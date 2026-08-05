@@ -10,7 +10,7 @@ Build one compact provider-neutral prompt per shot from the validated request, s
 Order the prompt as:
 
 1. State the single target angle, neutral portrait, prop, outfit detail, or action and its crop.
-2. Describe input roles: original sources define identity and design; named controls define spatial pose and framing only. The required neutral front portrait uses a text-free, featureless gray mannequin control for camera, upright head position, alignment, crop, and scale; other head shots use no portrait control.
+2. Describe input roles. For the neutral front portrait, original sources define identity and design. For every dependent shot, `GENERATED_IDENTITY_ANCHOR.png` is the primary identity and appearance variant; original sources remain authoritative for body, outfit, accessory, material, and off-crop details; named controls define spatial pose and framing only. The required neutral front portrait uses a text-free, featureless gray mannequin control for camera, upright head position, alignment, crop, and scale; other head shots use no portrait control.
 3. State the visible frame bounds and occupancy: identity portraits leave 10-12 percent clean clearance above the complete hair or headwear, preserve the complete face and neck, crop immediately below the collarbones with no armpits or arms, and make the head and facial region occupy 55-60 percent of image height. Other upper-body shots may extend through mid-torso. Full-body shots occupy 82-90 percent of image height with even top and bottom margins.
 4. State the directly observed identity, clothing, material, and medium evidence relevant to the shot.
 5. State an eye-level studio camera with a normal focal-length perspective, pure white background, and minimal perspective distortion.

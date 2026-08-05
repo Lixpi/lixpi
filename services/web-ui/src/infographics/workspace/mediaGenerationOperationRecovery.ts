@@ -1,17 +1,16 @@
-import type {
-    BranchMarkerMediaGenerationState,
-    CanvasState,
-    MediaGenerationProblem,
-    MediaGenerationRunProgress,
-    MediaGenerationRunStatus,
-    MediaGenerationRequest,
-    MediaGenerationRequestEvent,
-    OperationStatusCanvasNode,
-    OperationProgressItem,
-} from '@lixpi/constants'
 import {
     createDefaultMediaGenerationRunProgress,
     settleMediaGenerationRunProgress,
+    type BranchMarkerMediaGenerationState,
+    type CanvasState,
+    type MediaGenerationProblem,
+    type MediaGenerationRun,
+    type MediaGenerationRunProgress,
+    type MediaGenerationRunStatus,
+    type MediaGenerationRequest,
+    type MediaGenerationRequestEvent,
+    type OperationStatusCanvasNode,
+    type OperationProgressItem,
 } from '@lixpi/constants'
 
 export type MediaGenerationOperationRecoveryResult = {
@@ -105,6 +104,32 @@ function projectMarkerStates(
     }
 }
 
+function projectRequestStateToMarkers(
+    state: CanvasState,
+    generationRequestId: string,
+    generationRun: number | undefined,
+    mediaGeneration: BranchMarkerMediaGenerationState,
+): MediaGenerationOperationRecoveryResult {
+    const updatedNodeIds: string[] = []
+    const nodes = state.nodes.map(node => {
+        if (!isBranchMarkerNode(node)
+            || node.generationRequestId !== generationRequestId
+            || (generationRun !== undefined
+                && node.mediaGeneration?.generationRun !== undefined
+                && node.mediaGeneration.generationRun !== generationRun)) return node
+        updatedNodeIds.push(node.nodeId)
+        return { ...node, mediaGeneration }
+    })
+    return updatedNodeIds.length === 0
+        ? { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+        : {
+            state: { ...state, nodes },
+            changed: true,
+            updatedNodeIds,
+            removedNodeIds: [],
+        }
+}
+
 function removeOperationNodes(
     state: CanvasState,
     removedNodeIds: Set<string>,
@@ -144,6 +169,58 @@ function removeOperationNodes(
         changed: true,
         updatedNodeIds: markerProjection.updatedMarkerNodeIds,
         removedNodeIds: [...removedNodeIds],
+    }
+}
+
+function settleTerminalBranchMarkerProgress(
+    result: MediaGenerationOperationRecoveryResult,
+    generationRequestId: string,
+    runs: readonly Pick<MediaGenerationRun, 'generationRun' | 'status' | 'progress' | 'problem'>[],
+    requestStatus?: 'completed' | 'cancelled',
+): MediaGenerationOperationRecoveryResult {
+    const updatedNodeIds = new Set(result.updatedNodeIds)
+    let changed = result.changed
+    const nodes = result.state.nodes.map(node => {
+        if (!isBranchMarkerNode(node)
+            || node.generationRequestId !== generationRequestId
+            || !node.mediaGeneration) return node
+        const run = runs.find(candidate => candidate.generationRun === node.mediaGeneration?.generationRun)
+            ?? (runs.length === 1 ? runs[0] : undefined)
+        const status = requestStatus === 'cancelled'
+            ? 'cancelled'
+            : requestStatus === 'completed' ? run?.status ?? 'completed' : run?.status
+        if (status !== 'completed' && status !== 'failed' && status !== 'cancelled') return node
+        const message = status === 'completed'
+            ? run?.progress?.message ?? 'Media generation completed.'
+            : status === 'cancelled'
+                ? 'Media generation cancelled.'
+                : run?.problem?.detail ?? 'Media generation failed.'
+        const progress = settleMediaGenerationRunProgress(
+            run?.progress ?? node.mediaGeneration.progress,
+            status,
+            message,
+        )
+        if (node.mediaGeneration.status === status
+            && node.mediaGeneration.message === message
+            && JSON.stringify(node.mediaGeneration.progress) === JSON.stringify(progress)) return node
+        changed = true
+        updatedNodeIds.add(node.nodeId)
+        return {
+            ...node,
+            mediaGeneration: {
+                ...node.mediaGeneration,
+                status,
+                message,
+                progress,
+                updatedAt: Date.now(),
+            },
+        }
+    })
+    return {
+        ...result,
+        state: changed ? { ...result.state, nodes } : result.state,
+        changed,
+        updatedNodeIds: [...updatedNodeIds],
     }
 }
 
@@ -215,9 +292,15 @@ export function applyMediaGenerationRequestToOperationNodes(
     request: MediaGenerationRequest,
 ): MediaGenerationOperationRecoveryResult {
     if (request.status === 'completed' || request.status === 'cancelled') {
-        return removeOperationNodes(state, new Set(state.nodes
+        const removal = removeOperationNodes(state, new Set(state.nodes
             .filter(node => isMediaGenerationOperationNodeForRequest(node, request.generationRequestId))
             .map(node => node.nodeId)), request.status)
+        return settleTerminalBranchMarkerProgress(
+            removal,
+            request.generationRequestId,
+            request.runs,
+            request.status,
+        )
     }
 
     const firstUnresolvedBinding = request.unresolvedBindings[0]
@@ -299,7 +382,15 @@ function readProblem(value: unknown): MediaGenerationProblem | undefined {
 function readProgressItem(value: unknown): OperationProgressItem | undefined {
     if (!value || typeof value !== 'object') return undefined
     const candidate = value as Record<string, unknown>
-    const validStatuses = new Set(['pending', 'running', 'completed', 'failed', 'cancelled', 'skipped'])
+    const validStatuses = new Set([
+        'pending',
+        'running',
+        'completed',
+        'attention',
+        'failed',
+        'cancelled',
+        'skipped',
+    ])
     if (typeof candidate.id !== 'string'
         || typeof candidate.title !== 'string'
         || typeof candidate.status !== 'string'
@@ -342,13 +433,6 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     state: CanvasState,
     event: MediaGenerationRequestEvent,
 ): MediaGenerationOperationRecoveryResult {
-    const requestStatus = typeof event.payload.status === 'string' ? event.payload.status : undefined
-    if (requestStatus === 'completed' || requestStatus === 'cancelled') {
-        return removeOperationNodes(state, new Set(state.nodes
-            .filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId))
-            .map(node => node.nodeId)), requestStatus)
-    }
-
     const generationRun = typeof event.payload.generationRun === 'number'
         ? event.payload.generationRun
         : undefined
@@ -366,24 +450,47 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const mediaRunStatus = runStatus && validRunStatuses.has(runStatus as MediaGenerationRunStatus)
         ? runStatus as MediaGenerationRunStatus
         : undefined
+    const problem = readProblem(event.payload.problem)
+    const progressMessage = typeof event.payload.message === 'string'
+        ? event.payload.message
+        : undefined
+    const progress = readProgress(event.payload.progress)
+    const requestStatus = typeof event.payload.status === 'string' ? event.payload.status : undefined
+    if (requestStatus === 'completed' || requestStatus === 'cancelled') {
+        const removal = removeOperationNodes(state, new Set(state.nodes
+            .filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId))
+            .map(node => node.nodeId)), requestStatus)
+        const terminalRuns = generationRun === undefined || !mediaRunStatus
+            ? []
+            : [{
+                generationRun,
+                status: mediaRunStatus,
+                ...(progress ? { progress } : {}),
+                ...(problem ? { problem } : {}),
+            }]
+        return settleTerminalBranchMarkerProgress(
+            removal,
+            event.generationRequestId,
+            terminalRuns,
+            requestStatus,
+        )
+    }
     if (generationRun !== undefined && (runStatus === 'completed' || runStatus === 'cancelled')) {
-        return removeOperationNodes(state, new Set(state.nodes
+        const removal = removeOperationNodes(state, new Set(state.nodes
             .filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)
                 && node.generationRun === generationRun)
             .map(node => node.nodeId)), runStatus)
+        return settleTerminalBranchMarkerProgress(removal, event.generationRequestId, [{
+            generationRun,
+            status: runStatus,
+            ...(progress ? { progress } : {}),
+            ...(problem ? { problem } : {}),
+        }])
     }
 
     const requestNodes = state.nodes.filter(node => (
         isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)
     ))
-    const targetNode = generationRun === undefined
-        ? requestNodes[0]
-        : requestNodes.find(node => node.generationRun === generationRun)
-    if (!targetNode) {
-        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
-    }
-
-    const problem = readProblem(event.payload.problem)
     const candidateAssetIds = readStringArray(event.payload.candidateAssetIds)
     const verificationAssetIds = readStringArray(event.payload.assetIds)
     const verificationAssetId = typeof event.payload.verificationAssetId === 'string'
@@ -392,10 +499,31 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const unresolvedBindingId = typeof event.payload.bindingId === 'string'
         ? event.payload.bindingId
         : undefined
-    const progressMessage = typeof event.payload.message === 'string'
-        ? event.payload.message
-        : undefined
-    const progress = readProgress(event.payload.progress)
+    const targetNode = generationRun === undefined
+        ? requestNodes[0]
+        : requestNodes.find(node => node.generationRun === generationRun)
+    if (!targetNode) {
+        if (progress || runStatus === 'running' || runStatus === 'failed') {
+            const status = runStatus === 'failed' ? 'failed' : 'running'
+            const message = problem?.detail
+                ?? progressMessage
+                ?? progress?.message
+                ?? (status === 'failed' ? 'Generation failed.' : 'The provider is generating media.')
+            return projectRequestStateToMarkers(
+                state,
+                event.generationRequestId,
+                generationRun,
+                {
+                    status,
+                    message,
+                    progress: progress ?? createDefaultMediaGenerationRunProgress(status, message),
+                    ...(generationRun === undefined ? {} : { generationRun }),
+                    updatedAt: event.createdAt,
+                },
+            )
+        }
+        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+    }
 
     return applyOperationPatches(state, event.generationRequestId, node => {
         if (node.nodeId !== targetNode.nodeId) return null
@@ -421,9 +549,11 @@ export function applyMediaGenerationRequestEventToOperationNodes(
             }
         }
         if (event.status === 'MEDIA_GENERATION_PROBLEM' || runStatus === 'failed') {
+            const message = problem?.detail ?? 'Generation failed.'
             return {
                 status: 'failed',
-                message: problem?.detail ?? 'Generation failed.',
+                message,
+                progress: settleMediaGenerationRunProgress(progress ?? node.progress, 'failed', message),
                 ...(problem ? { problem } : {}),
                 requestRevision: event.requestRevision,
                 updatedAt: event.createdAt,

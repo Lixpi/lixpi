@@ -2,7 +2,9 @@
 
 import type { CapabilityMediaReviewTrace } from '@lixpi/constants'
 
-export const CHARACTER_SHEET_TRACE_SCHEMA_VERSION = 'character-sheet-trace-v2' as const
+import type { CharacterPanelAssessment } from './panel-assessor.ts'
+
+export const CHARACTER_SHEET_TRACE_SCHEMA_VERSION = 'character-sheet-trace-v3' as const
 
 export type CharacterPanelTrace = {
     panelId: string
@@ -12,6 +14,16 @@ export type CharacterPanelTrace = {
     score: number
     status: 'completed' | 'needs-review' | 'unavailable'
     failedDimensions: string[]
+    dimensionResults: CharacterPanelAssessment['dimensions']
+    faceFidelity?: {
+        available: boolean
+        cosineSimilarity?: number
+        unavailableReason?: string
+        errorCode?: string
+        detectorArtifactId?: string
+        recognizerArtifactId?: string
+    }
+    vlmEvaluationError?: CharacterPanelAssessment['vlmError']
     warning?: string
     vlmAssessor: string
     providerOperationIds: string[]

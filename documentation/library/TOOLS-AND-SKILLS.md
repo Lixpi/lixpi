@@ -128,6 +128,8 @@ The integration contract contains:
 
 Instruction/reference Tools include the applicable instruction and reference fields in their output schema and workflow bindings. Plan-based Tools include `capabilityMediaExecutionPlan`. The abstract Capability runtime validates and forwards both contracts without importing or naming the module. Provider adapters consume normalized references; plan strategies select the adapters through provider definitions.
 
+Plan-based media nodes can declare both `dependsOn` and named `outputBindings`. `dependsOn` controls when a node becomes ready. An output binding maps a producer node result to a stable binding key for the consumer and marks that output optional or required. `CapabilityMediaDagRunner` supplies resolved outputs to the module callback and blocks a consumer before provider execution when a required output is absent. Concrete modules decide which nodes are barriers and how bound outputs become prompts, references, controls, or other inputs; the generic runner contains no capability-specific roles.
+
 This boundary is important for extension. Adding another media-generation Tool requires a module-owned output mode and a media-policy implementation. It must not add provider-specific reference assembly or a concrete module check to `@lixpi/capability-system`.
 
 ## How users and models select modules and packages
@@ -272,7 +274,7 @@ Style Extraction lives under `packages/lixpi/capability-system/src/capabilities/
 
 ### Character Creator
 
-Character Creator lives under `packages/lixpi/capability-system/src/capabilities/character-creator/`. Its module-internal entry Tool validates the request and builds a typed provider-neutral plan for 26 required panels and one conditional prop panel. Separate module-internal Skills define the dependency graph, reference fidelity, and per-panel prompt rules.
+Character Creator lives under `packages/lixpi/capability-system/src/capabilities/character-creator/`. Its module-internal entry Tool validates the request and builds a typed provider-neutral plan for 3 to 10 shots. Separate module-internal Skills define the dependency graph, reference fidelity, and per-panel prompt rules.
 
 The Tool does not select a hidden media model or generate an Asset itself. The selected reasoning and image-model matrix remains authoritative. The media strategy reauthorizes canonical/original sources, analyzes structured evidence, generates and checks isolated panels, and assembles the final PNG with owned deterministic layout code. The final image settles through ordinary Asset and canvas paths. Character Creator excludes video generation. See [Character Creator](./CHARACTER-CREATOR.md).
 

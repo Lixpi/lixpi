@@ -38,10 +38,44 @@ const service = await NatsService.init({
         type: 'reply',
         payloadType: 'json',
         handler: async (request: CharacterFidelityAssessmentRequest): Promise<CharacterFidelityAssessmentResponse> => {
+            const startedAt = Date.now()
+            info(`character-fidelity: request ${JSON.stringify({
+                jobId: request.jobId,
+                panelId: request.panelId,
+                attemptId: request.attemptId,
+                sourceCount: Array.isArray(request.sources) ? request.sources.length : 0,
+                sourceMedium: request.sourceMedium,
+                expectedFaceVisibility: request.expectedFaceVisibility,
+                candidateObjectKey: request.candidate?.objectKey,
+                candidateByteLength: request.candidate?.byteLength,
+            })}`)
             try {
-                return await assessCharacterFidelity(request, NatsService.getInstance()!)
+                const result = await assessCharacterFidelity(request, NatsService.getInstance()!)
+                info(`character-fidelity: completed ${JSON.stringify({
+                    jobId: request.jobId,
+                    panelId: request.panelId,
+                    attemptId: request.attemptId,
+                    durationMs: Date.now() - startedAt,
+                    available: result.metric.available,
+                    unavailableReason: result.metric.unavailableReason ?? 'none',
+                    cosineSimilarity: result.metric.cosineSimilarity,
+                    sourceFaceCount: result.sourceDetections.length,
+                    candidateFaceCount: result.candidateDetections.length,
+                    errorCode: result.error?.code,
+                })}`)
+                return result
             } catch (error) {
-                const message = (error as Error).message
+                const message = error instanceof Error ? error.message : String(error)
+                const code = message.split(':')[0]!.slice(0, 96)
+                warn(`character-fidelity: failed ${JSON.stringify({
+                    jobId: request.jobId,
+                    panelId: request.panelId,
+                    attemptId: request.attemptId,
+                    durationMs: Date.now() - startedAt,
+                    code,
+                    errorName: error instanceof Error ? error.name : 'Error',
+                    diagnostic: message.slice(0, 320),
+                })}`)
                 return {
                     jobId: request.jobId,
                     panelId: request.panelId,
@@ -57,7 +91,7 @@ const service = await NatsService.init({
                         artifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.recognizer.artifactId,
                         sha256: CHARACTER_FIDELITY_MODEL_MANIFEST.recognizer.sha256,
                     },
-                    error: { code: message.split(':')[0]!.slice(0, 96), message: 'Character fidelity assessment failed.' },
+                    error: { code, message: 'Character fidelity assessment failed.' },
                 }
             }
         },
@@ -68,7 +102,11 @@ info(`nex-entry character-fidelity up; listening on ${subject}`)
 
 const shutdown = async (signal: string): Promise<void> => {
     warn(`nex-entry received ${signal}; shutting down character-fidelity`)
-    try { await service.close?.() } catch { /* best-effort */ }
+    try {
+        await service.close?.()
+    } catch {
+        // Best-effort shutdown.
+    }
     process.exit(0)
 }
 

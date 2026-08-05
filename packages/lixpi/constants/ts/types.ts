@@ -681,7 +681,14 @@ export type MediaGenerationRunStatus =
     | 'failed'
     | 'cancelled'
 
-export type OperationProgressItemStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped'
+export type OperationProgressItemStatus =
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'attention'
+    | 'failed'
+    | 'cancelled'
+    | 'skipped'
 
 export type OperationProgressItem = {
     id: string

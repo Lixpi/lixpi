@@ -4,20 +4,36 @@ import {
     CapabilityDagRunner,
     type CapabilityDagNode,
 } from './capability-dag-runner.ts'
+import type { CapabilityMediaDagOutputBinding } from '../shared/capability-media-execution-plan.ts'
 
 export type CapabilityMediaDagEvent = {
     sequence: number
     nodeId: string
-    type: 'started' | 'transport-retry' | 'completed' | 'failed' | 'cancelled'
+    type: 'started' | 'transport-retry' | 'completed' | 'failed' | 'blocked' | 'cancelled'
     attempt: number
+}
+
+export type CapabilityMediaDagNode = CapabilityDagNode & {
+    outputBindings?: readonly CapabilityMediaDagOutputBinding[]
+}
+
+export type CapabilityMediaDagExecutionContext<Result> = {
+    dependencyOutputs: ReadonlyMap<string, Result>
+    boundOutputs: ReadonlyMap<string, Result>
+}
+
+export type CapabilityMediaDagBlockedNode = {
+    missingBindingKeys: readonly string[]
+    missingOutputNodeIds: readonly string[]
 }
 
 export type CapabilityMediaDagResult<Result> = {
     results: ReadonlyMap<string, Result>
+    blockedNodes: ReadonlyMap<string, CapabilityMediaDagBlockedNode>
     events: CapabilityMediaDagEvent[]
 }
 
-export class CapabilityMediaDagRunner<Node extends CapabilityDagNode, Result> {
+export class CapabilityMediaDagRunner<Node extends CapabilityMediaDagNode, Result> {
     constructor(
         private readonly nodes: readonly Node[],
         private readonly concurrency: number,
@@ -27,16 +43,23 @@ export class CapabilityMediaDagRunner<Node extends CapabilityDagNode, Result> {
         if (!Number.isInteger(transportRetryLimit) || transportRetryLimit < 0) {
             throw new Error('CAPABILITY_MEDIA_TRANSPORT_RETRY_INVALID')
         }
+        this.validateOutputBindings()
     }
 
     async run(args: {
-        execute: (node: Node, signal?: AbortSignal) => Promise<Result>
+        execute: (
+            node: Node,
+            context: CapabilityMediaDagExecutionContext<Result>,
+            signal?: AbortSignal,
+        ) => Promise<Result>
         signal?: AbortSignal
         cleanup?: () => Promise<void>
         allowTerminalFailure?: (node: Node, error: unknown) => boolean
+        onNodeBlocked?: (node: Node, blocked: CapabilityMediaDagBlockedNode) => Promise<void> | void
     }): Promise<CapabilityMediaDagResult<Result>> {
         const dag = new CapabilityDagRunner(this.nodes)
         const results = new Map<string, Result>()
+        const blockedNodes = new Map<string, CapabilityMediaDagBlockedNode>()
         const unsortedEvents: Array<Omit<CapabilityMediaDagEvent, 'sequence'> & { nodeOrder: number; eventOrder: number }> = []
         const nodeOrder = new Map(this.nodes.map((node, index) => [node.nodeId, index]))
         let terminalError: unknown
@@ -50,6 +73,21 @@ export class CapabilityMediaDagRunner<Node extends CapabilityDagNode, Result> {
                 for (let offset = 0; offset < ready.length; offset += this.concurrency) {
                     const batch = ready.slice(offset, offset + this.concurrency)
                     const settled = await Promise.allSettled(batch.map(async node => {
+                        const context = this.buildExecutionContext(node, results)
+                        const blocked = this.getBlockedNode(node, context)
+                        if (blocked) {
+                            blockedNodes.set(node.nodeId, blocked)
+                            dag.setStatus(node.nodeId, 'skipped')
+                            unsortedEvents.push({
+                                nodeId: node.nodeId,
+                                type: 'blocked',
+                                attempt: 0,
+                                nodeOrder: nodeOrder.get(node.nodeId)!,
+                                eventOrder: 99,
+                            })
+                            await args.onNodeBlocked?.(node, blocked)
+                            return
+                        }
                         dag.setStatus(node.nodeId, 'running')
                         unsortedEvents.push({
                             nodeId: node.nodeId,
@@ -60,7 +98,7 @@ export class CapabilityMediaDagRunner<Node extends CapabilityDagNode, Result> {
                         })
                         for (let attempt = 1; attempt <= this.transportRetryLimit + 1; attempt += 1) {
                             try {
-                                const result = await args.execute(node, args.signal)
+                                const result = await args.execute(node, context, args.signal)
                                 results.set(node.nodeId, result)
                                 dag.setStatus(node.nodeId, 'completed')
                                 unsortedEvents.push({
@@ -121,7 +159,57 @@ export class CapabilityMediaDagRunner<Node extends CapabilityDagNode, Result> {
                 sequence: sequence + 1,
             }))
         if (terminalError) throw terminalError
-        return { results, events }
+        return { results, blockedNodes, events }
+    }
+
+    private buildExecutionContext(
+        node: Node,
+        results: ReadonlyMap<string, Result>,
+    ): CapabilityMediaDagExecutionContext<Result> {
+        const dependencyOutputs = new Map<string, Result>()
+        for (const dependencyNodeId of node.dependsOn) {
+            if (results.has(dependencyNodeId)) {
+                dependencyOutputs.set(dependencyNodeId, results.get(dependencyNodeId)!)
+            }
+        }
+        const boundOutputs = new Map<string, Result>()
+        for (const binding of node.outputBindings ?? []) {
+            if (results.has(binding.sourceNodeId)) {
+                boundOutputs.set(binding.bindingKey, results.get(binding.sourceNodeId)!)
+            }
+        }
+        return { dependencyOutputs, boundOutputs }
+    }
+
+    private getBlockedNode(
+        node: Node,
+        context: CapabilityMediaDagExecutionContext<Result>,
+    ): CapabilityMediaDagBlockedNode | undefined {
+        const missingBindings = (node.outputBindings ?? [])
+            .filter(binding => binding.required && !context.boundOutputs.has(binding.bindingKey))
+        if (missingBindings.length === 0) return undefined
+        return {
+            missingBindingKeys: missingBindings.map(binding => binding.bindingKey),
+            missingOutputNodeIds: [...new Set(missingBindings.map(binding => binding.sourceNodeId))],
+        }
+    }
+
+    private validateOutputBindings(): void {
+        for (const node of this.nodes) {
+            const bindingKeys = new Set<string>()
+            for (const binding of node.outputBindings ?? []) {
+                if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(binding.bindingKey)) {
+                    throw new Error(`CAPABILITY_MEDIA_OUTPUT_BINDING_KEY_INVALID:${node.nodeId}:${binding.bindingKey}`)
+                }
+                if (!node.dependsOn.includes(binding.sourceNodeId)) {
+                    throw new Error(`CAPABILITY_MEDIA_OUTPUT_BINDING_SOURCE_NOT_DEPENDENCY:${node.nodeId}:${binding.sourceNodeId}`)
+                }
+                if (bindingKeys.has(binding.bindingKey)) {
+                    throw new Error(`CAPABILITY_MEDIA_OUTPUT_BINDING_DUPLICATE:${node.nodeId}:${binding.bindingKey}`)
+                }
+                bindingKeys.add(binding.bindingKey)
+            }
+        }
     }
 }
 

@@ -6,7 +6,14 @@ import { settings } from '$src/settings.ts'
 import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
+import type {
+    CanvasGeometryUpdate,
+    CapabilityRunEvent,
+    MediaBranchVlmResolution,
+    MediaBranchLineagePlan,
+    MediaGenerationRunMeta,
+    WorkspaceContextResolution,
+} from '@lixpi/constants'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeType,
@@ -18,6 +25,10 @@ export {
 }
 
 export type AiGeneratedImageCallbacks = {
+    onCapabilityRunEventToCanvas?: (data: {
+        threadId: string
+        event: CapabilityRunEvent
+    }) => void
     onAddToCanvas?: (data: {
         imageUrl: string
         assetId: string

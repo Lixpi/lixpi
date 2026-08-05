@@ -14,6 +14,7 @@ import type {
     CharacterFidelityObjectCoordinate,
 } from '@lixpi/constants'
 import type NatsService from '@lixpi/nats-service'
+import { info } from '@lixpi/debug-tools'
 
 import { CHARACTER_FIDELITY_MODEL_MANIFEST } from './model-manifest.ts'
 
@@ -38,7 +39,13 @@ export async function assessCharacterFidelity(
     storage: NatsService,
     signal?: AbortSignal,
 ): Promise<CharacterFidelityAssessmentResponse> {
+    const startedAt = Date.now()
     validateRequest(request)
+    logFidelityStage(request, 'request-validated', {
+        sourceCount: request.sources.length,
+        sourceMedium: request.sourceMedium,
+        expectedFaceVisibility: request.expectedFaceVisibility,
+    })
     const responseBase = {
         jobId: request.jobId,
         panelId: request.panelId,
@@ -47,33 +54,96 @@ export async function assessCharacterFidelity(
         recognizer: artifactIdentity('recognizer'),
     }
     if (request.sourceMedium !== 'photograph') {
+        logFidelityStage(request, 'skipped', {
+            reason: 'non-photographic',
+            durationMs: Date.now() - startedAt,
+        })
         return unavailable(responseBase, 'non-photographic')
     }
     if (request.expectedFaceVisibility !== 'required') {
+        logFidelityStage(request, 'skipped', {
+            reason: 'face-not-required',
+            durationMs: Date.now() - startedAt,
+        })
         return unavailable(responseBase, 'face-not-required')
     }
     assertNotAborted(signal)
+    const objectReadStartedAt = Date.now()
+    logFidelityStage(request, 'object-read-started', {
+        sources: request.sources.map((coordinate, index) => ({
+            index,
+            objectKey: coordinate.objectKey,
+            expectedByteLength: coordinate.byteLength,
+            mimeType: coordinate.mimeType,
+        })),
+        candidate: {
+            objectKey: request.candidate.objectKey,
+            expectedByteLength: request.candidate.byteLength,
+            mimeType: request.candidate.mimeType,
+        },
+    })
     const sourceBytes = await Promise.all(request.sources.map(coordinate => readCoordinate(storage, coordinate, request.organizationId)))
     const candidateBytes = await readCoordinate(storage, request.candidate, request.organizationId)
+    logFidelityStage(request, 'object-read-completed', {
+        durationMs: Date.now() - objectReadStartedAt,
+        sourceByteLengths: sourceBytes.map(bytes => bytes.byteLength),
+        candidateByteLength: candidateBytes.byteLength,
+    })
     assertNotAborted(signal)
+    const modelStartedAt = Date.now()
     const runtime = await loadCharacterFidelityModels()
+    logFidelityStage(request, 'models-ready', { durationMs: Date.now() - modelStartedAt })
+    const detectionStartedAt = Date.now()
     const sourceFaceGroups = await Promise.all(sourceBytes.map(bytes => detectFaces(bytes, runtime.detector)))
     const sourceFaces = sourceFaceGroups.flat()
     const candidateFaces = await detectFaces(candidateBytes, runtime.detector)
-    if (sourceFaces.length === 0) return unavailable(responseBase, 'source-face-not-found', sourceFaces, candidateFaces)
+    logFidelityStage(request, 'detection-completed', {
+        durationMs: Date.now() - detectionStartedAt,
+        sources: sourceFaceGroups.map((faces, index) => ({
+            index,
+            ...summarizeDetections(faces),
+        })),
+        candidate: summarizeDetections(candidateFaces),
+    })
+    if (sourceFaces.length === 0) {
+        logFidelityStage(request, 'unavailable', { reason: 'source-face-not-found' })
+        return unavailable(responseBase, 'source-face-not-found', sourceFaces, candidateFaces)
+    }
     if (sourceFaceGroups.some(faces => faces.length > 1)) {
+        logFidelityStage(request, 'unavailable', { reason: 'ambiguous-source-face' })
         return unavailable(responseBase, 'ambiguous-source-face', sourceFaces, candidateFaces)
     }
-    if (candidateFaces.length === 0) return unavailable(responseBase, 'candidate-face-not-found', sourceFaces, candidateFaces)
-    if (candidateFaces.length > 1) return unavailable(responseBase, 'ambiguous-candidate-face', sourceFaces, candidateFaces)
+    if (candidateFaces.length === 0) {
+        logFidelityStage(request, 'unavailable', { reason: 'candidate-face-not-found' })
+        return unavailable(responseBase, 'candidate-face-not-found', sourceFaces, candidateFaces)
+    }
+    if (candidateFaces.length > 1) {
+        logFidelityStage(request, 'unavailable', { reason: 'ambiguous-candidate-face' })
+        return unavailable(responseBase, 'ambiguous-candidate-face', sourceFaces, candidateFaces)
+    }
     assertNotAborted(signal)
-    const sourceEmbeddings = await Promise.all(sourceBytes.map((bytes, index) => embedFace(
-        bytes,
-        sourceFaceGroups[index]![0]!,
+    const embeddingStartedAt = Date.now()
+    const usableSourceFaces = sourceBytes.flatMap((bytes, index) => {
+        const face = sourceFaceGroups[index]?.[0]
+        return face ? [{ bytes, face, index }] : []
+    })
+    const sourceEmbeddings = await Promise.all(usableSourceFaces.map(source => embedFace(
+        source.bytes,
+        source.face,
         runtime.recognizer,
     )))
     const candidateEmbedding = await embedFace(candidateBytes, candidateFaces[0]!, runtime.recognizer)
+    logFidelityStage(request, 'embedding-completed', {
+        durationMs: Date.now() - embeddingStartedAt,
+        sourceEmbeddingCount: sourceEmbeddings.length,
+        sourceIndexesUsed: usableSourceFaces.map(source => source.index),
+        embeddingDimensions: candidateEmbedding.length,
+    })
     const similarity = Math.max(...sourceEmbeddings.map(embedding => cosineSimilarity(embedding, candidateEmbedding)))
+    logFidelityStage(request, 'similarity-computed', {
+        durationMs: Date.now() - startedAt,
+        cosineSimilarity: similarity,
+    })
     return {
         ...responseBase,
         metric: { available: true, cosineSimilarity: similarity },
@@ -82,8 +152,34 @@ export async function assessCharacterFidelity(
     }
 }
 
+const logFidelityStage = (
+    request: CharacterFidelityAssessmentRequest,
+    stage: string,
+    details: Readonly<Record<string, unknown>>,
+): void => {
+    info(`character-fidelity: stage ${JSON.stringify({
+        jobId: request.jobId,
+        panelId: request.panelId,
+        attemptId: request.attemptId,
+        stage,
+        ...details,
+    })}`)
+}
+
+const summarizeDetections = (faces: readonly DetectedFace[]): Readonly<Record<string, unknown>> => ({
+    count: faces.length,
+    faces: faces.slice(0, 4).map(face => ({
+        confidence: face.confidence,
+        x: Math.round(face.x),
+        y: Math.round(face.y),
+        width: Math.round(face.width),
+        height: Math.round(face.height),
+    })),
+})
+
 export async function loadCharacterFidelityModels(): Promise<RuntimeModels> {
     modelsPromise ??= (async () => {
+        const startedAt = Date.now()
         ort.env.wasm.numThreads = 1
         ort.env.wasm.simd = true
         // These two models legitimately carry their initializers in the graph
@@ -96,11 +192,34 @@ export async function loadCharacterFidelityModels(): Promise<RuntimeModels> {
             executionProviders: ['wasm'],
             logSeverityLevel: 3,
         }
+        info(`character-fidelity: model-stage ${JSON.stringify({
+            stage: 'load-started',
+            detectorArtifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.detector.artifactId,
+            recognizerArtifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.recognizer.artifactId,
+            wasmThreads: ort.env.wasm.numThreads,
+            wasmSimd: ort.env.wasm.simd,
+        })}`)
         const detectorBytes = await readAndVerifyArtifact('detector')
         const recognizerBytes = await readAndVerifyArtifact('recognizer')
+        info(`character-fidelity: model-stage ${JSON.stringify({
+            stage: 'artifacts-verified',
+            detectorByteLength: detectorBytes.byteLength,
+            recognizerByteLength: recognizerBytes.byteLength,
+            durationMs: Date.now() - startedAt,
+        })}`)
+        const detector = await ort.InferenceSession.create(detectorBytes, sessionOptions)
+        const recognizer = await ort.InferenceSession.create(recognizerBytes, sessionOptions)
+        info(`character-fidelity: model-stage ${JSON.stringify({
+            stage: 'sessions-ready',
+            detectorInputs: detector.inputNames,
+            detectorOutputs: detector.outputNames,
+            recognizerInputs: recognizer.inputNames,
+            recognizerOutputs: recognizer.outputNames,
+            durationMs: Date.now() - startedAt,
+        })}`)
         return {
-            detector: await ort.InferenceSession.create(detectorBytes, sessionOptions),
-            recognizer: await ort.InferenceSession.create(recognizerBytes, sessionOptions),
+            detector,
+            recognizer,
         }
     })()
     return await modelsPromise

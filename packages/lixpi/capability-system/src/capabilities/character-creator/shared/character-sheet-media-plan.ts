@@ -1,19 +1,21 @@
 'use strict'
 
 import type { CapabilityJsonValue } from '@lixpi/constants'
-import type { CapabilityMediaExecutionPlan } from '../../../shared/capability-media-execution-plan.ts'
+import type {
+    CapabilityMediaDagNodePlan,
+    CapabilityMediaExecutionPlan,
+} from '../../../shared/capability-media-execution-plan.ts'
 
 export type CharacterPanelKind = 'body' | 'head' | 'prop' | 'action'
 export type CharacterPanelCrop = 'full-body' | 'upper-body' | 'prop' | 'action'
 export type CharacterPanelCondition = 'always' | 'generate-when-no-observed-prop'
 
-export type CharacterPanelSpec = {
+export type CharacterPanelSpec = CapabilityMediaDagNodePlan & {
     panelId: string
     kind: CharacterPanelKind
     title: string
     target: string
     crop: CharacterPanelCrop
-    dependsOn: string[]
     required: boolean
     condition: CharacterPanelCondition
     acceptanceDimensions: string[]
@@ -33,14 +35,28 @@ export const CHARACTER_SHEET_DEFAULT_OPERATION_COUNT = 3
 export const CHARACTER_SHEET_BASE_OPERATION_COUNT = CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
 export const CHARACTER_SHEET_MAX_OPERATION_COUNT = 10
 export const CHARACTER_SHEET_MAX_PROVIDER_OPERATIONS = CHARACTER_SHEET_MAX_OPERATION_COUNT
+export const CHARACTER_IDENTITY_ANCHOR_PANEL_ID = 'head-front-neutral'
+export const CHARACTER_IDENTITY_ANCHOR_BINDING_KEY = 'generated-identity-anchor'
+
+function identityAnchorDependency(): CapabilityMediaDagNodePlan {
+    return {
+        dependsOn: [CHARACTER_IDENTITY_ANCHOR_PANEL_ID],
+        outputBindings: [{
+            bindingKey: CHARACTER_IDENTITY_ANCHOR_BINDING_KEY,
+            sourceNodeId: CHARACTER_IDENTITY_ANCHOR_PANEL_ID,
+            required: true,
+        }],
+    }
+}
 
 const frontFacePanel: CharacterPanelSpec = {
-    panelId: 'head-front-neutral',
+    panelId: CHARACTER_IDENTITY_ANCHOR_PANEL_ID,
     kind: 'head',
     title: 'Neutral front identity portrait',
     target: 'close straight-on head-and-shoulders identity portrait with a relaxed neutral expression, level gaze, closed relaxed mouth, 10-12 percent clean clearance above the complete hair or headwear, the complete face and neck visible, a crop immediately below the collarbones with no armpits or arms, head upright, and the head and facial region occupying 55-60 percent of image height so facial details are sharp and unobstructed',
     crop: 'upper-body',
     dependsOn: [],
+    outputBindings: [],
     required: true,
     condition: 'always',
     acceptanceDimensions: ['facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness', 'framing'],
@@ -52,7 +68,7 @@ const frontBodyPanel: CharacterPanelSpec = {
     title: 'Front body',
     target: 'relaxed straight-on full-body front view from the complete top of the hair or headwear through the footwear, head upright, shoulders level, arms hanging naturally with slight separation from the torso, and feet hip-width apart',
     crop: 'full-body',
-    dependsOn: [],
+    ...identityAnchorDependency(),
     required: true,
     condition: 'always',
     acceptanceDimensions: ['target-view', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
@@ -64,7 +80,7 @@ const profileBodyPanel: CharacterPanelSpec = {
     title: 'Walking body profile',
     target: 'exact left-profile full-body walking view from the complete top of the hair or headwear through the footwear, head upright with level gaze, spine neutral, modest stride, relaxed arm counter-swing, and a clearly readable silhouette',
     crop: 'full-body',
-    dependsOn: [],
+    ...identityAnchorDependency(),
     required: true,
     condition: 'always',
     acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
@@ -77,7 +93,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Back body',
         target: 'neutral straight-on full-body back view from head to footwear',
         crop: 'full-body',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: true,
         condition: 'always',
         acceptanceDimensions: ['target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
@@ -88,7 +104,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Three-quarter face',
         target: 'close three-quarter head-and-shoulders identity view with a relaxed neutral expression, 10-12 percent clean clearance above the complete hair or headwear, the complete face and neck visible, a crop immediately below the collarbones with no armpits or arms, the head upright, and the head and facial region occupying 55-60 percent of image height',
         crop: 'upper-body',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: true,
         condition: 'always',
         acceptanceDimensions: ['target-view', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness'],
@@ -99,7 +115,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Belongings',
         target: 'isolated primary belongings, equipment, accessories, or prop arranged clearly at character scale',
         crop: 'prop',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: false,
         condition: 'generate-when-no-observed-prop',
         acceptanceDimensions: ['prop-design', 'materials', 'color', 'scale', 'framing'],
@@ -110,7 +126,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Signature pose',
         target: 'complete character in a restrained signature action pose with the full silhouette visible',
         crop: 'action',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: true,
         condition: 'always',
         acceptanceDimensions: ['action-pose', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
@@ -121,7 +137,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Front outfit detail',
         target: 'neutral straight-on upper-body outfit construction view from the complete top of the hair or headwear through the hips, with garment layers, closures, seams, accessories, and material transitions clearly visible',
         crop: 'upper-body',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: true,
         condition: 'always',
         acceptanceDimensions: ['target-view', 'identity', 'clothing', 'materials', 'accessories', 'framing'],
@@ -132,7 +148,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Back outfit detail',
         target: 'neutral straight-on upper-body back view from the complete top of the hair or headwear through the hips, with rear garment construction, seams, accessories, and material transitions clearly visible',
         crop: 'upper-body',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: true,
         condition: 'always',
         acceptanceDimensions: ['target-view', 'identity', 'clothing', 'materials', 'accessories', 'framing'],
@@ -143,7 +159,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         title: 'Additional belongings',
         target: 'isolated secondary belongings, equipment, accessories, or prop arranged clearly at character scale without repeating the primary belonging',
         crop: 'prop',
-        dependsOn: [],
+        ...identityAnchorDependency(),
         required: false,
         condition: 'generate-when-no-observed-prop',
         acceptanceDimensions: ['prop-design', 'materials', 'color', 'scale', 'framing'],
@@ -281,8 +297,48 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
         panelIds.add(panel.panelId)
     }
     for (const panel of plan.panels) {
+        if (!Array.isArray(panel.dependsOn)
+            || panel.dependsOn.some(dependency => typeof dependency !== 'string')) {
+            throw new Error(`CHARACTER_SHEET_PLAN_DEPENDENCIES_INVALID:${panel.panelId}`)
+        }
         if (panel.dependsOn.some(dependency => !panelIds.has(dependency))) {
             throw new Error(`CHARACTER_SHEET_PLAN_DEPENDENCY_UNKNOWN:${panel.panelId}`)
+        }
+        if (!Array.isArray(panel.outputBindings)) {
+            throw new Error(`CHARACTER_SHEET_PLAN_OUTPUT_BINDINGS_INVALID:${panel.panelId}`)
+        }
+        const bindingKeys = new Set<string>()
+        for (const binding of panel.outputBindings) {
+            if (!binding
+                || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(binding.bindingKey)
+                || typeof binding.sourceNodeId !== 'string'
+                || typeof binding.required !== 'boolean') {
+                throw new Error(`CHARACTER_SHEET_PLAN_OUTPUT_BINDING_INVALID:${panel.panelId}`)
+            }
+            if (!panel.dependsOn.includes(binding.sourceNodeId)) {
+                throw new Error(`CHARACTER_SHEET_PLAN_OUTPUT_BINDING_SOURCE_INVALID:${panel.panelId}`)
+            }
+            if (bindingKeys.has(binding.bindingKey)) {
+                throw new Error(`CHARACTER_SHEET_PLAN_OUTPUT_BINDING_DUPLICATE:${panel.panelId}`)
+            }
+            bindingKeys.add(binding.bindingKey)
+        }
+    }
+    const identityAnchor = plan.panels.find(panel => panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+    if (!identityAnchor?.required
+        || identityAnchor.dependsOn.length > 0
+        || identityAnchor.outputBindings.length > 0) {
+        throw new Error('CHARACTER_SHEET_PLAN_IDENTITY_ANCHOR_INVALID')
+    }
+    for (const panel of plan.panels) {
+        if (panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID) continue
+        const anchorBinding = panel.outputBindings.find(binding => (
+            binding.bindingKey === CHARACTER_IDENTITY_ANCHOR_BINDING_KEY
+        ))
+        if (!panel.dependsOn.includes(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+            || anchorBinding?.sourceNodeId !== CHARACTER_IDENTITY_ANCHOR_PANEL_ID
+            || anchorBinding?.required !== true) {
+            throw new Error(`CHARACTER_SHEET_PLAN_IDENTITY_ANCHOR_BINDING_REQUIRED:${panel.panelId}`)
         }
     }
     assertAcyclicPanels(plan.panels)

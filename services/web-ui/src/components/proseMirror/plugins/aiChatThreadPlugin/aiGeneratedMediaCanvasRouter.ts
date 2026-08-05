@@ -28,6 +28,15 @@ export function routeSegmentEventToCanvas(event: SegmentEvent, options: RouteOpt
     const responseMessageId = options.responseMessageId ?? ''
 
     switch (event.type) {
+        case 'capability_run_event':
+            if (event.capabilityRunEvent) {
+                imageCallbacks.onCapabilityRunEventToCanvas?.({
+                    threadId,
+                    event: event.capabilityRunEvent,
+                })
+            }
+            return
+
         case 'image_generation_trace':
             imageCallbacks.onImageGenerationTraceToCanvas?.({ threadId, generationRun })
             return

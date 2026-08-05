@@ -1,5 +1,3 @@
-@use '../../styles/transitions';
-
 .progress-timeline {
     display: grid;
     margin: 0;
@@ -43,55 +41,56 @@
     width: 8px;
     height: 8px;
     margin-top: 4px;
+    isolation: isolate;
+    overflow: visible;
+}
+
+.progress-timeline-marker-core {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    box-sizing: border-box;
     border: 2px solid var(--progress-timeline-pending-border, rgb(255 255 255 / 48%));
     border-radius: 50%;
     background: var(--progress-timeline-surface, #5d656d);
 }
 
-.progress-timeline-marker::before,
-.progress-timeline-marker::after {
-    content: '';
+.progress-ripple-icon {
     position: absolute;
-    z-index: -1;
-    inset: -2px;
-    border: 1px solid var(--progress-timeline-running, #cbbfff);
-    border-radius: 50%;
-    background: var(--progress-timeline-running-halo, rgb(203 191 255 / 18%));
-    opacity: 0;
+    z-index: 2;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: 18px;
+    height: 18px;
     pointer-events: none;
-    transform: scale(1);
+    transform: translate(-50%, -50%);
 }
 
-.progress-timeline-item[data-status='running'] > .progress-timeline-rail > .progress-timeline-marker {
-    border-color: var(--progress-timeline-running, #cbbfff);
-    background: var(--progress-timeline-running, #cbbfff);
+.progress-ripple-icon-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
 }
 
-.progress-timeline-item[data-status='running'] > .progress-timeline-rail > .progress-timeline-marker::before {
-    animation: progress-timeline-ripple-middle transitions.$progressTimelineRippleCycleDuration linear infinite;
-    animation-delay: var(--progress-timeline-ripple-delay, 0ms);
-}
-
-.progress-timeline-item[data-status='running'] > .progress-timeline-rail > .progress-timeline-marker::after {
-    animation: progress-timeline-ripple-outer transitions.$progressTimelineRippleCycleDuration linear infinite;
-    animation-delay: calc(
-        var(--progress-timeline-ripple-delay, 0ms)
-        + transitions.$progressTimelineRippleOuterDelay
-    );
-}
-
-.progress-timeline-item[data-status='completed'] > .progress-timeline-rail > .progress-timeline-marker {
+.progress-timeline-item[data-status='completed'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-color: var(--progress-timeline-completed, #72d4a9);
     background: var(--progress-timeline-completed, #72d4a9);
 }
 
-.progress-timeline-item[data-status='failed'] > .progress-timeline-rail > .progress-timeline-marker,
-.progress-timeline-item[data-status='cancelled'] > .progress-timeline-rail > .progress-timeline-marker {
+.progress-timeline-item[data-status='attention'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+    border-color: var(--progress-timeline-attention, #e1b45f);
+    background: var(--progress-timeline-attention, #e1b45f);
+}
+
+.progress-timeline-item[data-status='failed'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core,
+.progress-timeline-item[data-status='cancelled'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-color: var(--progress-timeline-failed, #ff8b8b);
     background: var(--progress-timeline-failed, #ff8b8b);
 }
 
-.progress-timeline-item[data-status='skipped'] > .progress-timeline-rail > .progress-timeline-marker {
+.progress-timeline-item[data-status='skipped'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-style: dashed;
     opacity: 0.58;
 }
@@ -104,6 +103,50 @@
 .progress-timeline-title-row {
     display: block;
     min-width: 0;
+}
+
+.progress-timeline-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+}
+
+.progress-timeline-toggle {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 12px;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.progress-timeline-chevron {
+    width: 5px;
+    height: 5px;
+    margin-left: 3px;
+    border-right: 1px solid var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    border-bottom: 1px solid var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    transform: rotate(45deg) translate(-1px, 1px);
+    transform-origin: center;
+    transition: transform 140ms ease;
+}
+
+.progress-timeline-toggle[aria-expanded='true'] .progress-timeline-chevron {
+    transform: rotate(225deg) translate(-1px, 1px);
+}
+
+.progress-timeline-details {
+    display: block;
 }
 
 .progress-timeline-title {
@@ -123,6 +166,17 @@
     font-size: var(--progress-timeline-summary-size, 11px);
     line-height: 1.35;
     overflow-wrap: anywhere;
+}
+
+.progress-timeline-meta {
+    overflow: hidden;
+    max-width: 148px;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: var(--progress-timeline-summary-size, 11px);
+    font-weight: 400;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .progress-timeline-children {
@@ -145,60 +199,17 @@
     width: 6px;
     height: 6px;
     margin-top: 5px;
+}
+
+.progress-timeline-children .progress-ripple-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.progress-timeline-children .progress-timeline-marker-core {
     border-width: 1px;
 }
 
 .progress-timeline-children .progress-timeline-content {
     padding-bottom: 7px;
-}
-
-@keyframes progress-timeline-ripple-middle {
-    0% {
-        opacity: 0.72;
-        transform: scale(1);
-        animation-timing-function: cubic-bezier(0.42, 0, 0.58, 1);
-    }
-
-    18% {
-        opacity: 0.42;
-        transform: scale(1.3);
-        animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
-    }
-
-    92%,
-    100% {
-        opacity: 0;
-        transform: scale(1.72);
-    }
-}
-
-@keyframes progress-timeline-ripple-outer {
-    0% {
-        opacity: 0.58;
-        transform: scale(1);
-        animation-timing-function: cubic-bezier(0.42, 0, 0.58, 1);
-    }
-
-    18% {
-        opacity: 0.34;
-        transform: scale(1.44);
-        animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
-    }
-
-    100% {
-        opacity: 0;
-        transform: scale(2.05);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .progress-timeline-item[data-status='running'] > .progress-timeline-rail > .progress-timeline-marker::before,
-    .progress-timeline-item[data-status='running'] > .progress-timeline-rail > .progress-timeline-marker::after {
-        animation: none;
-    }
-
-    .progress-timeline-item[data-status='running'] > .progress-timeline-rail > .progress-timeline-marker::before {
-        opacity: 0.45;
-        transform: scale(1.65);
-    }
 }

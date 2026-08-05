@@ -2193,8 +2193,9 @@
 
 // Screen-fixed before a canvas destination is computed: keep the prompt on a
 // single line at the input's type size. It grows wider (see
-// getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping; once
-// it lands on the canvas the pill regains its taller, larger on-canvas proportions.
+// getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping. A
+// streamed progress timeline expands beneath that compact header until the marker
+// lands on the canvas and regains its larger on-canvas proportions.
 .workspace-branch-marker-screen-fixed {
     .workspace-branch-marker-content {
         gap: 6px;
@@ -2241,10 +2242,6 @@
         gap: 5px;
         min-height: 1.12em;
         padding: 0;
-    }
-
-    .workspace-branch-marker-progress {
-        display: none;
     }
 }
 

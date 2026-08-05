@@ -55,10 +55,10 @@ export function createDefaultMediaGenerationRunProgress(
 
 export function settleMediaGenerationRunProgress(
     progress: MediaGenerationRunProgress | undefined,
-    status: 'completed' | 'cancelled',
+    status: 'completed' | 'failed' | 'cancelled',
     message: string,
 ): MediaGenerationRunProgress {
-    if (!progress) return createDefaultMediaGenerationRunProgress(status, message)
+    const currentProgress = progress ?? createDefaultMediaGenerationRunProgress(status, message)
     const settleItem = (item: OperationProgressItem): OperationProgressItem => ({
         ...item,
         status: item.status === 'pending' || item.status === 'running'
@@ -67,10 +67,10 @@ export function settleMediaGenerationRunProgress(
         ...(item.children ? { children: item.children.map(settleItem) } : {}),
     })
     return {
-        ...progress,
-        phase: status === 'completed' ? 'composing' : progress.phase,
-        completedSteps: status === 'completed' ? progress.totalSteps : progress.completedSteps,
+        ...currentProgress,
+        phase: status === 'completed' ? 'composing' : currentProgress.phase,
+        completedSteps: status === 'completed' ? currentProgress.totalSteps : currentProgress.completedSteps,
         message,
-        ...(progress.items ? { items: progress.items.map(settleItem) } : {}),
+        ...(currentProgress.items ? { items: currentProgress.items.map(settleItem) } : {}),
     }
 }

@@ -1531,6 +1531,7 @@ class AiChatThreadPluginClass {
 
             if (type === 'capability_run_event' && event.capabilityRunEvent) {
                 this.capabilityRunProgress.applyEvent(view, event.capabilityRunEvent)
+                routeSegmentEventToCanvas(event)
                 return
             }
 

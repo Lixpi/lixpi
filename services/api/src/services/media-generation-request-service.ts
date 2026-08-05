@@ -2,27 +2,29 @@
 
 import { v4 as uuid } from 'uuid'
 
-import type {
-    AiModelId,
-    MediaGenerationRequest,
-    MediaGenerationRequestEvent,
-    MediaGenerationRequestStatus,
-    MediaGenerationRun,
-    MediaReferenceBinding,
-    UnresolvedReferenceBinding,
-    MediaGenerationProblem,
-    MediaBranchLineagePlan,
-    MediaGenerationRunProgress,
-    OperationProgressItem,
+import {
+    createDefaultMediaGenerationRunProgress,
+    settleMediaGenerationRunProgress,
+    type AiModelId,
+    type AssetRequesterContext,
+    type MediaGenerationRequest,
+    type MediaGenerationRequestEvent,
+    type MediaGenerationRequestStatus,
+    type MediaGenerationRun,
+    type MediaReferenceBinding,
+    type UnresolvedReferenceBinding,
+    type MediaGenerationProblem,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunProgress,
+    type OperationProgressItem,
 } from '@lixpi/constants'
 import { getMediaGenerationOperationNodeId } from '@lixpi/canvas-engine'
-import { createDefaultMediaGenerationRunProgress } from '@lixpi/constants'
+import { warn } from '@lixpi/debug-tools'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
 import BlobModel from '../models/blob.ts'
 import AssetModel from '../models/asset.ts'
 import MediaGenerationRequestModel from '../models/media-generation-request.ts'
-import type { AssetRequesterContext } from '@lixpi/constants'
 import { createMediaReferenceBindings } from '../llm/media-reference/media-reference-compiler.ts'
 import { getContentAddressedBlob } from './blob-storage.ts'
 import { MediaGenerationRequestEventLog } from './media-generation-request-event-log.ts'
@@ -668,12 +670,23 @@ export class MediaGenerationRequestService {
             }
             if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
             const now = Date.now()
-            const runs = request.runs.map(candidate => candidate.generationRun === run.generationRun ? {
-                ...candidate,
-                status,
-                ...(status === 'running' ? { startedAt: candidate.startedAt ?? now } : { completedAt: now }),
-                ...(problem ? { problem: { ...problem, generationRun: candidate.generationRun } } : {}),
-            } : candidate)
+            const runs = request.runs.map(candidate => {
+                if (candidate.generationRun !== run.generationRun) return candidate
+                const statusMessage = status === 'completed'
+                    ? candidate.progress?.message ?? 'Media generation completed.'
+                    : problem?.detail ?? candidate.progress?.message ?? 'Media generation failed.'
+                return {
+                    ...candidate,
+                    status,
+                    ...(status === 'running'
+                        ? { startedAt: candidate.startedAt ?? now }
+                        : {
+                            completedAt: now,
+                            progress: settleMediaGenerationRunProgress(candidate.progress, status, statusMessage),
+                        }),
+                    ...(problem ? { problem: { ...problem, generationRun: candidate.generationRun } } : {}),
+                }
+            })
             const allTerminal = runs.every(candidate => ['completed', 'failed', 'cancelled'].includes(candidate.status))
             const completedCount = runs.filter(candidate => candidate.status === 'completed').length
             const failedCount = runs.filter(candidate => candidate.status === 'failed').length
@@ -746,25 +759,35 @@ export class MediaGenerationRequestService {
                 if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
                 throw error
             }
-            await updateMediaGenerationOperationNode({
-                workspaceId,
-                operationNodeId: run.operationNodeId,
-                status: 'in-progress',
-                message: nextProgress.message,
-                progress: nextProgress,
-                requestRevision: next.revision,
-            })
-            await this.events().append({
-                userId: request.userId,
-                workspaceId,
-                event: eventFor(next, 'MEDIA_GENERATION_PROGRESS', {
-                    status: next.status,
-                    runStatus: run.status,
+            const [projectionResult, eventResult] = await Promise.allSettled([
+                updateMediaGenerationOperationNode({
+                    workspaceId,
+                    operationNodeId: run.operationNodeId,
+                    generationRequestId,
                     generationRun: run.generationRun,
-                    progress: nextProgress,
+                    status: 'in-progress',
                     message: nextProgress.message,
+                    progress: nextProgress,
+                    requestRevision: next.revision,
                 }),
-            })
+                this.events().append({
+                    userId: request.userId,
+                    workspaceId,
+                    event: eventFor(next, 'MEDIA_GENERATION_PROGRESS', {
+                        status: next.status,
+                        runStatus: run.status,
+                        generationRun: run.generationRun,
+                        progress: nextProgress,
+                        message: nextProgress.message,
+                    }),
+                }),
+            ])
+            if (projectionResult.status === 'rejected') {
+                warn(`[MediaGenerationRequest] progress projection failed: ${String(projectionResult.reason)}`)
+            }
+            if (eventResult.status === 'rejected') {
+                warn(`[MediaGenerationRequest] progress event failed: ${String(eventResult.reason)}`)
+            }
             return next
         }
         throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
@@ -778,35 +801,49 @@ export class MediaGenerationRequestService {
         run: MediaGenerationRun
     }): Promise<void> {
         const problem = run.problem
-        if (run.status === 'completed') {
-            await removeMediaGenerationOperationNode({
+        const message = run.status === 'running'
+            ? run.progress?.message ?? 'The provider is generating media.'
+            : problem?.detail ?? 'Generation failed.'
+        const projection = run.status === 'completed'
+            ? removeMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
                 operationNodeId: run.operationNodeId,
+                generationRequestId: request.generationRequestId,
+                generationRun: run.generationRun,
+                progress: run.progress,
             })
-        } else {
-            const message = run.status === 'running'
-                ? run.progress?.message ?? 'The provider is generating media.'
-                : problem?.detail ?? 'Generation failed.'
-            await updateMediaGenerationOperationNode({
+            : updateMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
                 operationNodeId: run.operationNodeId,
+                generationRequestId: request.generationRequestId,
+                generationRun: run.generationRun,
                 status: run.status === 'failed' ? 'failed' : 'in-progress',
                 message,
                 progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
                 ...(problem ? { problem } : {}),
                 requestRevision: request.revision,
             })
-        }
-        await this.events().append({
+        const event = this.events().append({
             userId: request.userId,
             workspaceId: request.workspaceId,
             event: eventFor(request, problem ? 'MEDIA_GENERATION_PROBLEM' : 'MEDIA_GENERATION_REQUEST_STATUS', {
                 status: request.status,
                 runStatus: run.status,
                 generationRun: run.generationRun,
+                ...(run.progress ? {
+                    progress: run.progress,
+                    message: run.progress.message,
+                } : {}),
                 ...(problem ? { problem } : {}),
             }),
         })
+        const [projectionResult, eventResult] = await Promise.allSettled([projection, event])
+        if (projectionResult.status === 'rejected') {
+            warn(`[MediaGenerationRequest] status projection failed: ${String(projectionResult.reason)}`)
+        }
+        if (eventResult.status === 'rejected') {
+            warn(`[MediaGenerationRequest] status event failed: ${String(eventResult.reason)}`)
+        }
         if (request.status === 'completed') await this.releaseCheckpoint(request)
     }
 

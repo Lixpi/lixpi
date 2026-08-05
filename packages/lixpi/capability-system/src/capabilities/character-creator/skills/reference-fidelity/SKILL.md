@@ -5,7 +5,7 @@ description: Identity and design consistency instructions for authorized visual 
 
 # Reference Fidelity
 
-Treat authorized character reference images as identity and construction evidence, not as permission to copy their background, camera, crop, or pose. Treat dedicated pose-bearing body, action, and object-placement controls as spatial control only. All controls use the same deliberately gender-neutral, sexless gray mannequin with no male or female secondary traits. The required neutral front portrait uses that featureless control only for centered camera direction, upright head position, alignment, crop, and scale. Ignore all control anatomy, physique, material, clothing, and sex presentation. Other head and outfit-detail shots are source-only. Never attach a depicted synthetic face, portrait, or expression reference to a head shot; it can pollute facial anatomy, sex presentation, and identity.
+Treat authorized character reference images as identity and construction evidence, not as permission to copy their background, camera, crop, or pose. Treat dedicated pose-bearing body, action, and object-placement controls as spatial control only. All controls use the same deliberately gender-neutral, sexless gray mannequin with no male or female secondary traits. The required neutral front portrait uses that featureless control only for centered camera direction, upright head position, alignment, crop, and scale. Ignore all control anatomy, physique, material, clothing, and sex presentation. Other head and outfit-detail shots have no synthetic pose control; dependent shots still receive the generated identity anchor and original evidence. Never attach any other depicted synthetic face, portrait, or expression reference to a head shot; it can pollute facial anatomy, sex presentation, and identity.
 
 Preserve across every generated panel:
 
@@ -25,6 +25,6 @@ Do not copy a control reference's facial identity, sex presentation, facial prop
 
 Resolve canonical or original Asset renditions, never previews. Analyze references as an observation set. Explicit prompt changes override source facts. Otherwise observed evidence overrides descriptive prompt text, and angle-specific evidence from the closest view wins. Keep unresolved conflicts explicit instead of averaging them.
 
-When a requested detail is absent from every reference, mark it inferred and add only the smallest plausible design choice consistent with the prompt. Generated shots are outputs, not conditioning inputs for later shots.
+When a requested detail is absent from every reference, mark it inferred and add only the smallest plausible design choice consistent with the prompt. The generated neutral-front identity portrait is the one intentional generated conditioning input: use it as the primary identity variant for every dependent shot, while using original evidence to extend details not visible in its crop. Do not chain any other generated shot into later generation.
 
 Never reproduce a reference background, pose, camera angle, unrelated person, signature, logo, or watermark. Never merge identities from separate people. If multiple images show the same character, reconcile them into one consistent design before generating the sheet.

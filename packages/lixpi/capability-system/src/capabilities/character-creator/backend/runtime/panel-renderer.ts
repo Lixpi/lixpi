@@ -47,7 +47,7 @@ export async function renderCharacterPanel(args: {
             identityReferenceRoles: args.references.map(reference => reference.role),
         })}`)
     } else {
-        info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] source-only ${JSON.stringify({
+        info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] no-pose-control ${JSON.stringify({
             mediaRunId: args.context.mediaRunId,
             panelId: args.panel.panelId,
             target: args.panel.target,
@@ -65,6 +65,10 @@ export async function renderCharacterPanel(args: {
     })
     if (poseReference && !result.includedReferenceRoles.includes('pose-reference')) {
         throw new Error(`CHARACTER_PANEL_POSE_REFERENCE_OMITTED:${args.panel.panelId}`)
+    }
+    if (args.references.some(reference => reference.role === 'canonical-anchor')
+        && !result.includedReferenceRoles.includes('canonical-anchor')) {
+        throw new Error(`CHARACTER_PANEL_IDENTITY_ANCHOR_OMITTED:${args.panel.panelId}`)
     }
     info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] provider-result ${JSON.stringify({
         includedReferenceRoles: result.includedReferenceRoles,
@@ -96,12 +100,17 @@ export function buildCharacterPanelPrompt(args: {
     panel: CharacterPanelSpec
     userPrompt: string
     evidenceSummary: string
+    usesGeneratedIdentityAnchor: boolean
 }): string {
     const usesPoseReference = hasCharacterPoseReference(args.panel)
     const poseInstruction = !usesPoseReference
         ? args.panel.kind === 'head'
-            ? 'No synthetic facial or portrait control image is provided. Use only the prompt and original subject references for facial anatomy, sex presentation, identity, hair, headwear, expression, camera angle, and body context; create the requested neutral head view directly.'
-            : 'No synthetic spatial control image is provided for this detail shot. Use only the prompt and original subject references for identity, outfit construction, materials, accessories, camera angle, and framing.'
+            ? args.usesGeneratedIdentityAnchor
+                ? 'No synthetic facial or portrait control image is provided. Use the generated identity anchor as the primary visible identity variant, the original subject references for authoritative off-crop character evidence, and the prompt for the requested camera angle and body context.'
+                : 'No synthetic facial or portrait control image is provided. Use only the prompt and original subject references for facial anatomy, sex presentation, identity, hair, headwear, expression, camera angle, and body context; create the requested neutral head view directly.'
+            : args.usesGeneratedIdentityAnchor
+                ? 'No synthetic spatial control image is provided for this detail shot. Use the generated identity anchor as the primary visible identity variant, the original subject references for authoritative outfit construction and materials, and the prompt for camera angle and framing.'
+                : 'No synthetic spatial control image is provided for this detail shot. Use only the prompt and original subject references for identity, outfit construction, materials, accessories, camera angle, and framing.'
         : args.panel.kind === 'head'
             ? `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for centered straight-on camera direction, upright head position, symmetric head-and-shoulder alignment, upper-body crop, and subject scale. Its featureless gray mannequin is spatial pose control only, never identity or design evidence.`
         : args.panel.kind === 'prop'
@@ -117,10 +126,17 @@ export function buildCharacterPanelPrompt(args: {
     return [
         `Create one isolated ${args.panel.crop} reference image: ${args.panel.target}.`,
         'INPUT ROLES',
-        'The original source image or images define the exact person or character: facial identity, body proportions, hair, headwear, outfit construction, accessories, colors, materials, and visual medium.',
+        args.usesGeneratedIdentityAnchor
+            ? 'The file GENERATED_IDENTITY_ANCHOR.png is the primary identity and appearance anchor. Reproduce and extend that exact generated variant across this new camera angle, crop, and pose. Give it greater visual authority than the original source images for facial construction, hair silhouette, immediately visible outfit interpretation, material rendering, and the model’s own established visual vocabulary.'
+            : 'The original source image or images define the exact person or character: facial identity, body proportions, hair, headwear, outfit construction, accessories, colors, materials, and visual medium.',
+        args.usesGeneratedIdentityAnchor
+            ? 'The original source image or images remain authoritative evidence for body proportions, outfit construction, accessories, colors, materials, and details outside the generated anchor crop. Use them to correct omissions without replacing the generated anchor’s established identity variant.'
+            : '',
         poseInstruction,
         usesPoseReference
-            ? 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; only the original subject references define the character.'
+            ? args.usesGeneratedIdentityAnchor
+                ? 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; the generated identity anchor defines the established visible variant and the original subject references supply authoritative character evidence outside its crop.'
+                : 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; only the original subject references define the character.'
             : '',
         'SHOT CONTRACT',
         framingInstruction,
@@ -128,7 +144,9 @@ export function buildCharacterPanelPrompt(args: {
         args.userPrompt,
         args.evidenceSummary,
         'INVARIANTS',
-        'Preserve the observed identity, anatomy, clothing construction, materials, accessories, colors, and rendering medium exactly. Change only the camera, crop, and pose required by this shot.',
+        args.usesGeneratedIdentityAnchor
+            ? 'Preserve the generated identity anchor’s exact visible character variant while extending the original evidence for anatomy, clothing construction, materials, accessories, colors, and rendering medium. Change only the camera, crop, and pose required by this shot.'
+            : 'Preserve the observed identity, anatomy, clothing construction, materials, accessories, colors, and rendering medium exactly. Change only the camera, crop, and pose required by this shot.',
         args.panel.kind === 'head'
             ? 'Keep a relaxed neutral expression with level gaze and a closed relaxed mouth. Do not introduce a smile, frown, surprise, or other expression variant.'
             : '',

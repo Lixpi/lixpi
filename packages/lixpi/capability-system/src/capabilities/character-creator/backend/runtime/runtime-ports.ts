@@ -16,6 +16,7 @@ export type CharacterImageReferenceRole =
     | 'source-reference'
     | 'face-crop'
     | 'body-outfit-crop'
+    | 'canonical-anchor'
     | 'prop-crop'
     | 'pose-reference'
 

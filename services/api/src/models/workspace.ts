@@ -70,6 +70,76 @@ const normalizeCanvasState = (canvasState: CanvasState | undefined): CanvasState
     } as CanvasState
 }
 
+type MediaGenerationOperationCanvasNode = Extract<CanvasNode, { type: 'operationStatus' }>
+type BranchMarkerCanvasNode = Extract<CanvasNode, { type: 'branchOrigin' | 'branchFork' | 'branchLine' }>
+
+const isMediaGenerationOperationNode = (node: CanvasNode): node is MediaGenerationOperationCanvasNode =>
+    node.type === 'operationStatus' && node.operation === 'media-generation'
+
+const isBranchMarkerNode = (node: CanvasNode): node is BranchMarkerCanvasNode =>
+    node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+
+const preserveServerManagedMediaGenerationState = (
+    currentCanvasState: CanvasState,
+    incomingCanvasState: CanvasState,
+): CanvasState => {
+    const currentNodeById = new Map(currentCanvasState.nodes.map(node => [node.nodeId, node]))
+    const currentOperationNodes = currentCanvasState.nodes.filter(isMediaGenerationOperationNode)
+    const currentOperationNodeIds = new Set(currentOperationNodes.map(node => node.nodeId))
+    const currentOperationOwnerNodeIds = new Set(currentCanvasState.edges
+        .filter(edge => currentOperationNodeIds.has(edge.targetNodeId))
+        .map(edge => edge.sourceNodeId))
+    const allOperationNodeIds = new Set([
+        ...currentOperationNodeIds,
+        ...incomingCanvasState.nodes.filter(isMediaGenerationOperationNode).map(node => node.nodeId),
+    ])
+    const retainedOperationNodeIds = new Set<string>()
+    const nodes = incomingCanvasState.nodes.flatMap((node): CanvasNode[] => {
+        if (isMediaGenerationOperationNode(node)) {
+            const currentNode = currentNodeById.get(node.nodeId)
+            if (!currentNode || !isMediaGenerationOperationNode(currentNode)) return []
+            retainedOperationNodeIds.add(node.nodeId)
+            return [currentNode]
+        }
+        if (!isBranchMarkerNode(node)) return [node]
+        const currentNode = currentNodeById.get(node.nodeId)
+        if (!currentNode || !isBranchMarkerNode(currentNode)) return [node]
+        const { mediaGeneration: _incomingMediaGeneration, ...incomingNode } = node
+        return [{
+            ...incomingNode,
+            ...(currentNode.mediaGeneration ? { mediaGeneration: currentNode.mediaGeneration } : {}),
+        } as CanvasNode]
+    })
+    for (const operationNode of currentOperationNodes) {
+        if (retainedOperationNodeIds.has(operationNode.nodeId)) continue
+        nodes.push(operationNode)
+    }
+    const retainedNodeIds = new Set(nodes.map(node => node.nodeId))
+    for (const currentNode of currentCanvasState.nodes) {
+        if (!currentOperationOwnerNodeIds.has(currentNode.nodeId)
+            || retainedNodeIds.has(currentNode.nodeId)
+            || !isBranchMarkerNode(currentNode)) continue
+        nodes.push(currentNode)
+    }
+
+    const incomingEdges = incomingCanvasState.edges.filter(edge => (
+        !allOperationNodeIds.has(edge.sourceNodeId)
+        && !allOperationNodeIds.has(edge.targetNodeId)
+    ))
+    const serverEdges = currentCanvasState.edges.filter(edge => (
+        currentOperationNodeIds.has(edge.sourceNodeId)
+        || currentOperationNodeIds.has(edge.targetNodeId)
+    ))
+    const edgeIds = new Set<string>()
+    const edges = [...incomingEdges, ...serverEdges].filter(edge => {
+        if (edgeIds.has(edge.edgeId)) return false
+        edgeIds.add(edge.edgeId)
+        return true
+    })
+
+    return { ...incomingCanvasState, nodes, edges }
+}
+
 const getAssetMembershipEntries = (canvasState: CanvasState): string[] => {
     return canvasState.nodes
         .flatMap((node) => {
@@ -349,7 +419,10 @@ export default {
                 origin: 'updateWorkspaceCanvasState:get'
             })
             const currentCanvasState = normalizeCanvasState(currentWorkspace?.canvasState)
-            const incomingCanvasState = normalizeCanvasState(canvasState)
+            const rawIncomingCanvasState = normalizeCanvasState(canvasState)
+            const incomingCanvasState = persistViewport
+                ? rawIncomingCanvasState
+                : preserveServerManagedMediaGenerationState(currentCanvasState, rawIncomingCanvasState)
             const currentDate = getNextCanvasStateUpdatedAt(currentWorkspace)
             assertRevision2CanvasStorage(incomingCanvasState)
             const currentAssetMembership = getAssetMembershipEntries(currentCanvasState)

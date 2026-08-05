@@ -1,6 +1,7 @@
 'use strict'
 
 import sharp from 'sharp'
+import { info, warn } from '@lixpi/debug-tools'
 
 import type {
     CharacterFidelityAssessmentRequest,
@@ -30,13 +31,22 @@ export type CharacterPanelAssessment = {
         detector: string
         recognizer: string
     }
+    fidelityError?: CharacterFidelityAssessmentResponse['error']
     vlmAssessor: string
+    vlmError?: CharacterPanelVlmAssessmentError
     failedDimensions: string[]
+}
+
+export type CharacterPanelVlmAssessmentError = {
+    code: string
+    message: string
+    diagnostic: string
 }
 
 export type CharacterPanelVlmAssessmentResult = {
     dimensions: CharacterPanelDimensionAssessment[]
     assessor: string
+    error?: CharacterPanelVlmAssessmentError
 }
 
 export type CharacterPanelVlmAssessorPort = {
@@ -63,23 +73,11 @@ export async function assessCharacterPanel(args: {
 }): Promise<CharacterPanelAssessment> {
     await assertUsablePanel(args.candidateBytes)
     const candidateDataUrl = `data:image/png;base64,${args.candidateBytes.toString('base64')}`
-    // Assessment is advisory. An assessor that cannot produce scores leaves the
-    // preserved candidate unscored so the sheet still completes.
-    let vlmAssessment: CharacterPanelVlmAssessmentResult
-    try {
-        vlmAssessment = await args.vlm.assess({
-            panel: args.panel,
-            candidateDataUrl,
-            evidence: args.evidence,
-            sourceDataUrls: args.sourceDataUrls,
-            signal: args.signal,
-        })
-    } catch (error) {
-        if (args.signal?.aborted) throw error
-        vlmAssessment = { dimensions: [], assessor: 'assessment-unavailable' }
-    }
+    const [vlmAssessment, fidelity] = await Promise.all([
+        assessPanelDimensions(args, candidateDataUrl),
+        assessFaceFidelity(args),
+    ])
     const dimensions = vlmAssessment.dimensions
-    const fidelity = await assessFaceFidelity(args)
     const scores = dimensions.map(dimension => clamp(dimension.score))
     if (fidelity.metric.available && fidelity.metric.cosineSimilarity !== undefined) {
         scores.push(clamp(fidelity.metric.cosineSimilarity))
@@ -91,25 +89,81 @@ export async function assessCharacterPanel(args: {
     if (fidelity.metric.available && (fidelity.metric.cosineSimilarity ?? 0) < 0.45) {
         failedDimensions.push('facial-identity')
     }
+    if (!fidelity.metric.available
+        && fidelity.metric.unavailableReason !== 'face-not-required'
+        && fidelity.metric.unavailableReason !== 'non-photographic') {
+        failedDimensions.push('face-similarity-unavailable')
+    }
+    if (dimensions.length === 0) failedDimensions.push('per-dimension-evaluation-unavailable')
     return {
         panelId: args.panel.panelId,
         attemptId: args.attemptId,
-        valid: true,
+        valid: dimensions.length > 0,
         score,
         dimensions,
         fidelityMetric: fidelity.metric,
         fidelityModelIds: fidelity.detector.artifactId && fidelity.recognizer.artifactId
             ? { detector: fidelity.detector.artifactId, recognizer: fidelity.recognizer.artifactId }
             : undefined,
+        ...(fidelity.error ? { fidelityError: fidelity.error } : {}),
         vlmAssessor: vlmAssessment.assessor,
+        ...(vlmAssessment.error ? { vlmError: vlmAssessment.error } : {}),
         failedDimensions: [...new Set(failedDimensions)],
     }
 }
 
+const assessPanelDimensions = async (
+    args: Parameters<typeof assessCharacterPanel>[0],
+    candidateDataUrl: string,
+): Promise<CharacterPanelVlmAssessmentResult> => {
+    try {
+        return await args.vlm.assess({
+            panel: args.panel,
+            candidateDataUrl,
+            evidence: args.evidence,
+            sourceDataUrls: args.sourceDataUrls,
+            signal: args.signal,
+        })
+    } catch (error) {
+        if (args.signal?.aborted) throw error
+        const diagnostic = error instanceof Error ? error.message : String(error)
+        warn(`[CharacterCreatorFidelity] dimension-assessor-unavailable ${JSON.stringify({
+            attemptId: args.attemptId,
+            panelId: args.panel.panelId,
+            errorName: error instanceof Error ? error.name : 'Error',
+            diagnostic: diagnostic.slice(0, 320),
+        })}`)
+        return {
+            dimensions: [],
+            assessor: 'unavailable',
+            error: {
+                code: 'CHARACTER_PANEL_ASSESSMENT_UNAVAILABLE',
+                message: 'The per-dimension evaluator could not produce a usable score set.',
+                diagnostic,
+            },
+        }
+    }
+}
+
 const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[0]): Promise<CharacterFidelityAssessmentResponse> => {
+    const requiresFaceFidelity = args.panel.acceptanceDimensions.includes('facial-identity')
     if (!args.fidelity || args.evidence.medium !== 'photograph'
-        || !['head', 'action'].includes(args.panel.kind)) {
-        return unavailableMetric(args, args.evidence.medium === 'photograph' ? 'face-not-required' : 'non-photographic')
+        || !requiresFaceFidelity) {
+        const reason: CharacterFidelityUnavailableReason = args.evidence.medium !== 'photograph'
+            ? 'non-photographic'
+            : !requiresFaceFidelity
+                ? 'face-not-required'
+                : 'assessor-unavailable'
+        info(`[CharacterFidelity] local-skip ${JSON.stringify({
+            attemptId: args.attemptId,
+            panelId: args.panel.panelId,
+            panelKind: args.panel.kind,
+            sourceMedium: args.evidence.medium,
+            requiresFaceFidelity,
+            fidelityPortAvailable: Boolean(args.fidelity),
+            reason,
+        })}`)
+        return unavailableMetric(args, reason)
     }
     const request: CharacterFidelityAssessmentRequest = {
         jobId: args.attemptId,
@@ -128,6 +182,11 @@ const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[
         return await args.fidelity.assess(request, args.signal)
     } catch (error) {
         if (args.signal?.aborted) throw error
+        warn(`[CharacterFidelity] assessor-unavailable ${JSON.stringify({
+            attemptId: args.attemptId,
+            panelId: args.panel.panelId,
+            error: error instanceof Error ? error.message : String(error),
+        })}`)
         return unavailableMetric(args, 'assessor-unavailable')
     }
 }

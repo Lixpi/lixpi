@@ -35,6 +35,7 @@ import {
     type Asset,
     type AssetMeta,
     type CanvasGeometryUpdate,
+    type CapabilityRunEvent,
     type MediaBranchCandidateSnapshot,
     type MediaBranchVlmResolution,
     type MediaBranchLineagePlan,
@@ -54,11 +55,13 @@ import {
     type MediaPromptReference,
     MEDIA_DESCRIPTOR_VERSION,
     mediaGenerationLayoutSettings,
+    settleMediaGenerationRunProgress,
 } from '@lixpi/constants'
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import {
     createProgressTimeline,
+    type ProgressTimelineInstance,
     type ProgressTimelineItem,
 } from '@lixpi/ui-kit/components/progress-timeline'
 import {
@@ -378,6 +381,19 @@ type PendingBranchMarkerRecord = {
 }
 type BranchMarkerSettlementOptions = {
     preserveGeometry?: boolean
+    terminalProgressStatus?: 'completed' | 'cancelled'
+}
+type BranchMarkerCapabilityProgressStep = {
+    id: string
+    title: string
+    status: NonNullable<CapabilityRunEvent['stepStatus']>
+    summary?: string
+}
+type BranchMarkerCapabilityProgressRun = {
+    runId: string
+    status: CapabilityRunEvent['runStatus']
+    lastSequence: number
+    steps: Map<string, BranchMarkerCapabilityProgressStep>
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -1050,6 +1066,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
+    const branchMarkerProgressTimelines: Map<string, ProgressTimelineInstance> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\u0000reset-generated-media-chrome'
     let generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY
@@ -1125,6 +1142,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const mediaOperationLiveSubjects = new Set<string>()
     const mediaOperationEventSequences = new Map<string, Set<number>>()
     const mediaOperationRequestRevisions = new Map<string, number>()
+    const capabilityProgressRunsByThreadId = new Map<string, Map<string, BranchMarkerCapabilityProgressRun>>()
     let contextPreviewRefreshVersion = 0
     let mediaLibraryPanelInstance: ReturnType<typeof createMediaLibraryPanel> | null = null
     let artifactLibraryPanelInstance: ReturnType<typeof createArtifactLibraryPanel> | null = null
@@ -7963,6 +7981,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             liveNodeOverrides.delete(nodeId)
             branchMarkerProjectionOverrideNodeIds.delete(nodeId)
             manuallyPositionedBranchMarkerNodeIds.delete(nodeId)
+            branchMarkerProgressTimelines.get(nodeId)?.destroy()
+            branchMarkerProgressTimelines.delete(nodeId)
             for (const nodeEl of getBranchMarkerNodeEls(nodeId)) nodeEl.remove()
         }
     }
@@ -8188,7 +8208,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const entries = pendingNodes.map(node => ({
             node,
             // The preflight pose is laid out at its compact screen-fixed width, with
-            // height expanded only when a streamed response row is actually visible.
+            // height expanded for a visible response row or live progress timeline.
             dimensions: getBranchMarkerScreenFixedDimensionsForNode(node),
         }))
         const stackDimensions = entries.map(entry => entry.dimensions)
@@ -9745,16 +9765,37 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const markersToSync: BranchMarkerNode[] = []
         const nodes = currentCanvasState.nodes.map((node: CanvasNode): CanvasNode => {
             if (!isBranchMarkerNode(node) || node.generationRequestId !== generationRequestId) return node
+            const terminalNode = options.terminalProgressStatus && node.mediaGeneration
+                ? {
+                    ...node,
+                    mediaGeneration: {
+                        ...node.mediaGeneration,
+                        status: options.terminalProgressStatus,
+                        message: options.terminalProgressStatus === 'completed'
+                            ? 'Media generation completed.'
+                            : 'Media generation cancelled.',
+                        progress: settleMediaGenerationRunProgress(
+                            node.mediaGeneration.progress,
+                            options.terminalProgressStatus,
+                            options.terminalProgressStatus === 'completed'
+                                ? 'Media generation completed.'
+                                : 'Media generation cancelled.',
+                        ),
+                        updatedAt: Date.now(),
+                    },
+                } satisfies BranchMarkerNode
+                : node
 
             const hadTrackedUiPhase = branchMarkerUiPhaseByNodeId.has(node.nodeId)
             branchMarkerUiPhaseByNodeId.delete(node.nodeId)
             deletePendingBranchMarkerAliasesForNodeId(node.nodeId)
-            if (!node.pendingState) {
-                if (hadTrackedUiPhase) markersToSync.push(node)
-                return node
+            if (!terminalNode.pendingState) {
+                if (hadTrackedUiPhase || terminalNode !== node) markersToSync.push(terminalNode)
+                if (terminalNode !== node) changed = true
+                return terminalNode
             }
 
-            const liveNode = applyBranchMarkerLiveGeometry(node)
+            const liveNode = applyBranchMarkerLiveGeometry(terminalNode)
             const settledNode = options.preserveGeometry
                 ? stripPendingBranchMarkerState(liveNode) as BranchMarkerNode
                 : resizeBranchMarkerNodeFromProseMirror(stripPendingBranchMarkerState(liveNode) as BranchMarkerNode)
@@ -9816,6 +9857,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         clearGeneratingReferenceNodeIds(runPlacementKey)
         clearGeneratingReferenceNodeIds(threadId)
         settleBranchMarkersForGenerationRequest(generationRequestId, options)
+        capabilityProgressRunsByThreadId.delete(threadId)
         if (currentCanvasState) {
             const preflightSettlement = removePreflightBranchMarkersForThread(currentCanvasState, threadId)
             cleanupBranchMarkerArtifacts(preflightSettlement.removedNodeIds)
@@ -9852,6 +9894,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     function clearPendingGeneratedMediaPlacementsForThread(threadId: string): void {
+        capabilityProgressRunsByThreadId.delete(threadId)
         for (const placementKey of pendingGeneratedImagePlacements.keys()) {
             if (placementKey !== threadId && !placementKey.startsWith(`${threadId}:`)) continue
             pendingGeneratedImagePlacements.delete(placementKey)
@@ -10639,13 +10682,30 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function getBranchMarkerScreenFixedDimensionsForNode(node: BranchMarkerNode): { width: number; height: number } {
         const preview = getBranchMarkerConversationPreview(node)
         const responseText = getBranchMarkerReasoningResponseText(node, preview)
-        return getBranchMarkerScreenFixedDimensions(
+        const estimatedDimensions = getBranchMarkerScreenFixedDimensions(
             getBranchMarkerVisiblePromptText(node, preview),
             {
                 responseLine: shouldShowBranchMarkerResponseLine(node, preview),
                 responseText,
             },
         )
+        const expandedContent = findBranchMarkerNodeEl(node.nodeId)?.querySelector<HTMLElement>(
+            ':scope > .workspace-branch-marker-content.has-progress',
+        )
+        if (!expandedContent) return estimatedDimensions
+        const mainContent = expandedContent.querySelector<HTMLElement>(':scope > .workspace-branch-marker-main')
+        if (!mainContent) return estimatedDimensions
+        const contentStyle = getComputedStyle(expandedContent)
+        const verticalChrome = [
+            contentStyle.paddingTop,
+            contentStyle.paddingBottom,
+            contentStyle.borderTopWidth,
+            contentStyle.borderBottomWidth,
+        ].reduce((total, value) => total + (Number.parseFloat(value) || 0), 0)
+        return {
+            ...estimatedDimensions,
+            height: Math.max(estimatedDimensions.height, Math.ceil(mainContent.scrollHeight + verticalChrome)),
+        }
     }
 
     function applyBranchMarkerLiveGeometry<T extends BranchMarkerNode>(node: T): T {
@@ -12172,6 +12232,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     }
 
     setAiGeneratedImageCallbacks({
+        onCapabilityRunEventToCanvas: ({ threadId, event }) => {
+            applyCapabilityRunEventToBranchMarkers(threadId, event)
+        },
+
         onAddToCanvas: async (data) => {
             if (!data.assetId) return
             const refreshed = await assetService.refresh(data.assetId, workspaceId)
@@ -12264,7 +12328,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
             if (!accepted) return
 
-            settleMediaGenerationRequest(threadId, generationRequestId, generationRun)
+            settleMediaGenerationRequest(threadId, generationRequestId, generationRun, {
+                terminalProgressStatus: 'completed',
+            })
         },
 
         onMediaBranchResolutionErrorToCanvas: ({ threadId, generationRun }) => {
@@ -14048,10 +14114,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             operationStatusPreviewTiles.delete(nodeId)
         }
         for (const nodeId of result.updatedNodeIds) {
-            const updatedNode = currentCanvasState.nodes.find((candidate): candidate is OperationStatusCanvasNode => (
-                candidate.type === 'operationStatus' && candidate.nodeId === nodeId
-            ))
-            if (updatedNode) syncExistingOperationStatusNodeToDOM(updatedNode)
+            const updatedNode = currentCanvasState.nodes.find(candidate => candidate.nodeId === nodeId)
+            if (updatedNode?.type === 'operationStatus') syncExistingOperationStatusNodeToDOM(updatedNode)
+            if (updatedNode && isBranchMarkerNode(updatedNode)) {
+                syncBranchMarkerNodeContent(applyBranchMarkerLiveGeometry(updatedNode))
+            }
         }
         for (const generationRequestId of affectedRequestIds) {
             for (const candidate of currentCanvasState.nodes) {
@@ -14593,7 +14660,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (generationRequestId) cancelledMediaGenerationRequestIds.add(generationRequestId)
         removeActiveGeneratedMediaNodesForBranchMarker(node)
         if (generationRequestId) {
-            settleMediaGenerationRequest(threadId, generationRequestId, undefined, { preserveGeometry: true })
+            settleMediaGenerationRequest(threadId, generationRequestId, undefined, {
+                preserveGeometry: true,
+                terminalProgressStatus: 'cancelled',
+            })
         } else {
             clearPendingGeneratedMediaPlacementsForThread(threadId)
             settleBranchMarkersForGenerationRequest(node.generationRequestId, { preserveGeometry: true })
@@ -14796,6 +14866,106 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return operationNodes.filter(operationNode => directlyOwnedOperationNodeIds.has(operationNode.nodeId))
     }
 
+    function applyCapabilityRunEventToBranchMarkers(threadId: string, event: CapabilityRunEvent): void {
+        const runs = capabilityProgressRunsByThreadId.get(threadId) ?? new Map<string, BranchMarkerCapabilityProgressRun>()
+        const run = runs.get(event.runId) ?? {
+            runId: event.runId,
+            status: event.runStatus,
+            lastSequence: 0,
+            steps: new Map<string, BranchMarkerCapabilityProgressStep>(),
+        }
+        if (event.sequence <= run.lastSequence) return
+        run.lastSequence = event.sequence
+        run.status = event.runStatus
+        if (event.stepId && event.stepStatus) {
+            const existingStep = run.steps.get(event.stepId)
+            run.steps.set(event.stepId, {
+                id: event.stepId,
+                title: event.stepTitle ?? existingStep?.title ?? event.stepId,
+                status: event.stepStatus,
+                summary: event.errorMessage
+                    ?? event.safeOutputSummary
+                    ?? event.safeInputSummary
+                    ?? existingStep?.summary,
+            })
+        }
+        runs.set(event.runId, run)
+        capabilityProgressRunsByThreadId.set(threadId, runs)
+        refreshBranchMarkersForAiChatThread(threadId)
+    }
+
+    function getBranchMarkerCapabilityProgressRuns(node: BranchMarkerNode): BranchMarkerCapabilityProgressRun[] {
+        return [...(capabilityProgressRunsByThreadId.get(getBranchMarkerThreadId(node))?.values() ?? [])]
+    }
+
+    function getCapabilityRunTimelineStatus(
+        run: BranchMarkerCapabilityProgressRun,
+    ): ProgressTimelineItem['status'] {
+        if (run.status === 'completed') return 'completed'
+        if (run.status === 'failed') return 'failed'
+        if (run.status === 'cancelled') return 'cancelled'
+        return 'running'
+    }
+
+    function getBranchMarkerCapabilityProgressItems(node: BranchMarkerNode): ProgressTimelineItem[] {
+        const runs = getBranchMarkerCapabilityProgressRuns(node)
+        const toStepItem = (
+            run: BranchMarkerCapabilityProgressRun,
+            step: BranchMarkerCapabilityProgressStep,
+        ): ProgressTimelineItem => ({
+            id: `capability:${run.runId}:${step.id}`,
+            title: step.title,
+            status: step.status,
+            ...(step.summary ? { summary: step.summary } : {}),
+        })
+        if (runs.length === 1) {
+            const run = runs[0]!
+            const steps = [...run.steps.values()].map(step => toStepItem(run, step))
+            return steps.length > 0 ? steps : [{
+                id: `capability:${run.runId}`,
+                title: 'Start capability run',
+                status: getCapabilityRunTimelineStatus(run),
+                summary: run.status === 'completed'
+                    ? 'Capability preparation completed.'
+                    : 'Resolving the selected Capability and starting its Tool workflow.',
+            }]
+        }
+        return runs.map((run, index): ProgressTimelineItem => ({
+            id: `capability:${run.runId}`,
+            title: `Capability run ${index + 1}`,
+            status: getCapabilityRunTimelineStatus(run),
+            children: [...run.steps.values()].map(step => toStepItem(run, step)),
+        }))
+    }
+
+    function getBranchMarkerCapabilityProgressStatus(node: BranchMarkerNode): ProgressTimelineItem['status'] | null {
+        const runs = getBranchMarkerCapabilityProgressRuns(node)
+        if (runs.length === 0) return null
+        if (runs.some(run => run.status === 'failed')) return 'failed'
+        if (runs.some(run => run.status === 'cancelled')) return 'cancelled'
+        if (runs.every(run => run.status === 'completed')) return 'completed'
+        return 'running'
+    }
+
+    function getBranchMarkerCapabilityProgressMessage(node: BranchMarkerNode): string | undefined {
+        const runs = getBranchMarkerCapabilityProgressRuns(node)
+        for (const run of [...runs].reverse()) {
+            const steps = [...run.steps.values()]
+            const activeStep = [...steps].reverse().find(step => step.status === 'running')
+            if (activeStep?.summary) return activeStep.summary
+            const latestStep = steps.at(-1)
+            if (!latestStep?.summary) continue
+            if (run.status === 'running') {
+                return `${latestStep.summary} Starting the next Capability step.`
+            }
+            if (run.status === 'completed') {
+                return `${latestStep.summary} Capability planning is complete; committing the media run.`
+            }
+            return latestStep.summary
+        }
+        return undefined
+    }
+
     function toProgressTimelineItem(
         item: OperationProgressItem,
         operationFailed = false,
@@ -14828,17 +14998,25 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function getPendingBranchMarkerProgressItems(node: BranchMarkerNode): ProgressTimelineItem[] {
         const mediaPlaceholderVisible = getBranchMarkerUiPhase(node) === 'media-placeholder'
+        const capabilityItems = getBranchMarkerCapabilityProgressItems(node)
+        const capabilityStatus = getBranchMarkerCapabilityProgressStatus(node)
         return [
             { id: 'request', title: 'Understand request', status: 'completed' },
             {
                 id: 'plan',
                 title: 'Resolve capabilities, tools, and references',
-                status: mediaPlaceholderVisible ? 'completed' : 'running',
+                status: mediaPlaceholderVisible ? 'completed' : capabilityStatus ?? 'running',
+                ...(capabilityItems.length > 0 ? { children: capabilityItems } : {}),
             },
             {
                 id: 'provider',
                 title: 'Prepare media generation',
                 status: mediaPlaceholderVisible ? 'running' : 'pending',
+                summary: mediaPlaceholderVisible
+                    ? 'The media run is committed. Waiting for the Capability media runtime to publish its first preparation result.'
+                    : capabilityStatus === 'completed'
+                        ? 'Capability planning finished. Resolving model assignments and committing the media run.'
+                        : 'Waiting for capability planning to finish.',
             },
             { id: 'generation', title: 'Generate media', status: 'pending' },
             { id: 'finalize', title: 'Finalize assets', status: 'pending' },
@@ -14876,24 +15054,33 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     function createBranchMarkerProgress(
         node: BranchMarkerNode,
     ): HTMLElement | null {
+        const removeTimeline = (): null => {
+            branchMarkerProgressTimelines.get(node.nodeId)?.destroy()
+            branchMarkerProgressTimelines.delete(node.nodeId)
+            return null
+        }
         const markerPhase = getBranchMarkerUiPhase(node)
-        if (markerPhase === 'preflight') return null
+        const capabilityItems = getBranchMarkerCapabilityProgressItems(node)
+        if (markerPhase === 'preflight' && capabilityItems.length === 0) return removeTimeline()
         const operationNodes = getBranchMarkerOperationNodes(node)
         const isAwaitingOperationProjection = !node.mediaGeneration
             && operationNodes.length === 0
-            && isBranchMarkerGenerationGroupActive(node)
-        if (!node.mediaGeneration && operationNodes.length === 0 && !isAwaitingOperationProjection) return null
+            && (isBranchMarkerGenerationGroupActive(node) || capabilityItems.length > 0)
+        if (!node.mediaGeneration && operationNodes.length === 0 && !isAwaitingOperationProjection) {
+            return removeTimeline()
+        }
         const operationMessage = operationNodes
             .map(operationNode => operationNode.progress?.message ?? operationNode.message)
             .filter(Boolean)
             .join(' · ')
         const currentMessage = (operationNodes.length > 1 ? operationMessage : node.mediaGeneration?.message)
             || operationMessage
+            || getBranchMarkerCapabilityProgressMessage(node)
             || (markerPhase === 'media-placeholder'
                 ? 'The generation request is starting.'
                 : 'Preparing the generation plan.')
         const items = getBranchMarkerProgressItems(node)
-        if (items.length === 0) return null
+        if (items.length === 0) return removeTimeline()
         if (debugLoggingEnabled) console.info('[CANVAS][branch-marker-progress]', 'render', {
             nodeId: node.nodeId,
             generationRequestId: node.generationRequestId,
@@ -14905,10 +15092,17 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             operationNodeIds: operationNodes.map(operationNode => operationNode.nodeId),
             itemCount: items.length,
         })
-        const timeline = createProgressTimeline({
-            ariaLabel: 'Generation progress',
-            items,
-        })
+        let timeline = branchMarkerProgressTimelines.get(node.nodeId)
+        if (timeline) {
+            timeline.setItems(items)
+        } else {
+            timeline = createProgressTimeline({
+                ariaLabel: 'Generation progress',
+                items,
+                rippleClockId: `branch-marker:${node.nodeId}`,
+            })
+            branchMarkerProgressTimelines.set(node.nodeId, timeline)
+        }
         const panel = html`
             <section className="workspace-branch-marker-progress" aria-live="polite">
                 <div className="workspace-branch-marker-progress-current">${currentMessage}</div>
@@ -15078,10 +15272,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             label: getBranchMarkerTypeLabel(node),
         })
         if (currentContent) {
-            // The content is rebuilt on every streamed segment / state change, which
-            // would restart a fresh spinner's CSS rotation. Continuity is handled by
-            // phase-aligning each spinner to a shared clock (see createBranchMarkerContent),
-            // so a plain replace is safe here.
+            // The content is rebuilt on every streamed segment / state change. The
+            // progress timeline element is retained and moved into this new shell,
+            // so its D3 ripple keeps expanding without restarting on every update.
             currentContent.replaceWith(nextContent)
             syncBranchMarkerStopControl(node, nodeEl)
             syncBranchMarkerReviewControls(node, nodeEl)
@@ -16205,6 +16398,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             destroyCapabilityArtifactViews()
             resetGeneratedMediaChromeSyncKey()
             destroyBranchMarkerReasoningTooltips()
+            for (const timeline of branchMarkerProgressTimelines.values()) timeline.destroy()
+            branchMarkerProgressTimelines.clear()
             for (const dropdown of branchMarkerReviewDropdowns.values()) dropdown.destroy()
             branchMarkerReviewDropdowns.clear()
             destroyVideoControlInstances()
@@ -16294,6 +16489,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             mediaOperationLiveSubjects.clear()
             mediaOperationEventSequences.clear()
             mediaOperationRequestRevisions.clear()
+            capabilityProgressRunsByThreadId.clear()
             activeContextChipTrayEls.clear()
 
             promptInputController.destroy()

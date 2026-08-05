@@ -2,8 +2,6 @@
 @use 'sass:string';
 
 $defaultHoverTransitionDuration: var(--default-hover-transition-duration, 150ms) !default;
-$progressTimelineRippleCycleDuration: 1400ms !default;
-$progressTimelineRippleOuterDelay: 220ms !default;
 
 @function pupOutTransition($property, $duration) {
     @return #{$property} #{$duration} cubic-bezier(0.319, 1, 0.01, 1);

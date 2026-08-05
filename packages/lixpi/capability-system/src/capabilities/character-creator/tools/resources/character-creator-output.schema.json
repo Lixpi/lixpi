@@ -35,7 +35,7 @@
                     "items": {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": ["panelId", "kind", "title", "target", "crop", "dependsOn", "required", "condition", "acceptanceDimensions"],
+                        "required": ["panelId", "kind", "title", "target", "crop", "dependsOn", "outputBindings", "required", "condition", "acceptanceDimensions"],
                         "properties": {
                             "panelId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
                             "kind": { "enum": ["body", "head", "prop", "action"] },
@@ -43,6 +43,19 @@
                             "target": { "type": "string", "minLength": 1 },
                             "crop": { "enum": ["full-body", "upper-body", "prop", "action"] },
                             "dependsOn": { "type": "array", "items": { "type": "string" } },
+                            "outputBindings": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": ["bindingKey", "sourceNodeId", "required"],
+                                    "properties": {
+                                        "bindingKey": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                                        "sourceNodeId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                                        "required": { "type": "boolean" }
+                                    }
+                                }
+                            },
                             "required": { "type": "boolean" },
                             "condition": { "enum": ["always", "generate-when-no-observed-prop"] },
                             "acceptanceDimensions": { "type": "array", "minItems": 1, "items": { "type": "string" } }

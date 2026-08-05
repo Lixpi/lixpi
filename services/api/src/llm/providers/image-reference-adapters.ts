@@ -37,11 +37,11 @@ const IDENTITY_ROLES = new Set<ImageGenerationReferenceRole>([
 ])
 
 const ROLE_PRIORITY: Readonly<Record<ImageGenerationReferenceRole, number>> = {
-    'original-source': 0,
-    'pose-reference': 1,
-    'face-crop': 2,
-    'body-outfit-crop': 3,
-    'canonical-anchor': 4,
+    'canonical-anchor': 0,
+    'original-source': 1,
+    'pose-reference': 2,
+    'face-crop': 3,
+    'body-outfit-crop': 4,
     'adjacent-angle': 5,
     'prop-crop': 6,
     'structure-reference': 7,
@@ -59,9 +59,11 @@ const adaptByBudget = ({
         throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
     }
 
+    const hasCanonicalAnchor = references.some(reference => reference.role === 'canonical-anchor')
     const sorted = references
         .map((reference, index) => ({ reference, index }))
-        .sort((left, right) => ROLE_PRIORITY[left.reference.role] - ROLE_PRIORITY[right.reference.role]
+        .sort((left, right) => getRolePriority(left.reference.role, hasCanonicalAnchor)
+            - getRolePriority(right.reference.role, hasCanonicalAnchor)
             || left.index - right.index)
     const included: ResolvedImageGenerationReference[] = []
     const omitted: ImageReferenceAdaptation['omitted'] = []
@@ -109,6 +111,16 @@ const adaptByBudget = ({
         omitted,
         ...(capabilities.inputFidelity === 'high' ? { explicitInputFidelity: 'high' as const } : {}),
     }
+}
+
+const getRolePriority = (
+    role: ImageGenerationReferenceRole,
+    hasCanonicalAnchor: boolean,
+): number => {
+    if (!hasCanonicalAnchor) return ROLE_PRIORITY[role]
+    if (role === 'pose-reference') return 1
+    if (role === 'original-source') return 2
+    return ROLE_PRIORITY[role]
 }
 
 export const OPENAI_IMAGE_REFERENCE_ADAPTER: ImageReferenceAdapter = {

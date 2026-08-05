@@ -195,20 +195,63 @@ const assessCharacterFidelity = async (
     signal?: AbortSignal,
 ): Promise<CharacterFidelityAssessmentResponse> => {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+    const startedAt = Date.now()
+    console.info('[CharacterFidelity] dispatch', {
+        jobId: request.jobId,
+        panelId: request.panelId,
+        attemptId: request.attemptId,
+        sourceCount: request.sources.length,
+        sourceMedium: request.sourceMedium,
+        expectedFaceVisibility: request.expectedFaceVisibility,
+        candidateObjectKey: request.candidate.objectKey,
+        candidateByteLength: request.candidate.byteLength,
+        timeoutMs: DEFAULT_FIDELITY_TIMEOUT_MS,
+    })
     const pending = natsService.request<CharacterFidelityAssessmentRequest, CharacterFidelityAssessmentResponse>(
         NATS_SUBJECTS.CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL,
         request,
         DEFAULT_FIDELITY_TIMEOUT_MS,
     )
-    if (!signal) return await pending
-    let abort: (() => void) | undefined
-    const cancelled = new Promise<CharacterFidelityAssessmentResponse>((_resolve, reject) => {
-        abort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
-        signal.addEventListener('abort', abort, { once: true })
-    })
     try {
-        return await Promise.race([pending, cancelled])
-    } finally {
-        if (abort) signal.removeEventListener('abort', abort)
+        let response: CharacterFidelityAssessmentResponse
+        if (!signal) {
+            response = await pending
+        } else {
+            let abort: (() => void) | undefined
+            const cancelled = new Promise<CharacterFidelityAssessmentResponse>((_resolve, reject) => {
+                abort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+                signal.addEventListener('abort', abort, { once: true })
+                if (signal.aborted) abort?.()
+            })
+            try {
+                response = await Promise.race([pending, cancelled])
+            } finally {
+                if (abort) signal.removeEventListener('abort', abort)
+            }
+        }
+        console.info('[CharacterFidelity] result', {
+            jobId: request.jobId,
+            panelId: request.panelId,
+            attemptId: request.attemptId,
+            durationMs: Date.now() - startedAt,
+            available: response.metric.available,
+            unavailableReason: response.metric.unavailableReason,
+            cosineSimilarity: response.metric.cosineSimilarity,
+            sourceDetectionCount: response.sourceDetections.length,
+            candidateDetectionCount: response.candidateDetections.length,
+            errorCode: response.error?.code,
+            detectorArtifactId: response.detector.artifactId,
+            recognizerArtifactId: response.recognizer.artifactId,
+        })
+        return response
+    } catch (error) {
+        console.warn('[CharacterFidelity] request failed', {
+            jobId: request.jobId,
+            panelId: request.panelId,
+            attemptId: request.attemptId,
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+        })
+        throw error
     }
 }

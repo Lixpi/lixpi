@@ -29,8 +29,8 @@ export function registerCharacterCreatorActions(
         authorize: authorizeCharacterCreator,
         execute: input => validateCharacterCreatorRequest(input),
         classifyRetry: () => 'terminal',
-        summarizeInput: input => `prompt=${stringLength(input.prompt)} references=${arrayLength(input.referenceAssetIds)}`,
-        summarizeOutput: output => `references=${arrayLength(asRecord(output)?.referenceAssetIds)}`,
+        summarizeInput: input => `Checking a ${stringLength(input.prompt)}-character request with ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
+        summarizeOutput: output => `Request valid. ${formatReferenceCount(arrayLength(asRecord(output)?.referenceAssetIds))} accepted for character planning.`,
     })
     registerIfMissing(registry, {
         key: 'character.build-render-plan',
@@ -40,8 +40,8 @@ export function registerCharacterCreatorActions(
         authorize: authorizeCharacterCreator,
         execute: (input, context) => buildPlanOutput(input, context),
         classifyRetry: () => 'terminal',
-        summarizeInput: input => `prompt=${stringLength(input.prompt)} references=${arrayLength(input.referenceAssetIds)}`,
-        summarizeOutput: output => `panels=${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)}`,
+        summarizeInput: input => `Building the character-shot graph from ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
+        summarizeOutput: output => `Render plan ready: ${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)} shot(s). The neutral-front identity portrait runs first and releases every dependent shot after it succeeds; one provider attempt per shot.`,
     })
 }
 
@@ -131,4 +131,8 @@ function stringLength(value: unknown): number {
 
 function arrayLength(value: unknown): number {
     return Array.isArray(value) ? value.length : 0
+}
+
+function formatReferenceCount(count: number): string {
+    return `${count} reference Asset${count === 1 ? '' : 's'}`
 }

@@ -15,7 +15,7 @@
 - Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
 - Handles image, video, context-resolution, branch-resolution, trace, and error side-effect events from `SegmentsReceiver`.
 - Renders Capability media review details inside the image-generation trace, including per-shot status, match score, comparison issues, the zero-automatic-retry count, and the manual-variant recommendation.
-- Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
+- Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response and the canvas branch marker's preflight timeline. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
 - Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.

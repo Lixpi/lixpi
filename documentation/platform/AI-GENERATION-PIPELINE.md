@@ -41,21 +41,38 @@ Capability policies may remove an axis. Character Creator removes video models b
 
 `ProviderState.capabilityMediaExecutionPlan` carries a provider-neutral plan from Capability preflight to `ImageRouter`. The Capability package owns `CapabilityMediaStrategyRegistry`, the shared media DAG executor, and each concrete module strategy. A module publishes its strategies through `CapabilityModuleDefinition`; the API installs them through the catalog and never imports a concrete strategy. Common strategy and DAG layers contain no provider-name checks.
 
+Media DAG nodes declare ordering dependencies and optional named output bindings. An output binding identifies an earlier node, assigns its result a consumer-facing binding key, and states whether the result is required. The runner releases only dependency-ready nodes, supplies dependency and bound outputs to the execution callback, and marks a node blocked without invoking it when a required producer completed without an output. This separates reusable sequencing/output-flow mechanics from module-owned decisions about what an output means or how a provider consumes it.
+
+```ts
+{
+    nodeId: 'body-front',
+    dependsOn: ['head-front-neutral'],
+    outputBindings: [{
+        bindingKey: 'generated-identity-anchor',
+        sourceNodeId: 'head-front-neutral',
+        required: true,
+    }],
+}
+```
+
+The binding key is module-owned and opaque to the runner. A future Capability can reuse the same contract for keyframes, masks, layouts, calibration renders, audio stems, or any other generated prerequisite without adding a concrete Capability branch to shared infrastructure. Optional bindings preserve dependency ordering while allowing the consumer to execute without a producer result; required bindings settle the consumer as blocked and expose the missing key and producer ID to the module callback.
+
 Character Creator's strategy:
 
 1. reauthorizes canonical or original source Assets;
 2. analyzes source pixels with the selected reasoning model;
 3. writes lossless role crops to transient storage;
-4. executes 3 to 10 independent shots with bounded concurrency and one provider attempt per shot;
-5. attaches the shot's deterministic text-free neutral-mannequin pose image and adapts all provider-neutral reference roles through the selected image provider;
-6. publishes a progressive composite after every terminal shot result;
-7. compares rendered shots with structured VLM assessment and optional NEX face similarity;
-8. surfaces failed dimensions without automatically retrying or replacing pixels;
-9. assembles one deterministic 3840x2560 PNG;
-10. returns that PNG and its review trace to the normal image-settlement path;
-11. clears transient objects on success, failure, or cancellation.
+4. renders the neutral-front identity portrait as the required generated identity anchor;
+5. releases the remaining dependency-ready shots with bounded concurrency and one provider attempt per shot, binding the generated anchor into each request;
+6. attaches the shot's deterministic text-free neutral-mannequin pose image and adapts the anchor, source evidence, and controls through the selected image provider;
+7. publishes a progressive composite after every terminal shot result;
+8. compares rendered shots with structured VLM assessment and optional NEX face similarity;
+9. surfaces failed dimensions without automatically retrying or replacing pixels;
+10. assembles one deterministic 3840x2560 PNG;
+11. returns that PNG and its review trace to the normal image-settlement path;
+12. clears transient objects on success, failure, or cancellation.
 
-The default graph contains a detailed front face, a relaxed standing front body, and a natural walking profile body. Free-form prompt text can request 3 to 10 shots and prioritize belongings, expressions, back views, face angles, or action poses. Automatic paid and semantic retries are disabled. A failed shot remains visible as an unavailable cell while the runtime composes every successful shot; another attempt requires explicit user action and creates a preserved lineage variant.
+The default graph contains a detailed front face, a relaxed standing front body, and a natural walking profile body. The front face blocks and conditions every provider-generated dependent shot; the other ready shots may run concurrently after it succeeds. Free-form prompt text can request 3 to 10 shots and prioritize belongings, back views, face angles, outfit details, materials, or action poses. Automatic paid and semantic retries are disabled. A failed dependent shot remains visible as an unavailable cell while the runtime composes every successful shot. A failed identity anchor blocks all dependent provider work and fails the run visibly. Another attempt requires explicit user action and creates a preserved lineage variant.
 
 Every durable media run can publish an extensible nested `items` tree with its progress payload. After preflight resolves onto the canvas, the owning branch lineage marker renders that tree inside its existing surface through `@lixpi/ui-kit`, below the reasoning stream. The API mirrors progress onto the marker and archives terminal progress there before removing a successful operation projection. Runs that do not publish domain-specific items receive a generic media timeline, so image, video, Capability, Skill, and Tool execution share one transparent progress surface without sharing hardcoded step names.
 
