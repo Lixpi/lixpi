@@ -2272,8 +2272,10 @@
     width: calc(100% + 2px);
     height: auto;
     min-height: calc(100% + 2px);
+    padding-top: 12px;
+    padding-bottom: 12px;
     border: 1px solid var(--workspace-branch-origin-border-color);
-    border-radius: calc(var(--workspace-branch-marker-header-height, 64px) / 2);
+    border-radius: clamp(28px, 10%, 48px);
     background: var(--workspace-branch-origin-background-color);
     box-shadow: var(--workspace-branch-origin-box-shadow);
 }
@@ -2288,13 +2290,13 @@
 
 .workspace-branch-marker-progress {
     --progress-timeline-surface: var(--workspace-branch-origin-background-color, #5d656d);
-    --progress-timeline-primary: rgb(255 255 255 / 96%);
-    --progress-timeline-secondary: rgb(255 255 255 / 84%);
+    --progress-timeline-primary: currentColor;
+    --progress-timeline-secondary: currentColor;
     --progress-timeline-line: rgb(255 255 255 / 38%);
     --progress-timeline-pending-border: rgb(255 255 255 / 68%);
-    --progress-timeline-title-size: 15px;
-    --progress-timeline-title-weight: 400;
-    --progress-timeline-summary-size: 13px;
+    --progress-timeline-title-size: var(--workspace-branch-marker-response-font-size, 11.5px);
+    --progress-timeline-title-weight: 500;
+    --progress-timeline-summary-size: var(--workspace-branch-marker-response-font-size, 11.5px);
     position: static;
     width: 100%;
     min-width: 0;
@@ -2302,16 +2304,37 @@
     margin-top: 0;
     padding: 6px 2px 1px;
     color: currentColor;
+    font-size: var(--workspace-branch-marker-response-font-size, 11.5px);
+    font-weight: 500;
+    line-height: var(--workspace-branch-marker-response-line-height, 1.15);
     pointer-events: none;
 }
 
 .workspace-branch-marker-progress-current {
     margin: 0 0 10px;
-    color: rgb(255 255 255 / 94%);
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1.35;
+    color: currentColor;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
     overflow-wrap: anywhere;
+}
+
+.workspace-branch-marker-progress .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-summary,
+.workspace-branch-marker-progress .progress-timeline-meta {
+    color: currentColor;
+    line-height: inherit;
+    opacity: 0.72;
+}
+
+.workspace-branch-marker-progress .progress-timeline-chevron {
+    border-color: currentColor;
+    opacity: 0.72;
+}
+
+.workspace-branch-marker-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-meta {
+    opacity: 1;
 }
 
 .workspace-branch-marker-progress .progress-timeline-content {
