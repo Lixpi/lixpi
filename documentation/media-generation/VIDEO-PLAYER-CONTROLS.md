@@ -171,7 +171,7 @@ Video controls add **no** persisted data model, NATS subject, API route, Object 
 |------|------|
 | Shared control component | [videoControls.ts](../../packages/lixpi/ui-kit/src/components/videoControls/videoControls.ts) |
 | Component barrel | [index.ts](../../packages/lixpi/ui-kit/src/components/videoControls/index.ts) |
-| SVG glyphs | [icons/index.ts](../../packages/lixpi/ui-kit/src/icons/index.ts) |
+| SVG glyphs | [svg/svgIcons.ts](../../packages/lixpi/ui-kit/src/svg/svgIcons.ts) |
 | Canvas video element + poster handler | [videoNodeHandler.ts](../../services/web-ui/src/infographics/workspace/rendering/videoNodeHandler.ts) |
 | Canvas chrome mount | [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
 | In-chat video mount | [aiGeneratedVideoNode.ts](../../services/web-ui/src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts) |

@@ -7,7 +7,7 @@ import {
     stabilityIcon,
     bytedanceIcon,
     imageIcon
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'

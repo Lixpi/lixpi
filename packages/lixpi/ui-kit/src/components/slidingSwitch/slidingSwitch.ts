@@ -3,7 +3,7 @@ import 'd3-transition'
 
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
-import { xIcon } from '../../icons/index.ts'
+import { xIcon } from '../../svg/svgIcons.ts'
 import { appendSvgPathIcon } from '../../svg/svgIconPaths.ts'
 
 export type SlidingSwitchOption<Value extends string = string> = {

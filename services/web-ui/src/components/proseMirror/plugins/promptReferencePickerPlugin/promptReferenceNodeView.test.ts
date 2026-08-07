@@ -13,7 +13,7 @@ import {
     promptIcon,
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import { CapabilityModulePromiseCache } from './capabilityPromptReferencePreview.ts'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import {

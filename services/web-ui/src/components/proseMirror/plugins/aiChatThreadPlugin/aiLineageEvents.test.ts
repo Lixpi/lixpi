@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { branchForkfIcon, branchMidIcon } from '$src/svgIcons/index.ts'
+import { branchForkfIcon, branchMidIcon } from '@lixpi/ui-kit/svg'
 import { aiLineageEventNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
 import { getAiLineageEventLabel, getAiLineageEventsForProjection, getReasoningSectionLineageEvents, normalizeAiLineageProjectionScope, createAiLineageEventMarker } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 

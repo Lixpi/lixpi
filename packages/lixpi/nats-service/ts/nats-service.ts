@@ -852,8 +852,10 @@ export default class NatsService {
                 message.ack()
                 processed += 1
             } catch (error) {
+                // One poisoned message must not abandon the rest of the fetched batch:
+                // nak it for redelivery and keep draining what the consumer handed us.
                 message.nak(options.nakDelayMs)
-                throw error
+                err(`Error processing JetStream message on subject ${message.subject}`, error)
             }
         }
         return processed

@@ -14,7 +14,7 @@ import {
     triggerNodesConnectionIcon,
     changeNodesConnectorLineCurve,
     infoCircleFilledIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import type { BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'

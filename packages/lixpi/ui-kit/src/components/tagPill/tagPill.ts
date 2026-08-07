@@ -1,4 +1,4 @@
-import { xIcon } from '../../icons/index.ts'
+import { xIcon } from '../../svg/svgIcons.ts'
 import { appendSvgPathIcon } from '../../svg/svgIconPaths.ts'
 
 export type TagPillVariant = 'neutral' | 'explicit' | 'auto'

@@ -156,7 +156,7 @@ import {
     trashBinIcon,
     videoPlayGlyphIcon,
     xCircleIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import type {
     AssetDocumentView as Document,
     ConversationAssetView as AiChatThread,
@@ -225,7 +225,7 @@ import {
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { loadWorkspaceRouteData } from '$src/services/router-service.ts'
-import { tPatternSvgTexture } from '$src/svgIcons/svgTextures.ts'
+import { tPatternSvgTexture } from '@lixpi/ui-kit/svg'
 import { settings, type WorkspaceCollisionFlowSettings, type WorkspaceCollisionNodeTypeSettings } from '$src/settings.ts'
 import { BubbleMenu, type BubbleMenuPositionRequest } from '@lixpi/ui-kit/components/bubble-menu'
 import { buildCanvasBubbleMenuItems, CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT, CANVAS_EDGE_CONTEXT } from '$src/infographics/workspace/canvasBubbleMenuItems.ts'

@@ -32,7 +32,7 @@ import {
     promptIcon,
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import {
     capabilityArtifactFrontendRegistry,
     ensureCapabilityStyles,

@@ -8,7 +8,7 @@ import type {
 } from '@lixpi/constants'
 import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
-import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
+import { documentIcon, videoPlayGlyphIcon } from '@lixpi/ui-kit/svg'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import { applyStyle, html } from '$src/utils/domTemplates.ts'
 import {

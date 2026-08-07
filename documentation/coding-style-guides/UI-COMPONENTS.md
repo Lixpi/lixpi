@@ -22,7 +22,7 @@ Choose the rendering approach by where the UI lives and what it does.
 | Canvas-adjacent controls | D3 SVG | Menus, switches, sliders, playback controls, control bars, badges, handles, and similar UI that must track canvas geometry but needs precise interactive controls |
 | Normal app UI | Svelte | Panels, dialogs, forms, settings, inspectors, app navigation, persistent screens |
 | Non-Svelte TypeScript DOM UI | `html` tagged template | ProseMirror node views, plugins, and small DOM surfaces covered by [`TYPESCRIPT.md`](./TYPESCRIPT.md) |
-| Static icon or decorative SVG in DOM | Existing icon system | Import from [`svgIcons/index.ts`](../../services/web-ui/src/svgIcons/index.ts), then inject or parse according to the host renderer |
+| Static icon or decorative SVG in DOM | Existing icon system | Import from [`@lixpi/ui-kit/svg`](../../packages/lixpi/ui-kit/src/svg/svgIcons.ts), then inject or parse according to the host renderer |
 
 Do not use D3 as a general replacement for Svelte. Do not use HTML templates for canvas chrome when the control is expected to live in an SVG overlay. Do not use PIXI for form-like UI, menus, segmented switches, media controls, or text-heavy widgets unless there is a concrete rendering reason.
 
@@ -302,17 +302,16 @@ Keep durations short. Use easing intentionally. Avoid playful easing unless the 
 
 ## Icons
 
-Use existing icons from [`svgIcons/index.ts`](../../services/web-ui/src/svgIcons/index.ts).
+Use existing icons from [`@lixpi/ui-kit/svg`](../../packages/lixpi/ui-kit/src/svg/svgIcons.ts).
 
 For HTML/Svelte, inject icon markup through the existing DOM/template patterns.
 
 For D3 SVG controls, use `appendSvgPathIcon` from
-[`svgIconPaths.ts`](../../services/web-ui/src/components/svgIconPaths.ts) to
+[`svgIconPaths.ts`](../../packages/lixpi/ui-kit/src/svg/svgIconPaths.ts) to
 parse imported SVG markup and append scaled paths into an SVG group:
 
 ```typescript
-import { appendSvgPathIcon } from '$src/components/svgIconPaths.ts'
-import { xIcon } from '$src/svgIcons/index.ts'
+import { appendSvgPathIcon, xIcon } from '@lixpi/ui-kit/svg'
 
 appendSvgPathIcon(iconGroup, xIcon, { x: 0, y: 0, size: 14, fill: '#1a2744' })
 ```

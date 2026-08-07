@@ -1,7 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView, NodeView } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
-import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, brokenImageIcon } from '@lixpi/ui-kit/svg'
 import AuthService from '$src/services/auth-service.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'

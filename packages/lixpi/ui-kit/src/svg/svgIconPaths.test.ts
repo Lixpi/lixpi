@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { select } from 'd3-selection'
-import { extractSvgPathIcon, appendSvgPathIcon } from '$src/components/svgIconPaths.ts'
+import { extractSvgPathIcon, appendSvgPathIcon } from './svgIconPaths.ts'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 

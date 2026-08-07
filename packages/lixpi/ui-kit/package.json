@@ -9,6 +9,7 @@
     },
     "exports": {
         ".": "./src/index.ts",
+        "./svg": "./src/svg/index.ts",
         "./components/bubble-menu": "./src/components/bubbleMenu/index.ts",
         "./components/dropdown": "./src/components/dropdown/index.ts",
         "./components/help-tooltip": "./src/components/helpTooltip/index.ts",

@@ -5,7 +5,7 @@ import {
     type ContextPreviewPopoverInstance,
 } from '$src/components/contextPreview/index.ts'
 import { html } from '$src/utils/domTemplates.ts'
-import { atomIcon } from '$src/svgIcons/index.ts'
+import { atomIcon } from '@lixpi/ui-kit/svg'
 
 import type { PromptReferencePreviewInstance, PromptReferencePreviewRenderer } from './promptReferenceNodeView.ts'
 

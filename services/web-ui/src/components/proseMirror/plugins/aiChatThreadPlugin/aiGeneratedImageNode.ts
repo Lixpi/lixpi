@@ -1,4 +1,4 @@
-import { brokenImageIcon } from '$src/svgIcons/index.ts'
+import { brokenImageIcon } from '@lixpi/ui-kit/svg'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'

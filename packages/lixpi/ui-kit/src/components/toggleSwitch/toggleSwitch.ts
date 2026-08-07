@@ -6,7 +6,7 @@ import { select } from 'd3-selection'
 import 'd3-transition'
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
-import { checkMarkIcon } from '../../icons/index.ts'
+import { checkMarkIcon } from '../../svg/svgIcons.ts'
 import { extractSvgPathIcon } from '../../svg/svgIconPaths.ts'
 
 type ToggleSwitchConfig = {

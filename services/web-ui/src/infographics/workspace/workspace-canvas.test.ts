@@ -128,7 +128,7 @@ function loadSettings(): string {
 }
 
 function loadSvgIcons(): string {
-	return readSourceFile('../../svgIcons/index.ts', 'svgIcons/index.ts')
+	return readSourceFile('../../../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts', 'ui-kit/svg/svgIcons.ts')
 }
 
 function extractBlock(scss: string, selector: string): string {

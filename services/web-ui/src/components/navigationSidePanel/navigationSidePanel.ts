@@ -13,7 +13,7 @@ import {
     createNewFileIcon,
     navigationSidePanelToggleIcon,
     verticalTrippleDots,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 
 import routerService from '$src/services/router-service.ts'
 import WorkspaceService from '$src/services/workspace-service.ts'

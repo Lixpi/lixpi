@@ -1,5 +1,5 @@
 import { html } from '../../dom/domTemplates.ts'
-import { chevronDownIcon } from '../../icons/index.ts'
+import { chevronDownIcon } from '../../svg/svgIcons.ts'
 import { uiKitSettings } from '../../runtime-settings.ts'
 import { createInfoBubble, type InfoBubbleInstance } from '../infoBubble/index.ts'
 

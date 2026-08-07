@@ -1,5 +1,5 @@
 import { applyStyle, html } from '../../dom/domTemplates.ts'
-import { questionMarkCircleIcon } from '../../icons/index.ts'
+import { questionMarkCircleIcon } from '../../svg/svgIcons.ts'
 import { uiKitSettings } from '../../runtime-settings.ts'
 
 let nextHelpTooltipId = 0

@@ -322,7 +322,7 @@ Rules:
 
   applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px` })
   ```
-- SVG icons: always import from `$src/svgIcons/index.ts` and inject via `innerHTML` or string interpolation — never inline SVG markup in component files.
+- SVG icons: always import from `@lixpi/ui-kit/svg` and inject via `innerHTML` or string interpolation — never inline SVG markup in component files.
 - The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 
 ## Decorations – the visual contract

@@ -11,7 +11,7 @@ import {
     geminiIcon,
     gptAvatarIcon,
     stabilityIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 
 function setMockModels(models: Array<{ provider?: string; model?: string; title?: string; providerTitle?: string; colorIconName?: string }>): void {
     aiModelsStore.setAiModels(models as any)

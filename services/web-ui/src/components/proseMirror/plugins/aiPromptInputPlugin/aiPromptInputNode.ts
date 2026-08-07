@@ -6,7 +6,7 @@ import { html } from '$src/utils/domTemplates.ts'
 import { BubbleMenu, type BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
 import { createToggleSwitch } from '@lixpi/ui-kit/components/toggle-switch'
 import { createTagPill, type TagPillInstance } from '@lixpi/ui-kit/components/tag-pill'
-import { atomIcon } from '$src/svgIcons/index.ts'
+import { atomIcon } from '@lixpi/ui-kit/svg'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {

@@ -9,7 +9,7 @@ import {
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
     videoVolumeMutedGlyphIcon,
-} from '../../icons/index.ts'
+} from '../../svg/svgIcons.ts'
 import { uiKitSettings } from '../../runtime-settings.ts'
 
 export type VideoControlsConfig = {

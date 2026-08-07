@@ -24,7 +24,7 @@ import {
     alignCenterIcon,
     alignRightIcon,
     downloadIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import { downloadImage } from '$src/utils/downloadImage.ts'
 
 // =============================================================================

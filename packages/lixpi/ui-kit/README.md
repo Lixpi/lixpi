@@ -6,9 +6,8 @@
 src/
   components/          DOM, SVG, and Sass component implementations
   dom/                 Internal DOM template helpers
-  icons/               Icons owned by the component package
   styles/              Package-local tokens and transition functions
-  svg/                 Internal SVG path helpers
+  svg/                 SVG icons, textures, and path helpers (`@lixpi/ui-kit/svg`)
   runtime-settings.ts  Application-configurable component settings
 styles/                Public Sass entry points forwarding to component-owned styles
 ```
@@ -18,6 +17,7 @@ Use public package imports:
 ```typescript
 import { createProgressTimeline } from '@lixpi/ui-kit/components/progress-timeline'
 import { createSidePanel } from '@lixpi/ui-kit/components/side-panel'
+import { appendSvgPathIcon, xIcon } from '@lixpi/ui-kit/svg'
 ```
 
 ```scss
