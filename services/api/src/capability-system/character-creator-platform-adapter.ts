@@ -141,6 +141,20 @@ const generateCapabilityImage = async (args: {
             capabilityMediaExecutionPlan: args.plan,
             capabilityUsageMode: args.usageMode,
             captureOnlyImageGeneration: true,
+            captureOnlyImagePartialHandler: async (
+                imageBase64: string,
+                providerPartialIndex: number,
+            ): Promise<void> => {
+                try {
+                    await args.onImagePartial?.(imageBase64, providerPartialIndex)
+                } catch (error) {
+                    console.warn('[CharacterCreatorPartial] provider partial could not be projected', {
+                        operationKey: args.operationKey,
+                        providerPartialIndex,
+                        error: error instanceof Error ? error.message : String(error),
+                    })
+                }
+            },
             abortSignal: args.signal,
             eventMeta: args.context.eventMeta,
             generationRun: args.context.generationRun,

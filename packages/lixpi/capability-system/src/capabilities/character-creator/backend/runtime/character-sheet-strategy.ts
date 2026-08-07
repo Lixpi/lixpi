@@ -787,12 +787,20 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             let completedRenders = renderedPanels.size
             let providerOperationAttempts = 0
             let partialIndex = 0
+            const livePartialPanels = new Map<string, Buffer>()
             const progressivePublishQueue = new AsyncSerialQueue()
-            const publishProgressiveSheet = async (): Promise<void> => {
-                if (!options.publishImagePartial || renderedPanels.size === 0) return
-                const snapshot = [...renderedPanels.entries()].map(([panelId, rendered]) => ({
+            const publishProgressiveSheet = async (source: string): Promise<void> => {
+                if (!options.publishImagePartial) return
+                const visiblePanels = new Map<string, Buffer>(
+                    [...renderedPanels.entries()].map(
+                        ([panelId, rendered]): [string, Buffer] => [panelId, rendered.bytes],
+                    ),
+                )
+                for (const [panelId, bytes] of livePartialPanels) visiblePanels.set(panelId, bytes)
+                if (visiblePanels.size === 0) return
+                const snapshot = [...visiblePanels.entries()].map(([panelId, bytes]) => ({
                     panelId,
-                    bytes: rendered.bytes,
+                    bytes,
                 }))
                 const assessmentSnapshot = new Map(assessments)
                 const nextPartialIndex = ++partialIndex
@@ -811,13 +819,18 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             composition.bytes.toString('base64'),
                             nextPartialIndex,
                         )
-                    } catch {
-                        // Progress presentation must never invalidate rendered work.
+                    } catch (error) {
+                        console.warn('[CharacterCreatorPartial] sheet projection unavailable', {
+                            capabilityRunId: plan.capabilityRunId,
+                            source,
+                            partialIndex: nextPartialIndex,
+                            error: error instanceof Error ? error.message : String(error),
+                        })
                     }
                 })
             }
 
-            await publishProgressiveSheet()
+            await publishProgressiveSheet('prepared-evidence')
             await reportProgress({
                 phase: 'rendering',
                 completedSteps: completedRenders,
@@ -906,6 +919,16 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 attempt: 1,
                                 prompt,
                                 references,
+                                onImagePartial: async (imageBase64, providerPartialIndex) => {
+                                    if (!imageBase64) return
+                                    livePartialPanels.set(
+                                        panel.panelId,
+                                        decodeProviderPartialImage(imageBase64),
+                                    )
+                                    await publishProgressiveSheet(
+                                        `provider:${panel.panelId}:${providerPartialIndex}`,
+                                    )
+                                },
                                 signal: options.signal,
                             })
                             let coordinate: CharacterFidelityObjectCoordinate | undefined
@@ -921,6 +944,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             } catch (error) {
                                 if (options.signal?.aborted) throw error
                             }
+                            livePartialPanels.delete(panel.panelId)
                             renderedPanels.set(panel.panelId, {
                                 ...rendered,
                                 ...(coordinate ? { coordinate } : {}),
@@ -935,10 +959,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                     ? `The neutral-front identity anchor is complete. Releasing ${plan.panels.length - 1} dependent shot(s) with that generated anchor attached as their primary character reference.`
                                     : `Rendered ${completedRenders} of ${plan.panels.length} shots with the generated identity anchor; the sheet preview is updating.`,
                             })
-                            await publishProgressiveSheet()
+                            await publishProgressiveSheet(`terminal:${panel.panelId}`)
                             return rendered
                         } catch (error) {
                             runningPanelIds.delete(panel.panelId)
+                            livePartialPanels.delete(panel.panelId)
                             if (options.signal?.aborted) throw error
                             renderFailures.set(panel.panelId, (error as Error).message || 'Panel generation failed')
                             completedRenders += 1
@@ -950,7 +975,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                     ? 'The required neutral-front identity anchor failed. Dependent provider work will not start.'
                                     : `${panel.title} was unavailable; continuing with the rendered shots.`,
                             })
-                            await publishProgressiveSheet()
+                            await publishProgressiveSheet(`failed:${panel.panelId}`)
                             throw error
                         }
                     },
@@ -1283,6 +1308,17 @@ function decodeDataUrl(value: string): Buffer {
     const separator = value.indexOf(',')
     if (separator < 0) throw new Error('CHARACTER_REFERENCE_DATA_URL_INVALID')
     return Buffer.from(value.slice(separator + 1), 'base64')
+}
+
+function decodeProviderPartialImage(value: string): Buffer {
+    const dataUrl = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)$/u.exec(value)
+    const base64 = dataUrl?.[1] ?? value
+    if (!/^[A-Za-z0-9+/=\r\n]+$/u.test(base64)) {
+        throw new Error('CHARACTER_PROVIDER_PARTIAL_FORMAT_INVALID')
+    }
+    const bytes = Buffer.from(base64, 'base64')
+    if (bytes.length === 0) throw new Error('CHARACTER_PROVIDER_PARTIAL_EMPTY')
+    return bytes
 }
 
 function toGeneratedIdentityAnchorReference(

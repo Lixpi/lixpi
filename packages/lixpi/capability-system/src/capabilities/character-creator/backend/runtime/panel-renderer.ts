@@ -31,6 +31,7 @@ export async function renderCharacterPanel(args: {
     attempt: number
     prompt: string
     references: CharacterImageReference[]
+    onImagePartial?: (imageBase64: string, providerPartialIndex: number) => Promise<void>
     signal?: AbortSignal
 }): Promise<CharacterPanelRenderResult> {
     const poseReference = await loadCharacterPoseReference(args.panel)
@@ -61,6 +62,7 @@ export async function renderCharacterPanel(args: {
         usageMode: 'character-creator',
         prompt: args.prompt,
         references: poseReference ? [poseReference, ...args.references] : args.references,
+        ...(args.onImagePartial ? { onImagePartial: args.onImagePartial } : {}),
         signal: args.signal,
     })
     if (poseReference && !result.includedReferenceRoles.includes('pose-reference')) {

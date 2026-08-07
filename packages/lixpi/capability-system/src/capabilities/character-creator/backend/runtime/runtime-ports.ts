@@ -41,6 +41,7 @@ export type CharacterImageGenerationPort = {
         usageMode: 'character-creator'
         prompt: string
         references: CharacterImageReference[]
+        onImagePartial?: (imageBase64: string, providerPartialIndex: number) => Promise<void>
         signal?: AbortSignal
     }) => Promise<CharacterImageGenerationResult>
 }

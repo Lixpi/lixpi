@@ -19,7 +19,7 @@ The neutral front identity portrait is the required pipeline-blocking identity a
 
 Dependent shots use the generated identity anchor as their primary character reference because the selected image model can extend its own established visual variant more consistently across new views. Original sources remain authoritative for body proportions, outfit construction, accessories, colors, materials, and details outside the anchor crop. Pose controls remain spatial-only. After the anchor succeeds, independent dependent shots may run concurrently.
 
-Render every planned shot once. Publish a partial composite after each terminal shot result, including unavailable cells. Compare the rendered shots after generation and place findings in the character-sheet description and review trace, never inside the image. Do not retry automatically.
+Render every planned shot once. Publish a newly composed full-sheet preview for every partial image received from the provider and again for each terminal shot result, including unavailable cells. Provider partials are presentation-only: they never satisfy a required generated-output binding or release a dependent shot. Compare the rendered shots after generation and place findings in the character-sheet description and review trace, never inside the image. Do not retry automatically.
 
 Each provider request asks for one character on a pure white background with no text, labels, borders, grids, scenery, logos, watermarks, or additional people. The provider must never see or reproduce the final sheet layout.
 

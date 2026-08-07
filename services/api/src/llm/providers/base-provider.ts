@@ -347,6 +347,9 @@ export abstract class BaseProvider {
             requestData.canvasVisibleArea,
             getProseMirrorSnapshot,
             requestData.captureOnlyImageGeneration === true,
+            typeof requestData.captureOnlyImagePartialHandler === 'function'
+                ? requestData.captureOnlyImagePartialHandler
+                : undefined,
         )
         this.videoPublisher = new VideoPublisher(
             this.deps.natsService,

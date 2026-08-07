@@ -17,6 +17,11 @@ import { readImageIntrinsicSize } from './image-intrinsic-size.ts'
 
 export { readImageIntrinsicSize } from './image-intrinsic-size.ts'
 
+export type CapturedImagePartialHandler = (
+    imageBase64: string,
+    providerPartialIndex: number,
+) => Promise<void>
+
 function readImageMimeType(buffer: Buffer): TransientMediaMimeType | null {
     if (buffer.length >= 8
         && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
@@ -52,6 +57,7 @@ export class ImagePublisher {
         private readonly canvasVisibleArea?: { width: number; height: number },
         private readonly getProseMirrorSnapshot?: ProseMirrorSnapshotProvider,
         private readonly captureOnly = false,
+        private readonly onCapturedPartial?: CapturedImagePartialHandler,
     ) {
         if (generationRun) {
             this.transientMediaStore = new TransientMediaStore(nats, {
@@ -77,10 +83,14 @@ export class ImagePublisher {
         this.onProseMirrorContent?.(content)
     }
 
-    // Empty imageBase64 publishes a placeholder event. Non-empty provider
-    // partials stay transient; only final bytes settle the preassigned Asset.
+    // Capture-only publishers forward provider revisions to their owner without
+    // exposing an isolated intermediate as top-level media. Ordinary partials
+    // stay transient; only final bytes settle the preassigned Asset.
     async partial(imageBase64: string, partialIndex: number): Promise<void> {
-        if (this.captureOnly) return
+        if (this.captureOnly) {
+            await this.onCapturedPartial?.(imageBase64, partialIndex)
+            return
+        }
         if (!this.generationRun) throw new Error('Image partial is missing generationRun')
         const assetId = this.generationRun.lineageAssignment?.assetId
         if (!assetId) throw new Error('Image partial is missing Asset assignment')

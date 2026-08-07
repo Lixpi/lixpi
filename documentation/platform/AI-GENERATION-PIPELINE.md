@@ -65,14 +65,14 @@ Character Creator's strategy:
 4. renders the neutral-front identity portrait as the required generated identity anchor;
 5. releases the remaining dependency-ready shots with bounded concurrency and one provider attempt per shot, binding the generated anchor into each request;
 6. attaches the shot's deterministic text-free neutral-mannequin pose image and adapts the anchor, source evidence, and controls through the selected image provider;
-7. publishes a progressive composite after every terminal shot result;
+7. replaces each in-flight panel with every provider partial and publishes a new full-sheet composite, then replaces the last partial with the terminal shot result;
 8. compares rendered shots with structured VLM assessment and optional NEX face similarity;
 9. surfaces failed dimensions without automatically retrying or replacing pixels;
 10. assembles one deterministic 3840x2560 PNG;
 11. returns that PNG and its review trace to the normal image-settlement path;
 12. clears transient objects on success, failure, or cancellation.
 
-The default graph contains a detailed front face, a relaxed standing front body, and a natural walking profile body. The front face blocks and conditions every provider-generated dependent shot; the other ready shots may run concurrently after it succeeds. Free-form prompt text can request 3 to 10 shots and prioritize belongings, back views, face angles, outfit details, materials, or action poses. Automatic paid and semantic retries are disabled. A failed dependent shot remains visible as an unavailable cell while the runtime composes every successful shot. A failed identity anchor blocks all dependent provider work and fails the run visibly. Another attempt requires explicit user action and creates a preserved lineage variant.
+The default graph contains a detailed front face, a relaxed standing front body, and a natural walking profile body. The front face blocks and conditions every provider-generated dependent shot; the other ready shots may run concurrently after it succeeds. Provider partials are preview-only and never satisfy generated-output bindings, so a partial face can update the sheet without releasing dependent work. Free-form prompt text can request 3 to 10 shots and prioritize belongings, back views, face angles, outfit details, materials, or action poses. Automatic paid and semantic retries are disabled. A failed dependent shot remains visible as an unavailable cell while the runtime composes every successful shot. A failed identity anchor blocks all dependent provider work and fails the run visibly. Another attempt requires explicit user action and creates a preserved lineage variant.
 
 Every durable media run can publish an extensible nested `items` tree with its progress payload. After preflight resolves onto the canvas, the owning branch lineage marker renders that tree inside its existing surface through `@lixpi/ui-kit`, below the reasoning stream. The API mirrors progress onto the marker and archives terminal progress there before removing a successful operation projection. Runs that do not publish domain-specific items receive a generic media timeline, so image, video, Capability, Skill, and Tool execution share one transparent progress surface without sharing hardcoded step names.
 
