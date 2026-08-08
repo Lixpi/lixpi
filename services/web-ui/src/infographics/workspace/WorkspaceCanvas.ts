@@ -63,6 +63,7 @@ import {
     createProgressTimeline,
     type ProgressTimelineInstance,
     type ProgressTimelineItem,
+    type ProgressTimelineItemSource,
 } from '@lixpi/ui-kit/components/progress-timeline'
 import {
     createAiPromptComposer,
@@ -147,6 +148,8 @@ import {
     aiChatPanelToggleHistoryIcon,
     atomIcon,
     checkMarkIcon,
+    chevronUpIcon,
+    expandVerticallyIcon,
     imageIcon,
     imageResizeCornerIcon,
     infoLetterIcon,
@@ -394,6 +397,16 @@ type BranchMarkerCapabilityProgressRun = {
     status: CapabilityRunEvent['runStatus']
     lastSequence: number
     steps: Map<string, BranchMarkerCapabilityProgressStep>
+}
+type BranchMarkerReasoningProgress = {
+    modelIcon?: string
+    modelName?: string
+    summary: string
+    status: 'running' | 'completed'
+}
+type BranchMarkerProgressOptions = {
+    executionSource?: ProgressTimelineItemSource
+    reasoning?: BranchMarkerReasoningProgress
 }
 
 const RESIZE_CORNERS: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -14898,6 +14911,56 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return [...(capabilityProgressRunsByThreadId.get(getBranchMarkerThreadId(node))?.values() ?? [])]
     }
 
+    function getBranchMarkerExecutionSource(
+        promptParts: readonly BranchMarkerPromptPart[],
+    ): ProgressTimelineItemSource | undefined {
+        const sources = promptParts.flatMap((part): ProgressTimelineItemSource[] => {
+            if (part.type === 'capability-module') {
+                return [{ kind: 'capability', name: part.reference.displayName }]
+            }
+            if (part.type === 'tool') return [{ kind: 'tool', name: part.reference.displayName }]
+            if (part.type === 'skill') return [{ kind: 'skill', name: part.reference.displayName }]
+            return []
+        })
+        const uniqueSources = [...new Map(sources.map(source => [
+            `${source.kind}:${source.name ?? ''}`,
+            source,
+        ])).values()]
+        if (uniqueSources.length === 0) return undefined
+        if (uniqueSources.length === 1) return uniqueSources[0]
+        const sourceKinds = new Set(uniqueSources.map(source => source.kind))
+        return {
+            kind: sourceKinds.size === 1 ? uniqueSources[0]!.kind : 'pipeline',
+            name: uniqueSources.map(source => source.name).filter(Boolean).join(' + '),
+        }
+    }
+
+    function getBranchMarkerTimelineStatus(items: readonly ProgressTimelineItem[]): ProgressTimelineItem['status'] {
+        const statuses = items.flatMap(item => [
+            item.status,
+            ...(item.children ? [getBranchMarkerTimelineStatus(item.children)] : []),
+        ])
+        if (statuses.includes('running')) return 'running'
+        if (statuses.includes('failed')) return 'failed'
+        if (statuses.includes('attention')) return 'attention'
+        if (statuses.includes('cancelled')) return 'cancelled'
+        if (statuses.includes('pending')) return 'pending'
+        return 'completed'
+    }
+
+    function wrapBranchMarkerExecutionItems(
+        items: ProgressTimelineItem[],
+        source: ProgressTimelineItemSource | undefined,
+    ): ProgressTimelineItem[] {
+        if (!source || items.length === 0) return items
+        return [{
+            id: 'selected-workflow',
+            status: getBranchMarkerTimelineStatus(items),
+            source,
+            children: items,
+        }]
+    }
+
     function getCapabilityRunTimelineStatus(
         run: BranchMarkerCapabilityProgressRun,
     ): ProgressTimelineItem['status'] {
@@ -14945,25 +15008,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (runs.some(run => run.status === 'cancelled')) return 'cancelled'
         if (runs.every(run => run.status === 'completed')) return 'completed'
         return 'running'
-    }
-
-    function getBranchMarkerCapabilityProgressMessage(node: BranchMarkerNode): string | undefined {
-        const runs = getBranchMarkerCapabilityProgressRuns(node)
-        for (const run of [...runs].reverse()) {
-            const steps = [...run.steps.values()]
-            const activeStep = [...steps].reverse().find(step => step.status === 'running')
-            if (activeStep?.summary) return activeStep.summary
-            const latestStep = steps.at(-1)
-            if (!latestStep?.summary) continue
-            if (run.status === 'running') {
-                return `${latestStep.summary} Starting the next Capability step.`
-            }
-            if (run.status === 'completed') {
-                return `${latestStep.summary} Capability planning is complete; committing the media run.`
-            }
-            return latestStep.summary
-        }
-        return undefined
     }
 
     function toProgressTimelineItem(
@@ -15053,6 +15097,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function createBranchMarkerProgress(
         node: BranchMarkerNode,
+        options: BranchMarkerProgressOptions = {},
     ): HTMLElement | null {
         const removeTimeline = (): null => {
             branchMarkerProgressTimelines.get(node.nodeId)?.destroy()
@@ -15069,17 +15114,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!node.mediaGeneration && operationNodes.length === 0 && !isAwaitingOperationProjection) {
             return removeTimeline()
         }
-        const operationMessage = operationNodes
-            .map(operationNode => operationNode.progress?.message ?? operationNode.message)
-            .filter(Boolean)
-            .join(' · ')
-        const currentMessage = (operationNodes.length > 1 ? operationMessage : node.mediaGeneration?.message)
-            || operationMessage
-            || getBranchMarkerCapabilityProgressMessage(node)
-            || (markerPhase === 'media-placeholder'
-                ? 'The generation request is starting.'
-                : 'Preparing the generation plan.')
-        const items = getBranchMarkerProgressItems(node)
+        const executionItems = wrapBranchMarkerExecutionItems(
+            getBranchMarkerProgressItems(node),
+            options.executionSource,
+        )
+        const items: ProgressTimelineItem[] = [
+            ...(options.reasoning ? [{
+                id: 'reasoning-response',
+                status: options.reasoning.status,
+                source: {
+                    kind: 'reasoning-model' as const,
+                    ...(options.reasoning.modelIcon ? { icon: options.reasoning.modelIcon } : {}),
+                    ...(options.reasoning.modelName ? { name: options.reasoning.modelName } : {}),
+                },
+                summary: options.reasoning.summary,
+                showSummaryWhenCollapsed: true,
+            }] : []),
+            ...executionItems,
+        ]
         if (items.length === 0) return removeTimeline()
         if (debugLoggingEnabled) console.info('[CANVAS][branch-marker-progress]', 'render', {
             nodeId: node.nodeId,
@@ -15097,17 +15149,81 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             timeline.setItems(items)
         } else {
             timeline = createProgressTimeline({
-                ariaLabel: 'Generation progress',
+                ariaLabel: 'AI generation pipeline',
                 items,
                 rippleClockId: `branch-marker:${node.nodeId}`,
+                defaultViewMode: 'focused',
             })
             branchMarkerProgressTimelines.set(node.nodeId, timeline)
         }
+        const collectStatuses = (item: ProgressTimelineItem): ProgressTimelineItem['status'][] => {
+            return [
+                item.status,
+                ...(item.children ?? []).flatMap(collectStatuses),
+            ]
+        }
+        const itemStatuses = items.flatMap(collectStatuses)
+        const hasActiveItem = itemStatuses.includes('running')
+        const hasIssueItem = itemStatuses.some(status => (
+            status === 'attention' || status === 'failed' || status === 'cancelled'
+        ))
+        let pipelineStatus = 'Waiting'
+        if (hasActiveItem) pipelineStatus = hasIssueItem ? 'In progress · Issues found' : 'In progress'
+        else if (hasIssueItem) pipelineStatus = 'Needs attention'
+        else if (itemStatuses.every(status => status === 'completed' || status === 'skipped')) {
+            pipelineStatus = 'Completed'
+        }
+        const timelineId = `workspace-branch-marker-pipeline-${node.nodeId.replace(/[^A-Za-z0-9_-]/gu, '-')}`
+        timeline.element.id = timelineId
+        let disclosureButton: HTMLButtonElement
+        const syncPipelineDisclosure = (): void => {
+            const viewState = timeline.getViewState()
+            const showsAllSteps = viewState.mode === 'all'
+            const accessibleLabel = showsAllSteps
+                ? 'Show active and issue pipeline steps only'
+                : `Show all ${viewState.totalItemCount} pipeline steps`
+            disclosureButton.ariaExpanded = String(showsAllSteps)
+            disclosureButton.ariaLabel = accessibleLabel
+            disclosureButton.title = accessibleLabel
+            disclosureButton.hidden = !showsAllSteps && viewState.hiddenItemCount === 0
+            disclosureButton.classList.toggle('is-expanded', showsAllSteps)
+            disclosureButton.replaceChildren(
+                html`<span className="workspace-branch-marker-pipeline-disclosure-label">${showsAllSteps
+                    ? 'Show active'
+                    : `${viewState.hiddenItemCount} hidden`}</span>`,
+                html`
+                    <span
+                        className="workspace-branch-marker-pipeline-disclosure-icon"
+                        innerHTML=${showsAllSteps ? chevronUpIcon : expandVerticallyIcon}
+                        aria-hidden="true"
+                    ></span>
+                `,
+            )
+        }
+        const togglePipelineView = (event: Event): void => {
+            event.preventDefault()
+            event.stopPropagation()
+            const currentView = timeline.getViewState().mode
+            timeline.setViewMode(currentView === 'focused' ? 'all' : 'focused')
+            syncPipelineDisclosure()
+        }
         const panel = html`
             <section className="workspace-branch-marker-progress" aria-live="polite">
-                <div className="workspace-branch-marker-progress-current">${currentMessage}</div>
+                <header className="workspace-branch-marker-pipeline-header">
+                    <span className="workspace-branch-marker-pipeline-heading">Pipeline</span>
+                    <span className="workspace-branch-marker-pipeline-status">${pipelineStatus}</span>
+                    <button
+                        type="button"
+                        className="workspace-branch-marker-pipeline-disclosure nopan"
+                        aria-controls=${timelineId}
+                        onpointerdown=${(event: Event) => event.stopPropagation()}
+                        onclick=${togglePipelineView}
+                    ></button>
+                </header>
             </section>
         ` as HTMLElement
+        disclosureButton = panel.querySelector('.workspace-branch-marker-pipeline-disclosure') as HTMLButtonElement
+        syncPipelineDisclosure()
         panel.appendChild(timeline.element)
         return panel
     }
@@ -15135,9 +15251,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const reasoningModelEntry = getBranchMarkerReasoningModelEntry(node)
         const reasoningModelIcon = reasoningModelEntry ? reasoningModelEntry.icon ?? atomIcon : null
         const reasoningModelSummary = reasoningModelEntry?.title ? `Reasoning: ${reasoningModelEntry.title}` : ''
-        // Live reasoning stream (pending markers only). An empty receiving
-        // response shell keeps the marker as a single user row; streamed
-        // response text creates the separator and moves progress to row two.
+        // Keep the user request separate from the AI pipeline. Until progress
+        // exists, the live reasoning response retains its standalone row.
         const responseText = getBranchMarkerReasoningResponseText(node, threadPreview)
         const responsePhase = threadPreview?.phase ?? 'preamble'
         const responseIsReceiving = Boolean(threadPreview?.isReceiving)
@@ -15145,13 +15260,26 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const responsePreview = showResponseLine
             ? getBranchMarkerResponsePreview(responseText, { isReceiving: responseIsReceiving })
             : ''
+        const pipelineReasoningSummary = responseText.replace(/\s+/g, ' ').trim()
         const pendingForUi = isBranchMarkerPendingForUi(node)
-        const spinnerOnUserLine = pendingForUi && !showResponseLine
-        const spinnerOnResponseLine = pendingForUi && showResponseLine && responseIsReceiving
         const showStopControl = isBranchMarkerGenerationGroupActive(node)
         const responseIsEnhancing = responseIsReceiving && responsePhase === 'enhancement'
-        const responseDone = showResponseLine && (!pendingForUi || responsePhase === 'done' || !responseIsReceiving)
-        const progress = createBranchMarkerProgress(node)
+        const progress = createBranchMarkerProgress(node, {
+            executionSource: getBranchMarkerExecutionSource(promptParts),
+            ...(showResponseLine ? {
+                reasoning: {
+                    ...(reasoningModelIcon ? { modelIcon: reasoningModelIcon } : {}),
+                    ...(reasoningModelEntry?.title ? { modelName: reasoningModelEntry.title } : {}),
+                    summary: pipelineReasoningSummary,
+                    status: responseIsReceiving ? 'running' : 'completed',
+                },
+            } : {}),
+        })
+        const showStandaloneResponseLine = showResponseLine && !progress
+        const spinnerOnUserLine = pendingForUi && !showStandaloneResponseLine && !progress
+        const spinnerOnResponseLine = pendingForUi && showStandaloneResponseLine && responseIsReceiving
+        const responseDone = showStandaloneResponseLine
+            && (!pendingForUi || responsePhase === 'done' || !responseIsReceiving)
         const responseSummary = responsePreview ? `Response: ${responsePreview}` : ''
         const accessibleLabel = [promptPreview, label, reasoningModelSummary, responseSummary, modelSummary].filter(Boolean).join(' · ')
         const contentClassName = `workspace-branch-marker-content${showStopControl ? ' has-stop-control' : ''}${progress ? ' has-progress' : ''}`
@@ -15168,7 +15296,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <div className=${contentClassName} aria-label=${accessibleLabel}>
                 <div className="workspace-branch-marker-main">
                     <div className=${messageClassName}>
-                        ${reasoningModelEntry && reasoningModelIcon
+                        ${reasoningModelEntry && reasoningModelIcon && !progress
                             ? createBranchMarkerReasoningTooltip(node.nodeId, reasoningModelEntry.title, reasoningModelIcon)
                             : null}
                         ${spinnerOnUserLine
@@ -15178,7 +15306,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
                         })}</span>
                     </div>
-                    ${showResponseLine ? html`
+                    ${showStandaloneResponseLine ? html`
                         <div className="workspace-branch-marker-separator"></div>
                         <div className=${responseClassName}>
                             ${spinnerOnResponseLine

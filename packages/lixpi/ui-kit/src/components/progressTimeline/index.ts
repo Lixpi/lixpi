@@ -3,7 +3,11 @@ export {
     type ProgressTimelineConfig,
     type ProgressTimelineInstance,
     type ProgressTimelineItem,
+    type ProgressTimelineItemSource,
+    type ProgressTimelineItemSourceKind,
     type ProgressTimelineItemStatus,
+    type ProgressTimelineViewMode,
+    type ProgressTimelineViewState,
 } from './progressTimeline.ts'
 export {
     createProgressRippleIcon,

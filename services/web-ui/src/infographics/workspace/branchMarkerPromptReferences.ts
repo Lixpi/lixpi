@@ -14,6 +14,8 @@ import {
 
 type CapabilityModuleReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'capability-module' }>
 type MediaReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'media' }>
+type ToolReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'tool' }>
+type SkillReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'skill' }>
 
 export type BranchMarkerPromptPart = {
     type: 'text'
@@ -24,6 +26,18 @@ export type BranchMarkerPromptPart = {
 } | {
     type: 'media'
     reference: MediaReference
+} | {
+    type: 'tool'
+    reference: ToolReference
+} | {
+    type: 'skill'
+    reference: SkillReference
+}
+
+type BranchMarkerPromptReferencePart = Exclude<BranchMarkerPromptPart, { type: 'text' }>
+
+function isPromptReferencePart(part: BranchMarkerPromptPart): part is BranchMarkerPromptReferencePart {
+    return part.type !== 'text'
 }
 
 function appendText(parts: BranchMarkerPromptPart[], text: string): void {
@@ -54,6 +68,10 @@ function collectRawPromptParts(node: ProseMirrorJsonNode | undefined): BranchMar
                 parts.push({ type: 'capability-module', reference })
             } else if (reference?.referenceType === 'media') {
                 parts.push({ type: 'media', reference })
+            } else if (reference?.referenceType === 'tool') {
+                parts.push({ type: 'tool', reference })
+            } else if (reference?.referenceType === 'skill') {
+                parts.push({ type: 'skill', reference })
             }
             return
         }
@@ -69,7 +87,7 @@ function normalizePromptParts(parts: readonly BranchMarkerPromptPart[]): BranchM
     let pendingWhitespace = false
 
     for (const part of parts) {
-        if (part.type === 'capability-module' || part.type === 'media') {
+        if (isPromptReferencePart(part)) {
             if (pendingWhitespace && hasVisibleContent) appendText(normalized, ' ')
             normalized.push(part)
             hasVisibleContent = true
@@ -117,7 +135,7 @@ export function truncateBranchMarkerPromptParts(
     let didTruncate = false
     for (const [index, part] of parts.entries()) {
         const partText = part.type === 'text' ? part.text : part.reference.displayName
-        if (part.type === 'capability-module' || part.type === 'media') {
+        if (isPromptReferencePart(part)) {
             if (displayedCharacters >= boundedMaximumCharacters) {
                 didTruncate = true
                 break

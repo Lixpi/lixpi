@@ -2265,19 +2265,36 @@
 }
 
 .workspace-branch-marker-content.has-progress {
+    --workspace-branch-marker-progress-corner-radius: 40px;
+    --workspace-branch-marker-section-gap: 9px;
+
     position: absolute;
     top: -1px;
     left: -1px;
     align-items: flex-start;
     width: calc(100% + 2px);
     height: auto;
-    min-height: calc(100% + 2px);
+    min-height: 0;
     padding-top: 12px;
     padding-bottom: 12px;
     border: 1px solid var(--workspace-branch-origin-border-color);
-    border-radius: clamp(28px, 10%, 48px);
+    // Equal absolute x/y radii stay circular at every aspect ratio. CSS scales
+    // all corners uniformly only when a box becomes too short for this radius.
+    border-radius: var(--workspace-branch-marker-progress-corner-radius);
     background: var(--workspace-branch-origin-background-color);
     box-shadow: var(--workspace-branch-origin-box-shadow);
+}
+
+.workspace-branch-marker-content.has-progress .workspace-branch-marker-separator {
+    margin: var(--workspace-branch-marker-section-gap) auto;
+}
+
+.workspace-branch-origin-node:has(> .workspace-branch-marker-content.has-progress),
+.workspace-branch-fork-node:has(> .workspace-branch-marker-content.has-progress),
+.workspace-branch-line-node:has(> .workspace-branch-marker-content.has-progress) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
 }
 
 .workspace-branch-marker-content.has-progress .workspace-branch-marker-main {
@@ -2294,6 +2311,7 @@
     --progress-timeline-secondary: currentColor;
     --progress-timeline-line: rgb(255 255 255 / 38%);
     --progress-timeline-pending-border: rgb(255 255 255 / 68%);
+    --progress-timeline-source-size: 9px;
     --progress-timeline-title-size: var(--workspace-branch-marker-response-font-size, 11.5px);
     --progress-timeline-title-weight: 500;
     --progress-timeline-summary-size: var(--workspace-branch-marker-response-font-size, 11.5px);
@@ -2302,7 +2320,7 @@
     min-width: 0;
     box-sizing: border-box;
     margin-top: 0;
-    padding: 6px 2px 1px;
+    padding: 0 2px 1px;
     color: currentColor;
     font-size: var(--workspace-branch-marker-response-font-size, 11.5px);
     font-weight: 500;
@@ -2310,13 +2328,86 @@
     pointer-events: none;
 }
 
-.workspace-branch-marker-progress-current {
+.workspace-branch-marker-pipeline-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     margin: 0 0 10px;
     color: currentColor;
-    font-size: inherit;
-    font-weight: inherit;
-    line-height: inherit;
-    overflow-wrap: anywhere;
+}
+
+.workspace-branch-marker-pipeline-heading {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.workspace-branch-marker-pipeline-status {
+    overflow: hidden;
+    min-width: 0;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    opacity: 0.72;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-pipeline-disclosure {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: currentColor;
+    font: inherit;
+    opacity: 0.72;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+}
+
+.workspace-branch-marker-pipeline-disclosure:hover,
+.workspace-branch-marker-pipeline-disclosure:focus-visible {
+    opacity: 1;
+}
+
+.workspace-branch-marker-pipeline-disclosure-label {
+    overflow: hidden;
+    min-width: 0;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-pipeline-disclosure-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    line-height: 0;
+}
+
+.workspace-branch-marker-pipeline-disclosure-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.workspace-branch-marker-pipeline-disclosure-icon svg * {
+    fill: currentColor;
 }
 
 .workspace-branch-marker-progress .progress-timeline-title,
@@ -2327,8 +2418,40 @@
     opacity: 0.72;
 }
 
+.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-chevron {
+    transition:
+        hoverTransition(color, $defaultHoverTransitionDuration),
+        hoverTransition(opacity, $defaultHoverTransitionDuration);
+}
+
+.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-source {
+    opacity: 0.72;
+}
+
+.workspace-branch-marker-progress .progress-timeline-source-kind {
+    font-weight: 400;
+}
+
+.workspace-branch-marker-progress .progress-timeline-source-name {
+    font-weight: 700;
+}
+
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-chevron,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-chevron {
+    color: var(--workspace-branch-origin-icon-color);
+    opacity: 1;
+}
+
 .workspace-branch-marker-progress .progress-timeline-chevron {
-    border-color: currentColor;
     opacity: 0.72;
 }
 
@@ -2339,6 +2462,14 @@
 
 .workspace-branch-marker-progress .progress-timeline-content {
     padding-bottom: 8px;
+}
+
+.workspace-branch-marker-progress .progress-timeline-item:last-child > .progress-timeline-content {
+    padding-bottom: 0;
+}
+
+.workspace-branch-marker-progress .progress-timeline-item:last-child > .progress-timeline-rail {
+    min-height: 14px;
 }
 
 .workspace-branch-marker-progress .progress-timeline-children {
