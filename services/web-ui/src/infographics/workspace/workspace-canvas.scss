@@ -2394,9 +2394,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 12px;
-    width: 12px;
-    height: 12px;
+    flex: 0 0 15px;
+    width: 15px;
+    height: 15px;
+    /* The per-section chevrons below render in a 12px box flush to the same
+       right edge (.progress-timeline-chevron). This box is 15px, so pushing it
+       out by half the difference puts both glyph centres on one vertical axis. */
+    margin-right: -1.5px;
     line-height: 0;
 }
 

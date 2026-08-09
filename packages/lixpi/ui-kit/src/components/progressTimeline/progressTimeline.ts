@@ -275,6 +275,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
                 className="progress-timeline-item"
                 data-status=${item.status}
                 data-item-id=${item.id}
+                data-leading=${item.source ? 'source' : 'title'}
                 aria-label=${`${itemDescription}: ${item.status}${item.meta ? `; ${item.meta}` : ''}`}
             >
                 <span className="progress-timeline-rail" aria-hidden="true">

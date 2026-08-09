@@ -148,8 +148,9 @@ import {
     aiChatPanelToggleHistoryIcon,
     atomIcon,
     checkMarkIcon,
-    chevronUpIcon,
-    expandVerticallyIcon,
+    createCollapseExpandIcon,
+    type AnimatedSvgIconInstance,
+    type CollapseExpandIconState,
     imageIcon,
     imageResizeCornerIcon,
     infoLetterIcon,
@@ -1080,6 +1081,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const branchMarkerProgressTimelines: Map<string, ProgressTimelineInstance> = new Map()
+    // The disclosure icon animates between its states, so — like the timeline it
+    // controls — the instance has to outlive the marker DOM rebuilds that happen
+    // while the pipeline streams. A per-render instance would restart at the
+    // final pose and read as an instant flip.
+    const branchMarkerPipelineDisclosureIcons: Map<string, AnimatedSvgIconInstance<CollapseExpandIconState>> = new Map()
     const generatedMediaInfoPreviewTiles: Set<ContextPreviewTileInstance> = new Set()
     const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\u0000reset-generated-media-chrome'
     let generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY
@@ -7996,6 +8002,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             manuallyPositionedBranchMarkerNodeIds.delete(nodeId)
             branchMarkerProgressTimelines.get(nodeId)?.destroy()
             branchMarkerProgressTimelines.delete(nodeId)
+            branchMarkerPipelineDisclosureIcons.get(nodeId)?.destroy()
+            branchMarkerPipelineDisclosureIcons.delete(nodeId)
             for (const nodeEl of getBranchMarkerNodeEls(nodeId)) nodeEl.remove()
         }
     }
@@ -15102,6 +15110,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const removeTimeline = (): null => {
             branchMarkerProgressTimelines.get(node.nodeId)?.destroy()
             branchMarkerProgressTimelines.delete(node.nodeId)
+            branchMarkerPipelineDisclosureIcons.get(node.nodeId)?.destroy()
+            branchMarkerPipelineDisclosureIcons.delete(node.nodeId)
             return null
         }
         const markerPhase = getBranchMarkerUiPhase(node)
@@ -15176,7 +15186,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const timelineId = `workspace-branch-marker-pipeline-${node.nodeId.replace(/[^A-Za-z0-9_-]/gu, '-')}`
         timeline.element.id = timelineId
         let disclosureButton: HTMLButtonElement
-        const syncPipelineDisclosure = (): void => {
+        // The chevrons slide past each other on every toggle, so the icon has to
+        // be a persistent instance rather than re-injected markup.
+        const disclosureIconState = (showsAllSteps: boolean): CollapseExpandIconState =>
+            showsAllSteps ? 'expanded' : 'collapsed'
+        const initialShowsAllSteps = timeline.getViewState().mode === 'all'
+        const cachedDisclosureIcon = branchMarkerPipelineDisclosureIcons.get(node.nodeId)
+        const disclosureIcon = cachedDisclosureIcon ?? createCollapseExpandIcon({
+            state: disclosureIconState(initialShowsAllSteps),
+            className: 'workspace-branch-marker-pipeline-disclosure-icon',
+        })
+        if (!cachedDisclosureIcon) branchMarkerPipelineDisclosureIcons.set(node.nodeId, disclosureIcon)
+        const disclosureLabel = html`
+            <span className="workspace-branch-marker-pipeline-disclosure-label"></span>
+        ` as HTMLSpanElement
+        // Animating is the default: a state change seen here means the view mode
+        // moved, and the icon must travel. Only the very first paint of a freshly
+        // created icon opts out.
+        const syncPipelineDisclosure = ({ animateIcon = true }: { animateIcon?: boolean } = {}): void => {
             const viewState = timeline.getViewState()
             const showsAllSteps = viewState.mode === 'all'
             const accessibleLabel = showsAllSteps
@@ -15187,24 +15214,23 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             disclosureButton.title = accessibleLabel
             disclosureButton.hidden = !showsAllSteps && viewState.hiddenItemCount === 0
             disclosureButton.classList.toggle('is-expanded', showsAllSteps)
-            disclosureButton.replaceChildren(
-                html`<span className="workspace-branch-marker-pipeline-disclosure-label">${showsAllSteps
-                    ? 'Show active'
-                    : `${viewState.hiddenItemCount} hidden`}</span>`,
-                html`
-                    <span
-                        className="workspace-branch-marker-pipeline-disclosure-icon"
-                        innerHTML=${showsAllSteps ? chevronUpIcon : expandVerticallyIcon}
-                        aria-hidden="true"
-                    ></span>
-                `,
-            )
+            disclosureLabel.textContent = showsAllSteps
+                ? 'Show active'
+                : `${viewState.hiddenItemCount} hidden`
+            disclosureIcon.setState(disclosureIconState(showsAllSteps), { animate: animateIcon })
         }
         const togglePipelineView = (event: Event): void => {
             event.preventDefault()
             event.stopPropagation()
             const currentView = timeline.getViewState().mode
-            timeline.setViewMode(currentView === 'focused' ? 'all' : 'focused')
+            const nextView = currentView === 'focused' ? 'all' : 'focused'
+            // Start the icon travelling *before* switching the view mode.
+            // `setViewMode` re-renders the timeline, which changes the marker
+            // height and rebuilds the marker content synchronously — that rebuild
+            // re-syncs this button, and if it saw the new mode first it would
+            // settle the icon on its target pose before the animation existed.
+            disclosureIcon.setState(disclosureIconState(nextView === 'all'), { animate: true })
+            timeline.setViewMode(nextView)
             syncPipelineDisclosure()
         }
         const panel = html`
@@ -15223,7 +15249,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             </section>
         ` as HTMLElement
         disclosureButton = panel.querySelector('.workspace-branch-marker-pipeline-disclosure') as HTMLButtonElement
-        syncPipelineDisclosure()
+        disclosureButton.append(disclosureLabel, disclosureIcon.element)
+        syncPipelineDisclosure({ animateIcon: Boolean(cachedDisclosureIcon) })
         panel.appendChild(timeline.element)
         return panel
     }
@@ -16528,6 +16555,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             destroyBranchMarkerReasoningTooltips()
             for (const timeline of branchMarkerProgressTimelines.values()) timeline.destroy()
             branchMarkerProgressTimelines.clear()
+            for (const icon of branchMarkerPipelineDisclosureIcons.values()) icon.destroy()
+            branchMarkerPipelineDisclosureIcons.clear()
             for (const dropdown of branchMarkerReviewDropdowns.values()) dropdown.destroy()
             branchMarkerReviewDropdowns.clear()
             destroyVideoControlInstances()

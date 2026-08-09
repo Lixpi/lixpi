@@ -7,10 +7,20 @@
 }
 
 .progress-timeline-item {
+    // Height of the first text line in the content column — the line the status
+    // marker must be vertically centred on. Title/summary sizes are injected per
+    // host via custom properties, so this must be derived, never hardcoded.
+    --progress-timeline-first-line-height: calc(var(--progress-timeline-title-size, 12px) * 1.35);
     display: grid;
     grid-template-columns: 14px minmax(0, 1fr);
     column-gap: 9px;
     min-width: 0;
+}
+
+.progress-timeline-item[data-leading='source'] {
+    // Source rows lead with 9px caps text next to an 11px icon; the flex row's
+    // height is whichever is taller.
+    --progress-timeline-first-line-height: max(calc(var(--progress-timeline-source-size, 9px) * 1.2), 11px);
 }
 
 .progress-timeline-rail {
@@ -23,7 +33,8 @@
 .progress-timeline-rail::after {
     content: '';
     position: absolute;
-    top: 14px;
+    // Marker offset + 8px marker + 2px gap.
+    top: calc((var(--progress-timeline-first-line-height) - 8px) / 2 + 10px);
     bottom: 0;
     left: 50%;
     width: 1px;
@@ -40,7 +51,7 @@
     z-index: 1;
     width: 8px;
     height: 8px;
-    margin-top: 4px;
+    margin-top: calc((var(--progress-timeline-first-line-height) - 8px) / 2);
     isolation: isolate;
     overflow: visible;
 }
@@ -281,10 +292,15 @@
     min-height: 24px;
 }
 
+.progress-timeline-children .progress-timeline-rail::after {
+    // Marker offset + 6px marker + 2px gap.
+    top: calc((var(--progress-timeline-first-line-height) - 6px) / 2 + 8px);
+}
+
 .progress-timeline-children .progress-timeline-marker {
     width: 6px;
     height: 6px;
-    margin-top: 5px;
+    margin-top: calc((var(--progress-timeline-first-line-height) - 6px) / 2);
 }
 
 .progress-timeline-children .progress-ripple-icon {
