@@ -2,6 +2,7 @@
 
 import type { Merge, Except } from 'type-fest'
 import type { AssetSubjectIdentity, DepictionMedium } from './asset-types.ts'
+import type { PricingReference } from './model-pricing-contracts.ts'
 
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
@@ -1816,6 +1817,9 @@ export type AiModel = {
     // ai-models-synchronization. The API derives AiModelsCatalogResponse.defaultModels
     // from these flags so the UI can pre-select the configured defaults.
     isDefaultFor?: DefaultAiModelCapability[]
+    // The route-aware cost identity is staged alongside legacy price data until
+    // the coordinated billing cutover can remove that legacy payload.
+    pricingReference?: PricingReference
     pricing: {
         currency: string
         resaleMargin: string

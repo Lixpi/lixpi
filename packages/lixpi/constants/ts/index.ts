@@ -4,6 +4,8 @@ export * from './types.ts'
 export * from './asset-types.ts'
 export * from './aws-resources.ts'
 export * from './metrics-contracts.ts'
+export * from './model-pricing-contracts.ts'
+export * from './provider-route-config.ts'
 export {
     mediaGenerationLayoutSettings,
     workspaceCollisionSettings,

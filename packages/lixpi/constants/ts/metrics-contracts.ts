@@ -1,5 +1,7 @@
 'use strict'
 
+import type { PricingLookup } from './model-pricing-contracts.ts'
+
 // ============================================================================
 // CROSS-REPO WIRE CONTRACT — do NOT change without explicit user allowance.
 //
@@ -71,6 +73,19 @@ export type UsageBreakdown = {
     videoTokens?: number
 }
 
+export type EstimatedUsage = UsageBreakdown
+
+export type PricingCheckRequest = {
+    orgId: string
+    userId: string
+    workspaceId?: string
+    workflowId: string
+    pricingLookup: PricingLookup
+    modality: Modality
+    estimatedUsage: EstimatedUsage
+    currency: string
+}
+
 // ConfirmRequest reports one provider call's measured usage after it returns.
 // It carries dimensioned unit counts only — the implementation prices them.
 // measuringUnit is the primary unit for the modality (and disambiguates video:
@@ -96,4 +111,20 @@ export type ConfirmResponse = {
     transferId?: string
     resaleCost?: number // micro-dollars, amount charged to the org
     balance?: number // micro-dollars, new balance after the debit
+}
+
+export type PricingConfirmRequest = {
+    providerRequestId: string
+    operationId?: string
+    orgId: string
+    userId: string
+    workspaceId?: string
+    workflowId: string
+    workflowSeq: number
+    pricingLookup: PricingLookup
+    modality: Modality
+    measuringUnit: MeasuringUnit
+    usage: UsageBreakdown
+    currency: string
+    occurredAt: string
 }

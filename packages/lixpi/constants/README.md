@@ -12,7 +12,9 @@ Capability data contracts remain in `ts/types.ts`. Manifest, workflow, resource,
 
 `ts/aws-resources.ts` contains only active DynamoDB resource names, including the six revision-2 tables. `nats-subjects.json` contains only active Asset/Blob processing and maintenance subjects alongside unrelated current product subjects.
 
-`ts/metrics-contracts.ts` defines the usage-metering check/confirm request/response shapes served by the hosted metering backend over the `METRICS_SUBJECTS` subjects. Together with `METRICS_SUBJECTS` in `nats-subjects.json`, it is a cross-repo wire contract — do not change it without mirroring the metering backend in the same change.
+`ts/metrics-contracts.ts` defines the currently deployed usage-metering check/confirm request/response shapes served by the hosted metering backend over the `METRICS_SUBJECTS` subjects. Together with `METRICS_SUBJECTS` in `nats-subjects.json`, it is a cross-repo wire contract — do not change it without mirroring the metering backend in the same change.
+
+`ts/model-pricing-contracts.ts` defines the pricing-service lookup, dimensions, and opaque route-aware key primitives. `ts/provider-route-config.ts` is the single catalog-side resolver for direct versus Bedrock pricing and produces the staged `AiModel.pricingReference`. `PRICING_SUBJECTS` reserves the dedicated pricing service/admin/reconciliation NATS contract; callers must never infer a pricing key from a bare model name.
 
 ## Main files
 
@@ -22,6 +24,8 @@ packages/lixpi/constants/
 └── ts/
     ├── asset-types.ts
     ├── aws-resources.ts
+    ├── model-pricing-contracts.ts
+    ├── provider-route-config.ts
     ├── media-generation-layout-settings.ts
     ├── metrics-contracts.ts
     ├── workspace-persistence-settings.ts

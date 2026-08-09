@@ -14,6 +14,7 @@ import type {
     MediaReferenceBinding,
     ProviderSafeMediaIntent,
     ProviderName,
+    PricingReference,
     WorkspaceContextResolution,
     WorkspaceContextSnapshot,
 } from '@lixpi/constants'
@@ -69,6 +70,7 @@ export type AiModelMetaInfo = {
     imagePromptMaxChars?: number
     imageInputFidelity?: ImageInputFidelityPolicy
     videoMaxReferenceImages?: number
+    pricingReference?: PricingReference
     pricing?: Record<string, any>
     [key: string]: unknown
 }

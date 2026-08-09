@@ -18,6 +18,7 @@ import {
     type DefaultAiModelCapability,
     type ImageSizeMode,
     type ImageSizeOption,
+    resolveCatalogPricingReference,
 } from '@lixpi/constants'
 import type { PartialDeep } from 'type-fest'
 
@@ -1084,6 +1085,10 @@ export class AiModelsSync {
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             imageInputFidelity: modelDefaults.imageInputFidelity,
+            pricingReference: resolveCatalogPricingReference({
+                catalogProvider: 'OpenAI',
+                catalogModel: openAIModel.id,
+            }, process.env),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1127,6 +1132,10 @@ export class AiModelsSync {
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             imageInputFidelity: modelDefaults.imageInputFidelity,
+            pricingReference: resolveCatalogPricingReference({
+                catalogProvider: 'Anthropic',
+                catalogModel: anthropicModel.id,
+            }, process.env),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1178,6 +1187,10 @@ export class AiModelsSync {
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
             videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
+            pricingReference: resolveCatalogPricingReference({
+                catalogProvider: 'Google',
+                catalogModel: googleModel.name,
+            }, process.env),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1557,6 +1570,10 @@ export class AiModelsSync {
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
             imageInputFidelity: modelDefaults.imageInputFidelity,
+            pricingReference: resolveCatalogPricingReference({
+                catalogProvider: 'Stability',
+                catalogModel: model.id,
+            }, process.env),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1704,6 +1721,10 @@ export class AiModelsSync {
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
             videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
+            pricingReference: resolveCatalogPricingReference({
+                catalogProvider: 'BytePlus',
+                catalogModel: model.id,
+            }, process.env),
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now

@@ -136,5 +136,14 @@
 	"METRICS_SUBJECTS": {
 		"USAGE_CHECK": "metrics.usage.check",
 		"USAGE_CONFIRM": "metrics.usage.confirm"
+	},
+	"PRICING_SUBJECTS": {
+		"REVISION_GET": "pricing.revision.get",
+		"MODEL_GET": "pricing.model.get",
+		"TABLE_GET": "pricing.table.get",
+		"CHANGED": "pricing.changed",
+		"ADMIN_STATUS_GET": "pricing.admin.status.get",
+		"ADMIN_OVERRIDE_COMMAND": "pricing.admin.override.command",
+		"RECONCILIATION_PREDICTED_DAILY": "pricing.reconciliation.predicted.daily"
 	}
 }
