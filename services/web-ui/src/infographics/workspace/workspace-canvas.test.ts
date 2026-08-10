@@ -104,11 +104,11 @@ function loadAiPromptComposer(): string {
 }
 
 function loadSidePanel(): string {
-	return readSourceFile('../../../../../packages/lixpi/ui-kit/src/components/sidePanel/sidePanel.ts', 'packages/lixpi/ui-kit/src/components/sidePanel/sidePanel.ts')
+	return readSourceFile('../../../packages/lixpi/ui-kit/src/components/sidePanel/sidePanel.ts', 'packages/lixpi/ui-kit/src/components/sidePanel/sidePanel.ts')
 }
 
 function loadSidePanelScss(): string {
-	return readSourceFile('../../../../../packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss', 'packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss')
+	return readSourceFile('../../../packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss', 'packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss')
 }
 
 function loadLayout(): string {
@@ -128,7 +128,7 @@ function loadSettings(): string {
 }
 
 function loadSvgIcons(): string {
-	return readSourceFile('../../../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts', 'ui-kit/svg/svgIcons.ts')
+	return readSourceFile('../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts', 'ui-kit/svg/svgIcons.ts')
 }
 
 function extractBlock(scss: string, selector: string): string {
@@ -265,9 +265,7 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 	})
 
 	it('subscribes live before replay and deduplicates stream sequences after reload', () => {
-		const recoveryStart = ts.indexOf('function createOperationStatusNode(node: OperationStatusCanvasNode): HTMLElement')
-		const recoveryEnd = ts.indexOf('function syncExistingOperationStatusNodeToDOM', recoveryStart)
-		const recovery = ts.slice(recoveryStart, recoveryEnd)
+		const recovery = extractFunctionBody(ts, 'ensureMediaGenerationOperationRecovery')
 		expect(recovery.indexOf("servicesStore.getData('nats')!.subscribe(result.liveSubject")).toBeGreaterThan(-1)
 		expect(recovery.indexOf('return replayMediaGenerationRequest({')).toBeGreaterThan(
 			recovery.indexOf("servicesStore.getData('nats')!.subscribe(result.liveSubject")
@@ -736,6 +734,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(pixiLayerTs, 'if (!entry.sourceReloadPending\n            && entry.loadedTier !== null')
 		expectSourceToContain(pixiLayerTs, "preserveNodeGeometry: Boolean(oldKey?.includes('/api/transient-media/'))")
 		expectSourceNotToContain(pixiLayerTs, 'entry.sprite.texture = Texture.EMPTY')
+		expectSourceToContain(ts, 'syncPixiMediaLayer(currentCanvasState)\n                syncCanvasNodeDomGeometry([imageNode])\n                pixiMediaLayer?.renderNow()')
 	})
 
 	it('keeps in-progress generated media aligned with API-owned lineage identity', () => {
@@ -2425,11 +2424,13 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 	})
 
 	it('keeps connector lines visible when nodes are selected', () => {
-		expectSourceNotToContain(ts, 'function getEdgesForConnectionManager')
-		expectSourceNotToContain(ts, 'syncEdges(getEdgesForConnectionManager')
-		expectSourceNotToContain(ts, ['selectedContext', 'RegionNodeIds'].join(''))
-		expectSourceToContain(ts, 'connectionManager?.syncEdges(currentCanvasState.edges)')
-		expectSourceToContain(ts, 'connectionManager.syncEdges(currentCanvasState.edges)')
+		const edgeProjection = extractFunctionBody(ts, 'getEdgesForConnectionManager')
+		expectExcerptToContain(edgeProjection, 'if (hiddenNodeIds.size === 0) return state.edges', 'connection edge projection')
+		expectExcerptToContain(edgeProjection, 'state.edges.filter', 'connection edge projection')
+		expectExcerptNotToContain(edgeProjection, 'selectedNodeIds', 'connection edge projection')
+		expectExcerptNotToContain(edgeProjection, ['selectedContext', 'RegionNodeIds'].join(''), 'connection edge projection')
+		expectSourceToContain(ts, 'connectionManager?.syncEdges(getEdgesForConnectionManager(currentCanvasState))')
+		expectSourceToContain(ts, 'connectionManager.syncEdges(getEdgesForConnectionManager(currentCanvasState))')
 	})
 
 		it('keeps the overlay hit target active for any visible overlay selection', () => {

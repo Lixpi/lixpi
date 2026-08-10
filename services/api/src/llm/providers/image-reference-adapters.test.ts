@@ -40,7 +40,7 @@ const capabilities = (overrides: Partial<ImageReferenceCapabilities> = {}): Imag
 })
 
 describe('image reference adapters', () => {
-    it('reserves OpenAI identity slots before optional controls and emits explicit high fidelity', () => {
+    it('keeps pose evidence ahead of optional identity and control references and emits explicit high fidelity', () => {
         const result = OPENAI_IMAGE_REFERENCE_ADAPTER.adapt({
             references: [
                 reference('pose-reference', 1),
@@ -55,12 +55,12 @@ describe('image reference adapters', () => {
 
         expect(result.included.map(({ role }) => role)).toEqual([
             'original-source',
+            'pose-reference',
             'face-crop',
             'prop-crop',
         ])
         expect(result.omitted).toEqual(expect.arrayContaining([
             expect.objectContaining({ role: 'body-outfit-crop', reason: 'identity-budget' }),
-            expect.objectContaining({ role: 'pose-reference', reason: 'unsupported-conditioning' }),
         ]))
         expect(result.explicitInputFidelity).toBe('high')
     })
@@ -80,8 +80,8 @@ describe('image reference adapters', () => {
             requiresIdentity: true,
         })
 
-        expect(result.included.map(({ role }) => role)).toEqual(['face-crop', 'canonical-anchor'])
-        expect(result.omitted).toEqual([expect.objectContaining({ role: 'pose-reference', reason: 'reference-budget' })])
+        expect(result.included.map(({ role }) => role)).toEqual(['canonical-anchor', 'pose-reference'])
+        expect(result.omitted).toEqual([expect.objectContaining({ role: 'face-crop', reason: 'reference-budget' })])
     })
 
     it('rejects Stability identity conditioning before provider work', () => {

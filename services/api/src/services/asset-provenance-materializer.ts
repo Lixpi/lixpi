@@ -5,9 +5,12 @@ import * as process from 'node:process'
 import {
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
+    settleMediaGenerationRunProgress,
     type Asset,
     type MediaBranchLineagePlan,
+    type MediaGenerationProgressState,
     type MediaGenerationRunMeta,
+    type OperationProgressItem,
 } from '@lixpi/constants'
 import {
     buildGeneratedMediaTurnProjectionFromThreadContent,
@@ -18,6 +21,7 @@ import {
 
 import { buildAssetProjectionOperations, getAssetRecord, publishAssetEvent } from '../models/asset.ts'
 import BlobModel, { buildBlobReferenceOperations, buildBlobReferenceRemovalOperations } from '../models/blob.ts'
+import MediaGenerationRequestModel from '../models/media-generation-request.ts'
 import { enqueueBlobDeletion, enqueueProvenanceRebuild } from './asset-maintenance-queue.ts'
 import AssetDocumentService from './asset-document-service.ts'
 
@@ -31,6 +35,166 @@ const isRevisionConflict = (error: unknown): boolean => {
     }
     return record.name === 'TransactionCanceledException'
         && Boolean(record.CancellationReasons?.some((reason) => reason.Code === 'ConditionalCheckFailed'))
+}
+
+const collectDocumentText = (value: unknown): string => {
+    if (!value || typeof value !== 'object') return ''
+    if (Array.isArray(value)) return value.map(collectDocumentText).filter(Boolean).join(' ')
+    const node = value as Record<string, unknown>
+    return [
+        typeof node.text === 'string' ? node.text : '',
+        ...(Array.isArray(node.content) ? node.content.map(collectDocumentText) : []),
+    ].filter(Boolean).join(' ')
+}
+
+const getReasoningSummary = (
+    document: unknown,
+    generationRun: MediaGenerationRunMeta,
+): string => {
+    let summary = ''
+    const visit = (value: unknown): void => {
+        if (summary || !value || typeof value !== 'object') return
+        if (Array.isArray(value)) {
+            value.forEach(visit)
+            return
+        }
+        const node = value as Record<string, unknown>
+        const attrs = node.attrs && typeof node.attrs === 'object'
+            ? node.attrs as Record<string, unknown>
+            : undefined
+        if (node.type === 'aiReasoningSection' && (
+            attrs?.reasoningRunId === generationRun.reasoningRunId
+            || attrs?.generationRequestId === generationRun.generationRequestId
+        )) {
+            summary = collectDocumentText(node).replace(/\s+/gu, ' ').trim().slice(0, 600)
+            return
+        }
+        if (Array.isArray(node.content)) node.content.forEach(visit)
+    }
+    visit(document)
+    return summary
+}
+
+export const includeLineageProgressInAssetProvenance = (
+    progress: MediaGenerationProgressState,
+    reasoningSummary = '',
+): MediaGenerationProgressState => {
+    const sharedItems: OperationProgressItem[] = [
+        {
+            id: 'lineage:understand-request',
+            title: 'Understand request',
+            status: 'completed',
+            ...(reasoningSummary ? { summary: reasoningSummary } : {}),
+        },
+        {
+            id: 'lineage:resolve-capabilities-and-references',
+            title: 'Resolve capabilities, tools, and references',
+            status: 'completed',
+        },
+        {
+            id: 'lineage:resolve-branch-lineage',
+            title: 'Resolve branch lineage and media runs',
+            status: 'completed',
+        },
+    ]
+    return {
+        ...progress,
+        progress: {
+            ...progress.progress,
+            items: [
+                ...sharedItems,
+                ...(progress.progress.items ?? []),
+            ],
+        },
+    }
+}
+
+const createProvenanceMediaNode = ({
+    assetId,
+    generationRun,
+    generationProgress,
+}: {
+    assetId: string
+    generationRun: MediaGenerationRunMeta
+    generationProgress: MediaGenerationProgressState
+}): Record<string, unknown> => ({
+    type: generationRun.mediaType === 'video' ? 'aiGeneratedVideo' : 'aiGeneratedImage',
+    attrs: {
+        assetId,
+        generationRequestId: generationRun.generationRequestId,
+        reasoningRunId: generationRun.reasoningRunId,
+        mediaRunId: generationRun.mediaRunId ?? '',
+        reasoningModelId: generationRun.reasoningModelId,
+        mediaModelId: generationRun.mediaModelId ?? '',
+        mediaType: generationRun.mediaType ?? '',
+        variantIndex: generationRun.variantIndex ?? generationRun.mediaIndex ?? null,
+        generationProgress,
+        ...(generationRun.mediaType === 'video'
+            ? { isPending: false }
+            : { isPartial: false }),
+    },
+})
+
+const embedGenerationProgressInProvenance = ({
+    document,
+    assetId,
+    generationRun,
+    generationProgress,
+}: {
+    document: Record<string, unknown>
+    assetId: string
+    generationRun: MediaGenerationRunMeta
+    generationProgress: MediaGenerationProgressState
+}): Record<string, unknown> => {
+    let embedded = false
+    const visit = (value: unknown): unknown => {
+        if (!value || typeof value !== 'object') return value
+        if (Array.isArray(value)) return value.map(visit)
+        const node = value as Record<string, unknown>
+        const attrs = node.attrs && typeof node.attrs === 'object'
+            ? node.attrs as Record<string, unknown>
+            : undefined
+        const matches = (node.type === 'aiGeneratedImage' || node.type === 'aiGeneratedVideo') && (
+            attrs?.assetId === assetId
+            || Boolean(generationRun.mediaRunId && attrs?.mediaRunId === generationRun.mediaRunId)
+        )
+        if (matches) {
+            embedded = true
+            return {
+                ...node,
+                attrs: { ...attrs, generationProgress },
+                ...(Array.isArray(node.content) ? { content: node.content.map(visit) } : {}),
+            }
+        }
+        return {
+            ...node,
+            ...(Array.isArray(node.content) ? { content: node.content.map(visit) } : {}),
+        }
+    }
+    const projected = visit(document) as Record<string, unknown>
+    if (embedded) return projected
+
+    let appended = false
+    const appendToResponse = (value: unknown): unknown => {
+        if (!value || typeof value !== 'object') return value
+        if (Array.isArray(value)) return value.map(appendToResponse)
+        const node = value as Record<string, unknown>
+        if (!appended && node.type === 'aiResponseMessage') {
+            appended = true
+            return {
+                ...node,
+                content: [
+                    ...(Array.isArray(node.content) ? node.content : []),
+                    createProvenanceMediaNode({ assetId, generationRun, generationProgress }),
+                ],
+            }
+        }
+        return {
+            ...node,
+            ...(Array.isArray(node.content) ? { content: node.content.map(appendToResponse) } : {}),
+        }
+    }
+    return appendToResponse(projected) as Record<string, unknown>
 }
 
 const materializeAssetProvenanceAttempt = async ({
@@ -65,6 +229,40 @@ const materializeAssetProvenanceAttempt = async ({
         throw new Error('PROVENANCE_CONVERSATION_ASSET_NOT_FOUND')
     }
     const conversationSnapshot = await AssetDocumentService.loadCurrentSnapshot(conversationAsset, 'conversation')
+    const request = await MediaGenerationRequestModel.get({
+        generationRequestId: generationRun.generationRequestId,
+        workspaceId,
+    })
+    const durableRun = request?.runs.find(run => (
+        Boolean(generationRun.mediaRunId && run.mediaRunId === generationRun.mediaRunId)
+        || (run.reasoningIndex === generationRun.reasoningIndex
+            && run.modelId === generationRun.mediaModelId)
+    ))
+    const progressMessage = durableRun?.progress?.message
+        ?? (terminalStatus === 'completed'
+            ? 'Media generation completed.'
+            : terminalStatus === 'cancelled'
+                ? 'Media generation cancelled.'
+                : durableRun?.problem?.detail ?? 'Media generation failed.')
+    const mediaGenerationProgress: MediaGenerationProgressState = {
+        generationRequestId: generationRun.generationRequestId,
+        status: terminalStatus,
+        message: progressMessage,
+        progress: settleMediaGenerationRunProgress(
+            durableRun?.progress,
+            terminalStatus,
+            progressMessage,
+        ),
+        ...(durableRun?.generationRun === undefined ? {} : {
+            generationRun: durableRun.generationRun,
+        }),
+        ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
+        updatedAt: durableRun?.completedAt ?? request?.updatedAt ?? Date.now(),
+    }
+    const generationProgress = includeLineageProgressInAssetProvenance(
+        mediaGenerationProgress,
+        getReasoningSummary(conversationSnapshot?.doc, generationRun),
+    )
     const projection = conversationSnapshot
         ? buildGeneratedMediaTurnProjectionFromThreadContent(
             conversationSnapshot.doc,
@@ -88,33 +286,39 @@ const materializeAssetProvenanceAttempt = async ({
         throw new Error('PROVENANCE_PROJECTION_NOT_READY')
     }
     const projectedContent = projection?.content
-    const provenanceDocument = projectedContent
+    const baseProvenanceDocument = projectedContent
         ? {
             ...projectedContent,
             content: projectedContent.content,
         }
         : {
-        type: 'doc',
-        content: [{
-            type: 'aiChatThread',
-            attrs: { threadId: conversationAssetId, status: terminalStatus },
+            type: 'doc',
             content: [{
-                type: 'aiResponseMessage',
-                attrs: {
-                    generationRequestId: generationRun.generationRequestId,
-                    reasoningRunId: generationRun.reasoningRunId,
-                    mediaRunId: generationRun.mediaRunId ?? '',
-                    reasoningModelId: generationRun.reasoningModelId,
-                    mediaModelId: generationRun.mediaModelId ?? '',
-                    mediaType: generationRun.mediaType ?? '',
-                },
+                type: 'aiChatThread',
+                attrs: { threadId: conversationAssetId, status: terminalStatus },
                 content: [{
-                    type: 'paragraph',
-                    content: [{ type: 'text', text: `Generation ${terminalStatus}.` }],
+                    type: 'aiResponseMessage',
+                    attrs: {
+                        generationRequestId: generationRun.generationRequestId,
+                        reasoningRunId: generationRun.reasoningRunId,
+                        mediaRunId: generationRun.mediaRunId ?? '',
+                        reasoningModelId: generationRun.reasoningModelId,
+                        mediaModelId: generationRun.mediaModelId ?? '',
+                        mediaType: generationRun.mediaType ?? '',
+                    },
+                    content: [{
+                        type: 'paragraph',
+                        content: [{ type: 'text', text: `Generation ${terminalStatus}.` }],
+                    }],
                 }],
             }],
-        }],
         }
+    const provenanceDocument = embedGenerationProgressInProvenance({
+        document: baseProvenanceDocument,
+        assetId,
+        generationRun,
+        generationProgress,
+    })
     new HeadlessProseMirrorEngine({
         documentType: DOCUMENT_TYPE.ASSET_PROVENANCE,
         doc: provenanceDocument,

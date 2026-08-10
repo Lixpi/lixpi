@@ -9,7 +9,11 @@ import {
 
 export type ActionTimelineInputResolution =
     | { valid: true; input: ActionTimelineInput }
-    | { valid: false; error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' }
+    | {
+        valid: false
+        error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED'
+        missingInputFields: Array<'durationMs' | 'precisionMs'>
+    }
 
 export function resolveActionTimelineInput({
     prompt,
@@ -30,7 +34,14 @@ export function resolveActionTimelineInput({
         ?? readNumber(routedInput?.precisionMs)
         ?? readNumber(submittedInput?.precisionMs)
     if (durationMs === undefined || precisionMs === undefined) {
-        return { valid: false, error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' }
+        return {
+            valid: false,
+            error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED',
+            missingInputFields: [
+                ...(durationMs === undefined ? ['durationMs' as const] : []),
+                ...(precisionMs === undefined ? ['precisionMs' as const] : []),
+            ],
+        }
     }
     assertTimelineTiming(durationMs, precisionMs)
     return {

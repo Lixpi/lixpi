@@ -1,11 +1,21 @@
 'use strict'
 
 import { describe, expect, it, vi } from 'vitest'
+import type { AiModelInferenceCapabilities } from '@lixpi/constants'
 
 import { buildCharacterPanelSpecs } from '../../shared/character-sheet-media-plan.ts'
 
 import { createCharacterVlmPorts } from './character-vlm.ts'
 import { emptyCharacterEvidenceProfile } from './character-evidence.ts'
+
+const inferenceCapabilities: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: true,
+    supportedInputKinds: ['image', 'document-text'],
+}
 
 describe('Character Creator structured VLM ports', () => {
     it('analyzes authoritative source pixels with the selected reasoning model', async () => {
@@ -36,6 +46,7 @@ describe('Character Creator structured VLM ports', () => {
         const ports = createCharacterVlmPorts({
             provider: 'OpenAI',
             modelVersion: 'reasoning-model-v1',
+            inferenceCapabilities,
             vlm: { call: callVlm },
         })
         const result = await ports.evidenceAnalyzer.analyze({
@@ -65,7 +76,7 @@ describe('Character Creator structured VLM ports', () => {
         }))
     })
 
-    it('scores every requested panel dimension against sources and accepted anchors', async () => {
+    it('scores every requested panel dimension against authoritative sources and the candidate', async () => {
         const panel = buildCharacterPanelSpecs()[0]!
         const callVlm = vi.fn(async () => ({
             parsed: {
@@ -83,19 +94,19 @@ describe('Character Creator structured VLM ports', () => {
         const ports = createCharacterVlmPorts({
             provider: 'Google',
             modelVersion: 'reasoning-model-v1',
+            inferenceCapabilities,
             vlm: { call: callVlm },
         })
         const result = await ports.panelAssessor.assess({
             panel,
             candidateDataUrl: 'data:image/png;base64,Y2FuZGlkYXRl',
             sourceDataUrls: ['data:image/png;base64,c291cmNl'],
-            anchorDataUrls: ['data:image/png;base64,YW5jaG9y'],
             evidence: emptyCharacterEvidenceProfile(),
         })
 
         expect(result.assessor).toBe('Google/reasoning-model-v1')
         expect(result.dimensions.map(dimension => dimension.dimension)).toEqual(panel.acceptanceDimensions)
         const content = (callVlm.mock.calls[0]![0] as any).userMessages[0].content
-        expect(content.filter((part: any) => part.type === 'input_image')).toHaveLength(3)
+        expect(content.filter((part: any) => part.type === 'input_image')).toHaveLength(2)
     })
 })

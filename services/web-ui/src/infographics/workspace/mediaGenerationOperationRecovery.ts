@@ -1,9 +1,10 @@
 import {
     createDefaultMediaGenerationRunProgress,
     settleMediaGenerationRunProgress,
-    type BranchMarkerMediaGenerationState,
+    type CanvasNode,
     type CanvasState,
     type MediaGenerationProblem,
+    type MediaGenerationProgressState,
     type MediaGenerationRun,
     type MediaGenerationRunProgress,
     type MediaGenerationRunStatus,
@@ -34,15 +35,22 @@ type OperationPatch = {
 
 type OperationRemoval = {
     remove: 'completed' | 'cancelled'
+    progress?: MediaGenerationRunProgress
 }
 
+type GeneratedMediaNode = Extract<CanvasNode, { type: 'image' | 'video' }>
+
 function isMediaGenerationOperationNodeForRequest(
-    node: CanvasState['nodes'][number],
+    node: CanvasNode,
     generationRequestId: string,
 ): node is OperationStatusCanvasNode {
     return node.type === 'operationStatus'
         && node.operation === 'media-generation'
         && node.generationRequestId === generationRequestId
+}
+
+function isGeneratedMediaNode(node: CanvasNode): node is GeneratedMediaNode {
+    return node.type === 'image' || node.type === 'video'
 }
 
 function replaceOperationFields(
@@ -56,69 +64,145 @@ function replaceOperationFields(
         verificationAssetId: _verificationAssetId,
         ...stableNode
     } = node
-
-    return {
-        ...stableNode,
-        ...patch,
-    }
+    return { ...stableNode, ...patch }
 }
 
-function isBranchMarkerNode(
-    node: CanvasState['nodes'][number],
-): node is Extract<CanvasState['nodes'][number], { type: 'branchOrigin' | 'branchFork' | 'branchLine' }> {
-    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
-}
-
-function getOperationOwnerNodeIds(state: CanvasState, operationNodeId: string): string[] {
-    return state.edges
-        .filter(edge => edge.targetNodeId === operationNodeId)
-        .map(edge => edge.sourceNodeId)
-}
-
-function toMarkerRunStatus(status: OperationStatusCanvasNode['status']): MediaGenerationRunStatus {
+function toRunStatus(status: OperationStatusCanvasNode['status']): MediaGenerationRunStatus {
     if (status === 'failed') return 'failed'
     if (status === 'action-required') return 'awaiting-provider-verification'
     return 'running'
 }
 
-function projectMarkerStates(
-    state: CanvasState,
-    nodes: CanvasState['nodes'],
-    statesByOperationNodeId: ReadonlyMap<string, BranchMarkerMediaGenerationState>,
-): { nodes: CanvasState['nodes']; updatedMarkerNodeIds: string[] } {
-    const stateByMarkerNodeId = new Map<string, BranchMarkerMediaGenerationState>()
-    for (const [operationNodeId, mediaGeneration] of statesByOperationNodeId) {
-        for (const ownerNodeId of getOperationOwnerNodeIds(state, operationNodeId)) {
-            stateByMarkerNodeId.set(ownerNodeId, mediaGeneration)
-        }
-    }
-    const updatedMarkerNodeIds: string[] = []
+function createProgressState({
+    generationRequestId,
+    status,
+    message,
+    progress,
+    generationRun,
+    mediaRunId,
+    updatedAt,
+}: {
+    generationRequestId: string
+    status: MediaGenerationRunStatus
+    message: string
+    progress?: MediaGenerationRunProgress
+    generationRun?: number
+    mediaRunId?: string
+    updatedAt: number
+}): MediaGenerationProgressState {
     return {
-        nodes: nodes.map(node => {
-            const mediaGeneration = stateByMarkerNodeId.get(node.nodeId)
-            if (!mediaGeneration || !isBranchMarkerNode(node)) return node
-            updatedMarkerNodeIds.push(node.nodeId)
-            return { ...node, mediaGeneration }
-        }),
-        updatedMarkerNodeIds,
+        generationRequestId,
+        status,
+        message,
+        progress: progress ?? createDefaultMediaGenerationRunProgress(status, message),
+        ...(generationRun === undefined ? {} : { generationRun }),
+        ...(mediaRunId ? { mediaRunId } : {}),
+        updatedAt,
     }
 }
 
-function projectRequestStateToMarkers(
-    state: CanvasState,
+function mediaNodeMatches(
+    node: GeneratedMediaNode,
     generationRequestId: string,
     generationRun: number | undefined,
-    mediaGeneration: BranchMarkerMediaGenerationState,
+    outputNodeId: string | undefined,
+    mediaRunId?: string,
+): boolean {
+    if (outputNodeId && node.nodeId === outputNodeId) return true
+    if (node.generationProgress?.generationRequestId === generationRequestId) {
+        if (mediaRunId && node.generationProgress.mediaRunId === mediaRunId) return true
+        if (generationRun !== undefined && node.generationProgress.generationRun === generationRun) return true
+    }
+    if (node.generatedBy?.generationRequestId !== generationRequestId) return false
+    return Boolean(mediaRunId && node.generatedBy.mediaRunId === mediaRunId)
+}
+
+function projectProgressToMediaNodes({
+    nodes,
+    generationRequestId,
+    generationRun,
+    outputNodeId,
+    mediaRunId,
+    progressState,
+}: {
+    nodes: CanvasNode[]
+    generationRequestId: string
+    generationRun?: number
+    outputNodeId?: string
+    mediaRunId?: string
+    progressState: MediaGenerationProgressState
+}): { nodes: CanvasNode[]; updatedNodeIds: string[] } {
+    const updatedNodeIds: string[] = []
+    return {
+        nodes: nodes.map(node => {
+            if (!isGeneratedMediaNode(node) || !mediaNodeMatches(
+                node,
+                generationRequestId,
+                generationRun,
+                outputNodeId,
+                mediaRunId,
+            )) return node
+            if (JSON.stringify(node.generationProgress) === JSON.stringify(progressState)) return node
+            updatedNodeIds.push(node.nodeId)
+            return { ...node, generationProgress: progressState }
+        }),
+        updatedNodeIds,
+    }
+}
+
+function settleMediaNodesForRuns(
+    state: CanvasState,
+    generationRequestId: string,
+    runs: readonly Pick<MediaGenerationRun, 'generationRun' | 'mediaRunId' | 'outputNodeId' | 'status' | 'progress' | 'problem'>[],
+    requestStatus?: 'completed' | 'cancelled',
 ): MediaGenerationOperationRecoveryResult {
     const updatedNodeIds: string[] = []
     const nodes = state.nodes.map(node => {
-        if (!isBranchMarkerNode(node)
-            || node.generationRequestId !== generationRequestId
-            || (generationRun !== undefined
-                && node.mediaGeneration?.generationRun !== undefined
-                && node.mediaGeneration.generationRun !== generationRun)) return node
+        if (!isGeneratedMediaNode(node)) return node
+        const belongsToRequest = node.generationProgress?.generationRequestId === generationRequestId
+            || node.generatedBy?.generationRequestId === generationRequestId
+            || runs.some(candidate => candidate.outputNodeId === node.nodeId)
+        if (!belongsToRequest) return node
+        const matchingRun = runs.find(candidate => mediaNodeMatches(
+            node,
+            generationRequestId,
+            candidate.generationRun,
+            candidate.outputNodeId,
+            candidate.mediaRunId,
+        ))
+        const run = matchingRun ?? (runs.length === 1 ? runs[0] : undefined)
+        const existingTerminalStatus = node.generationProgress
+            && ['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)
+            ? node.generationProgress.status as 'completed' | 'failed' | 'cancelled'
+            : undefined
+        const status = requestStatus === 'cancelled'
+            ? run?.status === 'completed' || run?.status === 'failed' || run?.status === 'cancelled'
+                ? run.status
+                : existingTerminalStatus ?? 'cancelled'
+            : run?.status === 'failed' ? 'failed'
+                : run?.status === 'cancelled' ? 'cancelled' : 'completed'
+        const message = status === 'completed'
+            ? run?.progress?.message ?? 'Media generation completed.'
+            : status === 'cancelled'
+                ? 'Media generation cancelled.'
+                : run?.problem?.detail ?? 'Media generation failed.'
+        const progress = settleMediaGenerationRunProgress(
+            run?.progress ?? node.generationProgress?.progress,
+            status,
+            message,
+        )
+        const nextProgress = createProgressState({
+            generationRequestId,
+            status,
+            message,
+            progress,
+            generationRun: run?.generationRun ?? node.generationProgress?.generationRun,
+            mediaRunId: run?.mediaRunId ?? node.generationProgress?.mediaRunId,
+            updatedAt: Date.now(),
+        })
+        if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgress)) return node
         updatedNodeIds.push(node.nodeId)
-        return { ...node, mediaGeneration }
+        return { ...node, generationProgress: nextProgress }
     })
     return updatedNodeIds.length === 0
         ? { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
@@ -130,150 +214,71 @@ function projectRequestStateToMarkers(
         }
 }
 
-function removeOperationNodes(
-    state: CanvasState,
-    removedNodeIds: Set<string>,
-    terminalStatus: 'completed' | 'cancelled',
-): MediaGenerationOperationRecoveryResult {
-    if (removedNodeIds.size === 0) {
-        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
-    }
-
-    const terminalStates = new Map<string, BranchMarkerMediaGenerationState>()
-    for (const node of state.nodes) {
-        if (node.type !== 'operationStatus' || !removedNodeIds.has(node.nodeId)) continue
-        const message = node.progress?.message
-            ?? (terminalStatus === 'completed' ? 'Media generation completed.' : 'Media generation cancelled.')
-        terminalStates.set(node.nodeId, {
-            status: terminalStatus,
-            message,
-            progress: settleMediaGenerationRunProgress(node.progress, terminalStatus, message),
-            ...(node.generationRun !== undefined ? { generationRun: node.generationRun } : {}),
-            updatedAt: Date.now(),
-        })
-    }
-    const markerProjection = projectMarkerStates(
-        state,
-        state.nodes.filter(node => !removedNodeIds.has(node.nodeId)),
-        terminalStates,
-    )
-    return {
-        state: {
-            ...state,
-            nodes: markerProjection.nodes,
-            edges: state.edges.filter(edge => (
-                !removedNodeIds.has(edge.sourceNodeId)
-                && !removedNodeIds.has(edge.targetNodeId)
-            )),
-        },
-        changed: true,
-        updatedNodeIds: markerProjection.updatedMarkerNodeIds,
-        removedNodeIds: [...removedNodeIds],
-    }
-}
-
-function settleTerminalBranchMarkerProgress(
-    result: MediaGenerationOperationRecoveryResult,
-    generationRequestId: string,
-    runs: readonly Pick<MediaGenerationRun, 'generationRun' | 'status' | 'progress' | 'problem'>[],
-    requestStatus?: 'completed' | 'cancelled',
-): MediaGenerationOperationRecoveryResult {
-    const updatedNodeIds = new Set(result.updatedNodeIds)
-    let changed = result.changed
-    const nodes = result.state.nodes.map(node => {
-        if (!isBranchMarkerNode(node)
-            || node.generationRequestId !== generationRequestId
-            || !node.mediaGeneration) return node
-        const run = runs.find(candidate => candidate.generationRun === node.mediaGeneration?.generationRun)
-            ?? (runs.length === 1 ? runs[0] : undefined)
-        const status = requestStatus === 'cancelled'
-            ? 'cancelled'
-            : requestStatus === 'completed' ? run?.status ?? 'completed' : run?.status
-        if (status !== 'completed' && status !== 'failed' && status !== 'cancelled') return node
-        const message = status === 'completed'
-            ? run?.progress?.message ?? 'Media generation completed.'
-            : status === 'cancelled'
-                ? 'Media generation cancelled.'
-                : run?.problem?.detail ?? 'Media generation failed.'
-        const progress = settleMediaGenerationRunProgress(
-            run?.progress ?? node.mediaGeneration.progress,
-            status,
-            message,
-        )
-        if (node.mediaGeneration.status === status
-            && node.mediaGeneration.message === message
-            && JSON.stringify(node.mediaGeneration.progress) === JSON.stringify(progress)) return node
-        changed = true
-        updatedNodeIds.add(node.nodeId)
-        return {
-            ...node,
-            mediaGeneration: {
-                ...node.mediaGeneration,
-                status,
-                message,
-                progress,
-                updatedAt: Date.now(),
-            },
-        }
-    })
-    return {
-        ...result,
-        state: changed ? { ...result.state, nodes } : result.state,
-        changed,
-        updatedNodeIds: [...updatedNodeIds],
-    }
-}
-
 function applyOperationPatches(
     state: CanvasState,
     generationRequestId: string,
     patchForNode: (node: OperationStatusCanvasNode) => OperationPatch | OperationRemoval | null,
 ): MediaGenerationOperationRecoveryResult {
     const removedNodeIds = new Set<string>()
-    const updatedNodeIds: string[] = []
-    const markerStatesByOperationNodeId = new Map<string, BranchMarkerMediaGenerationState>()
-    const nodes = state.nodes.flatMap(node => {
+    const updatedNodeIds = new Set<string>()
+    const mediaProjections: Array<{
+        operation: OperationStatusCanvasNode
+        progressState: MediaGenerationProgressState
+    }> = []
+    let nodes = state.nodes.flatMap(node => {
         if (!isMediaGenerationOperationNodeForRequest(node, generationRequestId)) return [node]
         const patch = patchForNode(node)
         if (!patch) return [node]
+        const status = 'remove' in patch ? patch.remove : toRunStatus(patch.status)
+        const message = 'remove' in patch
+            ? patch.progress?.message ?? node.progress?.message
+                ?? (status === 'completed' ? 'Media generation completed.' : 'Media generation cancelled.')
+            : patch.message
+        const progress = 'remove' in patch
+            ? settleMediaGenerationRunProgress(patch.progress ?? node.progress, patch.remove, message)
+            : patch.progress ?? node.progress
+                ?? createDefaultMediaGenerationRunProgress(status, message)
+        mediaProjections.push({
+            operation: node,
+            progressState: createProgressState({
+                generationRequestId,
+                status,
+                message,
+                progress,
+                generationRun: node.generationRun,
+                mediaRunId: node.mediaRunId,
+                updatedAt: 'remove' in patch ? Date.now() : patch.updatedAt,
+            }),
+        })
         if ('remove' in patch) {
             removedNodeIds.add(node.nodeId)
-            const message = node.progress?.message
-                ?? (patch.remove === 'completed' ? 'Media generation completed.' : 'Media generation cancelled.')
-            markerStatesByOperationNodeId.set(node.nodeId, {
-                status: patch.remove,
-                message,
-                progress: settleMediaGenerationRunProgress(node.progress, patch.remove, message),
-                ...(node.generationRun !== undefined ? { generationRun: node.generationRun } : {}),
-                updatedAt: Date.now(),
-            })
             return []
         }
-        const updatedNode = replaceOperationFields(node, patch)
-        if (JSON.stringify(updatedNode) === JSON.stringify(node)) return [node]
-        updatedNodeIds.push(node.nodeId)
-        markerStatesByOperationNodeId.set(node.nodeId, {
-            status: toMarkerRunStatus(updatedNode.status),
-            message: updatedNode.message,
-            progress: updatedNode.progress ?? createDefaultMediaGenerationRunProgress(
-                toMarkerRunStatus(updatedNode.status),
-                updatedNode.message,
-            ),
-            ...(updatedNode.generationRun !== undefined ? { generationRun: updatedNode.generationRun } : {}),
-            updatedAt: updatedNode.updatedAt,
-        })
+        const updatedNode = replaceOperationFields(node, { ...patch, progress })
+        if (JSON.stringify(updatedNode) !== JSON.stringify(node)) updatedNodeIds.add(node.nodeId)
         return [updatedNode]
     })
 
-    if (removedNodeIds.size === 0 && updatedNodeIds.length === 0) {
-        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+    for (const projection of mediaProjections) {
+        const mediaProjection = projectProgressToMediaNodes({
+            nodes,
+            generationRequestId,
+            generationRun: projection.operation.generationRun,
+            outputNodeId: projection.operation.outputNodeId,
+            mediaRunId: projection.operation.mediaRunId,
+            progressState: projection.progressState,
+        })
+        for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
+        nodes = mediaProjection.nodes
     }
 
-    const markerProjection = projectMarkerStates(state, nodes, markerStatesByOperationNodeId)
+    if (removedNodeIds.size === 0 && updatedNodeIds.size === 0) {
+        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+    }
     return {
         state: {
             ...state,
-            nodes: markerProjection.nodes,
+            nodes,
             edges: removedNodeIds.size === 0
                 ? state.edges
                 : state.edges.filter(edge => (
@@ -282,7 +287,7 @@ function applyOperationPatches(
                 )),
         },
         changed: true,
-        updatedNodeIds: [...updatedNodeIds, ...markerProjection.updatedMarkerNodeIds],
+        updatedNodeIds: [...updatedNodeIds],
         removedNodeIds: [...removedNodeIds],
     }
 }
@@ -292,28 +297,42 @@ export function applyMediaGenerationRequestToOperationNodes(
     request: MediaGenerationRequest,
 ): MediaGenerationOperationRecoveryResult {
     if (request.status === 'completed' || request.status === 'cancelled') {
-        const removal = removeOperationNodes(state, new Set(state.nodes
+        const operationNodeIds = new Set(state.nodes
             .filter(node => isMediaGenerationOperationNodeForRequest(node, request.generationRequestId))
-            .map(node => node.nodeId)), request.status)
-        return settleTerminalBranchMarkerProgress(
-            removal,
+            .map(node => node.nodeId))
+        const withoutOperations: CanvasState = {
+            ...state,
+            nodes: state.nodes.filter(node => !operationNodeIds.has(node.nodeId)),
+            edges: state.edges.filter(edge => (
+                !operationNodeIds.has(edge.sourceNodeId)
+                && !operationNodeIds.has(edge.targetNodeId)
+            )),
+        }
+        const settled = settleMediaNodesForRuns(
+            withoutOperations,
             request.generationRequestId,
             request.runs,
             request.status,
         )
+        return {
+            ...settled,
+            changed: settled.changed || operationNodeIds.size > 0,
+            removedNodeIds: [...operationNodeIds],
+        }
     }
 
     const firstUnresolvedBinding = request.unresolvedBindings[0]
     const firstRun = request.runs[0]
-    return applyOperationPatches(state, request.generationRequestId, node => {
+    const operationResult = applyOperationPatches(state, request.generationRequestId, node => {
         if ((node.requestRevision ?? 0) > request.revision) return null
         const run = request.runs.find(candidate => (
             candidate.operationNodeId === node.nodeId
             || candidate.generationRun === node.generationRun
         ))
         if (!run) return null
-        if (run.status === 'completed' || run.status === 'cancelled') return { remove: run.status }
-
+        if (run.status === 'completed' || run.status === 'cancelled') {
+            return { remove: run.status, progress: run.progress }
+        }
         if (firstUnresolvedBinding && run.generationRun === firstRun?.generationRun) {
             const message = 'Choose which attached Asset the prompt refers to.'
             return {
@@ -328,7 +347,6 @@ export function applyMediaGenerationRequestToOperationNodes(
                 updatedAt: request.updatedAt,
             }
         }
-
         if (run.status === 'awaiting-provider-verification') {
             const message = run.problem?.detail ?? 'Provider verification is required to continue.'
             return {
@@ -343,7 +361,6 @@ export function applyMediaGenerationRequestToOperationNodes(
                 updatedAt: request.updatedAt,
             }
         }
-
         if (run.status === 'failed') {
             const message = run.problem?.detail ?? 'Generation failed.'
             return {
@@ -355,7 +372,6 @@ export function applyMediaGenerationRequestToOperationNodes(
                 updatedAt: request.updatedAt,
             }
         }
-
         const message = run.status === 'running'
             ? run.progress?.message ?? 'The provider is generating media.'
             : 'Preparing the media request.'
@@ -367,6 +383,55 @@ export function applyMediaGenerationRequestToOperationNodes(
             updatedAt: request.updatedAt,
         }
     })
+    let nodes = operationResult.state.nodes
+    const updatedNodeIds = new Set(operationResult.updatedNodeIds)
+    for (const run of request.runs) {
+        const status: MediaGenerationRunStatus = firstUnresolvedBinding
+            && run.generationRun === firstRun?.generationRun
+            ? 'awaiting-provider-verification'
+            : run.status
+        const message = firstUnresolvedBinding && run.generationRun === firstRun?.generationRun
+            ? 'Choose which attached Asset the prompt refers to.'
+            : run.problem?.detail
+                ?? run.progress?.message
+                ?? (status === 'completed'
+                    ? 'Media generation completed.'
+                    : status === 'cancelled'
+                        ? 'Media generation cancelled.'
+                        : status === 'failed'
+                            ? 'Media generation failed.'
+                            : status === 'running'
+                                ? 'The provider is generating media.'
+                                : 'Preparing the media request.')
+        const progress = status === 'completed' || status === 'failed' || status === 'cancelled'
+            ? settleMediaGenerationRunProgress(run.progress, status, message)
+            : run.progress
+        const mediaProjection = projectProgressToMediaNodes({
+            nodes,
+            generationRequestId: request.generationRequestId,
+            generationRun: run.generationRun,
+            outputNodeId: run.outputNodeId,
+            mediaRunId: run.mediaRunId,
+            progressState: createProgressState({
+                generationRequestId: request.generationRequestId,
+                status,
+                message,
+                progress,
+                generationRun: run.generationRun,
+                mediaRunId: run.mediaRunId,
+                updatedAt: request.updatedAt,
+            }),
+        })
+        nodes = mediaProjection.nodes
+        for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
+    }
+    if (updatedNodeIds.size === operationResult.updatedNodeIds.length) return operationResult
+    return {
+        ...operationResult,
+        state: { ...operationResult.state, nodes },
+        changed: true,
+        updatedNodeIds: [...updatedNodeIds],
+    }
 }
 
 function readStringArray(value: unknown): string[] | undefined {
@@ -436,6 +501,12 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const generationRun = typeof event.payload.generationRun === 'number'
         ? event.payload.generationRun
         : undefined
+    const mediaRunId = typeof event.payload.mediaRunId === 'string'
+        ? event.payload.mediaRunId
+        : undefined
+    const outputNodeId = typeof event.payload.outputNodeId === 'string'
+        ? event.payload.outputNodeId
+        : undefined
     const runStatus = typeof event.payload.runStatus === 'string'
         ? event.payload.runStatus
         : undefined
@@ -457,40 +528,83 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const progress = readProgress(event.payload.progress)
     const requestStatus = typeof event.payload.status === 'string' ? event.payload.status : undefined
     if (requestStatus === 'completed' || requestStatus === 'cancelled') {
-        const removal = removeOperationNodes(state, new Set(state.nodes
+        const operationNodeIds = new Set(state.nodes
             .filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId))
-            .map(node => node.nodeId)), requestStatus)
+            .map(node => node.nodeId))
+        const withoutOperations: CanvasState = {
+            ...state,
+            nodes: state.nodes.filter(node => !operationNodeIds.has(node.nodeId)),
+            edges: state.edges.filter(edge => (
+                !operationNodeIds.has(edge.sourceNodeId)
+                && !operationNodeIds.has(edge.targetNodeId)
+            )),
+        }
         const terminalRuns = generationRun === undefined || !mediaRunStatus
             ? []
             : [{
                 generationRun,
+                ...(mediaRunId ? { mediaRunId } : {}),
+                ...(outputNodeId ? { outputNodeId } : {}),
                 status: mediaRunStatus,
                 ...(progress ? { progress } : {}),
                 ...(problem ? { problem } : {}),
             }]
-        return settleTerminalBranchMarkerProgress(
-            removal,
+        const settled = settleMediaNodesForRuns(
+            withoutOperations,
             event.generationRequestId,
             terminalRuns,
             requestStatus,
         )
-    }
-    if (generationRun !== undefined && (runStatus === 'completed' || runStatus === 'cancelled')) {
-        const removal = removeOperationNodes(state, new Set(state.nodes
-            .filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)
-                && node.generationRun === generationRun)
-            .map(node => node.nodeId)), runStatus)
-        return settleTerminalBranchMarkerProgress(removal, event.generationRequestId, [{
-            generationRun,
-            status: runStatus,
-            ...(progress ? { progress } : {}),
-            ...(problem ? { problem } : {}),
-        }])
+        return {
+            ...settled,
+            changed: settled.changed || operationNodeIds.size > 0,
+            removedNodeIds: [...operationNodeIds],
+        }
     }
 
     const requestNodes = state.nodes.filter(node => (
         isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)
     ))
+    const targetNode = requestNodes.find(node => (
+        Boolean(mediaRunId && node.mediaRunId === mediaRunId)
+        || Boolean(outputNodeId && node.outputNodeId === outputNodeId)
+        || (generationRun !== undefined && node.generationRun === generationRun)
+    )) ?? (generationRun === undefined && !mediaRunId && !outputNodeId ? requestNodes[0] : undefined)
+    if (!targetNode) {
+        if (!progress && runStatus !== 'running' && runStatus !== 'failed') {
+            return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+        }
+        const status = runStatus === 'failed' ? 'failed' : 'running'
+        const message = problem?.detail
+            ?? progressMessage
+            ?? progress?.message
+            ?? (status === 'failed' ? 'Generation failed.' : 'The provider is generating media.')
+        const projection = projectProgressToMediaNodes({
+            nodes: state.nodes,
+            generationRequestId: event.generationRequestId,
+            generationRun,
+            outputNodeId,
+            mediaRunId,
+            progressState: createProgressState({
+                generationRequestId: event.generationRequestId,
+                status,
+                message,
+                progress,
+                generationRun,
+                mediaRunId,
+                updatedAt: event.createdAt,
+            }),
+        })
+        return projection.updatedNodeIds.length === 0
+            ? { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+            : {
+                state: { ...state, nodes: projection.nodes },
+                changed: true,
+                updatedNodeIds: projection.updatedNodeIds,
+                removedNodeIds: [],
+            }
+    }
+
     const candidateAssetIds = readStringArray(event.payload.candidateAssetIds)
     const verificationAssetIds = readStringArray(event.payload.assetIds)
     const verificationAssetId = typeof event.payload.verificationAssetId === 'string'
@@ -499,44 +613,22 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const unresolvedBindingId = typeof event.payload.bindingId === 'string'
         ? event.payload.bindingId
         : undefined
-    const targetNode = generationRun === undefined
-        ? requestNodes[0]
-        : requestNodes.find(node => node.generationRun === generationRun)
-    if (!targetNode) {
-        if (progress || runStatus === 'running' || runStatus === 'failed') {
-            const status = runStatus === 'failed' ? 'failed' : 'running'
-            const message = problem?.detail
-                ?? progressMessage
-                ?? progress?.message
-                ?? (status === 'failed' ? 'Generation failed.' : 'The provider is generating media.')
-            return projectRequestStateToMarkers(
-                state,
-                event.generationRequestId,
-                generationRun,
-                {
-                    status,
-                    message,
-                    progress: progress ?? createDefaultMediaGenerationRunProgress(status, message),
-                    ...(generationRun === undefined ? {} : { generationRun }),
-                    updatedAt: event.createdAt,
-                },
-            )
-        }
-        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
-    }
-
     return applyOperationPatches(state, event.generationRequestId, node => {
-        if (node.nodeId !== targetNode.nodeId) return null
-        if ((node.requestRevision ?? 0) > event.requestRevision) return null
+        if (node.nodeId !== targetNode.nodeId || (node.requestRevision ?? 0) > event.requestRevision) return null
+        if (runStatus === 'completed' || runStatus === 'cancelled') {
+            return { remove: runStatus, ...(progress ? { progress } : {}) }
+        }
         if (event.status === 'MEDIA_GENERATION_ACTION_REQUIRED') {
             const nextProblem = problem ?? node.problem
             const nextCandidateAssetIds = candidateAssetIds ?? node.candidateAssetIds
             const nextUnresolvedBindingId = unresolvedBindingId ?? node.unresolvedBindingId
             const nextVerificationAssetId = verificationAssetId ?? node.verificationAssetId
-            let message = node.message
-            if (nextProblem) message = nextProblem.detail
-            else if (nextCandidateAssetIds) message = 'Choose which attached Asset the prompt refers to.'
-            else if (nextVerificationAssetId) message = 'Provider verification is required to continue.'
+            const message = nextProblem?.detail
+                ?? (nextCandidateAssetIds
+                    ? 'Choose which attached Asset the prompt refers to.'
+                    : nextVerificationAssetId
+                        ? 'Provider verification is required to continue.'
+                        : node.message)
             return {
                 status: 'action-required',
                 message,
@@ -565,9 +657,7 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         return {
             status: 'in-progress',
             message,
-            ...(progress
-                ? { progress }
-                : mediaRunStatus ? { progress: createDefaultMediaGenerationRunProgress(mediaRunStatus, message) } : {}),
+            ...(progress ? { progress } : {}),
             requestRevision: event.requestRevision,
             updatedAt: event.createdAt,
         }

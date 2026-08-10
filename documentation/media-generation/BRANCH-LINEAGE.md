@@ -62,7 +62,7 @@ The assignment’s topology fields are node IDs. They are not Asset IDs.
 Markers store prompt/provenance information and `conversationAssetId`. Their positions and dimensions are persisted in the Workspace.
 At request settlement, the API projects the marker's bounded reasoning-run response preview into `provenance.reasoningResponseText`. The conversation response is authoritative while mounted; the persisted marker field guarantees the reasoning row survives reloads and prompt-replay workflows. If a provider emits only a media Tool call, the Tool prompt stored in that run's generation trace is the response fallback instead of an empty row.
 
-The screen-fixed preflight marker remains the original compact prompt/reasoning pill and never renders an operation timeline. As soon as lineage resolution moves the marker onto the canvas, the same marker expands its existing background and renders a high-contrast operation timeline inside it, directly below the reasoning response. Before the durable operation projection arrives, the client immediately shows the standard request, reference/capability resolution, provider preparation, generation, and finalization steps. `MediaGenerationRunProgress.items` replaces that fallback when a Capability, Skill, or Tool supplies domain-specific work. Multiple concrete media runs render as top-level variant/model items with their own children. Progress is copied onto its owning branch marker before a successful operation projection is removed, so the completed or failed list remains attached to the lineage variant after settlement and reload.
+Branch markers remain prompt/reasoning surfaces and never render per-media operation progress. The API creates one stable pending output node per concrete media run as soon as it accepts the request. That node receives a generic progress tree immediately, then `MediaGenerationRunProgress.items` replaces it when a Capability, Skill, Tool, or provider supplies domain-specific work. The browser renders the shared timeline directly to the right of its media node without a background. It centers vertically while shorter than the visible media/spinner outline and top-aligns after it grows taller. The external chrome does not change the media node or traveling-outline bounds. Accepting an output hides its live timeline; terminal progress remains in the Asset's sealed provenance and uses the same timeline component in accepted history.
 
 ## Pending output Assets
 
@@ -106,7 +106,7 @@ The branch VLM assigns target, style, and lineage roles only within the explicit
 
 ## Canvas projection
 
-The browser may render a transient preflight branch marker before the lineage plan arrives, but it never creates or positions generated media nodes. Pending image and video nodes use deterministic IDs derived from their run assignments and are persisted by the API before their partial/pending events are published.
+The browser may render a transient preflight branch marker before the lineage plan arrives, but it never creates or positions generated media nodes. Request creation assigns each concrete run its stable media-run, Asset, operation-node, and output-node IDs, then immediately persists the pending image/video node before reasoning, Capability execution, lineage planning, or any provider event. The later lineage plan reuses and enriches that same node rather than replacing it.
 
 The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings. Canvas revisions are strictly greater than the persisted revision, including when several provider events commit in the same millisecond. Every connected client can therefore apply the same ordered node snapshots and coordinates.
 
@@ -143,6 +143,7 @@ The source conversation streams once. Each terminal output Asset receives a seal
 - events for the shared `reasoningRunId`;
 - only events matching that output’s `mediaRunId` when an event is media-specific;
 - the Asset lineage assignment;
+- that output run's terminal recursive generation-progress tree;
 - terminal status: completed, failed, or cancelled.
 
 Sibling outputs can share reasoning while never receiving each other’s media prompt/call/result events.
@@ -165,7 +166,7 @@ Successful settlement stores the original Blob, starts rendition generation, att
 
 Provider failure or cancellation materializes terminal provenance for every unfinished planned Asset. Failed Assets use lifecycle/media `failed`; cancelled Assets use lifecycle `failed` and media/provenance `cancelled`. They remain addressable through their catalog/reference rows until explicitly removed.
 
-Durable media requests also project one generic `operationStatus` state node per concrete run. During lineage planning, each request projection is rebound to the exact API-planned marker owner. Every update mirrors the structured progress payload onto that branch marker. While the operation is `in-progress`, both its node and ownership edge are excluded from canvas rendering so the marker is the only visible progress surface. Success archives the terminal state on the marker before removing the temporary operation projection; ambiguity, missing provider verification, and provider failure render actionable recovery cards while also updating the marker timeline.
+Durable media requests also project one generic `operationStatus` state node per concrete run. It points directly to the stable `outputNodeId`; lineage planning rebinds the operation/output identities to the matching assignment without creating a marker ownership edge. Every update mirrors structured progress onto that image/video node. While the operation is `in-progress`, its operation card stays hidden and the media-owned side timeline is the progress surface. Terminal provenance materialization embeds the final tree in the Asset document; ambiguity, missing provider verification, and provider failure retain actionable recovery cards while the output node keeps the matching progress state.
 
 Request settlement removes unfinished pending Asset placements and rebalances remaining markers/completed outputs, but it does not silently erase the durable failed operation node. Completed siblings are never removed by a later failure or cancellation. Only explicit Cancel/Dismiss removes waiting/failed recovery state and releases its retained checkpoint.
 

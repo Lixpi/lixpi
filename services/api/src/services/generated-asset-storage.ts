@@ -323,6 +323,7 @@ export const attachGeneratedAssetNode = async ({
             && (existingProjectedNode.type === 'image' || existingProjectedNode.type === 'video')
             && existingProjectedNode.assetId === assetId
             && existingProjectedNode.mediaGenerationPhase === 'pending-before-first-frame'
+            && existingProjectedNode.generatedBy?.generationRequestId === generationRun.generationRequestId
         ) {
             return buildAssetCanvasGeometryUpdate({
                 state: workspace.canvasState,
@@ -347,6 +348,10 @@ export const attachGeneratedAssetNode = async ({
                 workspaceMutation: {
                     expectedCanvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
                     canvasStateUpdatedAt,
+                    adoptUnboundGeneratedMediaReservation: {
+                        generationRequestId: generationRun.generationRequestId,
+                        ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
+                    },
                     canvasState: projection.canvasState,
                 },
             })

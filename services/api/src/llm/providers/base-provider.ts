@@ -33,7 +33,10 @@ import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
-import { resolveCapabilityOutputMediaRuns } from '../lineage/capability-output-media-runs.ts'
+import {
+    resolveCapabilityOutputMediaRuns,
+    resolveDurableMediaRuns,
+} from '../lineage/capability-output-media-runs.ts'
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import type { CapabilityDispatcher } from '@lixpi/capability-system/backend'
@@ -515,7 +518,7 @@ export abstract class BaseProvider {
             : undefined
         const preassignedMediaRuns = capabilityOutputMediaAssetIds.length > 0
             ? await resolveCapabilityOutputMediaRuns(capabilityOutputMediaAssetIds)
-            : undefined
+            : resolveDurableMediaRuns(state.durableMediaRuns)
         const lineagePlan = this.mediaBranchLineagePlanner.buildPlan({
             generationRequestId: generationRun.generationRequestId,
             reasoningModelIds: preassignedMediaRuns

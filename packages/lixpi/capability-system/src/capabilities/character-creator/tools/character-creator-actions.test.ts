@@ -63,9 +63,9 @@ describe('Character Creator actions', () => {
             sourceAssetIds: ['asset-1'],
             userPrompt: 'Desert courier',
             layoutId: 'character-sheet-3840x2560',
-            semanticRetryLimit: 1,
+            semanticRetryLimit: 0,
         })
-        expect(output.capabilityMediaExecutionPlan.panels).toHaveLength(27)
+        expect(output.capabilityMediaExecutionPlan.panels).toHaveLength(3)
     })
 
     it('rejects more than eight source Assets', () => {

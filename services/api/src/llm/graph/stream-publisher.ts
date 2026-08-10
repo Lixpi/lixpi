@@ -351,6 +351,7 @@ export class StreamPublisher {
                         const canvasGeometry = await settleFailedGeneratedMediaRunOnCanvas({
                             workspaceId: this.workspaceId,
                             generationRun,
+                            ...(content.error ? { errorMessage: content.error } : {}),
                         })
                         this.canvasGeometryResolved(canvasGeometry, generationRun)
                     },

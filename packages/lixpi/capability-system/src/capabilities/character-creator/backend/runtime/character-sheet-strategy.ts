@@ -982,7 +982,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 }),
             })
             if (!renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)) {
-                throw new Error('CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE')
+                const failure = renderFailures.get(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+                throw new Error([
+                    'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE',
+                    failure,
+                ].filter(Boolean).join(':'))
             }
             if (renderedPanels.size === 0) throw new Error('CHARACTER_SHEET_NO_RENDERED_PANELS')
 

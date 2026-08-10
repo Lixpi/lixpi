@@ -17,8 +17,9 @@ export function createDefaultMediaGenerationRunProgress(
         : status === 'completed' ? 'completed'
             : status === 'failed' || status === 'cancelled' ? terminalStatus : 'pending'
     const providerStatus: OperationProgressItem['status'] = status === 'pending'
-        ? 'pending'
-        : status === 'awaiting-provider-verification' ? 'running' : 'completed'
+        || status === 'awaiting-provider-verification'
+        ? 'running'
+        : 'completed'
 
     return {
         phase: preparing ? 'preparing' : status === 'completed' ? 'composing' : 'rendering',
@@ -26,17 +27,11 @@ export function createDefaultMediaGenerationRunProgress(
         totalSteps: 1,
         message,
         items: [
-            { id: 'request', title: 'Understand request', status: 'completed' },
-            {
-                id: 'references',
-                title: 'Resolve references and capabilities',
-                status: status === 'pending' ? 'running' : 'completed',
-            },
             {
                 id: 'provider',
                 title: 'Prepare provider run',
                 status: providerStatus,
-                ...(status === 'awaiting-provider-verification' ? { summary: message } : {}),
+                ...(status === 'pending' || status === 'awaiting-provider-verification' ? { summary: message } : {}),
             },
             {
                 id: 'generation',

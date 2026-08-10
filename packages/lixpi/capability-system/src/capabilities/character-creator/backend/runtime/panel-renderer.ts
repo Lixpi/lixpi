@@ -58,7 +58,7 @@ export async function renderCharacterPanel(args: {
     const result = await args.imageGeneration.generate({
         context: args.context,
         plan: args.plan,
-        operationKey: `${args.plan.capabilityRunId}:${args.panel.panelId}:${args.attempt}`,
+        operationKey: `${args.context.mediaRunId}:${args.plan.capabilityRunId}:${args.panel.panelId}:${args.attempt}`,
         usageMode: 'character-creator',
         prompt: args.prompt,
         references: poseReference ? [poseReference, ...args.references] : args.references,
@@ -77,8 +77,8 @@ export async function renderCharacterPanel(args: {
         omittedReferenceRoles: result.omittedReferenceRoles,
         providerOperationId: result.providerOperationId ?? '',
     })}`)
-    const bytes = decodeGeneratedImage(result.image)
-    await assertGeneratedPanelUsable(bytes)
+    const providerBytes = decodeGeneratedImage(result.image)
+    const bytes = await normalizeGeneratedPanel(providerBytes)
     return {
         bytes,
         providerOperationId: result.providerOperationId,
@@ -87,12 +87,16 @@ export async function renderCharacterPanel(args: {
     }
 }
 
-const assertGeneratedPanelUsable = async (bytes: Buffer): Promise<void> => {
+const normalizeGeneratedPanel = async (bytes: Buffer): Promise<Buffer> => {
     try {
         const metadata = await sharp(bytes).metadata()
         if (!metadata.width || !metadata.height || metadata.width < 128 || metadata.height < 128) {
             throw new Error('dimensions')
         }
+        return await sharp(bytes)
+            .rotate()
+            .png({ compressionLevel: 9 })
+            .toBuffer()
     } catch (error) {
         throw new Error(`CHARACTER_PANEL_PROVIDER_OUTPUT_INVALID:${(error as Error).message}`)
     }

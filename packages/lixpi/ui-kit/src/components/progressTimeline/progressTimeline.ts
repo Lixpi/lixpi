@@ -53,6 +53,8 @@ export type ProgressTimelineConfig = {
     className?: string
     rippleClockId?: string
     defaultViewMode?: ProgressTimelineViewMode
+    preserveTopLevelItemsInFocusedView?: boolean
+    expandAllItemsInAllView?: boolean
 }
 
 export type ProgressTimelineInstance = {
@@ -156,6 +158,10 @@ class ProgressTimeline implements ProgressTimelineInstance {
     setViewMode(mode: ProgressTimelineViewMode): void {
         if (this.viewMode === mode) return
         this.viewMode = mode
+        if (this.config.expandAllItemsInAllView) {
+            this.expandedItemIds.clear()
+            this.collapsedItemIds.clear()
+        }
         if (this.config.rippleClockId) {
             ProgressTimeline.sharedViewModesByClockId.set(this.config.rippleClockId, mode)
         }
@@ -184,8 +190,12 @@ class ProgressTimeline implements ProgressTimelineInstance {
         const needsAttention = item.status === 'attention'
             || item.status === 'failed'
             || item.status === 'cancelled'
+        const isExpandedByAllView = this.viewMode === 'all'
+            && this.config.expandAllItemsInAllView
+            && !this.collapsedItemIds.has(itemKey)
         const isExpanded = hasDetails
-            && (isFocusedContext
+            && (isExpandedByAllView
+                || isFocusedContext
                 || item.status === 'running'
                 || (!this.collapsedItemIds.has(itemKey)
                     && (needsAttention || this.expandedItemIds.has(itemKey))))
@@ -325,11 +335,19 @@ class ProgressTimeline implements ProgressTimelineInstance {
             const itemKey = itemPath.join('/')
             const children = collectFocusedItems(item.children ?? [], itemPath)
             const isDirectlyVisible = FOCUSED_STATUSES.has(item.status)
-            if (!isDirectlyVisible && children.length === 0) return []
+            const preserveTopLevelItem = this.config.preserveTopLevelItemsInFocusedView
+                && parentPath.length === 0
+            if (!isDirectlyVisible && children.length === 0) {
+                return preserveTopLevelItem ? [item] : []
+            }
             if (!isDirectlyVisible) contextItemKeys.add(itemKey)
             return [{
                 ...item,
-                ...(children.length > 0 ? { children } : { children: undefined }),
+                ...(children.length > 0
+                    ? { children }
+                    : preserveTopLevelItem
+                        ? {}
+                        : { children: undefined }),
             }]
         })
         const focusedItems = collectFocusedItems(this.items)

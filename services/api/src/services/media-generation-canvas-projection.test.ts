@@ -8,15 +8,29 @@ import type {
     MediaGenerationRunMeta,
     MediaRunLineageAssignment,
 } from '@lixpi/constants'
+import { createDefaultMediaGenerationRunProgress } from '@lixpi/constants'
 import {
     estimateBranchMarkerDimensions,
     getPendingGeneratedMediaNodeId,
 } from '@lixpi/canvas-engine'
 
-const workspaceMutateCanvasState = vi.hoisted(() => vi.fn())
+const mocks = vi.hoisted(() => ({
+    detachWorkspaceReference: vi.fn(),
+    getAssetRecord: vi.fn(),
+    getWorkspace: vi.fn(),
+    mutateCanvasState: vi.fn(),
+}))
 
 vi.mock('../models/workspace.ts', () => ({
-    default: { mutateCanvasState: workspaceMutateCanvasState },
+    default: {
+        getWorkspace: mocks.getWorkspace,
+        mutateCanvasState: mocks.mutateCanvasState,
+    },
+}))
+
+vi.mock('../models/asset.ts', () => ({
+    default: { detachWorkspaceReference: mocks.detachWorkspaceReference },
+    getAssetRecord: mocks.getAssetRecord,
 }))
 
 import {
@@ -24,6 +38,7 @@ import {
     projectGeneratedAssetNode,
     refreshMediaGenerationRequestCanvasGeometry,
     removeGeneratedOutputCandidateFromCanvas,
+    settleFailedGeneratedMediaRunOnCanvas,
     settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
 } from './asset-canvas-projection.ts'
@@ -266,13 +281,28 @@ describe('asset canvas projection', () => {
         vi.clearAllMocks()
         storedState = emptyCanvasState()
         revision = 100
-        workspaceMutateCanvasState.mockImplementation(async ({ mutate }) => {
+        mocks.mutateCanvasState.mockImplementation(async ({ mutate }) => {
             const result = mutate(storedState)
             if (result.changed) {
                 storedState = result.canvasState
                 revision += 1
             }
             return { ...result, canvasState: storedState, canvasStateUpdatedAt: revision }
+        })
+        mocks.getAssetRecord.mockResolvedValue({
+            assetId: 'asset-1',
+            ownerUserId: 'user-1',
+            organizationId: 'org-1',
+        })
+        mocks.getWorkspace.mockImplementation(async () => ({
+            canvasState: storedState,
+            canvasStateUpdatedAt: revision,
+            updatedAt: revision,
+        }))
+        mocks.detachWorkspaceReference.mockImplementation(async ({ workspaceMutation }) => {
+            storedState = workspaceMutation.canvasState
+            revision = workspaceMutation.canvasStateUpdatedAt
+            return { success: true }
         })
     })
 
@@ -285,7 +315,7 @@ describe('asset canvas projection', () => {
             lineagePlan: plan,
         })
 
-        expect(workspaceMutateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mocks.mutateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
             origin: 'upsertAssetMediaLineagePlanToCanvas',
         }))
         expect(storedState.nodes).toEqual([
@@ -304,6 +334,70 @@ describe('asset canvas projection', () => {
                 expect.objectContaining({ nodeId: 'fork-1' }),
             ]),
         })
+    })
+
+    it('keeps a viewport-fallback root visible and balances already-reserved media around it', async () => {
+        const plan = lineagePlan()
+        plan.runAssignments = twoImageModelAssignments()
+        storedState = {
+            viewport: { x: -500, y: -300, zoom: 0.5 },
+            nodes: [
+                ...plan.runAssignments.map((entry, index) => ({
+                    nodeId: getPendingGeneratedMediaNodeId(entry),
+                    type: 'image' as const,
+                    assetId: entry.assetId,
+                    mediaGenerationPhase: 'pending-before-first-frame' as const,
+                    generationProgress: {
+                        generationRequestId: entry.generationRequestId,
+                        status: 'pending' as const,
+                        message: 'Preparing the media request.',
+                        progress: createDefaultMediaGenerationRunProgress('pending', 'Preparing the media request.'),
+                        mediaModelId: entry.mediaModelId,
+                        lineageAssignment: entry,
+                        generationRun: index,
+                        mediaRunId: entry.mediaRunId,
+                        updatedAt: 1,
+                    },
+                    position: { x: 0, y: index * 1200 },
+                    dimensions: { width: 800, height: 800 },
+                })),
+                ...plan.runAssignments.map((entry, index) => ({
+                    nodeId: `operation-${index}`,
+                    type: 'operationStatus' as const,
+                    operation: 'media-generation' as const,
+                    status: 'in-progress' as const,
+                    title: 'Generating',
+                    message: 'Working',
+                    generationRequestId: entry.generationRequestId,
+                    position: { x: 1000, y: 800 + index * 120 },
+                    dimensions: { width: 360, height: 104 },
+                    createdAt: 1,
+                    updatedAt: 1,
+                })),
+            ],
+            edges: [],
+        }
+
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'thread-1',
+            lineagePlan: plan,
+            canvasVisibleArea: { width: 1200, height: 800 },
+        })
+
+        const origin = storedState.nodes.find(node => node.nodeId === 'origin-1')!
+        const fork = storedState.nodes.find(node => node.nodeId === 'fork-1')!
+        const outputs = plan.runAssignments.map(entry => (
+            storedState.nodes.find(node => node.nodeId === getPendingGeneratedMediaNodeId(entry))!
+        ))
+        const visibleWorld = { left: 1000, top: 600, right: 3400, bottom: 2200 }
+        expect(origin.position.x).toBeGreaterThanOrEqual(visibleWorld.left)
+        expect(origin.position.y).toBeGreaterThanOrEqual(visibleWorld.top)
+        expect(origin.position.x + origin.dimensions.width).toBeLessThanOrEqual(visibleWorld.right)
+        expect(origin.position.y + origin.dimensions.height).toBeLessThanOrEqual(visibleWorld.bottom)
+        const averageOutputCenterY = outputs.reduce((sum, output) => sum + nodeCenterY(output), 0) / outputs.length
+        expect(averageOutputCenterY).toBeCloseTo(nodeCenterY(origin), 6)
+        expect(nodeCenterY(fork)).toBeCloseTo(nodeCenterY(origin), 6)
     })
 
     it('projects a selected generated-media continuation onto a shared fork marker for every model slot', async () => {
@@ -372,6 +466,118 @@ describe('asset canvas projection', () => {
 
         expect(storedState.nodes.filter(node => node.nodeId === 'selected-media-fork')).toHaveLength(1)
         expect(new Set(storedState.edges.map(edge => edge.edgeId)).size).toBe(storedState.edges.length)
+    })
+
+    it('reconciles a provisional root to the authoritative continuation without orphaning its media slot', async () => {
+        const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [
+                {
+                    nodeId: 'source-media',
+                    type: 'image',
+                    assetId: 'source-asset',
+                    mediaGenerationPhase: 'ready',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 800, height: 800 },
+                },
+                {
+                    nodeId: pendingNodeId,
+                    type: 'image',
+                    assetId: assignment.assetId,
+                    mediaGenerationPhase: 'pending-before-first-frame',
+                    position: { x: 1000, y: 0 },
+                    dimensions: { width: 800, height: 800 },
+                },
+            ],
+            edges: [],
+        } as CanvasState
+        const provisionalPlan = lineagePlan()
+        await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'thread-1',
+            lineagePlan: provisionalPlan,
+        })
+        const {
+            branchOriginNodeId: _branchOriginNodeId,
+            branchForkNodeId: _branchForkNodeId,
+            ...continuationAssignment
+        } = assignment
+        const authoritativePlan: MediaBranchLineagePlan = {
+            ...provisionalPlan,
+            branchId: 'existing-branch',
+            sourceNodeId: 'source-media',
+            placementAnchorNodeId: 'source-media',
+            referenceAssetIds: ['source-asset'],
+            referenceNodeIds: ['source-media'],
+            sourceContextNodeIds: ['source-media'],
+            branchOrigin: undefined,
+            branchForks: [],
+            branchLines: [{
+                nodeId: 'branch-line-request-1-r0-image-0',
+                generationRequestId: 'request-1',
+                branchId: 'existing-branch',
+                parentBranchNodeId: 'source-media',
+                reasoningRunId: assignment.reasoningRunId,
+                reasoningModelId: assignment.reasoningModelId,
+                reasoningIndex: assignment.reasoningIndex,
+                mediaRunId: assignment.mediaRunId,
+                mediaModelId: assignment.mediaModelId,
+                mediaType: 'image',
+                provenance: {
+                    kind: 'branch-continuation',
+                    promptText: assignment.promptText,
+                    referenceNodeIds: ['source-media'],
+                    sourceContextNodeIds: ['source-media'],
+                    reasoningRunId: assignment.reasoningRunId,
+                    reasoningModelId: assignment.reasoningModelId,
+                    reasoningIndex: assignment.reasoningIndex,
+                    mediaRunId: assignment.mediaRunId,
+                    mediaModelId: assignment.mediaModelId,
+                    mediaType: 'image',
+                },
+            }],
+            runAssignments: [{
+                ...continuationAssignment,
+                branchId: 'existing-branch',
+                parentMediaNodeId: 'source-media',
+                parentImageNodeId: 'source-media',
+                branchLineNodeId: 'branch-line-request-1-r0-image-0',
+                lineageParentNodeId: 'branch-line-request-1-r0-image-0',
+                referenceAssetIds: ['source-asset'],
+                referenceNodeIds: ['source-media'],
+                sourceContextNodeIds: ['source-media'],
+                operationKind: 'edit_existing',
+            }],
+        }
+
+        const geometry = await upsertMediaLineagePlanToCanvas({
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'thread-1',
+            lineagePlan: authoritativePlan,
+        })
+
+        expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: 'origin-1' }))
+        expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: 'fork-1' }))
+        expect(storedState.nodes).toContainEqual(expect.objectContaining({
+            nodeId: 'branch-line-request-1-r0-image-0',
+            type: 'branchLine',
+        }))
+        expect(storedState.nodes).toContainEqual(expect.objectContaining({
+            nodeId: pendingNodeId,
+            type: 'image',
+        }))
+        expect(storedState.edges).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sourceNodeId: 'source-media', targetNodeId: 'branch-line-request-1-r0-image-0' }),
+            expect.objectContaining({ sourceNodeId: 'branch-line-request-1-r0-image-0', targetNodeId: pendingNodeId }),
+        ]))
+        expect(geometry).toMatchObject({
+            removedNodeIds: expect.arrayContaining(['origin-1', 'fork-1']),
+            removedEdgeIds: expect.arrayContaining([
+                'edge-origin-1-fork-1',
+                `edge-fork-1-${pendingNodeId}`,
+            ]),
+        })
     })
 
     it('attaches a generated asset to the server-owned lineage parent and returns the complete geometry', () => {
@@ -584,12 +790,22 @@ describe('asset canvas projection', () => {
         expect(geometry).toMatchObject({ removedNodeIds: [pendingNodeId] })
     })
 
-    it('removes failed Asset-backed pending nodes without deleting ready siblings', async () => {
+    it('replaces a failed Asset-backed pending node in place with the structured error surface', async () => {
         const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
         const readyNodeId = getPendingGeneratedMediaNodeId(assignmentFor(1))
+        const operationNodeId = 'operation-request-1-0'
         storedState = {
             ...emptyCanvasState(),
             nodes: [
+                {
+                    nodeId: 'fork-1',
+                    type: 'branchFork',
+                    branchId: 'branch-1',
+                    generationRequestId: 'request-1',
+                    position: { x: -200, y: 0 },
+                    dimensions: { width: 120, height: 60 },
+                    temporary: true,
+                },
                 {
                     nodeId: pendingNodeId,
                     type: 'image',
@@ -600,6 +816,34 @@ describe('asset canvas projection', () => {
                     generatedBy: { generationRequestId: 'request-1' },
                 },
                 {
+                    nodeId: operationNodeId,
+                    type: 'operationStatus',
+                    operation: 'media-generation',
+                    status: 'failed',
+                    title: 'Generating with OpenAI:gpt-image-1',
+                    message: 'The provider rejected this request.',
+                    generationRequestId: 'request-1',
+                    generationRun: 0,
+                    mediaRunId: 'media-1',
+                    outputNodeId: pendingNodeId,
+                    plannedMediaType: 'image',
+                    problem: {
+                        problemVersion: '1',
+                        type: 'urn:lixpi:media-problem:provider-output',
+                        title: 'Provider output failed',
+                        detail: 'The provider rejected this request.',
+                        category: 'provider-output',
+                        stage: 'submit',
+                        generationRequestId: 'request-1',
+                        supportCode: 'support-1',
+                        action: 'none',
+                    },
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 360, height: 104 },
+                    createdAt: 1,
+                    updatedAt: 2,
+                },
+                {
                     nodeId: readyNodeId,
                     type: 'image',
                     assetId: 'asset-2',
@@ -607,6 +851,72 @@ describe('asset canvas projection', () => {
                     position: { x: 1000, y: 0 },
                     dimensions: { width: 800, height: 600 },
                     generatedBy: { generationRequestId: 'request-1' },
+                },
+            ],
+            edges: [{
+                edgeId: 'edge-fork-output',
+                sourceNodeId: 'fork-1',
+                targetNodeId: pendingNodeId,
+                sourceHandle: 'right',
+                targetHandle: 'left',
+            }],
+        } as CanvasState
+
+        const geometry = await settleFailedGeneratedMediaRunOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRun: generationRunFor(0),
+        })
+
+        expect(storedState.nodes).toContainEqual(expect.objectContaining({
+            nodeId: pendingNodeId,
+            type: 'operationStatus',
+            status: 'failed',
+            message: 'The provider rejected this request.',
+            problem: expect.objectContaining({ supportCode: 'support-1' }),
+            position: { x: 0, y: 0 },
+            dimensions: { width: 800, height: 800 },
+        }))
+        expect(storedState.nodes).toContainEqual(expect.objectContaining({ nodeId: readyNodeId }))
+        expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: operationNodeId }))
+        expect(storedState.edges).toContainEqual(expect.objectContaining({ targetNodeId: pendingNodeId }))
+        expect(geometry).toMatchObject({
+            removedNodeIds: [operationNodeId],
+            nodeSnapshots: expect.arrayContaining([
+                expect.objectContaining({ nodeId: pendingNodeId, type: 'operationStatus' }),
+            ]),
+        })
+        expect(mocks.detachWorkspaceReference).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            nodeId: pendingNodeId,
+        }))
+    })
+
+    it('preserves a failed error slot when terminal request cleanup removes unresolved media reservations', async () => {
+        const failedNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
+        const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(1))
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [
+                {
+                    nodeId: failedNodeId,
+                    type: 'operationStatus',
+                    operation: 'media-generation',
+                    status: 'failed',
+                    title: 'Generating with OpenAI:gpt-image-1',
+                    message: 'Provider failed.',
+                    generationRequestId: 'request-1',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 800, height: 800 },
+                    createdAt: 1,
+                    updatedAt: 2,
+                },
+                {
+                    nodeId: pendingNodeId,
+                    type: 'image',
+                    assetId: '',
+                    mediaGenerationPhase: 'pending-before-first-frame',
+                    position: { x: 1000, y: 0 },
+                    dimensions: { width: 800, height: 800 },
                 },
             ],
             edges: [],
@@ -621,7 +931,7 @@ describe('asset canvas projection', () => {
             lineagePlan: plan,
         })
 
-        expect(storedState.nodes.map((node) => node.nodeId)).toEqual([readyNodeId])
+        expect(storedState.nodes).toEqual([expect.objectContaining({ nodeId: failedNodeId, type: 'operationStatus' })])
         expect(geometry).toMatchObject({ removedNodeIds: [pendingNodeId] })
     })
 

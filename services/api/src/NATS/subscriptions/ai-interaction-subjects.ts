@@ -28,6 +28,7 @@ import {
     type AiInteractionChatSendMessagePayload,
     type AssetRequesterContext,
     type CapabilityJsonValue,
+    type CanvasGeometryUpdate,
     type CanvasNode,
     type Asset,
     type MediaGenerationRequest,
@@ -47,6 +48,10 @@ import {
     resolveCapabilities,
     validateJsonSchemaValue,
 } from '@lixpi/capability-system/backend'
+import {
+    getMediaGenerationOperationNodeId,
+    getPendingGeneratedMediaNodeId,
+} from '@lixpi/canvas-engine'
 
 import AiModel from '../../models/ai-model.ts'
 import type { LlmModule } from '../../llm/index.ts'
@@ -55,6 +60,7 @@ import Workspace from '../../models/workspace.ts'
 import Organization from '../../models/organization.ts'
 import { PipelineEventLog } from '../../llm/graph/pipeline-event-log.ts'
 import { MediaBranchAmbiguityError } from '../../llm/graph/media-branch-resolver.ts'
+import { MediaBranchLineagePlanner } from '../../llm/lineage/media-branch-lineage-planner.ts'
 import AssetModel from '../../models/asset.ts'
 import BlobModel from '../../models/blob.ts'
 import { ensureAiInteractionEventRelay } from '../../services/ai-interaction-event-relay.ts'
@@ -121,6 +127,12 @@ const normalizeModelOption = (
     if (values.length === 0) return requestedValue || undefined
     if (requestedValue && values.includes(requestedValue)) return requestedValue
     return values[0]
+}
+
+const formatNaturalLanguageList = (values: string[]): string => {
+    if (values.length < 2) return values[0] ?? ''
+    if (values.length === 2) return `${values[0]} and ${values[1]}`
+    return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`
 }
 
 type SealedMediaReplayTrace = {
@@ -203,6 +215,32 @@ const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
     return text
 }
 
+const getClarificationOriginUserMessage = (
+    doc: object,
+    conversationAssetId: string,
+): ProseMirrorJsonNode | undefined => {
+    const root = parseProseMirrorJsonContent(doc)
+    const thread = root ? findAiChatThreadContentNode(root, conversationAssetId) : null
+    if (!thread) return undefined
+    const messages = (thread.content ?? []).filter(node => (
+        node.type === aiUserMessageNodeType || node.type === aiResponseMessageNodeType
+    ))
+    const latest = messages.at(-1)
+    const response = messages.at(-2)
+    const origin = messages.at(-3)
+    if (latest?.type !== aiUserMessageNodeType
+        || response?.type !== aiResponseMessageNodeType
+        || origin?.type !== aiUserMessageNodeType) {
+        return undefined
+    }
+    const responseContainsGeneratedMedia = (node: ProseMirrorJsonNode): boolean => (
+        node.type === aiGeneratedImageNodeType
+        || node.type === aiGeneratedVideoNodeType
+        || (node.content ?? []).some(responseContainsGeneratedMedia)
+    )
+    return responseContainsGeneratedMedia(response) ? undefined : origin
+}
+
 const buildAuthoritativeConversationMessages = (
     doc: object,
     conversationAssetId: string,
@@ -239,24 +277,49 @@ const getLatestAuthoritativeUserMessageNode = (
 const createDurableMediaRuns = ({
     generationRequestId,
     reasoningModelIds,
-    mediaModelIds,
+    imageModelIds,
+    videoModelIds,
 }: {
     generationRequestId: string
     reasoningModelIds: string[]
-    mediaModelIds: string[]
-}): MediaGenerationRun[] => reasoningModelIds.flatMap((reasoningModelId, reasoningIndex) => mediaModelIds.map((modelId, mediaIndex) => {
-    const index = reasoningIndex * mediaModelIds.length + mediaIndex
-    const [provider] = modelId.split(':')
-    return {
-        generationRun: index,
-        reasoningModelId: reasoningModelId as `${string}:${string}`,
-        reasoningIndex,
-        provider: provider as ProviderName,
-        modelId: modelId as `${string}:${string}`,
-        status: 'pending',
-        operationNodeId: `operation-${generationRequestId}-${index}`,
-    }
-}))
+    imageModelIds: string[]
+    videoModelIds: string[]
+}): MediaGenerationRun[] => {
+    const mediaModels = [
+        ...imageModelIds.map((modelId, mediaIndex) => ({ modelId, mediaIndex, mediaType: 'image' as const })),
+        ...videoModelIds.map((modelId, mediaIndex) => ({ modelId, mediaIndex, mediaType: 'video' as const })),
+    ]
+    return reasoningModelIds.flatMap((reasoningModelId, reasoningIndex) => mediaModels.map((media, mediaAxisIndex) => {
+        const generationRun = reasoningIndex * mediaModels.length + mediaAxisIndex
+        const reasoningRunId = `${generationRequestId}:reasoning:${reasoningIndex}`
+        const mediaRunId = `${reasoningRunId}:${media.mediaType}:${media.mediaIndex}`
+        const assignment = {
+            generationRequestId,
+            reasoningRunId,
+            mediaRunId,
+            reasoningIndex,
+            mediaModelId: media.modelId as `${string}:${string}`,
+            mediaType: media.mediaType,
+            mediaIndex: media.mediaIndex,
+        }
+        const [provider] = media.modelId.split(':')
+        return {
+            generationRun,
+            reasoningModelId: reasoningModelId as `${string}:${string}`,
+            reasoningIndex,
+            reasoningRunId,
+            provider: provider as ProviderName,
+            modelId: media.modelId as `${string}:${string}`,
+            mediaRunId,
+            mediaType: media.mediaType,
+            mediaIndex: media.mediaIndex,
+            outputAssetId: uuid(),
+            outputNodeId: getPendingGeneratedMediaNodeId(assignment),
+            status: 'pending',
+            operationNodeId: getMediaGenerationOperationNodeId(assignment),
+        }
+    }))
+}
 
 const readAuthoritativeCapabilityInputs = (
     doc: object,
@@ -803,34 +866,78 @@ export const aiInteractionSubjects = [
                 authoritativeProseMirrorInitialDoc,
                 conversationAssetId,
             )
-            const submittedPromptReferences = extractLatestUserPromptReferences(
+            const latestSubmittedPromptReferences = extractLatestUserPromptReferences(
                 authoritativeProseMirrorInitialDoc,
                 conversationAssetId,
             )
-            const authorizedPromptReferences = await authorizePromptReferences({
-                references: submittedPromptReferences,
-                requester,
-                workspace,
-                moduleCatalog: getLlmModule().capabilityModuleCatalog,
-            })
             const latestAuthoritativeUserMessage = [...authoritativeMessages]
                 .reverse()
                 .find((message) => message.role === 'user')
             if (!latestAuthoritativeUserMessage) throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+            const authoritativePromptText = latestAuthoritativeUserMessage.content
+            const submittedCapabilityInputs = readAuthoritativeCapabilityInputs(
+                authoritativeProseMirrorInitialDoc,
+                conversationAssetId,
+            )
+            const moduleCatalog = getLlmModule().capabilityModuleCatalog
+            const latestRoutedModule = typeof moduleCatalog?.routePrompt === 'function'
+                ? moduleCatalog.routePrompt(authoritativePromptText)
+                : undefined
+            const clarificationOrigin = getClarificationOriginUserMessage(
+                authoritativeProseMirrorInitialDoc,
+                conversationAssetId,
+            )
+            const clarificationOriginPrompt = clarificationOrigin
+                ? collectAuthoritativeMessageText(clarificationOrigin).trim()
+                : ''
+            const clarificationOriginRoute = !latestRoutedModule
+                && clarificationOriginPrompt
+                && typeof moduleCatalog?.routePrompt === 'function'
+                ? moduleCatalog.routePrompt(clarificationOriginPrompt)
+                : undefined
+            const clarificationOriginResolution = clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
+                ? resolveActionTimelineInput({
+                    prompt: clarificationOriginPrompt,
+                    referenceAssetIds: [],
+                    routedInput: clarificationOriginRoute.input,
+                    submittedInput: submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID],
+                })
+                : undefined
+            const resumesActionTimelineClarification = !latestSubmittedPromptReferences.some(reference => (
+                reference.referenceType === 'capability'
+            ))
+                && clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
+                && clarificationOriginResolution?.valid === false
+            const submittedPromptReferences = resumesActionTimelineClarification && clarificationOrigin
+                ? [
+                    ...latestSubmittedPromptReferences,
+                    ...extractLatestUserPromptReferences({
+                        type: 'doc',
+                        content: [{
+                            type: 'aiChatThread',
+                            attrs: { threadId: conversationAssetId },
+                            content: [clarificationOrigin],
+                        }],
+                    }, conversationAssetId),
+                ]
+                : latestSubmittedPromptReferences
+            const authorizedPromptReferences = await authorizePromptReferences({
+                references: submittedPromptReferences,
+                requester,
+                workspace,
+                moduleCatalog,
+            })
             if (!latestAuthoritativeUserMessage.content.trim() && authorizedPromptReferences.references.length > 0) {
                 latestAuthoritativeUserMessage.content = 'Use the selected prompt references.'
             }
-            const authoritativePromptText = latestAuthoritativeUserMessage.content
             if (authorizedPromptReferences.documentContext.length > 0) {
                 latestAuthoritativeUserMessage.content = [
                     latestAuthoritativeUserMessage.content,
                     ...authorizedPromptReferences.documentContext,
                 ].filter(Boolean).join('\n\n')
             }
-            const moduleCatalog = getLlmModule().capabilityModuleCatalog
-            const routedModule = typeof moduleCatalog?.routePrompt === 'function'
-                ? moduleCatalog.routePrompt(authoritativePromptText)
-                : undefined
+            const routedModule = latestRoutedModule
+                ?? (resumesActionTimelineClarification ? clarificationOriginRoute : undefined)
             const routedCapabilityReferences = routedModule
                 && !authorizedPromptReferences.capabilityReferences.some(reference => (
                     reference.kind === routedModule.kind && reference.capabilityId === routedModule.capabilityId
@@ -840,43 +947,62 @@ export const aiInteractionSubjects = [
                     { capabilityId: routedModule.capabilityId, kind: routedModule.kind },
                 ]
                 : authorizedPromptReferences.capabilityReferences
-            const submittedCapabilityInputs = readAuthoritativeCapabilityInputs(
-                authoritativeProseMirrorInitialDoc,
-                conversationAssetId,
-            )
             const actionTimelineSelected = routedCapabilityReferences.some(reference => (
                 reference.kind === 'tool' && reference.capabilityId === ACTION_TIMELINE_TOOL_ID
             ))
             const capabilityInputs = { ...submittedCapabilityInputs }
+            let actionTimelineClarificationInstruction: string | undefined
             if (actionTimelineSelected) {
                 const submittedTiming = submittedCapabilityInputs[ACTION_TIMELINE_TOOL_ID] ?? {}
                 const routedTiming = routedModule?.capabilityId === ACTION_TIMELINE_TOOL_ID
                     ? routedModule.input
                     : {}
+                const actionTimelinePrompt = resumesActionTimelineClarification
+                    ? `${clarificationOriginPrompt}\n\nClarification: ${authoritativePromptText}`
+                    : authoritativePromptText
                 const resolution = resolveActionTimelineInput({
-                    prompt: authoritativePromptText,
+                    prompt: actionTimelinePrompt,
                     referenceAssetIds: authorizedPromptReferences.modelInputs.map(input => input.assetId),
                     routedInput: routedTiming,
                     submittedInput: submittedTiming,
                 })
-                if (!resolution.valid) return rejectSend(resolution.error)
-                capabilityInputs[ACTION_TIMELINE_TOOL_ID] = {
-                    prompt: resolution.input.prompt,
-                    referenceAssetIds: resolution.input.referenceAssetIds,
-                    durationMs: resolution.input.durationMs,
-                    precisionMs: resolution.input.precisionMs,
+                if (!resolution.valid) {
+                    delete capabilityInputs[ACTION_TIMELINE_TOOL_ID]
+                    const missingDetails = resolution.missingInputFields.map(field => (
+                        field === 'durationMs'
+                            ? 'the total timeline duration'
+                            : 'the timing precision or gap interval'
+                    ))
+                    actionTimelineClarificationInstruction = [
+                        'The selected Action Timeline capability cannot run yet.',
+                        `Ask the user for ${formatNaturalLanguageList(missingDetails)}.`,
+                        'Do not generate media, execute the capability, or invent the missing values.',
+                        'Keep the reply concise and directly state which details are required.',
+                    ].join(' ')
+                } else {
+                    capabilityInputs[ACTION_TIMELINE_TOOL_ID] = {
+                        prompt: resolution.input.prompt,
+                        referenceAssetIds: resolution.input.referenceAssetIds,
+                        durationMs: resolution.input.durationMs,
+                        precisionMs: resolution.input.precisionMs,
+                    }
                 }
             }
+            const executionCapabilityReferences = actionTimelineClarificationInstruction
+                ? routedCapabilityReferences.filter(reference => (
+                    reference.capabilityId !== ACTION_TIMELINE_TOOL_ID
+                ))
+                : routedCapabilityReferences
             await validateCapabilityInputs({
                 inputs: capabilityInputs,
-                references: routedCapabilityReferences,
+                references: executionCapabilityReferences,
                 requester,
                 workspaceId,
                 organizationId: workspace.organizationId,
             })
             const characterCreatorRouting = resolveCharacterCreatorRouting(
                 authoritativePromptText,
-                routedCapabilityReferences,
+                executionCapabilityReferences,
             )
             const canonicalMediaGenerationRequest = mediaGenerationRequest
                 ? {
@@ -909,6 +1035,7 @@ export const aiInteractionSubjects = [
             )
             let providerSafeMediaIntent: ProviderSafeMediaIntent | undefined
             let durableMediaRequest: MediaGenerationRequest | undefined
+            let initialMediaCanvasGeometry: CanvasGeometryUpdate | undefined
             if (hasMediaModelSelection) {
                 const referencedMedia = submittedPromptReferences.filter(reference => reference.referenceType === 'media')
                 const selectedMediaReferences = [...new Map([
@@ -957,50 +1084,93 @@ export const aiInteractionSubjects = [
                 const generationRequestId = persistedRequest?.generationRequestId
                     ?? routedMediaGenerationRequest?.generationRequestId
                     ?? `media-${uuid()}`
-                const mediaModelIds = routedMediaGenerationRequest
-                    ? [...routedMediaGenerationRequest.imageModelIds, ...routedMediaGenerationRequest.videoModelIds]
-                    : [routedAiImageModel, routedAiVideoModel].filter((value): value is string => Boolean(value))
+                const imageModelIds = routedMediaGenerationRequest?.imageModelIds
+                    ?? [routedAiImageModel].filter((value): value is string => Boolean(value))
+                const videoModelIds = routedMediaGenerationRequest?.videoModelIds
+                    ?? [routedAiVideoModel].filter((value): value is string => Boolean(value))
+                const mediaModelIds = [...imageModelIds, ...videoModelIds]
                 const reasoningModelIds = routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels
-                const durableMediaRuns = routedMediaGenerationRequest
-                    ? createDurableMediaRuns({ generationRequestId, reasoningModelIds, mediaModelIds })
-                    : []
+                const durableMediaRuns = createDurableMediaRuns({
+                    generationRequestId,
+                    reasoningModelIds,
+                    imageModelIds,
+                    videoModelIds,
+                })
+                const provisionalPromptText = compiled.intent.safePrompt || authoritativePromptText
+                const initialLineagePlan = new MediaBranchLineagePlanner().buildPlan({
+                    generationRequestId,
+                    reasoningModelIds: reasoningModelIds as `${string}:${string}`[],
+                    preassignedMediaRuns: durableMediaRuns.map(run => ({
+                        assetId: run.outputAssetId!,
+                        reasoningModelId: run.reasoningModelId,
+                        reasoningRunId: run.reasoningRunId!,
+                        reasoningIndex: run.reasoningIndex,
+                        mediaModelId: run.modelId,
+                        mediaType: run.mediaType!,
+                        mediaIndex: run.mediaIndex!,
+                        mediaRunId: run.mediaRunId!,
+                    })),
+                    ...(resolvedMediaBranchCandidateSnapshot ? {
+                        mediaBranchCandidateSnapshot: {
+                            ...resolvedMediaBranchCandidateSnapshot,
+                            promptText: provisionalPromptText,
+                        },
+                    } : {}),
+                    referenceAssetIds: mediaReferenceBindings.map(binding => binding.assetId),
+                    ...(resolvedWorkspaceContextSnapshot ? {
+                        workspaceContextSnapshot: {
+                            ...resolvedWorkspaceContextSnapshot,
+                            promptText: provisionalPromptText,
+                        },
+                    } : {}),
+                    createdAt: Date.now(),
+                })
                 const { user: _authenticatedUser, token: _token, resumeGenerationRequestId: _resumeId, ...submittedResumePayload } = data
                 const resumePayload = {
                     ...submittedResumePayload,
                     mediaBranchCandidateSnapshot: resolvedMediaBranchCandidateSnapshot,
                     workspaceContextSnapshot: resolvedWorkspaceContextSnapshot,
                 }
-                durableMediaRequest = persistedRequest ?? await new MediaGenerationRequestService().create({
-                    generationRequestId,
-                    workspaceId,
-                    organizationId,
-                    userId,
-                    conversationAssetId,
-                    checkpoint: {
-                        promptDocument: latestUserMessageNode,
-                        selectedReferences: selectedMediaReferences.map(reference => ({
-                            assetId: reference.assetId,
-                            ...(reference.nodeId ? { nodeId: reference.nodeId } : {}),
-                        })),
-                        modelSelection: {
-                            reasoningModelIds,
-                            mediaModelIds,
-                        },
-                        configuration: {
-                            generation: routedMediaGenerationRequest ?? {
-                                imageSize,
-                                videoAspectRatio,
-                                videoResolution,
-                                videoDuration,
+                if (persistedRequest) {
+                    durableMediaRequest = persistedRequest
+                } else {
+                    durableMediaRequest = await new MediaGenerationRequestService().create({
+                        generationRequestId,
+                        workspaceId,
+                        organizationId,
+                        userId,
+                        conversationAssetId,
+                        checkpoint: {
+                            promptDocument: latestUserMessageNode,
+                            selectedReferences: selectedMediaReferences.map(reference => ({
+                                assetId: reference.assetId,
+                                ...(reference.nodeId ? { nodeId: reference.nodeId } : {}),
+                            })),
+                            modelSelection: {
+                                reasoningModelIds,
+                                mediaModelIds,
                             },
-                            resumePayload,
-                            stripeCustomerId,
+                            configuration: {
+                                generation: routedMediaGenerationRequest ?? {
+                                    imageSize,
+                                    videoAspectRatio,
+                                    videoResolution,
+                                    videoDuration,
+                                },
+                                resumePayload,
+                                stripeCustomerId,
+                            },
                         },
-                    },
-                    bindings: mediaReferenceBindings,
-                    unresolvedBindings: compiled.unresolvedBindings,
-                    runs: durableMediaRuns,
-                })
+                        bindings: mediaReferenceBindings,
+                        unresolvedBindings: compiled.unresolvedBindings,
+                        runs: durableMediaRuns,
+                        initialLineagePlan,
+                        ...(canvasVisibleArea ? { canvasVisibleArea } : {}),
+                        onCanvasGeometryProjected: canvasGeometry => {
+                            initialMediaCanvasGeometry = canvasGeometry
+                        },
+                    })
+                }
                 if (persistedRequest && compiled.unresolvedBindings.length > 0) {
                     throw new Error('MEDIA_REFERENCE_RESOLUTION_DID_NOT_COMPILE')
                 }
@@ -1010,6 +1180,7 @@ export const aiInteractionSubjects = [
                         generationRequestId,
                         status: durableMediaRequest.status,
                         requestRevision: durableMediaRequest.revision,
+                        ...(initialMediaCanvasGeometry ? { canvasGeometry: initialMediaCanvasGeometry } : {}),
                         mediaEventSubject: [
                             getMediaGenerationUserEventSubject(userId, mediaRequestSubjects.STATUS),
                             workspaceId.replace(/[^A-Za-z0-9_-]/gu, '_'),
@@ -1036,6 +1207,16 @@ export const aiInteractionSubjects = [
                 providerMessagesWithoutAudio,
                 authorizedPromptReferences.modelInputs,
             )
+            if (actionTimelineClarificationInstruction) {
+                const latestProviderUserMessage = [...providerMessages]
+                    .reverse()
+                    .find(message => message.role === 'user')
+                if (!latestProviderUserMessage) throw new Error('CONVERSATION_USER_MESSAGE_NOT_FOUND')
+                latestProviderUserMessage.content = [
+                    latestProviderUserMessage.content,
+                    `[Lixpi capability state: ${actionTimelineClarificationInstruction}]`,
+                ].filter(Boolean).join('\n\n')
+            }
             if (characterCreatorRouting.isCharacterCreator) {
                 info('[CHARACTER_CREATOR] Enforcing selected reasoning/image model axes and excluding video', {
                     reasoningModelIds: routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels,

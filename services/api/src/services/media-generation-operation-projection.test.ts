@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
     CanvasState,
+    MediaBranchLineagePlan,
     MediaGenerationRun,
     MediaReferenceBinding,
 } from '@lixpi/constants'
@@ -88,19 +89,86 @@ describe('media generation operation-node projection', () => {
             plannedMediaType: 'video',
             position: { x: 580, y: 200 },
         })]))
-        expect(canvasState.edges).toEqual([expect.objectContaining({
-            sourceNodeId: 'source-node',
-            targetNodeId: 'operation-request-1-0',
-        })])
+        expect(canvasState.edges).toEqual([])
     })
 
-    it('rebinds the temporary node into the API-planned lineage slot and preserves its edge', async () => {
+    it('projects model attribution and lineage onto the reserved output before its first frame', async () => {
+        const mediaRun = run({
+            mediaRunId: 'media-run-1',
+            mediaType: 'video',
+            mediaIndex: 0,
+            outputAssetId: 'output-asset-1',
+            outputNodeId: 'output-node-1',
+        })
+        const lineagePlan = {
+            planVersion: 'media-branch-lineage-v1',
+            generationRequestId: 'request-1',
+            branchId: 'branch-1',
+            promptText: 'Animate the portrait.',
+            referenceAssetIds: ['asset-1'],
+            referenceNodeIds: ['source-node'],
+            sourceContextNodeIds: ['source-node'],
+            branchForks: [],
+            branchLines: [],
+            runAssignments: [{
+                assetId: 'output-asset-1',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-run-1',
+                mediaRunId: 'media-run-1',
+                reasoningModelId: 'Anthropic:claude',
+                reasoningIndex: 0,
+                mediaModelId: 'BytePlus:seedance-1-0-pro',
+                mediaType: 'video',
+                mediaIndex: 0,
+                branchId: 'branch-1',
+                branchForkNodeId: 'branch-fork-1',
+                lineageParentNodeId: 'branch-fork-1',
+                referenceAssetIds: ['asset-1'],
+                referenceNodeIds: ['source-node'],
+                sourceContextNodeIds: ['source-node'],
+                promptText: 'Animate the portrait.',
+                createdAt: 1,
+            }],
+            createdAt: 1,
+        } satisfies MediaBranchLineagePlan
+
         await projectMediaGenerationOperationNodes({
             workspaceId: 'workspace-1',
             generationRequestId: 'request-1',
-            runs: [run()],
+            lineagePlan,
+            runs: [mediaRun],
             bindings: [binding],
         })
+
+        const output = canvasState.nodes.find(node => node.nodeId === 'output-node-1')
+        expect(output).toMatchObject({
+            nodeId: 'output-node-1',
+            mediaGenerationPhase: 'pending-before-first-frame',
+            generationProgress: expect.objectContaining({
+                mediaModelId: 'BytePlus:seedance-1-0-pro',
+                mediaModelProvider: 'BytePlus',
+                lineageAssignment: expect.objectContaining({
+                    branchId: 'branch-1',
+                    lineageParentNodeId: 'branch-fork-1',
+                }),
+            }),
+        })
+        expect(output).not.toHaveProperty('generatedBy')
+    })
+
+    it('rebinds temporary operation and output identities without losing the reserved slot or lineage edge', async () => {
+        const provisionalRun = run({
+            mediaRunId: 'provisional-media-run',
+            outputAssetId: 'provisional-asset',
+            outputNodeId: 'pending-media-provisional',
+        })
+        await projectMediaGenerationOperationNodes({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            runs: [provisionalRun],
+            bindings: [binding],
+        })
+        const provisionalOutput = canvasState.nodes.find(node => node.nodeId === 'pending-media-provisional')!
         canvasState = {
             ...canvasState,
             nodes: [...canvasState.nodes, {
@@ -125,6 +193,14 @@ describe('media generation operation-node projection', () => {
                 dimensions: { width: 80, height: 80 },
                 temporary: true,
             }],
+            edges: [{
+                edgeId: 'edge-branch-fork-1-pending-media-provisional',
+                sourceNodeId: 'branch-fork-1',
+                targetNodeId: 'pending-media-provisional',
+                sourceHandle: 'right',
+                targetHandle: 'left',
+                pathType: 'horizontal-bezier',
+            }],
         }
 
         await rebindMediaGenerationOperationNodes({
@@ -133,23 +209,37 @@ describe('media generation operation-node projection', () => {
             requestRevision: 3,
             bindings: [{
                 previousNodeId: 'operation-request-1-0',
+                previousOutputNodeId: 'pending-media-provisional',
                 operationNodeId: 'pending-media-request-1-0',
                 lineageParentNodeId: 'branch-fork-1',
-                run: run({ operationNodeId: 'pending-media-request-1-0' }),
+                run: run({
+                    operationNodeId: 'pending-media-request-1-0',
+                    mediaRunId: 'authoritative-media-run',
+                    outputAssetId: 'authoritative-asset',
+                    outputNodeId: 'pending-media-authoritative',
+                }),
             }],
         })
 
         expect(canvasState.nodes.some(node => node.nodeId === 'operation-request-1-0')).toBe(false)
+        expect(canvasState.nodes.some(node => node.nodeId === 'pending-media-provisional')).toBe(false)
         expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
             nodeId: 'pending-media-request-1-0',
             type: 'operationStatus',
             requestRevision: 3,
             position: { x: 860, y: 300 },
+        }), expect.objectContaining({
+            nodeId: 'pending-media-authoritative',
+            type: 'video',
+            assetId: 'authoritative-asset',
+            position: provisionalOutput.position,
         })]))
         expect(canvasState.edges).toEqual(expect.arrayContaining([expect.objectContaining({
             sourceNodeId: 'branch-fork-1',
-            targetNodeId: 'pending-media-request-1-0',
+            targetNodeId: 'pending-media-authoritative',
         })]))
+        expect(canvasState.edges.some(edge => edge.targetNodeId === 'pending-media-provisional')).toBe(false)
+        expect(canvasState.edges.some(edge => edge.targetNodeId === 'pending-media-request-1-0')).toBe(false)
     })
 
     it('clears stale recovery actions when a paused request resumes', async () => {

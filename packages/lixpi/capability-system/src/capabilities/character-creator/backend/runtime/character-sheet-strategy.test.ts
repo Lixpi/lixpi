@@ -32,6 +32,17 @@ const mocks = {
     render: vi.fn(),
 }
 
+type CharacterImageGenerationRequest = Parameters<
+    NonNullable<CharacterSheetStrategyDeps['imageGeneration']>['generate']
+>[0]
+
+const providerResult = (request: CharacterImageGenerationRequest) => ({
+    image: panelPng.toString('base64'),
+    providerOperationId: request.operationKey,
+    includedReferenceRoles: [...new Set(request.references.map(reference => reference.role))],
+    omittedReferenceRoles: [],
+})
+
 let panelPng: Buffer
 
 const plan = () => buildCharacterSheetRenderPlan({
@@ -40,13 +51,13 @@ const plan = () => buildCharacterSheetRenderPlan({
     userPrompt: 'A courier',
 })
 
-const context = (): CapabilityMediaExecutionContext => ({
+const context = (mediaRunId = 'media-1'): CapabilityMediaExecutionContext => ({
     organizationId: 'org-1',
     userId: 'user-1',
     workspaceId: 'workspace-1',
     conversationAssetId: 'thread-1',
     generationRequestId: 'request-1',
-    mediaRunId: 'media-1',
+    mediaRunId,
     reasoningModel: {
         provider: 'OpenAI',
         modelVersion: 'reasoning-v1',
@@ -132,49 +143,84 @@ describe('CharacterSheetStrategy', () => {
             },
         })
         mocks.readBlob.mockResolvedValue(panelPng)
-        mocks.render.mockImplementation(async request => ({
-            image: panelPng.toString('base64'),
-            providerOperationId: request.operationKey,
-            includedReferenceRoles: [],
-            omittedReferenceRoles: [],
-        }))
+        mocks.render.mockImplementation(async request => providerResult(request))
     })
 
-    it('executes the 27-panel bound and carries accepted anchors through the graph', async () => {
-        const result = await strategy(async () => assessment(false)).execute(context(), plan(), {})
+    it('executes the planned panels and carries the accepted identity anchor through the graph', async () => {
+        const executionPlan = plan()
+        const result = await strategy(async () => assessment(false)).execute(context(), executionPlan, {})
         const trace = result.capabilityMediaTrace as Record<string, unknown>
 
-        expect(mocks.render).toHaveBeenCalledTimes(27)
-        expect(trace.totalProviderOperations).toBe(27)
-        expect(trace.panels).toHaveLength(27)
-        expect(mocks.render.mock.calls.find(([request]) => request.operationKey.includes(':body-profile-left:'))?.[0].references)
+        expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
+        expect(trace.totalProviderOperations).toBe(executionPlan.panels.length)
+        expect(trace.panels).toHaveLength(executionPlan.panels.length)
+        expect(mocks.render.mock.calls.find(([request]) => request.operationKey.includes(':body-profile:'))?.[0].references)
             .toEqual(expect.arrayContaining([expect.objectContaining({ role: 'canonical-anchor' })]))
         expect(mocks.clear).toHaveBeenCalledOnce()
     })
 
-    it('retries only the failed panel dimension once and never exceeds 54 operations', async () => {
+    it('isolates provider operations by media run and publishes the identity-anchor partial before its terminal image', async () => {
+        const lifecycle: string[] = []
+        mocks.render.mockImplementation(async request => {
+            if (request.operationKey.includes(':head-front-neutral:1')) {
+                lifecycle.push(`partial:${request.context.mediaRunId}`)
+                await request.onImagePartial?.(panelPng.toString('base64'), 1)
+                lifecycle.push(`terminal:${request.context.mediaRunId}`)
+            }
+            return providerResult(request)
+        })
+
+        const publishImagePartial = vi.fn(async () => {
+            lifecycle.push('published')
+        })
+        await strategy(async () => assessment(false)).execute(
+            context('media-google'),
+            plan(),
+            { publishImagePartial },
+        )
+        await strategy(async () => assessment(false)).execute(
+            context('media-openai'),
+            plan(),
+            {},
+        )
+
+        const plannedOperationCount = plan().panels.length
+        const operationKeys = mocks.render.mock.calls.map(([request]) => request.operationKey)
+        expect(operationKeys.filter(key => key.startsWith('media-google:'))).toHaveLength(plannedOperationCount)
+        expect(operationKeys.filter(key => key.startsWith('media-openai:'))).toHaveLength(plannedOperationCount)
+        expect(new Set(operationKeys)).toHaveLength(plannedOperationCount * 2)
+        expect(publishImagePartial).toHaveBeenCalled()
+        expect(lifecycle.indexOf('published')).toBeGreaterThan(lifecycle.indexOf('partial:media-google'))
+        expect(lifecycle.indexOf('published')).toBeLessThan(lifecycle.indexOf('terminal:media-google'))
+    })
+
+    it('does not silently regenerate panels when comparison reports a failed dimension', async () => {
         const attempts = new Map<string, number>()
+        const executionPlan = plan()
         const result = await strategy(async request => {
             const count = (attempts.get(request.panel.panelId) ?? 0) + 1
             attempts.set(request.panel.panelId, count)
             return assessment(count === 1)
-        }).execute(context(), plan(), {})
+        }).execute(context(), executionPlan, {})
         const trace = result.capabilityMediaTrace as Record<string, unknown>
 
-        expect(mocks.render).toHaveBeenCalledTimes(54)
-        expect(trace.totalProviderOperations).toBe(54)
-        const corrected = mocks.render.mock.calls.find(([request]) => request.operationKey.endsWith(':2'))?.[0].prompt
-        expect(corrected).toContain('Correct only these failed dimensions')
-        expect(corrected).toContain('target-view: WRONG_VIEW')
+        expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
+        expect(trace.totalProviderOperations).toBe(executionPlan.panels.length)
+        expect([...attempts.values()]).toEqual(executionPlan.panels.map(() => 1))
+        expect(mocks.render.mock.calls.some(([request]) => request.operationKey.endsWith(':2'))).toBe(false)
     })
 
-    it('selects best-effort valid panels with warnings after both semantic attempts', async () => {
-        const result = await strategy(async () => assessment(true, 0.6)).execute(context(), plan(), {})
+    it('retains panels with comparison warnings for explicit user review', async () => {
+        const executionPlan = plan()
+        const result = await strategy(async () => assessment(true, 0.6)).execute(context(), executionPlan, {})
         const trace = result.capabilityMediaTrace as { totalProviderOperations: number; panels: unknown[] }
 
-        expect(trace.totalProviderOperations).toBe(54)
+        expect(trace.totalProviderOperations).toBe(executionPlan.panels.length)
         expect(trace.panels).toEqual(expect.arrayContaining([
-            expect.objectContaining({ warning: expect.stringContaining('Best-effort') }),
+            expect.objectContaining({
+                status: 'needs-review',
+                failedDimensions: ['target-view'],
+            }),
         ]))
         expect(mocks.clear).toHaveBeenCalledOnce()
     })
@@ -195,44 +241,38 @@ describe('CharacterSheetStrategy', () => {
     })
 
     it('keeps the final sheet when only the optional generated prop fails', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-1',
+            sourceAssetIds: [],
+            userPrompt: 'A courier; include their belongings',
+        })
         mocks.render.mockImplementation(async request => {
             if (request.operationKey.includes(':prop-primary:')) throw new Error('prop unavailable')
-            return {
-                image: panelPng.toString('base64'),
-                providerOperationId: request.operationKey,
-                includedReferenceRoles: [],
-                omittedReferenceRoles: [],
-            }
+            return providerResult(request)
         })
 
-        const result = await strategy(async () => assessment(false)).execute(context(), plan(), {})
+        const result = await strategy(async () => assessment(false)).execute(context(), executionPlan, {})
         const trace = result.capabilityMediaTrace as { totalProviderOperations: number; panels: unknown[] }
 
         expect(result.generatedImages).toEqual([Buffer.from('composed-sheet').toString('base64')])
-        expect(trace.totalProviderOperations).toBe(27)
+        expect(trace.totalProviderOperations).toBe(executionPlan.panels.length)
         expect(trace.panels).toContainEqual(expect.objectContaining({
             panelId: 'prop-primary',
-            warning: 'Optional panel was unavailable and left blank.',
+            status: 'unavailable',
+            warning: 'prop unavailable',
         }))
     })
 
-    it('keeps bounded transport retries outside the semantic operation count', async () => {
+    it('does not silently rerun a failed required identity anchor', async () => {
         mocks.render.mockRejectedValueOnce(Object.assign(new Error('capacity'), { status: 429 }))
-        mocks.render.mockImplementation(async request => ({
-            image: panelPng.toString('base64'),
-            providerOperationId: request.operationKey,
-            includedReferenceRoles: [],
-            omittedReferenceRoles: [],
-        }))
+        mocks.render.mockImplementation(async request => providerResult(request))
 
-        const result = await strategy(async () => assessment(false)).execute(context(), plan(), {})
-        const trace = result.capabilityMediaTrace as Record<string, unknown>
-
-        expect(mocks.render).toHaveBeenCalledTimes(28)
-        expect(trace.totalProviderOperations).toBe(27)
+        await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
+            .rejects.toThrow('CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE:capacity')
+        expect(mocks.render).toHaveBeenCalledOnce()
     })
 
-    it('cleans transient objects when evidence analysis fails before panel execution', async () => {
+    it('continues with authorized source evidence and records a warning when analysis is unavailable', async () => {
         const executionPlan = plan()
         executionPlan.sourceAssetIds = ['asset-1']
         const failing = new CharacterSheetStrategy({
@@ -241,7 +281,13 @@ describe('CharacterSheetStrategy', () => {
             panelAssessor: { assess: async () => assessment(false) },
         })
 
-        await expect(failing.execute(context(), executionPlan, {})).rejects.toThrow('analysis failed')
+        const result = await failing.execute(context(), executionPlan, {})
+        const trace = result.capabilityMediaTrace as { steps: Array<{ stepId: string; issues: string[] }> }
+
+        expect(trace.steps).toContainEqual(expect.objectContaining({
+            stepId: 'source-evidence',
+            issues: [expect.stringContaining('analysis failed')],
+        }))
         expect(mocks.clear).toHaveBeenCalledOnce()
     })
 

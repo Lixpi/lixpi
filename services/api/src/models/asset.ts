@@ -404,11 +404,25 @@ const decodeSearchCursor = (
 type AssetCanvasNode = {
     nodeId: string
     assetId?: string
+    type?: string
+    mediaGenerationPhase?: string
+    generationProgress?: {
+        generationRequestId?: string
+        mediaRunId?: string
+    }
+    generatedBy?: {
+        generationRequestId?: string
+        mediaRunId?: string
+    }
 }
 
 type AssetWorkspaceMutation = {
     expectedCanvasStateUpdatedAt: number
     canvasStateUpdatedAt: number
+    adoptUnboundGeneratedMediaReservation?: {
+        generationRequestId: string
+        mediaRunId?: string
+    }
     canvasState: {
         viewport: unknown
         nodes: AssetCanvasNode[]
@@ -434,16 +448,24 @@ const assertSingleAssetMembershipMutation = ({
     assetId,
     nodeId,
     operation,
+    allowExistingTargetMembership,
+    adoptUnboundGeneratedMediaReservation,
 }: {
     beforeNodes: AssetCanvasNode[]
     afterNodes: AssetCanvasNode[]
     assetId: string
     nodeId: string
     operation: 'attach' | 'detach'
+    allowExistingTargetMembership: boolean
+    adoptUnboundGeneratedMediaReservation?: {
+        generationRequestId: string
+        mediaRunId?: string
+    }
 }): void => {
     const before = getAssetMembership(beforeNodes)
     const after = getAssetMembership(afterNodes)
     const assetIds = new Set([...before.keys(), ...after.keys()])
+    let foundExpectedMutation = false
     for (const currentAssetId of assetIds) {
         const beforeNodeIds = before.get(currentAssetId) ?? new Set<string>()
         const afterNodeIds = after.get(currentAssetId) ?? new Set<string>()
@@ -453,10 +475,44 @@ const assertSingleAssetMembershipMutation = ({
             && (operation === 'attach'
                 ? added.length === 1 && added[0] === nodeId && removed.length === 0
                 : removed.length === 1 && removed[0] === nodeId && added.length === 0)
+        if (isExpected) foundExpectedMutation = true
         if ((added.length > 0 || removed.length > 0) && !isExpected) {
             throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
         }
     }
+    if (foundExpectedMutation) return
+
+    const beforeTargetMembership = before.get(assetId)?.has(nodeId) ?? false
+    const afterTargetMembership = after.get(assetId)?.has(nodeId) ?? false
+    if (operation === 'attach'
+        && allowExistingTargetMembership
+        && beforeTargetMembership
+        && afterTargetMembership) return
+
+    const beforeNode = beforeNodes.find((node) => node.nodeId === nodeId)
+    const afterNode = afterNodes.find((node) => node.nodeId === nodeId)
+    const expectedGenerationRequestId = adoptUnboundGeneratedMediaReservation?.generationRequestId
+    const expectedMediaRunId = adoptUnboundGeneratedMediaReservation?.mediaRunId
+    const isReservationAdoption = operation === 'attach'
+        && Boolean(expectedGenerationRequestId)
+        && beforeTargetMembership
+        && afterTargetMembership
+        && (beforeNode?.type === 'image' || beforeNode?.type === 'video')
+        && afterNode?.type === beforeNode.type
+        && beforeNode.assetId === assetId
+        && afterNode.assetId === assetId
+        && beforeNode.mediaGenerationPhase === 'pending-before-first-frame'
+        && beforeNode.generationProgress?.generationRequestId === expectedGenerationRequestId
+        && afterNode.generationProgress?.generationRequestId === expectedGenerationRequestId
+        && !beforeNode.generatedBy
+        && afterNode.generatedBy?.generationRequestId === expectedGenerationRequestId
+        && (!expectedMediaRunId
+            || (beforeNode.generationProgress?.mediaRunId === expectedMediaRunId
+                && afterNode.generationProgress?.mediaRunId === expectedMediaRunId
+                && afterNode.generatedBy?.mediaRunId === expectedMediaRunId))
+    if (isReservationAdoption) return
+
+    throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
 }
 
 const getAssetProjectionScopeKeys = async (
@@ -525,12 +581,14 @@ const getWorkspaceMutationOperations = async ({
     assetId,
     nodeId,
     operation,
+    allowExistingTargetMembership = false,
 }: {
     workspaceId: string
     mutation: AssetWorkspaceMutation
     assetId: string
     nodeId: string
     operation: 'attach' | 'detach'
+    allowExistingTargetMembership?: boolean
 }): Promise<TransactOperation[]> => {
     const workspace = await dynamoDBService.getItem({
         tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
@@ -554,6 +612,8 @@ const getWorkspaceMutationOperations = async ({
         assetId,
         nodeId,
         operation,
+        allowExistingTargetMembership,
+        adoptUnboundGeneratedMediaReservation: mutation.adoptUnboundGeneratedMediaReservation,
     })
     for (const node of mutation.canvasState.nodes as Array<AssetCanvasNode & Record<string, unknown>>) {
         for (const field of ['fileId', 'posterFileId', 'frameFileId', 'src', 'posterSrc', 'referenceId', 'aiChatThreadId']) {
@@ -1755,6 +1815,7 @@ const AssetModel = {
                 assetId,
                 nodeId,
                 operation: 'attach',
+                allowExistingTargetMembership: true,
             })
             await dynamoDBService.transactWrite({
                 operations: workspaceOperations,
@@ -1790,6 +1851,7 @@ const AssetModel = {
                 assetId,
                 nodeId,
                 operation: 'attach',
+                allowExistingTargetMembership: Boolean(existing?.nodeIds?.includes(nodeId)),
             })
             : []
         const workspaceGuardOperations: TransactOperation[] = workspaceOperations.length === 0

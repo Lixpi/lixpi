@@ -24,7 +24,10 @@ import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapsh
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
-import { resolveCapabilityOutputMediaRuns } from '../lineage/capability-output-media-runs.ts'
+import {
+    resolveCapabilityOutputMediaRuns,
+    resolveDurableMediaRuns,
+} from '../lineage/capability-output-media-runs.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
@@ -801,7 +804,7 @@ export class MediaGenerationMatrixOrchestrator {
             ?? []
         const preassignedMediaRuns = capabilityOutputMediaAssetIds.length > 0
             ? await resolveCapabilityOutputMediaRuns(capabilityOutputMediaAssetIds)
-            : undefined
+            : resolveDurableMediaRuns(state.durableMediaRuns)
         const mediaBranchLineagePlan = this.lineagePlanner.buildPlan({
             generationRequestId: normalized.generationRequestId,
             reasoningModelIds: preassignedMediaRuns

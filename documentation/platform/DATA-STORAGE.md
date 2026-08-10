@@ -207,6 +207,6 @@ The only version-1 boundary is the offline converter documented in [Workspace Ex
 
 ## Durable media requests and identity attestations
 
-Media generation adds the standard primary/meta/access triad `Media-Generation-Requests`, `Media-Generation-Requests-Meta`, and `Media-Generation-Requests-Access-List`. The primary record is the CAS authority for request status, safe bindings, ambiguity resolutions, per-model runs, provider-verification sessions, operation-node IDs, and the checkpoint Blob pointer. Meta supports bounded Workspace recovery; access rows contain owner and Workspace principals.
+Media generation adds the standard primary/meta/access triad `Media-Generation-Requests`, `Media-Generation-Requests-Meta`, and `Media-Generation-Requests-Access-List`. The primary record is the CAS authority for request status, safe bindings, ambiguity resolutions, per-model runs, provider-verification sessions, stable media-run/Asset/operation-node/output-node IDs, and the checkpoint Blob pointer. Meta supports bounded Workspace recovery; access rows contain owner and Workspace principals.
 
 `Asset-Subject-Identity-Attestations` is an append-only child table authorized through its parent Asset. Each event records actor, organization, Asset revision, classification, server-owned statement version, supersession, and time. `Asset.subjectIdentity` is the current projection; `Asset.depictionMedium` remains a separate automatically derived fact. See [Media Reference Identity and Provider Moderation](../media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).

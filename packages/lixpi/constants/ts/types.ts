@@ -736,8 +736,14 @@ export type MediaGenerationRun = {
     generationRun: number
     reasoningModelId: AiModelId
     reasoningIndex: number
+    reasoningRunId?: string
     provider: ProviderName
     modelId: AiModelId
+    mediaRunId?: string
+    mediaType?: 'image' | 'video'
+    mediaIndex?: number
+    outputAssetId?: string
+    outputNodeId?: string
     status: MediaGenerationRunStatus
     operationNodeId: string
     providerOperationId?: string
@@ -1163,6 +1169,7 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
     assetId: string
     // API-persisted layout footprint. Asset remains authoritative for media lifecycle and renditions.
     mediaGenerationPhase?: MediaGenerationCanvasPhase
+    generationProgress?: MediaGenerationProgressState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: ImageGeneratedByMetadata
@@ -1214,6 +1221,7 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     assetId: string
     // API-persisted layout footprint. Asset remains authoritative for media lifecycle and renditions.
     mediaGenerationPhase?: MediaGenerationCanvasPhase
+    generationProgress?: MediaGenerationProgressState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: VideoGeneratedByMetadata
@@ -1266,6 +1274,8 @@ export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     kind?: MediaKind
     generationRequestId?: string
     generationRun?: number
+    mediaRunId?: string
+    outputNodeId?: string
     plannedMediaType?: 'image' | 'video'
     problem?: MediaGenerationProblem
     candidateAssetIds?: string[]
@@ -1279,11 +1289,16 @@ export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     updatedAt: number
 }
 
-export type BranchMarkerMediaGenerationState = {
+export type MediaGenerationProgressState = {
+    generationRequestId: string
     status: MediaGenerationRunStatus
     message: string
     progress: MediaGenerationRunProgress
+    mediaModelId?: AiModelId
+    mediaModelProvider?: ProviderName
+    lineageAssignment?: MediaRunLineageAssignment
     generationRun?: number
+    mediaRunId?: string
     updatedAt: number
 }
 
@@ -1295,7 +1310,6 @@ export type BranchOriginCanvasNode = CanvasNodeParentingFields & {
     conversationAssetId?: string
     promptFingerprint?: string
     provenance?: BranchOriginProvenance
-    mediaGeneration?: BranchMarkerMediaGenerationState
     pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
@@ -1314,7 +1328,6 @@ export type BranchForkCanvasNode = CanvasNodeParentingFields & {
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchForkProvenance
-    mediaGeneration?: BranchMarkerMediaGenerationState
     pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
@@ -1336,7 +1349,6 @@ export type BranchLineCanvasNode = CanvasNodeParentingFields & {
     parentBranchNodeId?: string
     promptFingerprint?: string
     provenance?: BranchLineProvenance
-    mediaGeneration?: BranchMarkerMediaGenerationState
     pendingState?: BranchMarkerPendingState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions

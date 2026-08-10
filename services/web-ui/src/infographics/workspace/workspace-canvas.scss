@@ -2193,9 +2193,7 @@
 
 // Screen-fixed before a canvas destination is computed: keep the prompt on a
 // single line at the input's type size. It grows wider (see
-// getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping. A
-// streamed progress timeline expands beneath that compact header until the marker
-// lands on the canvas and regains its larger on-canvas proportions.
+// getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping.
 .workspace-branch-marker-screen-fixed {
     .workspace-branch-marker-content {
         gap: 6px;
@@ -2278,8 +2276,6 @@
     padding-top: 12px;
     padding-bottom: 12px;
     border: 1px solid var(--workspace-branch-origin-border-color);
-    // Equal absolute x/y radii stay circular at every aspect ratio. CSS scales
-    // all corners uniformly only when a box becomes too short for this radius.
     border-radius: var(--workspace-branch-marker-progress-corner-radius);
     background: var(--workspace-branch-origin-background-color);
     box-shadow: var(--workspace-branch-origin-box-shadow);
@@ -2305,12 +2301,18 @@
     top: var(--workspace-branch-marker-header-center, 50%);
 }
 
-.workspace-branch-marker-progress {
-    --progress-timeline-surface: var(--workspace-branch-origin-background-color, #5d656d);
+.workspace-media-generation-progress-chrome {
+    position: absolute;
+    width: 360px;
+    pointer-events: none;
+}
+
+.workspace-media-generation-progress {
+    --progress-timeline-surface: transparent;
     --progress-timeline-primary: currentColor;
     --progress-timeline-secondary: currentColor;
-    --progress-timeline-line: rgb(255 255 255 / 38%);
-    --progress-timeline-pending-border: rgb(255 255 255 / 68%);
+    --progress-timeline-line: rgb(77 89 99 / 34%);
+    --progress-timeline-pending-border: rgb(77 89 99 / 58%);
     --progress-timeline-source-size: 9px;
     --progress-timeline-title-size: var(--workspace-branch-marker-response-font-size, 11.5px);
     --progress-timeline-title-weight: 500;
@@ -2320,15 +2322,39 @@
     min-width: 0;
     box-sizing: border-box;
     margin-top: 0;
-    padding: 0 2px 1px;
-    color: currentColor;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #4d5963;
     font-size: var(--workspace-branch-marker-response-font-size, 11.5px);
     font-weight: 500;
     line-height: var(--workspace-branch-marker-response-line-height, 1.15);
     pointer-events: none;
 }
 
-.workspace-branch-marker-pipeline-header {
+.workspace-branch-marker-progress {
+    --progress-timeline-surface: var(--workspace-branch-origin-background-color, #5d656d);
+    --progress-timeline-line: rgb(255 255 255 / 38%);
+    --progress-timeline-pending-border: rgb(255 255 255 / 68%);
+    padding: 0 2px 1px;
+    color: currentColor;
+}
+
+.workspace-branch-marker-progress .workspace-media-generation-pipeline-disclosure:hover,
+.workspace-branch-marker-progress .workspace-media-generation-pipeline-disclosure:focus-visible,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-chevron,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-chevron {
+    color: var(--workspace-branch-origin-icon-color);
+}
+
+.workspace-media-generation-pipeline-header {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
@@ -2338,7 +2364,7 @@
     color: currentColor;
 }
 
-.workspace-branch-marker-pipeline-heading {
+.workspace-media-generation-pipeline-heading {
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.055em;
@@ -2346,7 +2372,7 @@
     text-transform: uppercase;
 }
 
-.workspace-branch-marker-pipeline-status {
+.workspace-media-generation-pipeline-status {
     overflow: hidden;
     min-width: 0;
     font-size: 9px;
@@ -2357,7 +2383,7 @@
     white-space: nowrap;
 }
 
-.workspace-branch-marker-pipeline-disclosure {
+.workspace-media-generation-pipeline-disclosure {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -2375,12 +2401,12 @@
     transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
 }
 
-.workspace-branch-marker-pipeline-disclosure:hover,
-.workspace-branch-marker-pipeline-disclosure:focus-visible {
+.workspace-media-generation-pipeline-disclosure:hover,
+.workspace-media-generation-pipeline-disclosure:focus-visible {
     opacity: 1;
 }
 
-.workspace-branch-marker-pipeline-disclosure-label {
+.workspace-media-generation-pipeline-disclosure-label {
     overflow: hidden;
     min-width: 0;
     font-size: 9px;
@@ -2390,7 +2416,7 @@
     white-space: nowrap;
 }
 
-.workspace-branch-marker-pipeline-disclosure-icon {
+.workspace-media-generation-pipeline-disclosure-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2404,80 +2430,82 @@
     line-height: 0;
 }
 
-.workspace-branch-marker-pipeline-disclosure-icon svg {
+.workspace-media-generation-pipeline-disclosure-icon svg {
     display: block;
     width: 100%;
     height: 100%;
 }
 
-.workspace-branch-marker-pipeline-disclosure-icon svg * {
+.workspace-media-generation-pipeline-disclosure-icon svg * {
     fill: currentColor;
 }
 
-.workspace-branch-marker-progress .progress-timeline-title,
-.workspace-branch-marker-progress .progress-timeline-summary,
-.workspace-branch-marker-progress .progress-timeline-meta {
+.workspace-media-generation-progress .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-summary,
+.workspace-media-generation-progress .progress-timeline-meta {
     color: currentColor;
     line-height: inherit;
     opacity: 0.72;
 }
 
-.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-source,
-.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-title,
-.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-meta,
-.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-chevron {
-    transition:
-        hoverTransition(color, $defaultHoverTransitionDuration),
-        hoverTransition(opacity, $defaultHoverTransitionDuration);
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-source,
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-meta,
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-chevron {
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
 }
 
-.workspace-branch-marker-progress .progress-timeline-toggle .progress-timeline-source {
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-source {
     opacity: 0.72;
 }
 
-.workspace-branch-marker-progress .progress-timeline-source-kind {
+.workspace-media-generation-progress .progress-timeline-source-kind {
     font-weight: 400;
 }
 
-.workspace-branch-marker-progress .progress-timeline-source-name {
+.workspace-media-generation-progress .progress-timeline-source-name {
     font-weight: 700;
 }
 
-.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-source,
-.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-title,
-.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-meta,
-.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-chevron,
-.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-source,
-.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-title,
-.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-meta,
-.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-chevron {
-    color: var(--workspace-branch-origin-icon-color);
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-source,
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-meta,
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-chevron,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-source,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-meta,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-chevron {
     opacity: 1;
 }
 
-.workspace-branch-marker-progress .progress-timeline-chevron {
+.workspace-media-generation-progress .progress-timeline-chevron {
     opacity: 0.72;
 }
 
-.workspace-branch-marker-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-title,
-.workspace-branch-marker-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-meta {
+.workspace-media-generation-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-meta {
     opacity: 1;
 }
 
-.workspace-branch-marker-progress .progress-timeline-content {
+.workspace-media-generation-progress .progress-timeline-content {
     padding-bottom: 8px;
 }
 
-.workspace-branch-marker-progress .progress-timeline-item:last-child > .progress-timeline-content {
+.workspace-media-generation-progress .progress-timeline-item:last-child > .progress-timeline-content {
     padding-bottom: 0;
 }
 
-.workspace-branch-marker-progress .progress-timeline-item:last-child > .progress-timeline-rail {
+.workspace-media-generation-progress .progress-timeline-item:last-child > .progress-timeline-rail {
     min-height: 14px;
 }
 
-.workspace-branch-marker-progress .progress-timeline-children {
+.workspace-media-generation-progress .progress-timeline-children {
     margin-top: 6px;
+}
+
+.canvas-generated-media-history-panel > .workspace-media-generation-progress {
+    width: auto;
+    margin: 18px 18px 0;
 }
 
 .workspace-branch-marker-spinner {

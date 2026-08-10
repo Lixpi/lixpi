@@ -6,6 +6,7 @@ import { STREAM_STATUS } from '@lixpi/constants'
 const canvasProjectionMocks = vi.hoisted(() => ({
     upsertMediaLineagePlanToCanvas: vi.fn(async () => undefined),
     refreshMediaGenerationRequestCanvasGeometry: vi.fn(async () => undefined),
+    settleFailedGeneratedMediaRunOnCanvas: vi.fn(async () => undefined),
     settleMediaGenerationRequestOnCanvas: vi.fn(async () => undefined),
     logCanvasProjectionError: vi.fn(),
 }))
@@ -88,6 +89,7 @@ beforeEach(() => {
     consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     canvasProjectionMocks.upsertMediaLineagePlanToCanvas.mockResolvedValue(undefined)
     canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry.mockResolvedValue(undefined)
+    canvasProjectionMocks.settleFailedGeneratedMediaRunOnCanvas.mockResolvedValue(undefined)
     canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockResolvedValue(undefined)
 })
 
@@ -572,6 +574,42 @@ describe('StreamPublisher extraction progress', () => {
             aiProvider: 'Anthropic',
             error: 'no inline image data',
             generationRun,
+        })
+    })
+
+    it('settles a failed provider run into its reserved canvas slot with the provider error', async () => {
+        const nats = makeFakeNats()
+        const failedGenerationRun = {
+            ...generationRun,
+            mediaRunId: 'reasoning-1:image:0',
+            lineageAssignment: {
+                assetId: 'asset-1',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                mediaRunId: 'reasoning-1:image:0',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                mediaIndex: 0,
+                branchId: 'branch-1',
+                lineageParentNodeId: 'fork-1',
+                referenceAssetIds: [],
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'Draw a cat',
+                createdAt: 1,
+            },
+        } as const
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', failedGenerationRun)
+
+        publisher.imageGenerationError('The selected provider rejected the request.')
+        await flushPipelinePublishes()
+
+        expect(canvasProjectionMocks.settleFailedGeneratedMediaRunOnCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            generationRun: failedGenerationRun,
+            errorMessage: 'The selected provider rejected the request.',
         })
     })
 

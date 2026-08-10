@@ -115,6 +115,7 @@ export class VideoRouter {
                 workspaceId,
                 mediaModelId: generationRun.mediaModelId,
                 reasoningIndex: generationRun.reasoningIndex,
+                ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
                 status,
                 ...(problem ? { problem } : {}),
             })

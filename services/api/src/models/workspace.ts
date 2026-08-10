@@ -72,6 +72,7 @@ const normalizeCanvasState = (canvasState: CanvasState | undefined): CanvasState
 
 type MediaGenerationOperationCanvasNode = Extract<CanvasNode, { type: 'operationStatus' }>
 type BranchMarkerCanvasNode = Extract<CanvasNode, { type: 'branchOrigin' | 'branchFork' | 'branchLine' }>
+type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>
 
 const isMediaGenerationOperationNode = (node: CanvasNode): node is MediaGenerationOperationCanvasNode =>
     node.type === 'operationStatus' && node.operation === 'media-generation'
@@ -79,21 +80,30 @@ const isMediaGenerationOperationNode = (node: CanvasNode): node is MediaGenerati
 const isBranchMarkerNode = (node: CanvasNode): node is BranchMarkerCanvasNode =>
     node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 
+const isServerManagedGeneratedMediaNode = (node: CanvasNode): node is GeneratedMediaCanvasNode =>
+    (node.type === 'image' || node.type === 'video') && Boolean(node.generationProgress)
+
+const stripLegacyBranchMarkerProgress = (node: BranchMarkerCanvasNode): BranchMarkerCanvasNode => {
+    const { mediaGeneration: _mediaGeneration, ...cleanNode } = node as BranchMarkerCanvasNode & {
+        mediaGeneration?: unknown
+    }
+    return cleanNode as BranchMarkerCanvasNode
+}
+
 const preserveServerManagedMediaGenerationState = (
     currentCanvasState: CanvasState,
     incomingCanvasState: CanvasState,
 ): CanvasState => {
     const currentNodeById = new Map(currentCanvasState.nodes.map(node => [node.nodeId, node]))
     const currentOperationNodes = currentCanvasState.nodes.filter(isMediaGenerationOperationNode)
+    const currentGeneratedMediaNodes = currentCanvasState.nodes.filter(isServerManagedGeneratedMediaNode)
     const currentOperationNodeIds = new Set(currentOperationNodes.map(node => node.nodeId))
-    const currentOperationOwnerNodeIds = new Set(currentCanvasState.edges
-        .filter(edge => currentOperationNodeIds.has(edge.targetNodeId))
-        .map(edge => edge.sourceNodeId))
     const allOperationNodeIds = new Set([
         ...currentOperationNodeIds,
         ...incomingCanvasState.nodes.filter(isMediaGenerationOperationNode).map(node => node.nodeId),
     ])
     const retainedOperationNodeIds = new Set<string>()
+    const retainedGeneratedMediaNodeIds = new Set<string>()
     const nodes = incomingCanvasState.nodes.flatMap((node): CanvasNode[] => {
         if (isMediaGenerationOperationNode(node)) {
             const currentNode = currentNodeById.get(node.nodeId)
@@ -101,27 +111,43 @@ const preserveServerManagedMediaGenerationState = (
             retainedOperationNodeIds.add(node.nodeId)
             return [currentNode]
         }
+        if (node.type === 'image' || node.type === 'video') {
+            const currentNode = currentNodeById.get(node.nodeId)
+            if (!currentNode || !isServerManagedGeneratedMediaNode(currentNode)) return [node]
+            retainedGeneratedMediaNodeIds.add(node.nodeId)
+            const {
+                assetId: _incomingAssetId,
+                generatedBy: _incomingGeneratedBy,
+                generationProgress: _incomingGenerationProgress,
+                mediaGenerationPhase: _incomingMediaGenerationPhase,
+                type: _incomingType,
+                ...incomingNode
+            } = node
+            return [{
+                ...incomingNode,
+                type: currentNode.type,
+                assetId: currentNode.assetId,
+                ...(currentNode.mediaGenerationPhase ? {
+                    mediaGenerationPhase: currentNode.mediaGenerationPhase,
+                } : {}),
+                ...(currentNode.generatedBy ? { generatedBy: currentNode.generatedBy } : {}),
+                generationProgress: currentNode.generationProgress,
+            } as CanvasNode]
+        }
         if (!isBranchMarkerNode(node)) return [node]
         const currentNode = currentNodeById.get(node.nodeId)
-        if (!currentNode || !isBranchMarkerNode(currentNode)) return [node]
-        const { mediaGeneration: _incomingMediaGeneration, ...incomingNode } = node
-        return [{
-            ...incomingNode,
-            ...(currentNode.mediaGeneration ? { mediaGeneration: currentNode.mediaGeneration } : {}),
-        } as CanvasNode]
+        return [stripLegacyBranchMarkerProgress(
+            currentNode && isBranchMarkerNode(currentNode) ? { ...currentNode, ...node } : node,
+        )]
     })
     for (const operationNode of currentOperationNodes) {
         if (retainedOperationNodeIds.has(operationNode.nodeId)) continue
         nodes.push(operationNode)
     }
-    const retainedNodeIds = new Set(nodes.map(node => node.nodeId))
-    for (const currentNode of currentCanvasState.nodes) {
-        if (!currentOperationOwnerNodeIds.has(currentNode.nodeId)
-            || retainedNodeIds.has(currentNode.nodeId)
-            || !isBranchMarkerNode(currentNode)) continue
-        nodes.push(currentNode)
+    for (const mediaNode of currentGeneratedMediaNodes) {
+        if (retainedGeneratedMediaNodeIds.has(mediaNode.nodeId)) continue
+        nodes.push(mediaNode)
     }
-
     const incomingEdges = incomingCanvasState.edges.filter(edge => (
         !allOperationNodeIds.has(edge.sourceNodeId)
         && !allOperationNodeIds.has(edge.targetNodeId)
@@ -140,17 +166,27 @@ const preserveServerManagedMediaGenerationState = (
     return { ...incomingCanvasState, nodes, edges }
 }
 
-const getAssetMembershipEntries = (canvasState: CanvasState): string[] => {
+const getAssetMembershipEntries = (
+    canvasState: CanvasState,
+    ignoreUnboundGeneratedMediaReservations = false,
+): string[] => {
     return canvasState.nodes
         .flatMap((node) => {
+            if (ignoreUnboundGeneratedMediaReservations
+                && (node.type === 'image' || node.type === 'video')
+                && node.mediaGenerationPhase === 'pending-before-first-frame'
+                && node.generationProgress
+                && !node.generatedBy) return []
             const assetId = (node as CanvasNode & { assetId?: string }).assetId
             return assetId ? [`${assetId}#${node.nodeId}`] : []
         })
         .sort()
 }
 
-const getAssetMembershipSignature = (canvasState: CanvasState): string =>
-    JSON.stringify(getAssetMembershipEntries(canvasState))
+const getAssetMembershipSignature = (
+    canvasState: CanvasState,
+    ignoreUnboundGeneratedMediaReservations = false,
+): string => JSON.stringify(getAssetMembershipEntries(canvasState, ignoreUnboundGeneratedMediaReservations))
 
 const LEGACY_CANVAS_STORAGE_FIELDS = new Set([
     'fileId',
@@ -511,8 +547,14 @@ export default {
     mutateCanvasState: async ({
         workspaceId,
         mutate,
-        origin = 'mutateWorkspaceCanvasState'
-    }: { workspaceId: string; mutate: CanvasStateMutator; origin?: string }): Promise<{
+        origin = 'mutateWorkspaceCanvasState',
+        allowUnboundGeneratedMediaReservationMutation = false,
+    }: {
+        workspaceId: string
+        mutate: CanvasStateMutator
+        origin?: string
+        allowUnboundGeneratedMediaReservationMutation?: boolean
+    }): Promise<{
         changed: boolean
         canvasState: CanvasState | null
         canvasStateUpdatedAt: number | null
@@ -536,7 +578,13 @@ export default {
             if (!result.changed) return { changed: false, canvasState: currentCanvasState, canvasStateUpdatedAt: getCanvasStateUpdatedAt(workspace) ?? null }
             const nextCanvasState = normalizeCanvasState(result.canvasState)
             assertRevision2CanvasStorage(nextCanvasState)
-            if (getAssetMembershipSignature(currentCanvasState) !== getAssetMembershipSignature(nextCanvasState)) {
+            if (getAssetMembershipSignature(
+                currentCanvasState,
+                allowUnboundGeneratedMediaReservationMutation,
+            ) !== getAssetMembershipSignature(
+                nextCanvasState,
+                allowUnboundGeneratedMediaReservationMutation,
+            )) {
                 throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
             }
 

@@ -112,6 +112,7 @@ export class ImageRouter {
                 workspaceId,
                 mediaModelId: generationRun.mediaModelId,
                 reasoningIndex: generationRun.reasoningIndex,
+                ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
                 status,
                 ...(problem ? { problem } : {}),
             })
@@ -166,6 +167,7 @@ export class ImageRouter {
                                 workspaceId,
                                 mediaModelId: generationRun.mediaModelId,
                                 reasoningIndex: generationRun.reasoningIndex,
+                                ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
                                 progress,
                             })
                         } catch (error) {

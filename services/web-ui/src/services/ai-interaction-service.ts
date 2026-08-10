@@ -77,6 +77,7 @@ type MediaGenerationRequestSubmissionAcknowledgment = {
     generationRequestId: string
     status: 'submitted' | 'awaiting-reference-resolution'
     requestRevision: number
+    canvasGeometry?: CanvasGeometryUpdate
     mediaEventSubject: string
 }
 
@@ -359,6 +360,15 @@ export default class AiInteractionService {
                     status: data.status,
                     requestRevision: data.requestRevision,
                 })
+                if (data.canvasGeometry) {
+                    this.segmentsReceiver.receiveSegment({
+                        type: 'canvas_geometry_resolved',
+                        canvasGeometry: data.canvasGeometry,
+                        aiProvider: '',
+                        conversationAssetId: this.conversationAssetId,
+                        usesServerProseMirror: true,
+                    })
+                }
                 return
             }
 

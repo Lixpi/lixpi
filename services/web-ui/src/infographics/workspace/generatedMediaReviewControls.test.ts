@@ -36,7 +36,7 @@ describe('generated media review controls', () => {
     const scssSource = readSourceFile('workspace-canvas.scss')
     const layoutSource = readSourceFile('../../views/layouts/layout.svelte')
     const settingsSource = readSourceFile('../../settings.ts')
-    const iconSource = readSourceFile('../../../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts')
+    const iconSource = readSourceFile('../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts')
 
     it('uses the shared icon set and pure dropdown for review actions', () => {
         expectSourceToContain(canvasSource, 'checkMarkIcon,', 'WorkspaceCanvas.ts')

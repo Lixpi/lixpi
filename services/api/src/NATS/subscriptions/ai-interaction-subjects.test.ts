@@ -302,7 +302,7 @@ describe('AI interaction message routing', () => {
         expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledTimes(1)
     })
 
-    it('defers scalar media runs until reasoning selects the requested modality', async () => {
+    it('reserves scalar media slots and their branch lineage before reasoning starts', async () => {
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
             mediaGenerationRequest: undefined,
@@ -316,12 +316,35 @@ describe('AI interaction message routing', () => {
                     mediaModelIds: ['google:imagen3', 'openai:gpt-4o-video'],
                 },
             }),
-            runs: [],
+            runs: [
+                expect.objectContaining({
+                    mediaType: 'image',
+                    modelId: 'google:imagen3',
+                    status: 'pending',
+                }),
+                expect.objectContaining({
+                    mediaType: 'video',
+                    modelId: 'openai:gpt-4o-video',
+                    status: 'pending',
+                }),
+            ],
+            initialLineagePlan: expect.objectContaining({
+                branchForks: [expect.objectContaining({ reasoningModelId: 'openai:gpt-4' })],
+                runAssignments: [
+                    expect.objectContaining({ mediaModelId: 'google:imagen3', mediaType: 'image' }),
+                    expect.objectContaining({ mediaModelId: 'openai:gpt-4o-video', mediaType: 'video' }),
+                ],
+            }),
         }))
         expect(mocks.llmModule.process).toHaveBeenCalledWith(
             'workspace-1:conv-1',
             'openai',
-            expect.objectContaining({ durableMediaRuns: [] }),
+            expect.objectContaining({
+                durableMediaRuns: [
+                    expect.objectContaining({ mediaType: 'image', status: 'pending' }),
+                    expect.objectContaining({ mediaType: 'video', status: 'pending' }),
+                ],
+            }),
         )
     })
 
@@ -363,11 +386,83 @@ describe('AI interaction message routing', () => {
         })
         await flushPromises()
 
-        expect(mocks.nats.publish).toHaveBeenCalledWith(
+        expect(mocks.nats.publish).not.toHaveBeenCalledWith(
             expect.stringContaining(`${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.`),
             { error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED' },
         )
-        expect(mocks.llmModule.process).not.toHaveBeenCalled()
+        expect(mocks.llmModule.process).toHaveBeenCalledOnce()
+        expect(mocks.llmModule.process).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.any(String),
+            expect.objectContaining({
+                enableImageGeneration: false,
+                capabilityReferences: [],
+                capabilityInputs: {},
+                messages: expect.arrayContaining([
+                    expect.objectContaining({
+                        role: 'user',
+                        content: expect.stringContaining('the total timeline duration and the timing precision or gap interval'),
+                    }),
+                ]),
+            }),
+        )
+        expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
+    })
+
+    it('resumes the same Action Timeline turn when the user supplies the requested timing', async () => {
+        const clarification = '17 seconds total with 2 second gaps'
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Make a shot plan for this chase' }] }],
+                        },
+                        {
+                            type: 'aiResponseMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'What duration and timing gap should I use?' }] }],
+                        },
+                        {
+                            type: 'aiUserMessage',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: clarification }] }],
+                        },
+                    ],
+                }],
+            },
+            version: 6,
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            messages: [
+                { role: 'user', content: 'Make a shot plan for this chase' },
+                { role: 'assistant', content: 'What duration and timing gap should I use?' },
+                { role: 'user', content: clarification },
+            ],
+            mediaGenerationRequest: undefined,
+        })
+        await flushPromises()
+
+        expect(mocks.llmModule.process).toHaveBeenCalledWith(
+            'workspace-1:conv-1',
+            'openai',
+            expect.objectContaining({
+                imageModelMetaInfo: null,
+                videoModelMetaInfo: null,
+                enableImageGeneration: false,
+                capabilityInputs: {
+                    'global.action-timeline': {
+                        prompt: `Make a shot plan for this chase\n\nClarification: ${clarification}`,
+                        referenceAssetIds: [],
+                        durationMs: 17000,
+                        precisionMs: 2000,
+                    },
+                },
+            }),
+        )
         expect(mocks.llmModule.processMediaGenerationMatrix).not.toHaveBeenCalled()
     })
 

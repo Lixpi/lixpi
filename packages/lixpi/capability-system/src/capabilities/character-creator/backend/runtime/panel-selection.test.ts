@@ -2,10 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import {
-    buildCharacterPanelCorrectionPrompt,
-    selectCharacterPanelCandidate,
-} from './panel-selection.ts'
+import { selectCharacterPanelCandidate } from './panel-selection.ts'
 
 const candidate = (attempt: number, score: number, failedDimensions: string[] = []) => ({
     attempt,
@@ -25,7 +22,7 @@ const candidate = (attempt: number, score: number, failedDimensions: string[] = 
     },
 })
 
-describe('character panel correction and selection', () => {
+describe('character panel selection', () => {
     it('selects the best valid attempt and records below-threshold warnings', () => {
         expect(selectCharacterPanelCandidate([candidate(1, 0.6), candidate(2, 0.68)])).toMatchObject({
             attempt: 2,
@@ -33,14 +30,13 @@ describe('character panel correction and selection', () => {
         })
     })
 
-    it('corrects only failed dimensions and preserves accepted dimensions', () => {
-        const prompt = buildCharacterPanelCorrectionPrompt({
-            basePrompt: 'Render one front head.',
-            assessment: candidate(1, 0.6, ['facial-identity']).assessment,
-        })
+    it('uses the earliest attempt as the deterministic tie-breaker', () => {
+        const selected = selectCharacterPanelCandidate([
+            candidate(2, 0.9),
+            candidate(1, 0.9),
+        ])
 
-        expect(prompt).toContain('facial-identity: FACE_SHAPE')
-        expect(prompt).not.toContain('framing:')
-        expect(prompt).toContain('Preserve every accepted')
+        expect(selected).toMatchObject({ attempt: 1 })
+        expect(selected).not.toHaveProperty('warning')
     })
 })

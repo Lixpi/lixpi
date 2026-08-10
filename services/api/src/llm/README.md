@@ -104,8 +104,8 @@ The Character Creator runtime reauthorizes every source Asset through its inject
 
 The Sharp compositor reads the owned SVG layout resource, derives a compact grid from the requested shot count, removes near-white outer margins, fits available subjects into their cells, renders no typography or diagnostic decoration, and verifies a 3840x2560 PNG. Capture-only shot providers forward their raw partials to the Character Creator adapter instead of publishing isolated panels as top-level output. The strategy recomposes the full sheet, and the owning `ImageRouter` publishes each composite through transient image publication on the preassigned Asset. `ImagePublisher.complete` settles the final PNG through the ordinary Asset path. The image-generation trace carries the final comparison summary with `automaticRetries: 0`. A cleanup ledger removes every transient source crop and candidate after success, error, or cancellation.
 
-Providers and browser code must never synthesize assignments, marker IDs, or output Asset IDs.
-A lineage-plan canvas write persists branch markers only. Planned media slots remain transient until the first media event attaches each preassigned Asset node through its reference-counted Asset/workspace transaction.
+Providers and browser code must never synthesize assignments, marker IDs, output node IDs, or output Asset IDs.
+Request creation assigns every concrete media run its stable media-run, operation-node, output-node, and Asset IDs and persists the pending image/video node immediately. A lineage-plan canvas write persists branch markers and enriches those existing output nodes with final topology; the first media event does not create them.
 A matrix reasoning child never completes the shared generation request. It may settle only its own skipped branch; the matrix orchestrator publishes the single request-level completion after every reasoning child finishes.
 A reasoning-only matrix has no concrete media assignments, so it creates no pending output Assets or media-lineage canvas markers.
 
@@ -125,7 +125,7 @@ A failed concrete media run is settled independently: the API detaches only that
 
 ## Provenance
 
-`asset-provenance-materializer.ts` projects only the matching reasoning/media run from the settled conversation Asset into a schema-valid, title-free ProseMirror provenance snapshot. It stores the sealed snapshot Blob in `documents.provenance` and updates terminal states under Asset revision. A completed run retries while the rich conversation projection is still settling, then uses a minimal valid terminal projection only after bounded retries are exhausted. Failed/cancelled runs receive the same minimal valid terminal projection when no generated-media atom exists. Deferred reconstruction does not depend on pipeline events that normal cleanup may already have purged.
+`asset-provenance-materializer.ts` projects only the matching reasoning/media run from the settled conversation Asset into a schema-valid, title-free ProseMirror provenance snapshot, embeds that run's terminal recursive `generationProgress` on its generated-media atom, and stores the sealed snapshot Blob in `documents.provenance`. A completed run retries while the rich conversation projection is still settling, then uses a minimal valid terminal projection only after bounded retries are exhausted. Failed/cancelled runs receive the same minimal valid terminal projection and media atom when the conversation projection has none. Deferred reconstruction does not depend on pipeline events that normal cleanup may already have purged.
 
 Request-level failure/cancellation settles every unfinished planned Asset. Assets whose original already settled rely on their per-publisher provenance job/retry.
 

@@ -34,7 +34,7 @@ Explicit ProseMirror media-reference atoms never require text matching. Their au
 - the organization Blob hash for an immutable structured checkpoint;
 - safe reference bindings and unresolved candidate records;
 - user-selected resolutions;
-- per-reasoning/per-media-model run state and operation node IDs;
+- per-reasoning/per-media-model run state with stable media-run, Asset, operation-node, and output-node IDs;
 - provider verification sessions containing hashes and provider/account scope, never provider tokens;
 - a compare-and-swap revision and status timestamps.
 
@@ -46,9 +46,9 @@ Paused requests are never TTL-cancelled. Completed requests release their checkp
 
 Reference selection and native verification use the same request ID and CAS revision. The API reauthorizes every bound Asset on reference resume, refreshes revisions/descriptors/identity, and retains both checkpoint and current forbidden display variants. A user-selected visual branch target is persisted and bypasses another ambiguous VLM decision.
 
-Each run owns an `operationStatus` state node. Initial nodes are anchored to selected media, then rebound to the exact API lineage assignment after branch planning is durable. The state moves through:
+Each run owns an `operationStatus` state node and a stable pending image/video output node created when the request is accepted. The operation points to `outputNodeId`, and branch planning enriches that same output with its exact API lineage assignment. The state moves through:
 
-- `in-progress`, with its node and ownership edge kept state-only while the resolved branch marker renders its progress timeline;
+- `in-progress`, with its operation node kept state-only while the output media node renders its own progress timeline;
 - `action-required` with an anchored candidate picker or native-verification action;
 - `failed` with sanitized provider details, Edit request, and Dismiss.
 

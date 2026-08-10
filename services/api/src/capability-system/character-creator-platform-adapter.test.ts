@@ -106,7 +106,10 @@ describe('Character Creator API platform adapter', () => {
             }],
         })
 
-        expect(registry.createTransient).toHaveBeenCalledWith(expect.stringContaining('run-1:body-front:1'), 'OpenAI')
+        expect(registry.createTransient).toHaveBeenCalledWith(
+            expect.stringContaining(`${plan.capabilityRunId}:${panel.panelId}:1`),
+            'OpenAI',
+        )
         expect(process).toHaveBeenCalledWith(expect.objectContaining({
             aiModelMetaInfo: expect.objectContaining({ modelVersion: 'gpt-image-1.5' }),
             imageSize: '1536x1024',

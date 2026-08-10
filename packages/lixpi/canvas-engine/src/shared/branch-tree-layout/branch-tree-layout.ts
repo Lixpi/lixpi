@@ -22,6 +22,7 @@ import type {
     BranchOriginCanvasNode,
     BranchForkCanvasNode,
     BranchLineCanvasNode,
+    MediaRunLineageAssignment,
     WorkspaceEdge,
 } from '@lixpi/constants'
 import { layoutTree, type TreeLayoutNode } from '../tree-layout/index.ts'
@@ -97,7 +98,17 @@ const DEFAULT_COLLISION_MARGIN = 20
 function isGeneratedMediaBranchMember(node: CanvasNode): node is GeneratedOutputNode {
     return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
         && !node.parentId
-        && Boolean(node.generatedBy?.branchId)
+        && Boolean(
+            node.generatedBy?.branchId
+            || ((node.type === 'image' || node.type === 'video')
+                && node.generationProgress?.lineageAssignment?.branchId)
+        )
+}
+
+function getPendingLineageAssignment(node: GeneratedOutputNode): MediaRunLineageAssignment | undefined {
+    return node.type === 'image' || node.type === 'video'
+        ? node.generationProgress?.lineageAssignment
+        : undefined
 }
 
 function isBranchOriginMember(node: CanvasNode): node is BranchOriginCanvasNode {
@@ -128,11 +139,12 @@ function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanva
 }
 
 function getGeneratedMediaParentCandidates(node: GeneratedOutputNode): Array<string | undefined> {
+    const pendingLineage = getPendingLineageAssignment(node)
     return [
-        node.generatedBy?.parentMediaNodeId,
-        node.generatedBy?.branchOriginNodeId,
-        node.generatedBy?.branchForkNodeId,
-        node.generatedBy?.branchLineNodeId,
+        node.generatedBy?.parentMediaNodeId ?? pendingLineage?.parentMediaNodeId,
+        node.generatedBy?.branchOriginNodeId ?? pendingLineage?.branchOriginNodeId,
+        node.generatedBy?.branchForkNodeId ?? pendingLineage?.branchForkNodeId,
+        node.generatedBy?.branchLineNodeId ?? pendingLineage?.branchLineNodeId,
     ]
 }
 
@@ -213,12 +225,19 @@ export function buildBranchTrees(nodes: CanvasNode[], _edges: WorkspaceEdge[]): 
     const reasoningIndexById = new Map<string, number | undefined>()
     const createdAtById = new Map<string, number>()
     for (const node of members) {
+        const pendingLineage = isGeneratedMediaBranchMember(node) ? getPendingLineageAssignment(node) : undefined
         variantIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.variantIndex : undefined)
-        mediaIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.mediaIndex : undefined)
+        mediaIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node)
+            ? node.generatedBy?.mediaIndex ?? pendingLineage?.mediaIndex
+            : undefined)
         reasoningIndexById.set(node.nodeId, isBranchForkMember(node) || isBranchLineMember(node)
             ? node.reasoningIndex
-            : isGeneratedMediaBranchMember(node) ? node.generatedBy?.reasoningIndex : undefined)
-        createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.createdAt ?? 0 : 0)
+            : isGeneratedMediaBranchMember(node)
+                ? node.generatedBy?.reasoningIndex ?? pendingLineage?.reasoningIndex
+                : undefined)
+        createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node)
+            ? node.generatedBy?.createdAt ?? pendingLineage?.createdAt ?? 0
+            : 0)
     }
     const compareOptionalIndex = (a: number | undefined, b: number | undefined): number => {
         if (a === undefined && b === undefined) return 0
