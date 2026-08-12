@@ -84,6 +84,33 @@ describe('image reference adapters', () => {
         expect(result.omitted).toEqual([expect.objectContaining({ role: 'face-crop', reason: 'reference-budget' })])
     })
 
+    it('keeps all three generated anchors ahead of pose and original evidence', () => {
+        const result = OPENAI_IMAGE_REFERENCE_ADAPTER.adapt({
+            references: [
+                reference('original-source', 1),
+                reference('adjacent-angle', 2),
+                reference('pose-reference', 3),
+                reference('canonical-anchor', 4),
+                reference('opposite-angle', 5),
+            ],
+            capabilities: capabilities({
+                maxReferenceImages: 4,
+                maxIdentityReferenceImages: 3,
+            }),
+            requiresIdentity: true,
+        })
+
+        expect(result.included.map(({ role }) => role)).toEqual([
+            'canonical-anchor',
+            'adjacent-angle',
+            'opposite-angle',
+            'pose-reference',
+        ])
+        expect(result.omitted).toEqual([
+            expect.objectContaining({ role: 'original-source', reason: 'identity-budget' }),
+        ])
+    })
+
     it('rejects Stability identity conditioning before provider work', () => {
         expect(() => STABILITY_IMAGE_REFERENCE_ADAPTER.adapt({
             references: [reference('face-crop', 1)],

@@ -83,6 +83,42 @@ const sanitizeProviderText = (value: unknown): string | undefined => {
     return sanitized ? sanitized.slice(0, 240) : undefined
 }
 
+const readModerationMetadata = (error: unknown): {
+    stage?: MediaGenerationProblem['moderationStage']
+    categories: string[]
+} => {
+    const candidate = error && typeof error === 'object' ? error as Record<string, unknown> : {}
+    const nestedError = candidate.error && typeof candidate.error === 'object'
+        ? candidate.error as Record<string, unknown>
+        : {}
+    const details = [candidate.moderation_details, nestedError.moderation_details]
+        .find(value => value && typeof value === 'object') as Record<string, unknown> | undefined
+    const rawStage = details?.moderation_stage ?? details?.stage
+    const stage = rawStage === 'input' || rawStage === 'output' || rawStage === 'unknown'
+        ? rawStage
+        : undefined
+    const rawCategories = details?.categories ?? candidate.safety_violations ?? nestedError.safety_violations
+    const explicitCategories = Array.isArray(rawCategories)
+        ? rawCategories.filter((value): value is string => typeof value === 'string')
+        : rawCategories && typeof rawCategories === 'object'
+            ? Object.entries(rawCategories as Record<string, unknown>)
+                .filter(([, value]) => value === true)
+                .map(([key]) => key)
+            : []
+    const message = typeof candidate.message === 'string'
+        ? candidate.message
+        : typeof nestedError.message === 'string' ? nestedError.message : ''
+    const legacyMatch = /safety_violations=\[([^\]]+)\]/iu.exec(message)
+    const legacyCategories = legacyMatch?.[1]
+        ?.split(',')
+        .map(value => value.trim().replace(/^['"]|['"]$/gu, ''))
+        .filter(Boolean) ?? []
+    return {
+        ...(stage ? { stage } : {}),
+        categories: [...new Set([...explicitCategories, ...legacyCategories])],
+    }
+}
+
 export const normalizeProviderProblem = ({
     provider,
     error,
@@ -111,6 +147,9 @@ export const normalizeProviderProblem = ({
                     ? 'poll'
                     : context.stage
     const moderation = /moderation|filter|policy|rai|safety/iu.test(evidence)
+    const moderationMetadata: ReturnType<typeof readModerationMetadata> = moderation
+        ? readModerationMetadata(error)
+        : { categories: [] }
     const configuration = /configuration|invalid.*(?:parameter|setting)|not configured|required|unsupported/iu.test(evidence)
     const capacity = /\b429\b|capacity|quota|rate.?limit|resource.?exhausted/iu.test(evidence)
     const output = stage === 'download' || stage === 'persist'
@@ -131,7 +170,11 @@ export const normalizeProviderProblem = ({
                 : capacity ? 'Provider capacity prevented this generation'
                     : output ? 'Provider output could not be used' : 'Provider generation failed',
         detail: moderation
-            ? 'The provider rejected this attempt. Edit the request before submitting another attempt.'
+            ? moderationMetadata.stage === 'output'
+                ? 'The provider blocked the generated result during its output safety check. Edit the request before submitting another attempt.'
+                : moderationMetadata.stage === 'input'
+                    ? 'The provider rejected the request during its input safety check. Edit the request before submitting another attempt.'
+                    : 'The provider rejected this attempt. Edit the request before submitting another attempt.'
             : 'The provider could not complete this attempt. Edit the request before submitting again.',
         category,
         stage,
@@ -141,6 +184,10 @@ export const normalizeProviderProblem = ({
         ...(context.modelId ? { modelId: context.modelId } : {}),
         ...(providerCode ? { providerCode } : {}),
         ...(providerReason ? { providerReason } : {}),
+        ...(moderationMetadata.stage ? { moderationStage: moderationMetadata.stage } : {}),
+        ...(moderationMetadata.categories.length > 0
+            ? { moderationCategories: moderationMetadata.categories }
+            : {}),
         supportCode: uuid(),
         action: 'edit-request',
     }

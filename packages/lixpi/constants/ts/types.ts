@@ -728,6 +728,8 @@ export type MediaGenerationProblem = {
     modelId?: AiModelId
     providerCode?: string
     providerReason?: string
+    moderationStage?: 'input' | 'output' | 'unknown'
+    moderationCategories?: string[]
     supportCode: string
     action: 'resolve-reference' | 'verify-with-provider' | 'edit-request' | 'none'
 }
@@ -1277,6 +1279,11 @@ export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     mediaRunId?: string
     outputNodeId?: string
     plannedMediaType?: 'image' | 'video'
+    /**
+     * Preserves the failed output's branch identity after its provisional media
+     * reservation is replaced by this visible error leaf.
+     */
+    lineageAssignment?: MediaRunLineageAssignment
     problem?: MediaGenerationProblem
     candidateAssetIds?: string[]
     unresolvedBindingId?: string

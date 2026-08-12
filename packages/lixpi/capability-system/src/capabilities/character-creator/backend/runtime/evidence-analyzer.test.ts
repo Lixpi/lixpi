@@ -98,6 +98,8 @@ describe('character evidence analysis', () => {
             analyzer: {
                 analyze: async () => ({
                     medium: 'photograph',
+                    promptDirectives: ['Change the coat to blue.'],
+                    promptChangedFeatures: ['coat color'],
                     facts: [{
                         feature: 'coat color', value: 'red', visibility: 'observed', sourceAssetId: 'asset-front',
                         targetAngles: ['front'], confidence: 1,
@@ -109,8 +111,9 @@ describe('character evidence analysis', () => {
         expect(selectCharacterEvidenceFacts({
             evidence,
             targetAngle: 'front',
-            promptChangedFeatures: ['coat color'],
+            promptChangedFeatures: evidence.promptChangedFeatures,
         })).toEqual([])
+        expect(evidence.promptDirectives).toEqual(['Change the coat to blue.'])
     })
 
     it('rejects observed evidence outside the authorized source bounds', async () => {

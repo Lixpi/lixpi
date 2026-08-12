@@ -41,7 +41,7 @@ export function registerCharacterCreatorActions(
         execute: (input, context) => buildPlanOutput(input, context),
         classifyRetry: () => 'terminal',
         summarizeInput: input => `Building the character-shot graph from ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
-        summarizeOutput: output => `Render plan ready: ${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)} shot(s). The neutral-front identity portrait runs first and releases every dependent shot after it succeeds; one provider attempt per shot.`,
+        summarizeOutput: output => `Render plan ready: ${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)} shot(s). The portrait, front full-body, and back full-body anchors run sequentially before optional shots are released; one provider attempt per shot.`,
     })
 }
 

@@ -10,8 +10,8 @@ import { easeClickToggleFeedback, easePupOut } from '../../animation/index.ts'
 // from the very same chevrons the nested sections use, so the region control
 // reads as the sum of its children rather than as a separate icon family.
 //
-// Collapsed: both chevrons point inwards (down on top, up below).
-// Expanded: both chevrons point outwards.
+// Collapsed content exposes the expand action, so both chevrons point outwards.
+// Expanded content exposes the collapse action, so both chevrons point inwards.
 // The two chevrons never flip in place — they swap slots, travelling past each
 // other through the centre dot, which pinches as they pass.
 
@@ -24,11 +24,10 @@ const CENTER = VIEW_BOX_SIZE / 2
 // 19.2/24 of the 15px host box is exactly 12px — the same on-screen size as the
 // per-section `.progress-timeline-chevron` glyphs this icon sits beside.
 const CHEVRON_SIZE = 19.2
-// Collapsed, the chevron tips point at the dot and crowd it at a shared
-// offset, so the collapsed slots sit further out for equal breathing room;
-// expanded, the flat backs face the dot and can sit closer.
-const COLLAPSED_SLOT_OFFSET = 7.25
-const EXPANDED_SLOT_OFFSET = 5.5
+// Inward-facing chevron tips crowd the dot, so those slots sit further out for
+// equal breathing room; outward-facing flat backs can sit closer.
+const INWARD_SLOT_OFFSET = 7.25
+const OUTWARD_SLOT_OFFSET = 5.5
 const DOT_RADIUS = 1.35
 
 const collapseExpandIconSpec: AnimatedIconSpec<CollapseExpandIconState> = {
@@ -45,8 +44,8 @@ const collapseExpandIconSpec: AnimatedIconSpec<CollapseExpandIconState> = {
             shape: { kind: 'icon', markup: chevronUpIcon, size: CHEVRON_SIZE, cx: CENTER, cy: CENTER },
             origin: { x: CENTER, y: CENTER },
             poses: {
-                collapsed: { y: COLLAPSED_SLOT_OFFSET },
-                expanded: { y: -EXPANDED_SLOT_OFFSET },
+                collapsed: { y: -OUTWARD_SLOT_OFFSET },
+                expanded: { y: INWARD_SLOT_OFFSET },
             },
             // Full travel, no fade — the arrow has to be visible the whole way
             // across so the swap reads as motion rather than as a cross-fade.
@@ -58,8 +57,8 @@ const collapseExpandIconSpec: AnimatedIconSpec<CollapseExpandIconState> = {
             shape: { kind: 'icon', markup: chevronDownIcon, size: CHEVRON_SIZE, cx: CENTER, cy: CENTER },
             origin: { x: CENTER, y: CENTER },
             poses: {
-                collapsed: { y: -COLLAPSED_SLOT_OFFSET },
-                expanded: { y: EXPANDED_SLOT_OFFSET },
+                collapsed: { y: OUTWARD_SLOT_OFFSET },
+                expanded: { y: -INWARD_SLOT_OFFSET },
             },
             // Staggered against its twin so the two arrows are distinguishable
             // as they pass each other instead of overlapping into one glyph.

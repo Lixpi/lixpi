@@ -94,9 +94,9 @@ Rendering modules can consume `shared` plans, but shared/backend modules must ne
 
 - `shared/geometry`: minimal point and rectangle types shared by collision and canvas-node adapters. Keep executable algorithms in the domain modules that own them.
 - `shared/collision`: geometry-agnostic rectangle collision resolver.
-- `shared/canvas-node`: adapters that apply shared collision output to canvas-node groups.
+- `shared/canvas-node`: adapters that apply shared collision output to canvas-node groups, plus the shared centered pre-frame media geometry used by API and browser layout. The pre-frame layout envelope preserves final media width while using the compact circle height, so mixed pending/resolved siblings remain in one horizontal column. Terminal generated-media progress always overrides the legacy `pending-before-first-frame` phase so stale snapshots cannot resurrect pending geometry.
 - `shared/tree-layout`: geometry-agnostic tidy-tree layout for abstract node boxes.
-- `shared/branch-tree-layout`: deterministic branch topology plus prompt-aware marker dimensions that reserve the browser's pending-control chrome as well as visible text.
+- `shared/branch-tree-layout`: deterministic branch topology plus prompt-aware marker dimensions and resolved-media collision envelopes. The media envelope reserves screen-fixed title chrome above the pixels and action/model chrome below them at their maximum bounded-zoom world footprint; pending nodes use the compact pre-frame height with stable final media width. Failed media-operation cards retain the replaced output's lineage assignment and participate as normal leaves, so later sibling completion or collision resolution cannot detach the error from its connector or unbalance a mixed-result tree.
 - `shared/zoom-scaling`: deterministic bounded zoom-scaling helpers for canvas chrome.
 - `frontend/animation`: shared easing curves used by Canvas, PIXI, and SVG transitions.
 - `frontend/connectors`: frontend-only connector path helpers. These depend on `@xyflow/system`, emit SVG path strings, and are not backend-safe shared geometry.

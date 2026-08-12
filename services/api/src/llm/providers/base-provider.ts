@@ -385,6 +385,10 @@ export abstract class BaseProvider {
             imageModelMetaInfo: requestData.imageModelMetaInfo,
             imageModelVersion: requestData.imageModelMetaInfo?.modelVersion,
             imageProviderName: requestData.imageModelMetaInfo?.provider,
+            generatedImagePrompt: requestData.generatedImagePrompt
+                ?? (requestData.capabilityMediaExecutionPlan
+                    ? requestData.providerSafeMediaIntent?.safePrompt
+                    : undefined),
             imagePromptRetryCount: 0,
             imageGenerationReferences,
             resolvedImageGenerationReferences,
@@ -415,6 +419,7 @@ export abstract class BaseProvider {
             videoAspectRatio: characterCreatorSelected ? undefined : requestData.videoAspectRatio,
             videoResolution: characterCreatorSelected ? undefined : requestData.videoResolution,
             videoDurationSeconds: characterCreatorSelected ? undefined : requestData.videoDurationSeconds,
+            generatedVideoPrompt: characterCreatorSelected ? undefined : requestData.generatedVideoPrompt,
             videoFirstFrameImage: characterCreatorSelected ? undefined : requestData.videoFirstFrameImage,
             videoReferenceImages: characterCreatorSelected ? undefined : requestData.videoReferenceImages,
             videoSourceForExtension: characterCreatorSelected ? undefined : requestData.videoSourceForExtension,
@@ -451,6 +456,13 @@ export abstract class BaseProvider {
                 err(`Circuit breaker / abort fired for ${this.instanceKey}: ${message}`)
             } else {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
+            }
+            if (initialState.generationRun?.requestKind !== 'media-generation-matrix') {
+                try {
+                    await this.failUnfinishedDurableRuns(initialState)
+                } catch (settlementError) {
+                    err(`[BaseProvider] Failed to settle unfinished durable runs for ${this.instanceKey}:`, settlementError)
+                }
             }
             this.streamPublisher.error(initialState.durableGenerationRequestId
                 ? 'The provider could not complete this generation attempt.'
@@ -768,7 +780,9 @@ export abstract class BaseProvider {
 
     protected shouldGenerateImage(state: ProviderState): 'generate_image' | 'skip' {
         if (requiredCapabilityProducedOutput(state)) return 'skip'
-        return state.generatedImagePrompt ? 'generate_image' : 'skip'
+        return state.generatedImagePrompt || state.capabilityMediaExecutionPlan
+            ? 'generate_image'
+            : 'skip'
     }
 
     // Post-stream routing normally gives video precedence when a model emits
@@ -782,7 +796,7 @@ export abstract class BaseProvider {
             }
             return 'skip'
         }
-        if (state.capabilityUsageMode === 'character-creator' && state.generatedImagePrompt) return 'generate_image'
+        if (state.capabilityMediaExecutionPlan && state.imageModelVersion) return 'generate_image'
         if (state.generatedVideoPrompt) return 'generate_video'
         if (state.generatedImagePrompt) return 'generate_image'
         // A lineage plan was already announced to clients, but no media tool
@@ -795,6 +809,7 @@ export abstract class BaseProvider {
     }
 
     protected async validateImagePromptNode(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (state.capabilityMediaExecutionPlan) return {}
         const prompt = state.generatedImagePrompt
         if (!prompt) return {}
         const maxChars = getImagePromptMaxChars(state.imageModelMetaInfo, state.imageProviderName)
@@ -829,7 +844,9 @@ export abstract class BaseProvider {
             }
         }
 
-        this.assertProviderMediaPayload(state, state.generatedImagePrompt)
+        if (!state.capabilityMediaExecutionPlan) {
+            this.assertProviderMediaPayload(state, state.generatedImagePrompt)
+        }
         const imageResult = await this.deps.runImageRouter(state, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
@@ -907,7 +924,7 @@ export abstract class BaseProvider {
         if (state.generatedVideoPrompt) {
             return this.executeVideoFanout(state)
         }
-        if (state.generatedImagePrompt) {
+        if (state.generatedImagePrompt || state.capabilityMediaExecutionPlan) {
             return this.executeImageFanout(state)
         }
         return {}
@@ -976,7 +993,7 @@ export abstract class BaseProvider {
             if (replayPrompt) fanoutState.generatedImagePrompt = replayPrompt.finalPrompt
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
             fanoutState = { ...fanoutState, ...promptValidationPatch }
-            if (fanoutState.error || !fanoutState.generatedImagePrompt) {
+            if (fanoutState.error || (!fanoutState.generatedImagePrompt && !fanoutState.capabilityMediaExecutionPlan)) {
                 const error = fanoutState.error ?? 'Image prompt validation failed for selected image model.'
                 this.streamPublisher?.imageGenerationError(error, generationRun)
                 return {
@@ -1035,6 +1052,7 @@ export abstract class BaseProvider {
     }
 
     private async validateImageFanoutPrompt(state: ProviderState): Promise<Partial<ProviderState>> {
+        if (state.capabilityMediaExecutionPlan) return {}
         const prompt = state.generatedImagePrompt
         if (!prompt) return {}
         const maxChars = getImagePromptMaxChars(state.imageModelMetaInfo, state.imageProviderName)
@@ -1208,12 +1226,28 @@ export abstract class BaseProvider {
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {
+        let terminalSweepError: unknown
         if (_state.generationRun?.requestKind !== 'media-generation-matrix') {
+            try {
+                await this.failUnfinishedDurableRuns(_state)
+            } catch (error) {
+                terminalSweepError = error
+                err(`[BaseProvider] Failed to settle unfinished durable runs for ${this.instanceKey}:`, error)
+            }
             this.streamPublisher?.completeKnownMediaGenerationRequests()
         }
         await this.streamPublisher?.drainPendingWrites()
         await this.streamPublisher?.finishProseMirrorStream()
+        if (terminalSweepError) throw terminalSweepError
         return {}
+    }
+
+    private async failUnfinishedDurableRuns(state: ProviderState): Promise<void> {
+        if (!state.durableGenerationRequestId) return
+        await new MediaGenerationRequestService().failUnfinishedRuns({
+            generationRequestId: state.durableGenerationRequestId,
+            workspaceId: state.workspaceId,
+        })
     }
 
     // -- Helpers exposed to subclasses --

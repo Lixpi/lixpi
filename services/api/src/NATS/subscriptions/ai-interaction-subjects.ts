@@ -65,7 +65,10 @@ import AssetModel from '../../models/asset.ts'
 import BlobModel from '../../models/blob.ts'
 import { ensureAiInteractionEventRelay } from '../../services/ai-interaction-event-relay.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
-import { buildCandidateTranscriptContext } from '../../llm/graph/media-branch-snapshot.ts'
+import {
+    buildCandidateTranscriptContext,
+    deduplicateMediaBranchSnapshotCandidatesByAsset,
+} from '../../llm/graph/media-branch-snapshot.ts'
 import {
     addPromptReferenceAudioToLatestUserMessage,
     addPromptReferenceMediaToLatestUserMessage,
@@ -486,7 +489,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
         }
     }))
     const promptText = typeof snapshot.promptText === 'string' ? snapshot.promptText : ''
-    return {
+    return deduplicateMediaBranchSnapshotCandidatesByAsset({
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
         regionNodeId: snapshot.regionNodeId,
@@ -498,7 +501,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
         promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
         candidates,
         transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
-    }
+    })
 }
 
 type AuthorizedWorkspaceContextCanvasNode = Extract<CanvasNode, {
@@ -605,7 +608,7 @@ const mergePromptReferenceMediaCandidates = ({
     ])]
     const activeTargetCandidateId = snapshot?.activeTargetCandidateId
     const resolvedTargetCandidateId = snapshot?.resolvedTargetCandidateId
-    return {
+    return deduplicateMediaBranchSnapshotCandidatesByAsset({
         resolverVersion: 'image-branch-vlm-v1',
         conversationAssetId,
         regionNodeId: snapshot?.regionNodeId ?? `standalone:${conversationAssetId}`,
@@ -616,7 +619,7 @@ const mergePromptReferenceMediaCandidates = ({
         promptFingerprint: createHash('sha256').update(promptText).digest('hex'),
         candidates: mergedCandidates,
         transcriptContext: buildCandidateTranscriptContext(mergedCandidates, promptText, activeTargetCandidateId),
-    }
+    })
 }
 
 export const aiInteractionSubjects = [
@@ -1038,7 +1041,13 @@ export const aiInteractionSubjects = [
             let initialMediaCanvasGeometry: CanvasGeometryUpdate | undefined
             if (hasMediaModelSelection) {
                 const referencedMedia = submittedPromptReferences.filter(reference => reference.referenceType === 'media')
+                const contextMediaReferences = resolvedWorkspaceContextSnapshot?.nodes.flatMap(node => (
+                    (node.type === 'image' || node.type === 'video') && node.assetId
+                        ? [{ assetId: node.assetId, nodeId: node.nodeId }]
+                        : []
+                )) ?? []
                 const selectedMediaReferences = [...new Map([
+                    ...contextMediaReferences.map(reference => [reference.assetId, reference] as const),
                     ...referencedMedia.map(reference => [reference.assetId, {
                         assetId: reference.assetId,
                         nodeId: reference.nodeId,
@@ -1303,9 +1312,13 @@ export const aiInteractionSubjects = [
             }
             const pauseForBranchAmbiguity = async (error: unknown): Promise<boolean> => {
                 if (!(error instanceof MediaBranchAmbiguityError) || !durableMediaRequest) return false
+                const boundAssetIds = new Set(durableMediaRequest.bindings.map(binding => binding.assetId))
+                const candidateAssetIds = [...new Set(error.candidateAssetIds)]
+                    .filter(assetId => boundAssetIds.has(assetId))
+                if (candidateAssetIds.length < 2) return false
                 durableMediaRequest = await new MediaGenerationRequestService().pauseForBranchResolution({
                     request: durableMediaRequest,
-                    candidateAssetIds: error.candidateAssetIds,
+                    candidateAssetIds,
                     userId,
                 })
                 await AssetModel.updateConversationStateSystem({

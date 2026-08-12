@@ -135,6 +135,17 @@ const eventFor = (request: MediaGenerationRequest, status: MediaGenerationReques
     createdAt: request.updatedAt,
 })
 
+const getReferenceResolutionAction = (
+    unresolvedBindings: readonly UnresolvedReferenceBinding[],
+): { bindingId: string; candidateAssetIds: string[] } | undefined => {
+    const unresolved = unresolvedBindings[0]
+    if (!unresolved) return undefined
+    return {
+        bindingId: unresolved.bindingId,
+        candidateAssetIds: [...new Set(unresolved.candidates.map(candidate => candidate.assetId))],
+    }
+}
+
 const mediaProgressPhaseOrder: MediaGenerationRunProgress['phase'][] = [
     'preparing',
     'rendering',
@@ -192,6 +203,18 @@ function mergeMediaProgressItems(
         }),
         ...current.filter(item => !incomingIds.has(item.id)),
     ]
+}
+
+function deriveRequestStatus(runs: readonly MediaGenerationRun[]): MediaGenerationRequestStatus {
+    const allTerminal = runs.every(run => ['completed', 'failed', 'cancelled'].includes(run.status))
+    const completedCount = runs.filter(run => run.status === 'completed').length
+    const failedCount = runs.filter(run => run.status === 'failed').length
+    const hasActionRequired = runs.some(run => run.status === 'awaiting-provider-verification')
+    return allTerminal
+        ? failedCount === 0
+            ? 'completed'
+            : completedCount > 0 ? 'completed-with-errors' : 'failed'
+        : hasActionRequired ? 'action-required' : 'running'
 }
 
 function mergeMediaGenerationRunProgress(
@@ -325,6 +348,7 @@ export class MediaGenerationRequestService {
             updatedAt: now,
             statusUpdatedAt: now,
         }
+        const referenceAction = getReferenceResolutionAction(unresolvedBindings)
         let requestCreated = false
         try {
             await MediaGenerationRequestModel.create(request)
@@ -350,15 +374,14 @@ export class MediaGenerationRequestService {
                 lineageCanvasGeometry,
             ])
             await onCanvasGeometryProjected?.(canvasGeometry)
-            if (unresolvedBindings.length > 0 && runs[0]) {
-                const unresolved = unresolvedBindings[0]!
+            if (referenceAction && runs[0]) {
                 await updateMediaGenerationOperationNode({
                     workspaceId,
                     operationNodeId: runs[0].operationNodeId,
                     status: 'action-required',
                     message: 'Choose which attached Asset the prompt refers to.',
-                    candidateAssetIds: [...new Set(unresolvedBindings.flatMap(binding => binding.candidates.map(candidate => candidate.assetId)))],
-                    unresolvedBindingId: unresolved.bindingId,
+                    candidateAssetIds: referenceAction.candidateAssetIds,
+                    unresolvedBindingId: referenceAction.bindingId,
                     requestRevision: request.revision,
                 })
             }
@@ -368,7 +391,7 @@ export class MediaGenerationRequestService {
                 event: eventFor(
                     request,
                     unresolvedBindings.length > 0 ? 'MEDIA_GENERATION_ACTION_REQUIRED' : 'MEDIA_GENERATION_REQUEST_STATUS',
-                    { status },
+                    { status, ...referenceAction },
                 ),
             })
             return request
@@ -550,22 +573,22 @@ export class MediaGenerationRequestService {
             statusUpdatedAt: now,
         }
         await MediaGenerationRequestModel.transition({ request: next, expectedRevision: authorized.revision })
+        const pendingAction = getReferenceResolutionAction(remaining)
         const operationNode = next.runs[0]
         if (operationNode) {
-            const pending = remaining[0]
             await updateMediaGenerationOperationNode({
                 workspaceId,
                 operationNodeId: operationNode.operationNodeId,
-                status: pending ? 'action-required' : 'in-progress',
-                message: pending
+                status: pendingAction ? 'action-required' : 'in-progress',
+                message: pendingAction
                     ? 'Choose which attached Asset the prompt refers to.'
                     : 'Resuming the media request.',
-                ...(pending ? {
-                    candidateAssetIds: pending.candidates.map(candidate => candidate.assetId),
-                    unresolvedBindingId: pending.bindingId,
+                ...(pendingAction ? {
+                    candidateAssetIds: pendingAction.candidateAssetIds,
+                    unresolvedBindingId: pendingAction.bindingId,
                 } : {}),
                 requestRevision: next.revision,
-                clearAction: !pending,
+                clearAction: !pendingAction,
             })
         }
         await this.events().append({
@@ -573,8 +596,9 @@ export class MediaGenerationRequestService {
             workspaceId,
             event: eventFor(next, remaining.length > 0 ? 'MEDIA_GENERATION_ACTION_REQUIRED' : 'MEDIA_GENERATION_REQUEST_STATUS', {
                 status: next.status,
-                bindingId,
-                assetId,
+                ...pendingAction,
+                resolvedBindingId: bindingId,
+                resolvedAssetId: assetId,
             }),
         })
         return next
@@ -588,8 +612,16 @@ export class MediaGenerationRequestService {
     }): Promise<MediaGenerationRequest> {
         const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
         if ('error' in authorized) throw new Error(authorized.error)
+        if (['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)) {
+            await removeMediaGenerationOperationNodes({
+                workspaceId,
+                generationRequestId,
+                terminalStatus: authorized.status === 'cancelled' ? 'cancelled' : 'completed',
+                discardUnboundOutputNodes: true,
+            })
+            return authorized
+        }
         if (authorized.revision !== requestRevision) throw new Error('STALE_MEDIA_REQUEST_REVISION')
-        if (['completed', 'cancelled'].includes(authorized.status)) throw new Error('MEDIA_REQUEST_ALREADY_TERMINAL')
         const cancelledRuns = authorized.runs.filter(run => (
             !['completed', 'failed', 'cancelled'].includes(run.status)
         ))
@@ -765,6 +797,91 @@ export class MediaGenerationRequestService {
         })
     }
 
+    async failUnfinishedRuns({
+        generationRequestId,
+        workspaceId,
+        detail,
+    }: {
+        generationRequestId: string
+        workspaceId: string
+        detail?: string
+    }): Promise<MediaGenerationRequest | undefined> {
+        const initialRequest = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
+        if (!initialRequest) return undefined
+        if (['awaiting-reference-resolution', 'action-required', 'cancelled'].includes(initialRequest.status)) {
+            return initialRequest
+        }
+        const unfinishedRunIds = initialRequest.runs
+            .filter(run => run.status === 'pending' || run.status === 'running')
+            .map(run => run.generationRun)
+        let latestRequest = initialRequest
+
+        for (const generationRun of unfinishedRunIds) {
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+                const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
+                if (!request) return undefined
+                if (['awaiting-reference-resolution', 'action-required', 'cancelled'].includes(request.status)) {
+                    return request
+                }
+                const targetRun = request.runs.find(run => run.generationRun === generationRun)
+                if (!targetRun || (targetRun.status !== 'pending' && targetRun.status !== 'running')) {
+                    latestRequest = request
+                    break
+                }
+
+                const now = Date.now()
+                const problemDetail = detail ?? (targetRun.status === 'pending'
+                    ? 'The reasoning model did not produce the required media invocation, so this planned media run did not start.'
+                    : 'The generation workflow ended before this provider run reached a terminal result.')
+                const problem: MediaGenerationProblem = {
+                    problemVersion: '1',
+                    type: targetRun.status === 'pending'
+                        ? 'urn:lixpi:media-problem:media-invocation-missing'
+                        : 'urn:lixpi:media-problem:media-run-unsettled',
+                    title: targetRun.status === 'pending'
+                        ? 'Media generation did not start'
+                        : 'Media generation did not complete',
+                    detail: problemDetail,
+                    category: targetRun.status === 'pending' ? 'provider-output' : 'internal',
+                    stage: targetRun.status === 'pending' ? 'preflight' : 'submit',
+                    generationRequestId,
+                    generationRun,
+                    supportCode: uuid(),
+                    action: 'none',
+                }
+                const runs = request.runs.map(run => run.generationRun === generationRun ? {
+                    ...run,
+                    status: 'failed' as const,
+                    problem,
+                    completedAt: now,
+                    progress: settleMediaGenerationRunProgress(run.progress, 'failed', problemDetail),
+                } : run)
+                const status = deriveRequestStatus(runs)
+                const next: MediaGenerationRequest = {
+                    ...request,
+                    status,
+                    runs,
+                    revision: request.revision + 1,
+                    updatedAt: now,
+                    statusUpdatedAt: request.status === status ? request.statusUpdatedAt : now,
+                }
+                try {
+                    await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
+                } catch (error) {
+                    if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                    throw error
+                }
+                await this.reconcileRunProjection({
+                    request: next,
+                    run: runs.find(run => run.generationRun === generationRun)!,
+                })
+                latestRequest = next
+                break
+            }
+        }
+        return latestRequest
+    }
+
     async recordRunStatus({
         generationRequestId,
         workspaceId,
@@ -815,15 +932,7 @@ export class MediaGenerationRequestService {
                     ...(problem ? { problem: { ...problem, generationRun: candidate.generationRun } } : {}),
                 }
             })
-            const allTerminal = runs.every(candidate => ['completed', 'failed', 'cancelled'].includes(candidate.status))
-            const completedCount = runs.filter(candidate => candidate.status === 'completed').length
-            const failedCount = runs.filter(candidate => candidate.status === 'failed').length
-            const hasActionRequired = runs.some(candidate => candidate.status === 'awaiting-provider-verification')
-            const requestStatus: MediaGenerationRequestStatus = allTerminal
-                ? failedCount === 0
-                    ? 'completed'
-                    : completedCount > 0 ? 'completed-with-errors' : 'failed'
-                : hasActionRequired ? 'action-required' : 'running'
+            const requestStatus = deriveRequestStatus(runs)
             const next: MediaGenerationRequest = {
                 ...request,
                 status: requestStatus,

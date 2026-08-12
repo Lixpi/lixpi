@@ -16,6 +16,7 @@ import {
     aiGeneratedImageNodeType,
     aiGeneratedVideoNodeType,
     aiLineageEventNodeType,
+    aiMediaGenerationProgressNodeType,
     aiReasoningSectionNodeType,
     aiResponseMessageNodeType,
     aiUserMessageNodeType,
@@ -35,6 +36,10 @@ import { aiUserMessageNodeView, type AiUserMessageContextPreviewRenderer } from 
 import { aiCollapsibleBlockNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import { aiReasoningSectionNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
 import { aiLineageEventNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
+import {
+    aiMediaGenerationProgressNodeView,
+    type AiMediaGenerationProgressRenderer,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiMediaGenerationProgressNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import type {
@@ -94,6 +99,7 @@ export type AiChatThreadRenderContext = {
     readOnly?: boolean
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
     contextPreview?: AiUserMessageContextPreviewRenderer
+    mediaGenerationProgress?: AiMediaGenerationProgressRenderer
 }
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
@@ -2843,6 +2849,8 @@ class AiChatThreadPluginClass {
                         aiReasoningSectionNodeView(node),
                     [aiLineageEventNodeType]: (node: ProseMirrorNode) =>
                         aiLineageEventNodeView(node),
+                    [aiMediaGenerationProgressNodeType]: (node: ProseMirrorNode) =>
+                        aiMediaGenerationProgressNodeView(node, this.renderContext.mediaGenerationProgress),
                     [aiGeneratedVideoNodeType]: (node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) =>
                         aiGeneratedVideoNodeView(node, view, getPos),
                     // Note: aiGeneratedImage is handled by imageSelectionPlugin for bubble menu integration

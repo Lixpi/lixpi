@@ -48,11 +48,13 @@
                                 "items": {
                                     "type": "object",
                                     "additionalProperties": false,
-                                    "required": ["bindingKey", "sourceNodeId", "required"],
+                                    "required": ["bindingKey", "sourceNodeId", "required", "referenceRole", "fileName"],
                                     "properties": {
                                         "bindingKey": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
                                         "sourceNodeId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-                                        "required": { "type": "boolean" }
+                                        "required": { "type": "boolean" },
+                                        "referenceRole": { "enum": ["canonical-anchor", "adjacent-angle", "opposite-angle"] },
+                                        "fileName": { "type": "string", "pattern": "^GENERATED_[A-Z0-9_]+\\.png$" }
                                     }
                                 }
                             },

@@ -1,6 +1,9 @@
+import { readFile } from 'node:fs/promises'
+
 import { describe, expect, it } from 'vitest'
 
 import { CapabilityActionRegistry } from '../../../backend/capability-action-registry.ts'
+import { validateJsonSchemaValue } from '../../../shared/capability-json-schema.ts'
 import { registerCharacterCreatorActions } from './character-creator-actions.ts'
 
 function executionContext() {
@@ -66,6 +69,22 @@ describe('Character Creator actions', () => {
             semanticRetryLimit: 0,
         })
         expect(output.capabilityMediaExecutionPlan.panels).toHaveLength(3)
+    })
+
+    it('builds a plan accepted by the public Tool output schema', async () => {
+        const registry = new CapabilityActionRegistry()
+        registerCharacterCreatorActions(registry)
+        const schema = JSON.parse(await readFile(
+            new URL('./resources/character-creator-output.schema.json', import.meta.url),
+            'utf8',
+        )) as unknown
+
+        const output = await registry.get('character.build-render-plan').execute({
+            prompt: 'Desert courier in four shots',
+            referenceAssetIds: ['asset-1'],
+        }, executionContext())
+
+        expect(validateJsonSchemaValue(schema, output)).toEqual({ valid: true })
     })
 
     it('rejects more than eight source Assets', () => {

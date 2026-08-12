@@ -400,6 +400,8 @@ export class OpenAIProvider extends BaseProvider {
                                 promptLen: imageCall.prompt.length,
                                 referenceImagesExtracted: refs.length,
                             }, null, 0)}`)
+                        } else if (args.hasImageModel && args.state.capabilityMediaExecutionPlan) {
+                            info(`[OpenAI:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${args.modelVersion})`)
                         } else if (args.hasImageModel && args.hasVideoModel) {
                             warn(`[OpenAI:${this.instanceKey}] did not emit generate_image or generate_video (model=${args.modelVersion})`)
                         } else if (args.hasImageModel) {

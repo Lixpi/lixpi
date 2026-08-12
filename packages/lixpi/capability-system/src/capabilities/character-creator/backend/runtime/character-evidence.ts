@@ -31,6 +31,8 @@ export type CharacterSourceCoverage = {
 export type CharacterEvidenceProfile = {
     medium: CharacterSourceMedium
     facts: CharacterEvidenceFact[]
+    promptDirectives: string[]
+    promptChangedFeatures: string[]
     palette: string[]
     costumeNotes: string[]
     materialNotes: string[]
@@ -47,6 +49,8 @@ export function emptyCharacterEvidenceProfile(): CharacterEvidenceProfile {
     return {
         medium: 'unknown',
         facts: [],
+        promptDirectives: [],
+        promptChangedFeatures: [],
         palette: [],
         costumeNotes: [],
         materialNotes: [],

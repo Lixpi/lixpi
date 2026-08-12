@@ -393,6 +393,35 @@ describe('BaseProvider request validation', () => {
         ])
     })
 
+    it('preserves the shared preflight Capability plan and image prompt for a reasoning child', async () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const invoke = vi.fn(async (initialState: ProviderState) => initialState)
+        ;(provider as any).app = { invoke }
+        const plan = { kind: 'character-sheet', capabilityRunId: 'character-run-1' } as any
+
+        await provider.process({
+            organizationId: 'organization-1',
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            imageModelMetaInfo: makeImageModel('gemini-2.5-flash-image'),
+            messages: [{ role: 'user', content: 'Create a character sheet.' }],
+            generatedImagePrompt: 'Create a character sheet.',
+            capabilityMediaExecutionPlan: plan,
+        })
+
+        expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
+            generatedImagePrompt: 'Create a character sheet.',
+            capabilityMediaExecutionPlan: plan,
+        }), expect.anything())
+    })
+
     it('denies metrics admission before resolving or persisting media lineage', async () => {
         const nats = makeFakeNats()
         const metricsCheck = vi.fn().mockResolvedValue({ approved: false, reason: 'metrics_unreachable' })
@@ -501,6 +530,22 @@ describe('BaseProvider routing', () => {
             .toBe('generate_video')
         expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint' } as any)).toBe('generate_image')
         expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+    })
+
+    it('routes a required Capability media plan to image generation without a model tool call', () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const state = {
+            capabilityMediaExecutionPlan: { kind: 'character-sheet' },
+            imageModelVersion: 'gpt-image-2',
+        } as ProviderState
+
+        expect((provider as any).routeAfterStream(state)).toBe('generate_image')
+        expect((provider as any).shouldGenerateImage(state)).toBe('generate_image')
     })
 
     it('suppresses duplicate provider generation after a required Capability produced an output Asset', async () => {
@@ -854,6 +899,27 @@ describe('BaseProvider fanout', () => {
         expect(runVideoRouter).toHaveBeenCalledTimes(2)
         const videoErrorEvents = nats.published.filter((item) => item.payload.content.status === STREAM_STATUS.ERROR)
         expect(videoErrorEvents).toHaveLength(0)
+    })
+
+    it('fans out a typed Capability media plan when the reasoning model emitted no image prompt', async () => {
+        const runImageRouter = vi.fn(async () => ({ generatedImages: ['character-sheet'] }))
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter,
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        const result = await provider.runImageGeneration(createFanoutState({
+            generatedImagePrompt: undefined,
+            generatedVideoPrompt: undefined,
+            capabilityMediaExecutionPlan: { kind: 'character-sheet' } as any,
+        }))
+
+        expect(runImageRouter).toHaveBeenCalledTimes(2)
+        expect(result.generatedImages).toEqual(['character-sheet', 'character-sheet'])
     })
 
     it('returns an aggregated error when every media fanout attempt fails', async () => {

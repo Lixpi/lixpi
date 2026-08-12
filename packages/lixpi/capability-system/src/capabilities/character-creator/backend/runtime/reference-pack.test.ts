@@ -42,6 +42,8 @@ const makeStore = (): CharacterTransientMediaStorePort => {
 
 const evidence = (): CharacterEvidenceProfile => ({
     medium: 'illustration',
+    promptDirectives: [],
+    promptChangedFeatures: [],
     facts: [
         {
             feature: 'face', value: 'clear front face', visibility: 'observed', sourceAssetId: 'asset-front',

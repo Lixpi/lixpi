@@ -1,16 +1,18 @@
 'use strict'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
+import {
+    createDefaultMediaGenerationRunProgress,
+    mediaGenerationLayoutSettings,
+    type CanvasNode,
+    type CanvasState,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
-import { createDefaultMediaGenerationRunProgress } from '@lixpi/constants'
 import {
     estimateBranchMarkerDimensions,
+    getGeneratedOutputChromeCollisionInsets,
     getPendingGeneratedMediaNodeId,
 } from '@lixpi/canvas-engine'
 
@@ -336,12 +338,20 @@ describe('asset canvas projection', () => {
         })
     })
 
-    it('keeps a viewport-fallback root visible and balances already-reserved media around it', async () => {
+    it('finds a clear visible root slot and balances compact pending media around it', async () => {
         const plan = lineagePlan()
         plan.runAssignments = twoImageModelAssignments()
         storedState = {
             viewport: { x: -500, y: -300, zoom: 0.5 },
             nodes: [
+                {
+                    nodeId: 'visible-obstacle',
+                    type: 'image' as const,
+                    assetId: 'visible-obstacle-asset',
+                    mediaGenerationPhase: 'ready' as const,
+                    position: { x: 1100, y: 900 },
+                    dimensions: { width: 800, height: 800 },
+                },
                 ...plan.runAssignments.map((entry, index) => ({
                     nodeId: getPendingGeneratedMediaNodeId(entry),
                     type: 'image' as const,
@@ -395,9 +405,18 @@ describe('asset canvas projection', () => {
         expect(origin.position.y).toBeGreaterThanOrEqual(visibleWorld.top)
         expect(origin.position.x + origin.dimensions.width).toBeLessThanOrEqual(visibleWorld.right)
         expect(origin.position.y + origin.dimensions.height).toBeLessThanOrEqual(visibleWorld.bottom)
+        expect(origin.position.x).toBeGreaterThanOrEqual(
+            1100 + 800 + mediaGenerationLayoutSettings.nodeGap,
+        )
         const averageOutputCenterY = outputs.reduce((sum, output) => sum + nodeCenterY(output), 0) / outputs.length
         expect(averageOutputCenterY).toBeCloseTo(nodeCenterY(origin), 6)
         expect(nodeCenterY(fork)).toBeCloseTo(nodeCenterY(origin), 6)
+        expect(Math.abs(nodeCenterY(outputs[1]!) - nodeCenterY(outputs[0]!))).toBeCloseTo(
+            mediaGenerationLayoutSettings.generatedMediaSize
+                * mediaGenerationLayoutSettings.preFrameCircleScale
+                + mediaGenerationLayoutSettings.branchRowGap,
+            6,
+        )
     })
 
     it('projects a selected generated-media continuation onto a shared fork marker for every model slot', async () => {
@@ -648,7 +667,37 @@ describe('asset canvas projection', () => {
             dimensions: { width: 800, height: 800 },
             mediaGenerationPhase: 'pending-before-first-frame',
         })
+        expect(first.position.x).toBe(second.position.x)
         expect(nodeCenterY(fork)).toBeCloseTo((nodeCenterY(first) + nodeCenterY(second)) / 2, 6)
+    })
+
+    it('separates first-frame media chrome from the title above an existing media node', () => {
+        const pending = projectMedia(emptyCanvasState(), 0, true)
+        const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
+        const pendingNode = pending.nodes.find(node => node.nodeId === pendingNodeId)!
+        const existingNode: CanvasNode = {
+            nodeId: 'existing-media',
+            type: 'image',
+            assetId: 'existing-asset',
+            position: {
+                x: pendingNode.position.x,
+                y: pendingNode.position.y + pendingNode.dimensions.height + 100,
+            },
+            dimensions: { ...pendingNode.dimensions },
+        }
+        const beforeFirstFrame = {
+            ...pending,
+            nodes: [...pending.nodes, existingNode],
+        }
+
+        const resolved = projectMedia(beforeFirstFrame, 0, false, 3 / 2)
+        const generatedOut = resolved.nodes.find(node => node.nodeId === pendingNodeId)!
+        const existingOut = resolved.nodes.find(node => node.nodeId === existingNode.nodeId)!
+        const generatedInsets = getGeneratedOutputChromeCollisionInsets('image')
+        const existingInsets = getGeneratedOutputChromeCollisionInsets('image')
+
+        expect(generatedOut.position.y + generatedOut.dimensions.height + generatedInsets.bottom)
+            .toBeLessThanOrEqual(existingOut.position.y - existingInsets.top + 1)
     })
 
     it('converges on one final tree regardless of both arrival and completion order, with dimensions frozen at their pending size', () => {
@@ -850,7 +899,12 @@ describe('asset canvas projection', () => {
                     mediaGenerationPhase: 'ready',
                     position: { x: 1000, y: 0 },
                     dimensions: { width: 800, height: 600 },
-                    generatedBy: { generationRequestId: 'request-1' },
+                    generatedBy: {
+                        generationRequestId: 'request-1',
+                        branchId: 'branch-1',
+                        branchForkNodeId: 'fork-1',
+                        mediaIndex: 1,
+                    },
                 },
             ],
             edges: [{
@@ -867,15 +921,25 @@ describe('asset canvas projection', () => {
             generationRun: generationRunFor(0),
         })
 
-        expect(storedState.nodes).toContainEqual(expect.objectContaining({
+        const failedNode = storedState.nodes.find(node => node.nodeId === pendingNodeId)!
+        const readyNode = storedState.nodes.find(node => node.nodeId === readyNodeId)!
+        const forkNode = storedState.nodes.find(node => node.nodeId === 'fork-1')!
+        expect(failedNode).toMatchObject({
             nodeId: pendingNodeId,
             type: 'operationStatus',
             status: 'failed',
             message: 'The provider rejected this request.',
             problem: expect.objectContaining({ supportCode: 'support-1' }),
-            position: { x: 0, y: 0 },
-            dimensions: { width: 800, height: 800 },
-        }))
+            dimensions: { width: 360, height: 104 },
+            lineageAssignment: expect.objectContaining({
+                branchId: 'branch-1',
+                branchForkNodeId: 'fork-1',
+            }),
+        })
+        const failedCenterY = failedNode.position.y + failedNode.dimensions.height / 2
+        const readyCenterY = readyNode.position.y + readyNode.dimensions.height / 2
+        const forkCenterY = forkNode.position.y + forkNode.dimensions.height / 2
+        expect(forkCenterY).toBeCloseTo((failedCenterY + readyCenterY) / 2, 6)
         expect(storedState.nodes).toContainEqual(expect.objectContaining({ nodeId: readyNodeId }))
         expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: operationNodeId }))
         expect(storedState.edges).toContainEqual(expect.objectContaining({ targetNodeId: pendingNodeId }))

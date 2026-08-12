@@ -129,6 +129,55 @@ describe('current media provider policy definitions', () => {
         expect(problem.supportCode).toMatch(/^[0-9a-f-]{36}$/u)
     })
 
+    it('preserves provider moderation stage and categories so output filtering is not reported as input rejection', () => {
+        const problem = normalizeProviderProblem({
+            provider: 'OpenAI',
+            error: {
+                code: 'moderation_blocked',
+                message: 'request rejected safety_violations=[violence]',
+                moderation_details: {
+                    moderation_stage: 'output',
+                    categories: ['violence'],
+                },
+            },
+            context: {
+                generationRequestId: 'request-1',
+                generationRun: 0,
+                modelId: 'OpenAI:gpt-image-2',
+                stage: 'submit',
+            },
+        })
+
+        expect(problem).toMatchObject({
+            category: 'provider-moderation',
+            moderationStage: 'output',
+            moderationCategories: ['violence'],
+        })
+        expect(problem.detail).toContain('generated result')
+        expect(problem.detail).toContain('output safety check')
+    })
+
+    it('extracts legacy safety categories before the provider reason is truncated', () => {
+        const problem = normalizeProviderProblem({
+            provider: 'OpenAI',
+            error: new Error([
+                'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE:',
+                'Your request was rejected by the safety system. ',
+                'Include request ID req_1234567890. ',
+                'Additional provider diagnostic text that pushes the category beyond the display limit. '.repeat(3),
+                'safety_violations=[violence]',
+            ].join('')),
+            context: {
+                generationRequestId: 'request-1',
+                modelId: 'OpenAI:gpt-image-2',
+                stage: 'submit',
+            },
+        })
+
+        expect(problem.moderationCategories).toEqual(['violence'])
+        expect(problem.providerReason?.length).toBeLessThanOrEqual(240)
+    })
+
     it('redacts JSON-shaped credential fields from allowlisted provider messages', () => {
         const problem = normalizeProviderProblem({
             provider: 'Stability',

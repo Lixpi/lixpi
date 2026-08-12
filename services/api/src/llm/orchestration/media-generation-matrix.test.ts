@@ -22,6 +22,10 @@ const canvasProjectionMocks = vi.hoisted(() => ({
 const aiChatStreamAssemblerMocks = vi.hoisted(() => ({
     settlePersistedAiChatGenerationRequest: vi.fn(),
 }))
+const mediaGenerationRequestServiceMocks = vi.hoisted(() => ({
+    bindRunsToLineagePlan: vi.fn(),
+    failUnfinishedRuns: vi.fn(),
+}))
 
 vi.mock('../../services/generated-asset-storage.ts', () => generatedAssetStorageMocks)
 vi.mock('../../models/asset.ts', async (importOriginal) => ({
@@ -30,6 +34,17 @@ vi.mock('../../models/asset.ts', async (importOriginal) => ({
 }))
 vi.mock('../../services/asset-canvas-projection.ts', () => canvasProjectionMocks)
 vi.mock('../../prosemirror/ai-chat-stream-assembler.ts', () => aiChatStreamAssemblerMocks)
+vi.mock('../../services/media-generation-request-service.ts', () => ({
+    MediaGenerationRequestService: class {
+        async bindRunsToLineagePlan(args: unknown): Promise<unknown> {
+            return mediaGenerationRequestServiceMocks.bindRunsToLineagePlan(args)
+        }
+
+        async failUnfinishedRuns(args: unknown): Promise<unknown> {
+            return mediaGenerationRequestServiceMocks.failUnfinishedRuns(args)
+        }
+    },
+}))
 
 const natsService = { publish: vi.fn() } as any
 
@@ -83,6 +98,8 @@ beforeEach(() => {
     generatedAssetStorageMocks.ensurePendingGeneratedAssets.mockClear()
     canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockClear()
     aiChatStreamAssemblerMocks.settlePersistedAiChatGenerationRequest.mockClear()
+    mediaGenerationRequestServiceMocks.bindRunsToLineagePlan.mockClear()
+    mediaGenerationRequestServiceMocks.failUnfinishedRuns.mockClear()
     generatedAssetStorageMocks.ensurePendingGeneratedAssets.mockResolvedValue(undefined)
     canvasProjectionMocks.settleMediaGenerationRequestOnCanvas.mockResolvedValue(null)
     aiChatStreamAssemblerMocks.settlePersistedAiChatGenerationRequest.mockResolvedValue({})
@@ -167,6 +184,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             aiReasoningModels: undefined,
             aiImageModels: ['Google:gemini-2.5-flash-image'],
             aiVideoModels: undefined,
+            durableGenerationRequestId: 'durable-request-2',
             mediaGenerationRequest: {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'request-2',
@@ -196,6 +214,10 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(state0.generationRun.lineageAssignment?.reasoningRunId).toBe('request-2:reasoning:0')
         expect(state1.generationRun.lineageAssignment?.reasoningRunId).toBe('request-2:reasoning:1')
         expect(state0.generationRun.lineageAssignment?.branchForkNodeId).toBe('branch-fork-request-2-reasoning-0')
+        expect(mediaGenerationRequestServiceMocks.failUnfinishedRuns).toHaveBeenCalledWith({
+            generationRequestId: 'durable-request-2',
+            workspaceId: 'ws-1',
+        })
     })
 
     it('does not create video fanout assignments from stale scalar video defaults in structured image matrices', async () => {

@@ -40,6 +40,8 @@ type OperationRemoval = {
 
 type GeneratedMediaNode = Extract<CanvasNode, { type: 'image' | 'video' }>
 
+const FAILED_OPERATION_DIMENSIONS = { width: 360, height: 104 } as const
+
 function isMediaGenerationOperationNodeForRequest(
     node: CanvasNode,
     generationRequestId: string,
@@ -142,11 +144,125 @@ function projectProgressToMediaNodes({
                 outputNodeId,
                 mediaRunId,
             )) return node
-            if (JSON.stringify(node.generationProgress) === JSON.stringify(progressState)) return node
+            const nextProgressState = { ...node.generationProgress, ...progressState }
+            if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgressState)) return node
             updatedNodeIds.push(node.nodeId)
-            return { ...node, generationProgress: progressState }
+            return { ...node, generationProgress: nextProgressState }
         }),
         updatedNodeIds,
+    }
+}
+
+function replaceFailedPendingOutputWithOperation({
+    state,
+    generationRequestId,
+    generationRun,
+    mediaRunId,
+    outputNodeId,
+    operationNodeId,
+    message,
+    problem,
+    requestRevision,
+    progress,
+    updatedAt,
+}: {
+    state: CanvasState
+    generationRequestId: string
+    generationRun?: number
+    mediaRunId?: string
+    outputNodeId?: string
+    operationNodeId?: string
+    message: string
+    problem?: MediaGenerationProblem
+    requestRevision: number
+    progress?: MediaGenerationRunProgress
+    updatedAt: number
+}): MediaGenerationOperationRecoveryResult {
+    const output = state.nodes.find((node): node is GeneratedMediaNode => (
+        isGeneratedMediaNode(node)
+        && node.mediaGenerationPhase === 'pending-before-first-frame'
+        && mediaNodeMatches(node, generationRequestId, generationRun, outputNodeId, mediaRunId)
+    ))
+    if (!output) return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+
+    const existingOperation = state.nodes.find((node): node is OperationStatusCanvasNode => (
+        isMediaGenerationOperationNodeForRequest(node, generationRequestId)
+        && (
+            Boolean(operationNodeId && node.nodeId === operationNodeId)
+            || Boolean(mediaRunId && node.mediaRunId === mediaRunId)
+            || Boolean(outputNodeId && node.outputNodeId === outputNodeId)
+            || (generationRun !== undefined && node.generationRun === generationRun)
+        )
+    ))
+    const resolvedOperationNodeId = existingOperation?.nodeId
+        ?? operationNodeId
+        ?? `operation-${output.nodeId}`
+    const dimensions = existingOperation?.dimensions ?? FAILED_OPERATION_DIMENSIONS
+    const { parentId: _existingParentId, ...existingOperationWithoutParent } = existingOperation ?? {}
+    const failedOperation: OperationStatusCanvasNode = {
+        ...existingOperationWithoutParent,
+        nodeId: resolvedOperationNodeId,
+        type: 'operationStatus',
+        operation: 'media-generation',
+        status: 'failed',
+        title: existingOperation?.title
+            ?? `Generating with ${output.generationProgress?.mediaModelId ?? 'media provider'}`,
+        message,
+        generationRequestId,
+        ...(generationRun === undefined ? {} : { generationRun }),
+        ...(mediaRunId ? { mediaRunId } : {}),
+        outputNodeId: output.nodeId,
+        plannedMediaType: output.type,
+        ...(output.generationProgress?.lineageAssignment
+            ? { lineageAssignment: output.generationProgress.lineageAssignment }
+            : {}),
+        ...(problem ? { problem } : {}),
+        requestRevision,
+        progress: settleMediaGenerationRunProgress(
+            progress ?? existingOperation?.progress ?? output.generationProgress?.progress,
+            'failed',
+            message,
+        ),
+        ...(output.parentId ? { parentId: output.parentId } : {}),
+        position: {
+            x: output.position.x + (output.dimensions.width - dimensions.width) / 2,
+            y: output.position.y + (output.dimensions.height - dimensions.height) / 2,
+        },
+        dimensions,
+        createdAt: existingOperation?.createdAt ?? updatedAt,
+        updatedAt,
+    }
+    const edgeKeys = new Set<string>()
+    const edges = state.edges.flatMap(edge => {
+        const sourceNodeId = edge.sourceNodeId === output.nodeId ? failedOperation.nodeId : edge.sourceNodeId
+        const targetNodeId = edge.targetNodeId === output.nodeId ? failedOperation.nodeId : edge.targetNodeId
+        if (sourceNodeId === targetNodeId) return []
+        const edgeKey = `${sourceNodeId}:${targetNodeId}:${edge.sourceHandle ?? ''}:${edge.targetHandle ?? ''}`
+        if (edgeKeys.has(edgeKey)) return []
+        edgeKeys.add(edgeKey)
+        return [{
+            ...edge,
+            ...(sourceNodeId === edge.sourceNodeId && targetNodeId === edge.targetNodeId
+                ? {}
+                : {
+                    edgeId: `edge-${sourceNodeId}-${targetNodeId}`,
+                    sourceNodeId,
+                    targetNodeId,
+                }),
+        }]
+    })
+    const nodes = state.nodes.flatMap(node => {
+        if (node.nodeId === output.nodeId) return []
+        if (node.nodeId === failedOperation.nodeId) return [failedOperation]
+        return [node]
+    })
+    if (!existingOperation) nodes.push(failedOperation)
+
+    return {
+        state: { ...state, nodes, edges },
+        changed: true,
+        updatedNodeIds: [failedOperation.nodeId],
+        removedNodeIds: [output.nodeId],
     }
 }
 
@@ -339,9 +455,7 @@ export function applyMediaGenerationRequestToOperationNodes(
                 status: 'action-required',
                 message,
                 progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-                candidateAssetIds: [...new Set(request.unresolvedBindings.flatMap(binding => (
-                    binding.candidates.map(candidate => candidate.assetId)
-                )))],
+                candidateAssetIds: [...new Set(firstUnresolvedBinding.candidates.map(candidate => candidate.assetId))],
                 unresolvedBindingId: firstUnresolvedBinding.bindingId,
                 requestRevision: request.revision,
                 updatedAt: request.updatedAt,
@@ -425,13 +539,42 @@ export function applyMediaGenerationRequestToOperationNodes(
         nodes = mediaProjection.nodes
         for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
     }
-    if (updatedNodeIds.size === operationResult.updatedNodeIds.length) return operationResult
-    return {
-        ...operationResult,
-        state: { ...operationResult.state, nodes },
-        changed: true,
-        updatedNodeIds: [...updatedNodeIds],
+    let resultState = { ...operationResult.state, nodes }
+    let changed = operationResult.changed || updatedNodeIds.size > operationResult.updatedNodeIds.length
+    const removedNodeIds = new Set(operationResult.removedNodeIds)
+    for (const run of request.runs) {
+        if (run.status !== 'failed') continue
+        const message = run.problem?.detail ?? run.progress?.message ?? 'Media generation failed.'
+        const replacement = replaceFailedPendingOutputWithOperation({
+            state: resultState,
+            generationRequestId: request.generationRequestId,
+            generationRun: run.generationRun,
+            mediaRunId: run.mediaRunId,
+            outputNodeId: run.outputNodeId,
+            operationNodeId: run.operationNodeId,
+            message,
+            problem: run.problem,
+            requestRevision: request.revision,
+            progress: run.progress,
+            updatedAt: request.updatedAt,
+        })
+        if (!replacement.changed) continue
+        resultState = replacement.state
+        changed = true
+        for (const nodeId of replacement.removedNodeIds) {
+            removedNodeIds.add(nodeId)
+            updatedNodeIds.delete(nodeId)
+        }
+        for (const nodeId of replacement.updatedNodeIds) updatedNodeIds.add(nodeId)
     }
+    return changed
+        ? {
+            state: resultState,
+            changed: true,
+            updatedNodeIds: [...updatedNodeIds],
+            removedNodeIds: [...removedNodeIds],
+        }
+        : operationResult
 }
 
 function readStringArray(value: unknown): string[] | undefined {
@@ -595,7 +738,7 @@ export function applyMediaGenerationRequestEventToOperationNodes(
                 updatedAt: event.createdAt,
             }),
         })
-        return projection.updatedNodeIds.length === 0
+        const projectedResult: MediaGenerationOperationRecoveryResult = projection.updatedNodeIds.length === 0
             ? { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
             : {
                 state: { ...state, nodes: projection.nodes },
@@ -603,6 +746,20 @@ export function applyMediaGenerationRequestEventToOperationNodes(
                 updatedNodeIds: projection.updatedNodeIds,
                 removedNodeIds: [],
             }
+        if (status !== 'failed') return projectedResult
+        const replacement = replaceFailedPendingOutputWithOperation({
+            state: projectedResult.state,
+            generationRequestId: event.generationRequestId,
+            generationRun,
+            mediaRunId,
+            outputNodeId,
+            message,
+            problem,
+            requestRevision: event.requestRevision,
+            progress,
+            updatedAt: event.createdAt,
+        })
+        return replacement.changed ? replacement : projectedResult
     }
 
     const candidateAssetIds = readStringArray(event.payload.candidateAssetIds)
@@ -613,16 +770,19 @@ export function applyMediaGenerationRequestEventToOperationNodes(
     const unresolvedBindingId = typeof event.payload.bindingId === 'string'
         ? event.payload.bindingId
         : undefined
-    return applyOperationPatches(state, event.generationRequestId, node => {
+    const hasCompleteReferenceAction = Boolean(candidateAssetIds) === Boolean(unresolvedBindingId)
+    const hasActionPayload = Boolean(candidateAssetIds || verificationAssetId || problem)
+    const operationResult = applyOperationPatches(state, event.generationRequestId, node => {
         if (node.nodeId !== targetNode.nodeId || (node.requestRevision ?? 0) > event.requestRevision) return null
         if (runStatus === 'completed' || runStatus === 'cancelled') {
             return { remove: runStatus, ...(progress ? { progress } : {}) }
         }
         if (event.status === 'MEDIA_GENERATION_ACTION_REQUIRED') {
+            if (!hasCompleteReferenceAction || !hasActionPayload) return null
             const nextProblem = problem ?? node.problem
-            const nextCandidateAssetIds = candidateAssetIds ?? node.candidateAssetIds
-            const nextUnresolvedBindingId = unresolvedBindingId ?? node.unresolvedBindingId
-            const nextVerificationAssetId = verificationAssetId ?? node.verificationAssetId
+            const nextCandidateAssetIds = candidateAssetIds
+            const nextUnresolvedBindingId = unresolvedBindingId
+            const nextVerificationAssetId = verificationAssetId
             const message = nextProblem?.detail
                 ?? (nextCandidateAssetIds
                     ? 'Choose which attached Asset the prompt refers to.'
@@ -662,4 +822,31 @@ export function applyMediaGenerationRequestEventToOperationNodes(
             updatedAt: event.createdAt,
         }
     })
+    if (event.status !== 'MEDIA_GENERATION_PROBLEM' && runStatus !== 'failed') return operationResult
+    const message = problem?.detail ?? progressMessage ?? progress?.message ?? 'Generation failed.'
+    const replacement = replaceFailedPendingOutputWithOperation({
+        state: operationResult.state,
+        generationRequestId: event.generationRequestId,
+        generationRun,
+        mediaRunId,
+        outputNodeId: outputNodeId ?? targetNode.outputNodeId,
+        operationNodeId: targetNode.nodeId,
+        message,
+        problem,
+        requestRevision: event.requestRevision,
+        progress,
+        updatedAt: event.createdAt,
+    })
+    if (!replacement.changed) return operationResult
+    return {
+        ...replacement,
+        updatedNodeIds: [...new Set([
+            ...operationResult.updatedNodeIds.filter(nodeId => !replacement.removedNodeIds.includes(nodeId)),
+            ...replacement.updatedNodeIds,
+        ])],
+        removedNodeIds: [...new Set([
+            ...operationResult.removedNodeIds,
+            ...replacement.removedNodeIds,
+        ])],
+    }
 }

@@ -4,6 +4,8 @@ import type {
     BranchForkCanvasNode,
     BranchLineCanvasNode,
     BranchOriginCanvasNode,
+    CanvasNode,
+    MediaBranchLineagePlan,
 } from '@lixpi/constants'
 
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
@@ -16,6 +18,56 @@ export type BranchMarkerRenderOwnership = {
 export type PreflightBranchMarkerScreenOwnership = {
     visiblePreflightNodes: BranchMarkerNode[]
     supersededPreflightNodeIds: Set<string>
+}
+
+type PlannedBranchMarkerIdentity = {
+    nodeId: string
+    type: BranchMarkerNode['type']
+    generationRequestId: string
+}
+
+function isBranchMarkerNode(node: CanvasNode): node is BranchMarkerNode {
+    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+}
+
+function getPlannedBranchMarkerIdentities(
+    lineagePlan: MediaBranchLineagePlan,
+): PlannedBranchMarkerIdentity[] {
+    return [
+        ...(lineagePlan.branchOrigin
+            ? [{
+                nodeId: lineagePlan.branchOrigin.nodeId,
+                type: 'branchOrigin' as const,
+                generationRequestId: lineagePlan.branchOrigin.generationRequestId,
+            }]
+            : []),
+        ...lineagePlan.branchForks.map(marker => ({
+            nodeId: marker.nodeId,
+            type: 'branchFork' as const,
+            generationRequestId: marker.generationRequestId,
+        })),
+        ...lineagePlan.branchLines.map(marker => ({
+            nodeId: marker.nodeId,
+            type: 'branchLine' as const,
+            generationRequestId: marker.generationRequestId,
+        })),
+    ]
+}
+
+export function hasCompletePlannedBranchMarkerGeometry(
+    nodes: CanvasNode[],
+    lineagePlan: MediaBranchLineagePlan,
+): boolean {
+    const plannedMarkers = getPlannedBranchMarkerIdentities(lineagePlan)
+    if (plannedMarkers.length === 0) return false
+
+    return plannedMarkers.every(plannedMarker => nodes.some(node =>
+        isBranchMarkerNode(node)
+        && node.nodeId === plannedMarker.nodeId
+        && node.type === plannedMarker.type
+        && node.generationRequestId === plannedMarker.generationRequestId
+        && node.pendingState?.phase !== 'preflight'
+    ))
 }
 
 function getReasoningIndex(node: BranchMarkerNode): number | undefined {

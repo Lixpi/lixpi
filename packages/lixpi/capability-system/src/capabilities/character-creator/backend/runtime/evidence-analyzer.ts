@@ -9,6 +9,8 @@ import type { ResolvedCharacterReference } from './reference-resolver.ts'
 export type CharacterEvidenceAnalysis = {
     medium: CharacterEvidenceProfile['medium']
     facts?: CharacterEvidenceProfile['facts']
+    promptDirectives?: string[]
+    promptChangedFeatures?: string[]
     palette?: string[]
     costumeNotes?: string[]
     materialNotes?: string[]
@@ -42,6 +44,8 @@ export async function analyzeCharacterEvidence(args: {
     return {
         medium: analysis.medium,
         facts,
+        promptDirectives: unique(analysis.promptDirectives ?? []),
+        promptChangedFeatures: unique(analysis.promptChangedFeatures ?? []),
         palette: unique(analysis.palette ?? []).slice(0, 8),
         costumeNotes: unique(analysis.costumeNotes ?? []),
         materialNotes: unique(analysis.materialNotes ?? []),

@@ -72,7 +72,7 @@ describe('character sheet compositor', () => {
             issues: [
                 'body-front: unavailable',
                 'Neutral front identity portrait: comparison unavailable',
-                'Walking body profile: comparison unavailable',
+                'Back body: comparison unavailable',
             ],
         })
 

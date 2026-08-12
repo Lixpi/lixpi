@@ -6,6 +6,7 @@ import {
     getAiInteractionResponseSubject,
     NATS_SUBJECTS,
 } from '@lixpi/constants'
+import { MediaBranchAmbiguityError } from '../../llm/graph/media-branch-resolver.ts'
 
 const mocks = vi.hoisted(() => ({
     nats: {
@@ -345,6 +346,121 @@ describe('AI interaction message routing', () => {
                     expect.objectContaining({ mediaType: 'video', status: 'pending' }),
                 ],
             }),
+        )
+    })
+
+    it('binds explicit media context chips to the durable media request', async () => {
+        const contextImageNode = {
+            nodeId: 'context-image-node',
+            type: 'image',
+            assetId: 'context-image-asset',
+            position: { x: 100, y: 200 },
+            dimensions: { width: 640, height: 480 },
+        } as const
+        const contextImageAsset = {
+            assetId: contextImageNode.assetId,
+            organizationId: 'org-1',
+            revision: 3,
+            title: 'Context image',
+            depictionMedium: 'photograph',
+            subjectIdentity: 'generic',
+            media: {
+                kind: 'image',
+                originalName: 'context-image.png',
+                renditions: {},
+            },
+        }
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            ...workspace,
+            canvasState: { nodes: [contextImageNode] },
+        })
+        mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) => (
+            assetId === contextImageNode.assetId ? contextImageAsset : conversationAsset
+        ))
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            mediaGenerationRequest: undefined,
+            workspaceContextSnapshot: {
+                resolverVersion: 'workspace-context-v1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'conv-1',
+                promptText: 'Use this image as context.',
+                nodes: [{
+                    nodeId: contextImageNode.nodeId,
+                    type: contextImageNode.type,
+                    assetId: contextImageNode.assetId,
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+        })
+        await flushPromises()
+
+        expect(mocks.mediaRequestService.create).toHaveBeenCalledWith(expect.objectContaining({
+            bindings: [expect.objectContaining({
+                assetId: contextImageNode.assetId,
+                nodeId: contextImageNode.nodeId,
+            })],
+        }))
+    })
+
+    it('fails an unresolvable one-Asset branch ambiguity without calling the picker', async () => {
+        const contextImageNode = {
+            nodeId: 'context-image-node',
+            type: 'image',
+            assetId: 'context-image-asset',
+            position: { x: 100, y: 200 },
+            dimensions: { width: 640, height: 480 },
+        } as const
+        const contextImageAsset = {
+            assetId: contextImageNode.assetId,
+            organizationId: 'org-1',
+            revision: 3,
+            title: 'Context image',
+            depictionMedium: 'photograph',
+            subjectIdentity: 'generic',
+            media: {
+                kind: 'image',
+                originalName: 'context-image.png',
+                renditions: {},
+            },
+        }
+        mocks.workspace.getWorkspace.mockResolvedValueOnce({
+            ...workspace,
+            canvasState: { nodes: [contextImageNode] },
+        })
+        mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) => (
+            assetId === contextImageNode.assetId ? contextImageAsset : conversationAsset
+        ))
+        mocks.llmModule.process.mockRejectedValueOnce(new MediaBranchAmbiguityError({
+            candidateAssetIds: [contextImageNode.assetId],
+            rationale: 'The referent is unclear.',
+        }))
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            mediaGenerationRequest: undefined,
+            workspaceContextSnapshot: {
+                resolverVersion: 'workspace-context-v1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'conv-1',
+                promptText: 'Use this image as context.',
+                nodes: [{
+                    nodeId: contextImageNode.nodeId,
+                    type: contextImageNode.type,
+                    assetId: contextImageNode.assetId,
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+        })
+        await flushPromises()
+
+        expect(mocks.mediaRequestService.pauseForBranchResolution).not.toHaveBeenCalled()
+        expect(mocks.nats.publish).toHaveBeenCalledWith(
+            `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,
+            { error: 'MEDIA_BRANCH_REFERENCE_AMBIGUITY:The referent is unclear.' },
         )
     })
 

@@ -10,6 +10,8 @@ Shared runtime contracts for TypeScript services and the browser.
 
 `ts/media-generation-progress.ts` builds the generic durable image/video operation timeline used when a Capability, Skill, or Tool does not publish its own nested progress items. Progress items distinguish clean completion from an `attention` result that finished but still requires user review; actual execution failures remain `failed`. Its terminal settlement helper recursively closes every still-pending or running descendant for completed, failed, and cancelled runs, including recovery paths that have no prior progress snapshot.
 
+`ts/media-generation-layout-settings.ts` owns the API/WebUI branch-layout and collision metrics. Resolved media collision envelopes reserve the title above the pixels and the action/model strip below them at the bounded zoom curve's maximum world-space footprint; compact pre-frame circles intentionally reserve neither strip until the first frame resolves.
+
 Capability data contracts remain in `ts/types.ts`. Manifest, workflow, resource, and dependency-graph validation lives in [`@lixpi/capability-system`](../capability-system/README.md), because validation is executable Capability behavior rather than a constant.
 
 `ts/aws-resources.ts` contains only active DynamoDB resource names, including the six revision-2 tables. `nats-subjects.json` contains active Asset/Blob processing and maintenance subjects, Capability subjects, and the internal Character panel fidelity subject.

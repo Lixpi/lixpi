@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type {
+    CanvasNode,
     CanvasState,
     MediaGenerationRequest,
     MediaGenerationRequestEvent,
@@ -11,6 +12,8 @@ import {
     applyMediaGenerationRequestEventToOperationNodes,
     applyMediaGenerationRequestToOperationNodes,
 } from './mediaGenerationOperationRecovery.ts'
+
+type GeneratedMediaNode = Extract<CanvasNode, { type: 'image' | 'video' }>
 
 function operationNode(overrides: Partial<OperationStatusCanvasNode> = {}): OperationStatusCanvasNode {
     return {
@@ -40,6 +43,53 @@ function canvasState(node = operationNode()): CanvasState {
             targetNodeId: node.nodeId,
         }],
     }
+}
+
+function pendingOutputNode(overrides: Partial<GeneratedMediaNode> = {}): GeneratedMediaNode {
+    return {
+        nodeId: 'pending-image-media-run-1',
+        type: 'image',
+        assetId: 'asset-1',
+        mediaGenerationPhase: 'pending-before-first-frame',
+        generationProgress: {
+            generationRequestId: 'request-1',
+            generationRun: 0,
+            mediaRunId: 'media-run-1',
+            status: 'running',
+            message: 'The provider is generating media.',
+            progress: {
+                phase: 'rendering',
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'The provider is generating media.',
+            },
+            mediaModelId: 'OpenAI:gpt-image-2',
+            mediaModelProvider: 'OpenAI',
+            lineageAssignment: {
+                assetId: 'asset-1',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-run-1',
+                mediaRunId: 'media-run-1',
+                reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
+                reasoningIndex: 0,
+                mediaModelId: 'OpenAI:gpt-image-2',
+                mediaType: 'image',
+                mediaIndex: 0,
+                branchId: 'branch-1',
+                branchForkNodeId: 'branch-fork-1',
+                lineageParentNodeId: 'branch-fork-1',
+                referenceAssetIds: [],
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'Transform the reference.',
+                createdAt: 1,
+            },
+            updatedAt: 2,
+        },
+        position: { x: 500, y: 200 },
+        dimensions: { width: 512, height: 512 },
+        ...overrides,
+    } as GeneratedMediaNode
 }
 
 function request(overrides: Partial<MediaGenerationRequest> = {}): MediaGenerationRequest {
@@ -99,6 +149,94 @@ describe('media generation operation recovery', () => {
         })
     })
 
+    it('does not combine candidates from later unresolved bindings into the active picker', () => {
+        const result = applyMediaGenerationRequestToOperationNodes(canvasState(), request({
+            status: 'awaiting-reference-resolution',
+            unresolvedBindings: [{
+                bindingId: 'binding-reference-drawing',
+                promptRange: { from: 0, to: 17 },
+                originalText: 'reference drawing',
+                matcherVersion: '1',
+                candidates: [
+                    { assetId: 'asset-1', score: 0.9, previewRenditionName: 'thumbnail' },
+                    { assetId: 'asset-2', score: 0.8, previewRenditionName: 'thumbnail' },
+                ],
+            }, {
+                bindingId: 'binding-character-sheet',
+                promptRange: { from: 18, to: 33 },
+                originalText: 'character sheet',
+                matcherVersion: '1',
+                candidates: [
+                    { assetId: 'asset-2', score: 0.9, previewRenditionName: 'thumbnail' },
+                    { assetId: 'asset-3', score: 0.8, previewRenditionName: 'thumbnail' },
+                ],
+            }],
+        }))
+
+        expect(result.state.nodes[0]).toMatchObject({
+            candidateAssetIds: ['asset-1', 'asset-2'],
+            unresolvedBindingId: 'binding-reference-drawing',
+        })
+    })
+
+    it('atomically replaces the picker binding and candidates from the next action event', () => {
+        const event: MediaGenerationRequestEvent = {
+            eventId: 'event-2',
+            generationRequestId: 'request-1',
+            sequence: 2,
+            status: 'MEDIA_GENERATION_ACTION_REQUIRED',
+            requestRevision: 2,
+            payload: {
+                status: 'awaiting-reference-resolution',
+                bindingId: 'binding-character-sheet',
+                candidateAssetIds: ['asset-2', 'asset-3'],
+                resolvedBindingId: 'binding-reference-drawing',
+                resolvedAssetId: 'asset-1',
+            },
+            createdAt: 2,
+        }
+        const result = applyMediaGenerationRequestEventToOperationNodes(canvasState(operationNode({
+            status: 'action-required',
+            candidateAssetIds: ['asset-1', 'asset-2'],
+            unresolvedBindingId: 'binding-reference-drawing',
+            requestRevision: 1,
+        })), event)
+
+        expect(result.state.nodes[0]).toMatchObject({
+            status: 'action-required',
+            candidateAssetIds: ['asset-2', 'asset-3'],
+            unresolvedBindingId: 'binding-character-sheet',
+            requestRevision: 2,
+        })
+    })
+
+    it('ignores a legacy same-revision action that carries a binding without its candidates', () => {
+        const currentNode = operationNode({
+            status: 'action-required',
+            candidateAssetIds: ['asset-2', 'asset-3'],
+            unresolvedBindingId: 'binding-character-sheet',
+            requestRevision: 2,
+        })
+        const event: MediaGenerationRequestEvent = {
+            eventId: 'legacy-event-2',
+            generationRequestId: 'request-1',
+            sequence: 2,
+            status: 'MEDIA_GENERATION_ACTION_REQUIRED',
+            requestRevision: 2,
+            payload: {
+                status: 'awaiting-reference-resolution',
+                bindingId: 'binding-reference-drawing',
+                assetId: 'asset-1',
+            },
+            createdAt: 2,
+        }
+
+        const result = applyMediaGenerationRequestEventToOperationNodes(canvasState(currentNode), event)
+
+        expect(result.changed).toBe(false)
+        expect(result.state.nodes[0]).toBe(currentNode)
+    })
+
     it('removes completed request nodes and their incident edges without reloading workspace Assets', () => {
         const result = applyMediaGenerationRequestToOperationNodes(canvasState(), request({ status: 'completed' }))
 
@@ -138,6 +276,120 @@ describe('media generation operation recovery', () => {
             problem,
             requestRevision: 3,
         })
+    })
+
+    it('replaces a failed pending output with the existing operation card in its reserved slot', () => {
+        const output = pendingOutputNode()
+        const operation = operationNode({
+            mediaRunId: 'media-run-1',
+            outputNodeId: output.nodeId,
+        })
+        const state: CanvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [operation, output],
+            edges: [{
+                edgeId: 'edge-source-output',
+                sourceNodeId: 'source-1',
+                targetNodeId: output.nodeId,
+            }],
+        }
+        const failedRequest = request({
+            status: 'failed',
+            runs: [{
+                ...request().runs[0],
+                provider: 'OpenAI',
+                modelId: 'OpenAI:gpt-image-2',
+                mediaRunId: 'media-run-1',
+                outputNodeId: output.nodeId,
+                status: 'failed',
+                problem: {
+                    problemVersion: '1',
+                    type: 'urn:lixpi:media-problem:provider-moderation',
+                    title: 'Provider rejected the request',
+                    detail: 'The generated result was blocked by the provider safety check.',
+                    category: 'provider-moderation',
+                    stage: 'poll',
+                    generationRequestId: 'request-1',
+                    generationRun: 0,
+                    supportCode: 'support-1',
+                    action: 'edit-request',
+                },
+            }],
+        })
+
+        const result = applyMediaGenerationRequestToOperationNodes(state, failedRequest)
+
+        expect(result.removedNodeIds).toEqual([output.nodeId])
+        expect(result.state.nodes.some(node => node.nodeId === output.nodeId)).toBe(false)
+        expect(result.state.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
+            nodeId: operation.nodeId,
+            status: 'failed',
+            position: { x: 576, y: 404 },
+            lineageAssignment: expect.objectContaining({
+                branchId: 'branch-1',
+                branchForkNodeId: 'branch-fork-1',
+            }),
+        })]))
+        expect(result.state.edges).toEqual([expect.objectContaining({
+            sourceNodeId: 'source-1',
+            targetNodeId: operation.nodeId,
+        })])
+    })
+
+    it('materializes the failure card from a terminal live event when the hidden operation node is absent', () => {
+        const output = pendingOutputNode()
+        const state: CanvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [output],
+            edges: [{
+                edgeId: 'edge-source-output',
+                sourceNodeId: 'source-1',
+                targetNodeId: output.nodeId,
+            }],
+        }
+        const event: MediaGenerationRequestEvent = {
+            eventId: 'event-5',
+            generationRequestId: 'request-1',
+            sequence: 5,
+            status: 'MEDIA_GENERATION_PROBLEM',
+            requestRevision: 5,
+            payload: {
+                status: 'failed',
+                runStatus: 'failed',
+                generationRun: 0,
+                mediaRunId: 'media-run-1',
+                outputNodeId: output.nodeId,
+                problem: {
+                    problemVersion: '1',
+                    type: 'urn:lixpi:media-problem:provider-moderation',
+                    title: 'Provider rejected the request',
+                    detail: 'The generated result was blocked by the provider safety check.',
+                    category: 'provider-moderation',
+                    stage: 'poll',
+                    generationRequestId: 'request-1',
+                    generationRun: 0,
+                    supportCode: 'support-2',
+                    action: 'edit-request',
+                },
+            },
+            createdAt: 5,
+        }
+
+        const result = applyMediaGenerationRequestEventToOperationNodes(state, event)
+
+        expect(result.removedNodeIds).toEqual([output.nodeId])
+        expect(result.updatedNodeIds).toEqual([`operation-${output.nodeId}`])
+        expect(result.state.nodes).toEqual([expect.objectContaining({
+            nodeId: `operation-${output.nodeId}`,
+            type: 'operationStatus',
+            status: 'failed',
+            position: { x: 576, y: 404 },
+            lineageAssignment: expect.objectContaining({ branchId: 'branch-1' }),
+        })])
+        expect(result.state.edges).toEqual([expect.objectContaining({
+            sourceNodeId: 'source-1',
+            targetNodeId: `operation-${output.nodeId}`,
+        })])
     })
 
     it('removes only the completed run when sibling operation nodes remain active', () => {

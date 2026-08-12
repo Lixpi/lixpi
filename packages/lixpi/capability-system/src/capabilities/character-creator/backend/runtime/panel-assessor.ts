@@ -53,6 +53,9 @@ export type CharacterPanelVlmAssessorPort = {
     assess: (args: {
         panel: CharacterPanelSpec
         candidateDataUrl: string
+        authoritativePrompt: string
+        capabilityInstructions: readonly string[]
+        capabilityReferenceDataUrls: readonly string[]
         evidence: CharacterEvidenceProfile
         sourceDataUrls: string[]
         signal?: AbortSignal
@@ -66,6 +69,9 @@ export async function assessCharacterPanel(args: {
     candidateCoordinate: CharacterFidelityObjectCoordinate
     sourceCoordinates: CharacterFidelityObjectCoordinate[]
     sourceDataUrls: string[]
+    authoritativePrompt: string
+    capabilityInstructions: readonly string[]
+    capabilityReferenceDataUrls: readonly string[]
     evidence: CharacterEvidenceProfile
     vlm: CharacterPanelVlmAssessorPort
     fidelity?: CharacterFidelityPort
@@ -120,6 +126,9 @@ const assessPanelDimensions = async (
         return await args.vlm.assess({
             panel: args.panel,
             candidateDataUrl,
+            authoritativePrompt: args.authoritativePrompt,
+            capabilityInstructions: args.capabilityInstructions,
+            capabilityReferenceDataUrls: args.capabilityReferenceDataUrls,
             evidence: args.evidence,
             sourceDataUrls: args.sourceDataUrls,
             signal: args.signal,

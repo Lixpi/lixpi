@@ -231,6 +231,8 @@ export class AnthropicProvider extends BaseProvider {
                         promptLen: imageCall.prompt.length,
                         referenceImagesExtracted: refs.length,
                     }, null, 0)}`)
+                } else if (hasImageModel && state.capabilityMediaExecutionPlan) {
+                    info(`[Anthropic:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${modelVersion})`)
                 } else if (hasImageModel && hasVideoModel) {
                     warn(`[Anthropic:${this.instanceKey}] did not emit generate_image or generate_video (model=${modelVersion})`)
                 } else if (hasImageModel) {

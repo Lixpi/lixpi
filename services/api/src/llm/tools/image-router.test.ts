@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as debugTools from '@lixpi/debug-tools'
 
 import { ImageRouter } from './image-router.ts'
+import { ImagePublisher } from '../graph/image-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
 
 function createState(overrides: Partial<ProviderState> = {}): ProviderState {
@@ -265,6 +266,7 @@ describe('ImageRouter', () => {
     })
 
     it('delegates a Character Creator media plan to its registered strategy and returns the final PNG for normal settlement', async () => {
+        const complete = vi.spyOn(ImagePublisher.prototype, 'complete').mockResolvedValue(undefined)
         const execute = vi.fn(async () => ({
             generatedImages: ['final-character-sheet-base64'],
             imageUsage: { generatedCount: 27, size: '3840x2560', quality: 'high' },
@@ -276,7 +278,7 @@ describe('ImageRouter', () => {
             kind: 'character-sheet',
             capabilityRunId: 'run-1',
             sourceAssetIds: ['asset-1'],
-            userPrompt: 'Create a character sheet.',
+            userPrompt: 'Create a combie character out of this photo.',
             panels: [],
             layoutId: 'character-sheet-3840x2560',
             semanticRetryLimit: 1,
@@ -284,26 +286,69 @@ describe('ImageRouter', () => {
         const state = createState({
             capabilityUsageMode: 'character-creator',
             capabilityMediaExecutionPlan: plan,
+            generatedImagePrompt: 'Create an adorable chibi cartoon with a large head and small body.',
+            providerSafeMediaIntent: { safePrompt: 'Create a combie character out of this photo.' } as any,
+            mediaReferenceBindings: [{
+                subjectIdentity: { classification: 'self' },
+            }] as any,
+            capabilityUsagePrompt: 'Apply the sibling visual-style Capability.',
+            capabilityReferenceImages: ['data:image/png;base64,U1RZTEU='],
+            capabilityReferenceImageTraceUrls: ['/api/capabilities/style/resources/sample-1'],
+            capabilityToolResults: [
+                { capabilityId: 'character-creator', runId: 'character-run', output: {} },
+                { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
+            ],
+            generationRun: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+                mediaRunId: 'reasoning-1:image:0',
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                mediaIndex: 0,
+                variantIndex: 0,
+            },
             imageSize: '1024x1024',
         })
-        const router = new ImageRouter({ createTransient } as any, { get } as any)
+        const router = new ImageRouter({ createTransient } as any, { get } as any, {} as any)
 
-        const result = await router.execute(state)
+        try {
+            const result = await router.execute(state)
 
-        expect(get).toHaveBeenCalledWith(plan)
-        expect(execute).toHaveBeenCalledWith(expect.objectContaining({
-            organizationId: 'org-1',
-            userId: 'user-1',
-            workspaceId: 'workspace-1',
-            conversationAssetId: 'thread-1',
-            reasoningModel: expect.objectContaining({ provider: 'Anthropic' }),
-            imageModel: expect.objectContaining({ provider: 'Google' }),
-        }), plan, expect.objectContaining({}))
-        expect(createTransient).not.toHaveBeenCalled()
-        expect(result).toMatchObject({
-            generatedImages: ['final-character-sheet-base64'],
-            imageUsage: { generatedCount: 27, size: '3840x2560', quality: 'high' },
-        })
+            expect(get).toHaveBeenCalledWith(plan)
+            expect(execute).toHaveBeenCalledWith(expect.objectContaining({
+                organizationId: 'org-1',
+                userId: 'user-1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'thread-1',
+                reasoningModel: expect.objectContaining({ provider: 'Anthropic' }),
+                imageModel: expect.objectContaining({ provider: 'Google' }),
+                sharedState: {
+                    authoritativePrompt: 'Create a combie character out of this photo.',
+                    sourceSubjectIdentityClassifications: ['self'],
+                    capabilityInstructions: ['Apply the sibling visual-style Capability.'],
+                    capabilityReferences: [{
+                        imageUrl: 'data:image/png;base64,U1RZTEU=',
+                        traceUrl: '/api/capabilities/style/resources/sample-1',
+                    }],
+                    capabilityOutputs: [
+                        { capabilityId: 'character-creator', runId: 'character-run', output: {} },
+                        { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
+                    ],
+                },
+            }), plan, expect.objectContaining({}))
+            expect(complete).toHaveBeenCalledWith(expect.objectContaining({
+                revisedPrompt: 'Create a combie character out of this photo.',
+            }))
+            expect(createTransient).not.toHaveBeenCalled()
+            expect(result).toMatchObject({
+                generatedImages: ['final-character-sheet-base64'],
+                imageUsage: { generatedCount: 27, size: '3840x2560', quality: 'high' },
+            })
+        } finally {
+            complete.mockRestore()
+        }
     })
 
     it('returns a strategy preflight failure without calling an image provider', async () => {

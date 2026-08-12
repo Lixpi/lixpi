@@ -5,13 +5,15 @@ export type CapabilityMediaExecutionPlan = {
     capabilityRunId: string
 }
 
-export type CapabilityMediaDagOutputBinding = {
+export type CapabilityMediaDagOutputBinding<BindingMetadata extends object = Record<never, never>> = {
     bindingKey: string
     sourceNodeId: string
     required: boolean
-}
+} & BindingMetadata
 
-export type CapabilityMediaDagNodePlan = {
+export type CapabilityMediaDagNodePlan<
+    OutputBinding extends CapabilityMediaDagOutputBinding = CapabilityMediaDagOutputBinding,
+> = {
     dependsOn: string[]
-    outputBindings: CapabilityMediaDagOutputBinding[]
+    outputBindings: OutputBinding[]
 }

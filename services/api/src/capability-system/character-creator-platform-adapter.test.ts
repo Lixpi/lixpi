@@ -55,6 +55,13 @@ const createContext = (): CapabilityMediaExecutionContext => ({
             imageReferenceCapabilities,
         },
     },
+    sharedState: {
+        authoritativePrompt: 'Create a courier.',
+        sourceSubjectIdentityClassifications: [],
+        capabilityInstructions: [],
+        capabilityReferences: [],
+        capabilityOutputs: [],
+    },
     eventMeta: { userId: 'user-1', organizationId: 'org-1' },
 })
 
@@ -140,6 +147,7 @@ describe('Character Creator API platform adapter', () => {
             references: [
                 { url: 'data:image/png;base64,AQ==', role: 'canonical-anchor', fileName: 'body-front.png' },
                 { url: 'data:image/png;base64,Ag==', role: 'adjacent-angle', fileName: 'head-front.png' },
+                { url: 'data:image/png;base64,Aw==', role: 'opposite-angle', fileName: 'body-back.png' },
             ],
         })
 
@@ -147,6 +155,7 @@ describe('Character Creator API platform adapter', () => {
             imageGenerationReferences: expect.arrayContaining([
                 expect.objectContaining({ role: 'canonical-anchor', fileName: 'body-front.png' }),
                 expect.objectContaining({ role: 'adjacent-angle', fileName: 'head-front.png' }),
+                expect.objectContaining({ role: 'opposite-angle', fileName: 'body-back.png' }),
             ]),
         }))
     })

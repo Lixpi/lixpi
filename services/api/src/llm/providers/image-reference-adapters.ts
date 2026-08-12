@@ -34,19 +34,21 @@ const IDENTITY_ROLES = new Set<ImageGenerationReferenceRole>([
     'body-outfit-crop',
     'canonical-anchor',
     'adjacent-angle',
+    'opposite-angle',
 ])
 
 const ROLE_PRIORITY: Readonly<Record<ImageGenerationReferenceRole, number>> = {
     'canonical-anchor': 0,
-    'original-source': 1,
-    'pose-reference': 2,
-    'face-crop': 3,
-    'body-outfit-crop': 4,
-    'adjacent-angle': 5,
-    'prop-crop': 6,
-    'structure-reference': 7,
-    'capability-reference': 8,
-    'source-reference': 9,
+    'adjacent-angle': 1,
+    'opposite-angle': 2,
+    'pose-reference': 3,
+    'original-source': 4,
+    'face-crop': 5,
+    'body-outfit-crop': 6,
+    'prop-crop': 7,
+    'structure-reference': 8,
+    'capability-reference': 9,
+    'source-reference': 10,
 }
 
 const adaptByBudget = ({
@@ -117,9 +119,14 @@ const getRolePriority = (
     role: ImageGenerationReferenceRole,
     hasCanonicalAnchor: boolean,
 ): number => {
-    if (!hasCanonicalAnchor) return ROLE_PRIORITY[role]
-    if (role === 'pose-reference') return 1
-    if (role === 'original-source') return 2
+    if (!hasCanonicalAnchor) {
+        if (role === 'original-source') return 1
+        if (role === 'pose-reference') return 2
+        if (role === 'face-crop') return 3
+        if (role === 'body-outfit-crop') return 4
+        if (role === 'adjacent-angle') return 5
+        if (role === 'opposite-angle') return 6
+    }
     return ROLE_PRIORITY[role]
 }
 

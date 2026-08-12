@@ -92,7 +92,7 @@ export function buildCharacterCreatorManifest(resources: {
         capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.tool,
         kind: 'tool',
         name: 'Character Creator',
-        description: 'Use for any request to create, design, or develop a character. Defaults to one close front identity portrait and two full-body shots; free-form text can request 3 to 10 prioritized shots. Every shot runs once and the final sheet contains imagery only.',
+        description: 'Use for any request to create, design, or develop a character. Defaults to a close front identity portrait followed by front and back full-body shots; free-form text can request 3 to 10 prioritized shots. Every shot runs once and the final sheet contains imagery only.',
         references: [
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.layoutSkill, kind: 'skill', import: ['layout'] },
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.referenceFidelitySkill, kind: 'skill', import: ['reference-fidelity'] },

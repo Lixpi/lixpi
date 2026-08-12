@@ -7,6 +7,7 @@ import type {
     MediaGenerationRunProgress,
     MediaGenerationRunMeta,
     ProviderName,
+    SubjectIdentityClassification,
 } from '@lixpi/constants'
 
 import type { CapabilityMediaExecutionPlan } from '../shared/capability-media-execution-plan.ts'
@@ -29,6 +30,21 @@ export type CapabilityMediaModelMeta = {
     [key: string]: unknown
 }
 
+export type CapabilityMediaSharedState = {
+    authoritativePrompt: string
+    sourceSubjectIdentityClassifications: readonly SubjectIdentityClassification[]
+    capabilityInstructions: readonly string[]
+    capabilityReferences: ReadonlyArray<{
+        imageUrl: string
+        traceUrl?: string
+    }>
+    capabilityOutputs: ReadonlyArray<{
+        capabilityId: string
+        runId: string
+        output: Readonly<Record<string, CapabilityJsonValue>>
+    }>
+}
+
 export type CapabilityMediaExecutionContext = {
     organizationId: string
     userId: string
@@ -48,6 +64,7 @@ export type CapabilityMediaExecutionContext = {
         meta: CapabilityMediaModelMeta
         requestedSize?: string
     }
+    sharedState: CapabilityMediaSharedState
     eventMeta: Record<string, unknown>
     generationRun?: MediaGenerationRunMeta
     workflowId?: string

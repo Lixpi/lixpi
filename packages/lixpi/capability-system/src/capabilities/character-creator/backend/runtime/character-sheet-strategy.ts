@@ -9,14 +9,20 @@ import type { CapabilityMediaStrategy } from '../../../../backend/capability-med
 import { CapabilityMediaDagRunner } from '../../../../backend/capability-media-dag-runner.ts'
 import {
     assertValidCharacterSheetRenderPlan,
-    CHARACTER_IDENTITY_ANCHOR_BINDING_KEY,
+    CHARACTER_BACK_ANCHOR_PANEL_ID,
     CHARACTER_IDENTITY_ANCHOR_PANEL_ID,
+    CHARACTER_OUTFIT_ANCHOR_PANEL_ID,
     type CharacterPanelSpec,
+    type CharacterPanelOutputBinding,
     type CharacterSheetRenderPlan,
 } from '../../shared/character-sheet-media-plan.ts'
 
 import { resolveCharacterReferences } from './reference-resolver.ts'
-import { analyzeCharacterEvidence, type CharacterEvidenceAnalyzerPort } from './evidence-analyzer.ts'
+import {
+    analyzeCharacterEvidence,
+    selectCharacterEvidenceFacts,
+    type CharacterEvidenceAnalyzerPort,
+} from './evidence-analyzer.ts'
 import type { CharacterEvidenceProfile } from './character-evidence.ts'
 import {
     buildCharacterReferencePack,
@@ -275,7 +281,7 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
                     id: 'build-character-render-plan',
                     title: 'Build character render plan',
                     status: 'completed',
-                    summary: `${snapshot.plan.panels.length} shot(s) planned: ${plannedShotTitles}. The neutral-front identity portrait blocks and conditions every generated dependent shot.`,
+                    summary: `${snapshot.plan.panels.length} shot(s) planned: ${plannedShotTitles}. The portrait, front full-body, and back full-body shots form the configured reference barrier chain.`,
                 },
             ],
         },
@@ -290,15 +296,19 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
         },
         {
             id: 'render-shots',
-            title: `Generate identity anchor and ${snapshot.plan.panels.length - 1} dependent shot(s)`,
+            title: `Generate three required anchors plus ${snapshot.plan.panels.length - 3} optional shot(s)`,
             status: snapshot.renderFailures.size > 0 && phaseIsComplete('rendering')
                 ? 'failed'
                 : getPhaseStatus('rendering'),
             summary: snapshot.renderFailures.size > 0
                 ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; ${snapshot.renderFailures.size} unavailable. No automatic retry was started.`
-                : snapshot.renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
-                    ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the generated identity anchor is available to every dependent shot.`
-                    : `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; dependent generation is blocked until the identity anchor finishes.`,
+                : snapshot.renderedPanels.has(CHARACTER_BACK_ANCHOR_PANEL_ID)
+                    ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; all three generated anchors are available to every optional shot.`
+                    : snapshot.renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
+                        ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the back full-body outfit anchor is the remaining barrier.`
+                        : snapshot.renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+                            ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the front full-body outfit anchor is the next barrier.`
+                            : `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the front identity portrait is the first barrier.`,
             children: renderChildren,
         },
         {
@@ -344,13 +354,11 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
 
 function formatRenderProgressSummary(panelId: string, snapshot: CharacterProgressSnapshot): string {
     const panel = snapshot.plan.panels.find(candidate => candidate.panelId === panelId)
-    const usesIdentityAnchor = panel?.outputBindings.some(binding => (
-        binding.bindingKey === CHARACTER_IDENTITY_ANCHOR_BINDING_KEY
-    )) === true
+    const generatedReferenceRoles = panel?.outputBindings.map(binding => binding.referenceRole) ?? []
     const failure = snapshot.renderFailures.get(panelId)
     if (failure) {
         return failure.startsWith('Required generated output unavailable:')
-            ? `Not started because the required neutral-front identity anchor was unavailable. ${failure}`
+            ? `Not started because a required generated reference was unavailable. ${failure}`
             : formatRuntimeWarning('Provider generation failed', failure)
     }
     const rendered = snapshot.renderedPanels.get(panelId)
@@ -364,22 +372,38 @@ function formatRenderProgressSummary(panelId: string, snapshot: CharacterProgres
         const omitted = rendered.omittedReferenceRoles.length > 0
             ? ` Omitted by provider: ${[...new Set(rendered.omittedReferenceRoles)].join(', ')}.`
             : ''
-        const anchorResult = usesIdentityAnchor
-            ? rendered.includedReferenceRoles.includes('canonical-anchor')
-                ? ' The generated neutral-front identity anchor was used as the primary character reference.'
-                : ' The required generated identity anchor was not reported by the provider.'
+        const anchorResult = generatedReferenceRoles.length > 0
+            ? generatedReferenceRoles.every(role => rendered.includedReferenceRoles.includes(role))
+                ? generatedReferenceRoles.includes('opposite-angle')
+                    ? ' The generated portrait, front full-body, and back full-body anchors were all used.'
+                    : generatedReferenceRoles.includes('adjacent-angle')
+                        ? ' The generated portrait and front full-body anchors were both used.'
+                        : ' The generated neutral-front identity anchor was used.'
+                : ' One or more required generated reference roles were not reported by the provider.'
             : panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-                ? ' This shot is the generated identity anchor for every dependent shot.'
+                ? ' This shot is the generated identity anchor for the front full-body shot and every later shot.'
+                : panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                    ? ' This shot is the generated outfit anchor used with the identity portrait by every later shot.'
+                    : panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
+                        ? ' This shot is the generated rear-outfit anchor used with the portrait and front full-body shot by every optional shot.'
                 : ''
         return `Rendered in one provider attempt. References used: ${included}.${anchorResult}${omitted}`
     }
     if (snapshot.runningPanelIds.has(panelId)) {
-        return panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-            ? 'Generating the required neutral-front identity anchor from the authorized source evidence.'
-            : 'Provider generation is running with the generated neutral-front identity anchor as the primary character reference, plus original evidence and this shot’s pose control.'
+        if (panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID) {
+            return 'Generating the required neutral-front identity anchor from the authorized source evidence.'
+        }
+        if (panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID) {
+            return 'Generating the required front full-body outfit anchor from the completed identity portrait.'
+        }
+        if (panelId === CHARACTER_BACK_ANCHOR_PANEL_ID) {
+            return 'Generating the required back full-body outfit anchor from the completed portrait and front full-body shot.'
+        }
+        return 'Provider generation is running with all three generated anchors, plus original evidence and this shot’s pose control.'
     }
-    if (usesIdentityAnchor && !snapshot.renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)) {
-        return 'Blocked until the required neutral-front identity anchor finishes successfully.'
+    const missingDependencies = panel?.dependsOn.filter(dependency => !snapshot.renderedPanels.has(dependency)) ?? []
+    if (missingDependencies.length > 0) {
+        return `Blocked until required generated shot(s) finish successfully: ${missingDependencies.join(', ')}.`
     }
     return snapshot.phase === 'rendering'
         ? 'Queued until its shot dependencies and a provider slot are ready.'
@@ -601,11 +625,27 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
     ) {
         assertValidCharacterSheetRenderPlan(planValue)
         const plan: CharacterSheetRenderPlan = planValue
+        const authoritativePrompt = state.sharedState.authoritativePrompt.trim() || plan.userPrompt
+        const capabilityInstructions = [...new Set(state.sharedState.capabilityInstructions
+            .map(instruction => instruction.trim())
+            .filter(Boolean))]
+        const capabilityReferences = buildSharedCapabilityReferences(state.sharedState.capabilityReferences)
+        const completeRequest = [
+            authoritativePrompt,
+            ...capabilityInstructions.map(instruction => `Shared Capability instruction: ${instruction}`),
+        ].join('\n\n')
         const modelCapabilities = state.imageModel.meta.imageReferenceCapabilities
         if (!modelCapabilities) throw new Error('IMAGE_REFERENCE_CAPABILITIES_REQUIRED')
         if (!modelCapabilities.conditioningModes.includes('identity')
             || modelCapabilities.maxIdentityReferenceImages === 0) {
             throw new Error('CHARACTER_CREATOR_IDENTITY_CONDITIONING_UNSUPPORTED')
+        }
+        const requiredGeneratedReferenceCount = Math.max(
+            ...plan.panels.map(panel => panel.outputBindings.filter(binding => binding.required).length),
+        )
+        if (modelCapabilities.maxIdentityReferenceImages < requiredGeneratedReferenceCount
+            || modelCapabilities.maxReferenceImages < requiredGeneratedReferenceCount) {
+            throw new Error('CHARACTER_CREATOR_GENERATED_REFERENCE_BUDGET_UNSUPPORTED')
         }
         const vlmPorts = createCharacterVlmPorts({
             provider: state.reasoningModel.provider,
@@ -711,7 +751,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     }),
                     execute: () => analyzeCharacterEvidence({
                         sources,
-                        userPrompt: plan.userPrompt,
+                        userPrompt: completeRequest,
                         analyzer: this.deps.evidenceAnalyzer ?? vlmPorts.evidenceAnalyzer,
                         signal: options.signal,
                     }),
@@ -722,6 +762,8 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 evidence = {
                     medium: 'unknown',
                     facts: [],
+                    promptDirectives: [],
+                    promptChangedFeatures: [],
                     palette: [],
                     costumeNotes: [],
                     materialNotes: [],
@@ -835,7 +877,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 phase: 'rendering',
                 completedSteps: completedRenders,
                 totalSteps: plan.panels.length,
-                message: `Generating the required neutral-front identity anchor first. The other ${plan.panels.length - 1} shot(s) remain blocked until that anchor is available; no automatic retries will run.`,
+                message: `Generating the neutral-front portrait, front full-body shot, and back full-body shot sequentially. The ${plan.panels.length - 3} optional shot(s) wait for all three terminal outputs; no automatic retries will run.`,
             })
             const runner = new CapabilityMediaDagRunner<CharacterRenderDagNode, CharacterPanelRenderResult>(
                 renderPanels,
@@ -853,9 +895,13 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         0,
                         plan.panels.length - completedRenders - activePanelTitles.length,
                     )
-                    const waitingSummary = renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+                    const waitingSummary = renderedPanels.has(CHARACTER_BACK_ANCHOR_PANEL_ID)
                         ? `${remainingPanelCount} queued`
-                        : `${remainingPanelCount} blocked on the required identity anchor`
+                        : renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
+                            ? `${remainingPanelCount} waiting for the back full-body outfit anchor`
+                            : renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+                                ? `${remainingPanelCount} waiting for the front full-body outfit anchor`
+                                : `${remainingPanelCount} waiting for the front identity portrait`
                     return {
                         phase: 'rendering',
                         completedSteps: completedRenders,
@@ -876,39 +922,53 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             phase: 'rendering',
                             completedSteps: completedRenders,
                             totalSteps: plan.panels.length,
-                            message: `${panel.title} was not started because its required generated identity anchor was unavailable.`,
+                            message: `${panel.title} was not started because required generated reference output was unavailable: ${blocked.missingBindingKeys.join(', ')}.`,
                         })
                     },
                     execute: async (panel, executionContext) => {
                         runningPanelIds.add(panel.panelId)
-                        const generatedIdentityAnchor = executionContext.boundOutputs.get(
-                            CHARACTER_IDENTITY_ANCHOR_BINDING_KEY,
+                        const generatedReferences = buildGeneratedPanelReferences(
+                            panel.outputBindings,
+                            executionContext.boundOutputs,
                         )
-                        const references: CharacterImageReference[] = generatedIdentityAnchor
-                            ? [
-                                toGeneratedIdentityAnchorReference(generatedIdentityAnchor),
-                                ...referencePack.entries,
-                            ]
-                            : referencePack.entries
+                        const references: CharacterImageReference[] = [
+                            ...generatedReferences,
+                            ...referencePack.entries,
+                            ...capabilityReferences,
+                        ]
                         void reportProgressSafely({
                             phase: 'rendering',
                             completedSteps: completedRenders,
                             totalSteps: plan.panels.length,
                             message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
                                 ? `Generating ${panel.title} as the required identity anchor from the authorized source evidence.`
-                                : `Generating ${panel.title} with the completed neutral-front identity anchor as the primary character reference, plus original evidence and pose control.`,
+                                : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                                    ? `Generating ${panel.title} from the completed identity portrait to establish the complete outfit.`
+                                    : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
+                                        ? `Generating ${panel.title} from the completed portrait and front full-body shot to establish the rear outfit.`
+                                        : `Generating ${panel.title} with all three completed anchors, plus original evidence and pose control.`,
                         })
                         try {
-                            const evidenceSummary = evidence.facts
+                            const sourceEvidenceSummary = selectCharacterEvidenceFacts({
+                                evidence,
+                                targetAngle: panel.target,
+                                promptChangedFeatures: evidence.promptChangedFeatures,
+                            })
                                 .filter(fact => fact.visibility === 'observed')
                                 .slice(0, 16)
                                 .map(fact => `${fact.feature}: ${fact.value}`)
                                 .join('; ')
                             const prompt = buildCharacterPanelPrompt({
                                 panel,
-                                userPrompt: plan.userPrompt,
-                                evidenceSummary,
-                                usesGeneratedIdentityAnchor: Boolean(generatedIdentityAnchor),
+                                authoritativePrompt,
+                                sourceMedium: evidence.medium,
+                                sourceEvidenceSummary,
+                                promptDirectives: evidence.promptDirectives,
+                                sourceSubjectIdentityClassifications:
+                                    state.sharedState.sourceSubjectIdentityClassifications,
+                                capabilityInstructions,
+                                capabilityReferenceCount: capabilityReferences.length,
+                                generatedReferenceBindings: panel.outputBindings,
                             })
                             providerOperationAttempts += 1
                             const rendered = await renderCharacterPanel({
@@ -956,8 +1016,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 completedSteps: completedRenders,
                                 totalSteps: plan.panels.length,
                                 message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-                                    ? `The neutral-front identity anchor is complete. Releasing ${plan.panels.length - 1} dependent shot(s) with that generated anchor attached as their primary character reference.`
-                                    : `Rendered ${completedRenders} of ${plan.panels.length} shots with the generated identity anchor; the sheet preview is updating.`,
+                                    ? 'The neutral-front identity anchor is complete. Releasing the front full-body outfit shot.'
+                                    : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                                        ? 'The front full-body outfit anchor is complete. Releasing the back full-body outfit shot.'
+                                        : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
+                                            ? `The back full-body outfit anchor is complete. Releasing ${plan.panels.length - 3} optional shot(s) with all three generated references attached.`
+                                            : `Rendered ${completedRenders} of ${plan.panels.length} shots with all three generated anchors; the sheet preview is updating.`,
                             })
                             await publishProgressiveSheet(`terminal:${panel.panelId}`)
                             return rendered
@@ -973,7 +1037,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 totalSteps: plan.panels.length,
                                 message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
                                     ? 'The required neutral-front identity anchor failed. Dependent provider work will not start.'
-                                    : `${panel.title} was unavailable; continuing with the rendered shots.`,
+                                    : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                                        ? 'The required front full-body outfit anchor failed. Later provider work will not start.'
+                                        : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
+                                            ? 'The required back full-body outfit anchor failed. Optional provider work will not start.'
+                                            : `${panel.title} was unavailable; continuing with the rendered shots.`,
                             })
                             await publishProgressiveSheet(`failed:${panel.panelId}`)
                             throw error
@@ -985,6 +1053,20 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 const failure = renderFailures.get(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
                 throw new Error([
                     'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE',
+                    failure,
+                ].filter(Boolean).join(':'))
+            }
+            if (!renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)) {
+                const failure = renderFailures.get(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
+                throw new Error([
+                    'CHARACTER_SHEET_OUTFIT_ANCHOR_UNAVAILABLE',
+                    failure,
+                ].filter(Boolean).join(':'))
+            }
+            if (!renderedPanels.has(CHARACTER_BACK_ANCHOR_PANEL_ID)) {
+                const failure = renderFailures.get(CHARACTER_BACK_ANCHOR_PANEL_ID)
+                throw new Error([
+                    'CHARACTER_SHEET_BACK_ANCHOR_UNAVAILABLE',
                     failure,
                 ].filter(Boolean).join(':'))
             }
@@ -1044,6 +1126,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                         || entry.role === 'face-crop'
                                         || entry.role === 'body-outfit-crop')
                                     .map(entry => entry.url),
+                                authoritativePrompt,
+                                capabilityInstructions,
+                                capabilityReferenceDataUrls: capabilityReferences
+                                    .map(reference => reference.url)
+                                    .filter(isInlineImageDataUrl),
                                 evidence,
                                 vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
                                 fidelity,
@@ -1325,14 +1412,39 @@ function decodeProviderPartialImage(value: string): Buffer {
     return bytes
 }
 
-function toGeneratedIdentityAnchorReference(
-    rendered: CharacterPanelRenderResult,
-): CharacterImageReference {
-    return {
-        url: `data:image/png;base64,${rendered.bytes.toString('base64')}`,
-        role: 'canonical-anchor',
-        fileName: 'GENERATED_IDENTITY_ANCHOR.png',
-    }
+function buildGeneratedPanelReferences(
+    bindings: readonly CharacterPanelOutputBinding[],
+    boundOutputs: ReadonlyMap<string, CharacterPanelRenderResult>,
+): CharacterImageReference[] {
+    return bindings.flatMap(binding => {
+        const rendered = boundOutputs.get(binding.bindingKey)
+        if (!rendered) return []
+        return [{
+            url: `data:image/png;base64,${rendered.bytes.toString('base64')}`,
+            role: binding.referenceRole,
+            fileName: binding.fileName,
+        }]
+    })
+}
+
+function buildSharedCapabilityReferences(
+    references: ReadonlyArray<{ imageUrl: string }>,
+): CharacterImageReference[] {
+    const seen = new Set<string>()
+    return references.flatMap(reference => {
+        const imageUrl = reference.imageUrl.trim()
+        if (!imageUrl || seen.has(imageUrl)) return []
+        seen.add(imageUrl)
+        return [{
+            url: imageUrl,
+            role: 'capability-reference' as const,
+            fileName: `CAPABILITY_REFERENCE_${seen.size}.png`,
+        }]
+    })
+}
+
+function isInlineImageDataUrl(value: string): boolean {
+    return /^data:image\/(?:gif|jpeg|png|webp);base64,/u.test(value)
 }
 
 function formatRuntimeWarning(prefix: string, error: unknown): string {

@@ -36,6 +36,7 @@ type RenderImageGenerationTraceDetailsParams = {
 
 export type ImageGenerationTraceDetailsOptions = {
     className?: string
+    hideToolPrompt?: boolean
     getAdditionalReferenceImageSources?: (reference: ImageGenerationTraceReference) => string[]
     // Lets the host render its own reference tile (e.g. the canvas context-preview
     // tile: thumbnail-only with a rich hover card). When it returns an element that
@@ -99,6 +100,48 @@ const uniqueImageSources = (sources: string[]): string[] => {
         seen.add(source)
         return true
     })
+}
+
+function getReferenceIdentity(reference: ImageGenerationTraceReference): string {
+    if (reference.assetId) return `asset:${reference.assetId}`
+    if (reference.nodeId) return `node:${reference.nodeId}`
+    if (reference.imageUrl) return `image:${reference.imageUrl}`
+    return `reference:${reference.id}`
+}
+
+function getReferenceRolePriority(reference: ImageGenerationTraceReference): number {
+    switch (reference.role) {
+        case 'target': return 5
+        case 'comparison-target': return 4
+        case 'message-reference': return 3
+        case 'capability-reference': return 2
+        default: return 1
+    }
+}
+
+// Historical traces may contain the same Asset twice when browser branch
+// context and workspace context assigned different candidate IDs. Rendering is
+// Asset-identity based and keeps the strongest role at the original position.
+export function deduplicateImageGenerationTraceReferences(
+    references: ImageGenerationTraceReference[],
+): ImageGenerationTraceReference[] {
+    const distinctReferences: ImageGenerationTraceReference[] = []
+    const referenceIndexByIdentity = new Map<string, number>()
+
+    for (const reference of references) {
+        const identity = getReferenceIdentity(reference)
+        const existingIndex = referenceIndexByIdentity.get(identity)
+        if (existingIndex === undefined) {
+            referenceIndexByIdentity.set(identity, distinctReferences.length)
+            distinctReferences.push(reference)
+            continue
+        }
+        if (getReferenceRolePriority(reference) > getReferenceRolePriority(distinctReferences[existingIndex]!)) {
+            distinctReferences[existingIndex] = reference
+        }
+    }
+
+    return distinctReferences
 }
 
 const getReferenceImageSources = (
@@ -299,9 +342,10 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
 
     const renderReferenceGrid = (trace: GenerationTrace) => {
         if (renderedReferenceTrace === trace) return
+        const referenceImages = deduplicateImageGenerationTraceReferences(trace.referenceImages)
 
-        if (trace.referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) =>
+        if (referenceImages.length > 0) {
+            referenceGrid.replaceChildren(...referenceImages.map((reference) =>
                 options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
         } else {
             referenceGrid.replaceChildren(html`
@@ -396,7 +440,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         }
 
         const shouldShowFallback = Boolean(fallbackText && (forceToolPromptFallback || childCount === 0))
-        toolPromptSection.hidden = Boolean(capabilityTrace)
+        toolPromptSection.hidden = Boolean(capabilityTrace) || Boolean(options.hideToolPrompt)
         toolPromptSection.classList.toggle('has-content', hasTrace || childCount > 0 || shouldShowFallback)
         toolPromptFallback.textContent = shouldShowFallback ? fallbackText : ''
         toolPromptFallback.hidden = !shouldShowFallback

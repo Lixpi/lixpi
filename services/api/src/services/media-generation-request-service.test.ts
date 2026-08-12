@@ -2,9 +2,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    type Asset,
     type MediaBranchLineagePlan,
     type MediaGenerationRequest,
     type MediaGenerationRun,
+    type MediaReferenceBinding,
+    type UnresolvedReferenceBinding,
 } from '@lixpi/constants'
 import {
     getMediaGenerationOperationNodeId,
@@ -16,12 +19,16 @@ const mocks = vi.hoisted(() => ({
         create: vi.fn(),
         delete: vi.fn(),
         get: vi.fn(),
+        getAuthorized: vi.fn(),
         transition: vi.fn(),
     },
     blobModel: {
         store: vi.fn(),
         addReference: vi.fn(),
         removeReference: vi.fn(),
+    },
+    assetModel: {
+        get: vi.fn(),
     },
     canvasProjection: {
         upsertLineage: vi.fn(),
@@ -41,6 +48,10 @@ vi.mock('../models/media-generation-request.ts', () => ({
 
 vi.mock('../models/blob.ts', () => ({
     default: mocks.blobModel,
+}))
+
+vi.mock('../models/asset.ts', () => ({
+    default: mocks.assetModel,
 }))
 
 vi.mock('./asset-canvas-projection.ts', () => ({
@@ -78,6 +89,95 @@ const deferredRequest = (): MediaGenerationRequest => ({
     createdAt: 1,
     updatedAt: 1,
     statusUpdatedAt: 1,
+})
+
+const pendingRun = (): MediaGenerationRun => ({
+    generationRun: 0,
+    reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+    reasoningIndex: 0,
+    reasoningRunId: 'media-request-1:reasoning:0',
+    provider: 'OpenAI',
+    modelId: 'OpenAI:gpt-image-2',
+    mediaRunId: 'media-request-1:reasoning:0:image:0',
+    mediaType: 'image',
+    mediaIndex: 0,
+    outputAssetId: 'asset-image-1',
+    outputNodeId: 'pending-image-1',
+    operationNodeId: 'operation-image-1',
+    status: 'pending',
+})
+
+const referenceAsset = (assetId: string, title: string): Asset => ({
+    assetId,
+    organizationId: 'organization-1',
+    title,
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    originWorkspaceId: 'workspace-1',
+    ownerUserId: 'user-1',
+    media: {
+        kind: 'image',
+        originalName: `${title}.png`,
+        sourceMimeType: 'image/png',
+        modelSafe: true,
+        renditions: {},
+    },
+    descriptor: {
+        status: 'ready',
+        summary: `${title} character reference`,
+        entityTags: ['character'],
+        styleTags: ['illustration'],
+        source: 'analysis',
+        version: '1',
+        updatedAt: 1,
+    },
+    depictionMedium: 'painting',
+    subjectIdentity: {
+        classification: 'fictional',
+        source: 'user-attestation',
+        currentAttestationId: `attestation-${assetId}`,
+        identityGroupId: `identity-${assetId}`,
+        providerVerifications: [],
+    },
+    documents: {},
+    states: {
+        lifecycle: 'active',
+        media: 'ready',
+        conversation: 'none',
+        provenance: 'none',
+    },
+    referenceCount: 1,
+    revision: 3,
+    createdAt: 1,
+    updatedAt: 1,
+})
+
+const referenceBinding = (asset: Asset, index: number): MediaReferenceBinding => ({
+    assetId: asset.assetId,
+    assetRevision: asset.revision,
+    mediaKind: 'image',
+    alias: `REFERENCE_${index}`,
+    displayNameSnapshot: asset.title,
+    forbiddenNameVariants: [asset.title.toLocaleLowerCase('en-US')],
+    semanticDescriptor: asset.descriptor?.summary ?? 'character reference',
+    depictionMedium: asset.depictionMedium,
+    subjectIdentity: asset.subjectIdentity,
+})
+
+const unresolvedBinding = (
+    bindingId: string,
+    originalText: string,
+    candidateAssetIds: string[],
+): UnresolvedReferenceBinding => ({
+    bindingId,
+    promptRange: { from: 0, to: originalText.length },
+    originalText,
+    matcherVersion: 'bounded-local-v1',
+    candidates: candidateAssetIds.map((assetId, index) => ({
+        assetId,
+        score: 0.9 - index * 0.1,
+        previewRenditionName: 'thumbnail',
+    })),
 })
 
 const imageLineagePlan = (): MediaBranchLineagePlan => ({
@@ -150,6 +250,114 @@ describe('media generation checkpoint safety', () => {
         [{ payload: new Uint8Array([1, 2, 3]) }, 'MEDIA_REQUEST_CHECKPOINT_BINARY_FORBIDDEN:$.payload'],
     ])('rejects secret or media-byte checkpoint payloads', (checkpoint, expected) => {
         expect(() => assertSafeMediaGenerationCheckpoint(checkpoint)).toThrow(expected)
+    })
+})
+
+describe('media generation reference resolution actions', () => {
+    it('projects only the candidates authorized for the first unresolved binding', async () => {
+        const assets = [
+            referenceAsset('asset-1', 'Source Drawing'),
+            referenceAsset('asset-2', 'Character Sheet'),
+            referenceAsset('asset-3', 'Alternate Sheet'),
+        ]
+        const unresolvedBindings = [
+            unresolvedBinding('binding-reference-drawing', 'reference drawing', ['asset-1', 'asset-2']),
+            unresolvedBinding('binding-character-sheet', 'character sheet', ['asset-2', 'asset-3']),
+        ]
+        const run = pendingRun()
+        mocks.operationProjection.project.mockResolvedValue({
+            generationRequestId: 'media-request-1',
+            layoutRevision: 1,
+            nodes: [],
+        })
+        const eventLog = { append: vi.fn(async () => undefined) }
+
+        await new MediaGenerationRequestService(eventLog as never).create({
+            generationRequestId: 'media-request-1',
+            workspaceId: 'workspace-1',
+            organizationId: 'organization-1',
+            userId: 'user-1',
+            conversationAssetId: 'conversation-1',
+            checkpoint: {
+                promptDocument: { type: 'doc' },
+                selectedReferences: assets.map(asset => ({ assetId: asset.assetId })),
+                modelSelection: {},
+                configuration: {},
+            },
+            bindings: assets.map((asset, index) => referenceBinding(asset, index + 1)),
+            unresolvedBindings,
+            runs: [run],
+        })
+
+        expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
+            candidateAssetIds: ['asset-1', 'asset-2'],
+            unresolvedBindingId: 'binding-reference-drawing',
+        }))
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_ACTION_REQUIRED',
+                payload: expect.objectContaining({
+                    bindingId: 'binding-reference-drawing',
+                    candidateAssetIds: ['asset-1', 'asset-2'],
+                }),
+            }),
+        }))
+    })
+
+    it('publishes the next binding and its candidates after resolving one phrase', async () => {
+        const assets = [
+            referenceAsset('asset-1', 'Source Drawing'),
+            referenceAsset('asset-2', 'Character Sheet'),
+            referenceAsset('asset-3', 'Alternate Sheet'),
+        ]
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'awaiting-reference-resolution',
+            bindings: assets.map((asset, index) => referenceBinding(asset, index + 1)),
+            unresolvedBindings: [
+                unresolvedBinding('binding-reference-drawing', 'reference drawing', ['asset-1', 'asset-2']),
+                unresolvedBinding('binding-character-sheet', 'character sheet', ['asset-2', 'asset-3']),
+            ],
+            runs: [pendingRun()],
+        }
+        const eventLog = { append: vi.fn(async () => undefined) }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+        mocks.assetModel.get.mockImplementation(async ({ assetId }: { assetId: string }) => (
+            assets.find(asset => asset.assetId === assetId)!
+        ))
+
+        const result = await new MediaGenerationRequestService(eventLog as never).resolveReference({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            userId: request.userId,
+            requestRevision: request.revision,
+            bindingId: 'binding-reference-drawing',
+            assetId: 'asset-1',
+            requester: {} as never,
+        })
+
+        expect(result.unresolvedBindings.map(binding => binding.bindingId)).toEqual([
+            'binding-character-sheet',
+        ])
+        expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
+            candidateAssetIds: ['asset-2', 'asset-3'],
+            unresolvedBindingId: 'binding-character-sheet',
+            requestRevision: 2,
+        }))
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_ACTION_REQUIRED',
+                requestRevision: 2,
+                payload: {
+                    status: 'awaiting-reference-resolution',
+                    bindingId: 'binding-character-sheet',
+                    candidateAssetIds: ['asset-2', 'asset-3'],
+                    resolvedBindingId: 'binding-reference-drawing',
+                    resolvedAssetId: 'asset-1',
+                },
+            }),
+        }))
     })
 })
 
@@ -284,5 +492,92 @@ describe('media generation request lineage binding', () => {
                 expect.objectContaining({ nodeId: 'branch-origin-1' }),
             ]),
         }))
+    })
+})
+
+describe('media generation request terminal settlement', () => {
+    it('dismisses an already-terminal request even when the rendered card revision is stale', async () => {
+        const terminalRequest: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'completed-with-errors',
+            revision: 7,
+            runs: [{ ...pendingRun(), status: 'failed' }],
+        }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(terminalRequest)
+
+        const result = await new MediaGenerationRequestService().cancel({
+            generationRequestId: terminalRequest.generationRequestId,
+            workspaceId: terminalRequest.workspaceId,
+            userId: terminalRequest.userId,
+            requestRevision: 2,
+        })
+
+        expect(result).toBe(terminalRequest)
+        expect(mocks.operationProjection.removeAll).toHaveBeenCalledWith({
+            workspaceId: terminalRequest.workspaceId,
+            generationRequestId: terminalRequest.generationRequestId,
+            terminalStatus: 'completed',
+            discardUnboundOutputNodes: true,
+        })
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+    })
+
+    it('fails a pending durable run and projects an actionable problem before request completion', async () => {
+        const request = {
+            ...deferredRequest(),
+            runs: [pendingRun()],
+        }
+        const eventLog = { append: vi.fn(async () => undefined) }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).failUnfinishedRuns({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+        })
+
+        expect(result).toMatchObject({ status: 'failed' })
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({
+                status: 'failed',
+                revision: 2,
+                runs: [expect.objectContaining({
+                    status: 'failed',
+                    problem: expect.objectContaining({
+                        type: 'urn:lixpi:media-problem:media-invocation-missing',
+                        action: 'none',
+                    }),
+                })],
+            }),
+            expectedRevision: 1,
+        })
+        expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
+            operationNodeId: 'operation-image-1',
+            status: 'failed',
+        }))
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_PROBLEM',
+                payload: expect.objectContaining({ runStatus: 'failed' }),
+            }),
+        }))
+    })
+
+    it('preserves a reference-resolution pause instead of terminalizing its pending runs', async () => {
+        const request = {
+            ...deferredRequest(),
+            status: 'awaiting-reference-resolution' as const,
+            runs: [pendingRun()],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+
+        const result = await new MediaGenerationRequestService().failUnfinishedRuns({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+        })
+
+        expect(result).toBe(request)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
     })
 })

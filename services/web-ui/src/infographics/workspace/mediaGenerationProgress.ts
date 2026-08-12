@@ -26,6 +26,103 @@ export type MediaGenerationProgressAnchorGeometry = {
     dimensions: { width: number; height: number }
 }
 
+export type MediaGenerationProgressCollisionRect = {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+export type BranchMarkerGlobalProgressStatuses = {
+    reasoning: OperationProgressItem['status']
+    capability: OperationProgressItem['status']
+    lineage: OperationProgressItem['status']
+}
+
+export type BranchMarkerMediaRequestStatusSource = {
+    kind: 'output' | 'operation'
+    nodeId: string
+    outputNodeId?: string
+    mediaRunId?: string
+    status?: string
+}
+
+// Every run has a hidden operation record and a visible output node. Once the
+// output owns durable progress, it is authoritative for that run; retaining the
+// operation's older in-progress status would make completed branches pulse.
+export function resolveBranchMarkerMediaRequestStatuses(
+    sources: readonly BranchMarkerMediaRequestStatusSource[],
+): string[] {
+    const outputSources = sources.filter(source => source.kind === 'output' && Boolean(source.status))
+    const outputNodeIds = new Set(outputSources.map(source => source.nodeId))
+    const outputMediaRunIds = new Set(outputSources.flatMap(source => source.mediaRunId ? [source.mediaRunId] : []))
+    const statuses = outputSources.map(source => source.status as string)
+
+    for (const source of sources) {
+        if (source.kind !== 'operation' || !source.status) continue
+        if (source.outputNodeId && outputNodeIds.has(source.outputNodeId)) continue
+        if (source.mediaRunId && outputMediaRunIds.has(source.mediaRunId)) continue
+        statuses.push(source.status)
+    }
+    return statuses
+}
+
+export function resolveBranchMarkerGlobalProgressStatuses({
+    hasReasoningResponse,
+    isReasoningReceiving,
+    branchPending,
+    branchActive,
+    requestNodeCount,
+    mediaRequestStatuses,
+    capabilityRunStatuses,
+}: {
+    hasReasoningResponse: boolean
+    isReasoningReceiving: boolean
+    branchPending: boolean
+    branchActive: boolean
+    requestNodeCount: number
+    mediaRequestStatuses: readonly string[]
+    capabilityRunStatuses: readonly string[]
+}): BranchMarkerGlobalProgressStatuses {
+    const hasFailedCapability = capabilityRunStatuses.includes('failed')
+    const hasCancelledCapability = capabilityRunStatuses.includes('cancelled')
+    const hasActiveCapability = capabilityRunStatuses.some(status => status === 'pending' || status === 'running')
+    const hasFailedMediaRequest = mediaRequestStatuses.includes('failed')
+    const hasCancelledMediaRequest = mediaRequestStatuses.includes('cancelled')
+    const hasAttentionMediaRequest = mediaRequestStatuses.some(status => (
+        status === 'action-required' || status === 'awaiting-provider-verification'
+    ))
+    const hasActiveMediaRequest = mediaRequestStatuses.some(status => (
+        status === 'pending' || status === 'running' || status === 'in-progress'
+    ))
+    const hasDurableMediaRequestStatus = mediaRequestStatuses.length > 0
+    const requestHasStarted = requestNodeCount > 0
+
+    return {
+        // A durable media request can only exist after the reasoning model has
+        // understood the request and invoked media generation. Prefer that
+        // monotonic fact over transient editor receiving flags, which may toggle
+        // while tool output and the final assistant frame are interleaved.
+        reasoning: hasReasoningResponse || requestHasStarted
+            ? 'completed'
+            : isReasoningReceiving || branchPending ? 'running' : 'completed',
+        capability: hasFailedCapability || hasFailedMediaRequest
+            ? 'failed'
+            : hasCancelledCapability || hasCancelledMediaRequest
+                ? 'cancelled'
+                : hasAttentionMediaRequest
+                    ? 'attention'
+                    : (hasActiveCapability
+                        || hasActiveMediaRequest
+                        || (!hasDurableMediaRequestStatus && (branchPending || branchActive)))
+                        ? 'running'
+                        : 'completed',
+        lineage: requestHasStarted
+            ? 'completed'
+            : branchPending || branchActive ? 'running' : 'completed',
+    }
+}
+
 export function getMediaGenerationProgressPosition(
     anchor: MediaGenerationProgressAnchorGeometry,
     progressHeight: number,
@@ -39,10 +136,34 @@ export function getMediaGenerationProgressPosition(
     }
 }
 
+// Media-side progress is external chrome. Reserve only the vertical range it
+// occupies; extending this rectangle horizontally would push sibling branches
+// sideways as disclosure content grows.
+export function getMediaGenerationProgressCollisionRect(
+    mediaCollisionRect: MediaGenerationProgressCollisionRect,
+    anchor: MediaGenerationProgressAnchorGeometry,
+    progressHeight: number,
+): MediaGenerationProgressCollisionRect {
+    if (!Number.isFinite(progressHeight) || progressHeight <= 0) return mediaCollisionRect
+
+    const progressTop = getMediaGenerationProgressPosition(anchor, progressHeight).y
+    const top = Math.min(mediaCollisionRect.y, progressTop)
+    const bottom = Math.max(
+        mediaCollisionRect.y + mediaCollisionRect.height,
+        progressTop + progressHeight,
+    )
+    return {
+        ...mediaCollisionRect,
+        y: top,
+        height: bottom - top,
+    }
+}
+
 type MediaGenerationProgressOptions = {
     id: string
     state: MediaGenerationProgressState
     className?: string
+    defaultExpanded?: boolean
     showSummaryWhenCollapsedItemIds?: readonly string[]
     onLayoutChange?: () => void
 }
@@ -96,6 +217,7 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         id,
         state,
         className,
+        defaultExpanded = false,
         showSummaryWhenCollapsedItemIds = [],
         onLayoutChange,
     }: MediaGenerationProgressOptions) {
@@ -109,8 +231,10 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.timeline = createProgressTimeline({
             ariaLabel: 'Media generation pipeline',
             items,
-            rippleClockId: `media-generation:${id}`,
-            defaultViewMode: 'focused',
+            // Read-only provenance must reopen fully expanded every time. Live
+            // progress keeps its shared disclosure state across streamed rebuilds.
+            rippleClockId: defaultExpanded ? undefined : `media-generation:${id}`,
+            defaultViewMode: defaultExpanded ? 'all' : 'focused',
             preserveTopLevelItemsInFocusedView: true,
             expandAllItemsInAllView: true,
         })

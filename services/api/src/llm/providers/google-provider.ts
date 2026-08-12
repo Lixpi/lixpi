@@ -210,6 +210,8 @@ const buildGoogleImageReferenceLabel = (
             return `${prefix} — CANONICAL GENERATED ANCHOR. Keep the same generated character identity.`
         case 'adjacent-angle':
             return `${prefix} — ADJACENT GENERATED ANGLE. Keep cross-view continuity.`
+        case 'opposite-angle':
+            return `${prefix} — OPPOSITE GENERATED ANGLE. Preserve rear and front design continuity across views.`
         case 'prop-crop':
             return `${prefix} — OBSERVED PROP CROP. Preserve the visible prop.`
         case 'pose-reference':
@@ -665,6 +667,8 @@ export class GoogleProvider extends BaseProvider {
                         promptLen: detectedImage.length,
                         referenceImagesExtracted: refs.length,
                     }, null, 0)}`)
+                } else if (injectTool && state.capabilityMediaExecutionPlan) {
+                    info(`[Google:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${modelVersion})`)
                 } else if (injectTool && injectVideoTool) {
                     warn(`Google did not emit generate_image or generate_video tool call for ${this.instanceKey}`)
                 } else if (injectTool) {

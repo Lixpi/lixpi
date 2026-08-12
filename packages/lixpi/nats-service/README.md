@@ -136,6 +136,8 @@ await natsService.reply(
 await natsService.disconnect()
 ```
 
+Thrown request/reply handler failures are transported as `{ error: message }` for JSON payloads and as the message string for buffer payloads. Callers must treat an `error` response as a failed operation; the reply layer never serializes a native `Error` object directly.
+
 ### JetStream Object Store (TypeScript)
 
 ```typescript

@@ -22,6 +22,8 @@ describe('Character Creator structured VLM ports', () => {
         const callVlm = vi.fn(async () => ({
             parsed: {
                 medium: 'photograph',
+                promptDirectives: ['Transform the subject into a zombie.'],
+                promptChangedFeatures: ['skin condition'],
                 facts: [{
                     feature: 'face',
                     value: 'oval face',
@@ -60,13 +62,16 @@ describe('Character Creator structured VLM ports', () => {
                 width: 100,
                 height: 100,
             }],
-            userPrompt: 'A courier',
+            userPrompt: 'Create a combie character out of this photo.',
         })
 
         expect(result.facts?.[0]).not.toHaveProperty('conflictGroupId')
+        expect(result.promptDirectives).toEqual(['Transform the subject into a zombie.'])
+        expect(result.promptChangedFeatures).toEqual(['skin condition'])
         expect(callVlm).toHaveBeenCalledWith(expect.objectContaining({
             provider: 'OpenAI',
             modelVersion: 'reasoning-model-v1',
+            systemPrompt: expect.stringContaining('Resolve an obvious misspelling conservatively from the surrounding request'),
             schema: expect.objectContaining({ name: 'character_evidence' }),
             userMessages: [expect.objectContaining({
                 content: expect.arrayContaining([
@@ -100,13 +105,22 @@ describe('Character Creator structured VLM ports', () => {
         const result = await ports.panelAssessor.assess({
             panel,
             candidateDataUrl: 'data:image/png;base64,Y2FuZGlkYXRl',
+            authoritativePrompt: 'Transform this person into a zombie.',
+            capabilityInstructions: ['Render with rough watercolor texture.'],
+            capabilityReferenceDataUrls: ['data:image/png;base64,c3R5bGU='],
             sourceDataUrls: ['data:image/png;base64,c291cmNl'],
             evidence: emptyCharacterEvidenceProfile(),
         })
 
         expect(result.assessor).toBe('Google/reasoning-model-v1')
+        expect(result.dimensions).toContainEqual(expect.objectContaining({ dimension: 'request-compliance' }))
+        expect(result.dimensions).toContainEqual(expect.objectContaining({ dimension: 'depiction-medium' }))
         expect(result.dimensions.map(dimension => dimension.dimension)).toEqual(panel.acceptanceDimensions)
         const content = (callVlm.mock.calls[0]![0] as any).userMessages[0].content
-        expect(content.filter((part: any) => part.type === 'input_image')).toHaveLength(2)
+        expect(content.filter((part: any) => part.type === 'input_image')).toHaveLength(3)
+        expect(content[0].text).toContain('Transform this person into a zombie.')
+        expect(content[0].text).toContain('rough watercolor texture')
+        expect((callVlm.mock.calls[0]![0] as any).systemPrompt)
+            .toContain('unrequested depiction-medium or visual-style conversion')
     })
 })

@@ -45,6 +45,9 @@ export type MediaGenerationMarkerSettings = {
 }
 
 export type GeneratedMediaChromeLayoutSettings = {
+    // Base screen-pixel height reserved for the single-line title above a
+    // resolved media node, including the title's bottom padding.
+    titleCollisionHeight: number
     // Screen-pixel gap between a media node's bottom edge and its chrome strip.
     topGap: number
     // Screen-pixel icon/button size of the chrome strip.
@@ -53,6 +56,12 @@ export type GeneratedMediaChromeLayoutSettings = {
     videoControlsHeight: number
     // Screen-pixel gap between a video node edge and the external controls strip.
     videoControlsBottomInset: number
+    // Bounded zoom curve used to project screen-fixed chrome. Collision layout
+    // reserves the curve's maximum world-space footprint.
+    zoomScaling: {
+        minZoom: number
+        lowZoomPower?: number
+    }
 }
 
 export type MediaGenerationLayoutSettings = {
@@ -151,13 +160,15 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
             responseLineHeight: 1.15,
         },
     },
-    // Chrome (model badge strip / video controls) reserved below generated media
-    // in collision boxes, on both the API and the WebUI.
+    // Screen-fixed title/model chrome reserved around resolved media in collision
+    // boxes, on both the API and the WebUI.
     generatedMediaChrome: {
+        titleCollisionHeight: 46,
         topGap: 8,
         iconSize: 34,
         videoControlsHeight: 40,
         videoControlsBottomInset: 8,
+        zoomScaling: { minZoom: 0.4 },
     },
 }
 

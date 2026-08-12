@@ -1,7 +1,5 @@
 'use strict'
 
-'use strict'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import { CapabilityMediaDagRunner } from './capability-media-dag-runner.ts'
@@ -67,5 +65,118 @@ describe('CapabilityMediaDagRunner', () => {
         expect(result.results.get('required')).toBe('required')
         expect(result.results.has('optional')).toBe(false)
         expect(result.events).toContainEqual(expect.objectContaining({ nodeId: 'optional', type: 'failed' }))
+    })
+
+    it('supplies only declared producer outputs through configurable binding keys', async () => {
+        const seenBindings = new Map<string, string[]>()
+        const result = await new CapabilityMediaDagRunner([
+            { nodeId: 'identity', dependsOn: [], outputBindings: [] },
+            {
+                nodeId: 'outfit',
+                dependsOn: ['identity'],
+                outputBindings: [{ bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true }],
+            },
+            {
+                nodeId: 'back',
+                dependsOn: ['identity', 'outfit'],
+                outputBindings: [
+                    { bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true },
+                    { bindingKey: 'outfit-anchor', sourceNodeId: 'outfit', required: true },
+                ],
+            },
+        ], 3, 0).run({
+            execute: async (node, context) => {
+                seenBindings.set(node.nodeId, [...context.boundOutputs.keys()])
+                return node.nodeId
+            },
+        })
+
+        expect(seenBindings).toEqual(new Map([
+            ['identity', []],
+            ['outfit', ['identity-anchor']],
+            ['back', ['identity-anchor', 'outfit-anchor']],
+        ]))
+        expect([...result.results.keys()]).toEqual(['identity', 'outfit', 'back'])
+    })
+
+    it('blocks missing required outputs and releases independent consumers in parallel after their barriers', async () => {
+        let releaseConsumers = (): void => undefined
+        const consumerGate = new Promise<void>(resolve => {
+            releaseConsumers = resolve
+        })
+        let releaseStarted = (): void => undefined
+        const consumersStarted = new Promise<void>(resolve => {
+            releaseStarted = resolve
+        })
+        let activeConsumers = 0
+        const parallelRunner = new CapabilityMediaDagRunner([
+            { nodeId: 'identity', dependsOn: [], outputBindings: [] },
+            {
+                nodeId: 'outfit',
+                dependsOn: ['identity'],
+                outputBindings: [{ bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true }],
+            },
+            {
+                nodeId: 'back',
+                dependsOn: ['identity', 'outfit'],
+                outputBindings: [
+                    { bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true },
+                    { bindingKey: 'outfit-anchor', sourceNodeId: 'outfit', required: true },
+                ],
+            },
+            {
+                nodeId: 'profile',
+                dependsOn: ['identity', 'outfit', 'back'],
+                outputBindings: [
+                    { bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true },
+                    { bindingKey: 'outfit-anchor', sourceNodeId: 'outfit', required: true },
+                    { bindingKey: 'back-anchor', sourceNodeId: 'back', required: true },
+                ],
+            },
+            {
+                nodeId: 'action',
+                dependsOn: ['identity', 'outfit', 'back'],
+                outputBindings: [
+                    { bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true },
+                    { bindingKey: 'outfit-anchor', sourceNodeId: 'outfit', required: true },
+                    { bindingKey: 'back-anchor', sourceNodeId: 'back', required: true },
+                ],
+            },
+        ], 2, 0)
+        const parallelRun = parallelRunner.run({
+            execute: async node => {
+                if (node.nodeId === 'profile' || node.nodeId === 'action') {
+                    activeConsumers += 1
+                    if (activeConsumers === 2) releaseStarted()
+                    await consumerGate
+                }
+                return node.nodeId
+            },
+        })
+
+        await consumersStarted
+        expect(activeConsumers).toBe(2)
+        releaseConsumers()
+        await parallelRun
+
+        const blocked = await new CapabilityMediaDagRunner([
+            { nodeId: 'identity', dependsOn: [], outputBindings: [] },
+            {
+                nodeId: 'outfit',
+                dependsOn: ['identity'],
+                outputBindings: [{ bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true }],
+            },
+        ], 2, 0).run({
+            execute: async node => {
+                if (node.nodeId === 'identity') throw new Error('unavailable')
+                return node.nodeId
+            },
+            allowTerminalFailure: () => true,
+        })
+
+        expect(blocked.blockedNodes.get('outfit')).toEqual({
+            missingBindingKeys: ['identity-anchor'],
+            missingOutputNodeIds: ['identity'],
+        })
     })
 })

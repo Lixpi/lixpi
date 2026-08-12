@@ -14,6 +14,7 @@ export type ImageGenerationReferenceRole =
     | 'body-outfit-crop'
     | 'canonical-anchor'
     | 'adjacent-angle'
+    | 'opposite-angle'
     | 'prop-crop'
     | 'pose-reference'
     | 'structure-reference'

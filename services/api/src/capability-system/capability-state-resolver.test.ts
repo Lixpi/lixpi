@@ -20,6 +20,7 @@ import {
 function makePlan(
     properties: Record<string, unknown>,
     executionPolicy: 'required' | 'model-required' = 'required',
+    capabilityIds: readonly string[] = ['tool'],
 ): SealedResolvedCapabilityPlan {
     const ref: CapabilityResourceRef = {
         resourceId: 'input',
@@ -27,12 +28,12 @@ function makePlan(
         mediaType: 'application/schema+json',
         role: 'schema',
     }
-    const manifest: CapabilityManifest = {
+    const buildManifest = (capabilityId: string): CapabilityManifest => ({
         schemaVersion: 1,
-        capabilityId: 'tool',
+        capabilityId,
         kind: 'tool',
-        name: 'Tool',
-        description: 'Tool',
+        name: capabilityId,
+        description: capabilityId,
         references: [],
         resources: [ref],
         tool: {
@@ -49,17 +50,25 @@ function makePlan(
             },
             workflow: { steps: [], outputs: {} },
         },
-    }
+    })
     const serializable: ResolvedCapabilityPlan = {
-        rootCapabilityIds: ['tool'],
-        capabilities: [{ capabilityId: 'tool', kind: 'tool', manifestBlobHash: 'hash', manifest }],
-        resolvedManifests: [{ capabilityId: 'tool', manifestBlobHash: 'hash' }],
+        rootCapabilityIds: [...capabilityIds],
+        capabilities: capabilityIds.map(capabilityId => ({
+            capabilityId,
+            kind: 'tool' as const,
+            manifestBlobHash: `hash-${capabilityId}`,
+            manifest: buildManifest(capabilityId),
+        })),
+        resolvedManifests: capabilityIds.map(capabilityId => ({
+            capabilityId,
+            manifestBlobHash: `hash-${capabilityId}`,
+        })),
     }
-    return new SealedResolvedCapabilityPlan(serializable, [{
-        capabilityId: 'tool',
+    return new SealedResolvedCapabilityPlan(serializable, capabilityIds.map(capabilityId => ({
+        capabilityId,
         ref,
         bytes: new TextEncoder().encode(JSON.stringify({ type: 'object', properties })),
-    }])
+    })))
 }
 
 function makeState(plan: SealedResolvedCapabilityPlan): ProviderState {
@@ -193,5 +202,50 @@ describe('Capability state resolver inputs', () => {
             capabilityReferenceImages: ['data:image/png;base64,AA=='],
             capabilityReferenceImageTraceUrls: ['/api/capabilities/tool/resources/example'],
         })
+    })
+
+    it('aggregates every attached Capability contribution into one shared media state', async () => {
+        const state = {
+            ...makeState(makePlan(
+                { prompt: { type: 'string' } },
+                'required',
+                ['visual-style-a', 'visual-style-b'],
+            )),
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            eventMeta: { userId: 'user-1', organizationId: 'organization-1' },
+        } as ProviderState
+        const dispatcher = {
+            use: vi.fn(async ({ capabilityId }: { capabilityId: string }) => ({
+                run: { runId: `run-${capabilityId}`, outputAssetIds: [] },
+                output: {
+                    mediaGenerationMode: 'visual-style',
+                    preserveUserPrompt: true,
+                    visualInstructions: `Instruction from ${capabilityId}`,
+                    referenceImages: [`data:image/png;base64,${capabilityId}`],
+                    referenceImageTraceUrls: [`/api/capabilities/${capabilityId}/resources/sample`],
+                },
+            })),
+        }
+
+        const update = await executeRequiredCapabilitiesForState(
+            state,
+            dispatcher as any,
+            new AbortController().signal,
+        )
+
+        expect(update.capabilityUsagePrompt).toBe([
+            'Instruction from visual-style-a',
+            'Instruction from visual-style-b',
+        ].join('\n\n'))
+        expect(update.capabilityReferenceImages).toEqual([
+            'data:image/png;base64,visual-style-a',
+            'data:image/png;base64,visual-style-b',
+        ])
+        expect(update.capabilityToolResults?.map(result => result.capabilityId)).toEqual([
+            'visual-style-a',
+            'visual-style-b',
+        ])
+        expect(update.generatedImagePrompt).toBe('Make\na courier')
     })
 })

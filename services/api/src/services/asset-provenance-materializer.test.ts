@@ -2,7 +2,10 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { includeLineageProgressInAssetProvenance } from './asset-provenance-materializer.ts'
+import {
+    getReasoningPreambleSummary,
+    includeLineageProgressInAssetProvenance,
+} from './asset-provenance-materializer.ts'
 
 describe('asset provenance generation progress', () => {
     it('seals the shared lineage prefix before the media-run-specific timeline', () => {
@@ -34,5 +37,33 @@ describe('asset provenance generation progress', () => {
             expect.objectContaining({ id: 'provider' }),
             expect.objectContaining({ id: 'generation' }),
         ])
+    })
+
+    it('seals only assistant preamble into Understand request, excluding generation prompts', () => {
+        const summary = getReasoningPreambleSummary({
+            type: 'doc',
+            content: [{
+                type: 'aiReasoningSection',
+                attrs: {
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'reasoning-1',
+                },
+                content: [
+                    { type: 'paragraph', content: [{ type: 'text', text: 'I will build the requested character.' }] },
+                    {
+                        type: 'aiCollapsibleBlock',
+                        content: [{
+                            type: 'paragraph',
+                            content: [{ type: 'text', text: 'Long media-generation prompt must not leak into the preamble.' }],
+                        }],
+                    },
+                ],
+            }],
+        }, {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+        })
+
+        expect(summary).toBe('I will build the requested character.')
     })
 })

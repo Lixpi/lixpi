@@ -63,7 +63,9 @@ export class ImageRouter {
         const imageProvider = state.imageProviderName
         const imageModel = state.imageModelVersion
         const imageMeta = state.imageModelMetaInfo ?? ({} as any)
-        const prompt = state.generatedImagePrompt ?? ''
+        const prompt = state.generatedImagePrompt
+            ?? (state.capabilityMediaExecutionPlan ? state.providerSafeMediaIntent?.safePrompt : undefined)
+            ?? ''
         const workspaceId = state.workspaceId
         const aiChatThreadId = state.aiChatThreadId
         const imageSize = normalizeImageSize(imageProvider, state.imageSize)
@@ -79,7 +81,7 @@ export class ImageRouter {
             })
             : state.generationRun
 
-        if (!imageProvider || !imageModel || !prompt) {
+        if (!imageProvider || !imageModel || (!prompt && !state.capabilityMediaExecutionPlan)) {
             err(
                 `[ImageRouter] Missing provider, model, or prompt — provider=${imageProvider} ` +
                 `model=${imageModel} promptLen=${prompt.length}`,
@@ -106,6 +108,8 @@ export class ImageRouter {
                 modelId: problem.modelId,
                 providerCode: problem.providerCode,
                 providerReason: problem.providerReason,
+                moderationStage: problem.moderationStage,
+                moderationCategories: problem.moderationCategories,
             })}`)
             await requestService.recordRunStatus({
                 generationRequestId: state.durableGenerationRequestId,
@@ -141,7 +145,7 @@ export class ImageRouter {
             const strategy = this.capabilityMediaStrategies.get(state.capabilityMediaExecutionPlan)
             try {
                 await recordRunStatus('running')
-                const context = buildCapabilityMediaExecutionContext(state, generationRun)
+                const context = buildCapabilityMediaExecutionContext(state, generationRun, prompt)
                 const imagePublisher = this.natsService && generationRun
                     ? new ImagePublisher(
                         this.natsService,
@@ -200,7 +204,7 @@ export class ImageRouter {
                     await imagePublisher.complete({
                         imageBase64: finalImage,
                         responseId: `capability:${state.capabilityMediaExecutionPlan.capabilityRunId}`,
-                        revisedPrompt: prompt,
+                        revisedPrompt: context.sharedState.authoritativePrompt,
                         imageModelId: generationRun?.mediaModelId ?? mediaModelId ?? imageModel,
                     })
                 }
@@ -344,6 +348,7 @@ export class ImageRouter {
 const buildCapabilityMediaExecutionContext = (
     state: ProviderState,
     generationRun: ProviderState['generationRun'],
+    generatedMediaPrompt: string,
 ): CapabilityMediaExecutionContext => {
     const organizationId = state.eventMeta.organizationId
     const userId = state.eventMeta.userId
@@ -356,6 +361,16 @@ const buildCapabilityMediaExecutionContext = (
         throw new Error('CAPABILITY_MEDIA_IMAGE_MODEL_REQUIRED')
     }
     if (!plan) throw new Error('CAPABILITY_MEDIA_EXECUTION_PLAN_REQUIRED')
+    const promptAuthority = resolveCapabilityAuthoritativePrompt(state, generatedMediaPrompt)
+    info(`[ImageRouter] capability media prompt authority ${JSON.stringify({
+        workspaceId: state.workspaceId,
+        aiChatThreadId: state.aiChatThreadId,
+        source: promptAuthority.source,
+        authoritativePromptLength: promptAuthority.prompt.length,
+        generatedMediaPromptLength: generatedMediaPrompt.length,
+        ignoredGeneratedMediaPrompt: promptAuthority.source !== 'generated-media-prompt'
+            && generatedMediaPrompt.trim().length > 0,
+    })}`)
     return {
         organizationId,
         userId,
@@ -375,10 +390,57 @@ const buildCapabilityMediaExecutionContext = (
             meta: imageModelMeta,
             requestedSize: state.imageSize,
         },
+        sharedState: {
+            authoritativePrompt: promptAuthority.prompt,
+            sourceSubjectIdentityClassifications: [...new Set(
+                (state.mediaReferenceBindings ?? []).map(binding => binding.subjectIdentity.classification),
+            )],
+            capabilityInstructions: state.capabilityUsagePrompt?.trim()
+                ? [state.capabilityUsagePrompt.trim()]
+                : [],
+            capabilityReferences: (state.capabilityReferenceImages ?? []).map((imageUrl, index) => ({
+                imageUrl,
+                ...(state.capabilityReferenceImageTraceUrls?.[index]
+                    ? { traceUrl: state.capabilityReferenceImageTraceUrls[index] }
+                    : {}),
+            })),
+            capabilityOutputs: (state.capabilityToolResults ?? []).map(result => ({
+                capabilityId: result.capabilityId,
+                runId: result.runId,
+                output: result.output,
+            })),
+        },
         eventMeta: state.eventMeta,
         generationRun,
         workflowId: state.workflowId,
         metricsOperationId: state.metricsOperationId,
         metricsAdmissionApproved: state.metricsAdmissionApproved,
     }
+}
+
+const resolveCapabilityAuthoritativePrompt = (
+    state: ProviderState,
+    generatedMediaPrompt: string,
+): {
+    prompt: string
+    source: 'provider-safe-user-prompt' | 'latest-user-message' | 'generated-media-prompt'
+} => {
+    const providerSafeUserPrompt = state.providerSafeMediaIntent?.safePrompt.trim()
+    if (providerSafeUserPrompt) {
+        return { prompt: providerSafeUserPrompt, source: 'provider-safe-user-prompt' }
+    }
+    const latestUserPrompt = [...state.messages].reverse().flatMap(message => {
+        if (message.role !== 'user') return []
+        if (typeof message.content === 'string') return [message.content.trim()]
+        if (!Array.isArray(message.content)) return []
+        return [message.content.flatMap(part => {
+            if (!part || typeof part !== 'object' || Array.isArray(part)) return []
+            const value = part as { type?: unknown; text?: unknown }
+            return value.type === 'input_text' && typeof value.text === 'string'
+                ? [value.text]
+                : []
+        }).join('\n').trim()]
+    }).find(Boolean)
+    if (latestUserPrompt) return { prompt: latestUserPrompt, source: 'latest-user-message' }
+    return { prompt: generatedMediaPrompt.trim(), source: 'generated-media-prompt' }
 }

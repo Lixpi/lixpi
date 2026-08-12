@@ -1123,6 +1123,23 @@
     width: 100%;
 }
 
+.canvas-generated-media-history-section {
+    position: relative;
+    margin: 1rem;
+    padding-top: 1rem;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.08) 22%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 78%, rgba(0, 0, 0, 0) 100%);
+    }
+}
+
 .canvas-generated-media-projection-editor {
     min-height: 0;
     overflow: visible;
@@ -1184,6 +1201,18 @@
 
 .canvas-generated-media-projection-editor .ai-response-message {
     width: 100%;
+}
+
+.canvas-generated-media-projection-editor .ai-media-generation-progress {
+    margin: 0.85rem 0;
+}
+
+// ProseMirror gives every ordered list a 30px content indent. The pipeline is
+// already a self-indenting tree, so its root and child rails use only the
+// component-owned grid indentation.
+.canvas-generated-media-projection-editor .ai-media-generation-progress > .progress-timeline,
+.canvas-generated-media-projection-editor .ai-media-generation-progress .progress-timeline-children {
+    padding-left: 0;
 }
 
 .canvas-generated-media-projection-editor .ai-response-message-content > *:first-child,
@@ -1978,7 +2007,6 @@
 
 .workspace-upload-placeholder-content {
     position: relative;
-    z-index: 5;
     display: grid;
     width: 100%;
     gap: 3px;
@@ -2058,6 +2086,8 @@
 
 .workspace-media-operation-actions {
     position: relative;
+    // Escape the content flow's stacking order so controls stay above the
+    // full-node drag overlay while the rest of the card remains draggable.
     z-index: 20;
     display: flex;
     flex-wrap: wrap;
@@ -2503,9 +2533,10 @@
     margin-top: 6px;
 }
 
-.canvas-generated-media-history-panel > .workspace-media-generation-progress {
+.canvas-generated-media-history-panel > .workspace-media-generation-progress,
+.canvas-generated-media-history-panel .ai-media-generation-progress {
     width: auto;
-    margin: 18px 18px 0;
+    margin: 18px 0 0;
 }
 
 .workspace-branch-marker-spinner {

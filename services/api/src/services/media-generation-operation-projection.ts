@@ -21,6 +21,7 @@ import {
     mediaGenerationLayoutSettings,
     settleMediaGenerationRunProgress,
 } from '@lixpi/constants'
+import { getGeneratedMediaPreFrameSize } from '@lixpi/canvas-engine'
 import { info } from '@lixpi/debug-tools'
 
 import Workspace from '../models/workspace.ts'
@@ -30,7 +31,6 @@ const DEFAULT_MEDIA_DIMENSIONS = {
     width: mediaGenerationLayoutSettings.generatedMediaSize,
     height: mediaGenerationLayoutSettings.generatedMediaSize,
 }
-const EARLY_PENDING_RUN_GAP = 240
 
 type GeneratedMediaCanvasNode = ImageCanvasNode | VideoCanvasNode
 
@@ -162,6 +162,43 @@ const projectProgressToMediaNode = ({
     return { nodes: projectedNodes, changed }
 }
 
+const centerFailedOperationOverReservedOutput = ({
+    nodes,
+    operationNodeId,
+}: {
+    nodes: CanvasNode[]
+    operationNodeId: string
+}): CanvasNode[] => {
+    const operation = nodes.find((node): node is OperationStatusCanvasNode => (
+        node.type === 'operationStatus'
+        && node.nodeId === operationNodeId
+        && node.status === 'failed'
+    ))
+    if (!operation?.outputNodeId) return nodes
+    const output = nodes.find((node): node is GeneratedMediaCanvasNode => (
+        isGeneratedMediaNode(node)
+        && node.nodeId === operation.outputNodeId
+        && node.mediaGenerationPhase === 'pending-before-first-frame'
+    ))
+    if (!output) return nodes
+
+    return nodes.map(node => {
+        if (node.nodeId !== operation.nodeId || node.type !== 'operationStatus') return node
+        const { parentId: _previousParentId, ...operationWithoutParent } = node
+        return {
+            ...operationWithoutParent,
+            ...(output.parentId ? { parentId: output.parentId } : {}),
+            ...(node.lineageAssignment || !output.generationProgress?.lineageAssignment
+                ? {}
+                : { lineageAssignment: output.generationProgress.lineageAssignment }),
+            position: {
+                x: output.position.x + (output.dimensions.width - node.dimensions.width) / 2,
+                y: output.position.y + (output.dimensions.height - node.dimensions.height) / 2,
+            },
+        }
+    })
+}
+
 const getInitialPosition = (
     anchorNode: CanvasNode | undefined,
     generationRun: number,
@@ -169,7 +206,11 @@ const getInitialPosition = (
     viewport: { x: number; y: number; zoom: number },
     visibleArea?: { width: number; height: number },
 ): { x: number; y: number } => {
-    const runPitch = DEFAULT_MEDIA_DIMENSIONS.height + EARLY_PENDING_RUN_GAP
+    const preFrameSize = getGeneratedMediaPreFrameSize(
+        DEFAULT_MEDIA_DIMENSIONS,
+        mediaGenerationLayoutSettings.preFrameCircleScale,
+    )
+    const runPitch = preFrameSize + mediaGenerationLayoutSettings.branchRowGap
     const centeredRunOffset = (generationRun - (runCount - 1) / 2) * runPitch
     if (anchorNode) return {
         x: anchorNode.position.x + anchorNode.dimensions.width + 80,
@@ -269,6 +310,7 @@ const createPendingMediaNode = ({
 const createOperationNode = ({
     run,
     generationRequestId,
+    lineageAssignment,
     anchorNode,
     viewport,
     visibleArea,
@@ -276,6 +318,7 @@ const createOperationNode = ({
 }: {
     run: MediaGenerationRun
     generationRequestId: string
+    lineageAssignment?: MediaRunLineageAssignment
     anchorNode?: CanvasNode
     viewport: { x: number; y: number; zoom: number }
     visibleArea?: { width: number; height: number }
@@ -298,6 +341,7 @@ const createOperationNode = ({
     ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
     ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
     plannedMediaType: getPlannedMediaType(run),
+    ...(lineageAssignment ? { lineageAssignment } : {}),
     ...(run.problem ? { problem: run.problem } : {}),
     ...(anchorNode?.parentId ? { parentId: anchorNode.parentId } : {}),
     position: getInitialOperationPosition(anchorNode, run.generationRun, viewport, visibleArea),
@@ -345,6 +389,7 @@ export const projectMediaGenerationOperationNodes = async ({
                     additions.push(createOperationNode({
                         run,
                         generationRequestId,
+                        lineageAssignment,
                         anchorNode,
                         viewport: canvasState.viewport,
                         visibleArea,
@@ -483,7 +528,16 @@ export const updateMediaGenerationOperationNode = async ({
                 nodes = mediaProjection.nodes
                 changed ||= mediaProjection.changed
             }
-            return { canvasState: changed ? { ...canvasState, nodes } : canvasState, changed }
+            if (status === 'failed') {
+                nodes = centerFailedOperationOverReservedOutput({ nodes, operationNodeId })
+            }
+            return {
+                canvasState: changed ? {
+                    ...canvasState,
+                    nodes,
+                } : canvasState,
+                changed,
+            }
         },
     })
 }
@@ -590,6 +644,7 @@ export const rebindMediaGenerationOperationNodes = async ({
                 const operationNode = createOperationNode({
                     run,
                     generationRequestId,
+                    lineageAssignment: binding.lineageAssignment,
                     anchorNode: binding.lineageParentNodeId
                         ? nodeById.get(binding.lineageParentNodeId)
                         : undefined,

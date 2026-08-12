@@ -9,6 +9,23 @@
 $aiChatThreadMinHeight: 50px;
 $aiChatThreadMediaMaxWidth: 500px;
 
+@mixin ai-generation-prompt-surface {
+    margin: 0;
+    padding: 0.45rem 0.65rem;
+    border-left: 2px solid rgba(115, 87, 184, 0.34);
+    border-radius: 0 4px 4px 0;
+    background: rgba(115, 87, 184, 0.06);
+    color: rgba(26, 39, 68, 0.82);
+    font-family: inherit;
+    font-size: 0.76rem;
+    font-style: normal;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    opacity: 1;
+}
+
 // User message bubble colors
 $userMessageBubbleColor: linear-gradient(135deg, #636d75 0%, #6c747c 100%);
 $userMessageBubbleSolidColor: #6a7279; // Solid fallback for the tail
@@ -363,7 +380,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 border-radius: 999px;
                 background: var(--workspace-branch-origin-background-color, #53616c);
                 color: var(--workspace-branch-origin-icon-color, #fff);
-                box-shadow: var(--workspace-branch-origin-box-shadow, 0 6px 18px rgba(42, 48, 57, 0.18));
+                box-shadow: none;
 
                 svg {
                     display: block;
@@ -677,21 +694,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-tool-prompt-section .ai-generation-trace-content:not(:empty),
     .ai-image-generation-tool-prompt-fallback,
     .ai-image-generation-final-prompt {
-        margin: 0;
-        padding: 0.45rem 0.65rem;
-        max-height: 14rem;
-        overflow-y: auto;
-        border-left: 2px solid rgba(115, 87, 184, 0.34);
-        border-radius: 0 4px 4px 0;
-        background: rgba(115, 87, 184, 0.06);
-        color: rgba(26, 39, 68, 0.82);
-        font-family: inherit;
-        font-size: 0.76rem;
-        font-style: normal;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow-wrap: anywhere;
+        @include ai-generation-prompt-surface;
     }
 
     .ai-image-generation-tool-prompt-section .ai-generation-trace-content:empty {
@@ -1019,4 +1022,12 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         font-size: 0.7rem;
         line-height: 1.35;
     }
+}
+
+.workspace-media-generation-progress
+    .progress-timeline-item[data-item-id='lineage:media-generation-prompt']
+    > .progress-timeline-content
+    > .progress-timeline-details
+    > .progress-timeline-summary {
+    @include ai-generation-prompt-surface;
 }

@@ -4,7 +4,10 @@ import type { MediaGenerationProgressState } from '@lixpi/constants'
 
 import {
     createMediaGenerationProgress,
+    getMediaGenerationProgressCollisionRect,
     getMediaGenerationProgressPosition,
+    resolveBranchMarkerMediaRequestStatuses,
+    resolveBranchMarkerGlobalProgressStatuses,
 } from './mediaGenerationProgress.ts'
 
 const state = (): MediaGenerationProgressState => ({
@@ -50,6 +53,117 @@ const renderedItemIds = (element: HTMLElement): string[] => [
 ].map(item => item.dataset.itemId!)
 
 describe('media generation progress disclosure', () => {
+    it('does not mark branch preparation complete or reactivate reasoning while media work is active', () => {
+        expect(resolveBranchMarkerGlobalProgressStatuses({
+            hasReasoningResponse: true,
+            isReasoningReceiving: false,
+            branchPending: false,
+            branchActive: false,
+            requestNodeCount: 2,
+            mediaRequestStatuses: ['running'],
+            capabilityRunStatuses: [],
+        })).toEqual({
+            reasoning: 'completed',
+            capability: 'running',
+            lineage: 'completed',
+        })
+
+        expect(resolveBranchMarkerGlobalProgressStatuses({
+            hasReasoningResponse: false,
+            isReasoningReceiving: true,
+            branchPending: false,
+            branchActive: true,
+            requestNodeCount: 2,
+            mediaRequestStatuses: ['running'],
+            capabilityRunStatuses: ['running'],
+        })).toEqual({
+            reasoning: 'completed',
+            capability: 'running',
+            lineage: 'completed',
+        })
+    })
+
+    it('surfaces a terminal media failure in the branch pipeline instead of leaving it completed', () => {
+        expect(resolveBranchMarkerGlobalProgressStatuses({
+            hasReasoningResponse: true,
+            isReasoningReceiving: false,
+            branchPending: false,
+            branchActive: false,
+            requestNodeCount: 1,
+            mediaRequestStatuses: ['failed'],
+            capabilityRunStatuses: ['completed'],
+        }).capability).toBe('failed')
+    })
+
+    it('settles terminal media despite stale in-memory branch activity', () => {
+        expect(resolveBranchMarkerGlobalProgressStatuses({
+            hasReasoningResponse: true,
+            isReasoningReceiving: false,
+            branchPending: true,
+            branchActive: true,
+            requestNodeCount: 2,
+            mediaRequestStatuses: ['completed', 'completed'],
+            capabilityRunStatuses: ['completed'],
+        })).toEqual({
+            reasoning: 'completed',
+            capability: 'completed',
+            lineage: 'completed',
+        })
+    })
+
+    it('ignores a stale hidden operation status once its output is terminal', () => {
+        expect(resolveBranchMarkerMediaRequestStatuses([
+            {
+                kind: 'output',
+                nodeId: 'output-1',
+                mediaRunId: 'run-1',
+                status: 'completed',
+            },
+            {
+                kind: 'operation',
+                nodeId: 'operation-1',
+                outputNodeId: 'output-1',
+                mediaRunId: 'run-1',
+                status: 'in-progress',
+            },
+        ])).toEqual(['completed'])
+    })
+
+    it('renders the reasoning-authored media prompt at the styled timeline selector path', () => {
+        const mediaPrompt = 'Render the generated character sheet from the resolved reference.'
+        const progress = createMediaGenerationProgress({
+            id: 'media-prompt-run',
+            defaultExpanded: true,
+            state: {
+                generationRequestId: 'media-prompt-request',
+                status: 'completed',
+                message: 'Completed.',
+                updatedAt: 1,
+                progress: {
+                    phase: 'composing',
+                    completedSteps: 1,
+                    totalSteps: 1,
+                    message: 'Completed.',
+                    items: [{
+                        id: 'lineage:media-generation-prompt',
+                        title: 'Prompt for media generation model written by reasoning model',
+                        status: 'completed',
+                        summary: mediaPrompt,
+                    }],
+                },
+            },
+        })
+        const promptSurface = progress.element.querySelector<HTMLElement>([
+            ".progress-timeline-item[data-item-id='lineage:media-generation-prompt']",
+            '> .progress-timeline-content',
+            '> .progress-timeline-details',
+            '> .progress-timeline-summary',
+        ].join(' '))
+
+        expect(promptSurface?.textContent).toBe(mediaPrompt)
+        progress.destroy()
+    })
+
     it('shows one reasoning-summary line while collapsed and the full response when expanded', () => {
         const fullReasoningResponse = 'I will preserve every detail from this complete reasoning response.'
         const progress = createMediaGenerationProgress({
@@ -135,6 +249,37 @@ describe('media generation progress disclosure', () => {
         vi.unstubAllGlobals()
     })
 
+    it('reopens provenance with every nested level expanded instead of reusing focused live state', () => {
+        const liveProgress = createMediaGenerationProgress({
+            id: 'shared-run-1',
+            state: state(),
+        })
+        expect(renderedItemIds(liveProgress.element)).not.toContain('completed-child')
+        liveProgress.destroy()
+
+        const progress = createMediaGenerationProgress({
+            id: 'shared-run-1',
+            state: state(),
+            defaultExpanded: true,
+        })
+        const disclosure = progress.element.querySelector<HTMLButtonElement>(
+            '.workspace-media-generation-pipeline-disclosure',
+        )!
+
+        expect(disclosure.ariaExpanded).toBe('true')
+        expect(disclosure.textContent).toContain('Collapse')
+        expect(renderedItemIds(progress.element)).toEqual([
+            'completed-root',
+            'completed-child',
+            'problem-root',
+            'problem-child',
+            'problem-leaf',
+            'pending-root',
+            'pending-child',
+        ])
+        progress.destroy()
+    })
+
     it('centers short progress beside the media outline and top-aligns taller progress', () => {
         const anchor = {
             position: { x: 100, y: 200 },
@@ -143,6 +288,21 @@ describe('media generation progress disclosure', () => {
 
         expect(getMediaGenerationProgressPosition(anchor, 200)).toEqual({ x: 936, y: 400 })
         expect(getMediaGenerationProgressPosition(anchor, 700)).toEqual({ x: 936, y: 200 })
+    })
+
+    it('reserves tall progress vertically without widening the media collision column', () => {
+        const mediaRect = { x: 100, y: 200, width: 800, height: 600 }
+        const anchor = {
+            position: { x: 100, y: 200 },
+            dimensions: { width: 800, height: 600 },
+        }
+
+        expect(getMediaGenerationProgressCollisionRect(mediaRect, anchor, 900)).toEqual({
+            x: 100,
+            y: 200,
+            width: 800,
+            height: 900,
+        })
     })
 
     it('adds a caller-owned surface class without replacing the shared progress component', () => {

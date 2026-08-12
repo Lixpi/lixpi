@@ -47,9 +47,9 @@ const collectDocumentText = (value: unknown): string => {
     ].filter(Boolean).join(' ')
 }
 
-const getReasoningSummary = (
+export const getReasoningPreambleSummary = (
     document: unknown,
-    generationRun: MediaGenerationRunMeta,
+    generationRun: Pick<MediaGenerationRunMeta, 'generationRequestId' | 'reasoningRunId'>,
 ): string => {
     let summary = ''
     const visit = (value: unknown): void => {
@@ -66,7 +66,14 @@ const getReasoningSummary = (
             attrs?.reasoningRunId === generationRun.reasoningRunId
             || attrs?.generationRequestId === generationRun.generationRequestId
         )) {
-            summary = collectDocumentText(node).replace(/\s+/gu, ' ').trim().slice(0, 600)
+            const content = Array.isArray(node.content) ? node.content : []
+            const firstInvocationIndex = content.findIndex(child => (
+                child && typeof child === 'object' && (child as Record<string, unknown>).type === 'aiCollapsibleBlock'
+            ))
+            const preamble = firstInvocationIndex >= 0
+                ? content.slice(0, firstInvocationIndex)
+                : content
+            summary = collectDocumentText(preamble).replace(/\s+/gu, ' ').trim().slice(0, 600)
             return
         }
         if (Array.isArray(node.content)) node.content.forEach(visit)
@@ -261,7 +268,7 @@ const materializeAssetProvenanceAttempt = async ({
     }
     const generationProgress = includeLineageProgressInAssetProvenance(
         mediaGenerationProgress,
-        getReasoningSummary(conversationSnapshot?.doc, generationRun),
+        getReasoningPreambleSummary(conversationSnapshot?.doc, generationRun),
     )
     const projection = conversationSnapshot
         ? buildGeneratedMediaTurnProjectionFromThreadContent(

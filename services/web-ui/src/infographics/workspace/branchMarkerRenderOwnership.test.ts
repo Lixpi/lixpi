@@ -4,9 +4,11 @@ import type {
     BranchForkCanvasNode,
     BranchLineCanvasNode,
     BranchOriginCanvasNode,
+    MediaBranchLineagePlan,
 } from '@lixpi/constants'
 import { describe, expect, it } from 'vitest'
 import {
+    hasCompletePlannedBranchMarkerGeometry,
     resolveBranchMarkerRenderOwnership,
     resolvePreflightBranchMarkerScreenOwnership,
 } from './branchMarkerRenderOwnership.ts'
@@ -66,6 +68,83 @@ function makePlannedFork(nodeId: string, threadId: string, reasoningIndex: numbe
         temporary: true,
     }
 }
+
+function makeLineagePlan(): MediaBranchLineagePlan {
+    return {
+        planVersion: 'media-branch-lineage-v1',
+        generationRequestId: 'request-1',
+        branchId: 'branch-1',
+        promptText: 'create a character',
+        referenceAssetIds: [],
+        referenceNodeIds: [],
+        sourceContextNodeIds: [],
+        branchOrigin: {
+            nodeId: 'planned-origin',
+            generationRequestId: 'request-1',
+            branchId: 'branch-1',
+            provenance: {
+                kind: 'branch-root-fork-decision',
+                promptText: 'create a character',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                forked: false,
+                forkCount: 0,
+            },
+        },
+        branchForks: [],
+        branchLines: [],
+        runAssignments: [],
+        createdAt: 1,
+    }
+}
+
+describe('planned branch marker geometry readiness', () => {
+    it('accepts the complete matching planned marker set', () => {
+        const plannedOrigin = makePlannedOrigin('planned-origin', 'thread-1')
+
+        expect(hasCompletePlannedBranchMarkerGeometry(
+            [plannedOrigin],
+            makeLineagePlan(),
+        )).toBe(true)
+    })
+
+    it('rejects a screen-fixed preflight marker using the planned node identity', () => {
+        const preflight = makePreflight('planned-origin', 'thread-1')
+
+        expect(hasCompletePlannedBranchMarkerGeometry(
+            [preflight],
+            makeLineagePlan(),
+        )).toBe(false)
+    })
+
+    it('rejects incomplete or unrelated planned marker geometry', () => {
+        const lineagePlan = makeLineagePlan()
+        lineagePlan.branchForks.push({
+            nodeId: 'planned-fork',
+            generationRequestId: 'request-1',
+            branchId: 'branch-1',
+            reasoningRunId: 'reasoning-0',
+            reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
+            reasoningIndex: 0,
+            provenance: {
+                kind: 'reasoning-run',
+                promptText: 'create a character',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                reasoningRunId: 'reasoning-0',
+                reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
+                reasoningIndex: 0,
+            },
+        })
+        const plannedOrigin = makePlannedOrigin('planned-origin', 'thread-1')
+        const unrelatedFork = makePlannedFork('other-fork', 'thread-1', 0)
+
+        expect(hasCompletePlannedBranchMarkerGeometry(
+            [plannedOrigin, unrelatedFork],
+            lineagePlan,
+        )).toBe(false)
+    })
+})
 
 describe('branch marker structural render ownership', () => {
     it('renders only the preflight marker before its planned media starts', () => {

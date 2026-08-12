@@ -534,6 +534,34 @@ describe('resolveMediaBranch', () => {
         expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
     })
 
+    it('starts a fresh branch when duplicate candidates collapse to one Asset', async () => {
+        const duplicatePortraitCandidate = {
+            ...baseCandidates[0]!,
+            candidateId: 'portrait-source-copy',
+            nodeId: 'portrait-source-copy',
+            ancestorNodeIds: ['portrait-source-copy'],
+            sourceContextNodeIds: ['portrait-source-copy'],
+        }
+        const { deps, publisher } = createDeps(createParsedResolution({
+            mode: 'ambiguous',
+            confidence: 0.1,
+            rationale: 'The referent is unclear.',
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            candidates: [baseCandidates[0]!, duplicatePortraitCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            targetCandidateId: null,
+            referenceCandidateIds: ['portrait-source'],
+        })
+        expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
+    })
+
     // Temporary skip: API integration behavior changed; re-enable after stabilization.
     it.skip('runs for a video-only request and maps the resolved target onto videoFirstFrameImage', async () => {
         const { deps, publisher } = createDeps(createParsedResolution({

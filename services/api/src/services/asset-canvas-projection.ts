@@ -3,7 +3,9 @@
 import {
     estimateBranchMarkerDimensions,
     getBranchMarkerResponsePreview,
-    getGeneratedOutputChromeCollisionHeight,
+    getGeneratedMediaPreFrameLayoutRect,
+    getGeneratedMediaPreFrameRect,
+    getGeneratedOutputChromeCollisionInsets,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
     resizeBranchMarkerToDimensions,
@@ -50,6 +52,8 @@ type MarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanv
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
 type GeneratedOutputNode = ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode
 type CanvasVisibleArea = { width: number; height: number }
+type CanvasVisibleWorldBounds = { left: number; top: number; right: number; bottom: number }
+type Rect = { x: number; y: number; width: number; height: number }
 type ProjectionContext = { proseMirrorThreadContent?: unknown }
 
 const layout = settings.mediaGenerationCanvasProjection
@@ -120,12 +124,116 @@ const markerDimensions = (node: MarkerNode, context: ProjectionContext = {}): { 
     })
 }
 
+const getVisibleWorldBounds = (
+    state: CanvasState,
+    visibleArea?: CanvasVisibleArea,
+): CanvasVisibleWorldBounds | null => {
+    const visibleWidth = Number(visibleArea?.width)
+    const visibleHeight = Number(visibleArea?.height)
+    if (!Number.isFinite(visibleWidth) || visibleWidth <= 0
+        || !Number.isFinite(visibleHeight) || visibleHeight <= 0) return null
+    const viewport = (state as CanvasState & { viewport?: { x: number; y: number; zoom: number } }).viewport
+    const zoom = Number.isFinite(viewport?.zoom) && Number(viewport?.zoom) > 0 ? Number(viewport?.zoom) : 1
+    const left = -(Number(viewport?.x) || 0) / zoom
+    const top = -(Number(viewport?.y) || 0) / zoom
+    return {
+        left,
+        top,
+        right: left + visibleWidth / zoom,
+        bottom: top + visibleHeight / zoom,
+    }
+}
+
+const isGenerationRequestReservationNode = (node: CanvasNode, generationRequestId: string): boolean => {
+    if (node.type === 'operationStatus') return node.generationRequestId === generationRequestId
+    if (node.type !== 'image' && node.type !== 'video' && node.type !== 'capabilityArtifact') return false
+    return node.generatedBy?.generationRequestId === generationRequestId
+        || (node.type !== 'capabilityArtifact'
+            && node.generationProgress?.generationRequestId === generationRequestId)
+}
+
+const overlapArea = (a: Rect, b: Rect): number => {
+    const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
+    const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y))
+    return width * height
+}
+
+const findClearVisiblePosition = (
+    nodes: CanvasNode[],
+    dimensions: { width: number; height: number },
+    index: number,
+    bounds: CanvasVisibleWorldBounds,
+    generationRequestId: string,
+): { x: number; y: number } => {
+    const minX = bounds.left + layout.nodeGap
+    const minY = bounds.top + layout.nodeGap
+    const maxX = Math.max(minX, bounds.right - layout.nodeGap - dimensions.width)
+    const maxY = Math.max(minY, bounds.bottom - layout.nodeGap - dimensions.height)
+    const preferredY = Math.min(maxY, Math.max(
+        minY,
+        bounds.top + (bounds.bottom - bounds.top - dimensions.height) / 2
+            + index * (dimensions.height + layout.branchRowGap),
+    ))
+    const obstacles = nodes
+        .filter(node => !node.parentId)
+        .filter(node => node.type !== 'operationStatus')
+        .filter(node => !isGenerationRequestReservationNode(node, generationRequestId))
+        .map((node): Rect => ({
+            x: node.position.x - layout.nodeGap,
+            y: node.position.y - layout.nodeGap,
+            width: node.dimensions.width + layout.nodeGap * 2,
+            height: node.dimensions.height + layout.nodeGap * 2,
+        }))
+        .filter(rect => rect.x < bounds.right && rect.x + rect.width > bounds.left
+            && rect.y < bounds.bottom && rect.y + rect.height > bounds.top)
+    const clampX = (x: number): number => Math.min(maxX, Math.max(minX, x))
+    const clampY = (y: number): number => Math.min(maxY, Math.max(minY, y))
+    const xCandidates = [
+        minX,
+        ...obstacles.flatMap(rect => [
+            clampX(rect.x - dimensions.width),
+            clampX(rect.x + rect.width),
+        ]),
+        maxX,
+    ]
+    const yCandidates = [
+        preferredY,
+        minY,
+        ...obstacles.flatMap(rect => [
+            clampY(rect.y - dimensions.height),
+            clampY(rect.y + rect.height),
+        ]),
+        maxY,
+    ]
+    let best = { x: minX, y: preferredY }
+    let bestScore = Number.POSITIVE_INFINITY
+    for (const x of xCandidates) {
+        for (const y of yCandidates) {
+            const candidate = { x, y, width: dimensions.width, height: dimensions.height }
+            const occupiedArea = obstacles.reduce((sum, obstacle) => sum + overlapArea(candidate, obstacle), 0)
+            const score = occupiedArea * 1_000_000
+                + Math.abs(x - minX)
+                + Math.abs(y - preferredY) * 4
+            if (score >= bestScore) continue
+            best = { x, y }
+            bestScore = score
+        }
+    }
+    return best
+}
+
 const fallbackPosition = (
+    nodes: CanvasNode[],
     state: CanvasState,
     dimensions: { width: number; height: number },
     index: number,
+    generationRequestId: string,
     visibleArea?: CanvasVisibleArea,
 ): { x: number; y: number } => {
+    const visibleBounds = getVisibleWorldBounds(state, visibleArea)
+    if (visibleBounds) {
+        return findClearVisiblePosition(nodes, dimensions, index, visibleBounds, generationRequestId)
+    }
     const viewport = (state as CanvasState & { viewport?: { x: number; y: number; zoom: number } }).viewport
     const zoom = Number.isFinite(viewport?.zoom) && Number(viewport?.zoom) > 0 ? Number(viewport?.zoom) : 1
     const left = -(Number(viewport?.x) || 0) / zoom
@@ -176,16 +284,18 @@ const clampPositionToVisibleArea = (
 
 const positionRightOf = (
     source: CanvasNode | undefined,
+    nodes: CanvasNode[],
     state: CanvasState,
     dimensions: { width: number; height: number },
     index: number,
+    generationRequestId: string,
     visibleArea?: CanvasVisibleArea,
 ): { x: number; y: number } => source
     ? clampPositionToVisibleArea(state, {
         x: source.position.x + source.dimensions.width + layout.rootToFirstMediaGap,
         y: source.position.y + (source.dimensions.height - dimensions.height) / 2,
     }, dimensions, visibleArea)
-    : fallbackPosition(state, dimensions, index, visibleArea)
+    : fallbackPosition(nodes, state, dimensions, index, generationRequestId, visibleArea)
 
 const upsertNode = (nodes: CanvasNode[], next: CanvasNode): { nodes: CanvasNode[]; changed: boolean } => {
     const index = nodes.findIndex((node) => node.nodeId === next.nodeId)
@@ -256,8 +366,17 @@ const baseMarkerPosition = (
     parentNodeId: string | undefined,
     dimensions: { width: number; height: number },
     index: number,
+    generationRequestId: string,
     visibleArea?: CanvasVisibleArea,
-): { x: number; y: number } => positionRightOf(findNode(nodes, parentNodeId), state, dimensions, index, visibleArea)
+): { x: number; y: number } => positionRightOf(
+    findNode(nodes, parentNodeId),
+    nodes,
+    state,
+    dimensions,
+    index,
+    generationRequestId,
+    visibleArea,
+)
 
 const branchOriginFromPlan = (
     plan: BranchOriginLineagePlan,
@@ -282,7 +401,15 @@ const branchOriginFromPlan = (
     return {
         ...provisional,
         dimensions,
-        position: baseMarkerPosition(state.nodes, state, anchorNodeId, dimensions, 0, visibleArea),
+        position: baseMarkerPosition(
+            state.nodes,
+            state,
+            anchorNodeId,
+            dimensions,
+            0,
+            plan.generationRequestId,
+            visibleArea,
+        ),
     }
 }
 
@@ -313,7 +440,15 @@ const branchForkFromPlan = (
     return {
         ...provisional,
         dimensions,
-        position: baseMarkerPosition(nodes, state, plan.parentBranchNodeId, dimensions, plan.reasoningIndex, visibleArea),
+        position: baseMarkerPosition(
+            nodes,
+            state,
+            plan.parentBranchNodeId,
+            dimensions,
+            plan.reasoningIndex,
+            plan.generationRequestId,
+            visibleArea,
+        ),
     }
 }
 
@@ -347,7 +482,15 @@ const branchLineFromPlan = (
     return {
         ...provisional,
         dimensions,
-        position: baseMarkerPosition(nodes, state, plan.parentBranchNodeId, dimensions, plan.reasoningIndex, visibleArea),
+        position: baseMarkerPosition(
+            nodes,
+            state,
+            plan.parentBranchNodeId,
+            dimensions,
+            plan.reasoningIndex,
+            plan.generationRequestId,
+            visibleArea,
+        ),
     }
 }
 
@@ -459,6 +602,17 @@ const collisionSettingsFor = (node: CanvasNode) => {
     }
 }
 
+const getApiNodePreFrameRect = (
+    node: CanvasNode,
+    position: { x: number; y: number },
+): Rect | null => {
+    if ((node.type !== 'image' && node.type !== 'video')
+        || (node.generationProgress
+            && ['completed', 'failed', 'cancelled'].includes(node.generationProgress.status))
+        || node.mediaGenerationPhase !== 'pending-before-first-frame') return null
+    return getGeneratedMediaPreFrameRect(position, node.dimensions, layout.preFrameCircleScale)
+}
+
 const rebalance = (
     state: CanvasState,
     context: ProjectionContext = {},
@@ -482,10 +636,15 @@ const rebalance = (
         const dimensions = markerDimensions(node, context)
         return resizeBranchMarkerToDimensions(node, dimensions)
     })
-    // Operation status records are durable orchestration state, not visible tree
-    // cards. Letting their provisional boxes enter collision resolution pushes
-    // the real marker/media tree away from its viewport-safe anchor.
-    const layoutNodes = resizedNodes.filter(node => node.type !== 'operationStatus')
+    // Hidden in-progress operation records are orchestration state. A failed
+    // media operation with lineage is the visible replacement for its output,
+    // so it must remain a real branch leaf during every later rebalance.
+    const layoutNodes = resizedNodes.filter(node => (
+        node.type !== 'operationStatus'
+        || (node.operation === 'media-generation'
+            && node.status === 'failed'
+            && Boolean(node.lineageAssignment))
+    ))
     const balancedLayoutNodes = rebalanceBranchTreesAndResolve(layoutNodes, state.edges ?? [], {
         depthGap: layout.mediaToMediaGap,
         branchOriginDepthGap: layout.branchOriginToFirstMediaGap,
@@ -495,20 +654,28 @@ const rebalance = (
         branchOriginMarkerStackGap: layout.nodeGap,
         collisionIterations: Math.max(...Object.values(collision.nodeTypes).map((entry) => entry.iterations)),
         collisionMargin: 0,
-        // Loading media is visually rendered as a compact circle, but it still
-        // reserves its final card footprint. Otherwise every first frame changes
-        // the collision boxes and repeatedly reflows the entire branch tree.
-        getNodeCollisionRect: (node, position) => ({
-            x: position.x,
-            y: position.y,
-            width: node.dimensions.width,
-            height: node.dimensions.height + (
-                node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact'
-                    ? getGeneratedOutputChromeCollisionHeight(node.type)
-                    : 0
-            ),
-        }),
-        getNodeConnectorAnchorRect: (node, position) => ({
+        // Pending media keeps the final horizontal column while using the same
+        // compact vertical footprint and connector anchor the browser renders.
+        getNodeCollisionRect: (node, position) => {
+            const preFrameRect = getApiNodePreFrameRect(node, position)
+            if (preFrameRect) {
+                return getGeneratedMediaPreFrameLayoutRect(
+                    position,
+                    node.dimensions,
+                    layout.preFrameCircleScale,
+                )
+            }
+            const chromeInsets = node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact'
+                ? getGeneratedOutputChromeCollisionInsets(node.type)
+                : { top: 0, bottom: 0 }
+            return {
+                x: position.x,
+                y: position.y - chromeInsets.top,
+                width: node.dimensions.width,
+                height: chromeInsets.top + node.dimensions.height + chromeInsets.bottom,
+            }
+        },
+        getNodeConnectorAnchorRect: (node, position) => getApiNodePreFrameRect(node, position) ?? ({
             x: position.x,
             y: position.y,
             width: node.dimensions.width,
@@ -523,6 +690,69 @@ const rebalance = (
         state: { ...state, nodes },
         changed: JSON.stringify(state.nodes) !== JSON.stringify(nodes),
     }
+}
+
+const keepFreshLineageMarkersInsideVisibleArea = (
+    state: CanvasState,
+    plan: MediaBranchLineagePlan,
+    visibleArea?: CanvasVisibleArea,
+): { state: CanvasState; changed: boolean } => {
+    const rootMarkerId = plan.branchOrigin?.nodeId
+        ?? plan.branchForks.find(marker => !marker.parentBranchNodeId)?.nodeId
+        ?? plan.branchLines.find(marker => !marker.parentBranchNodeId)?.nodeId
+    const bounds = getVisibleWorldBounds(state, visibleArea)
+    if (!rootMarkerId || !bounds) return { state, changed: false }
+
+    const requestMarkers = state.nodes.filter((node): node is MarkerNode =>
+        isMarkerNode(node) && node.generationRequestId === plan.generationRequestId)
+    const rootMarker = requestMarkers.find(marker => marker.nodeId === rootMarkerId)
+    if (!rootMarker || requestMarkers.length === 0) return { state, changed: false }
+
+    const minX = Math.min(...requestMarkers.map(marker => marker.position.x))
+    const minY = Math.min(...requestMarkers.map(marker => marker.position.y))
+    const maxX = Math.max(...requestMarkers.map(marker => marker.position.x + marker.dimensions.width))
+    const maxY = Math.max(...requestMarkers.map(marker => marker.position.y + marker.dimensions.height))
+    const visibleMinX = bounds.left + layout.nodeGap
+    const visibleMinY = bounds.top + layout.nodeGap
+    const visibleMaxX = bounds.right - layout.nodeGap
+    const visibleMaxY = bounds.bottom - layout.nodeGap
+    const clampedRootPosition = clampPositionToVisibleArea(
+        state,
+        rootMarker.position,
+        rootMarker.dimensions,
+        visibleArea,
+    )
+    let dx = 0
+    let dy = 0
+    if (maxX - minX <= visibleMaxX - visibleMinX) {
+        if (minX < visibleMinX) dx = visibleMinX - minX
+        else if (maxX > visibleMaxX) dx = visibleMaxX - maxX
+    } else {
+        dx = clampedRootPosition.x - rootMarker.position.x
+    }
+    if (maxY - minY <= visibleMaxY - visibleMinY) {
+        if (minY < visibleMinY) dy = visibleMinY - minY
+        else if (maxY > visibleMaxY) dy = visibleMaxY - maxY
+    } else {
+        dy = clampedRootPosition.y - rootMarker.position.y
+    }
+    if (dx === 0 && dy === 0) return { state, changed: false }
+
+    const nodes = state.nodes.map((node): CanvasNode => {
+        const belongsToRequest = isMarkerNode(node)
+            ? node.generationRequestId === plan.generationRequestId
+            : node.type !== 'operationStatus'
+                && isGenerationRequestReservationNode(node, plan.generationRequestId)
+        if (!belongsToRequest || node.parentId) return node
+        return {
+            ...node,
+            position: {
+                x: node.position.x + dx,
+                y: node.position.y + dy,
+            },
+        } as CanvasNode
+    })
+    return { state: { ...state, nodes }, changed: true }
 }
 
 const geometryDiff = (before: CanvasState, after: CanvasState): CanvasNodeGeometry[] => {
@@ -613,10 +843,15 @@ export const upsertMediaLineagePlanToCanvas = async (params: {
             removedNodeIds = markerResult.removedNodeIds
             removedEdgeIds = markerResult.removedEdgeIds
             const balanced = rebalance(markerResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
-            geometryNodes = geometryDiff(canvasState, balanced.state)
+            const viewportSafe = keepFreshLineageMarkersInsideVisibleArea(
+                balanced.state,
+                params.lineagePlan,
+                params.canvasVisibleArea,
+            )
+            geometryNodes = geometryDiff(canvasState, viewportSafe.state)
             return {
-                canvasState: balanced.state,
-                changed: markerResult.changed || balanced.changed,
+                canvasState: viewportSafe.state,
+                changed: markerResult.changed || balanced.changed || viewportSafe.changed,
             }
         },
     })
@@ -753,6 +988,7 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
             ?? failedOperationNode?.message
             ?? params.errorMessage
             ?? 'Media generation failed.'
+        const failedDimensions = failedOperationNode?.dimensions ?? { width: 360, height: 104 }
         const failedNode: OperationStatusCanvasNode = {
             ...(failedOperationNode ?? {
                 type: 'operationStatus' as const,
@@ -774,9 +1010,13 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
                         : {}),
             outputNodeId: pendingNodeId,
             plannedMediaType: params.generationRun.mediaType ?? 'image',
+            lineageAssignment: assignment,
             ...(pendingNode.parentId ? { parentId: pendingNode.parentId } : {}),
-            position: pendingNode.position,
-            dimensions: pendingNode.dimensions,
+            position: {
+                x: pendingNode.position.x + (pendingNode.dimensions.width - failedDimensions.width) / 2,
+                y: pendingNode.position.y + (pendingNode.dimensions.height - failedDimensions.height) / 2,
+            },
+            dimensions: failedDimensions,
             updatedAt: now,
         }
         const replacedOperationNodeId = failedOperationNode?.nodeId !== pendingNodeId
@@ -791,9 +1031,10 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
                 edge.sourceNodeId !== replacedOperationNodeId && edge.targetNodeId !== replacedOperationNodeId
             ),
         }
-        const geometryNodes = geometryDiff(workspace.canvasState, stateWithFailedNode)
+        const balancedFailureState = rebalance(stateWithFailedNode).state
+        const geometryNodes = geometryDiff(workspace.canvasState, balancedFailureState)
         if (!geometryNodes.some(node => node.nodeId === pendingNodeId)) {
-            const settledNode = stateWithFailedNode.nodes.find(node => node.nodeId === pendingNodeId)
+            const settledNode = balancedFailureState.nodes.find(node => node.nodeId === pendingNodeId)
             if (settledNode) geometryNodes.push({
                 nodeId: settledNode.nodeId,
                 position: settledNode.position,
@@ -818,7 +1059,7 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
                 workspaceMutation: {
                     expectedCanvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
                     canvasStateUpdatedAt,
-                    canvasState: stateWithFailedNode,
+                    canvasState: balancedFailureState,
                 },
             })
             if ('error' in detached) {
@@ -826,7 +1067,7 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
                 throw new Error(detached.error)
             }
             return buildAssetCanvasGeometryUpdate({
-                state: stateWithFailedNode,
+                state: balancedFailureState,
                 layoutRevision: canvasStateUpdatedAt,
                 generationRequestId: params.generationRun.generationRequestId,
                 geometryNodes,
@@ -974,9 +1215,8 @@ export const projectGeneratedAssetNode = ({
     const existing = markerResult.state.nodes.find((node) => node.nodeId === nodeId) as GeneratedMediaNode | undefined
     const width = existing?.dimensions.width ?? layout.generatedMediaSize
     const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
-    // Planned nodes reserve their stable card size before any provider pixels
-    // arrive. Partials and completion replace content/state inside that card;
-    // they must not resize it and trigger a whole-tree reflow.
+    // Keep the stable card dimensions on the node while its visible layout
+    // footprint transitions from the compact pre-frame circle to the card.
     const dimensions = existing?.mediaGenerationPhase === 'pending-before-first-frame'
         ? existing.dimensions
         : { width, height: width / safeAspectRatio }
@@ -991,7 +1231,14 @@ export const projectGeneratedAssetNode = ({
             x: existing.position.x + (existing.dimensions.width - dimensions.width) / 2,
             y: existing.position.y + (existing.dimensions.height - dimensions.height) / 2,
         }
-        : positionRightOf(source, markerResult.state, dimensions, markerResult.state.nodes.length)
+        : positionRightOf(
+            source,
+            markerResult.state.nodes,
+            markerResult.state,
+            dimensions,
+            markerResult.state.nodes.length,
+            assignment.generationRequestId,
+        )
     const lineage = generatedByLineage(assignment)
     const node: GeneratedMediaNode = kind === 'image'
         ? {
@@ -1074,7 +1321,14 @@ export const projectGeneratedArtifactNode = ({
         ?? assignment.branchOriginNodeId
     const source = findNode(markerResult.state.nodes, lineageParentNodeId)
     const position = existing?.position
-        ?? positionRightOf(source, markerResult.state, dimensions, markerResult.state.nodes.length)
+        ?? positionRightOf(
+            source,
+            markerResult.state.nodes,
+            markerResult.state,
+            dimensions,
+            markerResult.state.nodes.length,
+            assignment.generationRequestId,
+        )
     const node: CapabilityArtifactCanvasNode = {
         nodeId,
         type: 'capabilityArtifact',

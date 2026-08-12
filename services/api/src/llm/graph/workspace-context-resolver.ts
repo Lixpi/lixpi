@@ -22,7 +22,11 @@ import {
     isAssetAvailableInWorkspaceScope,
 } from '../../services/workspace-reference-scope.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
-import { buildCandidateTranscriptContext, restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
+import {
+    buildCandidateTranscriptContext,
+    deduplicateMediaBranchSnapshotCandidatesByAsset,
+    restrictSnapshotToExplicitRefs,
+} from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
@@ -417,7 +421,7 @@ const buildExplicitMediaBranchSnapshot = async (
         : undefined
     const promptText = existingSnapshot?.promptText ?? contextSnapshot.promptText
 
-    return {
+    return deduplicateMediaBranchSnapshotCandidatesByAsset({
         resolverVersion: existingSnapshot?.resolverVersion ?? contextSnapshot.resolverVersion,
         conversationAssetId: existingSnapshot?.conversationAssetId ?? contextSnapshot.conversationAssetId,
         regionNodeId: existingSnapshot?.regionNodeId ?? contextSnapshot.conversationAssetId,
@@ -428,7 +432,7 @@ const buildExplicitMediaBranchSnapshot = async (
             ?? `explicit-context:${contextSnapshot.conversationAssetId}:${contextSnapshot.promptText}:${explicitReferenceCandidateIds.join(',')}`,
         candidates,
         transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
-    }
+    })
 }
 
 export const resolveWorkspaceContext = async (

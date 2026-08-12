@@ -20,11 +20,11 @@ The compiler assigns aliases in canonical reference order, collapses multiple ca
 
 ## Local reference matching
 
-`media-reference-matcher.ts` compares free-form prompt windows only with Assets attached to the current request. It normalizes Unicode, case, punctuation, possessives, common plurals, generic media suffixes, bounded edit distance, token overlap, and character trigrams. Descriptor summary segments and existing entity/style tags are bounded semantic aliases; there is no global thesaurus or model call.
+`media-reference-matcher.ts` compares free-form prompt windows only with the user-visible title and filename identities of Assets attached to the current request. It normalizes Unicode, case, punctuation, possessives, common plurals, generic media suffixes, bounded edit distance, token overlap, and character trigrams. A phrase containing only non-identifying function words cannot match an Asset. Descriptor summaries and entity/style tags remain provider-safe generation context; they are never Asset identity aliases and cannot trigger reference resolution.
 
 A score must meet the unique threshold and beat the runner-up by the versioned winning margin. Close candidates become `awaiting-reference-resolution`; zero matches preserve the original text. Requests are capped at 32 unique bindings and ambiguity records expose at most five candidates.
 
-Explicit ProseMirror media-reference atoms never require text matching. Their authorized `assetId` maps directly to the assigned alias.
+Explicit ProseMirror media-reference atoms never require text matching. Their authorized `assetId` maps directly to the assigned alias. Persisted user resolutions are honored only when the phrase still matches a current identity variant, preventing obsolete matcher decisions from rewriting ordinary instructions after a matcher upgrade.
 
 ## Durable media request
 

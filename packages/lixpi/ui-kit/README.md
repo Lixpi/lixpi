@@ -27,6 +27,8 @@ import { appendSvgPathIcon, xIcon } from '@lixpi/ui-kit/svg'
 
 The Web UI calls `configureUiKit(settings)` once during startup so package primitives receive the application-owned runtime values. Defaults keep the package usable in isolation and in component tests.
 
+The shared animated collapse/expand icon describes the available action: collapsed content shows outward expand chevrons, while expanded content shows inward collapse chevrons. Hosts provide the label and ARIA state; they do not reverse the icon state themselves.
+
 ## Components
 
 - Bubble menu

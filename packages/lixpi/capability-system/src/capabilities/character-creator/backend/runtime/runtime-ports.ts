@@ -14,9 +14,12 @@ import type { CharacterSheetRenderPlan } from '../../shared/character-sheet-medi
 export type CharacterImageReferenceRole =
     | 'original-source'
     | 'source-reference'
+    | 'capability-reference'
     | 'face-crop'
     | 'body-outfit-crop'
     | 'canonical-anchor'
+    | 'adjacent-angle'
+    | 'opposite-angle'
     | 'prop-crop'
     | 'pose-reference'
 

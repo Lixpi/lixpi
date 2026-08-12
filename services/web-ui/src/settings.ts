@@ -1172,7 +1172,7 @@ export const settings: Settings = {
             // Lower zoom breakpoint for generated-media icon chrome. Runtime call
             // sites opt this config into the shared adaptive low-zoom curve,
             // which defaults to 0.45 unless this object provides `lowZoomPower`.
-            zoomScaling: { minZoom: 0.4 },
+            zoomScaling: mediaGenerationLayoutSettings.generatedMediaChrome.zoomScaling,
             // Theme tokens for the model badge + info button, surfaced as CSS custom properties.
             styles: {
                 // Gap between the provider icon and the provider/model name.

@@ -370,10 +370,24 @@ const sanitizeResolution = (args: {
     let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
     let confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
     if (mode === 'ambiguous' || confidence < 0.2) {
-        throw new MediaBranchAmbiguityError({
-            candidateAssetIds: snapshot.candidates.map(candidate => candidate.assetId),
-            rationale: rationale || 'The referenced branch could not be selected safely.',
-        })
+        const candidateAssetIds = [...new Set(snapshot.candidates.map(candidate => candidate.assetId))]
+        if (candidateAssetIds.length > 1) {
+            throw new MediaBranchAmbiguityError({
+                candidateAssetIds,
+                rationale: rationale || 'The referenced branch could not be selected safely.',
+            })
+        }
+
+        mode = 'fresh-branch'
+        operationKind = 'new_image'
+        targetCandidateId = null
+        parentCandidateId = undefined
+        includeGeneratedCandidateIds = []
+        styleReferenceCandidateIds = []
+        rationale = appendRationale(
+            rationale,
+            'Resolver guard kept the only explicit Asset as context and started a fresh branch because no competing branch candidate exists.',
+        )
     }
 
     if (parentCandidateId && !candidateById.has(parentCandidateId)) {

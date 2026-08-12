@@ -36,6 +36,17 @@
         viewportOverride?: Viewport
     }
 
+    type AssetAttachResponse = {
+        error?: unknown
+        assetId?: unknown
+        nodeIds?: unknown
+    }
+
+    type AssetDetachResponse = {
+        error?: unknown
+        success?: unknown
+    }
+
     let paneEl: HTMLDivElement
     let viewportEl: HTMLDivElement
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
@@ -104,6 +115,83 @@
         const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
         const width = settings.mediaNode.image.defaultInsertionWidth
         return { width, height: width / safeAspectRatio }
+    }
+
+    function getCanvasMembershipResponseError(response: unknown): string | null {
+        if (!response || typeof response !== 'object') return 'INVALID_CANVAS_MEMBERSHIP_RESPONSE'
+        const error = (response as { error?: unknown }).error
+        if (error === undefined) return null
+        return typeof error === 'string' && error ? error : 'INVALID_CANVAS_MEMBERSHIP_RESPONSE'
+    }
+
+    function assertAssetAttached(response: unknown, assetId: string, nodeId: string): void {
+        const responseError = getCanvasMembershipResponseError(response)
+        if (responseError) throw new Error(responseError)
+
+        const attached = response as AssetAttachResponse
+        if (attached.assetId !== assetId
+            || !Array.isArray(attached.nodeIds)
+            || !attached.nodeIds.includes(nodeId)) {
+            throw new Error('INVALID_ASSET_ATTACH_RESPONSE')
+        }
+    }
+
+    function assertAssetDetached(response: unknown): void {
+        const responseError = getCanvasMembershipResponseError(response)
+        if (responseError) throw new Error(responseError)
+        if ((response as AssetDetachResponse).success !== true) {
+            throw new Error('INVALID_ASSET_DETACH_RESPONSE')
+        }
+    }
+
+    function getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt: number): number {
+        return Math.max(Date.now(), expectedCanvasStateUpdatedAt + 1)
+    }
+
+    async function runCanvasMembershipMutation<Result>(
+        targetWorkspaceId: string,
+        mutation: () => Promise<Result>,
+    ): Promise<Result> {
+        const workspaceService = servicesStore.getData('workspaceService')
+        if (!workspaceService || typeof workspaceService.runCanvasMembershipMutation !== 'function') {
+            throw new Error('CANVAS_WRITE_COORDINATOR_UNAVAILABLE')
+        }
+        return await workspaceService.runCanvasMembershipMutation({
+            workspaceId: targetWorkspaceId,
+            mutation,
+        })
+    }
+
+    function commitCanvasMembershipState(nextCanvasState: CanvasState, canvasStateUpdatedAt: number): void {
+        workspaceStore.updateCanvasState(nextCanvasState)
+        workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+    }
+
+    function rebaseCanvasMembershipState(
+        requestedState: CanvasState,
+        nodeId: string,
+        operation: 'attach' | 'detach',
+    ): CanvasState {
+        const currentState = renderer?.getCanvasState()
+        if (!currentState) return requestedState
+
+        const requestedNodeIds = new Set(requestedState.nodes.map((node) => node.nodeId))
+        const nodes = [
+            ...requestedState.nodes,
+            ...currentState.nodes.filter((node) => (
+                !requestedNodeIds.has(node.nodeId)
+                && !(operation === 'detach' && node.nodeId === nodeId)
+            )),
+        ]
+        const requestedEdgeIds = new Set(requestedState.edges.map((edge) => edge.edgeId))
+        const edges = [
+            ...requestedState.edges,
+            ...currentState.edges.filter((edge) => (
+                !requestedEdgeIds.has(edge.edgeId)
+                && !(operation === 'detach' && (edge.sourceNodeId === nodeId || edge.targetNodeId === nodeId))
+            )),
+        ]
+        return { ...requestedState, nodes, edges }
     }
 
     function cloneViewport(viewportValue: Viewport | null | undefined): Viewport | null {
@@ -230,10 +318,16 @@
                     assetId: doc.assetId,
                     dimensions,
                 }
-                const nextCanvasState = renderer?.insertNodeAtViewportCenter(documentNode, {}, false)
-                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                if (nextCanvasState && typeof expectedCanvasStateUpdatedAt === 'number') {
-                    const canvasStateUpdatedAt = Date.now()
+                await runCanvasMembershipMutation(targetWorkspaceId, async () => {
+                    if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) {
+                        throw new Error('WORKSPACE_CHANGED_DURING_CANVAS_MUTATION')
+                    }
+                    const nextCanvasState = renderer?.insertNodeAtViewportCenter(documentNode, {}, false)
+                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                    if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') {
+                        throw new Error('CANVAS_REVISION_REQUIRED')
+                    }
+                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
                     const response = await assetService.attach({
                         assetId: doc.assetId,
                         workspaceId: targetWorkspaceId,
@@ -243,12 +337,11 @@
                             canvasStateUpdatedAt,
                             canvasState: nextCanvasState,
                         },
-                    }) as { error?: string }
-                    if (response?.error) throw new Error(response.error)
+                    })
+                    assertAssetAttached(response, doc.assetId, documentNode.nodeId)
                     renderer?.commitTransientCanvasState(nextCanvasState)
-                    workspaceStore.updateCanvasState(nextCanvasState)
-                    workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
-                }
+                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                })
             }
         } catch (error) {
             console.error('Error creating document:', error)
@@ -420,25 +513,31 @@
             ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | DocumentMediaCanvasNode,
             'position'
         >
-        const replacedState = placeholderNodeId ? renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false) : null
-        const nextCanvasState = replacedState ?? renderer?.insertNodeAtViewportCenter(node, {}, false)
-        const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-        if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') return
-        const canvasStateUpdatedAt = Date.now()
-        const response = await assetService.attach({
-            assetId: result.assetId,
-            workspaceId: targetWorkspaceId,
-            nodeId,
-            workspaceMutation: {
-                expectedCanvasStateUpdatedAt,
-                canvasStateUpdatedAt,
-                canvasState: nextCanvasState,
-            },
-        }) as { error?: string }
-        if (response?.error) throw new Error(response.error)
-        renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)
-        workspaceStore.updateCanvasState(nextCanvasState)
-        workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+        await runCanvasMembershipMutation(targetWorkspaceId, async () => {
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) {
+                throw new Error('WORKSPACE_CHANGED_DURING_CANVAS_MUTATION')
+            }
+            const replacedState = placeholderNodeId ? renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false) : null
+            const nextCanvasState = replacedState ?? renderer?.insertNodeAtViewportCenter(node, {}, false)
+            const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+            if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') {
+                throw new Error('CANVAS_REVISION_REQUIRED')
+            }
+            const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+            const response = await assetService.attach({
+                assetId: result.assetId,
+                workspaceId: targetWorkspaceId,
+                nodeId,
+                workspaceMutation: {
+                    expectedCanvasStateUpdatedAt,
+                    canvasStateUpdatedAt,
+                    canvasState: nextCanvasState,
+                },
+            })
+            assertAssetAttached(response, result.assetId, nodeId)
+            renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)
+            commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+        })
     }
 
     onMount(() => {
@@ -468,41 +567,47 @@
             },
             onDocumentContentChange: () => {},
             onAiChatThreadContentChange: () => {},
-            onAssetDetach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {
-                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
-                const canvasStateUpdatedAt = Date.now()
-                const response = await assetService.detach({
-                    assetId,
-                    workspaceId,
-                    nodeId,
-                    workspaceMutation: {
-                        expectedCanvasStateUpdatedAt,
-                        canvasStateUpdatedAt,
-                        canvasState: nextCanvasState,
-                    },
-                }) as { error?: string }
-                if (response?.error) throw new Error(response.error)
-                workspaceStore.updateCanvasState(nextCanvasState)
-                workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+            onAssetDetach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
+                return await runCanvasMembershipMutation(workspaceId, async () => {
+                    const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, 'detach')
+                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                    if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+                    const response = await assetService.detach({
+                        assetId,
+                        workspaceId,
+                        nodeId,
+                        workspaceMutation: {
+                            expectedCanvasStateUpdatedAt,
+                            canvasStateUpdatedAt,
+                            canvasState: nextCanvasState,
+                        },
+                    })
+                    assertAssetDetached(response)
+                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                    return nextCanvasState
+                })
             },
-            onAssetAttach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {
-                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
-                const canvasStateUpdatedAt = Date.now()
-                const response = await assetService.attach({
-                    assetId,
-                    workspaceId,
-                    nodeId,
-                    workspaceMutation: {
-                        expectedCanvasStateUpdatedAt,
-                        canvasStateUpdatedAt,
-                        canvasState: nextCanvasState,
-                    },
-                }) as { error?: string }
-                if (response?.error) throw new Error(response.error)
-                workspaceStore.updateCanvasState(nextCanvasState)
-                workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+            onAssetAttach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
+                return await runCanvasMembershipMutation(workspaceId, async () => {
+                    const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, 'attach')
+                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                    if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+                    const response = await assetService.attach({
+                        assetId,
+                        workspaceId,
+                        nodeId,
+                        workspaceMutation: {
+                            expectedCanvasStateUpdatedAt,
+                            canvasStateUpdatedAt,
+                            canvasState: nextCanvasState,
+                        },
+                    })
+                    assertAssetAttached(response, assetId, nodeId)
+                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                    return nextCanvasState
+                })
             },
         })
 

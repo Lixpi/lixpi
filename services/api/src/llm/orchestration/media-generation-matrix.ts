@@ -2,7 +2,7 @@
 
 import { v4 as uuid } from 'uuid'
 import type NatsService from '@lixpi/nats-service'
-import { info } from '@lixpi/debug-tools'
+import { info, warn } from '@lixpi/debug-tools'
 import type {
     AiInteractionMediaGenerationRequest,
     AiModel,
@@ -281,14 +281,24 @@ export class MediaGenerationMatrixOrchestrator {
             imageModelOptions: normalized.imageModelOptions,
             videoModelOptions: normalized.videoModelOptions,
         })
-        const sharedPreflight = await this.runSharedPreflight({
-            requestData,
-            normalized,
-            primaryImageModel,
-            primaryVideoModel,
-            primaryImageOptions,
-            primaryVideoOptions,
-        })
+        let sharedPreflight: SharedPreflightResult
+        try {
+            sharedPreflight = await this.runSharedPreflight({
+                requestData,
+                normalized,
+                primaryImageModel,
+                primaryVideoModel,
+                primaryImageOptions,
+                primaryVideoOptions,
+            })
+        } catch (error) {
+            try {
+                await this.failUnfinishedDurableRuns(requestData)
+            } catch (settlementError) {
+                warn(`[MEDIA_MATRIX] Failed to settle durable runs after preflight failure: ${String(settlementError)}`)
+            }
+            throw error
+        }
         this.rememberRequestPublisher(normalized.requestGroupKey, sharedPreflight.publisher)
         const sharedPreflightState = sharedPreflight.state
 
@@ -408,13 +418,31 @@ export class MediaGenerationMatrixOrchestrator {
             if (rejectedResult?.status === 'rejected') throw rejectedResult.reason
         } finally {
             const removeProjectedPendingNodes = this.cancelledRequestGroupKeys.delete(normalized.requestGroupKey)
+            let terminalSweepError: unknown
+            if (!removeProjectedPendingNodes) {
+                try {
+                    await this.failUnfinishedDurableRuns(requestData)
+                } catch (error) {
+                    terminalSweepError = error
+                    warn(`[MEDIA_MATRIX] Failed to settle unfinished durable runs: ${String(error)}`)
+                }
+            }
             sharedPreflight.publisher.mediaGenerationRequestComplete(normalized.generationRequestId, {
                 removeProjectedPendingNodes,
             })
             await sharedPreflight.publisher.drainPendingWrites()
             await sharedPreflight.publisher.finishProseMirrorStream()
             this.scheduleRequestPublisherCleanup(normalized.requestGroupKey)
+            if (terminalSweepError) throw terminalSweepError
         }
+    }
+
+    private async failUnfinishedDurableRuns(requestData: MatrixRequestData): Promise<void> {
+        if (!requestData.durableGenerationRequestId) return
+        await new MediaGenerationRequestService().failUnfinishedRuns({
+            generationRequestId: requestData.durableGenerationRequestId,
+            workspaceId: requestData.workspaceId,
+        })
     }
 
     async stop({ workspaceId, aiChatThreadId, generationRequestId }: StopMatrixRequestParams): Promise<void> {

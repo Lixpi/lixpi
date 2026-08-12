@@ -5,12 +5,19 @@ import { createHash } from 'node:crypto'
 import { info } from '@lixpi/debug-tools'
 import sharp from 'sharp'
 
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
+import {
+    CHARACTER_BACK_ANCHOR_BINDING_KEY,
+    CHARACTER_IDENTITY_ANCHOR_BINDING_KEY,
+    CHARACTER_OUTFIT_ANCHOR_BINDING_KEY,
+    type CharacterPanelOutputBinding,
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
 import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
 import type {
     CharacterImageGenerationPort,
     CharacterImageReference,
 } from './runtime-ports.ts'
+import type { CharacterSourceMedium } from './character-evidence.ts'
 import {
     hasCharacterPoseReference,
     loadCharacterPoseReference,
@@ -68,9 +75,13 @@ export async function renderCharacterPanel(args: {
     if (poseReference && !result.includedReferenceRoles.includes('pose-reference')) {
         throw new Error(`CHARACTER_PANEL_POSE_REFERENCE_OMITTED:${args.panel.panelId}`)
     }
-    if (args.references.some(reference => reference.role === 'canonical-anchor')
-        && !result.includedReferenceRoles.includes('canonical-anchor')) {
-        throw new Error(`CHARACTER_PANEL_IDENTITY_ANCHOR_OMITTED:${args.panel.panelId}`)
+    const requiredGeneratedReferenceRoles = new Set(args.panel.outputBindings
+        .filter(binding => binding.required)
+        .map(binding => binding.referenceRole))
+    for (const role of requiredGeneratedReferenceRoles) {
+        if (!result.includedReferenceRoles.includes(role)) {
+            throw new Error(`CHARACTER_PANEL_GENERATED_REFERENCE_OMITTED:${args.panel.panelId}:${role}`)
+        }
     }
     info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] provider-result ${JSON.stringify({
         includedReferenceRoles: result.includedReferenceRoles,
@@ -104,18 +115,34 @@ const normalizeGeneratedPanel = async (bytes: Buffer): Promise<Buffer> => {
 
 export function buildCharacterPanelPrompt(args: {
     panel: CharacterPanelSpec
-    userPrompt: string
-    evidenceSummary: string
-    usesGeneratedIdentityAnchor: boolean
+    authoritativePrompt: string
+    sourceMedium: CharacterSourceMedium
+    sourceEvidenceSummary: string
+    promptDirectives: readonly string[]
+    sourceSubjectIdentityClassifications: CapabilityMediaExecutionContext['sharedState']['sourceSubjectIdentityClassifications']
+    capabilityInstructions: readonly string[]
+    capabilityReferenceCount: number
+    generatedReferenceBindings: readonly CharacterPanelOutputBinding[]
 }): string {
     const usesPoseReference = hasCharacterPoseReference(args.panel)
+    const isSelfReference = args.sourceSubjectIdentityClassifications.includes('self')
+    const usesGeneratedIdentityAnchor = args.generatedReferenceBindings.some(binding => (
+        binding.bindingKey === CHARACTER_IDENTITY_ANCHOR_BINDING_KEY
+    ))
+    const usesGeneratedOutfitAnchor = args.generatedReferenceBindings.some(binding => (
+        binding.bindingKey === CHARACTER_OUTFIT_ANCHOR_BINDING_KEY
+    ))
+    const usesGeneratedBackOutfitAnchor = args.generatedReferenceBindings.some(binding => (
+        binding.bindingKey === CHARACTER_BACK_ANCHOR_BINDING_KEY
+    ))
+    const usesGeneratedReferences = args.generatedReferenceBindings.length > 0
     const poseInstruction = !usesPoseReference
         ? args.panel.kind === 'head'
-            ? args.usesGeneratedIdentityAnchor
-                ? 'No synthetic facial or portrait control image is provided. Use the generated identity anchor as the primary visible identity variant, the original subject references for authoritative off-crop character evidence, and the prompt for the requested camera angle and body context.'
+            ? usesGeneratedReferences
+                ? 'No synthetic facial or portrait control image is provided. Use the generated identity and outfit anchors for complementary request-compliant continuity, use the original subject references for unchanged evidence absent from both anchors, and use the request for the required design, camera angle, and body context.'
                 : 'No synthetic facial or portrait control image is provided. Use only the prompt and original subject references for facial anatomy, sex presentation, identity, hair, headwear, expression, camera angle, and body context; create the requested neutral head view directly.'
-            : args.usesGeneratedIdentityAnchor
-                ? 'No synthetic spatial control image is provided for this detail shot. Use the generated identity anchor as the primary visible identity variant, the original subject references for authoritative outfit construction and materials, and the prompt for camera angle and framing.'
+            : usesGeneratedReferences
+                ? 'No synthetic spatial control image is provided for this detail shot. Use the generated identity and outfit anchors for request-compliant continuity, the original subject references for unchanged evidence absent from both anchors, and the prompt for requested design changes, camera angle, and framing.'
                 : 'No synthetic spatial control image is provided for this detail shot. Use only the prompt and original subject references for identity, outfit construction, materials, accessories, camera angle, and framing.'
         : args.panel.kind === 'head'
             ? `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for centered straight-on camera direction, upright head position, symmetric head-and-shoulder alignment, upper-body crop, and subject scale. Its featureless gray mannequin is spatial pose control only, never identity or design evidence.`
@@ -131,33 +158,73 @@ export function buildCharacterPanelPrompt(args: {
                 : 'Fill the frame with the requested object arrangement while keeping every object and hand fully visible.'
     return [
         `Create one isolated ${args.panel.crop} reference image: ${args.panel.target}.`,
+        'AUTHORITATIVE REQUEST — APPLY EVERY PART OF IT',
+        args.authoritativePrompt,
+        args.capabilityInstructions.length > 0
+            ? `SHARED CAPABILITY INSTRUCTIONS — APPLY THEM TO THIS SAME OUTPUT\n${args.capabilityInstructions.join('\n\n')}`
+            : '',
+        args.promptDirectives.length > 0
+            ? `EXPLICIT REQUESTED CHANGES\n${args.promptDirectives.map(directive => `- ${directive}`).join('\n')}`
+            : '',
+        isSelfReference
+            ? 'SELF-REFERENCE CONTEXT — The supplied source Asset is classified as the requesting user’s own identity. This is a transformation of their supplied reference; preserve recognizability while applying every requested visible change. This context does not override provider safety requirements.'
+            : '',
+        buildSourceMediumInstruction(args.sourceMedium),
         'INPUT ROLES',
-        args.usesGeneratedIdentityAnchor
-            ? 'The file GENERATED_IDENTITY_ANCHOR.png is the primary identity and appearance anchor. Reproduce and extend that exact generated variant across this new camera angle, crop, and pose. Give it greater visual authority than the original source images for facial construction, hair silhouette, immediately visible outfit interpretation, material rendering, and the model’s own established visual vocabulary.'
-            : 'The original source image or images define the exact person or character: facial identity, body proportions, hair, headwear, outfit construction, accessories, colors, materials, and visual medium.',
-        args.usesGeneratedIdentityAnchor
-            ? 'The original source image or images remain authoritative evidence for body proportions, outfit construction, accessories, colors, materials, and details outside the generated anchor crop. Use them to correct omissions without replacing the generated anchor’s established identity variant.'
+        usesGeneratedIdentityAnchor
+            ? 'The file GENERATED_IDENTITY_ANCHOR.png is the facial identity, hair, headwear, and close-detail continuity anchor only when it complies with the authoritative request and shared Capability instructions. If it omitted or weakened an explicit requested change, correct that failure instead of copying it.'
+            : 'The original source image or images define the baseline person or character. Preserve recognizable identity and every observed trait that the authoritative request and shared Capability instructions do not change.',
+        usesGeneratedOutfitAnchor
+            ? 'The file GENERATED_OUTFIT_ANCHOR.png is the full-body proportions, outfit construction, layer, accessory, color, material, and footwear continuity anchor only when it complies with the authoritative request and shared Capability instructions. Preserve its complete request-compliant outfit across this view.'
+            : '',
+        usesGeneratedBackOutfitAnchor
+            ? 'The file GENERATED_BACK_OUTFIT_ANCHOR.png is the rear garment construction, rear layers, back-facing accessories, rear materials, and back-of-footwear continuity anchor only when it complies with the authoritative request and shared Capability instructions. Preserve its request-compliant rear design wherever this view exposes it.'
+            : '',
+        usesGeneratedReferences
+            ? 'The original source image or images remain baseline evidence for unchanged details absent from the generated anchors. They never override an explicit requested transformation or design change.'
+            : '',
+        args.capabilityReferenceCount > 0
+            ? `The files CAPABILITY_REFERENCE_1 through CAPABILITY_REFERENCE_${args.capabilityReferenceCount} belong to the same shared request state. Apply them only according to the shared Capability instructions. Do not copy their subject identity, pose, composition, text, or background unless those instructions explicitly require it.`
             : '',
         poseInstruction,
         usesPoseReference
-            ? args.usesGeneratedIdentityAnchor
-                ? 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; the generated identity anchor defines the established visible variant and the original subject references supply authoritative character evidence outside its crop.'
-                : 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; only the original subject references define the character.'
+            ? usesGeneratedReferences
+                ? 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; the authoritative request defines all requested changes, the generated anchors supply complementary request-compliant continuity, and the original subject references supply unchanged evidence absent from both anchors.'
+                : 'The pose file is spatial control, never identity or design evidence. Ignore its gray material, featureless face, anatomy, physique, sex presentation, clothing, lighting, and rendering style; the authoritative request defines all requested changes and the original subject references define only unchanged character traits.'
             : '',
         'SHOT CONTRACT',
         framingInstruction,
         'Use an eye-level studio camera with a normal focal-length perspective, minimal perspective distortion, level shoulders where applicable, and an upright head unless the user explicitly requests otherwise.',
-        args.userPrompt,
-        args.evidenceSummary,
+        args.sourceEvidenceSummary
+            ? `UNMODIFIED SOURCE EVIDENCE — BASELINE ONLY, OVERRIDDEN BY REQUESTED CHANGES\n${args.sourceEvidenceSummary}`
+            : '',
         'INVARIANTS',
-        args.usesGeneratedIdentityAnchor
-            ? 'Preserve the generated identity anchor’s exact visible character variant while extending the original evidence for anatomy, clothing construction, materials, accessories, colors, and rendering medium. Change only the camera, crop, and pose required by this shot.'
-            : 'Preserve the observed identity, anatomy, clothing construction, materials, accessories, colors, and rendering medium exactly. Change only the camera, crop, and pose required by this shot.',
+        'Apply every explicit transformation, design change, state change, material change, costume change, and stylistic instruction from the authoritative request and shared Capability instructions. Preserve source or anchor traits only where they are not changed by that shared request state. Never return the unmodified source appearance when a transformation was requested.',
+        usesGeneratedReferences
+            ? 'Maintain recognizable continuity with the request-compliant parts of every supplied generated anchor. Use the identity portrait for face-level identity, the front full-body anchor for proportions and frontal outfit continuity, and the back full-body anchor when supplied for rear outfit continuity, while correcting any part that conflicts with the authoritative request.'
+            : 'Maintain recognizable underlying identity where the request permits it, while applying each requested change to every affected visible trait.',
         args.panel.kind === 'head'
-            ? 'Keep a relaxed neutral expression with level gaze and a closed relaxed mouth. Do not introduce a smile, frown, surprise, or other expression variant.'
+            ? 'Keep a relaxed neutral expression with level gaze and a closed relaxed mouth. Neutral expression controls only facial pose; it must not suppress any requested visual attribute, state, design change, or transformation.'
             : '',
         'One character only on a pure white studio background. No text, letters, numbers, labels, headings, captions, borders, grids, swatches, logos, watermarks, scenery, or additional people.',
     ].filter(Boolean).join('\n')
+}
+
+const buildSourceMediumInstruction = (sourceMedium: CharacterSourceMedium): string => {
+    if (sourceMedium === 'photograph') {
+        return [
+            'SOURCE DEPICTION MEDIUM — PHOTOGRAPH',
+            'Preserve a realistic photographic depiction with natural human proportions, photographic skin and material texture, plausible lighting, and camera/lens behavior unless the authoritative request or shared Capability instructions explicitly request a different depiction medium or named visual style.',
+            'A requested change to the subject, character state, design, or appearance does not by itself authorize a depiction-medium or visual-style change.',
+        ].join('\n')
+    }
+    if (sourceMedium === 'illustration') {
+        return 'SOURCE DEPICTION MEDIUM — ILLUSTRATION\nPreserve the source illustration medium and its established rendering language unless the authoritative request or shared Capability instructions explicitly request a different depiction medium or named visual style.'
+    }
+    if (sourceMedium === 'render') {
+        return 'SOURCE DEPICTION MEDIUM — RENDER\nPreserve the source rendered medium and its established rendering language unless the authoritative request or shared Capability instructions explicitly request a different depiction medium or named visual style.'
+    }
+    return 'SOURCE DEPICTION MEDIUM — UNSPECIFIED\nDo not invent a depiction-medium or visual-style change. Apply one only when it is explicitly stated by the authoritative request or shared Capability instructions.'
 }
 
 const decodeGeneratedImage = (value: string): Buffer => {

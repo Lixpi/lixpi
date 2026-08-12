@@ -84,6 +84,13 @@ const context = (mediaRunId = 'media-1'): CapabilityMediaExecutionContext => ({
             },
         },
     },
+    sharedState: {
+        authoritativePrompt: 'A courier',
+        sourceSubjectIdentityClassifications: [],
+        capabilityInstructions: [],
+        capabilityReferences: [],
+        capabilityOutputs: [],
+    },
     eventMeta: { organizationId: 'org-1', userId: 'user-1' },
 })
 
@@ -146,17 +153,216 @@ describe('CharacterSheetStrategy', () => {
         mocks.render.mockImplementation(async request => providerResult(request))
     })
 
-    it('executes the planned panels and carries the accepted identity anchor through the graph', async () => {
+    it('executes the configured three-shot barrier chain and carries the first two anchors into the back shot', async () => {
         const executionPlan = plan()
         const result = await strategy(async () => assessment(false)).execute(context(), executionPlan, {})
         const trace = result.capabilityMediaTrace as Record<string, unknown>
+        const operationKeys = mocks.render.mock.calls.map(([request]) => request.operationKey)
+        const frontRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-front:')
+        ))?.[0]
+        const backRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-back:')
+        ))?.[0]
 
         expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
         expect(trace.totalProviderOperations).toBe(executionPlan.panels.length)
         expect(trace.panels).toHaveLength(executionPlan.panels.length)
-        expect(mocks.render.mock.calls.find(([request]) => request.operationKey.includes(':body-profile:'))?.[0].references)
-            .toEqual(expect.arrayContaining([expect.objectContaining({ role: 'canonical-anchor' })]))
+        expect(operationKeys.findIndex(key => key.includes(':head-front-neutral:')))
+            .toBeLessThan(operationKeys.findIndex(key => key.includes(':body-front:')))
+        expect(operationKeys.findIndex(key => key.includes(':body-front:')))
+            .toBeLessThan(operationKeys.findIndex(key => key.includes(':body-back:')))
+        expect(frontRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                role: 'canonical-anchor',
+                fileName: 'GENERATED_IDENTITY_ANCHOR.png',
+            }),
+        ]))
+        expect(backRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                role: 'adjacent-angle',
+                fileName: 'GENERATED_IDENTITY_ANCHOR.png',
+            }),
+            expect.objectContaining({
+                role: 'canonical-anchor',
+                fileName: 'GENERATED_OUTFIT_ANCHOR.png',
+            }),
+        ]))
         expect(mocks.clear).toHaveBeenCalledOnce()
+    })
+
+    it('feeds all three declared anchors, and no unrelated completed shot, into optional shots', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-optional',
+            sourceAssetIds: [],
+            userPrompt: 'A courier in four shots',
+        })
+        const serialStrategy = new CharacterSheetStrategy({
+            ...runtime(),
+            providerConcurrency: 1,
+            panelAssessor: { assess: async () => assessment(false) },
+            evidenceAnalyzer: { analyze: async () => ({ medium: 'unknown' }) },
+        })
+
+        await serialStrategy.execute(context(), executionPlan, {})
+
+        const profileRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-profile:')
+        ))?.[0]
+        expect(profileRequest?.references.filter(reference => (
+            ['canonical-anchor', 'adjacent-angle', 'opposite-angle'].includes(reference.role)
+        ))).toEqual([
+            expect.objectContaining({
+                role: 'adjacent-angle',
+                fileName: 'GENERATED_IDENTITY_ANCHOR.png',
+            }),
+            expect.objectContaining({
+                role: 'canonical-anchor',
+                fileName: 'GENERATED_OUTFIT_ANCHOR.png',
+            }),
+            expect.objectContaining({
+                role: 'opposite-angle',
+                fileName: 'GENERATED_BACK_OUTFIT_ANCHOR.png',
+            }),
+        ])
+    })
+
+    it('applies the authoritative shared request before source fidelity and carries sibling Capability state into every shot', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-1',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Create a character sheet.',
+        })
+        const executionContext = context()
+        executionContext.sharedState = {
+            authoritativePrompt: 'Transform the referenced woman into a visibly undead zombie.',
+            sourceSubjectIdentityClassifications: ['self'],
+            capabilityInstructions: ['Render the transformed character with rough watercolor texture.'],
+            capabilityReferences: [{
+                imageUrl: `data:image/png;base64,${panelPng.toString('base64')}`,
+                traceUrl: '/api/capabilities/watercolor/resources/sample-1',
+            }],
+            capabilityOutputs: [
+                { capabilityId: 'character-creator', runId: 'character-run', output: {} },
+                { capabilityId: 'watercolor-style', runId: 'style-run', output: {} },
+            ],
+        }
+        const assess = vi.fn(async () => assessment(false))
+        const intentAwareStrategy = new CharacterSheetStrategy({
+            ...runtime(),
+            evidenceAnalyzer: {
+                analyze: async () => ({
+                    medium: 'illustration',
+                    promptDirectives: ['Make the subject visibly undead.'],
+                    promptChangedFeatures: ['skin condition'],
+                    facts: [
+                        {
+                            feature: 'skin condition',
+                            value: 'healthy natural skin',
+                            visibility: 'observed',
+                            sourceAssetId: 'asset-1',
+                            targetAngles: ['front'],
+                            confidence: 1,
+                        },
+                        {
+                            feature: 'facial identity',
+                            value: 'recognizable oval facial structure',
+                            visibility: 'observed',
+                            sourceAssetId: 'asset-1',
+                            targetAngles: ['front'],
+                            confidence: 1,
+                        },
+                    ],
+                }),
+            },
+            panelAssessor: { assess },
+        })
+
+        await intentAwareStrategy.execute(executionContext, executionPlan, {})
+
+        const headRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':head-front-neutral:')
+        ))?.[0]
+        const bodyRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-front:')
+        ))?.[0]
+        const backRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-back:')
+        ))?.[0]
+        expect(headRequest?.prompt).toContain('Transform the referenced woman into a visibly undead zombie.')
+        expect(headRequest?.prompt).toContain('rough watercolor texture')
+        expect(headRequest?.prompt).toContain('Make the subject visibly undead.')
+        expect(headRequest?.prompt).toContain('classified as the requesting user’s own identity')
+        expect(headRequest?.prompt).not.toContain('NON-GRAPHIC ZOMBIE DESIGN')
+        expect(headRequest?.prompt).not.toContain('pallid mottled skin')
+        expect(headRequest?.prompt).toContain('must not suppress any requested visual attribute')
+        expect(headRequest?.prompt).toContain('facial identity: recognizable oval facial structure')
+        expect(headRequest?.prompt).not.toContain('skin condition: healthy natural skin')
+        expect(headRequest?.prompt).not.toContain('Change only the camera, crop, and pose')
+        expect(headRequest?.references).toContainEqual(expect.objectContaining({
+            role: 'capability-reference',
+            fileName: 'CAPABILITY_REFERENCE_1.png',
+        }))
+        expect(bodyRequest?.prompt).toContain('GENERATED_IDENTITY_ANCHOR.png')
+        expect(bodyRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'canonical-anchor' }),
+            expect.objectContaining({ role: 'capability-reference' }),
+        ]))
+        expect(backRequest?.prompt).toContain('GENERATED_OUTFIT_ANCHOR.png')
+        expect(backRequest?.prompt).toContain('full-body proportions, outfit construction')
+        expect(backRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'canonical-anchor', fileName: 'GENERATED_OUTFIT_ANCHOR.png' }),
+            expect.objectContaining({ role: 'adjacent-angle', fileName: 'GENERATED_IDENTITY_ANCHOR.png' }),
+        ]))
+        expect(assess).toHaveBeenCalledWith(expect.objectContaining({
+            authoritativePrompt: 'Transform the referenced woman into a visibly undead zombie.',
+            capabilityInstructions: ['Render the transformed character with rough watercolor texture.'],
+            capabilityReferenceDataUrls: [expect.stringMatching(/^data:image\/png;base64,/u)],
+        }))
+    })
+
+    it('preserves a photographic source medium and uses the evidence interpretation of an obvious archetype typo', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-1',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Create a combie character out of this photo.',
+        })
+        const executionContext = context()
+        executionContext.sharedState.authoritativePrompt = 'Create a combie character out of this photo.'
+        const analyze = vi.fn(async () => ({
+            medium: 'photograph' as const,
+            promptDirectives: ['Interpret "combie character" as "zombie character" and make the subject visibly undead.'],
+            promptChangedFeatures: ['skin condition'],
+            facts: [{
+                feature: 'skin condition',
+                value: 'healthy natural skin',
+                visibility: 'observed' as const,
+                sourceAssetId: 'asset-1',
+                targetAngles: ['front' as const],
+                confidence: 1,
+            }],
+        }))
+        const intentAwareStrategy = new CharacterSheetStrategy({
+            ...runtime(),
+            evidenceAnalyzer: { analyze },
+            panelAssessor: { assess: async () => assessment(false) },
+        })
+
+        await intentAwareStrategy.execute(executionContext, executionPlan, {})
+
+        expect(analyze).toHaveBeenCalledWith(expect.objectContaining({
+            userPrompt: 'Create a combie character out of this photo.',
+        }))
+        const headRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':head-front-neutral:')
+        ))?.[0]
+        expect(headRequest?.prompt).toContain('Create a combie character out of this photo.')
+        expect(headRequest?.prompt).toContain('"zombie character" and make the subject visibly undead')
+        expect(headRequest?.prompt).toContain('SOURCE DEPICTION MEDIUM — PHOTOGRAPH')
+        expect(headRequest?.prompt).toContain('Preserve a realistic photographic depiction')
+        expect(headRequest?.prompt).toContain('does not by itself authorize a depiction-medium or visual-style change')
+        expect(headRequest?.prompt).not.toContain('adorable chibi')
+        expect(headRequest?.prompt).not.toContain('large head and small body')
     })
 
     it('isolates provider operations by media run and publishes the identity-anchor partial before its terminal image', async () => {
@@ -270,6 +476,52 @@ describe('CharacterSheetStrategy', () => {
         await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
             .rejects.toThrow('CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE:capacity')
         expect(mocks.render).toHaveBeenCalledOnce()
+    })
+
+    it('blocks every later shot when the required outfit anchor fails', async () => {
+        mocks.render.mockImplementation(async request => {
+            if (request.operationKey.includes(':body-front:')) throw new Error('outfit unavailable')
+            return providerResult(request)
+        })
+
+        await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
+            .rejects.toThrow('CHARACTER_SHEET_OUTFIT_ANCHOR_UNAVAILABLE:outfit unavailable')
+        expect(mocks.render).toHaveBeenCalledTimes(2)
+        expect(mocks.render.mock.calls.some(([request]) => request.operationKey.includes(':body-back:')))
+            .toBe(false)
+    })
+
+    it('blocks optional shots when the required back outfit anchor fails', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-optional',
+            sourceAssetIds: [],
+            userPrompt: 'A courier in four shots',
+        })
+        mocks.render.mockImplementation(async request => {
+            if (request.operationKey.includes(':body-back:')) throw new Error('back outfit unavailable')
+            return providerResult(request)
+        })
+
+        await expect(strategy(async () => assessment(false)).execute(context(), executionPlan, {}))
+            .rejects.toThrow('CHARACTER_SHEET_BACK_ANCHOR_UNAVAILABLE:back outfit unavailable')
+        expect(mocks.render).toHaveBeenCalledTimes(3)
+        expect(mocks.render.mock.calls.some(([request]) => request.operationKey.includes(':body-profile:')))
+            .toBe(false)
+    })
+
+    it('rejects models that cannot carry all generated anchors required by the selected graph', async () => {
+        const executionContext = context()
+        executionContext.imageModel.meta.imageReferenceCapabilities!.maxIdentityReferenceImages = 2
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-optional',
+            sourceAssetIds: [],
+            userPrompt: 'A courier in four shots',
+        })
+
+        await expect(strategy(async () => assessment(false)).execute(executionContext, executionPlan, {}))
+            .rejects.toThrow('CHARACTER_CREATOR_GENERATED_REFERENCE_BUDGET_UNSUPPORTED')
+        expect(mocks.render).not.toHaveBeenCalled()
+        expect(mocks.clear).not.toHaveBeenCalled()
     })
 
     it('continues with authorized source evidence and records a warning when analysis is unavailable', async () => {

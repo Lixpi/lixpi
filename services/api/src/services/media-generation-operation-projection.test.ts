@@ -2,11 +2,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type {
-    CanvasState,
-    MediaBranchLineagePlan,
-    MediaGenerationRun,
-    MediaReferenceBinding,
+import {
+    mediaGenerationLayoutSettings,
+    type CanvasState,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRun,
+    type MediaReferenceBinding,
 } from '@lixpi/constants'
 
 const mutateCanvasState = vi.hoisted(() => vi.fn())
@@ -81,7 +82,6 @@ describe('media generation operation-node projection', () => {
             runs: [run()],
             bindings: [binding],
         })
-
         expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
             nodeId: 'operation-request-1-0',
             type: 'operationStatus',
@@ -141,6 +141,7 @@ describe('media generation operation-node projection', () => {
         })
 
         const output = canvasState.nodes.find(node => node.nodeId === 'output-node-1')
+        const operation = canvasState.nodes.find(node => node.nodeId === mediaRun.operationNodeId)
         expect(output).toMatchObject({
             nodeId: 'output-node-1',
             mediaGenerationPhase: 'pending-before-first-frame',
@@ -154,6 +155,52 @@ describe('media generation operation-node projection', () => {
             }),
         })
         expect(output).not.toHaveProperty('generatedBy')
+        expect(operation).toMatchObject({
+            type: 'operationStatus',
+            lineageAssignment: expect.objectContaining({
+                branchId: 'branch-1',
+                lineageParentNodeId: 'branch-fork-1',
+            }),
+        })
+    })
+
+    it('stacks unanchored pending media with the compact pre-frame pitch from shared settings', async () => {
+        canvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [],
+            edges: [],
+        }
+        const firstRun = run({
+            generationRun: 0,
+            operationNodeId: 'operation-request-1-0',
+            mediaRunId: 'media-run-0',
+            outputAssetId: 'output-asset-0',
+            outputNodeId: 'output-node-0',
+        })
+        const secondRun = run({
+            generationRun: 1,
+            operationNodeId: 'operation-request-1-1',
+            mediaRunId: 'media-run-1',
+            outputAssetId: 'output-asset-1',
+            outputNodeId: 'output-node-1',
+        })
+
+        await projectMediaGenerationOperationNodes({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            runs: [firstRun, secondRun],
+            bindings: [],
+            visibleArea: { width: 1600, height: 1200 },
+        })
+
+        const firstOutput = canvasState.nodes.find(node => node.nodeId === 'output-node-0')!
+        const secondOutput = canvasState.nodes.find(node => node.nodeId === 'output-node-1')!
+        expect(Math.abs(secondOutput.position.y - firstOutput.position.y)).toBeCloseTo(
+            mediaGenerationLayoutSettings.generatedMediaSize
+                * mediaGenerationLayoutSettings.preFrameCircleScale
+                + mediaGenerationLayoutSettings.branchRowGap,
+            6,
+        )
     })
 
     it('rebinds temporary operation and output identities without losing the reserved slot or lineage edge', async () => {
@@ -273,5 +320,63 @@ describe('media generation operation-node projection', () => {
         expect(operation).not.toHaveProperty('unresolvedBindingId')
         expect(operation).not.toHaveProperty('verificationAssetId')
         expect(operation).toMatchObject({ status: 'in-progress', message: 'Resuming.', requestRevision: 3 })
+    })
+
+    it('projects terminal failure without illegally removing the reserved Asset node', async () => {
+        const failedRun = run({
+            mediaType: 'image',
+            mediaRunId: 'media-run-1',
+            outputAssetId: 'output-asset-1',
+            outputNodeId: 'output-node-1',
+        })
+        await projectMediaGenerationOperationNodes({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            runs: [failedRun],
+            bindings: [binding],
+        })
+        const reservedOutput = canvasState.nodes.find(node => node.nodeId === 'output-node-1')!
+        canvasState = {
+            ...canvasState,
+            edges: [{
+                edgeId: 'edge-source-output',
+                sourceNodeId: 'source-node',
+                targetNodeId: 'output-node-1',
+                sourceHandle: 'right',
+                targetHandle: 'left',
+            }],
+        }
+
+        await updateMediaGenerationOperationNode({
+            workspaceId: 'workspace-1',
+            operationNodeId: failedRun.operationNodeId,
+            generationRequestId: 'request-1',
+            generationRun: 0,
+            status: 'failed',
+            message: 'The generated result was blocked by the provider safety check.',
+            requestRevision: 4,
+        })
+
+        expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
+            nodeId: 'output-node-1',
+            type: 'image',
+            generationProgress: expect.objectContaining({ status: 'failed' }),
+        })]))
+        expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
+            nodeId: failedRun.operationNodeId,
+            type: 'operationStatus',
+            status: 'failed',
+            position: {
+                x: reservedOutput.position.x + (reservedOutput.dimensions.width - 360) / 2,
+                y: reservedOutput.position.y + (reservedOutput.dimensions.height - 104) / 2,
+            },
+        })]))
+        expect(canvasState.edges).toEqual([expect.objectContaining({
+            sourceNodeId: 'source-node',
+            targetNodeId: 'output-node-1',
+        })])
+        expect(mutateCanvasState).toHaveBeenLastCalledWith(expect.not.objectContaining({
+            allowUnboundGeneratedMediaReservationMutation: true,
+        }))
     })
 })

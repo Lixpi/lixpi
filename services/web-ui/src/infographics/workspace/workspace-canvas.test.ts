@@ -278,6 +278,19 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptNotToContain(recovery, 'loadWorkspaceRouteData(workspaceId)', 'operation recovery')
 	})
 
+	it('replaces terminal partial media with the live failure card without a workspace reload', () => {
+		const recovery = extractFunctionBody(ts, 'applyMediaOperationRecoveryResult')
+		expectExcerptToContain(recovery, 'rebalanceGeneratedMediaTrees(result.state.nodes, result.state.edges)', 'failure recovery')
+		expectExcerptToContain(recovery, 'commitTransientCanvasStatePreservingEditors({ ...result.state, nodes: rebalancedNodes })', 'failure recovery')
+		expectExcerptToContain(recovery, 'syncCanvasNodeDomGeometry(', 'failure recovery')
+		expectExcerptToContain(recovery, 'removeApiCanvasRemovedNodesFromDOM(result.removedNodeIds)', 'failure recovery')
+		expectExcerptToContain(recovery, 'pruneApiCanvasRemovedGeneratedMediaTrackers(result.removedNodeIds)', 'failure recovery')
+		expectExcerptToContain(recovery, 'pixiMediaLayer?.setTransientImageSource(nodeId, null)', 'failure recovery')
+		expectExcerptToContain(recovery, 'syncExistingOperationStatusNodeToDOM(updatedNode)', 'failure recovery')
+		expectExcerptToContain(recovery, 'scheduleGeneratedMediaChromeSync()', 'failure recovery')
+		expectExcerptNotToContain(recovery, 'loadWorkspaceRouteData(workspaceId)', 'failure recovery')
+	})
+
 	it('renders explicit ambiguity, provider verification, failure, edit, cancel, and dismiss actions', () => {
 		expectSourceToContain(ts, 'createContextPreviewTile({')
 		expectSourceToContain(ts, "addActionButton('Verify with provider'")
@@ -613,6 +626,35 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expect(transientReleaseIndex).toBeGreaterThan(geometryApplyIndex)
 	})
 
+	it('anchors completed-image connectors to the final media rectangle during texture handoff', () => {
+		const connectorNodesStart = ts.indexOf('function getNodesForConnectionManager(')
+		const connectorEdgesStart = ts.indexOf('function getEdgesForConnectionManager(', connectorNodesStart)
+		const clearOutlineStart = ts.indexOf('function clearFinalizingGeneratedImageOutline(')
+		const pruneAliasesStart = ts.indexOf('function pruneGeneratedMediaTrackerAliases(', clearOutlineStart)
+		expect(connectorNodesStart).toBeGreaterThan(-1)
+		expect(connectorEdgesStart).toBeGreaterThan(connectorNodesStart)
+		expect(clearOutlineStart).toBeGreaterThan(-1)
+		expect(pruneAliasesStart).toBeGreaterThan(clearOutlineStart)
+
+		const connectorNodes = ts.slice(connectorNodesStart, connectorEdgesStart)
+		const clearOutline = ts.slice(clearOutlineStart, pruneAliasesStart)
+		expectExcerptToContain(
+			connectorNodes,
+			'finalizingGeneratedImageRunKeysByNodeId.has(node.nodeId)',
+			'connector node geometry',
+		)
+		expectExcerptToContain(
+			connectorNodes,
+			'? null\n                : getPendingGeneratedMediaBeforeFrameVisualGeometry(',
+			'connector node geometry',
+		)
+		expectExcerptToContain(
+			clearOutline,
+			'syncConnectionManagerForCurrentCanvasState({ flushPixi: true })',
+			'completion texture handoff cleanup',
+		)
+	})
+
 	it('shows review and regeneration controls only for AI-generated media', () => {
 		const acceptStart = ts.indexOf('function createMediaAcceptButton')
 		const regenerateStart = ts.indexOf('function createMediaRegenerationControls', acceptStart)
@@ -717,6 +759,22 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'appendImageNodeToDOM(completedImageNode)')
 		expectSourceToContain(ts, 'appendVideoNodeToDOM(completedVideoNode)')
 		expectSourceToContain(ts, 'applyApiCanvasGeometry(data.canvasGeometry)')
+		const snapshotSyncStart = ts.indexOf('function syncApiCanvasSnapshotNodesToDOM(')
+		const snapshotSyncEnd = ts.indexOf('function removeApiCanvasRemovedNodesFromDOM(', snapshotSyncStart)
+		expect(snapshotSyncStart).toBeGreaterThan(-1)
+		expect(snapshotSyncEnd).toBeGreaterThan(snapshotSyncStart)
+		const snapshotSync = ts.slice(snapshotSyncStart, snapshotSyncEnd)
+		expectExcerptToContain(
+			snapshotSync,
+			"else if (node.type === 'operationStatus') {\n                syncExistingOperationStatusNodeToDOM(node)\n            }",
+			'failed operation-status snapshot DOM sync',
+		)
+		const waitingForFrameStart = ts.indexOf('function isGeneratedMediaCanvasNodeWaitingForFrame')
+		const waitingForFrameEnd = ts.indexOf('function isPendingGeneratedMediaBeforeFirstFrame', waitingForFrameStart)
+		expect(waitingForFrameStart).toBeGreaterThan(-1)
+		expect(waitingForFrameEnd).toBeGreaterThan(waitingForFrameStart)
+		const waitingForFrame = ts.slice(waitingForFrameStart, waitingForFrameEnd)
+		expectExcerptToContain(waitingForFrame, "['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)", 'terminal media progress guard')
 		expectSourceToContain(ts, "if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'")
 		expectSourceToContain(ts, "return Boolean(node.generatedBy) && asset?.media?.renditions.original?.status !== 'ready'")
 	})
@@ -850,13 +908,14 @@ describe('Workspace canvas — generated video canvas state', () => {
 		// separately as constant-size screen-space content, so the two affordances
 		// are fully decoupled.
 		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
-		const chromeEnd = ts.indexOf('function createGeneratedMediaInfoPanelChrome', chromeStart)
+		const chromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		expect(chromeStart).toBeGreaterThan(-1)
 		expect(chromeEnd).toBeGreaterThan(chromeStart)
 		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome strip')
 		expectExcerptToContain(mediaChrome, 'applyGeneratedMediaChromeGeometry(', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedMediaInfoPanel', 'media chrome strip')
+		expectExcerptNotToContain(mediaChrome, 'createGeneratedOutputHistoryButton(node)', 'media chrome strip')
 	})
 
 	it('keeps the video controls overlay free of the info button', () => {
@@ -965,10 +1024,15 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceNotToContain(loadScss(), '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
 	})
 
-	it('uses one prompt-derived history trigger for every generated output', () => {
+	it('combines media history into the info panel while retaining the Artifact history trigger', () => {
 		const messagePartsResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessageParts')
 		const messageResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessageText')
 		const historyButton = extractFunctionBody(ts, 'createGeneratedOutputHistoryButton')
+		const mediaChromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const mediaChromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', mediaChromeStart)
+		const mediaChrome = ts.slice(mediaChromeStart, mediaChromeEnd)
+		const mediaInfoPanel = extractFunctionBody(ts, 'createGeneratedMediaMetadataPanel')
+		const projectionMount = extractFunctionBody(ts, 'mountGeneratedMediaChatProjection')
 		const artifactChrome = extractFunctionBody(ts, 'createGeneratedCapabilityArtifactChrome')
 
 		expectExcerptToContain(messagePartsResolver, "node.type === 'capabilityArtifact'", 'generated output history message')
@@ -984,10 +1048,33 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(historyButton, 'workspace-branch-marker-message-icon media-history-reasoning-icon', 'generated output history trigger')
 		expectExcerptToContain(historyButton, 'title=${message}', 'generated output history trigger')
 		expectSourceToContain(ts, 'GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS = 22')
-		expectSourceToContain(ts, '${createGeneratedOutputHistoryButton(node)}')
+		expectExcerptNotToContain(mediaChrome, 'createGeneratedOutputHistoryButton(node)', 'generated media chrome')
+		expectExcerptToContain(mediaInfoPanel, 'appendGeneratedMediaMetadata(panel, node)', 'generated media info panel')
+		expectExcerptToContain(mediaInfoPanel, 'appendGeneratedMediaHistory(historySection, node, {', 'generated media info panel')
+		expectExcerptToContain(mediaInfoPanel, 'canvas-generated-media-history-section', 'generated media info panel')
+		expectExcerptToContain(projectionMount, 'defaultExpanded: true', 'generated media history pipeline')
+		expectExcerptToContain(projectionMount, 'includeGenerationProgressTimeline,', 'generated media history trace')
+		expectSourceNotToContain(ts, 'defaultProgressTimelineExpanded')
 		expectExcerptToContain(artifactChrome, 'createGeneratedOutputHistoryButton(node)', 'generated Artifact chrome')
 		expectSourceNotToContain(ts, 'function createCapabilityArtifactHistoryButton')
 		expectSourceNotToContain(ts, '<span className="media-history-button-text">History</span>')
+	})
+
+	it('removes the ProseMirror ordered-list indent from every generated-media timeline level', () => {
+		const scss = loadScss()
+		const timelineBlock = extractBlock(
+			scss,
+			'.canvas-generated-media-projection-editor .ai-media-generation-progress > .progress-timeline,\n'
+				+ '.canvas-generated-media-projection-editor .ai-media-generation-progress .progress-timeline-children',
+		)
+		const historyTimelineBlock = extractBlock(
+			scss,
+			'.canvas-generated-media-history-panel > .workspace-media-generation-progress,\n'
+				+ '.canvas-generated-media-history-panel .ai-media-generation-progress',
+		)
+
+		expectExcerptToContain(timelineBlock, 'padding-left: 0;', 'generated media timeline')
+		expectExcerptToContain(historyTimelineBlock, 'margin: 18px 0 0;', 'generated media history timeline')
 	})
 
 	it('uses the submitted Capability accent inside accepted-output history triggers', () => {
@@ -1424,8 +1511,24 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(insertBody, 'conversationAssetId: threadId', 'lineage preflight marker insert')
 		expectExcerptToContain(insertBody, 'setPendingBranchMarkerRecordAliases(threadId, spec.generationRun, record)', 'lineage preflight marker insert')
 		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'lineage preflight marker insert')
+		expectExcerptToContain(applyLineageBody, '!hasCompletePlannedBranchMarkerGeometry(currentCanvasState.nodes, lineagePlan)', 'lineage marker geometry gate')
 		expect(insertIndex).toBeGreaterThan(-1)
 		expect(resolveIndex).toBeGreaterThan(insertIndex)
+	})
+
+	it('never rewrites API-planned branch marker geometry during lineage handoff', () => {
+		const ensureOriginBody = extractFunctionBody(ts, 'ensureBranchOriginForGeneratedMedia')
+		const ensureForkBody = extractFunctionBody(ts, 'ensureBranchForkForGeneratedMedia')
+		const ensureLineBody = extractFunctionBody(ts, 'ensureBranchLineForGeneratedMedia')
+		const resolveBody = extractFunctionBody(ts, 'resolvePendingBranchMarkerWithLineagePlan')
+		const applyApiGeometryBody = extractFunctionBody(ts, 'applyApiCanvasGeometry')
+
+		expectExcerptToContain(ensureOriginBody, "if (existing?.type === 'branchOrigin') {\n            return existing as BranchOriginCanvasNode", 'branch origin geometry ownership')
+		expectExcerptToContain(ensureForkBody, "if (existing?.type === 'branchFork') {\n            return existing as BranchForkCanvasNode", 'branch fork geometry ownership')
+		expectExcerptToContain(ensureLineBody, "if (existing?.type === 'branchLine' && existing.pendingState?.phase !== 'preflight') {\n            return existing as BranchLineCanvasNode", 'branch line geometry ownership')
+		expectExcerptNotToContain(resolveBody, 'positionPendingBranchMarkerBeforeGeneratedMedia', 'pending marker promotion')
+		expectExcerptToContain(applyApiGeometryBody, 'resolvePendingBranchMarkersAfterApiGeometry(canvasGeometry.generationRequestId)', 'API geometry lineage handoff')
+		expectSourceNotToContain(ts, 'shouldReplaceApiFallbackFreshRootPosition')
 	})
 
 	it('keeps branch marker planning and pending-state clearing transient so they cannot overwrite API-owned media membership', () => {
@@ -2691,6 +2794,14 @@ describe('Workspace canvas — collision resolution ownership', () => {
 		expectSourceNotToContain(ts, ['getContext', 'Region', 'Cl', 'oudBounds'].join(''))
 	})
 
+	it('includes resolved media title and action chrome in collision boxes', () => {
+		expectSourceToContain(ts, 'getGeneratedOutputChromeCollisionInsets,')
+		expectSourceToContain(ts, 'const chromeInsets = getMediaChromeCollisionInsets(node)')
+		expectSourceToContain(ts, 'y: worldPosition.y - chromeInsets.top,')
+		expectSourceToContain(ts, 'height: chromeInsets.top + dimensions.height + chromeInsets.bottom,')
+		expectSourceToContain(ts, 'if (pendingCircleGeometry) {')
+	})
+
 	it('uses plain rectangle overlap filtering for collision pairs', () => {
 		expectSourceToContain(ts, 'const shouldResolvePair = (): boolean => true')
 		expectSourceNotToContain(ts, ['context', 'RegionCl', 'oudGeometry'].join(''))
@@ -3152,5 +3263,42 @@ describe('video generation — canvas + plugin source shape', () => {
 		const branchingTs = readSourceFile('../../services/ai-image-branching.ts')
 		expectSourceToContain(branchingTs, "return buildAssetRenditionPath(node.assetId, node.type === 'video' ? 'representativeFrame' : 'preview')")
 		expectSourceNotToContain(branchingTs, "'.mp4'")
+	})
+})
+
+// =============================================================================
+// Asset membership persistence
+// =============================================================================
+
+describe('asset membership persistence', () => {
+	const ts = loadTs()
+	const svelte = loadWorkspaceCanvasSvelte()
+
+	it('requires explicit membership confirmation before committing upload state', () => {
+		const uploadHandlerStart = svelte.indexOf('async function addAssetToCanvas(')
+		const uploadHandlerEnd = svelte.indexOf('\n    onMount(() => {', uploadHandlerStart)
+		const uploadHandler = svelte.slice(uploadHandlerStart, uploadHandlerEnd)
+		const assertionIndex = uploadHandler.indexOf('assertAssetAttached(response, result.assetId, nodeId)')
+		const commitIndex = uploadHandler.indexOf('renderer?.commitTransientCanvasNodeInsertion(')
+
+		expect(uploadHandlerStart).toBeGreaterThan(-1)
+		expect(uploadHandlerEnd).toBeGreaterThan(uploadHandlerStart)
+		expect(assertionIndex).toBeGreaterThan(-1)
+		expect(commitIndex).toBeGreaterThan(assertionIndex)
+		expectSourceToContain(svelte, 'if (attached.assetId !== assetId')
+		expectSourceToContain(svelte, '!attached.nodeIds.includes(nodeId)')
+		expectSourceToContain(svelte, "throw new Error('INVALID_ASSET_ATTACH_RESPONSE')")
+		expectSourceToContain(svelte, 'assertAssetDetached(response)')
+	})
+
+	it('uses the per-workspace mutation lane and commits the rebased accepted state', () => {
+		expectSourceToContain(svelte, 'return await workspaceService.runCanvasMembershipMutation({')
+		expectSourceToContain(svelte, 'const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, \'attach\')')
+		expectSourceToContain(svelte, 'const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, \'detach\')')
+		expectSourceToContain(svelte, 'const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)')
+		expectSourceToContain(ts, 'onAssetDetach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>')
+		expectSourceToContain(ts, 'onAssetAttach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>')
+		expectSourceToContain(ts, 'const committedState = await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })')
+		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(committedState)')
 	})
 })
