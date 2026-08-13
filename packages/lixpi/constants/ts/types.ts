@@ -1819,7 +1819,7 @@ export type AiModel = {
     isDefaultFor?: DefaultAiModelCapability[]
     // The route-aware cost identity is staged alongside legacy price data until
     // the coordinated billing cutover can remove that legacy payload.
-    pricingReference?: PricingReference
+    pricingReference: PricingReference
     pricing: {
         currency: string
         resaleMargin: string

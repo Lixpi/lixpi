@@ -180,12 +180,18 @@ deploy_workload() {
 
 # ai-models-sync: AWS/DynamoDB/provider config (NEX-account creds minted by the
 # native nexlet for its own NATS publish).
+#
+# The BEDROCK/AWS_REGION keys below mirror ProviderRouteEnvironment in
+# packages/lixpi/constants/ts/provider-route-config.ts; bash can't import that
+# type, so keep this list in sync by hand — it went silently out of sync once
+# before (see git history).
 AI_MODELS_KEYS="ORG_NAME STAGE ENVIRONMENT AWS_REGION AWS_PROFILE \
 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
 AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_CREDENTIALS_FULL_URI \
 DYNAMODB_ENDPOINT OPENAI_API_KEY ANTHROPIC_API_KEY \
 ANTHROPIC_USE_AWS_BEDROCK_INFERENCE GOOGLE_API_KEY \
-STABLE_DIFFUSION_API_KEY ARK_API_KEY LIXPI_SYNC_INTERVAL_MS"
+STABLE_DIFFUSION_API_KEY STABILITY_USE_AWS_BEDROCK_INFERENCE \
+STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE ARK_API_KEY LIXPI_SYNC_INTERVAL_MS"
 
 # file-conversion: connects to NATS as the AUTH-account regular_user (not the
 # NEX-account creds) so it can read/write organization Blob Object Store buckets.

@@ -59,6 +59,7 @@ const {
     GOOGLE_API_KEY,
     STABLE_DIFFUSION_API_KEY,
     STABILITY_USE_AWS_BEDROCK_INFERENCE,
+    STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE,
     ARK_API_KEY,
     BYTEPLUS_ARK_API_KEY,
     LLM_TIMEOUT_SECONDS,
@@ -373,6 +374,7 @@ export const createInfrastructure = async () => {
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
             STABILITY_USE_AWS_BEDROCK_INFERENCE: STABILITY_USE_AWS_BEDROCK_INFERENCE ?? 'false',
+            STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE: STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             // BytePlus ModelArk (Seedance video). Accept either env name and emit the
             // canonical ARK_API_KEY on the task def; || (not ??) so an empty string from
             // one name falls through to the other. The provider reads ARK_API_KEY as a fallback.
@@ -424,6 +426,8 @@ export const createInfrastructure = async () => {
             ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ANTHROPIC_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
+            STABILITY_USE_AWS_BEDROCK_INFERENCE: STABILITY_USE_AWS_BEDROCK_INFERENCE ?? 'false',
+            STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE: STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             // Forwarded for parity with the API task def + nex entrypoint key set; the
             // models-sync workload injects Seedance statically and makes no BytePlus call.
             ARK_API_KEY: ARK_API_KEY || BYTEPLUS_ARK_API_KEY || '',

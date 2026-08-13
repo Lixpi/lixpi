@@ -13,13 +13,15 @@
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
+import { type ProviderRouteEnvironment } from '@lixpi/constants'
+
 import {
     buildDockerImage,
     type DockerImageBuildResult,
 } from '../../helpers/docker/build-helpers.ts'
 import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
-export interface NexNodeServiceArgs {
+export type NexNodeServiceArgs = {
     ecsCluster: {
         id: pulumi.Output<string>
         arn: pulumi.Output<string>
@@ -39,7 +41,26 @@ export interface NexNodeServiceArgs {
 
     // Container env. Values may be Outputs (e.g. NATS_SERVERS from the cluster's
     // internal CloudMap URL), so they are resolved inside the task definition.
-    environment: Record<string, pulumi.Input<string>>
+    // The *_USE_AWS_BEDROCK_INFERENCE / AWS_REGION fields come from
+    // ProviderRouteEnvironment (the same type main-api-service and the pricing-route
+    // resolver consume), so a missing key here fails to compile instead of silently
+    // never reaching the ai-models-sync workload.
+    environment: {
+        NATS_SERVERS: pulumi.Input<string>
+        NATS_NEX_NODE_NKEY_PUBLIC: pulumi.Input<string>
+        NATS_NEX_NODE_NKEY_SEED: pulumi.Input<string>
+        NATS_JS_DOMAIN: pulumi.Input<string>
+        NEX_NAMESPACE: pulumi.Input<string>
+        NEX_NODE_NAME: pulumi.Input<string>
+        ORG_NAME: pulumi.Input<string>
+        STAGE: pulumi.Input<string>
+        ENVIRONMENT: pulumi.Input<string>
+        OPENAI_API_KEY: pulumi.Input<string>
+        ANTHROPIC_API_KEY: pulumi.Input<string>
+        GOOGLE_API_KEY: pulumi.Input<string>
+        STABLE_DIFFUSION_API_KEY: pulumi.Input<string>
+        ARK_API_KEY: pulumi.Input<string>
+    } & Required<ProviderRouteEnvironment>
 
     dockerBuildContext: string
     dockerfilePath: string

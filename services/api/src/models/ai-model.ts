@@ -26,6 +26,17 @@ const {
 const modelHasGenerationModality = (model: Omit<AiModel, 'pricing'>, modality: 'image_generation' | 'video_generation'): boolean =>
     model.modalities?.some(entry => entry.modality === modality) ?? false
 
+// AiModel.pricingReference is typed as required, but rows written before
+// ai-models-synchronization started populating it (or missed by a later sync
+// pass) can still come back from DynamoDB without one. Flag that drift loudly
+// at the boundary where this raw, unvalidated storage data starts being
+// trusted as AiModel, instead of leaving it to surface as a silent
+// undefined-dereference wherever pricingReference is next read.
+const warnIfMissingPricingReference = (model: { provider: string; model: string; pricingReference?: unknown }): void => {
+    if (model.pricingReference) return
+    console.error(`AI model ${model.provider}:${model.model} is missing pricingReference; run ai-models-sync to backfill route-aware pricing for it.`)
+}
+
 const modelIdFor = (model: Pick<AiModel, 'provider' | 'model'>): AiModelId =>
     `${model.provider}:${model.model}` as AiModelId
 
@@ -279,6 +290,8 @@ export default {
             return model as Omit<AiModel, 'pricing'>
         }).sort((a, b) => a.sortingPosition - b.sortingPosition)
 
+        models.forEach(warnIfMissingPricingReference)
+
         return {
             models,
             mediaGenerationConfigMatrix: buildMediaGenerationConfigMatrix(models),
@@ -304,6 +317,8 @@ export default {
             delete modelWithoutPricing.pricing
             return modelWithoutPricing
         }
+
+        warnIfMissingPricingReference(aiModel)
 
         return aiModel
     }

@@ -6,6 +6,7 @@ import * as pulumi from '@pulumi/pulumi'
 
 import {
     formatStageResourceName,
+    type ProviderRouteEnvironment,
 } from '@lixpi/constants'
 
 import {
@@ -45,11 +46,13 @@ export type MainApiServiceArgs = {
         }
     }
 
-    // App configuration
+    // App configuration.
+    // The AWS_REGION and *_USE_AWS_BEDROCK_INFERENCE fields come from
+    // ProviderRouteEnvironment (the same type services/nex and the pricing-route
+    // resolver consume) instead of being redeclared here, so a rename or addition
+    // to that contract fails this type instead of silently drifting.
     environment: {
         NODE_OPTIONS: string
-
-        AWS_REGION: string
 
         STAGE: string
         ORG_NAME: string
@@ -77,13 +80,11 @@ export type MainApiServiceArgs = {
 
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
-        ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: string
         GOOGLE_API_KEY: string
         STABLE_DIFFUSION_API_KEY: string
-        STABILITY_USE_AWS_BEDROCK_INFERENCE: string
         ARK_API_KEY: string
         LLM_TIMEOUT_SECONDS: string
-    }
+    } & Required<ProviderRouteEnvironment>
 
     // Docker build context
     dockerBuildContext: string

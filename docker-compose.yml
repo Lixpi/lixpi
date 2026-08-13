@@ -284,6 +284,7 @@ services:
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
             STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE: ${STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE:-false}
             # BytePlus ModelArk (Seedance) — forwarded for parity with the API/entrypoint key
             # set (entrypoint.sh relays ARK_API_KEY to the nexlet). The models-sync workload
             # injects Seedance statically and makes no BytePlus call, so this is future-proofing.
@@ -496,6 +497,7 @@ services:
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
             STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE: ${STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE:-false}
             # BytePlus ModelArk (Seedance 2.0 video). The provider reads BYTEPLUS_ARK_API_KEY
             # or ARK_API_KEY; forward both so whichever name the .env sets reaches the
             # container (the unset one defaults to empty and is ignored by the provider's ||).
@@ -709,6 +711,7 @@ services:
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
             STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
+            STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE: ${STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE:-false}
             # BytePlus ModelArk (Seedance) — passed through so Pulumi can put it on the
             # deployed API task definition (see pulumiProgram.ts). Both names forwarded.
             ARK_API_KEY: ${ARK_API_KEY:-}

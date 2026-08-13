@@ -25,6 +25,9 @@ start_request:
     - "/usr/src/service/workloads/ai-models-synchronization/index.ts"
   # The entrypoint injects these from container env at deploy time:
   #   ORG_NAME, STAGE, ENVIRONMENT, AWS_REGION, AWS_PROFILE, DYNAMODB_ENDPOINT,
-  #   OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, HOME, PATH
+  #   OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY,
+  #   ANTHROPIC_USE_AWS_BEDROCK_INFERENCE,
+  #   STABILITY_USE_AWS_BEDROCK_INFERENCE,
+  #   STABLE_DIFFUSION_USE_AWS_BEDROCK_INFERENCE, HOME, PATH
   environment:
     LIXPI_SYNC_INTERVAL_MS: "3600000"
