@@ -74,6 +74,18 @@ export type CapabilityMediaExecutionContext = {
 
 export type CapabilityMediaExecutionResult = {
     generatedImages?: string[]
+    mediaComposition?: {
+        kind: string
+        capabilityId: string
+        sourceAssetIds: string[]
+        components: Array<{
+            componentId: string
+            role: string
+            title: string
+            imageBase64: string
+            mimeType: 'image/png'
+        }>
+    }
     imageUsage?: {
         generatedCount: number
         size: string

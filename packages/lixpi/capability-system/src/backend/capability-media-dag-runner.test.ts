@@ -99,6 +99,47 @@ describe('CapabilityMediaDagRunner', () => {
         expect([...result.results.keys()]).toEqual(['identity', 'outfit', 'back'])
     })
 
+    it('uses durable initial outputs to satisfy dependencies without executing their producer nodes', async () => {
+        const execute = vi.fn(async (node: { nodeId: string }) => `${node.nodeId}-new`)
+        const result = await new CapabilityMediaDagRunner([
+            { nodeId: 'identity', dependsOn: [], outputBindings: [] },
+            {
+                nodeId: 'outfit',
+                dependsOn: ['identity'],
+                outputBindings: [{ bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true }],
+            },
+            {
+                nodeId: 'back',
+                dependsOn: ['identity', 'outfit'],
+                outputBindings: [
+                    { bindingKey: 'identity-anchor', sourceNodeId: 'identity', required: true },
+                    { bindingKey: 'outfit-anchor', sourceNodeId: 'outfit', required: true },
+                ],
+            },
+        ], 2, 0).run({
+            initialResults: new Map([
+                ['identity', 'identity-stored'],
+                ['back', 'back-stored'],
+            ]),
+            execute,
+        })
+
+        expect(execute).toHaveBeenCalledOnce()
+        expect(execute).toHaveBeenCalledWith(
+            expect.objectContaining({ nodeId: 'outfit' }),
+            expect.objectContaining({
+                boundOutputs: new Map([['identity-anchor', 'identity-stored']]),
+            }),
+            undefined,
+        )
+        expect(result.results).toEqual(new Map([
+            ['identity', 'identity-stored'],
+            ['back', 'back-stored'],
+            ['outfit', 'outfit-new'],
+        ]))
+        expect(result.events.map(event => event.nodeId)).toEqual(['outfit', 'outfit'])
+    })
+
     it('blocks missing required outputs and releases independent consumers in parallel after their barriers', async () => {
         let releaseConsumers = (): void => undefined
         const consumerGate = new Promise<void>(resolve => {

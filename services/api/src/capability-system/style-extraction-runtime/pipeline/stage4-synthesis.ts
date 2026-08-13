@@ -12,36 +12,29 @@ const SYSTEM_PROMPT = `You are a senior visual-style SYNTHESIZER. You receive a 
 Rules:
 1. **Dominance-weighted structure.** Axes with dominance >= 0.8 are signature axes and get dedicated top-level sections in the markdown instructions. Axes with dominance 0.5–0.8 get short sections. Axes with dominance 0.3–0.5 get a single sentence. Axes with dominance < 0.3 are absent from instructions but their extractor outputs (if present) stay in parameters.
 
-2. **Category.** Pick a category that reflects the dominant axis grouping:
-   - If forcedCategory is non-empty in the router's intentResolution, use it verbatim.
-   - Else if palette dominance is the single highest (≥ 0.8) and others are < 0.5, category = "color-palette".
-   - Else if character-design dominance is highest, category = "character-design" or "illustration-style" (prefer the latter if multiple axes are strong).
-   - Else if surface-texture dominance is highest, category = "surface-texture".
-   - Else if mood dominance is highest, category = "mood".
-   - Else if composition dominance is highest, category = "composition-rule".
-   - Else, fallback to "illustration-style" or "painting-style" depending on the medium.
+2. **Category.** Use a non-empty forced category verbatim. Otherwise derive a concise reusable category from the highest-dominance registered axis or axis group. Do not select a category from subject content or a stock aesthetic association.
 
-3. **Name.** Kebab-case derived from the dominant traits and medium. Examples: cel-shaded-chibi-cat-warm-window, dusty-sage-coral-palette, melancholy-late-autumn-mood. Maximum 8 words. Do NOT default to "loose-watercolor" or other training-prior tropes — the name must reflect what's actually distinctive.
+3. **Name.** Produce a kebab-case name of at most eight words derived only from observed dominant traits and the evidence-supported medium. Do not include source subject identity or stock aesthetic tropes.
 
-4. **Summary.** One sentence that names the dominant traits AND, when relevant, includes an explicit negative claim like "— digital, NOT traditional watercolor".
+4. **Summary.** Write one sentence naming the dominant observed traits and any evidence-required medium distinction without introducing a comparison that was absent from the analysis.
 
-5. **Tags.** 6–12 short tags derived from concrete dominant-axis observations. Do NOT include training-prior tropes that the router or medium-signature extractor rejected (e.g. no "watercolor" tag for a digital illustration; the medium-signature extractor's medium classification is authoritative on this).
+5. **Tags.** Produce six to twelve short tags derived from concrete dominant-axis observations. Exclude source content and any interpretation rejected by the router or medium-signature extractor.
 
 6. **Instructions (markdown).**
-   - **First section is "## DO NOT"** — enumerate training-prior tropes the system rejected, derived from the router's medium classification and the medium-signature extractor's notes. For a digital illustration, say "this is digital — DO NOT add paper tooth, dry-brush, deckle edges, wash bleeds, granulation, or any other traditional-medium artifacts." Be specific. This section is non-negotiable.
+   - **First section is "## DO NOT"** — include only constraints derived from observed evidence or explicit router negatives. Never populate it from a fixed list.
    - Then "## Application notes" with a brief intro.
-   - Then dominance-weighted sections per axis. Each section names the axis (e.g. "### Character design (signature, dominance 0.95)"), describes the axis's transferable traits, and gives a 1–3 sentence transfer recipe to a new subject.
+   - Then add dominance-weighted sections per axis. Each section names the registered axis, states its dominance class and score, describes transferable traits, and gives concise application guidance for unrelated requested content.
    - Tone: imperative, concrete, transferable. Write for another LLM to follow.
-   - Length: 600–2500 words depending on how many strong axes there are.
+   - Length: proportional to the supported axes and evidence. Do not pad with unsupported detail.
 
 7. **Parameters.** A nested JSON object with:
    - **axisDominance** — copy of the router's dominance map.
    - **sceneAssessment** — copy of the router's full assessment (for downstream consumers).
    - One nested block per axis that was extracted. Each block has the axis's full extracted "fields" object plus its dominance and rationale.
 
-8. **recommendedSampleSubjects.** 1–3 neutral subjects that will be rendered in Stage 5 to demonstrate the style. For palette-dominant styles: { kind: "palette-board", prompt: "labeled palette swatch board" }. For character-design-dominant styles: { kind: "applied-medium-probe", prompt: "a generic neutral cartoon character head, front-facing" }. For surface-texture-dominant styles: { kind: "texture-specimen", prompt: "2x2 texture composite from source crops" }. Always pick neutral subjects that won't reproduce the source subject. Each entry has kind, prompt (short text), aspectRatio (default "1024x1024"), rationale (1 sentence).
+8. **recommendedSampleSubjects.** Return one to three content-neutral probes appropriate to the dominant axes. Prompts must describe only the minimum abstract form, spatial arrangement, or non-semantic surface needed to reveal those axes. They must not name a real-world entity, character type, source subject, setting, narrative, brand, or text content. Each entry has kind, a short prompt, aspectRatio, and a one-sentence rationale.
 
-Critically: the synthesized style must NOT misrepresent the medium. If the router classified the medium as digital-illustration and the medium-signature extractor agreed, the synthesis MUST NOT describe the look as "watercolor" or "painterly traditional" — it can describe digital techniques that imitate painterly softness, but the medium label is authoritative.`
+The synthesis must not misrepresent the medium. The evidence-supported medium classification is authoritative, and technique language must remain consistent with its observed signatures.`
 
 const buildSynthesisSchema = (): VlmJsonSchema => ({
     name: 'synthesize_style',
@@ -75,7 +68,7 @@ const buildSynthesisSchema = (): VlmJsonSchema => ({
                     properties: {
                         kind: { type: 'string', description: 'palette-board | texture-specimen | applied-medium-probe' },
                         prompt: { type: 'string' },
-                        aspectRatio: { type: 'string', description: 'e.g. 1024x1024, 1536x1024' },
+                        aspectRatio: { type: 'string', description: 'Positive integer width and height joined by x.' },
                         rationale: { type: 'string' },
                     },
                     required: ['kind', 'prompt', 'aspectRatio', 'rationale'],

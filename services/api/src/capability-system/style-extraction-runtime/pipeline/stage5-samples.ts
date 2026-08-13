@@ -15,7 +15,7 @@ import type {
 } from './types.ts'
 import BlobModel from '../../../models/blob.ts'
 
-const ANTI_LEAKAGE_INSTRUCTION = 'Render the requested neutral subject using ONLY the medium and stylistic traits evidenced by the attached source crops and the style brief. The source crops are intentionally sub-frame — they carry mark-making, palette, edge behavior, and rendering technique. Do NOT reproduce any subject, identity, pose, layout, or composition the crops happen to contain. A fragment of fur is not permission to draw a cat; a fragment of an eye is not permission to draw a face. Apply the medium to the new subject, not to a decorative backdrop behind it.'
+const ANTI_LEAKAGE_INSTRUCTION = 'Render only the content-neutral probe declared by the style brief, using the transferable visual traits evidenced by the attached source crops. Treat every crop as visual-treatment evidence only. Do not reproduce or infer any subject, identity, pose, layout, composition, setting, or narrative content visible in a crop. Apply the evidenced treatment to the probe itself rather than adding source-derived content or a decorative backdrop.'
 
 // Fetches source-crop bytes from the organization Blob registry for composite
 // builders and image-router calls.
@@ -123,7 +123,7 @@ const renderAppliedMediumProbe = async (args: {
         'Instructions:',
         state.draft?.instructions ?? '',
         '',
-        'NEUTRAL SUBJECT TO RENDER:',
+        'CONTENT-NEUTRAL PROBE TO RENDER:',
         subject.prompt,
     ].join('\n')
 

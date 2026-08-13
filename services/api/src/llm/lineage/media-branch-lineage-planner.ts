@@ -53,6 +53,7 @@ type SourceDecision = {
     sourceNodeId?: string
     placementAnchorNodeId?: string
     parentMediaNodeId?: string
+    activeBranchId?: string
 }
 
 // One concrete media generation. The mediaRunId mirrors the scheme used by
@@ -104,11 +105,6 @@ export class MediaBranchLineagePlanner {
             ? undefined
             : referenceResolution
         const snapshot = input.mediaBranchCandidateSnapshot
-        const branchId = input.forceFreshLineage
-            ? `branch-${input.generationRequestId}`
-            : (input.regenerationTarget?.branchId
-                ?? lineageResolution?.branchId
-                ?? `branch-${input.generationRequestId}`)
         const promptText = snapshot?.promptText ?? input.workspaceContextSnapshot?.promptText ?? ''
         const promptFingerprint = snapshot?.promptFingerprint
         const referenceCandidates = this.getReferenceCandidates(referenceResolution, snapshot)
@@ -129,6 +125,11 @@ export class MediaBranchLineagePlanner {
                 parentMediaNodeId: input.regenerationTarget.sourceMediaNodeId,
             }
             : this.getSourceDecision(lineageResolution, snapshot, referenceNodeIds)
+        const branchId = input.forceFreshLineage
+            ? `branch-${input.generationRequestId}`
+            : (input.regenerationTarget?.branchId
+                ?? sourceDecision.activeBranchId
+                ?? `branch-${input.generationRequestId}`)
         const mediaRuns = this.enumerateMediaRuns(input)
         const reasoningRuns = this.enumerateReasoningRuns(mediaRuns)
         const usesReasoningForks = this.shouldCreateReasoningForks(reasoningRuns)
@@ -278,10 +279,14 @@ export class MediaBranchLineagePlanner {
     ): SourceDecision {
         const sourceNodeId = resolution ? this.getLineageSourceNodeId(resolution, snapshot) : undefined
         if (sourceNodeId) {
+            const sourceCandidate = this.getCandidateByNodeId(snapshot, sourceNodeId)
             return {
                 sourceNodeId,
                 placementAnchorNodeId: sourceNodeId,
                 parentMediaNodeId: sourceNodeId,
+                ...(sourceCandidate?.branchId
+                    ? { activeBranchId: sourceCandidate.branchId }
+                    : {}),
             }
         }
 
@@ -298,6 +303,13 @@ export class MediaBranchLineagePlanner {
         return {
             placementAnchorNodeId: referenceNodeIds[0],
         }
+    }
+
+    private getCandidateByNodeId(
+        snapshot: MediaBranchCandidateSnapshot | undefined,
+        nodeId: string,
+    ): MediaBranchCandidateImage | undefined {
+        return snapshot?.candidates.find(candidate => candidate.nodeId === nodeId)
     }
 
     private getLineageSourceNodeId(
@@ -326,8 +338,6 @@ export class MediaBranchLineagePlanner {
             || candidate.roleHints.includes('branch-leaf')
             || candidate.roleHints.includes('branch-ancestor')
             || Boolean(candidate.branchId)
-            || Boolean(candidate.parentMediaNodeId)
-            || Boolean(candidate.parentImageNodeId)
     }
 
     private buildBranchOrigin(args: {

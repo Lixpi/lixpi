@@ -1,6 +1,7 @@
 'use strict'
 
 import type {
+    AssetMediaComposition,
     CharacterFidelityAssessmentRequest,
     CharacterFidelityAssessmentResponse,
     CharacterFidelityObjectCoordinate,
@@ -58,6 +59,7 @@ export type CharacterReferenceRendition = {
 export type CharacterReferenceAssetRecord = {
     assetId: string
     organizationId: string
+    composition?: AssetMediaComposition
     media?: {
         renditions: {
             canonical?: CharacterReferenceRendition

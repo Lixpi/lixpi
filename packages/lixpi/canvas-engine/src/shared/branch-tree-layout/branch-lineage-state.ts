@@ -10,6 +10,7 @@ import type {
     MediaRunLineageAssignment,
     OperationStatusCanvasNode,
     VideoCanvasNode,
+    WorkspaceEdge,
 } from '@lixpi/constants'
 
 export type BranchLineageMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
@@ -61,6 +62,37 @@ export function getBranchLineageAssignment(
 // marker type is added or renamed.
 export function isBranchLineageMarkerNode(node: CanvasNode | undefined): node is BranchLineageMarkerNode {
     return node?.type === 'branchOrigin' || node?.type === 'branchFork' || node?.type === 'branchLine'
+}
+
+// Generation provenance is immutable history, not proof that a media node is
+// still attached to an editable branch. Acceptance deliberately removes the
+// marker relationship while retaining `generatedBy`, so continuation authority
+// must come from the live marker + connector topology.
+export function hasActiveGeneratedOutputLineage(
+    node: CanvasNode,
+    nodes: CanvasNode[],
+    edges: WorkspaceEdge[],
+): boolean {
+    if (!isGeneratedMediaNode(node) || !node.generatedBy?.branchId) return false
+
+    const incomingMarkerIds = new Set(
+        edges
+            .filter(edge => edge.targetNodeId === node.nodeId)
+            .map(edge => edge.sourceNodeId),
+    )
+    const declaredMarkerIds = new Set([
+        node.generatedBy.lineageParentNodeId,
+        node.generatedBy.branchLineNodeId,
+        node.generatedBy.branchForkNodeId,
+        node.generatedBy.branchOriginNodeId,
+    ].filter((nodeId): nodeId is string => Boolean(nodeId)))
+
+    return nodes.some((candidate) =>
+        isBranchLineageMarkerNode(candidate)
+        && candidate.branchId === node.generatedBy?.branchId
+        && declaredMarkerIds.has(candidate.nodeId)
+        && incomingMarkerIds.has(candidate.nodeId)
+    )
 }
 
 // A generated media node can reference several marker roles at once: the origin

@@ -172,6 +172,42 @@ const uploadedVideoNode = {
     },
 } satisfies CanvasNode
 
+function createActiveLineageTopology(
+    node: Extract<CanvasNode, { type: 'image' | 'video' }>,
+    markerNodeId = `line-${node.nodeId}`,
+): { nodes: CanvasNode[]; edges: WorkspaceEdge[] } {
+    const branchId = node.generatedBy?.branchId
+    if (!branchId) throw new Error(`Missing branchId for ${node.nodeId}`)
+    const activeNode = {
+        ...node,
+        generatedBy: {
+            ...node.generatedBy,
+            branchLineNodeId: markerNodeId,
+            lineageParentNodeId: markerNodeId,
+        },
+    } satisfies CanvasNode
+    const markerNode = {
+        nodeId: markerNodeId,
+        type: 'branchLine',
+        branchId,
+        generationRequestId: `request-${node.nodeId}`,
+        parentBranchNodeId: node.generatedBy?.parentMediaNodeId ?? 'source-root',
+        reasoningRunId: `reasoning-${node.nodeId}`,
+        reasoningModelId: 'OpenAI:gpt-5-mini' as any,
+        reasoningIndex: 0,
+        position: { x: 0, y: 0 },
+        dimensions: { width: 100, height: 40 },
+    } satisfies CanvasNode
+    return {
+        nodes: [activeNode, markerNode],
+        edges: [{
+            edgeId: `edge-${markerNodeId}-${node.nodeId}`,
+            sourceNodeId: markerNodeId,
+            targetNodeId: node.nodeId,
+        }],
+    }
+}
+
 const cubistDocNode = {
     nodeId: 'cubist-doc',
     type: 'document',
@@ -248,11 +284,13 @@ describe('buildMediaBranchCandidateSnapshot', () => {
     })
 
     it('preserves authorized generated-media lineage and visual descriptor fields', () => {
+        const personTopology = createActiveLineageTopology(personGeneratedNode)
+        const goatTopology = createActiveLineageTopology(goatGeneratedNode)
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             conversationAssetId: 'thread-1',
-            nodes: [personGeneratedNode, goatGeneratedNode],
-            edges: [],
+            nodes: [...personTopology.nodes, ...goatTopology.nodes],
+            edges: [...personTopology.edges, ...goatTopology.edges],
             contextMediaNodeIds: ['person-generated', 'goat-generated'],
             prompt: 'make the goat wear sunglasses',
         })
@@ -272,6 +310,25 @@ describe('buildMediaBranchCandidateSnapshot', () => {
             entityTags: ['goat'],
             roleHints: ['base-context', 'generated-variant'],
         })
+    })
+
+    it('keeps accepted generated media eligible as an explicit edit parent', () => {
+        const snapshot = buildMediaBranchCandidateSnapshot({
+            regionNodeId: 'thread-node-1',
+            conversationAssetId: 'thread-1',
+            activeTargetNodeId: personGeneratedNode.nodeId,
+            nodes: [personGeneratedNode],
+            edges: [],
+            contextMediaNodeIds: [personGeneratedNode.nodeId],
+            prompt: 'fix the coat sleeves on this character sheet',
+        })
+
+        expect(snapshot.candidates[0]).toMatchObject({
+            nodeId: personGeneratedNode.nodeId,
+            roleHints: ['base-context', 'generated-variant', 'active-target'],
+        })
+        expect(snapshot.candidates[0]?.branchId).toBeUndefined()
+        expect(snapshot.candidates[0]?.parentMediaNodeId).toBeUndefined()
     })
 
     it('grounds attached images by canonical Asset rendition path', () => {
@@ -312,11 +369,12 @@ describe('buildMediaBranchCandidateSnapshot', () => {
     })
 
     it('carries a selected generated Asset parent identity without attaching its parent implicitly', () => {
+        const refinedTopology = createActiveLineageTopology(refinedPersonGeneratedNode)
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             conversationAssetId: 'thread-1',
-            nodes: [portraitSourceNode, personGeneratedNode, refinedPersonGeneratedNode],
-            edges: [],
+            nodes: [portraitSourceNode, personGeneratedNode, ...refinedTopology.nodes],
+            edges: refinedTopology.edges,
             contextMediaNodeIds: ['person-refined'],
             prompt: 'make that guy more monochromatic',
         })
@@ -544,11 +602,12 @@ describe('buildMediaBranchCandidateSnapshot — video media', () => {
     })
 
     it('keeps a generated video on its branch so an edit continues lineage', () => {
+        const videoTopology = createActiveLineageTopology(videoGeneratedNode)
         const snapshot = buildMediaBranchCandidateSnapshot({
             regionNodeId: 'thread-node-1',
             conversationAssetId: 'thread-1',
-            nodes: [videoGeneratedNode],
-            edges: [],
+            nodes: videoTopology.nodes,
+            edges: videoTopology.edges,
             contextMediaNodeIds: ['video-generated'],
             prompt: 'make the dawn light warmer',
         })
@@ -647,7 +706,7 @@ describe('buildWorkspaceContextSnapshot', () => {
         expect(video?.assetId).toBe('uploaded-mp4-file')
 
         const generated = byId.get('person-generated')
-        expect(generated?.branchId).toBe('branch-person')
+        expect(generated?.branchId).toBeUndefined()
         expect(generated?.sourceConversationAssetId).toBe('thread-1')
         expect(generated?.isCurrentConversationGenerated).toBe(true)
         expect(generated?.assetId).toBe('person-generated-file')

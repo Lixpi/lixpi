@@ -428,6 +428,113 @@ describe('resolveMediaBranch', () => {
         })
     })
 
+    it('targets an accepted generated Asset and assigns a new continuation branch', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+            branchId: undefined,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            branchId: 'stale-branch-from-vlm',
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+            decisions: [{
+                candidateId: acceptedCandidate.candidateId,
+                role: 'target',
+                reason: 'selected character sheet',
+            }],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'fix the coat sleeves on this accepted character sheet',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+            referenceCandidateIds: [acceptedCandidate.candidateId],
+        })
+        expect(update.mediaBranchResolution?.branchId).toMatch(/^branch-/)
+        expect(update.mediaBranchResolution?.branchId).not.toBe('stale-branch-from-vlm')
+    })
+
+    it('keeps the only accepted generated Asset as parent when the VLM is ambiguous', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+            branchId: undefined,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'ambiguous',
+            operationKind: 'new_image',
+            targetCandidateId: '',
+            parentCandidateId: '',
+            branchId: 'stale-branch-from-vlm',
+            includeGeneratedCandidateIds: [],
+            confidence: 0.1,
+            rationale: 'The edit referent was not resolved confidently.',
+            decisions: [],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'fix this accepted character sheet',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+            referenceCandidateIds: [acceptedCandidate.candidateId],
+        })
+        expect(update.mediaBranchResolution?.branchId).toMatch(/^branch-/)
+        expect(update.mediaBranchResolution?.branchId).not.toBe('stale-branch-from-vlm')
+        expect(update.mediaBranchResolution?.rationale).toContain('retained the only explicit generated Asset')
+    })
+
+    it('does not force an ambiguous new-subject request to edit its only generated style reference', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+            branchId: undefined,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'ambiguous',
+            operationKind: 'new_image',
+            targetCandidateId: '',
+            parentCandidateId: '',
+            branchId: 'stale-branch-from-vlm',
+            confidence: 0.1,
+            rationale: 'The referent was not resolved confidently.',
+            decisions: [],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'draw a goat in the style of this image',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            targetCandidateId: null,
+            parentCandidateId: undefined,
+            referenceCandidateIds: [acceptedCandidate.candidateId],
+        })
+    })
+
     it('keeps explicit new-subject requests targetless even when a generated image is active', async () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'fresh-branch',

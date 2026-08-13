@@ -184,6 +184,65 @@ describe('MediaBranchLineagePlanner', () => {
         })
     })
 
+    it('continues from accepted generated media under a new server branch id', () => {
+        const snapshot: MediaBranchCandidateSnapshot = {
+            resolverVersion: 'image-branch-vlm-v1',
+            conversationAssetId: 'thread-1',
+            regionNodeId: 'standalone:thread-1',
+            promptText: 'fix the coat sleeves',
+            promptFingerprint: 'accepted-edit-fp',
+            transcriptContext: 'context',
+            candidates: [candidate({
+                nodeId: 'accepted-character-sheet',
+                roleHints: ['generated-variant', 'branch-leaf'],
+                parentMediaNodeId: 'historical-parent',
+            })],
+        }
+        const resolution: MediaBranchVlmResolution = {
+            resolverKind: 'structured-vlm',
+            resolverVersion: 'image-branch-vlm-v1',
+            resolverModelProvider: 'OpenAI',
+            resolverModelId: 'gpt-4.1',
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: 'accepted-character-sheet',
+            parentCandidateId: 'accepted-character-sheet',
+            branchId: 'stale-accepted-branch',
+            includeGeneratedCandidateIds: ['accepted-character-sheet'],
+            referenceCandidateIds: ['accepted-character-sheet'],
+            sourceContextNodeIds: ['accepted-character-sheet'],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
+            entityTags: ['character'],
+            styleTags: [],
+            confidence: 1,
+            rationale: 'stale resolver output',
+            decisions: [],
+        }
+
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-accepted-edit',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: resolution,
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.branchId).toBe('branch-request-accepted-edit')
+        expect(plan.sourceNodeId).toBe('accepted-character-sheet')
+        expect(plan.placementAnchorNodeId).toBe('accepted-character-sheet')
+        expect(plan.branchOrigin).toBeUndefined()
+        expect(plan.branchLines).toEqual([expect.objectContaining({
+            parentBranchNodeId: 'accepted-character-sheet',
+            branchId: 'branch-request-accepted-edit',
+        })])
+        expect(plan.runAssignments[0]).toMatchObject({
+            parentMediaNodeId: 'accepted-character-sheet',
+            operationKind: 'edit_existing',
+        })
+    })
+
     it('uses explicit placement from a non-standalone region node when no lineage source is matched', () => {
         const snapshot: MediaBranchCandidateSnapshot = {
             resolverVersion: 'image-branch-vlm-v1',

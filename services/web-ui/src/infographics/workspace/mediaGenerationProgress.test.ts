@@ -8,6 +8,7 @@ import {
     getMediaGenerationProgressPosition,
     resolveBranchMarkerMediaRequestStatuses,
     resolveBranchMarkerGlobalProgressStatuses,
+    shouldRenderLiveMediaGenerationProgress,
 } from './mediaGenerationProgress.ts'
 
 const state = (): MediaGenerationProgressState => ({
@@ -53,6 +54,36 @@ const renderedItemIds = (element: HTMLElement): string[] => [
 ].map(item => item.dataset.itemId!)
 
 describe('media generation progress disclosure', () => {
+    it('never mounts accepted terminal history as live canvas progress during Asset hydration', () => {
+        expect(shouldRenderLiveMediaGenerationProgress({
+            progressStatus: 'completed',
+            reviewStatus: undefined,
+            hasActiveLineage: false,
+            pendingBeforeFirstFrame: false,
+        })).toBe(false)
+        expect(shouldRenderLiveMediaGenerationProgress({
+            progressStatus: 'completed',
+            reviewStatus: 'accepted',
+            hasActiveLineage: true,
+            pendingBeforeFirstFrame: false,
+        })).toBe(false)
+    })
+
+    it('keeps live progress for active candidates and pre-lineage reservations', () => {
+        expect(shouldRenderLiveMediaGenerationProgress({
+            progressStatus: 'completed',
+            reviewStatus: 'candidate',
+            hasActiveLineage: true,
+            pendingBeforeFirstFrame: false,
+        })).toBe(true)
+        expect(shouldRenderLiveMediaGenerationProgress({
+            progressStatus: 'running',
+            reviewStatus: undefined,
+            hasActiveLineage: false,
+            pendingBeforeFirstFrame: true,
+        })).toBe(true)
+    })
+
     it('does not mark branch preparation complete or reactivate reasoning while media work is active', () => {
         expect(resolveBranchMarkerGlobalProgressStatuses({
             hasReasoningResponse: true,
@@ -290,7 +321,7 @@ describe('media generation progress disclosure', () => {
         expect(getMediaGenerationProgressPosition(anchor, 700)).toEqual({ x: 936, y: 200 })
     })
 
-    it('reserves tall progress vertically without widening the media collision column', () => {
+    it('reserves the full right-side progress timeline collision envelope', () => {
         const mediaRect = { x: 100, y: 200, width: 800, height: 600 }
         const anchor = {
             position: { x: 100, y: 200 },
@@ -300,7 +331,7 @@ describe('media generation progress disclosure', () => {
         expect(getMediaGenerationProgressCollisionRect(mediaRect, anchor, 900)).toEqual({
             x: 100,
             y: 200,
-            width: 800,
+            width: 1_196,
             height: 900,
         })
     })

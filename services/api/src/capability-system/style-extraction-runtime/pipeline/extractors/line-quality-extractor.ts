@@ -7,15 +7,15 @@ import { registerExtractor } from './registry.ts'
 const SYSTEM_PROMPT = `You are a senior visual-analysis specialist focused EXCLUSIVELY on LINE QUALITY: line presence, weight, variation, color, outline behavior, and interior linework.
 
 Rules:
-- linePresence: line-less | thin-contour | thick-ink | sketchy | hatched | mixed.
-- lineWeight: a short phrase (e.g. "uniform fine 1-2px equivalent", "tapered varying 0.5–4px equivalent", "heavy bold 3-6px equivalent", "no visible lines").
-- lineVariation: how much line weight varies along a single stroke (none | subtle | pronounced).
-- lineColor: short description of line color (e.g. "warm umber, slightly darker than midtones", "pure black", "near-subject color of darker value", "no lines").
-- outlineBehavior: how the subject silhouette is bounded (no-outline | hairline-contour | broken-sketchy | full-thick-ink | painterly-implied-edge).
-- interiorLines: how interior shape divisions are rendered (no-interior-lines | thin-shading-lines | crosshatched-fill | brush-pattern | line-art-shading).
+- linePresence: describe presence, absence, and continuity of visible lines.
+- lineWeight: a short relational or image-scale measurement of visible width.
+- lineVariation: describe visible variation along individual marks.
+- lineColor: describe only sampled visible line color and its value relation to adjacent regions.
+- outlineBehavior: describe how visible silhouettes are bounded.
+- interiorLines: describe how visible interior divisions and shading marks are rendered.
 - transferGuidance: 1–2 sentences on how to reproduce this line treatment on a new subject.
 
-If the reference has no visible lines at all (lineless painterly rendering), say so explicitly in linePresence ("line-less") and write "no lines" or empty placeholders for line-specific fields, with a full transferGuidance explaining that subjects should be rendered without contour lines.`
+If no visible lines are present, say so explicitly and keep line-specific fields empty or absence-marked. Do not infer a medium from line absence alone.`
 
 const FIELDS_SCHEMA = {
     type: 'object',

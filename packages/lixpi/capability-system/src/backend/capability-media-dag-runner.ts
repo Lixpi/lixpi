@@ -52,13 +52,19 @@ export class CapabilityMediaDagRunner<Node extends CapabilityMediaDagNode, Resul
             context: CapabilityMediaDagExecutionContext<Result>,
             signal?: AbortSignal,
         ) => Promise<Result>
+        initialResults?: ReadonlyMap<string, Result>
         signal?: AbortSignal
         cleanup?: () => Promise<void>
         allowTerminalFailure?: (node: Node, error: unknown) => boolean
         onNodeBlocked?: (node: Node, blocked: CapabilityMediaDagBlockedNode) => Promise<void> | void
     }): Promise<CapabilityMediaDagResult<Result>> {
         const dag = new CapabilityDagRunner(this.nodes)
-        const results = new Map<string, Result>()
+        const knownNodeIds = new Set(this.nodes.map(node => node.nodeId))
+        const results = new Map<string, Result>(args.initialResults)
+        for (const nodeId of results.keys()) {
+            if (!knownNodeIds.has(nodeId)) throw new Error(`CAPABILITY_MEDIA_INITIAL_RESULT_NODE_UNKNOWN:${nodeId}`)
+            dag.setStatus(nodeId, 'completed')
+        }
         const blockedNodes = new Map<string, CapabilityMediaDagBlockedNode>()
         const unsortedEvents: Array<Omit<CapabilityMediaDagEvent, 'sequence'> & { nodeOrder: number; eventOrder: number }> = []
         const nodeOrder = new Map(this.nodes.map((node, index) => [node.nodeId, index]))

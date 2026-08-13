@@ -67,12 +67,12 @@ export const buildMediaDescriptorSchema = (): VlmJsonSchema => ({
             entityTags: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'A few concrete subjects/objects visible in the media (e.g. "person", "city street", "red car").',
+                description: 'A few concrete subjects or objects visibly present in the media.',
             },
             styleTags: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'A few style descriptors (medium, palette, mood, lighting — e.g. "cinematic", "warm", "night").',
+                description: 'A few visible medium, palette, mood, or lighting descriptors.',
             },
         },
         required: ['title', 'summary', 'entityTags', 'styleTags'],
@@ -160,7 +160,7 @@ type DescribeTextContentArgs = {
 
 const TEXT_SYSTEM_PROMPT = [
     'You summarize a text node (a document or an AI chat transcript) for a visual canvas. Produce a compact, neutral description that lets a person or model tell this node apart from others at a glance.',
-    'Return: a specific title of two or three words; a one-to-two sentence summary of what the text is about; a few entity tags (key subjects, names, or topics mentioned); a few style tags (the kind/format/tone — e.g. "notes", "spec", "transcript", "outline", "formal").',
+    'Return: a specific title of two or three words; a one-to-two sentence summary of what the text is about; a few entity tags copied from key subjects, names, or topics actually mentioned; and a few style tags describing the text kind, format, or tone.',
     'Be specific and factual about the content. Do not speculate about intent, do not add commentary, and never invent topics that are not present.',
     `Keep the summary under ${MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH} characters.`,
 ].join(' ')
@@ -185,12 +185,12 @@ export const buildTextDescriptorSchema = (): VlmJsonSchema => ({
             entityTags: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'A few key subjects, names, or topics mentioned in the text (e.g. "budget", "Q3 roadmap", "Acme Corp").',
+                description: 'A few key subjects, names, or topics actually mentioned in the text.',
             },
             styleTags: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'A few descriptors of the kind/format/tone (e.g. "notes", "spec", "transcript", "formal").',
+                description: 'A few descriptors of the text kind, format, or tone.',
             },
         },
         required: ['title', 'summary', 'entityTags', 'styleTags'],

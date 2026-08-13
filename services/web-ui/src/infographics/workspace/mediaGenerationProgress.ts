@@ -1,8 +1,12 @@
 import {
     createDefaultMediaGenerationRunProgress,
+    mediaGenerationLayoutSettings,
+    type GeneratedOutputReviewStatus,
     type MediaGenerationProgressState,
+    type MediaGenerationRunStatus,
     type OperationProgressItem,
 } from '@lixpi/constants'
+import { getGeneratedMediaProgressCollisionRect } from '@lixpi/canvas-engine'
 import {
     createProgressTimeline,
     type ProgressTimelineInstance,
@@ -45,6 +49,29 @@ export type BranchMarkerMediaRequestStatusSource = {
     outputNodeId?: string
     mediaRunId?: string
     status?: string
+}
+
+export function shouldRenderLiveMediaGenerationProgress({
+    progressStatus,
+    reviewStatus,
+    hasActiveLineage,
+    pendingBeforeFirstFrame,
+}: {
+    progressStatus: MediaGenerationRunStatus | undefined
+    reviewStatus: GeneratedOutputReviewStatus | undefined
+    hasActiveLineage: boolean
+    pendingBeforeFirstFrame: boolean
+}): boolean {
+    // Accepted output progress is immutable provenance, not live canvas state.
+    // Active topology covers candidates; pre-frame state covers runs that have
+    // started before their lineage marker is available.
+    if (!progressStatus || reviewStatus === 'accepted' || reviewStatus === 'superseded') return false
+    if (hasActiveLineage) return true
+    return pendingBeforeFirstFrame && (
+        progressStatus === 'pending'
+        || progressStatus === 'running'
+        || progressStatus === 'awaiting-provider-verification'
+    )
 }
 
 // Every run has a hidden operation record and a visible output node. Once the
@@ -126,7 +153,7 @@ export function resolveBranchMarkerGlobalProgressStatuses({
 export function getMediaGenerationProgressPosition(
     anchor: MediaGenerationProgressAnchorGeometry,
     progressHeight: number,
-    gap = 36,
+    gap = mediaGenerationLayoutSettings.generatedMediaProgress.gap,
 ): { x: number; y: number } {
     return {
         x: anchor.position.x + anchor.dimensions.width + gap,
@@ -136,27 +163,12 @@ export function getMediaGenerationProgressPosition(
     }
 }
 
-// Media-side progress is external chrome. Reserve only the vertical range it
-// occupies; extending this rectangle horizontally would push sibling branches
-// sideways as disclosure content grows.
 export function getMediaGenerationProgressCollisionRect(
     mediaCollisionRect: MediaGenerationProgressCollisionRect,
     anchor: MediaGenerationProgressAnchorGeometry,
     progressHeight: number,
 ): MediaGenerationProgressCollisionRect {
-    if (!Number.isFinite(progressHeight) || progressHeight <= 0) return mediaCollisionRect
-
-    const progressTop = getMediaGenerationProgressPosition(anchor, progressHeight).y
-    const top = Math.min(mediaCollisionRect.y, progressTop)
-    const bottom = Math.max(
-        mediaCollisionRect.y + mediaCollisionRect.height,
-        progressTop + progressHeight,
-    )
-    return {
-        ...mediaCollisionRect,
-        y: top,
-        height: bottom - top,
-    }
+    return getGeneratedMediaProgressCollisionRect(mediaCollisionRect, anchor, progressHeight)
 }
 
 type MediaGenerationProgressOptions = {

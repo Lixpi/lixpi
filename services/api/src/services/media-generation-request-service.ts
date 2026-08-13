@@ -33,7 +33,10 @@ import { createMediaReferenceBindings } from '../llm/media-reference/media-refer
 import { enqueueAssetSurfaceCleanup } from './asset-maintenance-queue.ts'
 import { getContentAddressedBlob } from './blob-storage.ts'
 import { MediaGenerationRequestEventLog } from './media-generation-request-event-log.ts'
-import { upsertMediaLineagePlanToCanvas } from './asset-canvas-projection.ts'
+import {
+    settleFailedGeneratedMediaRunOnCanvas,
+    upsertMediaLineagePlanToCanvas,
+} from './asset-canvas-projection.ts'
 import {
     projectMediaGenerationOperationNodes,
     rebindMediaGenerationOperationNodes,
@@ -1057,6 +1060,29 @@ export class MediaGenerationRequestService {
                 generationRun: run.generationRun,
                 progress: run.progress,
             })
+            : run.status === 'failed' && run.outputNodeId && run.outputAssetId
+                ? settleFailedGeneratedMediaRunOnCanvas({
+                    workspaceId: request.workspaceId,
+                    generationRun: {
+                        requestKind: 'media-generation-matrix',
+                        generationRequestId: request.generationRequestId,
+                        reasoningRunId: run.reasoningRunId
+                            ?? `${request.generationRequestId}:reasoning:${run.reasoningIndex}`,
+                        ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                        reasoningModelId: run.reasoningModelId,
+                        mediaModelId: run.modelId,
+                        ...(run.mediaType ? { mediaType: run.mediaType } : {}),
+                        reasoningIndex: run.reasoningIndex,
+                        ...(run.mediaIndex === undefined ? {} : { mediaIndex: run.mediaIndex }),
+                        variantIndex: run.generationRun,
+                    },
+                    outputNodeId: run.outputNodeId,
+                    assetId: run.outputAssetId,
+                    errorMessage: message,
+                    ...(problem ? { problem } : {}),
+                    ...(run.progress ? { progress: run.progress } : {}),
+                    requestRevision: request.revision,
+                })
             : updateMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
                 operationNodeId: run.operationNodeId,

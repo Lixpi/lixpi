@@ -284,7 +284,8 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptToContain(recovery, 'commitTransientCanvasStatePreservingEditors({ ...result.state, nodes: rebalancedNodes })', 'failure recovery')
 		expectExcerptToContain(recovery, 'syncCanvasNodeDomGeometry(', 'failure recovery')
 		expectExcerptToContain(recovery, 'removeApiCanvasRemovedNodesFromDOM(result.removedNodeIds)', 'failure recovery')
-		expectExcerptToContain(recovery, 'pruneApiCanvasRemovedGeneratedMediaTrackers(result.removedNodeIds)', 'failure recovery')
+		expectExcerptToContain(recovery, "updatedNode?.type === 'operationStatus'", 'failure recovery')
+		expectExcerptToContain(recovery, '...replacedGeneratedMediaNodeIds', 'failure recovery')
 		expectExcerptToContain(recovery, 'pixiMediaLayer?.setTransientImageSource(nodeId, null)', 'failure recovery')
 		expectExcerptToContain(recovery, 'syncExistingOperationStatusNodeToDOM(updatedNode)', 'failure recovery')
 		expectExcerptToContain(recovery, 'scheduleGeneratedMediaChromeSync()', 'failure recovery')
@@ -749,7 +750,8 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(currentCanvasState)')
 		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(result.state)')
 		expectSourceToContain(ts, 'removeApiCanvasRemovedNodesFromDOM(result.removedNodeIds)')
-		expectSourceToContain(ts, 'pruneApiCanvasRemovedGeneratedMediaTrackers(result.removedNodeIds)')
+		expectSourceToContain(ts, 'const replacedGeneratedMediaNodeIds = result.updatedNodeIds.filter(nodeId => {')
+		expectSourceToContain(ts, '...replacedGeneratedMediaNodeIds')
 		expectSourceToContain(ts, 'onCanvasGeometryResolvedToCanvas: ({ canvasGeometry }) => {')
 		// Complete handlers only apply API geometry and refuse local topology mutation.
 		expectSourceToContain(ts, "'image-complete-apply'")
@@ -3008,7 +3010,7 @@ describe('Image generation error cleanup', () => {
 	const ts = loadTs()
 
 	function getImageErrorHandler(): string {
-		const start = ts.indexOf('onImageErrorToCanvas: ({ threadId, generationRun }) => {')
+		const start = ts.indexOf('onImageErrorToCanvas: ({ threadId, error, generationRun }) => {')
 		expect(start, 'WorkspaceCanvas.ts should contain onImageErrorToCanvas handler').toBeGreaterThan(-1)
 		const end = ts.indexOf('onImagePartialToCanvas:', start)
 		expect(end, 'onImageErrorToCanvas handler should end before onImagePartialToCanvas').toBeGreaterThan(start)
@@ -3026,6 +3028,8 @@ describe('Image generation error cleanup', () => {
 
 		expectExcerptToContain(handler, 'const runKey = getGeneratedMediaRunKey(threadId, generationRun)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'const existing = partialImageTracker.get(runKey)', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'applyMediaGenerationStreamFailureToOperationNodes(currentCanvasState', 'onImageErrorToCanvas')
+		expectExcerptToContain(handler, 'message: error', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'partialImageTracker.delete(runKey)', 'onImageErrorToCanvas')
 		expectExcerptToContain(handler, 'selectedNodeIds.delete(existing.nodeId)', 'onImageErrorToCanvas')
 		expectExcerptNotToContain(handler, 'removeFailedGeneratedMediaNodeFromCanvas(existing.nodeId)', 'onImageErrorToCanvas')

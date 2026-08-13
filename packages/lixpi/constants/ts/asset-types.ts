@@ -62,6 +62,25 @@ export type AssetMedia = {
     pageCount?: number
 }
 
+export type AssetMediaCompositionComponent = {
+    componentId: string
+    role: string
+    title: string
+    blobHash: string
+    mimeType: 'image/png'
+    byteSize: number
+    width?: number
+    height?: number
+}
+
+export type AssetMediaComposition = {
+    schemaVersion: 'asset-media-composition-v1'
+    kind: string
+    capabilityId: string
+    sourceAssetIds: string[]
+    components: AssetMediaCompositionComponent[]
+}
+
 export type AssetCapabilityArtifact = {
     artifactTypeId: string
     schemaVersion: string
@@ -186,6 +205,7 @@ export type Asset = {
     ownerUserId: string
     documents: Partial<Record<AssetDocumentRole, AssetDocumentPointer>>
     media?: AssetMedia
+    composition?: AssetMediaComposition
     artifact?: AssetCapabilityArtifact
     lineage?: AssetLineage
     generatedOutputReview?: GeneratedOutputReview

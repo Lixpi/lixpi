@@ -227,6 +227,78 @@ describe('CharacterSheetStrategy', () => {
         ])
     })
 
+    it('reuses durable component shots and regenerates only the explicitly targeted view', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-edit',
+            sourceAssetIds: ['sheet-1'],
+            userPrompt: 'Fix only the last shot: the back view has bare arms.',
+        })
+        const executionContext = context()
+        executionContext.sharedState.authoritativePrompt = executionPlan.userPrompt
+        mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) => assetId === 'sheet-1' ? {
+            assetId: 'sheet-1',
+            organizationId: 'org-1',
+            composition: {
+                schemaVersion: 'asset-media-composition-v1',
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['source-1'],
+                components: executionPlan.panels.map(panel => ({
+                    componentId: panel.panelId,
+                    role: 'character-sheet-panel',
+                    title: panel.title,
+                    blobHash: `${panel.panelId}-hash`,
+                    mimeType: 'image/png',
+                    byteSize: panelPng.byteLength,
+                })),
+            },
+        } : {
+            assetId: 'source-1',
+            organizationId: 'org-1',
+            media: {
+                renditions: {
+                    canonical: { status: 'ready', blobHash: 'source-hash', mimeType: 'image/png' },
+                },
+            },
+        })
+        const editStrategy = new CharacterSheetStrategy({
+            ...runtime(),
+            panelAssessor: { assess: async () => assessment(false) },
+            evidenceAnalyzer: { analyze: async () => ({ medium: 'unknown' }) },
+        })
+
+        const result = await editStrategy.execute(executionContext, executionPlan, {})
+        const trace = result.capabilityMediaTrace as {
+            totalProviderOperations: number
+            panels: Array<{ panelId: string; attempts: number; vlmAssessor: string }>
+        }
+        const backRequest = mocks.render.mock.calls[0]?.[0]
+
+        expect(mocks.render).toHaveBeenCalledOnce()
+        expect(backRequest?.operationKey).toContain(':body-back:')
+        expect(backRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'adjacent-angle', fileName: 'GENERATED_IDENTITY_ANCHOR.png' }),
+            expect.objectContaining({ role: 'canonical-anchor', fileName: 'GENERATED_OUTFIT_ANCHOR.png' }),
+        ]))
+        expect(trace.totalProviderOperations).toBe(1)
+        expect(trace.panels).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                panelId: 'head-front-neutral',
+                attempts: 0,
+                vlmAssessor: 'durable-composition-component',
+            }),
+            expect.objectContaining({
+                panelId: 'body-front',
+                attempts: 0,
+                vlmAssessor: 'durable-composition-component',
+            }),
+            expect.objectContaining({ panelId: 'body-back', attempts: 1 }),
+        ]))
+        expect(result.mediaComposition?.sourceAssetIds).toEqual(['source-1'])
+        expect(result.mediaComposition?.components.map(component => component.componentId))
+            .toEqual(executionPlan.panels.map(panel => panel.panelId))
+    })
+
     it('applies the authoritative shared request before source fidelity and carries sibling Capability state into every shot', async () => {
         const executionPlan = buildCharacterSheetRenderPlan({
             capabilityRunId: 'run-1',

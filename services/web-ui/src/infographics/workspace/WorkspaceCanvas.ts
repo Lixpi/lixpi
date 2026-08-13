@@ -119,6 +119,7 @@ import {
     getGeneratedOutputChromeCollisionInsets,
     getPendingGeneratedMediaNodeId,
     getResizeHandleScaledSizes,
+    hasActiveGeneratedOutputLineage,
     resolveCollisions,
     resizeBranchMarkerToDimensions,
     scaleCanvasChromeToScreenForZoom,
@@ -197,6 +198,7 @@ import {
     replaceBranchMarkerDomCopies,
 } from '$src/infographics/workspace/branchMarkerDomOwnership.ts'
 import {
+    getSupersededPreflightNodeIdsForPlannedOwner,
     hasCompletePlannedBranchMarkerGeometry,
     resolveBranchMarkerRenderOwnership,
     resolvePreflightBranchMarkerScreenOwnership,
@@ -217,6 +219,7 @@ import { planWorkspaceRenderTransition } from '$src/infographics/workspace/works
 import {
     applyMediaGenerationRequestEventToOperationNodes,
     applyMediaGenerationRequestToOperationNodes,
+    applyMediaGenerationStreamFailureToOperationNodes,
     type MediaGenerationOperationRecoveryResult,
 } from '$src/infographics/workspace/mediaGenerationOperationRecovery.ts'
 import {
@@ -225,6 +228,7 @@ import {
     getMediaGenerationProgressPosition,
     resolveBranchMarkerMediaRequestStatuses,
     resolveBranchMarkerGlobalProgressStatuses,
+    shouldRenderLiveMediaGenerationProgress,
     type MediaGenerationProgressInstance,
 } from '$src/infographics/workspace/mediaGenerationProgress.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
@@ -4340,11 +4344,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function shouldRenderLiveMediaGenerationProgress(node: ImageCanvasNode | VideoCanvasNode): boolean {
-        if (!node.generationProgress || isGeneratedOutputAccepted(node)) return false
-        return assetsStore.get(node.assetId)?.generatedOutputReview?.status !== 'superseded'
-    }
-
     function createMediaGenerationProgressChrome(
         node: ImageCanvasNode | VideoCanvasNode,
     ): HTMLElement | null {
@@ -4355,6 +4354,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 data=${{ mediaGenerationProgressNodeId: node.nodeId }}
             ></div>
         ` as HTMLElement
+        applyStyle(chromeEl, {
+            width: `${mediaGenerationLayoutSettings.generatedMediaProgress.width}px`,
+        })
         const instanceKey = `live:${node.nodeId}`
         const progress = createMediaGenerationProgress({
             id: instanceKey,
@@ -4411,7 +4413,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const progressNodes = canvasNodes
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode => (
                 (node.type === 'image' || node.type === 'video')
-                && shouldRenderLiveMediaGenerationProgress(node)
+                && shouldRenderLiveMediaGenerationProgress({
+                    progressStatus: node.generationProgress?.status,
+                    reviewStatus: assetsStore.get(node.assetId)?.generatedOutputReview?.status,
+                    hasActiveLineage: hasActiveGeneratedOutputLineage(
+                        node,
+                        canvasNodes,
+                        canvasState?.edges ?? [],
+                    ),
+                    pendingBeforeFirstFrame: node.mediaGenerationPhase === 'pending-before-first-frame',
+                })
             ))
         const branchOriginNodes = canvasNodes
             .filter((node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin')
@@ -5050,12 +5061,24 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 height: pendingCircleGeometry.dimensions.height,
             }
         }
-        return {
+        const mediaRect = {
             x: worldPosition.x,
             y: worldPosition.y,
             width: dimensions.width,
             height: dimensions.height,
         }
+        const progressHeight = mediaGenerationProgressCollisionHeights.get(node.nodeId) ?? 0
+        if (progressHeight <= 0 || (node.type !== 'image' && node.type !== 'video')) return mediaRect
+        return getMediaGenerationProgressCollisionRect(
+            mediaRect,
+            getMediaGenerationProgressAnchorGeometry(
+                node.nodeId,
+                worldPosition,
+                dimensions,
+                getLiveViewport(),
+            ),
+            dimensions.height,
+        )
     }
 
     function getBranchLineageCollisionSettings(
@@ -7527,6 +7550,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         ? buildExplicitMediaCandidateSnapshot({
                             generationRunId: threadId,
                             nodes,
+                            edges,
                             prompt: promptText,
                             referenceNodeIds: explicitMediaReferenceNodeIds,
                         })
@@ -9256,6 +9280,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const retiredOwnerNodeIds = new Set([
             previousRecord.nodeId,
             screenFixedOwnerNodeId,
+            ...getSupersededPreflightNodeIdsForPlannedOwner(
+                currentCanvasState.nodes.filter((node: CanvasNode): node is BranchMarkerNode => isBranchMarkerNode(node)),
+                plannedNode,
+            ),
         ].filter(nodeId => nodeId !== plannedNode.nodeId))
         const nodes: CanvasNode[] = []
         for (const node of currentCanvasState.nodes) {
@@ -12306,6 +12334,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const preflightReconciliation = reconcileApiBranchMarkersWithTemporaryPreflightNodes(currentCanvasState, canvasGeometry)
         const result = applyCanvasGeometryUpdateToState(preflightReconciliation.state, canvasGeometry)
+        const replacedGeneratedMediaNodeIds = result.updatedNodeIds.filter(nodeId => {
+            const previousNode = preflightReconciliation.state.nodes.find(node => node.nodeId === nodeId)
+            const updatedNode = result.state.nodes.find(node => node.nodeId === nodeId)
+            return (previousNode?.type === 'image' || previousNode?.type === 'video')
+                && updatedNode?.type === 'operationStatus'
+        })
         const changed = result.changed || preflightReconciliation.removedNodeIds.length > 0
         highestObservedApiLayoutRevision = Math.max(highestObservedApiLayoutRevision, canvasGeometry.layoutRevision)
         if (debugLoggingEnabled) console.info('[CANVAS][api-geometry]', 'received', {
@@ -12351,7 +12385,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (!changed) return
         removeApiCanvasRemovedNodesFromDOM(preflightReconciliation.removedNodeIds)
         removeApiCanvasRemovedNodesFromDOM(result.removedNodeIds)
-        pruneApiCanvasRemovedGeneratedMediaTrackers(result.removedNodeIds)
+        pruneApiCanvasRemovedGeneratedMediaTrackers([
+            ...result.removedNodeIds,
+            ...replacedGeneratedMediaNodeIds,
+        ])
         syncPixiGeneratingImageNodes()
         const snapshotNodeIds = new Set([...result.upsertedNodeIds, ...result.updatedNodeIds])
         syncApiCanvasSnapshotNodesToDOM(snapshotNodeIds)
@@ -12530,13 +12567,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             clearGeneratingReferencesAfterPromptHandoff(threadId, generationRun)
         },
 
-        onImageErrorToCanvas: ({ threadId, generationRun }) => {
+        onImageErrorToCanvas: ({ threadId, error, generationRun }) => {
             if (!shouldAcceptGeneratedMediaEvent(threadId, undefined, generationRun)) return
 
             const runKey = getGeneratedMediaRunKey(threadId, generationRun)
             const existing = partialImageTracker.get(runKey)
+            const generationRequestId = getGenerationRequestId(generationRun)
+            const outputNodeId = generationRun?.lineageAssignment
+                ? getPendingGeneratedMediaNodeId(generationRun.lineageAssignment)
+                : existing?.nodeId
+            const failureResult = currentCanvasState && generationRequestId
+                ? applyMediaGenerationStreamFailureToOperationNodes(currentCanvasState, {
+                    generationRequestId,
+                    ...(generationRun?.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
+                    ...(outputNodeId ? { outputNodeId } : {}),
+                    message: error,
+                    requestRevision: mediaOperationRequestRevisions.get(generationRequestId) ?? 0,
+                    updatedAt: Date.now(),
+                })
+                : undefined
+            if (failureResult) applyMediaOperationRecoveryResult(failureResult)
             if (!existing || !currentCanvasState) {
-                removePendingBranchMarkerForRun(threadId, generationRun)
+                if (!failureResult?.changed) removePendingBranchMarkerForRun(threadId, generationRun)
                 finishFailedGeneratedMediaRun(threadId, generationRun)
                 return
             }
@@ -14266,7 +14318,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     function applyMediaOperationRecoveryResult(result: MediaGenerationOperationRecoveryResult): void {
         if (!result.changed || !currentCanvasState) return
-        const rebalancedNodes = result.removedNodeIds.length > 0
+        const replacedGeneratedMediaNodeIds = result.updatedNodeIds.filter(nodeId => {
+            const previousNode = currentCanvasState?.nodes.find(node => node.nodeId === nodeId)
+            const updatedNode = result.state.nodes.find(node => node.nodeId === nodeId)
+            return (previousNode?.type === 'image' || previousNode?.type === 'video')
+                && updatedNode?.type === 'operationStatus'
+        })
+        const rebalancedNodes = result.removedNodeIds.length > 0 || replacedGeneratedMediaNodeIds.length > 0
             ? rebalanceGeneratedMediaTrees(result.state.nodes, result.state.edges)
             : result.state.nodes
         const changedGeometryNodeIds = rebalancedNodes.flatMap(node => {
@@ -14281,7 +14339,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
         commitTransientCanvasStatePreservingEditors({ ...result.state, nodes: rebalancedNodes })
         removeApiCanvasRemovedNodesFromDOM(result.removedNodeIds)
-        pruneApiCanvasRemovedGeneratedMediaTrackers(result.removedNodeIds)
+        pruneApiCanvasRemovedGeneratedMediaTrackers([
+            ...result.removedNodeIds,
+            ...replacedGeneratedMediaNodeIds,
+        ])
 
         for (const nodeId of result.removedNodeIds) {
             pixiMediaLayer?.setTransientImageSource(nodeId, null)

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { mediaGenerationLayoutSettings } from '@lixpi/constants'
 
 import {
+    getGeneratedMediaProgressCollisionRect,
     getGeneratedOutputChromeCollisionHeight,
     getGeneratedOutputChromeCollisionInsets,
 } from './media-fitting.ts'
@@ -26,5 +27,20 @@ describe('generated output chrome collision insets', () => {
 
         expect(videoInsets.top).toBe(imageInsets.top)
         expect(videoInsets.bottom).toBeGreaterThan(imageInsets.bottom)
+    })
+})
+
+describe('generated media progress collision envelope', () => {
+    it('reserves the fixed right-side timeline width and measured vertical disclosure height', () => {
+        expect(getGeneratedMediaProgressCollisionRect(
+            { x: 100, y: 150, width: 800, height: 700 },
+            { position: { x: 100, y: 200 }, dimensions: { width: 800, height: 600 } },
+            900,
+        )).toEqual({
+            x: 100,
+            y: 150,
+            width: 1_196,
+            height: 950,
+        })
     })
 })

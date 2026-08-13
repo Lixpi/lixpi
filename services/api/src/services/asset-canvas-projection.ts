@@ -5,34 +5,38 @@ import {
     getBranchMarkerResponsePreview,
     getGeneratedMediaPreFrameLayoutRect,
     getGeneratedMediaPreFrameRect,
+    getGeneratedMediaProgressCollisionRect,
     getGeneratedOutputChromeCollisionInsets,
     getPendingGeneratedMediaNodeId,
     rebalanceBranchTreesAndResolve,
     resizeBranchMarkerToDimensions,
 } from '@lixpi/canvas-engine'
-import type {
-    AiModelId,
-    Asset,
-    AssetRequesterContext,
-    BranchForkCanvasNode,
-    BranchForkLineagePlan,
-    BranchLineCanvasNode,
-    BranchLineLineagePlan,
-    BranchOriginCanvasNode,
-    BranchOriginLineagePlan,
-    CanvasGeometryUpdate,
-    CanvasNode,
-    CanvasNodeGeometry,
-    CanvasState,
-    CapabilityArtifactCanvasNode,
-    CapabilityJsonValue,
-    ImageCanvasNode,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
-    OperationStatusCanvasNode,
-    VideoCanvasNode,
-    WorkspaceEdge,
+import {
+    settleMediaGenerationRunProgress,
+    type AiModelId,
+    type Asset,
+    type AssetRequesterContext,
+    type BranchForkCanvasNode,
+    type BranchForkLineagePlan,
+    type BranchLineCanvasNode,
+    type BranchLineLineagePlan,
+    type BranchOriginCanvasNode,
+    type BranchOriginLineagePlan,
+    type CanvasGeometryUpdate,
+    type CanvasNode,
+    type CanvasNodeGeometry,
+    type CanvasState,
+    type CapabilityArtifactCanvasNode,
+    type CapabilityJsonValue,
+    type ImageCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaGenerationProblem,
+    type MediaGenerationRunProgress,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
+    type OperationStatusCanvasNode,
+    type VideoCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 import { err } from '@lixpi/debug-tools'
@@ -668,19 +672,37 @@ const rebalance = (
             const chromeInsets = node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact'
                 ? getGeneratedOutputChromeCollisionInsets(node.type)
                 : { top: 0, bottom: 0 }
-            return {
+            const collisionRect = {
                 x: position.x,
                 y: position.y - chromeInsets.top,
                 width: node.dimensions.width,
                 height: chromeInsets.top + node.dimensions.height + chromeInsets.bottom,
             }
+            if ((node.type !== 'image' && node.type !== 'video') || !node.generationProgress) {
+                return collisionRect
+            }
+            return getGeneratedMediaProgressCollisionRect(
+                collisionRect,
+                { position, dimensions: node.dimensions },
+                node.dimensions.height,
+            )
         },
-        getNodeConnectorAnchorRect: (node, position) => getApiNodePreFrameRect(node, position) ?? ({
-            x: position.x,
-            y: position.y,
-            width: node.dimensions.width,
-            height: node.dimensions.height,
-        }),
+        getNodeConnectorAnchorRect: (node, position) => {
+            const preFrameRect = getApiNodePreFrameRect(node, position)
+            if (preFrameRect) return preFrameRect
+            const mediaRect = {
+                x: position.x,
+                y: position.y,
+                width: node.dimensions.width,
+                height: node.dimensions.height,
+            }
+            if ((node.type !== 'image' && node.type !== 'video') || !node.generationProgress) return mediaRect
+            return getGeneratedMediaProgressCollisionRect(
+                mediaRect,
+                { position, dimensions: node.dimensions },
+                node.dimensions.height,
+            )
+        },
         getNodeCollisionMargin: (node) => isMarkerNode(node) ? layout.nodeGap : collisionSettingsFor(node).margin,
         getNodeCollisionOverlapThreshold: (node) => collisionSettingsFor(node).overlapThreshold,
     })
@@ -950,14 +972,19 @@ export const settleMediaGenerationRequestOnCanvas = async (params: {
 export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
     workspaceId: string
     generationRun: MediaGenerationRunMeta
+    outputNodeId?: string
+    assetId?: string
     errorMessage?: string
+    problem?: MediaGenerationProblem
+    progress?: MediaGenerationRunProgress
+    requestRevision?: number
 }): Promise<CanvasGeometryUpdate | null> => {
-    const assignment = params.generationRun.lineageAssignment
-    if (!assignment) return null
-
-    const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
-    const assetId = assignment.assetId
-    if (!assetId) return null
+    const declaredAssignment = params.generationRun.lineageAssignment
+    const pendingNodeId = declaredAssignment
+        ? getPendingGeneratedMediaNodeId(declaredAssignment)
+        : params.outputNodeId
+    const assetId = declaredAssignment?.assetId ?? params.assetId
+    if (!pendingNodeId || !assetId) return null
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const asset = await getAssetRecord(assetId)
@@ -983,10 +1010,14 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
                 ? node.mediaRunId === params.generationRun.mediaRunId
                 : node.generationRun === params.generationRun.mediaIndex)
         ))
+        const resolvedAssignment = declaredAssignment
+            ?? pendingNode.generationProgress?.lineageAssignment
+            ?? failedOperationNode?.lineageAssignment
         const now = Date.now()
-        const message = failedOperationNode?.problem?.detail
-            ?? failedOperationNode?.message
+        const message = params.problem?.detail
+            ?? failedOperationNode?.problem?.detail
             ?? params.errorMessage
+            ?? (failedOperationNode?.status === 'failed' ? failedOperationNode.message : undefined)
             ?? 'Media generation failed.'
         const failedDimensions = failedOperationNode?.dimensions ?? { width: 360, height: 104 }
         const failedNode: OperationStatusCanvasNode = {
@@ -1010,7 +1041,14 @@ export const settleFailedGeneratedMediaRunOnCanvas = async (params: {
                         : {}),
             outputNodeId: pendingNodeId,
             plannedMediaType: params.generationRun.mediaType ?? 'image',
-            lineageAssignment: assignment,
+            ...(resolvedAssignment ? { lineageAssignment: resolvedAssignment } : {}),
+            ...(params.problem ? { problem: params.problem } : {}),
+            ...(params.requestRevision === undefined ? {} : { requestRevision: params.requestRevision }),
+            progress: settleMediaGenerationRunProgress(
+                params.progress ?? failedOperationNode?.progress ?? pendingNode.generationProgress?.progress,
+                'failed',
+                message,
+            ),
             ...(pendingNode.parentId ? { parentId: pendingNode.parentId } : {}),
             position: {
                 x: pendingNode.position.x + (pendingNode.dimensions.width - failedDimensions.width) / 2,
@@ -1406,6 +1444,11 @@ export const detachReviewedGeneratedOutputsFromCanvas = ({
             'branchLineNodeId',
             'lineageParentNodeId',
         ]) delete provenanceLocator[field]
+        if (candidate.type === 'image' || candidate.type === 'video') {
+            const acceptedNode = { ...candidate }
+            delete acceptedNode.generationProgress
+            return { ...acceptedNode, generatedBy: provenanceLocator } as CanvasNode
+        }
         return { ...candidate, generatedBy: provenanceLocator } as CanvasNode
     })
     const edgesWithoutDetachedLineage = (canvasState.edges ?? []).filter((edge) =>

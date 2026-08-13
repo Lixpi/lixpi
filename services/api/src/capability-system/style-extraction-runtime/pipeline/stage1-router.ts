@@ -8,30 +8,25 @@ import { getExtractors } from './extractors/registry.ts'
 import type { ChatMessage } from '../../../llm/graph/state.ts'
 import type { StyleExtractionDependencies, StyleExtractionState, StageLogger } from './types.ts'
 
-const SYSTEM_PROMPT = `You are a senior visual-analysis ROUTER. Your sole job is to look at the attached reference image(s) and produce a structured scene assessment that downstream specialist extractors will use.
+const SYSTEM_PROMPT = `You are a senior visual-analysis router. Inspect the attached reference image(s) and produce a structured scene assessment for downstream specialist extractors.
 
-You are MEDIA-NEUTRAL. You do not default to any familiar category. You observe what is concretely present and commit to claims grounded in pixel evidence. You DO NOT use terminology associated with traditional media (watercolor, paper tooth, dry-brush, wash, deckle, granulation, glaze, impasto, etc.) UNLESS such traits are CONCRETELY VISIBLE — and if they are, you cite the specific artifact that proves it (e.g. "visible irregular granulation in mid-values consistent with cold-press watercolor paper", not "soft watercolor look").
+Remain content- and medium-neutral. Do not default to a familiar subject, medium, style, mood, or category. Every claim must be grounded in visible pixel evidence. Use a medium or technique term only when visible process signatures support it, and describe those signatures without introducing stock examples.
 
-You must produce three things:
+You must produce these structured sections:
 
-1. **references[]** — for every input image (input-0, input-1, …):
-   - **subjects[]** — every distinct subject in the frame, each with a normalized bbox [x0, y0, x1, y1] in 0..1 coordinates, a salience rank (1 = primary, 2 = secondary, …), and a one-line description that names the distinctive rendering details (e.g. "round chibi-style orange tabby kitten, front-facing, OVERSIZED green eyes with glossy circular highlights, soft cel-shaded fur with painterly falloff, distinct tabby stripe pattern").
-   - **regions[]** — non-subject regions worth capturing (background, frame, foreground, etc.) with bboxes and descriptions.
+1. **references[]** — for every input image in supplied order:
+   - **subjects[]** — every distinct visible subject, each with a normalized bbox [x0, y0, x1, y1], a salience rank, and a one-line description limited to distinctive visible rendering details.
+   - **regions[]** — non-subject regions worth capturing, with normalized bboxes and evidence-grounded descriptions.
 
-2. **medium** — commit to a SINGLE medium classification. Allowed values include: digital-illustration, digital-painting, cel-shaded-3d, photoreal-3d, traditional-watercolor, gouache, oil-painting, acrylic, pencil-drawing, ink-drawing, charcoal, mixed-media, photograph, vector, comic-print. Other values are allowed if precise.
+2. **medium** — commit to one precise medium classification based only on observable production signatures. Distinguish physical, digital, photographic, rendered, and mixed processes from evidence rather than resemblance or subject matter.
 
-   Decide based on OBJECTIVE evidence:
-   - Digital: clean anti-aliased edges, perfect gradient falloff, uniform fill quality, soft-airbrush radial falloff, layer-flat opacity, no medium-physical artifacts.
-   - Traditional: paper-tooth granulation in mid-values, deckle-edge borders, wet-on-wet bleed, dry-brush broken strokes, oil-paint ridges, pencil-graphite sheen.
-   - If you see a digital painting that LOOKS soft, the medium is digital-illustration or digital-painting — NOT watercolor.
+3. **axisDominance** — for every registered axis, provide a 0..1 score expressing how strongly the reference expresses that axis. Score every axis; do not omit any. The endpoints mean absent and signature-defining.
 
-3. **axisDominance** — for EACH of the axes listed below (the system will substitute the registered list), provide a 0..1 score expressing how strongly the reference EXPRESSES that axis. Score every axis; do not omit any. 0 means "this axis is essentially absent or irrelevant for this reference"; 1 means "this axis is the signature of the work."
+4. **intentResolution** — use the user intent to decide whether a category or axis restriction is explicit. Preserve explicit category wording, use registered axis ids, and otherwise leave forced fields empty while proposing a category derived from the dominant axes.
 
-4. **intentResolution** — given the user intent string, decide whether to force a specific style category and / or restrict to specific axes. If the user wrote "save the palette", set forcedCategory="color-palette" and forcedAxes=["palette"]. If no intent, set both to empty string / empty array and write a proposedCategory describing the dominant axis grouping (e.g. "illustration-style", "color-palette", "character-design", "mood", "composition-rule").
+5. **notes** — two to five concrete observations for synthesis. Include source-derived negative constraints only when they prevent a conflicting interpretation. Never add a stock prohibition list.
 
-5. **notes** — 2–5 sentences with concrete observations the synthesis stage will rely on. Include explicit DO NOTs that the synthesis must respect (e.g. "this is digital — DO NOT add paper tooth, dry-brush, deckle edges, or wash bleeds in the application notes"). Always include a DO-NOT line if the medium classification implies anti-defaults.
-
-CRITICAL: Do not reach for category defaults. A cute pastel children's illustration is NOT automatically "watercolor". A glossy 3D render is NOT automatically "anime". Commit to the medium and dominance scores based on pixel evidence, not on what the work superficially resembles.`
+Do not reach for category defaults. Commit to the medium and dominance scores from pixel evidence, not from subject, mood, familiarity, or superficial resemblance.`
 
 const buildAxisDominanceSchema = (): Record<string, any> => {
     const axes = getExtractors().map((e) => ({ axis: e.axis, displayName: e.displayName, description: e.description }))
@@ -68,7 +63,7 @@ const buildRouterSchema = (): VlmJsonSchema => ({
                             items: {
                                 type: 'object',
                                 properties: {
-                                    label: { type: 'string', description: 'short label like "kitten", "vase", "figure"' },
+                                    label: { type: 'string', description: 'Short label derived only from the visible subject.' },
                                     bbox: {
                                         type: 'array',
                                         description: 'normalized [x0, y0, x1, y1] in 0..1 coordinates',

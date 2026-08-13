@@ -26,6 +26,38 @@ export function computeVerticallyCenteredY(rect: RectLike, itemHeight: number): 
     return rect.y + rect.height / 2 - itemHeight / 2
 }
 
+export function getGeneratedMediaProgressCollisionRect(
+    mediaCollisionRect: RectLike,
+    anchor: { position: { x: number; y: number }; dimensions: SizeLike },
+    progressHeight: number,
+    progressWidth = mediaGenerationLayoutSettings.generatedMediaProgress.width,
+    gap = mediaGenerationLayoutSettings.generatedMediaProgress.gap,
+): RectLike {
+    if (!Number.isFinite(progressHeight) || progressHeight <= 0
+        || !Number.isFinite(progressWidth) || progressWidth <= 0) return mediaCollisionRect
+
+    const progressLeft = anchor.position.x + anchor.dimensions.width + gap
+    const progressTop = progressHeight <= anchor.dimensions.height
+        ? anchor.position.y + (anchor.dimensions.height - progressHeight) / 2
+        : anchor.position.y
+    const left = Math.min(mediaCollisionRect.x, progressLeft)
+    const top = Math.min(mediaCollisionRect.y, progressTop)
+    const right = Math.max(
+        mediaCollisionRect.x + mediaCollisionRect.width,
+        progressLeft + progressWidth,
+    )
+    const bottom = Math.max(
+        mediaCollisionRect.y + mediaCollisionRect.height,
+        progressTop + progressHeight,
+    )
+    return {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    }
+}
+
 // Position for the next lineage item to the right of a rect, vertically centered.
 export function computeLineageContinuationPositionToRightOfRect(
     rect: RectLike,

@@ -104,9 +104,13 @@ Videos cost one still image in branch resolution. The MP4 is used only by the ex
 
 The branch VLM assigns target, style, and lineage roles only within the explicit candidate set. Every explicit candidate remains a generation reference. If the VLM cannot assign a target safely, the API keeps all explicit references and plans a targetless fresh branch instead of failing preflight.
 
+A generated Asset remains eligible as the explicit parent of a later edit after acceptance. While its Workspace projection still declares a live `branchId`, the edit continues that branch. Acceptance removes the old marker topology, so a later edit receives a new server-owned branch ID, but the accepted media node remains `parentMediaNodeId` and the new `branchLine` stays between that source and the edited output. Uploaded or otherwise non-generated references remain context-only and cannot become lineage parents merely because they are selected.
+
 ## Canvas projection
 
 The browser may render a transient preflight branch marker before the lineage plan arrives, but it never creates or positions generated media nodes. Request creation assigns each concrete run its stable media-run, Asset, operation-node, and output-node IDs, then immediately persists the pending image/video node before reasoning, Capability execution, lineage planning, or any provider event. The later lineage plan reuses and enriches that same node rather than replacing it.
+
+Preflight and planned markers are two phases of one request/run owner, never two renderable lineage nodes. Promotion retires every matching preflight state/DOM identity atomically; structural rendering also selects exactly one visible owner when duplicate preflight events race before planned media starts.
 
 The API projection service persists marker topology when the lineage plan is announced. It uses shared marker text metrics and canvas-engine branch-tree/collision settings. For a fresh unanchored branch, it searches the submitted visible world area for a clear marker position instead of always starting at the left-center fallback, and clamps the request's marker envelope back inside that area after rigid collision cleanup. Canvas revisions are strictly greater than the persisted revision, including when several provider events commit in the same millisecond. Every connected client can therefore apply the same ordered node snapshots and coordinates.
 

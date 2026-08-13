@@ -313,6 +313,13 @@ const buildAssetBlobReferences = async (asset: Asset): Promise<TransactOperation
         })
     }
 
+    for (const component of asset.composition?.components ?? []) {
+        pointers.push({
+            blobHash: component.blobHash,
+            referenceKey: `asset#${asset.assetId}#composition#${component.componentId}`,
+        })
+    }
+
     if (pointers.length > 40) throw new Error('ASSET_BLOB_REFERENCE_LIMIT_EXCEEDED')
 
     const additions: Array<{ blob: BlobRecord; reference: BlobReference }> = []
@@ -660,6 +667,7 @@ type CreateAssetInput = Pick<
     | 'assetId'
     | 'documents'
     | 'media'
+    | 'composition'
     | 'artifact'
     | 'lineage'
     | 'generatedOutputReview'
@@ -691,7 +699,7 @@ export const assertAssetComponents = (asset: Asset): void => {
             throw new Error('INVALID_ASSET_PROVIDER_IDENTITY_VERIFICATION')
         }
     }
-    if (!asset.media && !asset.artifact && !asset.lineage && Object.keys(asset.documents).length === 0) {
+    if (!asset.media && !asset.composition && !asset.artifact && !asset.lineage && Object.keys(asset.documents).length === 0) {
         throw new Error('ASSET_COMPONENT_REQUIRED')
     }
     for (const [role, pointer] of Object.entries(asset.documents)) {
@@ -757,6 +765,32 @@ export const assertAssetComponents = (asset: Asset): void => {
         ]
         if (lineageIds.some((lineageId) => lineageId === asset.assetId)) throw new Error('SELF_REFERENTIAL_ASSET_LINEAGE')
     }
+    if (asset.composition) {
+        if (asset.composition.schemaVersion !== 'asset-media-composition-v1'
+            || !asset.composition.kind.trim()
+            || !asset.composition.capabilityId.trim()
+            || !Array.isArray(asset.composition.sourceAssetIds)
+            || !Array.isArray(asset.composition.components)
+            || asset.composition.components.length === 0
+            || asset.composition.components.length > 32) {
+            throw new Error('INVALID_ASSET_MEDIA_COMPOSITION')
+        }
+        const componentIds = new Set<string>()
+        for (const component of asset.composition.components) {
+            if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
+                || componentIds.has(component.componentId)
+                || !component.role.trim()
+                || !component.title.trim()
+                || !/^[a-f0-9]{64}$/u.test(component.blobHash)
+                || component.mimeType !== 'image/png'
+                || !Number.isSafeInteger(component.byteSize)
+                || component.byteSize <= 0) {
+                throw new Error('INVALID_ASSET_MEDIA_COMPOSITION_COMPONENT')
+            }
+            componentIds.add(component.componentId)
+        }
+        if (!asset.lineage) throw new Error('ASSET_MEDIA_COMPOSITION_REQUIRES_LINEAGE')
+    }
     if (asset.generatedOutputReview && !asset.lineage) throw new Error('GENERATED_OUTPUT_REVIEW_REQUIRES_LINEAGE')
     if (asset.descriptor && !isValidDescriptor(asset.descriptor)) throw new Error('INVALID_ASSET_DESCRIPTOR')
 }
@@ -772,6 +806,7 @@ const AssetModel = {
         ownerUserId,
         documents = {},
         media,
+        composition,
         artifact,
         lineage,
         generatedOutputReview,
@@ -859,6 +894,7 @@ const AssetModel = {
             ownerUserId,
             documents: resolvedDocuments,
             ...(media ? { media } : {}),
+            ...(composition ? { composition } : {}),
             ...(artifact ? { artifact } : {}),
             ...(lineage ? { lineage } : {}),
             ...(generatedOutputReview ? { generatedOutputReview } : {}),

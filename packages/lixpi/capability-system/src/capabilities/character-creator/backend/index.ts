@@ -33,7 +33,7 @@ export function createCharacterCreatorModule(
                     name: 'Character prompt',
                     requirement: 'required',
                     accepts: ['prompt'],
-                    description: 'Describe the character and priorities in free form. The default is one close neutral front identity portrait followed by front and back full-body views; request 3 to 10 shots plus belongings, profiles, face angles, outfit details, materials, or actions when needed.',
+                    description: 'Describe the character and shot priorities in free form. The default is the required three-shot identity-and-turnaround plan; request any total from 3 to 10 when additional user-specified views are needed.',
                 },
                 {
                     name: 'Character references',

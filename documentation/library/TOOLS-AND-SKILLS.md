@@ -47,7 +47,7 @@ Every Capability manifest includes:
 | `kind` | `skill` or `tool`. |
 | `name` and `description` | Human and model-facing discovery text. |
 | `references` | Other Capability packages required by ID and kind, with optional named imports. |
-| `resources` | Content-addressed Markdown, JSON, JSON Schema, image, example, or Asset resources. |
+| `resources` | Content-addressed Markdown, JSON, JSON Schema, media, or Asset resources. |
 | `exports` | Named instruction or step-template exports that another package can import. |
 | `tool` | Tool-only input schema, output schema, execution policy, workflow steps, and outputs. |
 
@@ -78,7 +78,7 @@ This keeps the Skill independently versioned and authorized. The Tool consumes a
 A Skill is instruction-first. It can contain:
 
 - Markdown instructions
-- examples and reference images
+- authorized reference media with a declared role
 - JSON configuration
 - JSON Schemas
 - references to other Skills or Tools
@@ -87,6 +87,12 @@ A Skill is instruction-first. It can contain:
 A Skill does not register API actions. When the resolver includes it in a plan, its authorized resources can be added to model context or bound into a Tool workflow.
 
 Use a module-internal Skill when it exists only to support a module. Use a standalone Skill when users or models should attach it directly. Module membership is structural: internal packages use `catalogExposure: 'module-internal'` and a required `parentModuleId`; standalone packages use `catalogExposure: 'standalone'` and no parent.
+
+### Instruction neutrality
+
+Static model-facing instructions describe roles, relationships, fields, invariants, evidence rules, and output structure. They do not contain illustrative subjects, objects, settings, actions, sample prompts, named aesthetics, creators, brands, equipment, or fixed semantic negative lists. Those details can prime generation even when they appear in an unrelated example or prohibition.
+
+Required schema literals, stable identifiers, registered axis names, and domain vocabulary that defines the Capability contract are allowed. Semantic details for a run come from the authoritative user request, authorized reference evidence, or a deliberately assigned Capability resource. Negative constraints are derived from that run's request and evidence.
 
 ## Tools
 

@@ -192,11 +192,12 @@ const SYSTEM_PROMPT = [
     'Resolve visual references only — never judge feasibility. Do not refuse, lower confidence, or return mode="ambiguous" because the request is for a video, because it asks for motion, animation, camera movement, or audio, or because of any perceived capability limit. Motion and clip requests are ordinary video generation and must be grounded exactly like image requests. For video, the target identity you pick becomes the first frame (image-to-video) and your selected style references become the video reference images.',
     'Always ground decisions in the actual candidate pixels. Do not route from regexes, recency, prompt text alone, or guessed entity tags.',
     'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target candidateId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
-    'Purely deictic prompts like "this", "that", "it", or "make it" usually refer to the active-target candidate. Deictic prompts with an explicit visible subject like "that man", "that guy", "that person", "that goat", "that portrait", or "that landscape" must target a candidate whose pixels match that named subject. If the active target visibly conflicts with the named subject, keep it as attached base context and choose the matching candidate as target; if no candidate matches, return mode="ambiguous" with low confidence.',
+    'A prompt that refers only to the selected item usually targets the active-target candidate. When the prompt also names or describes visible content, target only a candidate whose pixels match that description. If the active target visibly conflicts with the described content, keep it as attached context and choose the matching candidate; if no candidate matches, return mode="ambiguous" with low confidence.',
     'For style/medium changes to an active-target candidate, return mode="edit-active-branch", operationKind="edit_existing", and set targetCandidateId to the active target only when the prompt is purely deictic or its pixels match the named subject. Do not assign the active target as target for a different visible subject or a fresh unrelated image.',
-    'If the prompt identifies an existing generated candidate or branch as the subject/identity, continue that generated branch even when the requested palette, medium, or style changes substantially. If you include a generated candidate as the target/identity reference, set targetCandidateId and parentCandidateId to that candidate, preserve its branchId when available, and do not return targetless mode="fresh-branch".',
+    'A generated candidate remains an editable lineage parent after acceptance. If it has a branchId, continue that active branch. If acceptance removed its branchId, target the generated candidate and let the server create a new continuation branch rooted at that media node.',
+    'If the prompt identifies a generated candidate or branch as the subject/identity, continue from that generated candidate even when the requested palette, medium, or style changes substantially. Set targetCandidateId and parentCandidateId to that candidate and do not return targetless mode="fresh-branch".',
     'Every candidate was explicitly attached by the user in the message or composer context. Include every candidate in referenceCandidateIds and never exclude one. Your role is to assign target/style/branch roles, not to decide whether an attached reference reaches generation.',
-    'Separate target identity from style/source evidence. A phrase like "draw a goat in the style of that landscape painting" means the goat is the requested subject and the landscape can be style evidence.',
+    'Separate requested target content from style or source evidence. A reference assigned only to style must remain context and must not become the target identity or lineage parent for newly requested content.',
     'Reserve mode="ambiguous" strictly for when the visual referent genuinely cannot be determined from the candidate pixels — never to flag an unsupported output type or a request you believe cannot be fulfilled. If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
 ].join('\n')
 
@@ -377,17 +378,43 @@ const sanitizeResolution = (args: {
                 rationale: rationale || 'The referenced branch could not be selected safely.',
             })
         }
-
-        mode = 'fresh-branch'
-        operationKind = 'new_image'
-        targetCandidateId = null
-        parentCandidateId = undefined
-        includeGeneratedCandidateIds = []
-        styleReferenceCandidateIds = []
-        rationale = appendRationale(
-            rationale,
-            'Resolver guard kept the only explicit Asset as context and started a fresh branch because no competing branch candidate exists.',
-        )
+        const onlyCandidate = snapshot.candidates.length === 1 ? snapshot.candidates[0] : undefined
+        const promptLooksLikeEdit = /\b(?:fix|edit|correct|adjust|change|update|revise|redo|regenerate|remove|replace|add)\b/iu
+            .test(snapshot.promptText)
+            || /\bmake\s+(?:this|that|it)\b/iu.test(snapshot.promptText)
+        const generatedTargetWasSelected = Boolean(onlyCandidate
+            && (targetCandidateId === onlyCandidate.candidateId
+                || parentCandidateId === onlyCandidate.candidateId
+                || (onlyCandidate.roleHints.includes('active-target')
+                    && promptLooksLikeEdit)))
+        const generatedTarget = onlyCandidate?.roleHints.includes('generated-variant') && generatedTargetWasSelected
+            ? onlyCandidate
+            : undefined
+        if (generatedTarget) {
+            mode = 'edit-active-branch'
+            operationKind = 'edit_existing'
+            targetCandidateId = generatedTarget.candidateId
+            parentCandidateId = generatedTarget.candidateId
+            includeGeneratedCandidateIds = [...new Set([
+                ...includeGeneratedCandidateIds,
+                generatedTarget.candidateId,
+            ])]
+            rationale = appendRationale(
+                rationale,
+                'Resolver guard retained the only explicit generated Asset as the edit target and continuation parent.',
+            )
+        } else {
+            mode = 'fresh-branch'
+            operationKind = 'new_image'
+            targetCandidateId = null
+            parentCandidateId = undefined
+            includeGeneratedCandidateIds = []
+            styleReferenceCandidateIds = []
+            rationale = appendRationale(
+                rationale,
+                'Resolver guard kept the only explicit Asset as context and started a fresh branch because no competing branch candidate exists.',
+            )
+        }
     }
 
     if (parentCandidateId && !candidateById.has(parentCandidateId)) {
@@ -413,8 +440,13 @@ const sanitizeResolution = (args: {
 
     const targetCandidate = targetCandidateId ? candidateById.get(targetCandidateId) : undefined
     const rawBranchId = normalizeOptionalCandidateId(args.parsed.branchId)
+    const generatedTargetWithoutActiveBranch = Boolean(
+        targetCandidate
+        && !targetCandidate.branchId
+        && targetCandidate.roleHints.includes('generated-variant'),
+    )
     const branchId = targetCandidate?.branchId
-        ?? (mode === 'fresh-branch' ? undefined : rawBranchId)
+        ?? (mode === 'fresh-branch' || generatedTargetWithoutActiveBranch ? undefined : rawBranchId)
         ?? `branch-${randomUUID()}`
 
     return {

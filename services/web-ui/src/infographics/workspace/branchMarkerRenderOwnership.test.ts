@@ -8,6 +8,7 @@ import type {
 } from '@lixpi/constants'
 import { describe, expect, it } from 'vitest'
 import {
+    getSupersededPreflightNodeIdsForPlannedOwner,
     hasCompletePlannedBranchMarkerGeometry,
     resolveBranchMarkerRenderOwnership,
     resolvePreflightBranchMarkerScreenOwnership,
@@ -168,6 +169,50 @@ describe('branch marker structural render ownership', () => {
 
         expect([...ownership.suppressedNodeIds]).toEqual(['preflight-1'])
         expect(ownership.visibleOwnerBySuppressedNodeId.get('preflight-1')).toBe('planned-1')
+    })
+
+    it('allows only one visible owner when duplicate preflight nodes race the same planned run', () => {
+        const firstPreflight = makePreflight('preflight-1', 'thread-1')
+        const duplicatePreflight = makePreflight('preflight-duplicate', 'thread-1')
+        const planned = makePlannedOrigin('planned-1', 'thread-1')
+
+        const beforeStart = resolveBranchMarkerRenderOwnership(
+            [firstPreflight, duplicatePreflight, planned],
+            new Set(),
+        )
+        expect([...beforeStart.suppressedNodeIds].sort()).toEqual([
+            'planned-1',
+            'preflight-duplicate',
+        ])
+
+        const afterStart = resolveBranchMarkerRenderOwnership(
+            [firstPreflight, duplicatePreflight, planned],
+            new Set([planned.nodeId]),
+        )
+        expect([...afterStart.suppressedNodeIds].sort()).toEqual([
+            'preflight-1',
+            'preflight-duplicate',
+        ])
+        expect(getSupersededPreflightNodeIdsForPlannedOwner(
+            [firstPreflight, duplicatePreflight, planned],
+            planned,
+        ).sort()).toEqual([
+            'preflight-1',
+            'preflight-duplicate',
+        ])
+    })
+
+    it('allows only one visible preflight owner before the lineage plan arrives', () => {
+        const firstPreflight = makePreflight('preflight-1', 'thread-1')
+        const duplicatePreflight = makePreflight('preflight-duplicate', 'thread-1')
+
+        const ownership = resolveBranchMarkerRenderOwnership(
+            [firstPreflight, duplicatePreflight],
+            new Set(),
+        )
+
+        expect([...ownership.suppressedNodeIds]).toEqual(['preflight-duplicate'])
+        expect(ownership.visibleOwnerBySuppressedNodeId.get('preflight-duplicate')).toBe('preflight-1')
     })
 
     it('matches multi-model markers by reasoning identity without suppressing siblings', () => {

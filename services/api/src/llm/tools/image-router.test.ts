@@ -4,6 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
+const generatedAssetStorageMocks = vi.hoisted(() => ({
+    settleGeneratedAssetComposition: vi.fn(async () => undefined),
+}))
+
+vi.mock('../../services/generated-asset-storage.ts', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../../services/generated-asset-storage.ts')>(),
+    settleGeneratedAssetComposition: generatedAssetStorageMocks.settleGeneratedAssetComposition,
+}))
+
 import { ImageRouter } from './image-router.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
@@ -72,6 +81,7 @@ let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
 
 beforeEach(() => {
+    generatedAssetStorageMocks.settleGeneratedAssetComposition.mockClear()
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
@@ -269,6 +279,18 @@ describe('ImageRouter', () => {
         const complete = vi.spyOn(ImagePublisher.prototype, 'complete').mockResolvedValue(undefined)
         const execute = vi.fn(async () => ({
             generatedImages: ['final-character-sheet-base64'],
+            mediaComposition: {
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['asset-1'],
+                components: [{
+                    componentId: 'body-back',
+                    role: 'character-sheet-panel',
+                    title: 'Back body',
+                    imageBase64: 'cGFuZWw=',
+                    mimeType: 'image/png' as const,
+                }],
+            },
             imageUsage: { generatedCount: 27, size: '3840x2560', quality: 'high' },
             capabilityMediaTrace: { schemaVersion: 'character-sheet-trace-v1' },
         }))
@@ -308,6 +330,21 @@ describe('ImageRouter', () => {
                 mediaType: 'image',
                 mediaIndex: 0,
                 variantIndex: 0,
+                lineageAssignment: {
+                    assetId: 'output-asset-1',
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'reasoning-1',
+                    mediaRunId: 'reasoning-1:image:0',
+                    mediaType: 'image',
+                    mediaIndex: 0,
+                    branchId: 'branch-1',
+                    lineageParentNodeId: 'branch-line-1',
+                    referenceAssetIds: ['asset-1'],
+                    referenceNodeIds: ['source-node-1'],
+                    sourceContextNodeIds: ['source-node-1'],
+                    promptText: 'Create a combie character out of this photo.',
+                    createdAt: 1,
+                },
             },
             imageSize: '1024x1024',
         })
@@ -341,6 +378,17 @@ describe('ImageRouter', () => {
             expect(complete).toHaveBeenCalledWith(expect.objectContaining({
                 revisedPrompt: 'Create a combie character out of this photo.',
             }))
+            expect(generatedAssetStorageMocks.settleGeneratedAssetComposition).toHaveBeenCalledWith({
+                generationRun: expect.objectContaining({
+                    lineageAssignment: expect.objectContaining({ assetId: 'output-asset-1' }),
+                }),
+                composition: expect.objectContaining({
+                    kind: 'character-sheet',
+                    components: [expect.objectContaining({ componentId: 'body-back' })],
+                }),
+            })
+            expect(generatedAssetStorageMocks.settleGeneratedAssetComposition.mock.invocationCallOrder[0])
+                .toBeLessThan(complete.mock.invocationCallOrder[0]!)
             expect(createTransient).not.toHaveBeenCalled()
             expect(result).toMatchObject({
                 generatedImages: ['final-character-sheet-base64'],
@@ -349,6 +397,45 @@ describe('ImageRouter', () => {
         } finally {
             complete.mockRestore()
         }
+    })
+
+    it('fails a composed Capability result when no output Asset was assigned', async () => {
+        const execute = vi.fn(async () => ({
+            generatedImages: ['final-character-sheet-base64'],
+            mediaComposition: {
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['asset-1'],
+                components: [{
+                    componentId: 'body-back',
+                    role: 'character-sheet-panel',
+                    title: 'Back body',
+                    imageBase64: 'cGFuZWw=',
+                    mimeType: 'image/png' as const,
+                }],
+            },
+        }))
+        const plan = {
+            kind: 'character-sheet',
+            capabilityRunId: 'run-without-asset',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Fix this character sheet.',
+            panels: [],
+            layoutId: 'character-sheet-3840x2560',
+            semanticRetryLimit: 1,
+        } as any
+        const router = new ImageRouter({ createTransient: vi.fn() } as any, {
+            get: vi.fn(() => ({ execute })),
+        } as any, {} as any)
+
+        const result = await router.execute(createState({
+            capabilityUsageMode: 'character-creator',
+            capabilityMediaExecutionPlan: plan,
+            providerSafeMediaIntent: { safePrompt: 'Fix this character sheet.' } as any,
+        }))
+
+        expect(result.error).toBe('CAPABILITY_MEDIA_COMPOSITION_ASSET_REQUIRED')
+        expect(generatedAssetStorageMocks.settleGeneratedAssetComposition).not.toHaveBeenCalled()
     })
 
     it('returns a strategy preflight failure without calling an image provider', async () => {

@@ -497,6 +497,13 @@ describe('asset canvas projection', () => {
                     type: 'image',
                     assetId: 'source-asset',
                     mediaGenerationPhase: 'ready',
+                    generationProgress: {
+                        generationRequestId: 'previous-request',
+                        status: 'completed',
+                        message: 'Character sheet complete.',
+                        progress: createDefaultMediaGenerationRunProgress('completed', 'Character sheet complete.'),
+                        updatedAt: 1,
+                    },
                     position: { x: 0, y: 0 },
                     dimensions: { width: 800, height: 800 },
                 },
@@ -582,6 +589,14 @@ describe('asset canvas projection', () => {
             nodeId: 'branch-line-request-1-r0-image-0',
             type: 'branchLine',
         }))
+        const source = storedState.nodes.find(node => node.nodeId === 'source-media')!
+        const branchLine = storedState.nodes.find(node => node.nodeId === 'branch-line-request-1-r0-image-0')!
+        expect(branchLine.position.x).toBeGreaterThanOrEqual(
+            source.position.x
+                + source.dimensions.width
+                + mediaGenerationLayoutSettings.generatedMediaProgress.gap
+                + mediaGenerationLayoutSettings.generatedMediaProgress.width,
+        )
         expect(storedState.nodes).toContainEqual(expect.objectContaining({
             nodeId: pendingNodeId,
             type: 'image',
@@ -955,6 +970,120 @@ describe('asset canvas projection', () => {
         }))
     })
 
+    it('replaces a pre-lineage failed reservation in its exact media slot without leaving a shell', async () => {
+        const pendingNodeId = 'pending-image-pre-lineage'
+        const operationNodeId = 'operation-pre-lineage'
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [
+                {
+                    nodeId: pendingNodeId,
+                    type: 'image',
+                    assetId: 'asset-1',
+                    mediaGenerationPhase: 'pending-before-first-frame',
+                    generationProgress: {
+                        generationRequestId: 'request-1',
+                        generationRun: 0,
+                        mediaRunId: 'media-1',
+                        status: 'running',
+                        message: 'Preparing the media request.',
+                        progress: createDefaultMediaGenerationRunProgress(
+                            'running',
+                            'Preparing the media request.',
+                        ),
+                        updatedAt: 2,
+                    },
+                    position: { x: 300, y: 400 },
+                    dimensions: { width: 800, height: 800 },
+                    generatedBy: { generationRequestId: 'request-1' },
+                },
+                {
+                    nodeId: operationNodeId,
+                    type: 'operationStatus',
+                    operation: 'media-generation',
+                    status: 'in-progress',
+                    title: 'Generating with OpenAI:gpt-image-1',
+                    message: 'Preparing the media request.',
+                    generationRequestId: 'request-1',
+                    generationRun: 0,
+                    mediaRunId: 'media-1',
+                    outputNodeId: pendingNodeId,
+                    plannedMediaType: 'image',
+                    position: { x: 1200, y: 50 },
+                    dimensions: { width: 360, height: 104 },
+                    createdAt: 1,
+                    updatedAt: 2,
+                },
+            ],
+            edges: [{
+                edgeId: 'edge-source-output',
+                sourceNodeId: 'source-1',
+                targetNodeId: pendingNodeId,
+                sourceHandle: 'right',
+                targetHandle: 'left',
+            }],
+        } as CanvasState
+        const problem = {
+            problemVersion: '1',
+            type: 'urn:lixpi:media-problem:media-invocation-missing',
+            title: 'Media generation did not start',
+            detail: 'The reasoning model did not produce the required media invocation.',
+            category: 'provider-output',
+            stage: 'preflight',
+            generationRequestId: 'request-1',
+            generationRun: 0,
+            supportCode: 'support-pre-lineage',
+            action: 'none',
+        } as const
+
+        const geometry = await settleFailedGeneratedMediaRunOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRun: {
+                requestKind: 'media-generation-matrix',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                mediaRunId: 'media-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                mediaModelId: 'OpenAI:gpt-image-1',
+                mediaType: 'image',
+                reasoningIndex: 0,
+                mediaIndex: 0,
+                variantIndex: 0,
+            },
+            outputNodeId: pendingNodeId,
+            assetId: 'asset-1',
+            problem,
+            requestRevision: 3,
+        })
+
+        expect(storedState.nodes).toEqual([expect.objectContaining({
+            nodeId: pendingNodeId,
+            type: 'operationStatus',
+            status: 'failed',
+            message: problem.detail,
+            problem,
+            requestRevision: 3,
+            position: { x: 520, y: 748 },
+            dimensions: { width: 360, height: 104 },
+        })])
+        expect(storedState.nodes.some(node => node.type === 'image')).toBe(false)
+        expect(storedState.nodes.some(node => node.nodeId === operationNodeId)).toBe(false)
+        expect(storedState.edges).toEqual([expect.objectContaining({
+            sourceNodeId: 'source-1',
+            targetNodeId: pendingNodeId,
+        })])
+        expect(geometry).toMatchObject({
+            removedNodeIds: [operationNodeId],
+            nodeSnapshots: expect.arrayContaining([
+                expect.objectContaining({ nodeId: pendingNodeId, type: 'operationStatus' }),
+            ]),
+        })
+        expect(mocks.detachWorkspaceReference).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            nodeId: pendingNodeId,
+        }))
+    })
+
     it('preserves a failed error slot when terminal request cleanup removes unresolved media reservations', async () => {
         const failedNodeId = getPendingGeneratedMediaNodeId(assignmentFor(0))
         const pendingNodeId = getPendingGeneratedMediaNodeId(assignmentFor(1))
@@ -1004,7 +1133,29 @@ describe('asset canvas projection', () => {
             ...emptyCanvasState(),
             nodes: [
                 { nodeId: 'fork-1', type: 'branchFork', branchId: 'branch-1', generationRequestId: 'request-1', reasoningRunId: 'reasoning-1', reasoningModelId: 'Anthropic:claude-sonnet-4-6', reasoningIndex: 0, position: { x: 0, y: 0 }, dimensions: { width: 120, height: 60 }, provenance: {} },
-                { nodeId: 'media-1', type: 'image', assetId: 'asset-1', position: { x: 200, y: 0 }, dimensions: { width: 100, height: 100 }, generatedBy: { branchId: 'branch-1', lineageParentNodeId: 'fork-1', generationRequestId: 'request-1', conversationAssetId: 'thread-1', responseId: '', aiModel: 'Anthropic:claude-sonnet-4-6', revisedPrompt: 'draw a goat' } },
+                {
+                    nodeId: 'media-1',
+                    type: 'image',
+                    assetId: 'asset-1',
+                    position: { x: 200, y: 0 },
+                    dimensions: { width: 100, height: 100 },
+                    generationProgress: {
+                        generationRequestId: 'request-1',
+                        status: 'completed',
+                        message: 'Generation complete.',
+                        progress: createDefaultMediaGenerationRunProgress('completed', 'Generation complete.'),
+                        updatedAt: 2,
+                    },
+                    generatedBy: {
+                        branchId: 'branch-1',
+                        lineageParentNodeId: 'fork-1',
+                        generationRequestId: 'request-1',
+                        conversationAssetId: 'thread-1',
+                        responseId: '',
+                        aiModel: 'Anthropic:claude-sonnet-4-6',
+                        revisedPrompt: 'draw a goat',
+                    },
+                },
             ] as any,
             edges: [{ edgeId: 'edge-fork-1-media-1', sourceNodeId: 'fork-1', targetNodeId: 'media-1', sourceHandle: 'right', targetHandle: 'left' }],
         }
@@ -1019,6 +1170,10 @@ describe('asset canvas projection', () => {
         expect(accepted.canvasState.nodes).toContainEqual(expect.objectContaining({
             nodeId: 'media-1',
             generatedBy: expect.not.objectContaining({ branchId: 'branch-1' }),
+        }))
+        expect(accepted.canvasState.nodes).not.toContainEqual(expect.objectContaining({
+            nodeId: 'media-1',
+            generationProgress: expect.anything(),
         }))
         expect(accepted.removedNodeIds).toEqual(['fork-1'])
         expect(superseded.canvasState.nodes).toEqual([expect.objectContaining({ nodeId: 'fork-1' })])

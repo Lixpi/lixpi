@@ -613,6 +613,61 @@ describe('StreamPublisher extraction progress', () => {
         })
     })
 
+    it('settles a generic reasoning failure into the reserved canvas slot and broadcasts its geometry', async () => {
+        const nats = makeFakeNats()
+        const failedGenerationRun = {
+            ...generationRun,
+            mediaRunId: 'reasoning-1:image:0',
+            lineageAssignment: {
+                assetId: 'asset-1',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                mediaRunId: 'reasoning-1:image:0',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                mediaIndex: 0,
+                branchId: 'branch-1',
+                lineageParentNodeId: 'fork-1',
+                referenceAssetIds: [],
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'Draw a cat',
+                createdAt: 1,
+            },
+        } as const
+        const failedGeometry = {
+            layoutRevision: 9,
+            nodes: [],
+            nodeSnapshots: [{ nodeId: 'failed-operation-1' }],
+            edgeSnapshots: [],
+        } as any
+        canvasProjectionMocks.settleFailedGeneratedMediaRunOnCanvas.mockResolvedValueOnce(failedGeometry)
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', failedGenerationRun)
+
+        publisher.error('The reasoning provider could not prepare this media request.')
+        await publisher.drainPendingWrites()
+        await flushPipelinePublishes()
+
+        expect(canvasProjectionMocks.settleFailedGeneratedMediaRunOnCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            generationRun: failedGenerationRun,
+            errorMessage: 'The reasoning provider could not prepare this media request.',
+        })
+        expect(nats.published).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                payload: expect.objectContaining({
+                    content: expect.objectContaining({
+                        status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
+                        canvasGeometry: failedGeometry,
+                        generationRun: failedGenerationRun,
+                    }),
+                }),
+            }),
+        ]))
+    })
+
     it('deduplicates media request completion calls and avoids duplicate settle writes', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')

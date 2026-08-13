@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
         get: vi.fn(),
     },
     canvasProjection: {
+        settleFailed: vi.fn(),
         upsertLineage: vi.fn(),
     },
     operationProjection: {
@@ -55,6 +56,7 @@ vi.mock('../models/asset.ts', () => ({
 }))
 
 vi.mock('./asset-canvas-projection.ts', () => ({
+    settleFailedGeneratedMediaRunOnCanvas: mocks.canvasProjection.settleFailed,
     upsertMediaLineagePlanToCanvas: mocks.canvasProjection.upsertLineage,
 }))
 
@@ -551,10 +553,22 @@ describe('media generation request terminal settlement', () => {
             }),
             expectedRevision: 1,
         })
-        expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
-            operationNodeId: 'operation-image-1',
-            status: 'failed',
+        expect(mocks.canvasProjection.settleFailed).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'workspace-1',
+            outputNodeId: 'pending-image-1',
+            assetId: 'asset-image-1',
+            requestRevision: 2,
+            problem: expect.objectContaining({
+                type: 'urn:lixpi:media-problem:media-invocation-missing',
+            }),
+            generationRun: expect.objectContaining({
+                generationRequestId: 'media-request-1',
+                mediaRunId: 'media-request-1:reasoning:0:image:0',
+                mediaIndex: 0,
+                variantIndex: 0,
+            }),
         }))
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
         expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
             event: expect.objectContaining({
                 status: 'MEDIA_GENERATION_PROBLEM',

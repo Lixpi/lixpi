@@ -17,7 +17,10 @@ import {
     type CharacterSheetRenderPlan,
 } from '../../shared/character-sheet-media-plan.ts'
 
-import { resolveCharacterReferences } from './reference-resolver.ts'
+import {
+    resolveCharacterReferences,
+    type ResolvedCharacterReference,
+} from './reference-resolver.ts'
 import {
     analyzeCharacterEvidence,
     selectCharacterEvidenceFacts,
@@ -48,6 +51,7 @@ import {
     createCharacterVlmPorts,
     describeCharacterPanelAssessmentFailure,
 } from './character-vlm.ts'
+import { selectCharacterPanelsForRegeneration } from './panel-regeneration.ts'
 import type {
     CharacterCreatorRuntimePorts,
     CharacterImageReference,
@@ -62,6 +66,7 @@ export type CharacterSheetStrategyDeps = CharacterCreatorRuntimePorts & {
 
 type RenderedPanel = {
     bytes: Buffer
+    reused?: boolean
     coordinate?: CharacterFidelityObjectCoordinate
     providerOperationId?: string
     includedReferenceRoles: string[]
@@ -730,13 +735,45 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     assets: this.deps.referenceAssets,
                 }),
             })
-            preparationSourceCount = sources.length
+            const storedComponents = new Map<string, ResolvedCharacterReference>()
+            for (const source of sources) {
+                if (source.sourceKind === 'composition-component' && source.componentId) {
+                    storedComponents.set(source.componentId, source)
+                }
+            }
+            const assetSources = sources.filter(source => source.sourceKind === 'asset-rendition')
+            const evidenceSources = assetSources.length > 0 ? assetSources : sources
+            const regenerationDecision = selectCharacterPanelsForRegeneration({
+                prompt: completeRequest,
+                panels: plan.panels,
+                availableComponentIds: new Set(storedComponents.keys()),
+            })
+            const reusedPanelIds = new Set(regenerationDecision.reusePanelIds)
+            for (const panel of plan.panels) {
+                const stored = storedComponents.get(panel.panelId)
+                if (!stored || !reusedPanelIds.has(panel.panelId)) continue
+                renderedPanels.set(panel.panelId, {
+                    bytes: stored.bytes,
+                    reused: true,
+                    includedReferenceRoles: ['composition-component'],
+                    omittedReferenceRoles: [],
+                })
+            }
+            console.info('[CharacterCreatorRegeneration] decision', {
+                capabilityRunId: plan.capabilityRunId,
+                mode: regenerationDecision.mode,
+                reason: regenerationDecision.reason,
+                storedPanelIds: [...storedComponents.keys()],
+                regeneratePanelIds: regenerationDecision.regeneratePanelIds,
+                reusePanelIds: regenerationDecision.reusePanelIds,
+            })
+            preparationSourceCount = evidenceSources.length
             preparationStage = 'analyzing-evidence'
             await reportProgress({
                 phase: 'preparing',
                 completedSteps: 1,
                 totalSteps: 3,
-                message: `${sources.length} source image(s) loaded. Analyzing identity, outfit, materials, and source coverage.`,
+                message: `${evidenceSources.length} original source image(s) and ${storedComponents.size} stored panel(s) loaded. Analyzing identity, outfit, materials, and source coverage.`,
             })
             let evidence: CharacterEvidenceProfile
             try {
@@ -747,10 +784,10 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         phase: 'preparing',
                         completedSteps: 1,
                         totalSteps: 3,
-                        message: `Identity analysis is active on ${sources.length} loaded source image(s): checking observed facial traits, outfit, materials, palette, conflicts, and source coverage; ${formatElapsedTime(elapsedMs)}.`,
+                        message: `Identity analysis is active on ${evidenceSources.length} original source image(s): checking observed facial traits, outfit, materials, palette, conflicts, and source coverage; ${formatElapsedTime(elapsedMs)}.`,
                     }),
                     execute: () => analyzeCharacterEvidence({
-                        sources,
+                        sources: evidenceSources,
                         userPrompt: completeRequest,
                         analyzer: this.deps.evidenceAnalyzer ?? vlmPorts.evidenceAnalyzer,
                         signal: options.signal,
@@ -768,7 +805,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     costumeNotes: [],
                     materialNotes: [],
                     distinguishingDetailNotes: [],
-                    sourceCoverage: sources.map((source): CharacterEvidenceProfile['sourceCoverage'][number] => ({
+                    sourceCoverage: evidenceSources.map((source): CharacterEvidenceProfile['sourceCoverage'][number] => ({
                         sourceAssetId: source.assetId,
                         angles: ['unspecified'],
                         regions: ['face', 'body', 'outfit'],
@@ -793,10 +830,10 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     phase: 'preparing',
                     completedSteps: 2,
                     totalSteps: 3,
-                    message: `Reference-pack construction is active: preparing lossless identity crops and model-compatible source references from ${sources.length} source image(s); ${formatElapsedTime(elapsedMs)}.`,
+                    message: `Reference-pack construction is active: preparing lossless identity crops and model-compatible source references from ${evidenceSources.length} original source image(s); ${formatElapsedTime(elapsedMs)}.`,
                 }),
                 execute: () => buildCharacterReferencePack({
-                    sources,
+                    sources: evidenceSources,
                     evidence,
                     capabilities: modelCapabilities,
                     store,
@@ -811,7 +848,10 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 message: `${preparationReferenceSummary} Starting shot generation.`,
             })
             const observedProp = referencePack.entries.find(entry => entry.role === 'prop-crop')
+            const regeneratePanelIds = new Set(regenerationDecision.regeneratePanelIds)
             const observedPropSpec = observedProp
+                && !renderedPanels.has('prop-primary')
+                && !(storedComponents.size > 0 && regeneratePanelIds.has('prop-primary'))
                 ? plan.panels.find(panel => panel.panelId === 'prop-primary')
                 : undefined
             if (observedProp && observedPropSpec) {
@@ -825,7 +865,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             const renderPanels: CharacterRenderDagNode[] = plan.panels
                 .filter(panel => panel.panelId !== observedPropSpec?.panelId)
                 .map(panel => ({ ...panel, nodeId: panel.panelId }))
-            const fidelity = sources.length > 0 ? this.deps.fidelity : undefined
+            const initialPanelResults = new Map<string, CharacterPanelRenderResult>()
+            for (const panel of renderPanels) {
+                const rendered = renderedPanels.get(panel.panelId)
+                if (rendered?.reused) initialPanelResults.set(panel.panelId, rendered)
+            }
+            const fidelity = evidenceSources.length > 0 ? this.deps.fidelity : undefined
             let completedRenders = renderedPanels.size
             let providerOperationAttempts = 0
             let partialIndex = 0
@@ -877,7 +922,9 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 phase: 'rendering',
                 completedSteps: completedRenders,
                 totalSteps: plan.panels.length,
-                message: `Generating the neutral-front portrait, front full-body shot, and back full-body shot sequentially. The ${plan.panels.length - 3} optional shot(s) wait for all three terminal outputs; no automatic retries will run.`,
+                message: initialPanelResults.size > 0
+                    ? `Reusing ${initialPanelResults.size} stored shot(s) and regenerating ${renderPanels.length - initialPanelResults.size} affected or missing shot(s); no automatic retries will run.`
+                    : `Generating the neutral-front portrait, front full-body shot, and back full-body shot sequentially. The ${plan.panels.length - 3} optional shot(s) wait for all three terminal outputs; no automatic retries will run.`,
             })
             const runner = new CapabilityMediaDagRunner<CharacterRenderDagNode, CharacterPanelRenderResult>(
                 renderPanels,
@@ -910,6 +957,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     }
                 },
                 execute: () => runner.run({
+                    initialResults: initialPanelResults,
                     signal: options.signal,
                     allowTerminalFailure: () => true,
                     onNodeBlocked: async (panel, blocked) => {
@@ -1283,6 +1331,21 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             }
             return {
                 generatedImages: [composition.bytes.toString('base64')],
+                mediaComposition: {
+                    kind: 'character-sheet',
+                    capabilityId: 'global.character-creator',
+                    sourceAssetIds: [...new Set(assetSources.map(source => source.assetId))],
+                    components: plan.panels.flatMap(panel => {
+                        const rendered = renderedPanels.get(panel.panelId)
+                        return rendered ? [{
+                            componentId: panel.panelId,
+                            role: 'character-sheet-panel',
+                            title: panel.title,
+                            imageBase64: rendered.bytes.toString('base64'),
+                            mimeType: 'image/png' as const,
+                        }] : []
+                    }),
+                },
                 imageUsage: {
                     generatedCount: trace.totalProviderOperations,
                     size: '3840x2560',
@@ -1317,6 +1380,22 @@ function buildPanelTrace(args: {
             vlmAssessor: 'not-assessed',
             providerOperationIds: [],
             includedReferenceRoles: [],
+            omittedReferenceRoles: [],
+        }
+    }
+    if (args.rendered.reused) {
+        return {
+            panelId: args.panel.panelId,
+            title: args.panel.title,
+            attempts: 0,
+            selectedAttempt: 0,
+            score: 1,
+            status: 'completed',
+            failedDimensions: [],
+            dimensionResults: [],
+            vlmAssessor: 'durable-composition-component',
+            providerOperationIds: [],
+            includedReferenceRoles: ['composition-component'],
             omittedReferenceRoles: [],
         }
     }

@@ -99,6 +99,12 @@ const buildAssetBlobRemovalOperations = async (asset: Asset) => {
             referenceKey: `asset#${asset.assetId}#rendition#${name}`,
         })
     }
+    for (const component of asset.composition?.components ?? []) {
+        pointers.push({
+            blobHash: component.blobHash,
+            referenceKey: `asset#${asset.assetId}#composition#${component.componentId}`,
+        })
+    }
 
     const removals: Array<{ blob: BlobRecord; reference: BlobReference }> = []
     for (const pointer of pointers) {

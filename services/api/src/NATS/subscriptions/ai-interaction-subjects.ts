@@ -38,6 +38,7 @@ import {
     type MediaBranchCandidateSnapshot,
     type ProviderName,
     type WorkspaceContextSnapshot,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     ACTION_TIMELINE_TOOL_ID,
@@ -51,6 +52,7 @@ import {
 import {
     getMediaGenerationOperationNodeId,
     getPendingGeneratedMediaNodeId,
+    hasActiveGeneratedOutputLineage,
 } from '@lixpi/canvas-engine'
 
 import AiModel from '../../models/ai-model.ts'
@@ -387,6 +389,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
     organizationId,
     conversationAssetId,
     workspaceNodes,
+    workspaceEdges,
 }: {
     snapshot: MediaBranchCandidateSnapshot | undefined
     requester: AssetRequesterContext
@@ -394,6 +397,7 @@ const resolveAuthorizedCandidateSnapshot = async ({
     organizationId: string
     conversationAssetId: string
     workspaceNodes: CanvasNode[]
+    workspaceEdges: WorkspaceEdge[]
 }): Promise<MediaBranchCandidateSnapshot | undefined> => {
     if (!snapshot) return undefined
     if (!Array.isArray(snapshot.candidates)) throw new Error('INVALID_MEDIA_BRANCH_CANDIDATES')
@@ -446,11 +450,13 @@ const resolveAuthorizedCandidateSnapshot = async ({
         const blob = await BlobModel.get({ organizationId, blobHash: rendition.blobHash })
         if (!blob) throw new Error(`MEDIA_BRANCH_BLOB_NOT_FOUND:${candidate.assetId}`)
         const generatedBy = workspaceNode.generatedBy
-        const childExists = workspaceNodes.some((node) =>
+        const hasActiveLineage = hasActiveGeneratedOutputLineage(workspaceNode, workspaceNodes, workspaceEdges)
+        const childExists = hasActiveLineage && workspaceNodes.some((node) =>
             (node.type === 'image' || node.type === 'video')
-            && node.generatedBy?.parentMediaNodeId === workspaceNode.nodeId)
+            && node.generatedBy?.parentMediaNodeId === workspaceNode.nodeId
+            && hasActiveGeneratedOutputLineage(node, workspaceNodes, workspaceEdges))
         const roleHints = new Set<MediaBranchCandidateRoleHint>(['base-context'])
-        if (generatedBy) {
+        if (hasActiveLineage) {
             roleHints.add('generated-variant')
             roleHints.add(childExists ? 'branch-ancestor' : 'branch-leaf')
         }
@@ -470,9 +476,9 @@ const resolveAuthorizedCandidateSnapshot = async ({
             imageUrl: `nats-obj://${blob.bucketName}/${blob.objectKey}`,
             mediaKind,
             roleHints: [...roleHints],
-            ...(generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
-            ...(generatedBy?.parentMediaNodeId ? { parentMediaNodeId: generatedBy.parentMediaNodeId } : {}),
-            ...(generatedBy?.parentImageNodeId ? { parentImageNodeId: generatedBy.parentImageNodeId } : {}),
+            ...(hasActiveLineage && generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
+            ...(hasActiveLineage && generatedBy?.parentMediaNodeId ? { parentMediaNodeId: generatedBy.parentMediaNodeId } : {}),
+            ...(hasActiveLineage && generatedBy?.parentImageNodeId ? { parentImageNodeId: generatedBy.parentImageNodeId } : {}),
             ancestorNodeIds,
             // Selecting one generated output does not implicitly select every
             // historical source that produced it. Context identity is exactly
@@ -520,11 +526,13 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
     workspaceId,
     conversationAssetId,
     workspaceNodes,
+    workspaceEdges,
 }: {
     snapshot: WorkspaceContextSnapshot | undefined
     workspaceId: string
     conversationAssetId: string
     workspaceNodes: CanvasNode[]
+    workspaceEdges: WorkspaceEdge[]
 }): WorkspaceContextSnapshot | undefined => {
     if (!snapshot) return undefined
     if (snapshot.workspaceId !== workspaceId) throw new Error('WORKSPACE_CONTEXT_WORKSPACE_MISMATCH')
@@ -549,6 +557,7 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
                 || workspaceNode.type === 'capabilityArtifact'
                 ? workspaceNode.generatedBy
                 : undefined
+            const hasActiveLineage = hasActiveGeneratedOutputLineage(workspaceNode, workspaceNodes, workspaceEdges)
             return {
                 nodeId: workspaceNode.nodeId,
                 type: workspaceNode.type,
@@ -561,7 +570,7 @@ const resolveAuthorizedWorkspaceContextSnapshot = ({
                 ...(node.descriptorSummary ? { descriptorSummary: node.descriptorSummary } : {}),
                 ...(node.entityTags ? { entityTags: node.entityTags } : {}),
                 ...(node.styleTags ? { styleTags: node.styleTags } : {}),
-                ...(generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
+                ...(hasActiveLineage && generatedBy?.branchId ? { branchId: generatedBy.branchId } : {}),
                 ...(generatedBy?.conversationAssetId ? { sourceConversationAssetId: generatedBy.conversationAssetId } : {}),
                 ...(generatedBy?.conversationAssetId === conversationAssetId ? { isCurrentConversationGenerated: true } : {}),
                 isExplicitChip: true,
@@ -710,6 +719,7 @@ export const aiInteractionSubjects = [
             const organizationId = workspace.organizationId
             const aiChatThreadId = conversationAssetId
             const workspaceNodes = workspace.canvasState?.nodes ?? []
+            const workspaceEdges = workspace.canvasState?.edges ?? []
             const regeneration = mediaGenerationRequest?.regeneration
             let resolvedRegeneration = regeneration
             if (regeneration
@@ -806,6 +816,7 @@ export const aiInteractionSubjects = [
                 organizationId,
                 conversationAssetId,
                 workspaceNodes,
+                workspaceEdges,
             })
             if (resolvedBranchTargetAssetId && resolvedMediaBranchCandidateSnapshot) {
                 const target = resolvedMediaBranchCandidateSnapshot.candidates.find(candidate =>
@@ -826,6 +837,7 @@ export const aiInteractionSubjects = [
                 workspaceId,
                 conversationAssetId,
                 workspaceNodes,
+                workspaceEdges,
             })
             ensureAiInteractionEventRelay({
                 userId,

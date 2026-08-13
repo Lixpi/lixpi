@@ -53,6 +53,7 @@ describe('resolveCharacterReferences', () => {
         expect(result[0]).toMatchObject({
             assetId: 'asset-1',
             rendition: 'canonical',
+            sourceKind: 'asset-rendition',
             blobHash: 'canonical-hash',
             width: 640,
             height: 480,
@@ -90,5 +91,72 @@ describe('resolveCharacterReferences', () => {
 
         await expect(resolve()).rejects.toThrow('CHARACTER_REFERENCE_ORGANIZATION_MISMATCH:asset-1')
         expect(assets.readBlob).not.toHaveBeenCalled()
+    })
+
+    it('expands a stored character sheet into its original sources and isolated component shots', async () => {
+        vi.mocked(assets.getAuthorizedAsset).mockImplementation(async ({ assetId }) => assetId === 'sheet-1'
+            ? readyAsset({
+                assetId: 'sheet-1',
+                composition: {
+                    schemaVersion: 'asset-media-composition-v1',
+                    kind: 'character-sheet',
+                    capabilityId: 'global.character-creator',
+                    sourceAssetIds: ['source-1'],
+                    components: [
+                        {
+                            componentId: 'head-front-neutral',
+                            role: 'character-sheet-panel',
+                            title: 'Neutral front identity portrait',
+                            blobHash: 'head-hash',
+                            mimeType: 'image/png',
+                            byteSize: 100,
+                        },
+                        {
+                            componentId: 'body-front',
+                            role: 'character-sheet-panel',
+                            title: 'Front body',
+                            blobHash: 'front-hash',
+                            mimeType: 'image/png',
+                            byteSize: 100,
+                        },
+                    ],
+                },
+            })
+            : readyAsset({ assetId: 'source-1' }))
+
+        const result = await resolveCharacterReferences({
+            assetIds: ['sheet-1', 'source-1'],
+            organizationId: 'org-1',
+            workspaceId: 'workspace-1',
+            userId: 'user-1',
+            assets,
+        })
+
+        expect(result.map(reference => ({
+            assetId: reference.assetId,
+            sourceKind: reference.sourceKind,
+            componentId: reference.componentId,
+            blobHash: reference.blobHash,
+        }))).toEqual([
+            {
+                assetId: 'source-1',
+                sourceKind: 'asset-rendition',
+                componentId: undefined,
+                blobHash: 'canonical-hash',
+            },
+            {
+                assetId: 'sheet-1',
+                sourceKind: 'composition-component',
+                componentId: 'head-front-neutral',
+                blobHash: 'head-hash',
+            },
+            {
+                assetId: 'sheet-1',
+                sourceKind: 'composition-component',
+                componentId: 'body-front',
+                blobHash: 'front-hash',
+            },
+        ])
+        expect(assets.getAuthorizedAsset).toHaveBeenCalledTimes(2)
     })
 })

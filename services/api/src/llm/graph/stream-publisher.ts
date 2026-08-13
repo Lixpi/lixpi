@@ -343,15 +343,20 @@ export class StreamPublisher {
             content,
             conversationAssetId: this.aiChatThreadId,
         })
-        if (content.status === STREAM_STATUS.IMAGE_ERROR || content.status === STREAM_STATUS.VIDEO_ERROR) {
+        if (
+            content.status === STREAM_STATUS.IMAGE_ERROR
+            || content.status === STREAM_STATUS.VIDEO_ERROR
+            || content.status === STREAM_STATUS.ERROR
+        ) {
             const generationRun = content.generationRun
             if (generationRun?.lineageAssignment) {
+                const errorMessage = content.error || content.text
                 this.enqueueCanvasProjection(
                     async () => {
                         const canvasGeometry = await settleFailedGeneratedMediaRunOnCanvas({
                             workspaceId: this.workspaceId,
                             generationRun,
-                            ...(content.error ? { errorMessage: content.error } : {}),
+                            ...(errorMessage ? { errorMessage } : {}),
                         })
                         this.canvasGeometryResolved(canvasGeometry, generationRun)
                     },

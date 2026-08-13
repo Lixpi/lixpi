@@ -40,6 +40,15 @@ type OperationRemoval = {
 
 type GeneratedMediaNode = Extract<CanvasNode, { type: 'image' | 'video' }>
 
+export type MediaGenerationStreamFailure = {
+    generationRequestId: string
+    mediaRunId?: string
+    outputNodeId?: string
+    message: string
+    requestRevision: number
+    updatedAt: number
+}
+
 const FAILED_OPERATION_DIMENSIONS = { width: 360, height: 104 } as const
 
 function isMediaGenerationOperationNodeForRequest(
@@ -194,14 +203,11 @@ function replaceFailedPendingOutputWithOperation({
             || (generationRun !== undefined && node.generationRun === generationRun)
         )
     ))
-    const resolvedOperationNodeId = existingOperation?.nodeId
-        ?? operationNodeId
-        ?? `operation-${output.nodeId}`
     const dimensions = existingOperation?.dimensions ?? FAILED_OPERATION_DIMENSIONS
     const { parentId: _existingParentId, ...existingOperationWithoutParent } = existingOperation ?? {}
     const failedOperation: OperationStatusCanvasNode = {
         ...existingOperationWithoutParent,
-        nodeId: resolvedOperationNodeId,
+        nodeId: output.nodeId,
         type: 'operationStatus',
         operation: 'media-generation',
         status: 'failed',
@@ -232,37 +238,89 @@ function replaceFailedPendingOutputWithOperation({
         createdAt: existingOperation?.createdAt ?? updatedAt,
         updatedAt,
     }
-    const edgeKeys = new Set<string>()
-    const edges = state.edges.flatMap(edge => {
-        const sourceNodeId = edge.sourceNodeId === output.nodeId ? failedOperation.nodeId : edge.sourceNodeId
-        const targetNodeId = edge.targetNodeId === output.nodeId ? failedOperation.nodeId : edge.targetNodeId
-        if (sourceNodeId === targetNodeId) return []
-        const edgeKey = `${sourceNodeId}:${targetNodeId}:${edge.sourceHandle ?? ''}:${edge.targetHandle ?? ''}`
-        if (edgeKeys.has(edgeKey)) return []
-        edgeKeys.add(edgeKey)
-        return [{
-            ...edge,
-            ...(sourceNodeId === edge.sourceNodeId && targetNodeId === edge.targetNodeId
-                ? {}
-                : {
-                    edgeId: `edge-${sourceNodeId}-${targetNodeId}`,
-                    sourceNodeId,
-                    targetNodeId,
-                }),
-        }]
-    })
+    const replacedOperationNodeId = existingOperation?.nodeId !== output.nodeId
+        ? existingOperation?.nodeId
+        : undefined
+    const edges = state.edges.filter(edge => (
+        edge.sourceNodeId !== replacedOperationNodeId
+        && edge.targetNodeId !== replacedOperationNodeId
+    ))
     const nodes = state.nodes.flatMap(node => {
-        if (node.nodeId === output.nodeId) return []
-        if (node.nodeId === failedOperation.nodeId) return [failedOperation]
+        if (node.nodeId === output.nodeId) return [failedOperation]
+        if (node.nodeId === replacedOperationNodeId) return []
         return [node]
     })
-    if (!existingOperation) nodes.push(failedOperation)
 
     return {
         state: { ...state, nodes, edges },
         changed: true,
         updatedNodeIds: [failedOperation.nodeId],
-        removedNodeIds: [output.nodeId],
+        removedNodeIds: replacedOperationNodeId ? [replacedOperationNodeId] : [],
+    }
+}
+
+export function applyMediaGenerationStreamFailureToOperationNodes(
+    state: CanvasState,
+    failure: MediaGenerationStreamFailure,
+): MediaGenerationOperationRecoveryResult {
+    const output = state.nodes.find((node): node is GeneratedMediaNode => (
+        isGeneratedMediaNode(node)
+        && mediaNodeMatches(
+            node,
+            failure.generationRequestId,
+            undefined,
+            failure.outputNodeId,
+            failure.mediaRunId,
+        )
+    ))
+    if (!output) return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+
+    const generationRun = output.generationProgress?.generationRun
+    const progress = settleMediaGenerationRunProgress(
+        output.generationProgress?.progress,
+        'failed',
+        failure.message,
+    )
+    const projection = projectProgressToMediaNodes({
+        nodes: state.nodes,
+        generationRequestId: failure.generationRequestId,
+        generationRun,
+        outputNodeId: output.nodeId,
+        mediaRunId: failure.mediaRunId ?? output.generationProgress?.mediaRunId,
+        progressState: createProgressState({
+            generationRequestId: failure.generationRequestId,
+            status: 'failed',
+            message: failure.message,
+            progress,
+            generationRun,
+            mediaRunId: failure.mediaRunId ?? output.generationProgress?.mediaRunId,
+            updatedAt: failure.updatedAt,
+        }),
+    })
+    const projectedResult: MediaGenerationOperationRecoveryResult = {
+        state: { ...state, nodes: projection.nodes },
+        changed: projection.updatedNodeIds.length > 0,
+        updatedNodeIds: projection.updatedNodeIds,
+        removedNodeIds: [],
+    }
+    const replacement = replaceFailedPendingOutputWithOperation({
+        state: projectedResult.state,
+        generationRequestId: failure.generationRequestId,
+        generationRun,
+        mediaRunId: failure.mediaRunId ?? output.generationProgress?.mediaRunId,
+        outputNodeId: output.nodeId,
+        message: failure.message,
+        requestRevision: failure.requestRevision,
+        progress,
+        updatedAt: failure.updatedAt,
+    })
+    if (!replacement.changed) return projectedResult
+    return {
+        ...replacement,
+        updatedNodeIds: [...new Set([
+            ...projectedResult.updatedNodeIds.filter(nodeId => !replacement.removedNodeIds.includes(nodeId)),
+            ...replacement.updatedNodeIds,
+        ])],
     }
 }
 

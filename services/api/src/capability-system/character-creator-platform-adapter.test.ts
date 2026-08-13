@@ -160,10 +160,24 @@ describe('Character Creator API platform adapter', () => {
         }))
     })
 
-    it('reauthorizes Assets through the API model and exposes only runtime rendition metadata', async () => {
+    it('reauthorizes Assets and exposes runtime renditions plus durable composition metadata', async () => {
         mocks.assetGet.mockResolvedValue({
             assetId: 'asset-1',
             organizationId: 'org-1',
+            composition: {
+                schemaVersion: 'asset-media-composition-v1',
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['source-1'],
+                components: [{
+                    componentId: 'body-back',
+                    role: 'character-sheet-panel',
+                    title: 'Back body',
+                    blobHash: 'a'.repeat(64),
+                    mimeType: 'image/png',
+                    byteSize: 100,
+                }],
+            },
             media: {
                 renditions: {
                     canonical: { status: 'ready', blobHash: 'canonical-hash', mimeType: 'image/png' },
@@ -194,6 +208,10 @@ describe('Character Creator API platform adapter', () => {
             canonical: { status: 'ready', blobHash: 'canonical-hash', mimeType: 'image/png' },
             original: { status: 'ready', blobHash: 'original-hash', mimeType: 'image/jpeg' },
         })
+        expect(asset.composition).toEqual(expect.objectContaining({
+            sourceAssetIds: ['source-1'],
+            components: [expect.objectContaining({ componentId: 'body-back' })],
+        }))
     })
 
     it('uses the internal fidelity subject and stops waiting when cancelled', async () => {

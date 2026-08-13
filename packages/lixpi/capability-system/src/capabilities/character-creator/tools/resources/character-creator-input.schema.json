@@ -8,7 +8,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 8000,
-            "description": "Character description and requested design constraints. Defaults to three shots. May request 3 to 10 shots and prioritize belongings, profiles, back views, neutral face details, outfit construction, materials, or action poses in free-form text."
+            "description": "Authoritative character description and requested design constraints. Defaults to the required three-shot plan and accepts 3 to 10 user-prioritized shots in free-form text."
         },
         "referenceAssetIds": {
             "type": "array",

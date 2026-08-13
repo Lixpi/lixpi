@@ -7,14 +7,14 @@ import { registerExtractor } from './registry.ts'
 const SYSTEM_PROMPT = `You are a senior visual-analysis specialist focused EXCLUSIVELY on composition: framing, layout, focus hierarchy, perspective, viewpoint, balance.
 
 Rules:
-- framing: short description (e.g. "square frame with painterly soft border", "wide cinematic 21:9", "tight portrait crop").
-- aspectRatio: a string like "1:1", "3:2", "16:9", "9:16", or "auto" if uncertain.
-- focusHierarchy: order of focus from most to least prominent (e.g. ["central subject", "left background plant", "window light"]).
+- framing: a short description of visible frame shape, crop, and boundary behavior.
+- aspectRatio: the observed width-to-height ratio as two positive numeric terms, or the literal auto when uncertain.
+- focusHierarchy: visible regions ordered from most to least prominent, using generic spatial or role labels when possible.
 - negativeSpace: 1 sentence on how negative space is handled.
-- compositionRule: one of rule-of-thirds | center-weighted | golden-ratio | symmetrical | leading-lines | rule-of-odds | radial | layered-depth | flat-graphic.
-- perspective: a short phrase (e.g. "eye-level frontal", "three-quarter elevated", "worm's-eye", "isometric flat", "no-perspective vector").
-- viewpoint: subjective distance and angle (e.g. "close intimate", "medium-shot", "long landscape").
-- balance: short description (e.g. "centered symmetric", "left-weighted with right counter-light", "diagonal tension").
+- compositionRule: name the observed organizing geometry without forcing a stock rule.
+- perspective: a short evidence-grounded phrase describing projection and angle.
+- viewpoint: a short description of visible distance and angle.
+- balance: a short relational description of visual weight.
 - transferGuidance: 1–2 sentences on how to apply this composition to a new subject.
 
 Stay concrete; describe what you observe.`

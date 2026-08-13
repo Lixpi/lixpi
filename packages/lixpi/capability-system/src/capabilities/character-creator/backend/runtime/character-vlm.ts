@@ -62,13 +62,13 @@ class CharacterPanelAssessmentResponseError extends Error {
 
 const EVIDENCE_SYSTEM_PROMPT = [
     'Analyze the supplied character references as an observation set for consistent image generation.',
-    'Record visible face, hair, skin, clothing, accessories, props, body proportions, materials, medium, target angles, source coverage, and useful crop boxes.',
+    'Record the visible identity, design, construction, proportion, material, depiction, target-geometry, source-coverage, and crop evidence required by the response schema.',
     'Read the complete character request as authoritative. Extract every explicit requested visual attribute, design change, state change, transformation, material change, costume change, and depiction instruction into promptDirectives without substituting a capability-authored interpretation.',
     'Resolve an obvious misspelling conservatively from the surrounding request. Put the corrected intended term in promptDirectives only when context makes that correction unambiguous; otherwise preserve the user term instead of inventing a meaning.',
     'Never reinterpret an unknown or misspelled character term as a depiction-medium or visual-style change unless the request explicitly asks for that change. A requested subject or design transformation does not imply a depiction-medium change.',
     'List in promptChangedFeatures the exact feature names from facts that those directives override. Explicit requested changes outrank source pixels; stable identity evidence remains authoritative only where the request does not change it.',
     'Mark a fact observed only when pixels directly support it. Mark hidden geometry, unseen views, and prompt-derived details inferred.',
-    'Use conflictGroupId when references disagree about one feature. Never average conflicting outfits or designs.',
+    'Use conflictGroupId when references disagree about one feature. Never average conflicting alternatives.',
     'Coordinates are pixel coordinates in the named source image. Keep them inside that image.',
 ].join(' ')
 
@@ -78,7 +78,7 @@ const PANEL_SYSTEM_PROMPT = [
     'The structured evidence medium is the required baseline depiction medium unless the authoritative request or shared Capability instructions explicitly change it. Treat any unrequested depiction-medium or visual-style conversion as both a depiction-medium and request-compliance failure.',
     'Score each requested dimension from 0 to 1. Weight directly observed evidence over polish.',
     'Use short stable mismatch codes for concrete failures. Do not penalize inferred regions for lacking unavailable source truth.',
-    'Treat extra people, duplicates, text, watermarks, wrong view, wrong crop, and layout artifacts as failures in the relevant dimensions.',
+    'Treat any unrequested visible content, incorrect target geometry, or composition artifact as a failure in the relevant dimension.',
 ].join(' ')
 
 export function createCharacterVlmPorts(args: CharacterVlmArgs): {

@@ -19,6 +19,7 @@ import {
 } from './image-generation-trace.ts'
 import { buildImageGenerationReferences, type ImageGenerationReference } from '../image-generation-references.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
+import { settleGeneratedAssetComposition } from '../../services/generated-asset-storage.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
@@ -199,6 +200,15 @@ export class ImageRouter {
                     } catch (error) {
                         warn(`[ImageRouter] Unable to publish capability review trace: ${(error as Error).message}`)
                     }
+                }
+                if (result.mediaComposition) {
+                    if (!generationRun?.lineageAssignment?.assetId) {
+                        throw new Error('CAPABILITY_MEDIA_COMPOSITION_ASSET_REQUIRED')
+                    }
+                    await settleGeneratedAssetComposition({
+                        generationRun,
+                        composition: result.mediaComposition,
+                    })
                 }
                 if (imagePublisher) {
                     await imagePublisher.complete({

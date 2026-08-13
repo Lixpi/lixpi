@@ -11,6 +11,7 @@ import type {
 import {
     applyMediaGenerationRequestEventToOperationNodes,
     applyMediaGenerationRequestToOperationNodes,
+    applyMediaGenerationStreamFailureToOperationNodes,
 } from './mediaGenerationOperationRecovery.ts'
 
 type GeneratedMediaNode = Extract<CanvasNode, { type: 'image' | 'video' }>
@@ -319,10 +320,10 @@ describe('media generation operation recovery', () => {
 
         const result = applyMediaGenerationRequestToOperationNodes(state, failedRequest)
 
-        expect(result.removedNodeIds).toEqual([output.nodeId])
-        expect(result.state.nodes.some(node => node.nodeId === output.nodeId)).toBe(false)
+        expect(result.removedNodeIds).toEqual([operation.nodeId])
+        expect(result.state.nodes.some(node => node.nodeId === operation.nodeId)).toBe(false)
         expect(result.state.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
-            nodeId: operation.nodeId,
+            nodeId: output.nodeId,
             status: 'failed',
             position: { x: 576, y: 404 },
             lineageAssignment: expect.objectContaining({
@@ -332,7 +333,7 @@ describe('media generation operation recovery', () => {
         })]))
         expect(result.state.edges).toEqual([expect.objectContaining({
             sourceNodeId: 'source-1',
-            targetNodeId: operation.nodeId,
+            targetNodeId: output.nodeId,
         })])
     })
 
@@ -377,10 +378,10 @@ describe('media generation operation recovery', () => {
 
         const result = applyMediaGenerationRequestEventToOperationNodes(state, event)
 
-        expect(result.removedNodeIds).toEqual([output.nodeId])
-        expect(result.updatedNodeIds).toEqual([`operation-${output.nodeId}`])
+        expect(result.removedNodeIds).toEqual([])
+        expect(result.updatedNodeIds).toEqual([output.nodeId])
         expect(result.state.nodes).toEqual([expect.objectContaining({
-            nodeId: `operation-${output.nodeId}`,
+            nodeId: output.nodeId,
             type: 'operationStatus',
             status: 'failed',
             position: { x: 576, y: 404 },
@@ -388,7 +389,45 @@ describe('media generation operation recovery', () => {
         })])
         expect(result.state.edges).toEqual([expect.objectContaining({
             sourceNodeId: 'source-1',
-            targetNodeId: `operation-${output.nodeId}`,
+            targetNodeId: output.nodeId,
+        })])
+    })
+
+    it('materializes a terminal failure immediately from a generic reasoning stream error', () => {
+        const output = pendingOutputNode()
+        const state: CanvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [output],
+            edges: [{
+                edgeId: 'edge-source-output',
+                sourceNodeId: 'source-1',
+                targetNodeId: output.nodeId,
+            }],
+        }
+
+        const result = applyMediaGenerationStreamFailureToOperationNodes(state, {
+            generationRequestId: 'request-1',
+            mediaRunId: 'media-run-1',
+            outputNodeId: output.nodeId,
+            message: 'The reasoning provider could not prepare this media request.',
+            requestRevision: 4,
+            updatedAt: 4,
+        })
+
+        expect(result.removedNodeIds).toEqual([])
+        expect(result.state.nodes).toEqual([expect.objectContaining({
+            nodeId: output.nodeId,
+            type: 'operationStatus',
+            status: 'failed',
+            message: 'The reasoning provider could not prepare this media request.',
+            requestRevision: 4,
+            progress: expect.objectContaining({
+                message: 'The reasoning provider could not prepare this media request.',
+            }),
+        })])
+        expect(result.state.edges).toEqual([expect.objectContaining({
+            sourceNodeId: 'source-1',
+            targetNodeId: output.nodeId,
         })])
     })
 

@@ -64,6 +64,11 @@ export type GeneratedMediaChromeLayoutSettings = {
     }
 }
 
+export type GeneratedMediaProgressLayoutSettings = {
+    width: number
+    gap: number
+}
+
 export type MediaGenerationLayoutSettings = {
     markerWidth: number
     markerHeight: number
@@ -80,6 +85,7 @@ export type MediaGenerationLayoutSettings = {
     serverFallbackPaneHeight: number
     marker: MediaGenerationMarkerSettings
     generatedMediaChrome: GeneratedMediaChromeLayoutSettings
+    generatedMediaProgress: GeneratedMediaProgressLayoutSettings
 }
 
 export type WorkspaceCollisionNodeTypeSettings = {
@@ -169,6 +175,10 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
         videoControlsHeight: 40,
         videoControlsBottomInset: 8,
         zoomScaling: { minZoom: 0.4 },
+    },
+    generatedMediaProgress: {
+        width: 360,
+        gap: 36,
     },
 }
 

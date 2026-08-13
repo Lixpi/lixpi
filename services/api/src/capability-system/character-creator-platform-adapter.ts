@@ -43,6 +43,7 @@ export function createCharacterCreatorRuntimePorts(args: {
                 return {
                     assetId: asset.assetId,
                     organizationId: asset.organizationId,
+                    ...(asset.composition ? { composition: structuredClone(asset.composition) } : {}),
                     ...(asset.media ? {
                         media: {
                             renditions: {

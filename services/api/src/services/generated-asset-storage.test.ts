@@ -4,21 +4,28 @@ import type { Asset, CanvasState, MediaGenerationRunMeta } from '@lixpi/constant
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+    assertAssetComponents: vi.fn(),
     attachWorkspaceReference: vi.fn(),
+    blobStore: vi.fn(),
     buildAssetCanvasGeometryUpdate: vi.fn(),
+    buildBlobReferenceBatchOperations: vi.fn(),
     getAssetRecord: vi.fn(),
     getWorkspace: vi.fn(),
+    publishAssetEvent: vi.fn(),
     projectGeneratedAssetNode: vi.fn(),
+    transactWrite: vi.fn(),
 }))
 
 vi.mock('../models/asset.ts', () => ({
     default: { attachWorkspaceReference: mocks.attachWorkspaceReference },
+    assertAssetComponents: mocks.assertAssetComponents,
     buildAssetProjectionOperations: vi.fn(async () => []),
     getAssetRecord: mocks.getAssetRecord,
-    publishAssetEvent: vi.fn(),
+    publishAssetEvent: mocks.publishAssetEvent,
 }))
 vi.mock('../models/blob.ts', () => ({
-    default: {},
+    default: { store: mocks.blobStore },
+    buildBlobReferenceBatchOperations: mocks.buildBlobReferenceBatchOperations,
     buildBlobReferenceOperations: vi.fn(() => []),
 }))
 vi.mock('../models/workspace.ts', () => ({
@@ -34,6 +41,7 @@ vi.mock('./asset-maintenance-queue.ts', () => ({ enqueueRenditionRetry: vi.fn() 
 import {
     attachGeneratedAssetNode,
     collectGeneratedAssetSourceIds,
+    settleGeneratedAssetComposition,
 } from './generated-asset-storage.ts'
 
 const generationRun: MediaGenerationRunMeta = {
@@ -136,6 +144,9 @@ describe('collectGeneratedAssetSourceIds', () => {
 beforeEach(() => {
     vi.useRealTimers()
     vi.resetAllMocks()
+    ;(globalThis as any).dynamoDBService = { transactWrite: mocks.transactWrite }
+    mocks.buildBlobReferenceBatchOperations.mockReturnValue({ operations: [], deletionBlobHashes: [] })
+    mocks.transactWrite.mockResolvedValue(undefined)
     mocks.getWorkspace.mockResolvedValue({
         workspaceId: 'workspace-1',
         updatedAt: 100,
@@ -160,6 +171,76 @@ beforeEach(() => {
         layoutRevision: params.layoutRevision,
         nodes: params.geometryNodes,
     }))
+})
+
+describe('settleGeneratedAssetComposition', () => {
+    it('stores isolated panel blobs and atomically attaches their references to the pending Asset', async () => {
+        const pending = asset(false)
+        mocks.getAssetRecord.mockResolvedValue(pending)
+        mocks.blobStore
+            .mockResolvedValueOnce({
+                blobKey: 'organization-1:head-hash',
+                blobHash: 'a'.repeat(64),
+                organizationId: 'organization-1',
+                referenceCount: 0,
+                status: 'staging',
+            })
+            .mockResolvedValueOnce({
+                blobKey: 'organization-1:body-hash',
+                blobHash: 'b'.repeat(64),
+                organizationId: 'organization-1',
+                referenceCount: 0,
+                status: 'staging',
+            })
+
+        const composition = await settleGeneratedAssetComposition({
+            generationRun,
+            composition: {
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['source-1'],
+                components: [
+                    {
+                        componentId: 'head-front-neutral',
+                        role: 'character-sheet-panel',
+                        title: 'Neutral front identity portrait',
+                        imageBase64: Buffer.from('head').toString('base64'),
+                        mimeType: 'image/png',
+                    },
+                    {
+                        componentId: 'body-front',
+                        role: 'character-sheet-panel',
+                        title: 'Front body',
+                        imageBase64: Buffer.from('body').toString('base64'),
+                        mimeType: 'image/png',
+                    },
+                ],
+            },
+        })
+
+        expect(mocks.blobStore).toHaveBeenCalledTimes(2)
+        expect(mocks.buildBlobReferenceBatchOperations).toHaveBeenCalledWith(expect.objectContaining({
+            additions: [
+                expect.objectContaining({
+                    reference: expect.objectContaining({
+                        referenceKey: 'asset#asset-1#composition#head-front-neutral',
+                    }),
+                }),
+                expect.objectContaining({
+                    reference: expect.objectContaining({
+                        referenceKey: 'asset#asset-1#composition#body-front',
+                    }),
+                }),
+            ],
+        }))
+        expect(mocks.transactWrite).toHaveBeenCalledWith(expect.objectContaining({
+            origin: 'settleGeneratedAssetComposition',
+            operations: [expect.objectContaining({
+                updates: expect.objectContaining({ composition }),
+            })],
+        }))
+        expect(mocks.publishAssetEvent).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ composition }))
+    })
 })
 
 describe('attachGeneratedAssetNode', () => {
