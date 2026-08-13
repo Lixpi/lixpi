@@ -197,6 +197,40 @@ if (env.NATS_NEX_NODE_NKEY_PUBLIC) {
     warn('NATS_NEX_NODE_NKEY_PUBLIC is not configured; NEX clients cannot authenticate through auth callout')
 }
 
+const pricingIdentityConfigs = [
+    {
+        environmentKey: 'NATS_PRICING_SERVICE_NKEY_PUBLIC',
+        userId: 'svc:model-pricing',
+        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
+    },
+    {
+        environmentKey: 'NATS_PRICING_OPERATOR_NKEY_PUBLIC',
+        userId: 'svc:pricing-operator',
+        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
+    },
+    {
+        environmentKey: 'NATS_PRICING_BILLING_NKEY_PUBLIC',
+        userId: 'svc:pricing-billing',
+        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
+    },
+] as const
+
+for (const pricingIdentity of pricingIdentityConfigs) {
+    const publicKey = env[pricingIdentity.environmentKey]
+
+    if (!publicKey) {
+        warn(`${pricingIdentity.environmentKey} is not configured; ${pricingIdentity.userId} cannot authenticate through auth callout`)
+        continue
+    }
+
+    serviceAuthConfigs.push({
+        publicKey,
+        userId: pricingIdentity.userId,
+        account: 'PRICING',
+        permissions: pricingIdentity.permissions,
+    })
+}
+
 // Initialize with your NATS server connection
 const apiNatsService = await NATS_Service.init({
     servers: env.NATS_SERVERS,

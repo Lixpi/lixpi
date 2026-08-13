@@ -221,6 +221,30 @@ export const getTableDefinitions = () => ({
         'blobKey',
         'referenceKey',
     ),
+    modelPricingSnapshotsTable: table(
+        'MODEL_PRICING_SNAPSHOTS',
+        [{ name: 'recordKey', type: 'S' }, { name: 'sortKey', type: 'S' }],
+        'recordKey',
+        'sortKey',
+    ),
+    modelPricingRecordsTable: table(
+        'MODEL_PRICING_RECORDS',
+        [{ name: 'snapshotId', type: 'S' }, { name: 'pricingKey', type: 'S' }],
+        'snapshotId',
+        'pricingKey',
+    ),
+    modelPricingAuditTable: table(
+        'MODEL_PRICING_AUDIT',
+        [{ name: 'recordKey', type: 'S' }, { name: 'sortKey', type: 'S' }],
+        'recordKey',
+        'sortKey',
+    ),
+    modelPricingReconciliationTable: table(
+        'MODEL_PRICING_RECONCILIATION',
+        [{ name: 'recordKey', type: 'S' }, { name: 'sortKey', type: 'S' }],
+        'recordKey',
+        'sortKey',
+    ),
 })
 
 const getLegacyStorageDefinitions = (): Record<string, TableDefinition> => ({

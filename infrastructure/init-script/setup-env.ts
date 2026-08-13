@@ -41,6 +41,12 @@ type EnvConfig = {
     natsLlmServiceNkeyPublic: string
     natsNexNodeNkeySeed: string
     natsNexNodeNkeyPublic: string
+    natsPricingServiceNkeySeed: string
+    natsPricingServiceNkeyPublic: string
+    natsPricingOperatorNkeySeed: string
+    natsPricingOperatorNkeyPublic: string
+    natsPricingBillingNkeySeed: string
+    natsPricingBillingNkeyPublic: string
     natsSysUserPassword: string
     natsRegularUserPassword: string
 
@@ -154,6 +160,9 @@ function generateNatsKeys(): {
     authXkey: { seed: string; public: string }
     llmServiceNkey: { seed: string; public: string }
     nexNodeNkey: { seed: string; public: string }
+    pricingServiceNkey: { seed: string; public: string }
+    pricingOperatorNkey: { seed: string; public: string }
+    pricingBillingNkey: { seed: string; public: string }
 } {
     // createAccount() for NATS_AUTH_NKEY_* (seeds start with SA)
     const accountKey = createAccount()
@@ -188,7 +197,36 @@ function generateNatsKeys(): {
     }
     nexNodeKey.clear()
 
-    return { authNkey, authXkey, llmServiceNkey, nexNodeNkey }
+    const pricingServiceKey = createUser()
+    const pricingServiceNkey = {
+        seed: new TextDecoder().decode(pricingServiceKey.getSeed()),
+        public: pricingServiceKey.getPublicKey(),
+    }
+    pricingServiceKey.clear()
+
+    const pricingOperatorKey = createUser()
+    const pricingOperatorNkey = {
+        seed: new TextDecoder().decode(pricingOperatorKey.getSeed()),
+        public: pricingOperatorKey.getPublicKey(),
+    }
+    pricingOperatorKey.clear()
+
+    const pricingBillingKey = createUser()
+    const pricingBillingNkey = {
+        seed: new TextDecoder().decode(pricingBillingKey.getSeed()),
+        public: pricingBillingKey.getPublicKey(),
+    }
+    pricingBillingKey.clear()
+
+    return {
+        authNkey,
+        authXkey,
+        llmServiceNkey,
+        nexNodeNkey,
+        pricingServiceNkey,
+        pricingOperatorNkey,
+        pricingBillingNkey,
+    }
 }
 
 function generateSecurePassword(length: number = 32): string {
@@ -698,6 +736,12 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
         natsNexNodeNkeySeed: natsKeys.nexNodeNkey.seed,
         natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
+        natsPricingServiceNkeySeed: natsKeys.pricingServiceNkey.seed,
+        natsPricingServiceNkeyPublic: natsKeys.pricingServiceNkey.public,
+        natsPricingOperatorNkeySeed: natsKeys.pricingOperatorNkey.seed,
+        natsPricingOperatorNkeyPublic: natsKeys.pricingOperatorNkey.public,
+        natsPricingBillingNkeySeed: natsKeys.pricingBillingNkey.seed,
+        natsPricingBillingNkeyPublic: natsKeys.pricingBillingNkey.public,
         natsSysUserPassword,
         natsRegularUserPassword,
         configureAwsSso: configureAwsSso as boolean,
@@ -757,6 +801,12 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{NATS_LLM_SERVICE_NKEY_PUBLIC}}': config.natsLlmServiceNkeyPublic,
         '{{NATS_NEX_NODE_NKEY_SEED}}': config.natsNexNodeNkeySeed,
         '{{NATS_NEX_NODE_NKEY_PUBLIC}}': config.natsNexNodeNkeyPublic,
+        '{{NATS_PRICING_SERVICE_NKEY_SEED}}': config.natsPricingServiceNkeySeed,
+        '{{NATS_PRICING_SERVICE_NKEY_PUBLIC}}': config.natsPricingServiceNkeyPublic,
+        '{{NATS_PRICING_OPERATOR_NKEY_SEED}}': config.natsPricingOperatorNkeySeed,
+        '{{NATS_PRICING_OPERATOR_NKEY_PUBLIC}}': config.natsPricingOperatorNkeyPublic,
+        '{{NATS_PRICING_BILLING_NKEY_SEED}}': config.natsPricingBillingNkeySeed,
+        '{{NATS_PRICING_BILLING_NKEY_PUBLIC}}': config.natsPricingBillingNkeyPublic,
         '{{NATS_CORS_COMMENT}}': isLocal ? ' (local development - allow all origins)' : '',
         '{{ORIGIN_HOST_URL}}': isLocal ? 'http://localhost:3001' : `https://${config.domainName}`,
         '{{API_HOST_URL}}': isLocal ? 'http://localhost:3005' : `https://api.${config.domainName}`,
@@ -913,6 +963,12 @@ async function main(): Promise<void> {
             natsLlmServiceNkeyPublic: natsKeys.llmServiceNkey.public,
             natsNexNodeNkeySeed: natsKeys.nexNodeNkey.seed,
             natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
+            natsPricingServiceNkeySeed: natsKeys.pricingServiceNkey.seed,
+            natsPricingServiceNkeyPublic: natsKeys.pricingServiceNkey.public,
+            natsPricingOperatorNkeySeed: natsKeys.pricingOperatorNkey.seed,
+            natsPricingOperatorNkeyPublic: natsKeys.pricingOperatorNkey.public,
+            natsPricingBillingNkeySeed: natsKeys.pricingBillingNkey.seed,
+            natsPricingBillingNkeyPublic: natsKeys.pricingBillingNkey.public,
             natsSysUserPassword: generateSecurePassword(28),
             natsRegularUserPassword: generateSecurePassword(28),
             configureAwsSso: false,

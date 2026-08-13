@@ -64,6 +64,9 @@ export type MainApiServiceArgs = {
         NATS_AUTH_XKEY_ISSUER_SEED: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
         NATS_NEX_NODE_NKEY_PUBLIC: string
+        NATS_PRICING_SERVICE_NKEY_PUBLIC: string
+        NATS_PRICING_OPERATOR_NKEY_PUBLIC: string
+        NATS_PRICING_BILLING_NKEY_PUBLIC: string
 
         ORIGIN_HOST_URL: string
         API_HOST_URL: string

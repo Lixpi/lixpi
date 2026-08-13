@@ -28,6 +28,10 @@ export const DYNAMODB_TABLES: Record<string, string> = {
     PROMPT_REFERENCE_RECENTS: 'Prompt-Reference-Recents',
     BLOBS: 'Blobs',
     BLOB_REFERENCES: 'Blob-References',
+    MODEL_PRICING_SNAPSHOTS: 'Model-Pricing-Snapshots',
+    MODEL_PRICING_RECORDS: 'Model-Pricing-Records',
+    MODEL_PRICING_AUDIT: 'Model-Pricing-Audit',
+    MODEL_PRICING_RECONCILIATION: 'Model-Pricing-Reconciliation',
 }
 
 export const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`

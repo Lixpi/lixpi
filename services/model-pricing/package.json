@@ -1,0 +1,20 @@
+{
+    "name": "lixpi-model-pricing",
+    "private": true,
+    "type": "module",
+    "version": "0.1.0",
+    "description": "Lixpi model pricing service",
+    "main": "src/main.ts",
+    "scripts": {
+        "start": "node ./src/main.ts"
+    },
+    "dependencies": {
+        "@lixpi/constants": "workspace:*",
+        "@lixpi/debug-tools": "workspace:*",
+        "@lixpi/nats-service": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "*"
+    },
+    "packageManager": "pnpm@11.6.0"
+}

@@ -15,6 +15,7 @@ import { createEcsEc2Cluster } from './resources/ECS-EC2-cluster.ts'
 import { createNatsClusterService } from './resources/NATS-cluster/NATS-cluster.ts'
 import { createMainApiService } from './resources/main-api-service.ts'
 import { createNexNodeService } from './resources/nex-node/nex-node.ts'
+import { createModelPricingService } from './resources/model-pricing-service.ts'
 import { createCertificate } from './resources//certificate.ts'
 import { createDnsRecords, createHostedZone, createDelegationRecord, getOrCreateHostedZone } from './resources/dns-records.ts'
 import { createWebUI } from './resources/web-ui.ts'
@@ -47,6 +48,10 @@ const {
     NATS_REGULAR_USER_PASSWORD,
     NATS_NEX_NODE_NKEY_PUBLIC,
     NATS_NEX_NODE_NKEY_SEED,
+    NATS_PRICING_SERVICE_NKEY_SEED,
+    NATS_PRICING_SERVICE_NKEY_PUBLIC,
+    NATS_PRICING_OPERATOR_NKEY_PUBLIC,
+    NATS_PRICING_BILLING_NKEY_PUBLIC,
     NATS_AUTH_NKEY_ISSUER_SEED,
     NATS_AUTH_NKEY_ISSUER_PUBLIC,
     NATS_AUTH_XKEY_ISSUER_SEED,
@@ -351,6 +356,9 @@ export const createInfrastructure = async () => {
             NATS_AUTH_XKEY_ISSUER_SEED: NATS_AUTH_XKEY_ISSUER_SEED!,
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
+            NATS_PRICING_SERVICE_NKEY_PUBLIC: NATS_PRICING_SERVICE_NKEY_PUBLIC!,
+            NATS_PRICING_OPERATOR_NKEY_PUBLIC: NATS_PRICING_OPERATOR_NKEY_PUBLIC!,
+            NATS_PRICING_BILLING_NKEY_PUBLIC: NATS_PRICING_BILLING_NKEY_PUBLIC!,
             NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
             NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             ORIGIN_HOST_URL: ORIGIN_HOST_URL!,
@@ -422,6 +430,33 @@ export const createInfrastructure = async () => {
         },
         dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/nex/Dockerfile',
+        dependencies: [natsClusterService.ecsService],
+    })
+
+    createModelPricingService({
+        ecsCluster: {
+            id: ecsCluster.outputs.clusterId,
+            arn: ecsCluster.outputs.clusterArn,
+            name: ecsCluster.outputs.clusterName,
+        },
+        vpc: networkInfrastructure.vpc,
+        privateSubnets: networkInfrastructure.privateSubnets,
+        tables: {
+            snapshots: dynamoDBtables.modelPricingSnapshotsTable,
+            records: dynamoDBtables.modelPricingRecordsTable,
+            audit: dynamoDBtables.modelPricingAuditTable,
+            reconciliation: dynamoDBtables.modelPricingReconciliationTable,
+        },
+        environment: {
+            NATS_SERVERS: natsClusterService.outputs.natsUrl,
+            MODEL_PRICING_SNAPSHOTS_TABLE: dynamoDBtables.modelPricingSnapshotsTable.name,
+            MODEL_PRICING_RECORDS_TABLE: dynamoDBtables.modelPricingRecordsTable.name,
+            MODEL_PRICING_AUDIT_TABLE: dynamoDBtables.modelPricingAuditTable.name,
+            MODEL_PRICING_RECONCILIATION_TABLE: dynamoDBtables.modelPricingReconciliationTable.name,
+        },
+        pricingServiceNkeySeed: NATS_PRICING_SERVICE_NKEY_SEED!,
+        dockerBuildContext: '/usr/src/service',
+        dockerfilePath: '/usr/src/service/services/model-pricing/Dockerfile',
         dependencies: [natsClusterService.ecsService],
     })
 

@@ -483,6 +483,9 @@ services:
             NATS_SYS_USER_PASSWORD: ${NATS_SYS_USER_PASSWORD}
             NATS_REGULAR_USER_PASSWORD: ${NATS_REGULAR_USER_PASSWORD}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            NATS_PRICING_SERVICE_NKEY_PUBLIC: ${NATS_PRICING_SERVICE_NKEY_PUBLIC}
+            NATS_PRICING_OPERATOR_NKEY_PUBLIC: ${NATS_PRICING_OPERATOR_NKEY_PUBLIC}
+            NATS_PRICING_BILLING_NKEY_PUBLIC: ${NATS_PRICING_BILLING_NKEY_PUBLIC}
 
             # AI config — provider keys + LLM workflow circuit breaker (formerly llm-api)
             OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -589,6 +592,41 @@ services:
                 condition: service_healthy
                 restart: true
 
+    lixpi-model-pricing:
+        container_name: lixpi-model-pricing
+        profiles: ["main"]
+        image: lixpi/model-pricing
+        build:
+            dockerfile: services/model-pricing/Dockerfile
+            context: .
+        environment:
+            NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
+            NATS_PRICING_SERVICE_NKEY_SEED: ${NATS_PRICING_SERVICE_NKEY_SEED}
+            MODEL_PRICING_SNAPSHOTS_TABLE: ${MODEL_PRICING_SNAPSHOTS_TABLE:-}
+            MODEL_PRICING_RECORDS_TABLE: ${MODEL_PRICING_RECORDS_TABLE:-}
+            MODEL_PRICING_AUDIT_TABLE: ${MODEL_PRICING_AUDIT_TABLE:-}
+            MODEL_PRICING_RECONCILIATION_TABLE: ${MODEL_PRICING_RECONCILIATION_TABLE:-}
+        volumes:
+            - ./services/model-pricing/src:/usr/src/service/src:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts:/usr/src/service/packages/lixpi/constants/ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts:/usr/src/service/packages/lixpi/debug-tools/ts:ro,cached
+            - ./packages/lixpi/nats-service/ts:/usr/src/service/packages/lixpi/nats-service/ts:ro,cached
+        networks:
+            - nats
+        working_dir: /usr/src/service
+        healthcheck:
+            test: ["CMD-SHELL", "node -e 'process.kill(1, 0)'"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            lixpi-api:
+                condition: service_healthy
+                restart: true
+
     lixpi-pulumi:
         container_name: lixpi-pulumi
         profiles: ["deploy"]
@@ -646,6 +684,11 @@ services:
             # NEX node nkey — passed through so `createNexNodeService` can put it in the node's task definition
             NATS_NEX_NODE_NKEY_SEED: ${NATS_NEX_NODE_NKEY_SEED}
             NATS_NEX_NODE_NKEY_PUBLIC: ${NATS_NEX_NODE_NKEY_PUBLIC}
+            # Model pricing service seed is stored in Secrets Manager by the Pulumi resource.
+            NATS_PRICING_SERVICE_NKEY_SEED: ${NATS_PRICING_SERVICE_NKEY_SEED}
+            NATS_PRICING_SERVICE_NKEY_PUBLIC: ${NATS_PRICING_SERVICE_NKEY_PUBLIC}
+            NATS_PRICING_OPERATOR_NKEY_PUBLIC: ${NATS_PRICING_OPERATOR_NKEY_PUBLIC}
+            NATS_PRICING_BILLING_NKEY_PUBLIC: ${NATS_PRICING_BILLING_NKEY_PUBLIC}
             NATS_SAME_ORIGIN: ${NATS_SAME_ORIGIN}
 
             # App host addresses
