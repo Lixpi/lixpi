@@ -33,16 +33,20 @@ const shutdown = async (signal: string): Promise<void> => {
     process.exit(0)
 }
 
-process.once('SIGINT', () => {
-    void shutdown('SIGINT').catch(error => {
+process.once('SIGINT', async () => {
+    try {
+        await shutdown('SIGINT')
+    } catch (error) {
         err('Model pricing service shutdown failed:', error)
         process.exit(1)
-    })
+    }
 })
 
-process.once('SIGTERM', () => {
-    void shutdown('SIGTERM').catch(error => {
+process.once('SIGTERM', async () => {
+    try {
+        await shutdown('SIGTERM')
+    } catch (error) {
         err('Model pricing service shutdown failed:', error)
         process.exit(1)
-    })
+    }
 })

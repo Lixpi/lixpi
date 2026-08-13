@@ -120,7 +120,7 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
     })
 
     new aws.iam.RolePolicyAttachment(`${serviceName}-logs-attachment`, {
-        role: taskRole.name,
+        role: executionRole.name,
         policyArn: logsPolicy.arn,
     })
 
@@ -175,10 +175,16 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         requiresCompatibilities: ['FARGATE'],
         executionRoleArn: executionRole.arn,
         taskRoleArn: taskRole.arn,
-        containerDefinitions: pulumi.all([logGroup.name, imageRef, pulumi.output(environment)]).apply(([
+        containerDefinitions: pulumi.all([
+            logGroup.name,
+            imageRef,
+            pulumi.output(environment),
+            pricingServiceSecretVersion.arn,
+        ]).apply(([
             logGroupName,
             imageReference,
             configuredEnvironment,
+            secretVersionArn,
         ]) => JSON.stringify([{
             name: serviceName,
             image: imageReference,
@@ -187,7 +193,7 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
                 .map(([name, value]) => ({ name, value })),
             secrets: [{
                 name: 'NATS_PRICING_SERVICE_NKEY_SEED',
-                valueFrom: pricingServiceSecretVersion.arn,
+                valueFrom: secretVersionArn,
             }],
             logConfiguration: {
                 logDriver: 'awslogs',

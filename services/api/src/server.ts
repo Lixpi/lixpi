@@ -213,7 +213,7 @@ const pricingIdentityConfigs = [
         userId: 'svc:pricing-billing',
         permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
     },
-] as const
+]
 
 for (const pricingIdentity of pricingIdentityConfigs) {
     const publicKey = env[pricingIdentity.environmentKey]
