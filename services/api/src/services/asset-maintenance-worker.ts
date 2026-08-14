@@ -106,10 +106,19 @@ const dispatchMaintenanceMessage = async ({
     }
     if (subject === NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.DELETE_BLOB) {
         if (!data.blobHash) throw new Error('BLOB_HASH_REQUIRED')
-        await BlobModel.deleteZeroReferenceBlob({
+        const deleted = await BlobModel.deleteZeroReferenceBlob({
             organizationId: data.organizationId,
             blobHash: data.blobHash,
         })
+        if (!deleted) {
+            const blob = await BlobModel.get({
+                organizationId: data.organizationId,
+                blobHash: data.blobHash,
+            })
+            if (blob?.referenceCount === 0 && blob.status === 'deleting') {
+                return { nakDelayMs: 30000 }
+            }
+        }
         return
     }
     if (subject === NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.REBUILD_PROVENANCE) {

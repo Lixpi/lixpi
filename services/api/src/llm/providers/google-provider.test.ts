@@ -431,11 +431,11 @@ describe('GoogleProvider internals', () => {
                 parts: [
                     { text: 'show me a dog' },
                     {
-                        text: 'REFERENCE IMAGE 1 — AUTHORITATIVE SOURCE. Preserve observed identity and design evidence.',
+                        text: 'REFERENCE IMAGE 1 — AUTHORITATIVE ORIGINAL SOURCE. File: original-source-1.jpg. Use its observed design, clothing, material, accessory, and placement evidence wherever the request assigns the target appearance to this source.',
                     },
                     { inlineData: { mimeType: 'image/jpeg', data: sourceBytes.toString('base64') } },
                     {
-                        text: 'REFERENCE IMAGE 2 — STRUCTURE REFERENCE. Use its composition without copying identity.',
+                        text: 'REFERENCE IMAGE 2 — STRUCTURE REFERENCE ONLY. File: structure-reference-1.png. Use its composition without copying identity or design.',
                     },
                     { inlineData: { mimeType: 'image/png', data: layoutBytes.toString('base64') } },
                 ],

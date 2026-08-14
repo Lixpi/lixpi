@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
+import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
 import { CharacterSheetStrategy, type CharacterSheetStrategyDeps } from './character-sheet-strategy.ts'
 
@@ -86,6 +87,7 @@ const context = (mediaRunId = 'media-1'): CapabilityMediaExecutionContext => ({
     },
     sharedState: {
         authoritativePrompt: 'A courier',
+        mediaReferenceAliases: [],
         sourceSubjectIdentityClassifications: [],
         capabilityInstructions: [],
         capabilityReferences: [],
@@ -94,12 +96,27 @@ const context = (mediaRunId = 'media-1'): CapabilityMediaExecutionContext => ({
     eventMeta: { organizationId: 'org-1', userId: 'user-1' },
 })
 
-const assessment = (failed: boolean, score = failed ? 0.4 : 0.9) => ({
-    dimensions: [{
-        dimension: 'target-view',
-        score,
-        mismatchCodes: failed ? ['WRONG_VIEW'] : [],
-    }],
+const assessment = (
+    failed: boolean,
+    score = failed ? 0.4 : 0.95,
+    failedDimension = 'clothing',
+) => ({
+    dimensions: [
+        'single-panel-composition',
+        'template-conformance',
+        'target-view',
+        'framing',
+        ...(![
+            'single-panel-composition',
+            'template-conformance',
+            'target-view',
+            'framing',
+        ].includes(failedDimension) ? [failedDimension] : []),
+    ].map(dimension => ({
+        dimension,
+        score: failed && dimension === failedDimension ? score : 0.95,
+        mismatchCodes: failed && dimension === failedDimension ? ['TEST_MISMATCH'] : [],
+    })),
     assessor: 'test/reasoning-v1',
 })
 
@@ -130,6 +147,33 @@ const strategy = (assess: (request: Parameters<NonNullable<CharacterSheetStrateg
     panelAssessor: { assess },
     evidenceAnalyzer: { analyze: async () => ({ medium: 'unknown' }) },
 })
+
+const createFlattenedSheet = async (executionPlan: ReturnType<typeof plan>): Promise<Buffer> => {
+    const layout = buildCharacterSheetLayout(executionPlan.panels)
+    const width = 1200
+    const height = 800
+    const overlays = await Promise.all(layout.cells.map(async (cell, index) => {
+        const scaledWidth = Math.round(cell.width * width / layout.width)
+        const scaledHeight = Math.round(cell.height * height / layout.height)
+        const source = await sharp({
+            create: {
+                width: Math.max(20, Math.round(scaledWidth * 0.2)),
+                height: Math.max(40, Math.round(scaledHeight * 0.65)),
+                channels: 3,
+                background: index === 0 ? '#223344' : index === 1 ? '#445566' : '#667788',
+            },
+        }).png().toBuffer()
+        const sourceMetadata = await sharp(source).metadata()
+        return {
+            input: source,
+            left: Math.round(cell.x * width / layout.width + (scaledWidth - sourceMetadata.width!) / 2),
+            top: Math.round(cell.y * height / layout.height + (scaledHeight - sourceMetadata.height!) / 2),
+        }
+    }))
+    return await sharp({
+        create: { width, height, channels: 3, background: '#ffffff' },
+    }).composite(overlays).png().toBuffer()
+}
 
 describe('CharacterSheetStrategy', () => {
     beforeAll(async () => {
@@ -235,6 +279,7 @@ describe('CharacterSheetStrategy', () => {
         })
         const executionContext = context()
         executionContext.sharedState.authoritativePrompt = executionPlan.userPrompt
+        executionContext.sharedState.editTargetAssetId = 'sheet-1'
         mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) => assetId === 'sheet-1' ? {
             assetId: 'sheet-1',
             organizationId: 'org-1',
@@ -264,7 +309,13 @@ describe('CharacterSheetStrategy', () => {
         const editStrategy = new CharacterSheetStrategy({
             ...runtime(),
             panelAssessor: { assess: async () => assessment(false) },
-            evidenceAnalyzer: { analyze: async () => ({ medium: 'unknown' }) },
+            evidenceAnalyzer: {
+                analyze: async () => ({
+                    medium: 'unknown',
+                    regenerationScope: 'selected-panels',
+                    affectedPanelIds: ['body-back'],
+                }),
+            },
         })
 
         const result = await editStrategy.execute(executionContext, executionPlan, {})
@@ -299,6 +350,192 @@ describe('CharacterSheetStrategy', () => {
             .toEqual(executionPlan.panels.map(panel => panel.panelId))
     })
 
+    it('isolates legacy flattened sheet panels and sends only the matching panel to an edited shot', async () => {
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-legacy-edit',
+            sourceAssetIds: ['legacy-sheet'],
+            userPrompt: 'Fix only the last shot: correct the back view.',
+        })
+        const executionContext = context()
+        executionContext.sharedState.authoritativePrompt = executionPlan.userPrompt
+        executionContext.sharedState.editTargetAssetId = 'legacy-sheet'
+        mocks.getAuthorizedAsset.mockResolvedValue({
+            assetId: 'legacy-sheet',
+            organizationId: 'org-1',
+            media: {
+                renditions: {
+                    canonical: { status: 'ready', blobHash: 'legacy-sheet-hash', mimeType: 'image/png' },
+                },
+            },
+        })
+        mocks.readBlob.mockResolvedValue(await createFlattenedSheet(executionPlan))
+        const editStrategy = new CharacterSheetStrategy({
+            ...runtime(),
+            panelAssessor: { assess: async () => assessment(false) },
+            evidenceAnalyzer: {
+                analyze: async () => ({
+                    medium: 'unknown',
+                    regenerationScope: 'selected-panels',
+                    affectedPanelIds: ['body-back'],
+                }),
+            },
+        })
+
+        const result = await editStrategy.execute(executionContext, executionPlan, {})
+        const backRequest = mocks.render.mock.calls[0]?.[0]
+        const flattenedReferenceFiles = backRequest?.references
+            .map(reference => reference.fileName)
+            .filter(fileName => fileName?.startsWith('EDIT_TARGET_'))
+
+        expect(mocks.render).toHaveBeenCalledOnce()
+        expect(backRequest?.operationKey).toContain(':body-back:')
+        expect(flattenedReferenceFiles).toEqual(['EDIT_TARGET_body-back.png'])
+        expect(backRequest?.references).toContainEqual(expect.objectContaining({
+            role: 'edit-target',
+            fileName: 'EDIT_TARGET_body-back.png',
+        }))
+        expect(backRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'adjacent-angle', fileName: 'GENERATED_IDENTITY_ANCHOR.png' }),
+            expect.objectContaining({ role: 'canonical-anchor', fileName: 'GENERATED_OUTFIT_ANCHOR.png' }),
+        ]))
+        expect(result.mediaComposition?.sourceAssetIds).toEqual([])
+        expect(result.mediaComposition?.components.map(component => component.componentId))
+            .toEqual(executionPlan.panels.map(panel => panel.panelId))
+    })
+
+    it('distinguishes the existing panel from authoritative source evidence during a full-sheet edit', async () => {
+        const userPrompt = [
+            'Remove the hair completely and replace it with short antennas.',
+            'Keep the robot face, but redo all clothing to match the original drawing.',
+            'Move the bag much lower and print Lixpi in red and ai in black.',
+        ].join(' ')
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-full-edit',
+            sourceAssetIds: ['sheet-1'],
+            userPrompt,
+        })
+        const executionContext = context()
+        executionContext.sharedState.authoritativePrompt = userPrompt
+        executionContext.sharedState.editTargetAssetId = 'sheet-1'
+        executionContext.sharedState.mediaReferenceAliases = [
+            { assetId: 'source-1', alias: 'REFERENCE_1' },
+            { assetId: 'sheet-1', alias: 'REFERENCE_2' },
+        ]
+        mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) => assetId === 'sheet-1' ? {
+            assetId: 'sheet-1',
+            organizationId: 'org-1',
+            composition: {
+                schemaVersion: 'asset-media-composition-v1',
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['source-1'],
+                components: executionPlan.panels.map(panel => ({
+                    componentId: panel.panelId,
+                    role: 'character-sheet-panel',
+                    title: panel.title,
+                    blobHash: `${panel.panelId}-hash`,
+                    mimeType: 'image/png',
+                    byteSize: panelPng.byteLength,
+                })),
+            },
+        } : {
+            assetId: 'source-1',
+            organizationId: 'org-1',
+            media: {
+                renditions: {
+                    canonical: { status: 'ready', blobHash: 'source-hash', mimeType: 'image/png' },
+                },
+            },
+        })
+        const editStrategy = new CharacterSheetStrategy({
+            ...runtime(),
+            panelAssessor: { assess: async () => assessment(false) },
+            evidenceAnalyzer: {
+                analyze: async () => ({
+                    medium: 'illustration',
+                    editTargetPolicy: 'identity-only',
+                    editTargetApprovedRegions: ['face'],
+                    editTargetRejectedRegions: ['body', 'outfit', 'hands', 'feet', 'prop'],
+                    regenerationScope: 'full-sheet',
+                    affectedPanelIds: executionPlan.panels.map(panel => panel.panelId),
+                    promptDirectives: [
+                        'Remove the hair and replace it with short antennas.',
+                        'Rebuild the clothing and lower bag from the original reference.',
+                    ],
+                    promptChangedFeatures: ['hair', 'clothing', 'bag placement'],
+                    facts: [
+                        {
+                            feature: 'clothing',
+                            value: 'gray herringbone coat with fully covered arms',
+                            region: 'outfit' as const,
+                            requestAuthority: 'assigned' as const,
+                            visibility: 'observed' as const,
+                            sourceRegion: { x: 10, y: 10, width: 200, height: 230 },
+                            targetAngles: ['back' as const],
+                            confidence: 1,
+                        },
+                        {
+                            feature: 'bag placement',
+                            value: 'long bag hanging low against the hip and thigh',
+                            region: 'prop' as const,
+                            requestAuthority: 'assigned' as const,
+                            visibility: 'observed' as const,
+                            sourceAssetId: 'source-1',
+                            sourceRegion: { x: 50, y: 60, width: 100, height: 180 },
+                            targetAngles: ['back' as const],
+                            confidence: 1,
+                        },
+                    ],
+                }),
+            },
+        })
+
+        await editStrategy.execute(executionContext, executionPlan, {})
+
+        const headRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':head-front-neutral:')
+        ))?.[0]
+        const frontRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-front:')
+        ))?.[0]
+        const backRequest = mocks.render.mock.calls.find(([request]) => (
+            request.operationKey.includes(':body-back:')
+        ))?.[0]
+
+        expect(headRequest?.references.some(reference => reference.role === 'edit-target-identity'
+            && reference.fileName === 'EDIT_TARGET_IDENTITY_FACE.png')).toBe(true)
+        expect(headRequest?.references.some(reference => reference.role === 'original-source'
+            || reference.role === 'face-crop')).toBe(false)
+        expect(headRequest?.references.some(reference => reference.role === 'body-outfit-crop'
+            || reference.role === 'prop-crop')).toBe(false)
+        expect(frontRequest?.references.some(reference => reference.role === 'edit-target'
+            || reference.role === 'edit-target-identity')).toBe(false)
+        expect(backRequest?.references.some(reference => reference.role === 'edit-target'
+            || reference.role === 'edit-target-identity')).toBe(false)
+        expect(frontRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'original-source', fileName: 'REFERENCE_1.png' }),
+            expect.objectContaining({ role: 'body-outfit-crop', fileName: 'REFERENCE_1_BODY_OUTFIT_CROP.png' }),
+            expect.objectContaining({ role: 'prop-crop', fileName: 'REFERENCE_1_PROP_CROP.png' }),
+        ]))
+        expect(backRequest?.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'original-source', fileName: 'REFERENCE_1.png' }),
+            expect.objectContaining({ role: 'body-outfit-crop', fileName: 'REFERENCE_1_BODY_OUTFIT_CROP.png' }),
+            expect.objectContaining({ role: 'prop-crop', fileName: 'REFERENCE_1_PROP_CROP.png' }),
+        ]))
+        expect(frontRequest?.references.filter(reference => reference.role === 'original-source'))
+            .toHaveLength(1)
+        expect(frontRequest?.prompt).toContain('[REQUEST-CHANGED] [REFERENCE_1] clothing: gray herringbone coat with fully covered arms')
+        expect(frontRequest?.prompt).toContain('[REQUEST-CHANGED] [REFERENCE_1] bag placement: long bag hanging low against the hip and thigh')
+        expect(frontRequest?.prompt).toContain('Render exact lettering required by the authoritative request')
+        expect(frontRequest?.prompt).not.toContain('No text, letters, numbers')
+        expect(frontRequest?.prompt).toContain(userPrompt)
+        expect(headRequest?.prompt).toContain('This provider call renders only head-front-neutral')
+        expect(headRequest?.prompt).toContain('Do not show a full-body figure, back view, alternate pose')
+        expect(headRequest?.prompt).toContain('No contact sheet, montage, lineup, split frame, inset, second pose')
+        expect(headRequest?.prompt).toContain('approved edit-target identity crop defines only')
+        expect(headRequest?.prompt).not.toContain('original source image or images remain independent')
+    })
+
     it('applies the authoritative shared request before source fidelity and carries sibling Capability state into every shot', async () => {
         const executionPlan = buildCharacterSheetRenderPlan({
             capabilityRunId: 'run-1',
@@ -308,6 +545,7 @@ describe('CharacterSheetStrategy', () => {
         const executionContext = context()
         executionContext.sharedState = {
             authoritativePrompt: 'Transform the referenced woman into a visibly undead zombie.',
+            mediaReferenceAliases: [],
             sourceSubjectIdentityClassifications: ['self'],
             capabilityInstructions: ['Render the transformed character with rough watercolor texture.'],
             capabilityReferences: [{
@@ -369,7 +607,8 @@ describe('CharacterSheetStrategy', () => {
         expect(headRequest?.prompt).not.toContain('pallid mottled skin')
         expect(headRequest?.prompt).toContain('must not suppress any requested visual attribute')
         expect(headRequest?.prompt).toContain('facial identity: recognizable oval facial structure')
-        expect(headRequest?.prompt).not.toContain('skin condition: healthy natural skin')
+        expect(headRequest?.prompt).toContain('[REQUEST-CHANGED] skin condition: healthy natural skin')
+        expect(headRequest?.prompt).toContain('are not preservation defaults')
         expect(headRequest?.prompt).not.toContain('Change only the camera, crop, and pose')
         expect(headRequest?.references).toContainEqual(expect.objectContaining({
             role: 'capability-reference',
@@ -437,11 +676,10 @@ describe('CharacterSheetStrategy', () => {
         expect(headRequest?.prompt).not.toContain('large head and small body')
     })
 
-    it('isolates provider operations by media run and publishes the identity-anchor partial before its terminal image', async () => {
+    it('publishes provider partials before the validated terminal panel releases the next shot', async () => {
         const lifecycle: string[] = []
         mocks.render.mockImplementation(async request => {
             if (request.operationKey.includes(':head-front-neutral:1')) {
-                lifecycle.push(`partial:${request.context.mediaRunId}`)
                 await request.onImagePartial?.(panelPng.toString('base64'), 1)
                 lifecycle.push(`terminal:${request.context.mediaRunId}`)
             }
@@ -468,7 +706,6 @@ describe('CharacterSheetStrategy', () => {
         expect(operationKeys.filter(key => key.startsWith('media-openai:'))).toHaveLength(plannedOperationCount)
         expect(new Set(operationKeys)).toHaveLength(plannedOperationCount * 2)
         expect(publishImagePartial).toHaveBeenCalled()
-        expect(lifecycle.indexOf('published')).toBeGreaterThan(lifecycle.indexOf('partial:media-google'))
         expect(lifecycle.indexOf('published')).toBeLessThan(lifecycle.indexOf('terminal:media-google'))
     })
 
@@ -488,7 +725,7 @@ describe('CharacterSheetStrategy', () => {
         expect(mocks.render.mock.calls.some(([request]) => request.operationKey.endsWith(':2'))).toBe(false)
     })
 
-    it('retains panels with comparison warnings for explicit user review', async () => {
+    it('retains panels with non-structural comparison warnings for explicit user review', async () => {
         const executionPlan = plan()
         const result = await strategy(async () => assessment(true, 0.6)).execute(context(), executionPlan, {})
         const trace = result.capabilityMediaTrace as { totalProviderOperations: number; panels: unknown[] }
@@ -497,10 +734,152 @@ describe('CharacterSheetStrategy', () => {
         expect(trace.panels).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 status: 'needs-review',
-                failedDimensions: ['target-view'],
+                failedDimensions: ['clothing'],
             }),
         ]))
         expect(mocks.clear).toHaveBeenCalledOnce()
+    })
+
+    it('retains template and framing variance without discarding a completed provider result', async () => {
+        const executionPlan = plan()
+        const result = await strategy(async () => {
+            const result = assessment(false)
+            return {
+                ...result,
+                dimensions: result.dimensions.map(dimension => (
+                    dimension.dimension === 'template-conformance'
+                    || dimension.dimension === 'framing'
+                        ? {
+                            ...dimension,
+                            score: 0.6,
+                            mismatchCodes: [`${dimension.dimension.toLocaleUpperCase()}_VARIANCE`],
+                        }
+                        : dimension
+                )),
+            }
+        }).execute(context(), executionPlan, {})
+        const trace = result.capabilityMediaTrace as { panels: Array<{
+            panelId: string
+            failedDimensions: string[]
+        }> }
+
+        expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
+        expect(trace.panels).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                panelId: 'head-front-neutral',
+                failedDimensions: expect.arrayContaining(['template-conformance', 'framing']),
+            }),
+        ]))
+    })
+
+    it('keeps generated anchors moving when the comparison response is unusable', async () => {
+        const executionPlan = plan()
+        const result = await strategy(async () => ({
+            dimensions: [],
+            assessor: 'Anthropic/claude-sonnet-5',
+            error: {
+                code: 'CHARACTER_PANEL_ASSESSMENT_RESPONSE_INVALID',
+                message: 'The evaluator returned no usable per-dimension score list.',
+                diagnostic: 'The structured response dimensions field was a string.',
+            },
+        })).execute(context(), executionPlan, {})
+        const trace = result.capabilityMediaTrace as { panels: Array<{
+            status: string
+            failedDimensions: string[]
+        }> }
+
+        expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
+        expect(result.mediaComposition?.components).toHaveLength(executionPlan.panels.length)
+        expect(result.mediaComposition?.components.every(component => (
+            component.role === 'character-sheet-panel'
+        ))).toBe(true)
+        expect(trace.panels).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                status: 'needs-review',
+                failedDimensions: expect.arrayContaining([
+                    'comparison-unavailable',
+                    'per-dimension-evaluation-unavailable',
+                ]),
+            }),
+        ]))
+    })
+
+    it('retains a structurally rejected terminal for review without releasing it as an anchor', async () => {
+        const executionPlan = plan()
+        const providerPartial = await sharp({
+            create: { width: 96, height: 96, channels: 3, background: '#aa4466' },
+        }).png().toBuffer()
+        mocks.render.mockImplementation(async request => {
+            await request.onImagePartial?.(providerPartial.toString('base64'), 1)
+            return providerResult(request)
+        })
+        const publishImagePartial = vi.fn(async () => undefined)
+
+        const result = await strategy(async () => assessment(
+            true,
+            0.1,
+            'single-panel-composition',
+        )).execute(context(), executionPlan, { publishImagePartial })
+        const trace = result.capabilityMediaTrace as { panels: Array<{
+            panelId: string
+            status: string
+            warning?: string
+        }> }
+
+        expect(mocks.render).toHaveBeenCalledOnce()
+        expect(publishImagePartial).toHaveBeenCalledTimes(2)
+        expect(mocks.compose).toHaveBeenCalledTimes(3)
+        expect(mocks.compose.mock.calls[0]?.[0].panels).toEqual([{
+            panelId: 'head-front-neutral',
+            bytes: providerPartial,
+        }])
+        const retainedTerminal = mocks.compose.mock.calls[1]?.[0].panels[0]?.bytes
+        const finalTerminal = mocks.compose.mock.calls.at(-1)?.[0].panels[0]?.bytes
+        expect(Buffer.isBuffer(retainedTerminal)).toBe(true)
+        expect(
+            retainedTerminal?.equals(providerPartial),
+            'the structurally rejected terminal should replace the earlier provider partial',
+        ).toBe(false)
+        expect(
+            finalTerminal?.equals(retainedTerminal),
+            'final composition should retain the same rejected terminal shown in the failed preview',
+        ).toBe(true)
+        expect(result.mediaComposition?.components).toEqual([
+            expect.objectContaining({
+                componentId: 'head-front-neutral',
+                role: 'character-sheet-panel-review-only',
+            }),
+        ])
+        expect(trace.panels).toContainEqual(expect.objectContaining({
+            panelId: 'head-front-neutral',
+            status: 'needs-review',
+            warning: 'CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:head-front-neutral:single-panel-composition',
+        }))
+    })
+
+    it('retains the last provider partial when the provider fails before terminal output', async () => {
+        const providerPartial = await sharp({
+            create: { width: 96, height: 96, channels: 3, background: '#aa4466' },
+        }).png().toBuffer()
+        mocks.render.mockImplementationOnce(async request => {
+            await request.onImagePartial?.(providerPartial.toString('base64'), 1)
+            throw new Error('provider disconnected')
+        })
+
+        const result = await strategy(async () => assessment(false)).execute(context(), plan(), {})
+
+        expect(mocks.render).toHaveBeenCalledOnce()
+        expect(mocks.compose.mock.calls.at(-1)?.[0].panels).toEqual([{
+            panelId: 'head-front-neutral',
+            bytes: providerPartial,
+        }])
+        expect(result.mediaComposition?.components).toEqual([
+            expect.objectContaining({
+                componentId: 'head-front-neutral',
+                role: 'character-sheet-panel-review-only',
+                imageBase64: providerPartial.toString('base64'),
+            }),
+        ])
     })
 
     it('propagates provider failure and cancellation while cleaning all transient objects', async () => {
@@ -515,6 +894,14 @@ describe('CharacterSheetStrategy', () => {
         await expect(strategy(async () => assessment(false)).execute(context(), plan(), { signal: controller.signal }))
             .rejects.toThrow('cancelled')
         expect(mocks.render).not.toHaveBeenCalled()
+        expect(mocks.clear).toHaveBeenCalledOnce()
+    })
+
+    it('propagates a provider abort without converting it into a failed required shot', async () => {
+        mocks.render.mockRejectedValueOnce(new Error('Abort'))
+
+        await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
+            .rejects.toMatchObject({ message: 'Abort' })
         expect(mocks.clear).toHaveBeenCalledOnce()
     })
 
@@ -546,24 +933,26 @@ describe('CharacterSheetStrategy', () => {
         mocks.render.mockImplementation(async request => providerResult(request))
 
         await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
-            .rejects.toThrow('CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE:capacity')
+            .rejects.toThrow('capacity')
         expect(mocks.render).toHaveBeenCalledOnce()
     })
 
-    it('blocks every later shot when the required outfit anchor fails', async () => {
+    it('keeps accepted progress and blocks every later shot when the required outfit anchor fails', async () => {
         mocks.render.mockImplementation(async request => {
             if (request.operationKey.includes(':body-front:')) throw new Error('outfit unavailable')
             return providerResult(request)
         })
 
-        await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
-            .rejects.toThrow('CHARACTER_SHEET_OUTFIT_ANCHOR_UNAVAILABLE:outfit unavailable')
+        const result = await strategy(async () => assessment(false)).execute(context(), plan(), {})
+
         expect(mocks.render).toHaveBeenCalledTimes(2)
         expect(mocks.render.mock.calls.some(([request]) => request.operationKey.includes(':body-back:')))
             .toBe(false)
+        expect(result.mediaComposition?.components.map(component => component.componentId))
+            .toEqual(['head-front-neutral'])
     })
 
-    it('blocks optional shots when the required back outfit anchor fails', async () => {
+    it('keeps accepted progress and blocks optional shots when the required back outfit anchor fails', async () => {
         const executionPlan = buildCharacterSheetRenderPlan({
             capabilityRunId: 'run-optional',
             sourceAssetIds: [],
@@ -574,11 +963,47 @@ describe('CharacterSheetStrategy', () => {
             return providerResult(request)
         })
 
-        await expect(strategy(async () => assessment(false)).execute(context(), executionPlan, {}))
-            .rejects.toThrow('CHARACTER_SHEET_BACK_ANCHOR_UNAVAILABLE:back outfit unavailable')
+        const result = await strategy(async () => assessment(false)).execute(context(), executionPlan, {})
+
         expect(mocks.render).toHaveBeenCalledTimes(3)
         expect(mocks.render.mock.calls.some(([request]) => request.operationKey.includes(':body-profile:')))
             .toBe(false)
+        expect(result.mediaComposition?.components.map(component => component.componentId))
+            .toEqual(['head-front-neutral', 'body-front'])
+    })
+
+    it('retains a rejected body-front candidate while preventing back-body generation', async () => {
+        const result = await strategy(async request => request.panel.panelId === 'body-front'
+            ? assessment(true, 0.1, 'target-view')
+            : assessment(false)).execute(context(), plan(), {})
+        const trace = result.capabilityMediaTrace as { panels: Array<{
+            panelId: string
+            status: string
+            warning?: string
+        }> }
+
+        expect(mocks.render).toHaveBeenCalledTimes(2)
+        expect(mocks.render.mock.calls.some(([request]) => request.operationKey.includes(':body-back:')))
+            .toBe(false)
+        expect(result.mediaComposition?.components).toEqual([
+            expect.objectContaining({
+                componentId: 'head-front-neutral',
+                role: 'character-sheet-panel',
+            }),
+            expect.objectContaining({
+                componentId: 'body-front',
+                role: 'character-sheet-panel-review-only',
+            }),
+        ])
+        expect(trace.panels).toContainEqual(expect.objectContaining({
+            panelId: 'body-front',
+            status: 'needs-review',
+            warning: 'CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:body-front:target-view',
+        }))
+        expect(trace.panels).toContainEqual(expect.objectContaining({
+            panelId: 'body-back',
+            status: 'unavailable',
+        }))
     })
 
     it('rejects models that cannot carry all generated anchors required by the selected graph', async () => {

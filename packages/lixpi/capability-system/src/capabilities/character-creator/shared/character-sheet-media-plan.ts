@@ -107,7 +107,7 @@ const frontFacePanel: CharacterPanelSpec = {
     outputBindings: [],
     required: true,
     condition: 'always',
-    acceptanceDimensions: ['request-compliance', 'depiction-medium', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness', 'framing'],
+    acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness'],
 }
 
 const frontBodyPanel: CharacterPanelSpec = {
@@ -119,7 +119,7 @@ const frontBodyPanel: CharacterPanelSpec = {
     ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identity),
     required: true,
     condition: 'always',
-    acceptanceDimensions: ['request-compliance', 'depiction-medium', 'target-view', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+    acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'facial-identity', 'body-proportions', 'clothing', 'materials'],
 }
 
 const backBodyPanel: CharacterPanelSpec = {
@@ -131,7 +131,7 @@ const backBodyPanel: CharacterPanelSpec = {
     ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndOutfit),
     required: true,
     condition: 'always',
-    acceptanceDimensions: ['request-compliance', 'depiction-medium', 'target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+    acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'identity', 'body-proportions', 'clothing', 'materials'],
 }
 
 const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
@@ -144,7 +144,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: true,
         condition: 'always',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'target-view', 'identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+        acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'identity', 'body-proportions', 'clothing', 'materials'],
     },
     'head-three-quarter': {
         panelId: 'head-three-quarter',
@@ -155,7 +155,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: true,
         condition: 'always',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'target-view', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness'],
+        acceptanceDimensions: ['single-panel-composition', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'facial-identity', 'hair', 'skin', 'distinctive-features', 'sharpness'],
     },
     'prop-primary': {
         panelId: 'prop-primary',
@@ -166,7 +166,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: false,
         condition: 'generate-when-no-observed-prop',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'prop-design', 'materials', 'color', 'scale', 'framing'],
+        acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'framing', 'request-compliance', 'depiction-medium', 'prop-design', 'materials', 'color', 'scale'],
     },
     'action-signature': {
         panelId: 'action-signature',
@@ -177,7 +177,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: true,
         condition: 'always',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'action-pose', 'facial-identity', 'body-proportions', 'clothing', 'materials', 'framing'],
+        acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'action-pose', 'framing', 'request-compliance', 'depiction-medium', 'facial-identity', 'body-proportions', 'clothing', 'materials'],
     },
     'outfit-front-detail': {
         panelId: 'outfit-front-detail',
@@ -188,7 +188,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: true,
         condition: 'always',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'target-view', 'identity', 'clothing', 'materials', 'accessories', 'framing'],
+        acceptanceDimensions: ['single-panel-composition', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'identity', 'clothing', 'materials', 'accessories'],
     },
     'outfit-back-detail': {
         panelId: 'outfit-back-detail',
@@ -199,7 +199,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: true,
         condition: 'always',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'target-view', 'identity', 'clothing', 'materials', 'accessories', 'framing'],
+        acceptanceDimensions: ['single-panel-composition', 'target-view', 'framing', 'request-compliance', 'depiction-medium', 'identity', 'clothing', 'materials', 'accessories'],
     },
     'prop-secondary': {
         panelId: 'prop-secondary',
@@ -210,7 +210,7 @@ const optionalPanels: Readonly<Record<string, CharacterPanelSpec>> = {
         ...generatedReferenceDependencies(characterSheetShotGraph.generatedReferenceSets.identityAndCompleteOutfit),
         required: false,
         condition: 'generate-when-no-observed-prop',
-        acceptanceDimensions: ['request-compliance', 'depiction-medium', 'prop-design', 'materials', 'color', 'scale', 'framing'],
+        acceptanceDimensions: ['single-panel-composition', 'template-conformance', 'framing', 'request-compliance', 'depiction-medium', 'prop-design', 'materials', 'color', 'scale'],
     },
 }
 

@@ -482,8 +482,13 @@ export const updateMediaGenerationOperationNode = async ({
                 node.type === 'operationStatus' && node.nodeId === operationNodeId)
             const resolvedGenerationRequestId = generationRequestId ?? operationNode?.generationRequestId
             const resolvedGenerationRun = generationRun ?? operationNode?.generationRun
+            const projectedRunStatus: MediaGenerationRunStatus = status === 'action-required'
+                && Boolean(candidateAssetIds?.length)
+                && Boolean(unresolvedBindingId)
+                ? 'pending'
+                : toRunStatus(status)
             const nextProgress = progress ?? operationNode?.progress
-                ?? createDefaultMediaGenerationRunProgress(toRunStatus(status), message)
+                ?? createDefaultMediaGenerationRunProgress(projectedRunStatus, message)
             let changed = false
             let nodes = canvasState.nodes.map(rawNode => {
                 const node = stripLegacyMarkerProgress(rawNode)
@@ -518,7 +523,7 @@ export const updateMediaGenerationOperationNode = async ({
                     generationRun: resolvedGenerationRun,
                     state: createProgressState({
                         generationRequestId: resolvedGenerationRequestId,
-                        status: toRunStatus(status),
+                        status: projectedRunStatus,
                         message,
                         progress: nextProgress,
                         generationRun: resolvedGenerationRun,

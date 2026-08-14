@@ -53,6 +53,7 @@ export type CharacterPanelVlmAssessorPort = {
     assess: (args: {
         panel: CharacterPanelSpec
         candidateDataUrl: string
+        poseReferenceDataUrl?: string
         authoritativePrompt: string
         capabilityInstructions: readonly string[]
         capabilityReferenceDataUrls: readonly string[]
@@ -60,6 +61,32 @@ export type CharacterPanelVlmAssessorPort = {
         sourceDataUrls: string[]
         signal?: AbortSignal
     }) => Promise<CharacterPanelVlmAssessmentResult>
+}
+
+const CHARACTER_PANEL_HARD_ACCEPTANCE_THRESHOLD = 0.85
+const CHARACTER_PANEL_HARD_DIMENSIONS = new Set([
+    'single-panel-composition',
+    'target-view',
+    'action-pose',
+])
+
+export function getCharacterPanelStructuralFailures(
+    panel: CharacterPanelSpec,
+    assessment: CharacterPanelAssessment,
+): string[] {
+    if (!assessment.valid) return []
+    const assessmentsByDimension = new Map(assessment.dimensions.map(dimension => [
+        dimension.dimension,
+        dimension,
+    ]))
+    return panel.acceptanceDimensions
+        .filter(dimension => CHARACTER_PANEL_HARD_DIMENSIONS.has(dimension))
+        .filter(dimension => {
+            const result = assessmentsByDimension.get(dimension)
+            return !result
+                || result.score < CHARACTER_PANEL_HARD_ACCEPTANCE_THRESHOLD
+                || result.mismatchCodes.length > 0
+        })
 }
 
 export async function assessCharacterPanel(args: {
@@ -72,6 +99,7 @@ export async function assessCharacterPanel(args: {
     authoritativePrompt: string
     capabilityInstructions: readonly string[]
     capabilityReferenceDataUrls: readonly string[]
+    poseReferenceDataUrl?: string
     evidence: CharacterEvidenceProfile
     vlm: CharacterPanelVlmAssessorPort
     fidelity?: CharacterFidelityPort
@@ -126,6 +154,9 @@ const assessPanelDimensions = async (
         return await args.vlm.assess({
             panel: args.panel,
             candidateDataUrl,
+            ...(args.poseReferenceDataUrl
+                ? { poseReferenceDataUrl: args.poseReferenceDataUrl }
+                : {}),
             authoritativePrompt: args.authoritativePrompt,
             capabilityInstructions: args.capabilityInstructions,
             capabilityReferenceDataUrls: args.capabilityReferenceDataUrls,

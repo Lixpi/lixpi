@@ -560,7 +560,7 @@ export function applyMediaGenerationRequestToOperationNodes(
     for (const run of request.runs) {
         const status: MediaGenerationRunStatus = firstUnresolvedBinding
             && run.generationRun === firstRun?.generationRun
-            ? 'awaiting-provider-verification'
+            ? 'pending'
             : run.status
         const message = firstUnresolvedBinding && run.generationRun === firstRun?.generationRun
             ? 'Choose which attached Asset the prompt refers to.'

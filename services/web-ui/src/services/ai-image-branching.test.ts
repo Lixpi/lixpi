@@ -385,7 +385,7 @@ describe('buildMediaBranchCandidateSnapshot', () => {
             branchId: 'branch-person',
             parentImageNodeId: 'person-generated',
             ancestorNodeIds: ['person-generated', 'person-refined'],
-            sourceContextNodeIds: ['person-refined'],
+            sourceContextNodeIds: ['portrait-source', 'person-refined'],
         })
         expect(snapshot.candidates.map((candidate) => candidate.nodeId)).toEqual(['person-refined'])
     })
@@ -554,6 +554,44 @@ describe('buildCanvasWideCandidateSnapshot', () => {
 
         expect(snapshot.activeTargetCandidateId).toBeUndefined()
         expect(snapshot.candidates.some((candidate) => candidate.roleHints.includes('active-target'))).toBe(false)
+    })
+
+    it('infers the generated edit target when its original source is attached with it', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-related-target',
+            nodes: [portraitSourceNode, refinedPersonGeneratedNode],
+            edges: [],
+            prompt: 'adjust only the derived output',
+            referenceNodeIds: ['portrait-source', 'person-refined'],
+        })
+
+        expect(snapshot.activeTargetCandidateId).toBe('node:person-refined')
+        expect(snapshot.candidates.find(candidate => candidate.nodeId === 'person-refined')?.roleHints)
+            .toContain('active-target')
+    })
+
+    it('keeps the target ambiguous when an unrelated reference is attached', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-unrelated-reference',
+            nodes: [landscapeSourceNode, refinedPersonGeneratedNode],
+            edges: [],
+            prompt: 'adjust the selected media',
+            referenceNodeIds: ['landscape-source', 'person-refined'],
+        })
+
+        expect(snapshot.activeTargetCandidateId).toBeUndefined()
+    })
+
+    it('keeps the target ambiguous when multiple generated outputs are attached', () => {
+        const snapshot = buildCanvasWideCandidateSnapshot({
+            generationRunId: 'run-wide-multiple-generated',
+            nodes: [personGeneratedNode, refinedPersonGeneratedNode],
+            edges: [],
+            prompt: 'adjust the selected media',
+            referenceNodeIds: ['person-generated', 'person-refined'],
+        })
+
+        expect(snapshot.activeTargetCandidateId).toBeUndefined()
     })
 
     it('keeps the candidate list request-bounded and carries explicit refs for API authorization', () => {

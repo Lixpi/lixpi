@@ -7,6 +7,7 @@ const assetModelMocks = vi.hoisted(() => ({
     get: vi.fn(),
     updateGeneratedOutputReview: vi.fn(),
     detachWorkspaceReference: vi.fn(),
+    detachCatalogReference: vi.fn(),
 }))
 const workspaceMocks = vi.hoisted(() => ({
     getWorkspace: vi.fn(),
@@ -15,11 +16,22 @@ const workspaceMocks = vi.hoisted(() => ({
 const projectionMocks = vi.hoisted(() => ({
     detachReviewedGeneratedOutputsFromCanvas: vi.fn(),
     removeGeneratedOutputCandidateFromCanvas: vi.fn(),
+    removeOrphanBranchLineageMarkerFromCanvas: vi.fn(),
+}))
+const mediaGenerationRequestMocks = vi.hoisted(() => ({
+    cancelCurrent: vi.fn(),
 }))
 
 vi.mock('../models/asset.ts', () => ({ default: assetModelMocks }))
 vi.mock('../models/workspace.ts', () => ({ default: workspaceMocks }))
 vi.mock('./asset-canvas-projection.ts', () => projectionMocks)
+vi.mock('./media-generation-request-service.ts', () => ({
+    MediaGenerationRequestService: class {
+        async cancelCurrent(params: unknown): Promise<unknown> {
+            return await mediaGenerationRequestMocks.cancelCurrent(params)
+        }
+    },
+}))
 
 import { GeneratedOutputReviewService } from './generated-output-review-service.ts'
 
@@ -86,6 +98,8 @@ describe('GeneratedOutputReviewService', () => {
         assetModelMocks.get.mockResolvedValue(readyAsset())
         assetModelMocks.updateGeneratedOutputReview.mockResolvedValue(readyAsset())
         assetModelMocks.detachWorkspaceReference.mockResolvedValue({ success: true })
+        assetModelMocks.detachCatalogReference.mockResolvedValue({ success: true })
+        mediaGenerationRequestMocks.cancelCurrent.mockResolvedValue({ status: 'cancelled' })
     })
 
     it('rejects media-node prompt regeneration before any canvas or Asset mutation', async () => {
@@ -216,6 +230,207 @@ describe('GeneratedOutputReviewService', () => {
                 layoutRevision: 102,
                 nodes: [{ nodeId: 'media-1' }],
                 nodeSnapshots: [{ nodeId: 'media-1' }],
+                removedNodeIds: ['branch-line-1'],
+            },
+        })
+    })
+
+    it('rejects a candidate, removes its orphan marker, and releases owned Asset references', async () => {
+        const initialState = canvasState()
+        const removedState: CanvasState = { ...initialState, nodes: [], edges: [] }
+        const rejectedAsset = {
+            ...readyAsset(),
+            lineage: {
+                sourceConversationAssetId: 'conversation-1',
+                mediaRunId: 'media-run-1',
+            },
+        }
+        workspaceMocks.getWorkspace
+            .mockResolvedValueOnce(workspace(initialState))
+            .mockResolvedValueOnce(workspace(initialState))
+            .mockResolvedValueOnce({ ...workspace(removedState), canvasStateUpdatedAt: 103 })
+        assetModelMocks.updateGeneratedOutputReview.mockResolvedValue(rejectedAsset)
+        projectionMocks.detachReviewedGeneratedOutputsFromCanvas.mockReturnValue({
+            canvasState: initialState,
+            affectedNodes: [mediaNode],
+            geometryNodes: [],
+            removedNodeIds: [],
+            removedEdgeIds: [],
+        })
+        projectionMocks.removeGeneratedOutputCandidateFromCanvas.mockReturnValue({
+            canvasState: removedState,
+            geometryNodes: [],
+            removedNodeIds: ['media-1', 'branch-line-1'],
+            removedEdgeIds: ['edge-branch-line-1-media-1'],
+        })
+
+        const result = await new GeneratedOutputReviewService().review({
+            request: {
+                workspaceId: 'workspace-1',
+                scope: 'output-node',
+                action: 'reject',
+                nodeId: 'media-1',
+            },
+            requester,
+        })
+
+        expect(assetModelMocks.updateGeneratedOutputReview).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            status: 'superseded',
+        }))
+        expect(projectionMocks.removeGeneratedOutputCandidateFromCanvas).toHaveBeenCalledWith({
+            canvasState: initialState,
+            nodeId: 'media-1',
+            preserveLineageNodeIds: new Set(),
+        })
+        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            assetId: 'asset-1',
+            surfaceId: 'conversation#conversation-1#media#media-run-1',
+        }))
+        expect(assetModelMocks.detachCatalogReference).toHaveBeenCalledWith({
+            assetId: 'asset-1',
+            requester,
+        })
+        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            assetId: 'asset-1',
+            nodeId: 'media-1',
+        }))
+        expect(result).toMatchObject({
+            success: true,
+            acceptedAssetIds: [],
+            supersededAssetIds: [],
+            rejectedAssetIds: ['asset-1'],
+            canvasGeometry: {
+                layoutRevision: 103,
+                nodeSnapshots: [],
+                removedNodeIds: ['media-1', 'branch-line-1'],
+            },
+        })
+    })
+
+    it('cancels and deletes an unfinished candidate without requiring final media or sealed provenance', async () => {
+        const initialState = canvasState()
+        const removedState: CanvasState = { ...initialState, nodes: [], edges: [] }
+        const unfinishedAsset = {
+            ...readyAsset(),
+            media: { renditions: { original: { status: 'pending' } } },
+            documents: {},
+            states: { provenance: 'building' },
+            lineage: {
+                sourceConversationAssetId: 'conversation-1',
+                mediaRunId: 'media-run-1',
+            },
+        }
+        workspaceMocks.getWorkspace
+            .mockResolvedValueOnce(workspace(initialState))
+            .mockResolvedValueOnce(workspace(initialState))
+            .mockResolvedValueOnce({ ...workspace(removedState), canvasStateUpdatedAt: 105 })
+        assetModelMocks.get.mockResolvedValue(unfinishedAsset)
+        assetModelMocks.updateGeneratedOutputReview.mockResolvedValue(unfinishedAsset)
+        projectionMocks.detachReviewedGeneratedOutputsFromCanvas.mockReturnValue({
+            canvasState: initialState,
+            affectedNodes: [mediaNode],
+            geometryNodes: [],
+            removedNodeIds: [],
+            removedEdgeIds: [],
+        })
+        projectionMocks.removeGeneratedOutputCandidateFromCanvas.mockReturnValue({
+            canvasState: removedState,
+            geometryNodes: [],
+            removedNodeIds: ['media-1', 'branch-line-1'],
+            removedEdgeIds: ['edge-branch-line-1-media-1'],
+        })
+
+        const result = await new GeneratedOutputReviewService().review({
+            request: {
+                workspaceId: 'workspace-1',
+                scope: 'output-node',
+                action: 'reject',
+                nodeId: 'media-1',
+            },
+            requester,
+        })
+
+        expect(mediaGenerationRequestMocks.cancelCurrent).toHaveBeenCalledWith({
+            generationRequestId: 'request-1',
+            workspaceId: 'workspace-1',
+            userId: 'user-1',
+        })
+        expect(assetModelMocks.updateGeneratedOutputReview).toHaveBeenCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            status: 'superseded',
+        }))
+        expect(assetModelMocks.detachCatalogReference).toHaveBeenCalledWith({
+            assetId: 'asset-1',
+            requester,
+        })
+        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenLastCalledWith(expect.objectContaining({
+            assetId: 'asset-1',
+            nodeId: 'media-1',
+            workspaceMutation: expect.objectContaining({ canvasState: removedState }),
+        }))
+        expect(result).toMatchObject({
+            success: true,
+            rejectedAssetIds: ['asset-1'],
+            canvasGeometry: {
+                layoutRevision: 105,
+                removedNodeIds: ['media-1', 'branch-line-1'],
+            },
+        })
+    })
+
+    it('deletes an orphan branch marker without requiring a generated output Asset', async () => {
+        const initialState = canvasState()
+        const orphanState: CanvasState = { ...initialState, nodes: [marker] as any, edges: [] }
+        const removedState: CanvasState = { ...initialState, nodes: [], edges: [] }
+        workspaceMocks.getWorkspace.mockResolvedValue(workspace(orphanState))
+        projectionMocks.detachReviewedGeneratedOutputsFromCanvas.mockReturnValue({
+            canvasState: orphanState,
+            affectedNodes: [],
+            geometryNodes: [],
+            removedNodeIds: [],
+            removedEdgeIds: [],
+        })
+        projectionMocks.removeOrphanBranchLineageMarkerFromCanvas.mockReturnValue({
+            canvasState: removedState,
+            geometryNodes: [],
+            removedNodeIds: ['branch-line-1'],
+            removedEdgeIds: [],
+        })
+        workspaceMocks.mutateCanvasState.mockImplementation(async ({ mutate }) => {
+            const mutation = mutate(orphanState)
+            return {
+                changed: mutation.changed,
+                canvasState: mutation.canvasState,
+                canvasStateUpdatedAt: 104,
+            }
+        })
+
+        const result = await new GeneratedOutputReviewService().review({
+            request: {
+                workspaceId: 'workspace-1',
+                scope: 'branch-lineage',
+                action: 'reject',
+                nodeId: 'branch-line-1',
+            },
+            requester,
+        })
+
+        expect(workspaceMocks.mutateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'workspace-1',
+            origin: 'rejectOrphanBranchLineageMarker',
+        }))
+        expect(assetModelMocks.get).not.toHaveBeenCalled()
+        expect(assetModelMocks.updateGeneratedOutputReview).not.toHaveBeenCalled()
+        expect(assetModelMocks.detachWorkspaceReference).not.toHaveBeenCalled()
+        expect(result).toMatchObject({
+            success: true,
+            affectedAssetIds: [],
+            rejectedAssetIds: [],
+            canvasGeometry: {
+                generationRequestId: 'request-1',
+                layoutRevision: 104,
+                nodeSnapshots: [],
                 removedNodeIds: ['branch-line-1'],
             },
         })

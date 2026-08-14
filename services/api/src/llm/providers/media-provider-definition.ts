@@ -134,8 +134,14 @@ export const normalizeProviderProblem = ({
     }
 }): MediaGenerationProblem => {
     const candidate = error as { code?: unknown; message?: unknown; name?: unknown; status?: unknown }
-    const providerCode = sanitizeProviderText(candidate?.code ?? candidate?.status ?? candidate?.name)
     const providerReason = sanitizeProviderText(candidate?.message)
+    const capabilityFailureCode = /\b((?:CHARACTER|CAPABILITY)_[A-Z0-9_]+)\b/u.exec(
+        typeof candidate?.message === 'string' ? candidate.message : '',
+    )?.[1]
+    const explicitProviderCode = sanitizeProviderText(candidate?.code ?? candidate?.status)
+    const providerCode = explicitProviderCode
+        ?? capabilityFailureCode
+        ?? sanitizeProviderText(candidate?.name)
     const evidence = `${providerCode ?? ''} ${providerReason ?? ''}`
     const stage: MediaGenerationProblem['stage'] = context.stage !== 'submit'
         ? context.stage
@@ -153,7 +159,7 @@ export const normalizeProviderProblem = ({
     const configuration = /configuration|invalid.*(?:parameter|setting)|not configured|required|unsupported/iu.test(evidence)
     const capacity = /\b429\b|capacity|quota|rate.?limit|resource.?exhausted/iu.test(evidence)
     const output = stage === 'download' || stage === 'persist'
-        || /output.*(?:blocked|missing|invalid)|download|persist/iu.test(evidence)
+        || /output.*(?:blocked|missing|invalid)|download|persist|\b(?:CHARACTER|CAPABILITY)_[A-Z0-9_]+\b/iu.test(evidence)
     const category: MediaGenerationProblem['category'] = moderation
         ? 'provider-moderation'
         : configuration

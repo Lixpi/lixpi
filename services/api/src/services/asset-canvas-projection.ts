@@ -544,6 +544,7 @@ const reconcileLineagePlan = (
     state: CanvasState,
     markers: MarkerNode[],
     plan: MediaBranchLineagePlan,
+    conversationAssetId: string,
 ): {
     state: CanvasState
     changed: boolean
@@ -553,8 +554,15 @@ const reconcileLineagePlan = (
     const markerIds = new Set(markers.map(marker => marker.nodeId))
     const staleMarkerIds = new Set(state.nodes.flatMap(node => (
         isMarkerNode(node)
-        && node.generationRequestId === plan.generationRequestId
         && !markerIds.has(node.nodeId)
+        && (
+            node.generationRequestId === plan.generationRequestId
+            || (
+                node.pendingState?.phase === 'preflight'
+                && node.conversationAssetId === conversationAssetId
+                && node.generationRequestId === conversationAssetId
+            )
+        )
             ? [node.nodeId]
             : []
     )))
@@ -861,7 +869,12 @@ export const upsertMediaLineagePlanToCanvas = async (params: {
                 canvasState,
                 params.canvasVisibleArea,
             )
-            const markerResult = reconcileLineagePlan(canvasState, markers, params.lineagePlan)
+            const markerResult = reconcileLineagePlan(
+                canvasState,
+                markers,
+                params.lineagePlan,
+                params.conversationAssetId,
+            )
             removedNodeIds = markerResult.removedNodeIds
             removedEdgeIds = markerResult.removedEdgeIds
             const balanced = rebalance(markerResult.state, { proseMirrorThreadContent: params.proseMirrorThreadContent })
@@ -959,7 +972,6 @@ export const settleMediaGenerationRequestOnCanvas = async (params: {
         },
     })
     if (!result.canvasState || result.canvasStateUpdatedAt === null) return null
-    if (!result.changed && removedNodeIds.length === 0) return null
     return buildAssetCanvasGeometryUpdate({
         state: result.canvasState,
         layoutRevision: result.canvasStateUpdatedAt,
@@ -1500,6 +1512,52 @@ export const detachReviewedGeneratedOutputsFromCanvas = ({
     }
 }
 
+export const removeOrphanBranchLineageMarkerFromCanvas = ({
+    canvasState,
+    nodeId,
+}: {
+    canvasState: CanvasState
+    nodeId: string
+}): {
+    canvasState: CanvasState
+    geometryNodes: CanvasNodeGeometry[]
+    removedNodeIds: string[]
+    removedEdgeIds: string[]
+} => {
+    const marker = canvasState.nodes.find((node) => node.nodeId === nodeId && isMarkerNode(node))
+    if (!marker) {
+        return {
+            canvasState,
+            geometryNodes: [],
+            removedNodeIds: [],
+            removedEdgeIds: [],
+        }
+    }
+
+    const nodes = canvasState.nodes.filter((node) => node.nodeId !== nodeId)
+    const edges = (canvasState.edges ?? []).filter((edge) =>
+        edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId)
+    const removedEdgeIds = (canvasState.edges ?? [])
+        .filter((edge) => edge.sourceNodeId === nodeId || edge.targetNodeId === nodeId)
+        .map((edge) => edge.edgeId)
+    const contextChips = canvasState.aiChatPanel?.contextChips.filter((candidateNodeId) => candidateNodeId !== nodeId)
+    const next = rebalance({
+        ...canvasState,
+        ...(canvasState.aiChatPanel ? {
+            aiChatPanel: { ...canvasState.aiChatPanel, contextChips: contextChips ?? [] },
+        } : {}),
+        nodes,
+        edges,
+    }).state
+
+    return {
+        canvasState: next,
+        geometryNodes: geometryDiff(canvasState, next),
+        removedNodeIds: [nodeId],
+        removedEdgeIds,
+    }
+}
+
 export const removeGeneratedOutputCandidateFromCanvas = ({
     canvasState,
     nodeId,
@@ -1546,7 +1604,16 @@ export const removeGeneratedOutputCandidateFromCanvas = ({
     const removedEdgeIds = (canvasState.edges ?? [])
         .filter((edge) => !edges.some((candidate) => candidate.edgeId === edge.edgeId))
         .map(edge => edge.edgeId)
-    const next = rebalance({ ...canvasState, nodes, edges }).state
+    const nextContextChips = canvasState.aiChatPanel?.contextChips.filter((candidateNodeId) =>
+        !removedNodeIds.has(candidateNodeId))
+    const next = rebalance({
+        ...canvasState,
+        ...(canvasState.aiChatPanel ? {
+            aiChatPanel: { ...canvasState.aiChatPanel, contextChips: nextContextChips ?? [] },
+        } : {}),
+        nodes,
+        edges,
+    }).state
     return {
         canvasState: next,
         geometryNodes: geometryDiff(canvasState, next),
@@ -1584,6 +1651,13 @@ const removeGenerationRequestProjectionNode = ({
     removedEdgeIds: string[]
 } => {
     const removedNodeIds = new Set(assetNodeId ? [assetNodeId] : [])
+    for (const node of canvasState.nodes) {
+        if (node.type === 'operationStatus'
+            && node.operation === 'media-generation'
+            && node.generationRequestId === generationRequestId) {
+            removedNodeIds.add(node.nodeId)
+        }
+    }
     const hasRemainingGeneratedOutput = canvasState.nodes.some((node) =>
         node.nodeId !== assetNodeId
         && isGeneratedOutputForRequest(node, generationRequestId, conversationAssetId)

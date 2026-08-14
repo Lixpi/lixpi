@@ -417,6 +417,26 @@ const sanitizeResolution = (args: {
         }
     }
 
+    if (operationKind === 'edit_existing' && !targetCandidateId) {
+        const activeTarget = snapshot.activeTargetCandidateId
+            ? candidateById.get(snapshot.activeTargetCandidateId)
+            : undefined
+        if (!activeTarget) {
+            throw new Error('Image branch resolver returned edit_existing without an active target')
+        }
+        mode = 'edit-active-branch'
+        targetCandidateId = activeTarget.candidateId
+        parentCandidateId = activeTarget.candidateId
+        includeGeneratedCandidateIds = [...new Set([
+            ...includeGeneratedCandidateIds,
+            activeTarget.candidateId,
+        ])]
+        rationale = appendRationale(
+            rationale,
+            'Resolver guard restored the active target omitted from an edit_existing resolution.',
+        )
+    }
+
     if (parentCandidateId && !candidateById.has(parentCandidateId)) {
         const unknownParentCandidateId = parentCandidateId
         parentCandidateId = targetCandidateId && candidateById.has(targetCandidateId)

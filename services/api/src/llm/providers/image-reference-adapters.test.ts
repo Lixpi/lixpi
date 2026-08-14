@@ -8,6 +8,7 @@ import type {
     ResolvedImageGenerationReference,
 } from '../image-generation-references.ts'
 import {
+    buildImageReferencePromptLabel,
     GOOGLE_IMAGE_REFERENCE_ADAPTER,
     OPENAI_IMAGE_REFERENCE_ADAPTER,
     STABILITY_IMAGE_REFERENCE_ADAPTER,
@@ -84,7 +85,7 @@ describe('image reference adapters', () => {
         expect(result.omitted).toEqual([expect.objectContaining({ role: 'face-crop', reason: 'reference-budget' })])
     })
 
-    it('keeps all three generated anchors ahead of pose and original evidence', () => {
+    it('keeps all three generated anchors and required pose control when identity slots are exhausted', () => {
         const result = OPENAI_IMAGE_REFERENCE_ADAPTER.adapt({
             references: [
                 reference('original-source', 1),
@@ -109,6 +110,50 @@ describe('image reference adapters', () => {
         expect(result.omitted).toEqual([
             expect.objectContaining({ role: 'original-source', reason: 'identity-budget' }),
         ])
+    })
+
+    it('keeps the existing edit target as identity evidence ahead of the original source', () => {
+        const result = OPENAI_IMAGE_REFERENCE_ADAPTER.adapt({
+            references: [
+                reference('original-source', 1),
+                reference('pose-reference', 2),
+                reference('edit-target', 3),
+            ],
+            capabilities: capabilities(),
+            requiresIdentity: true,
+        })
+
+        expect(result.included.map(({ role }) => role)).toEqual([
+            'edit-target',
+            'original-source',
+            'pose-reference',
+        ])
+        expect(result.omitted).toEqual([])
+    })
+
+    it('preserves identity-only edit scope in provider-neutral reference adaptation', () => {
+        const result = GOOGLE_IMAGE_REFERENCE_ADAPTER.adapt({
+            references: [
+                reference('original-source', 1),
+                reference('pose-reference', 2),
+                reference('edit-target-identity', 3),
+            ],
+            capabilities: capabilities(),
+            requiresIdentity: true,
+        })
+
+        expect(result.included.map(({ role }) => role)).toEqual([
+            'edit-target-identity',
+            'original-source',
+            'pose-reference',
+        ])
+        expect(result.omitted).toEqual([])
+        expect(buildImageReferencePromptLabel(result.included[0]!, 0)).toContain(
+            'EDIT-TARGET IDENTITY CROP ONLY',
+        )
+        expect(buildImageReferencePromptLabel(result.included[0]!, 0)).toContain(
+            'Do not copy any trait outside that region, any rejected trait inside it, or any prior-output defect',
+        )
     })
 
     it('rejects Stability identity conditioning before provider work', () => {

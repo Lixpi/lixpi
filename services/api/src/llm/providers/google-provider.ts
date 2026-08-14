@@ -34,6 +34,7 @@ import {
 import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
+import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -197,33 +198,7 @@ export function buildVeoReferenceImages(refs: VeoImageInput[]): Array<{ image: V
 const buildGoogleImageReferenceLabel = (
     reference: ResolvedImageGenerationReference,
     index: number,
-): string => {
-    const prefix = `REFERENCE IMAGE ${index + 1}`
-    switch (reference.role) {
-        case 'original-source':
-            return `${prefix} — AUTHORITATIVE SOURCE. Preserve observed identity and design evidence.`
-        case 'face-crop':
-            return `${prefix} — FACE IDENTITY CROP. Preserve observed facial construction.`
-        case 'body-outfit-crop':
-            return `${prefix} — BODY AND OUTFIT CROP. Preserve observed proportions, silhouette, and clothing.`
-        case 'canonical-anchor':
-            return `${prefix} — CANONICAL GENERATED ANCHOR. Keep the same generated character identity.`
-        case 'adjacent-angle':
-            return `${prefix} — ADJACENT GENERATED ANGLE. Keep cross-view continuity.`
-        case 'opposite-angle':
-            return `${prefix} — OPPOSITE GENERATED ANGLE. Preserve rear and front design continuity across views.`
-        case 'prop-crop':
-            return `${prefix} — OBSERVED PROP CROP. Preserve the visible prop.`
-        case 'pose-reference':
-            return `${prefix} — POSE REFERENCE. Use its pose without copying identity.`
-        case 'structure-reference':
-            return `${prefix} — STRUCTURE REFERENCE. Use its composition without copying identity.`
-        case 'capability-reference':
-            return `${prefix} — CAPABILITY REFERENCE.`
-        case 'source-reference':
-            return `${prefix} — SOURCE REFERENCE.`
-    }
-}
+): string => buildImageReferencePromptLabel(reference, index, 'REFERENCE IMAGE')
 
 export class GoogleProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Google'

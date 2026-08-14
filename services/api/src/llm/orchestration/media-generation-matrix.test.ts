@@ -1087,14 +1087,66 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         expect(registry.process).not.toHaveBeenCalled()
     })
 
-    it('forwards stop calls to the provider registry', async () => {
+    it('marks the request as cancelling before stopping providers and then removes its projection', async () => {
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const callOrder: string[] = []
+        const publisher = {
+            beginMediaGenerationRequestCancellation: vi.fn(() => callOrder.push('begin-cancellation')),
+            cancelProseMirrorGenerationRequest: vi.fn(async () => {
+                callOrder.push('cancel-transcript')
+            }),
+            mediaGenerationRequestComplete: vi.fn(() => callOrder.push('complete-request')),
+            drainPendingWrites: vi.fn(async () => undefined),
+            finishProseMirrorStream: vi.fn(async () => undefined),
+        }
+        const requestGroupKey = buildMediaGenerationRequestGroupKey('ws-1', 'thread-1', 'request-1')
+        registry.stopGroup.mockImplementationOnce(async () => {
+            callOrder.push('stop-providers')
+        })
+        ;(orchestrator as any).requestPublishers.set(requestGroupKey, publisher)
 
         await orchestrator.stop({ workspaceId: 'ws-1', aiChatThreadId: 'thread-1', generationRequestId: 'request-1' })
 
-        expect(registry.stopGroup).toHaveBeenCalledWith(buildMediaGenerationRequestGroupKey('ws-1', 'thread-1', 'request-1'))
+        expect(registry.stopGroup).toHaveBeenCalledWith(requestGroupKey)
         expect(registry.stopGroupsWithPrefix).not.toHaveBeenCalled()
+        expect(callOrder).toEqual([
+            'begin-cancellation',
+            'stop-providers',
+            'cancel-transcript',
+            'complete-request',
+        ])
+        expect(publisher.mediaGenerationRequestComplete).toHaveBeenCalledWith('request-1', {
+            removeProjectedPendingNodes: true,
+        })
+    })
+
+    it('continues cancellation cleanup when live transcript settlement rejects', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const publisher = {
+            beginMediaGenerationRequestCancellation: vi.fn(),
+            cancelProseMirrorGenerationRequest: vi.fn(async () => {
+                throw new Error('transcript settlement failed')
+            }),
+            mediaGenerationRequestComplete: vi.fn(),
+            drainPendingWrites: vi.fn(async () => undefined),
+            finishProseMirrorStream: vi.fn(async () => undefined),
+        }
+        const requestGroupKey = buildMediaGenerationRequestGroupKey('ws-1', 'thread-1', 'request-1')
+        ;(orchestrator as any).requestPublishers.set(requestGroupKey, publisher)
+
+        await expect(orchestrator.stop({
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            generationRequestId: 'request-1',
+        })).resolves.toBeUndefined()
+
+        expect(publisher.mediaGenerationRequestComplete).toHaveBeenCalledWith('request-1', {
+            removeProjectedPendingNodes: true,
+        })
+        expect(publisher.drainPendingWrites).toHaveBeenCalledOnce()
+        expect(publisher.finishProseMirrorStream).toHaveBeenCalledOnce()
     })
 
     it('forwards stop-all-thread to the provider registry when no generation request id is present', async () => {

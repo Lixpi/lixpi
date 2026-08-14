@@ -79,6 +79,10 @@ function loadWorkspaceCanvasSvelte(): string {
 	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
 }
 
+function loadCanvasMembershipStateRebase(): string {
+	return readSourceFile('canvasMembershipStateRebase.ts')
+}
+
 function loadContextPreview(): string {
 	return readSourceFile('../../components/contextPreview/contextPreview.ts', 'components/contextPreview/contextPreview.ts')
 }
@@ -292,8 +296,26 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptNotToContain(recovery, 'loadWorkspaceRouteData(workspaceId)', 'failure recovery')
 	})
 
-	it('renders explicit ambiguity, provider verification, failure, edit, cancel, and dismiss actions', () => {
-		expectSourceToContain(ts, 'createContextPreviewTile({')
+	it('attaches reference ambiguity to the submitted prompt with canonical Asset references', () => {
+		const markerContent = extractFunctionBody(ts, 'createBranchMarkerContent')
+		const referenceResolution = extractFunctionBody(ts, 'createBranchMarkerReferenceResolution')
+		const screenPlacement = extractFunctionBody(ts, 'syncPendingBranchMarkerScreenPlacements')
+		const resolutionStyles = extractBlock(loadScss(), '.workspace-branch-reference-resolution')
+		expectSourceToContain(ts, 'if (isMediaGenerationReferenceResolutionOperation(node)) return false')
+		expectExcerptToContain(markerContent, 'getMediaGenerationReferenceResolutionForMarker(currentCanvasState.nodes, node)', 'branch marker content')
+		expectExcerptToContain(markerContent, '${referenceResolution}', 'branch marker content')
+		expectExcerptToContain(referenceResolution, 'renderBranchMarkerPromptParts([{', 'reference resolution')
+		expectExcerptToContain(referenceResolution, "referenceType: 'media'", 'reference resolution')
+		expectExcerptToContain(referenceResolution, 'resolveMediaGenerationReference({', 'reference resolution')
+		expectExcerptNotToContain(referenceResolution, '<button', 'reference resolution')
+		expectExcerptToContain(screenPlacement, 'getMediaGenerationReferenceResolutionOwner(', 'reference resolution placement')
+		expectExcerptToContain(screenPlacement, '...referenceResolutionOwners,', 'reference resolution placement')
+		expectExcerptToContain(resolutionStyles, 'right: 0', 'reference resolution styles')
+		expectExcerptToContain(resolutionStyles, 'bottom: calc(100% + 7px)', 'reference resolution styles')
+		expectSourceNotToContain(ts, 'workspace-media-operation-candidate')
+	})
+
+	it('renders provider verification, failure, edit, cancel, and dismiss actions', () => {
 		expectSourceToContain(ts, "addActionButton('Verify with provider'")
 		expectSourceToContain(ts, "addActionButton('Cancel'")
 		expectSourceToContain(ts, "addActionButton('Edit request'")
@@ -658,14 +680,41 @@ describe('Workspace canvas — generated image preview rendering', () => {
 
 	it('shows review and regeneration controls only for AI-generated media', () => {
 		const acceptStart = ts.indexOf('function createMediaAcceptButton')
+		const rejectStart = ts.indexOf('function createMediaRejectButton', acceptStart)
 		const regenerateStart = ts.indexOf('function createMediaRegenerationControls', acceptStart)
 		const historyStart = ts.indexOf('function createGeneratedOutputHistoryButton', regenerateStart)
 		expect(acceptStart).toBeGreaterThan(-1)
+		expect(rejectStart).toBeGreaterThan(acceptStart)
 		expect(regenerateStart).toBeGreaterThan(acceptStart)
 		expect(historyStart).toBeGreaterThan(regenerateStart)
 
-		expectExcerptToContain(ts.slice(acceptStart, regenerateStart), 'if (!node.generatedBy) return null', 'accept control')
+		expectExcerptToContain(ts.slice(acceptStart, rejectStart), 'if (!node.generatedBy) return null', 'accept control')
+		expectExcerptToContain(
+			ts.slice(rejectStart, regenerateStart),
+			'isGeneratedOutputRejectableForCanvas({',
+			'reject control',
+		)
 		expectExcerptToContain(ts.slice(regenerateStart, historyStart), 'if (!node.generatedBy) return null', 'regeneration control')
+	})
+
+	it('keeps terminal candidate controls usable while the local Asset cache catches up', () => {
+		const readiness = extractFunctionBody(ts, 'isGeneratedOutputReviewReady')
+		const accepted = extractFunctionBody(ts, 'isGeneratedOutputAccepted')
+		const accept = extractFunctionBody(ts, 'createMediaAcceptButton')
+		const reject = extractFunctionBody(ts, 'createMediaRejectButton')
+		const regenerate = extractFunctionBody(ts, 'createMediaRegenerationControls')
+		const chromeKey = extractFunctionBody(ts, 'getGeneratedMediaNodeChromeKey')
+
+		expectExcerptToContain(readiness, 'isGeneratedOutputReadyForReview(', 'generated output readiness')
+		expectExcerptToContain(accepted, 'isGeneratedOutputAcceptedForCanvas({', 'generated output accepted state')
+		expectExcerptNotToContain(accept, 'if (!asset ||', 'accept control')
+		expectExcerptToContain(reject, 'isGeneratedOutputRejectableForCanvas({', 'reject control')
+		expectExcerptNotToContain(regenerate, 'if (!asset ||', 'regeneration control')
+		expectExcerptToContain(chromeKey, "node.generatedBy?.generationRequestId ?? ''", 'generated media chrome key')
+		expectExcerptToContain(chromeKey, "node.generatedBy?.branchOriginNodeId ?? ''", 'generated media chrome key')
+		expectExcerptToContain(chromeKey, "asset?.media?.renditions.original?.status ?? ''", 'generated media chrome key')
+		expectExcerptToContain(chromeKey, "asset?.generatedOutputReview?.status ?? ''", 'generated media chrome key')
+		expectSourceToContain(ts, 'syncLoadedDocumentEditors()\n                syncBranchMarkerNodeContents()')
 	})
 
 	it('preserves workspace panel metadata when image workflows write canvas state', () => {
@@ -729,7 +778,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		// applies the server's canvasGeometry instead of building a local node tree.
 		expectSourceNotToContain(ts, 'rebalanceGeneratedMediaTrees(nodesWithVideo, newEdges)')
 		// Re-tidies on delete only when the removed node was a lineage member.
-		expectSourceToContain(ts, 'deletedNode && isBranchTreeCanvasNode(deletedNode)')
+		expectSourceToContain(ts, 'isBranchTreeCanvasNode(deletedNode)')
 		expectSourceToContain(ts, 'resolveGeneratedMediaTreeState(remainingNodes, updatedEdges)')
 		expectSourceNotToContain(ts, ['stripLegacy', 'Branch', 'Origin', 'Nodes'].join(''))
 	})
@@ -1451,8 +1500,10 @@ describe('Workspace canvas — detached generation resume stability', () => {
 
 		expectExcerptToContain(submitBody, 'const promptParts = getBranchMarkerPromptParts({', 'preflight prompt snapshot')
 		expectExcerptToContain(submitBody, 'promptParts,', 'preflight prompt snapshot')
-		expectExcerptToContain(promptPartsBody, 'if (node.pendingState)', 'preflight prompt snapshot')
 		expectExcerptToContain(promptPartsBody, 'pendingGeneratedImagePlacements.get(placementKey)?.promptParts', 'preflight prompt snapshot')
+		expectExcerptToContain(promptPartsBody, 'resolveBranchMarkerPromptParts({', 'preflight prompt snapshot')
+		expectExcerptToContain(promptPartsBody, 'persistedUserMessage: preview?.userMessage', 'preflight prompt snapshot')
+		expectExcerptNotToContain(promptPartsBody, 'if (node.pendingState)', 'preflight prompt snapshot')
 		expectExcerptNotToContain(screenProjectionBody, 'scrollWidth', 'preflight marker sizing')
 		expectExcerptNotToContain(screenProjectionBody, "width: 'max-content'", 'preflight marker sizing')
 	})
@@ -1470,7 +1521,12 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(insertBody, 'const promptText = getLatestAiUserMessageText(thread)', 'persisted marker restore')
 		expectExcerptToContain(insertBody, 'getDetachedThreadPendingModelStates(thread, promptText)', 'persisted marker restore')
 		expectExcerptToContain(insertBody, 'const nodeId = `pending-branch-${threadId}-${index}`', 'persisted marker restore')
-		expectExcerptToContain(insertBody, 'generationRequestId: threadId', 'persisted marker restore')
+		expectExcerptToContain(
+			insertBody,
+			'const generationRequestId = pendingGeneratedImagePlacements.get(threadId)?.generationRequestId ?? threadId',
+			'persisted marker restore',
+		)
+		expectExcerptToContain(insertBody, 'generationRequestId,', 'persisted marker restore')
 		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'persisted marker restore')
 		expectExcerptToContain(insertBody, 'syncPendingBranchMarkerScreenPlacements()', 'persisted marker restore')
 	})
@@ -1566,6 +1622,19 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptNotToContain(branchOriginBody, 'if (!isCurrentBranchMarkerPending(node.nodeId)) toggleBranchOriginGeneratedMediaInfo(node.nodeId)', 'branch origin node')
 		expectExcerptNotToContain(branchForkBody, 'if (!isCurrentBranchMarkerPending(node.nodeId)) toggleBranchForkGeneratedMediaInfo(node.nodeId)', 'branch fork node')
 		expectExcerptNotToContain(branchLineBody, 'if (!isCurrentBranchMarkerPending(node.nodeId)) toggleBranchLineGeneratedMediaInfo(node.nodeId)', 'branch line node')
+	})
+
+	it('restores branch cancellation controls from persisted nonterminal output state after reload', () => {
+		const activeBody = extractFunctionBody(ts, 'isBranchMarkerGenerationGroupActive')
+		const stopBody = extractFunctionBody(ts, 'stopBranchMarkerGeneration')
+
+		expectExcerptToContain(activeBody, 'const hasPersistedActiveOutput = generatedOutputNodes.some', 'branch group activity recovery')
+		expectExcerptToContain(activeBody, 'isPersistedMediaGenerationActive({', 'branch group activity recovery')
+		expectExcerptToContain(activeBody, 'progressStatus: outputNode.generationProgress?.status', 'branch group activity recovery')
+		expectExcerptToContain(activeBody, 'mediaGenerationPhase: outputNode.mediaGenerationPhase', 'branch group activity recovery')
+		expectExcerptToContain(activeBody, 'if (hasPersistedActiveOutput) return true', 'branch group activity recovery')
+		expectExcerptToContain(stopBody, 'conversationAssetId: threadId', 'reloaded branch cancellation')
+		expectExcerptToContain(stopBody, 'generationRequestId: projectionGenerationRequestId', 'reloaded branch cancellation')
 	})
 
 	it('clears pending marker state and refreshes persisted thread content when a media run finishes', () => {
@@ -2133,7 +2202,11 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'const referenceNodeIds = getExistingMediaNodeIds(explicitReferenceNodeIds)')
 		expectSourceToContain(ts, 'setGeneratingReferenceNodeIds(threadId, candidateNodeIds)')
 		expectSourceNotToContain(ts, '...Array.from(selectedNodeIds),')
-		expectSourceToContain(ts, 'const placementAnchorNodeId = referenceNodeIds[0] ?? activeTargetNodeId ?? candidateNodeIds[0]')
+		expectSourceToContain(ts, 'const inferredActiveTargetNodeId = getMediaBranchSnapshotActiveTargetNodeId(mediaBranchCandidateSnapshot)')
+		expectSourceToContain(ts, 'const placementAnchorNodeId = inferredActiveTargetNodeId')
+		expectSourceToContain(ts, '?? activeTargetNodeId')
+		expectSourceToContain(ts, '?? referenceNodeIds[0]')
+		expectSourceToContain(ts, '?? candidateNodeIds[0]')
 		expectSourceToContain(ts, '...(placementAnchorNodeId ? { placementAnchorNodeId } : {}),')
 		expectSourceToContain(ts, 'referenceNodeIds: candidateNodeIds,')
 		expectSourceToContain(ts, 'rememberStandaloneGeneratedImagePlacement(')
@@ -2393,6 +2466,27 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 		expectExcerptToContain(fnBody, 'selectedNodeIdsInRect.add(node.nodeId)')
 		expectExcerptNotToContain(fnBody, 'getSelectionTargetNodeId')
+	})
+
+	it('includes branch lineage markers in marquee selection while preserving their click-to-inspect behavior', () => {
+		const intersection = extractFunctionBody(ts, 'selectionRectIntersectsNode')
+		const filter = extractFunctionBody(ts, 'filterSelectableNodeIds')
+		const branchOrigin = extractFunctionBody(ts, 'createBranchOriginNode')
+		const branchFork = extractFunctionBody(ts, 'createBranchForkNode')
+		const branchLine = extractFunctionBody(ts, 'createBranchLineNode')
+
+		expectExcerptToContain(intersection, 'rectsOverlap(rect, getSelectionBoundsForNode(node))', 'selectionRectIntersectsNode')
+		expectExcerptNotToContain(intersection, "node.type !== 'branchOrigin'", 'selectionRectIntersectsNode')
+		expectExcerptToContain(filter, 'currentCanvasState.nodes.map((node: CanvasNode) => node.nodeId)', 'filterSelectableNodeIds')
+		expectExcerptNotToContain(filter, '.filter(isSelectableCanvasNode)', 'filterSelectableNodeIds')
+		for (const [label, source] of [
+			['createBranchOriginNode', branchOrigin],
+			['createBranchForkNode', branchFork],
+			['createBranchLineNode', branchLine],
+		] as const) {
+			expectExcerptToContain(source, 'allowSelection: false', label)
+			expectExcerptToContain(source, 'handleBranchMarkerInfoClick(node.nodeId)', label)
+		}
 	})
 
 	it('clicking inside editor content (ProseMirror, contenteditable) does not trigger node selection', () => {
@@ -3296,13 +3390,74 @@ describe('asset membership persistence', () => {
 	})
 
 	it('uses the per-workspace mutation lane and commits the rebased accepted state', () => {
+		const membershipRebase = loadCanvasMembershipStateRebase()
+
 		expectSourceToContain(svelte, 'return await workspaceService.runCanvasMembershipMutation({')
-		expectSourceToContain(svelte, 'const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, \'attach\')')
-		expectSourceToContain(svelte, 'const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, \'detach\')')
+		expectSourceToContain(svelte, 'const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, \'attach\')')
+		expectSourceToContain(svelte, "'detach',\n                        removedNodeIds,")
+		expectSourceToContain(membershipRebase, 'const removedNodeIdSet = new Set(removedNodeIds)')
+		expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(node.nodeId)')
+		expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(edge.sourceNodeId)')
 		expectSourceToContain(svelte, 'const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)')
-		expectSourceToContain(ts, 'onAssetDetach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>')
+		expectSourceToContain(ts, 'removedNodeIds: string[]')
 		expectSourceToContain(ts, 'onAssetAttach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>')
 		expectSourceToContain(ts, 'const committedState = await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })')
+		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(committedState)')
+	})
+})
+
+describe('canvas node deletion', () => {
+	const ts = loadTs()
+
+	it('deletes marquee selections from the keyboard without intercepting editor input', () => {
+		const start = ts.indexOf('const onKeyDown = (e: KeyboardEvent) => {')
+		const end = ts.indexOf('\n    function ensureMediaLibraryPanel()', start)
+		const handler = ts.slice(start, end)
+
+		expect(start).toBeGreaterThan(-1)
+		expect(end).toBeGreaterThan(start)
+		expectExcerptToContain(handler, 'if (isTyping) return', 'canvas keydown handler')
+		expectExcerptToContain(handler, "(e.key === 'Backspace' || e.key === 'Delete') && selectedNodeIds.size > 0", 'canvas keydown handler')
+		expectExcerptToContain(handler, 'void deleteCanvasNodes(new Set(selectedNodeIds))', 'canvas keydown handler')
+	})
+
+	it('uses one deletion path for node menus and generated-output rejection', () => {
+		expectSourceToContain(ts, 'void deleteCanvasNodes(new Set([nodeId]))')
+		expectSourceToContain(ts, 'async function deleteCanvasNodes(nodeIds: ReadonlySet<string>): Promise<void>')
+		expectSourceToContain(ts, 'return isGeneratedOutputRejectableForCanvas({')
+		expectSourceToContain(ts, "action: 'reject'")
+		expectSourceToContain(ts, 'aria-label="Reject and delete generated output"')
+		expectSourceToContain(ts, 'innerHTML=${trashBinIcon}')
+	})
+
+	it('keeps rejection enabled while an output is still generating', () => {
+		const rejectButton = extractFunctionBody(ts, 'createMediaRejectButton')
+
+		expectExcerptToContain(
+			rejectButton,
+			"? 'Cancel generation and delete output'",
+			'createMediaRejectButton',
+		)
+		expect(
+			rejectButton.includes('button.disabled'),
+			'createMediaRejectButton should not disable pending-output deletion',
+		).toBe(false)
+	})
+
+	it('rejects a selected lineage marker authoritatively and locally removes an unpersisted orphan', () => {
+		const deletion = extractFunctionBody(ts, 'deleteCanvasNodes')
+
+		expectExcerptToContain(deletion, 'if (isBranchMarkerNode(node))', 'deleteCanvasNodes')
+		expectExcerptToContain(deletion, "await rejectGeneratedOutput('branch-lineage', node.nodeId)", 'deleteCanvasNodes')
+		expectExcerptToContain(deletion, "if (outcome === 'not-found')", 'deleteCanvasNodes branch marker handling')
+		expectExcerptToContain(deletion, 'await detachCanvasNode(node.nodeId)', 'deleteCanvasNodes branch marker handling')
+		expectSourceToContain(ts, "if (result.error === 'GENERATED_OUTPUT_NOT_FOUND') return 'not-found'")
+	})
+
+	it('passes every pruned marker id through the authoritative Asset detach rebase', () => {
+		expectSourceToContain(ts, 'const removedNodeIds = getRemovedCanvasNodeIds(previousState, unprunedNextState)')
+		expectSourceToContain(ts, 'const nextState = pruneCanvasContextChips(unprunedNextState, removedNodeIds)')
+		expectSourceToContain(ts, 'resolveGeneratedMediaTreeState(remainingNodes, updatedEdges)')
 		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(committedState)')
 	})
 })

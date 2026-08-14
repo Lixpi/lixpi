@@ -118,6 +118,8 @@ When the last reference is removed, the same transaction sets lifecycle `deletin
 4. deletes zero-reference Blob objects;
 5. deletes Asset ACL, Meta, and aggregate rows under revision conditions.
 
+Blob deletion claims expire and can be taken over after the configured worker timeout. A worker releases its own claim when Object Store deletion or DB finalization fails, and the JetStream consumer delays the message while a zero-reference Blob still has an active claim. Object Store tombstones count as deleted, so retrying finalization does not issue another object deletion.
+
 Workspace deletion removes every workspace reference and every catalog owned by that workspace before removing the Workspace triad. Only a Workspace owner can delete it.
 
 ## Content-addressed Blobs

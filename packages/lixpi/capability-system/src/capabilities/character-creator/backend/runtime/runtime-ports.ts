@@ -13,6 +13,8 @@ import type { CapabilityMediaExecutionContext } from '../../../../backend/capabi
 import type { CharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
 
 export type CharacterImageReferenceRole =
+    | 'edit-target'
+    | 'edit-target-identity'
     | 'original-source'
     | 'source-reference'
     | 'capability-reference'

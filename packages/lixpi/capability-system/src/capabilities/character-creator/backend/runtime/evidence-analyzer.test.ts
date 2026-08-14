@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { buildCharacterPanelSpecs } from '../../shared/character-sheet-media-plan.ts'
 import {
     analyzeCharacterEvidence,
     selectCharacterEvidenceFacts,
@@ -61,6 +62,37 @@ describe('character evidence analysis', () => {
         expect(evidence.facts.some(fact => fact.visibility === 'inferred')).toBe(false)
     })
 
+    it('relinks an observed fact to the only authorized original source', async () => {
+        const evidence = await analyzeCharacterEvidence({
+            sources: [source('asset-original')],
+            userPrompt: 'Use the original clothing and keep only the prior face.',
+            editTargetPresent: true,
+            analyzer: {
+                analyze: async () => ({
+                    medium: 'illustration',
+                    editTargetPolicy: 'identity-only',
+                    editTargetApprovedRegions: ['face'],
+                    editTargetRejectedRegions: ['body', 'outfit', 'hands', 'feet', 'prop'],
+                    facts: [{
+                        feature: 'outfit construction',
+                        value: 'long coat with covered arms',
+                        region: 'outfit',
+                        requestAuthority: 'assigned',
+                        visibility: 'observed',
+                        targetAngles: ['back'],
+                        confidence: 1,
+                    }],
+                }),
+            },
+        })
+
+        expect(evidence.editTargetPolicy).toBe('identity-only')
+        expect(evidence.facts).toContainEqual(expect.objectContaining({
+            feature: 'outfit construction',
+            sourceAssetId: 'asset-original',
+        }))
+    })
+
     it('keeps observed and inferred facts and records multi-source conflicts', async () => {
         const evidence = await analyzeCharacterEvidence({
             sources: [source('asset-front'), source('asset-profile')],
@@ -91,7 +123,7 @@ describe('character evidence analysis', () => {
             .find(fact => fact.feature === 'coat color')?.value).toBe('brown')
     })
 
-    it('lets explicit prompt changes override observed source facts', async () => {
+    it('retains changed original-source facts so requests can explicitly reuse them', async () => {
         const evidence = await analyzeCharacterEvidence({
             sources: [source('asset-front')],
             userPrompt: 'Change coat to blue',
@@ -112,7 +144,9 @@ describe('character evidence analysis', () => {
             evidence,
             targetAngle: 'front',
             promptChangedFeatures: evidence.promptChangedFeatures,
-        })).toEqual([])
+        })).toEqual([
+            expect.objectContaining({ feature: 'coat color', value: 'red' }),
+        ])
         expect(evidence.promptDirectives).toEqual(['Change the coat to blue.'])
     })
 
@@ -135,5 +169,79 @@ describe('character evidence analysis', () => {
                 }),
             },
         })).rejects.toThrow('CHARACTER_EVIDENCE_REGION_INVALID')
+    })
+
+    it('restricts a mixed-authority edit target to its sole approved region', async () => {
+        const panels = buildCharacterPanelSpecs()
+        const evidence = await analyzeCharacterEvidence({
+            sources: [source('asset-original')],
+            editTargets: [{
+                ...source('asset-sheet'),
+                rendition: 'composition-component' as const,
+                sourceKind: 'composition-component' as const,
+                componentId: 'head-front-neutral',
+                compositionAssetId: 'asset-sheet',
+            }],
+            panels,
+            userPrompt: 'Apply the requested corrections throughout the sheet.',
+            editTargetPresent: true,
+            analyzer: {
+                analyze: async () => ({
+                    medium: 'illustration',
+                    editTargetPolicy: 'preserve-panel',
+                    editTargetApprovedRegions: ['face'],
+                    editTargetRejectedRegions: ['body', 'outfit', 'prop'],
+                    regenerationScope: 'full-sheet',
+                    affectedPanelIds: panels.map(panel => panel.panelId),
+                }),
+            },
+        })
+
+        expect(evidence.editTargetPolicy).toBe('identity-only')
+        expect(evidence.regenerationScope).toBe('full-sheet')
+        expect(evidence.affectedPanelIds).toEqual(panels.map(panel => panel.panelId))
+    })
+
+    it('prefers request-assigned source evidence over a higher-confidence supporting source', async () => {
+        const evidence = await analyzeCharacterEvidence({
+            sources: [source('asset-assigned'), source('asset-supporting')],
+            userPrompt: 'Use the assigned source for this visible feature.',
+            analyzer: {
+                analyze: async () => ({
+                    medium: 'illustration',
+                    facts: [
+                        {
+                            feature: 'surface treatment',
+                            value: 'assigned appearance',
+                            region: 'outfit',
+                            requestAuthority: 'assigned',
+                            visibility: 'observed',
+                            sourceAssetId: 'asset-assigned',
+                            targetAngles: ['front'],
+                            confidence: 0.6,
+                        },
+                        {
+                            feature: 'surface treatment',
+                            value: 'supporting appearance',
+                            region: 'outfit',
+                            requestAuthority: 'supporting',
+                            visibility: 'observed',
+                            sourceAssetId: 'asset-supporting',
+                            targetAngles: ['front'],
+                            confidence: 1,
+                        },
+                    ],
+                }),
+            },
+        })
+
+        expect(selectCharacterEvidenceFacts({
+            evidence,
+            targetAngle: 'front',
+            promptChangedFeatures: [],
+        })).toContainEqual(expect.objectContaining({
+            sourceAssetId: 'asset-assigned',
+            value: 'assigned appearance',
+        }))
     })
 })

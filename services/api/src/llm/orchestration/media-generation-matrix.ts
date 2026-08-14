@@ -449,16 +449,20 @@ export class MediaGenerationMatrixOrchestrator {
         if (generationRequestId) {
             const requestGroupKey = buildMediaGenerationRequestGroupKey(workspaceId, aiChatThreadId, generationRequestId)
             this.cancelledRequestGroupKeys.add(requestGroupKey)
-            await this.registry.stopGroup(requestGroupKey)
             const publisher = this.requestPublishers.get(requestGroupKey)
+            publisher?.beginMediaGenerationRequestCancellation(generationRequestId)
+            await this.registry.stopGroup(requestGroupKey)
             if (publisher) {
-                await publisher.cancelProseMirrorGenerationRequest(generationRequestId)
+                try {
+                    await publisher.cancelProseMirrorGenerationRequest(generationRequestId)
+                } catch (error) {
+                    warn(`[MEDIA_MATRIX] Failed to settle live cancelled transcript state: ${String(error)}`)
+                }
                 publisher.mediaGenerationRequestComplete(generationRequestId, {
                     removeProjectedPendingNodes: true,
                 })
                 await publisher.drainPendingWrites()
                 await publisher.finishProseMirrorStream()
-                this.cancelledRequestGroupKeys.delete(requestGroupKey)
                 this.scheduleRequestPublisherCleanup(requestGroupKey)
             } else {
                 const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
@@ -473,16 +477,20 @@ export class MediaGenerationMatrixOrchestrator {
                 })
                 this.scheduleRequestPublisherCleanup(requestGroupKey)
             }
-            const persistedThreadCancellation = await settlePersistedAiChatGenerationRequest({
-                workspaceId,
-                aiChatThreadId,
-                generationRequestId,
-            })
-            info('[MEDIA_MATRIX] Persisted cancelled transcript state', {
-                requestGroupKey,
-                generationRequestId,
-                ...persistedThreadCancellation,
-            })
+            try {
+                const persistedThreadCancellation = await settlePersistedAiChatGenerationRequest({
+                    workspaceId,
+                    aiChatThreadId,
+                    generationRequestId,
+                })
+                info('[MEDIA_MATRIX] Persisted cancelled transcript state', {
+                    requestGroupKey,
+                    generationRequestId,
+                    ...persistedThreadCancellation,
+                })
+            } catch (error) {
+                warn(`[MEDIA_MATRIX] Failed to settle persisted cancelled transcript state: ${String(error)}`)
+            }
             return
         }
 

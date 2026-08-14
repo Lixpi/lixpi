@@ -7,6 +7,7 @@ import {
     getBranchMarkerPromptDisplayText,
     getBranchMarkerPromptParts,
     renderBranchMarkerPromptParts,
+    resolveBranchMarkerPromptParts,
     truncateBranchMarkerPromptParts,
 } from './branchMarkerPromptReferences.ts'
 
@@ -38,6 +39,29 @@ const submittedMessage = {
 }
 
 describe('branch marker prompt content', () => {
+    it('keeps the exact submitted prompt while the persisted turn is still unavailable', () => {
+        const submittedParts = getBranchMarkerPromptParts(submittedMessage, '')
+
+        expect(resolveBranchMarkerPromptParts({
+            submittedParts,
+            fallbackText: 'REFERENCE_1 placeholder serialization',
+        })).toEqual(submittedParts)
+    })
+
+    it('switches from the submit snapshot only when the persisted user turn is available', () => {
+        expect(getBranchMarkerPromptDisplayText(resolveBranchMarkerPromptParts({
+            persistedUserMessage: {
+                type: 'aiUserMessage',
+                content: [{
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Persisted user request' }],
+                }],
+            },
+            submittedParts: [{ type: 'text', text: 'Submitted user request' }],
+            fallbackText: 'Serialized provider request',
+        }))).toBe('Persisted user request')
+    })
+
     it('reads submitted composer content before the persisted user message is available', () => {
         const parts = getBranchMarkerPromptParts({
             type: 'doc',

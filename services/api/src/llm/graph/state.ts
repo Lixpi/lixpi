@@ -145,6 +145,7 @@ export type ProviderState = {
 
     // Stream state
     streamActive: boolean
+    cancelledByUser?: boolean | undefined
     error?: string | undefined
     errorCode?: string | undefined
     errorType?: string | undefined
@@ -257,6 +258,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     maxCompletionSize: { reducer: keep },
     temperature: { reducer: keep, default: () => 0.7 },
     streamActive: { reducer: keep, default: () => false },
+    cancelledByUser: { reducer: keep },
     error: { reducer: keep },
     errorCode: { reducer: keep },
     errorType: { reducer: keep },

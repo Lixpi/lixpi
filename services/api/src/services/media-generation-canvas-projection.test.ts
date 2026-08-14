@@ -37,9 +37,11 @@ vi.mock('../models/asset.ts', () => ({
 
 import {
     detachReviewedGeneratedOutputsFromCanvas,
+    removeOrphanBranchLineageMarkerFromCanvas,
     projectGeneratedAssetNode,
     refreshMediaGenerationRequestCanvasGeometry,
     removeGeneratedOutputCandidateFromCanvas,
+    removeMediaGenerationRequestFromCanvas,
     settleFailedGeneratedMediaRunOnCanvas,
     settleMediaGenerationRequestOnCanvas,
     upsertMediaLineagePlanToCanvas,
@@ -308,6 +310,38 @@ describe('asset canvas projection', () => {
         })
     })
 
+    it('removes a residual failed operation node when cancellation has no media output left', async () => {
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [{
+                nodeId: 'failed-operation-1',
+                type: 'operationStatus',
+                operation: 'media-generation',
+                status: 'error',
+                title: 'Generation failed',
+                message: 'Abort',
+                generationRequestId: 'request-1',
+                position: { x: 100, y: 100 },
+                dimensions: { width: 360, height: 104 },
+                createdAt: 1,
+                updatedAt: 2,
+            }],
+        }
+
+        const geometry = await removeMediaGenerationRequestFromCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            conversationAssetId: 'thread-1',
+            requester: { userId: 'user-1' } as any,
+        })
+
+        expect(storedState.nodes).toEqual([])
+        expect(geometry?.removedNodeIds).toEqual(['failed-operation-1'])
+        expect(mocks.mutateCanvasState).toHaveBeenCalledWith(expect.objectContaining({
+            origin: 'removeCancelledMediaGenerationRequestFromCanvas',
+        }))
+    })
+
     it('seeds only the lineage markers before any media asset is projected, leaving media slots for per-asset projection', async () => {
         const plan = lineagePlan()
         plan.runAssignments = twoImageModelAssignments()
@@ -524,6 +558,26 @@ describe('asset canvas projection', () => {
             conversationAssetId: 'thread-1',
             lineagePlan: provisionalPlan,
         })
+        storedState = {
+            ...storedState,
+            nodes: [...storedState.nodes, {
+                nodeId: 'late-preflight-marker',
+                type: 'branchLine',
+                branchId: 'pending-thread-1',
+                generationRequestId: 'thread-1',
+                conversationAssetId: 'thread-1',
+                pendingState: {
+                    phase: 'preflight',
+                    promptText: 'Pending request',
+                    reasoningModelIds: [],
+                    imageModelIds: [],
+                    videoModelIds: [],
+                },
+                position: { x: 0, y: 0 },
+                dimensions: { width: 200, height: 60 },
+                temporary: true,
+            } as any],
+        }
         const {
             branchOriginNodeId: _branchOriginNodeId,
             branchForkNodeId: _branchForkNodeId,
@@ -585,6 +639,7 @@ describe('asset canvas projection', () => {
 
         expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: 'origin-1' }))
         expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: 'fork-1' }))
+        expect(storedState.nodes).not.toContainEqual(expect.objectContaining({ nodeId: 'late-preflight-marker' }))
         expect(storedState.nodes).toContainEqual(expect.objectContaining({
             nodeId: 'branch-line-request-1-r0-image-0',
             type: 'branchLine',
@@ -606,7 +661,7 @@ describe('asset canvas projection', () => {
             expect.objectContaining({ sourceNodeId: 'branch-line-request-1-r0-image-0', targetNodeId: pendingNodeId }),
         ]))
         expect(geometry).toMatchObject({
-            removedNodeIds: expect.arrayContaining(['origin-1', 'fork-1']),
+            removedNodeIds: expect.arrayContaining(['origin-1', 'fork-1', 'late-preflight-marker']),
             removedEdgeIds: expect.arrayContaining([
                 'edge-origin-1-fork-1',
                 `edge-fork-1-${pendingNodeId}`,
@@ -852,6 +907,47 @@ describe('asset canvas projection', () => {
 
         expect(storedState.nodes).toEqual([])
         expect(geometry).toMatchObject({ removedNodeIds: [pendingNodeId] })
+    })
+
+    it('returns the terminal request snapshot when settlement does not change geometry', async () => {
+        storedState = {
+            ...emptyCanvasState(),
+            nodes: [{
+                nodeId: 'completed-image-1',
+                type: 'image',
+                assetId: 'asset-1',
+                mediaGenerationPhase: 'ready',
+                generatedBy: { generationRequestId: 'request-1' },
+                generationProgress: {
+                    generationRequestId: 'request-1',
+                    status: 'completed',
+                    message: 'Media generation completed.',
+                    progress: createDefaultMediaGenerationRunProgress(
+                        'completed',
+                        'Media generation completed.',
+                    ),
+                    updatedAt: 100,
+                },
+                position: { x: 100, y: 100 },
+                dimensions: { width: 800, height: 800 },
+            }],
+            edges: [],
+        }
+
+        const geometry = await settleMediaGenerationRequestOnCanvas({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+        })
+
+        expect(geometry).toMatchObject({
+            generationRequestId: 'request-1',
+            layoutRevision: 100,
+            nodes: [],
+            nodeSnapshots: [expect.objectContaining({
+                nodeId: 'completed-image-1',
+                generationProgress: expect.objectContaining({ status: 'completed' }),
+            })],
+        })
     })
 
     it('replaces a failed Asset-backed pending node in place with the structured error surface', async () => {
@@ -1131,6 +1227,13 @@ describe('asset canvas projection', () => {
     it('accept detaches output lineage and removes unreferenced markers, while supersede preserves an explicit marker', () => {
         const state: CanvasState = {
             ...emptyCanvasState(),
+            aiChatPanel: {
+                isOpen: false,
+                isSessionHistoryOpen: false,
+                topLevelMode: 'aiThreads',
+                tabs: [],
+                contextChips: ['media-1'],
+            },
             nodes: [
                 { nodeId: 'fork-1', type: 'branchFork', branchId: 'branch-1', generationRequestId: 'request-1', reasoningRunId: 'reasoning-1', reasoningModelId: 'Anthropic:claude-sonnet-4-6', reasoningIndex: 0, position: { x: 0, y: 0 }, dimensions: { width: 120, height: 60 }, provenance: {} },
                 {
@@ -1178,5 +1281,53 @@ describe('asset canvas projection', () => {
         expect(accepted.removedNodeIds).toEqual(['fork-1'])
         expect(superseded.canvasState.nodes).toEqual([expect.objectContaining({ nodeId: 'fork-1' })])
         expect(superseded.removedNodeIds).toEqual(['media-1'])
+        expect(superseded.canvasState.aiChatPanel?.contextChips).toEqual([])
+    })
+
+    it('removes an orphan branch marker, its incident edges, and stale context chips', () => {
+        const state: CanvasState = {
+            ...emptyCanvasState(),
+            aiChatPanel: {
+                isOpen: false,
+                isSessionHistoryOpen: false,
+                topLevelMode: 'aiThreads',
+                tabs: [],
+                contextChips: ['branch-line-1'],
+            },
+            nodes: [
+                {
+                    nodeId: 'source-media-1',
+                    type: 'image',
+                    assetId: 'asset-source-1',
+                    position: { x: 0, y: 0 },
+                    dimensions: { width: 100, height: 100 },
+                },
+                {
+                    nodeId: 'branch-line-1',
+                    type: 'branchLine',
+                    branchId: 'branch-1',
+                    generationRequestId: 'request-1',
+                    position: { x: 200, y: 0 },
+                    dimensions: { width: 120, height: 60 },
+                    temporary: true,
+                },
+            ] as any,
+            edges: [{
+                edgeId: 'edge-source-media-1-branch-line-1',
+                sourceNodeId: 'source-media-1',
+                targetNodeId: 'branch-line-1',
+            }],
+        }
+
+        const removed = removeOrphanBranchLineageMarkerFromCanvas({
+            canvasState: state,
+            nodeId: 'branch-line-1',
+        })
+
+        expect(removed.canvasState.nodes).toEqual([expect.objectContaining({ nodeId: 'source-media-1' })])
+        expect(removed.canvasState.edges).toEqual([])
+        expect(removed.canvasState.aiChatPanel?.contextChips).toEqual([])
+        expect(removed.removedNodeIds).toEqual(['branch-line-1'])
+        expect(removed.removedEdgeIds).toEqual(['edge-source-media-1-branch-line-1'])
     })
 })

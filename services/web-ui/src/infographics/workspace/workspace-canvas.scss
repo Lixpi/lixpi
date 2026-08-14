@@ -2096,8 +2096,7 @@
     pointer-events: auto;
 }
 
-.workspace-media-operation-action,
-.workspace-media-operation-candidate {
+.workspace-media-operation-action {
     min-height: 28px;
     padding: 5px 9px;
     border: 1px solid rgba(95, 143, 207, 0.38);
@@ -2110,6 +2109,82 @@
     &:disabled {
         cursor: progress;
         opacity: 0.55;
+    }
+}
+
+.workspace-branch-reference-resolution {
+    --prompt-reference-color: #d7e6ff;
+
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 7px);
+    z-index: 24;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px 7px;
+    width: max-content;
+    max-width: min(560px, calc(100vw - 48px));
+    box-sizing: border-box;
+    padding: 7px 10px;
+    border: 1px solid var(--workspace-branch-origin-border-color);
+    border-radius: 13px 13px 4px 13px;
+    background: var(--workspace-branch-origin-background-color);
+    box-shadow: var(--workspace-branch-origin-box-shadow);
+    color: var(--workspace-branch-origin-icon-color);
+    cursor: default;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    pointer-events: auto;
+}
+
+.workspace-branch-reference-resolution-message {
+    opacity: 0.82;
+    white-space: nowrap;
+}
+
+.workspace-branch-reference-resolution-choices {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.workspace-branch-reference-resolution-choice {
+    display: inline-flex;
+    cursor: pointer;
+    opacity: 0.94;
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+
+    &:hover,
+    &:focus-within {
+        opacity: 1;
+    }
+
+    &.is-resolving {
+        cursor: progress;
+        opacity: 0.48;
+    }
+
+    .prompt-reference-chip {
+        color: var(--prompt-reference-color);
+        font-size: inherit;
+        line-height: inherit;
+    }
+}
+
+.workspace-branch-reference-resolution-error {
+    flex-basis: 100%;
+    color: #ffd0d0;
+    font-size: 10px;
+    font-weight: 500;
+    text-align: right;
+
+    &:empty {
+        display: none;
     }
 }
 
@@ -2309,6 +2384,14 @@
     border-radius: var(--workspace-branch-marker-progress-corner-radius);
     background: var(--workspace-branch-origin-background-color);
     box-shadow: var(--workspace-branch-origin-box-shadow);
+}
+
+.workspace-branch-marker-content.has-progress.has-stop-control {
+    padding-right: 18px;
+}
+
+.workspace-branch-marker-content.has-progress.has-stop-control > .workspace-branch-marker-main > .workspace-branch-marker-message {
+    padding-right: 34px;
 }
 
 .workspace-branch-marker-content.has-progress .workspace-branch-marker-separator {

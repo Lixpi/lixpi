@@ -8,6 +8,8 @@ import { parseDataUrl, resolveImageUrls } from './utils/attachments.ts'
 
 export type ImageGenerationReferenceRole =
     | 'capability-reference'
+    | 'edit-target'
+    | 'edit-target-identity'
     | 'source-reference'
     | 'original-source'
     | 'face-crop'

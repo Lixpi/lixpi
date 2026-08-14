@@ -607,14 +607,8 @@ export class MediaGenerationRequestService {
         return next
     }
 
-    async cancel({ generationRequestId, workspaceId, userId, requestRevision }: {
-        generationRequestId: string
-        workspaceId: string
-        userId: string
-        requestRevision: number
-    }): Promise<MediaGenerationRequest> {
-        const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
-        if ('error' in authorized) throw new Error(authorized.error)
+    private async cancelAuthorizedRequest(authorized: MediaGenerationRequest): Promise<MediaGenerationRequest> {
+        const { generationRequestId, workspaceId, userId } = authorized
         if (['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)) {
             await removeMediaGenerationOperationNodes({
                 workspaceId,
@@ -624,7 +618,6 @@ export class MediaGenerationRequestService {
             })
             return authorized
         }
-        if (authorized.revision !== requestRevision) throw new Error('STALE_MEDIA_REQUEST_REVISION')
         const cancelledRuns = authorized.runs.filter(run => (
             !['completed', 'failed', 'cancelled'].includes(run.status)
         ))
@@ -666,6 +659,39 @@ export class MediaGenerationRequestService {
         }))
         await this.releaseCheckpoint(next)
         return next
+    }
+
+    async cancel({ generationRequestId, workspaceId, userId, requestRevision }: {
+        generationRequestId: string
+        workspaceId: string
+        userId: string
+        requestRevision: number
+    }): Promise<MediaGenerationRequest> {
+        const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
+        if ('error' in authorized) throw new Error(authorized.error)
+        if (!['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)
+            && authorized.revision !== requestRevision) {
+            throw new Error('STALE_MEDIA_REQUEST_REVISION')
+        }
+        return await this.cancelAuthorizedRequest(authorized)
+    }
+
+    async cancelCurrent({ generationRequestId, workspaceId, userId }: {
+        generationRequestId: string
+        workspaceId: string
+        userId: string
+    }): Promise<MediaGenerationRequest> {
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
+            if ('error' in authorized) throw new Error(authorized.error)
+            try {
+                return await this.cancelAuthorizedRequest(authorized)
+            } catch (error) {
+                if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
+                throw error
+            }
+        }
+        throw new Error('MEDIA_REQUEST_CAS_RETRY_EXHAUSTED')
     }
 
     async pauseForBranchResolution({ request, candidateAssetIds, userId }: {
@@ -905,6 +931,7 @@ export class MediaGenerationRequestService {
         for (let attempt = 0; attempt < 8; attempt++) {
             const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
             if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
+            if (request.status === 'cancelled') return request
             const run = request.runs.find(candidate => (
                 Boolean(mediaRunId && candidate.mediaRunId === mediaRunId)
                 || (!mediaRunId
@@ -977,6 +1004,7 @@ export class MediaGenerationRequestService {
         for (let attempt = 0; attempt < 8; attempt += 1) {
             const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
             if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
+            if (request.status === 'cancelled') return request
             const run = request.runs.find(candidate => (
                 Boolean(mediaRunId && candidate.mediaRunId === mediaRunId)
                 || (!mediaRunId

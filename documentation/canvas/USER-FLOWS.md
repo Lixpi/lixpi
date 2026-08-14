@@ -196,6 +196,10 @@ Because placement and catalog references are independent, removing a canvas node
 
 When an Asset-backed node is removed, the browser submits an Asset detach with the new canvas state. The API atomically commits the canvas mutation and removes the node ID from the Workspace reference. An Asset enters maintenance deletion only when its reference count reaches zero.
 
+Canvas nodes, including branch lineage markers, support marquee selection. Image, video, document, audio, and Capability Artifact nodes also support direct and modifier-assisted selection. Delete or Backspace removes the selected nodes unless focus is inside an input, textarea, or contenteditable editor. Deleting a selected branch marker rejects its candidate outputs at branch scope so the related canvas topology and generation-owned Asset references are removed together. If the marker has no candidate output, the API removes the orphan marker and its incident edges without requiring an Asset review transition. Deleting ordinary nodes removes incident edges, context chips, and a branch marker after its last generated child is gone. Batch deletion serializes Asset detach transactions through the workspace mutation lane so each transaction has an authoritative canvas revision.
+
+Candidate media also has a Reject control beside Accept and Regenerate. Reject removes the candidate node and releases its generation-owned conversation and catalog references. Ordinary node deletion leaves the independent catalog reference intact.
+
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
@@ -244,7 +248,7 @@ sequenceDiagram
     end
 ```
 
-Detachment never deletes bytes inline. Maintenance rechecks Asset and Blob reference counts before deletion, and catalog references protect the Asset independently of canvas placement. See [Workspace Model](./WORKSPACE-MODEL.md) and [Data Storage](../platform/DATA-STORAGE.md).
+Detachment never deletes bytes inline. Maintenance rechecks Asset and Blob reference counts before deletion, and catalog references protect the Asset independently of canvas placement. A rejected candidate releases its generation-owned catalog reference explicitly. See [Workspace Model](./WORKSPACE-MODEL.md) and [Data Storage](../platform/DATA-STORAGE.md).
 
 ## Editing Content
 

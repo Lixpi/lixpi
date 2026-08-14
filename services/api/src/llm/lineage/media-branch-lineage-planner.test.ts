@@ -28,6 +28,83 @@ const candidate = (overrides: Partial<MediaBranchCandidateImage>): MediaBranchCa
 }
 
 describe('MediaBranchLineagePlanner', () => {
+    it('continues an unambiguous active generated branch before semantic resolution finishes', () => {
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-provisional-continuation',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            mediaBranchCandidateSnapshot: {
+                resolverVersion: 'image-branch-vlm-v1',
+                conversationAssetId: 'thread-1',
+                regionNodeId: 'standalone:thread-1',
+                activeTargetCandidateId: 'node:derived-output',
+                explicitReferenceCandidateIds: ['node:source-input', 'node:derived-output'],
+                promptText: 'adjust only the derived output',
+                promptFingerprint: 'prompt-provisional',
+                transcriptContext: '',
+                candidates: [
+                    candidate({
+                        candidateId: 'node:source-input',
+                        nodeId: 'source-input',
+                        roleHints: ['base-context'],
+                    }),
+                    candidate({
+                        candidateId: 'node:derived-output',
+                        nodeId: 'derived-output',
+                        roleHints: ['generated-variant', 'branch-leaf', 'active-target'],
+                        branchId: 'branch-existing',
+                        sourceContextNodeIds: ['source-input', 'derived-output'],
+                    }),
+                ],
+            },
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.sourceNodeId).toBe('derived-output')
+        expect(plan.placementAnchorNodeId).toBe('derived-output')
+        expect(plan.branchId).toBe('branch-existing')
+        expect(plan.branchOrigin).toBeUndefined()
+        expect(plan.branchLines).toEqual([
+            expect.objectContaining({
+                parentBranchNodeId: 'derived-output',
+                branchId: 'branch-existing',
+            }),
+        ])
+        expect(plan.runAssignments[0]).toMatchObject({
+            parentMediaNodeId: 'derived-output',
+            lineageParentNodeId: plan.branchLines[0]?.nodeId,
+        })
+    })
+
+    it('does not turn an active base reference into a generated lineage continuation', () => {
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-provisional-root',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            mediaBranchCandidateSnapshot: {
+                resolverVersion: 'image-branch-vlm-v1',
+                conversationAssetId: 'thread-1',
+                regionNodeId: 'standalone:thread-1',
+                activeTargetCandidateId: 'node:source-input',
+                explicitReferenceCandidateIds: ['node:source-input'],
+                promptText: 'create a new output using the reference',
+                promptFingerprint: 'prompt-root',
+                transcriptContext: '',
+                candidates: [candidate({
+                    candidateId: 'node:source-input',
+                    nodeId: 'source-input',
+                    roleHints: ['base-context', 'active-target'],
+                })],
+            },
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.sourceNodeId).toBeUndefined()
+        expect(plan.placementAnchorNodeId).toBe('source-input')
+        expect(plan.branchOrigin).toBeDefined()
+        expect(plan.branchLines).toEqual([])
+    })
+
     it('places a preassigned Capability output through the normal lineage topology without creating another Asset', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-character',

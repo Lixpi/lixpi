@@ -1081,12 +1081,17 @@ export type MediaGenerationCanvasPhase = 'pending-before-first-frame' | 'ready'
 
 export type GeneratedOutputReviewScope = 'output-node' | 'branch-lineage'
 
-export type GeneratedOutputReviewAction = 'accept' | 'supersede'
+export type GeneratedOutputReviewAction = 'accept' | 'supersede' | 'reject'
 
 export type GeneratedOutputReviewRequest = {
     workspaceId: string
     scope: GeneratedOutputReviewScope
     action: 'accept'
+    nodeId: string
+} | {
+    workspaceId: string
+    scope: GeneratedOutputReviewScope
+    action: 'reject'
     nodeId: string
 } | {
     workspaceId: string
@@ -1108,6 +1113,7 @@ export type GeneratedOutputReviewResponse = {
     affectedAssetIds: string[]
     acceptedAssetIds: string[]
     supersededAssetIds: string[]
+    rejectedAssetIds: string[]
     canvasGeometry: CanvasGeometryUpdate
 }
 
@@ -1874,6 +1880,9 @@ export type AiInteractionChatSendMessagePayload = {
     // via `mediaGenerationRequest.reasoningModelIds`.
     aiReasoningModels: string[]
     conversationAssetId: string
+    // Allocated by the browser before a media turn is submitted so provisional
+    // canvas ownership, cancellation, and the durable request all share one ID.
+    generationRequestId?: string
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Explicit composer context attached to this submitted turn.

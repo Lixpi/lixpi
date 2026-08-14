@@ -73,6 +73,8 @@ Removing a node detaches only `(assetId, workspaceId, nodeId)`. The Asset surviv
 
 Removing the catalog reference is explicit. The final reference transition marks the Asset deleting and queues maintenance. Maintenance releases document/rendition Blob references and deletes zero-reference objects. There is no special media-library deletion path.
 
+Generated-candidate rejection is an explicit catalog removal. It releases the candidate's generation conversation surface and catalog reference before detaching the canvas node. Any other node or surface reference keeps the Asset and its Blobs alive.
+
 ## Generated media
 
 Generated outputs are Assets from preflight, before bytes exist. They appear with creating/processing state and settle to ready/degraded/failed/cancelled. Their original and derived renditions are attached to the same Asset identity; no “save generated image to library” copy is required.

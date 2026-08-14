@@ -17,6 +17,7 @@
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
+    import { rebaseCanvasMembershipState } from '$src/infographics/workspace/canvasMembershipStateRebase.ts'
     import AssetService from '$src/services/asset-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
     import { assetsStore } from '$src/stores/assetsStore.ts'
@@ -167,31 +168,17 @@
         workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
     }
 
-    function rebaseCanvasMembershipState(
+    function rebaseRequestedCanvasMembershipState(
         requestedState: CanvasState,
-        nodeId: string,
         operation: 'attach' | 'detach',
+        removedNodeIds: readonly string[] = [],
     ): CanvasState {
-        const currentState = renderer?.getCanvasState()
-        if (!currentState) return requestedState
-
-        const requestedNodeIds = new Set(requestedState.nodes.map((node) => node.nodeId))
-        const nodes = [
-            ...requestedState.nodes,
-            ...currentState.nodes.filter((node) => (
-                !requestedNodeIds.has(node.nodeId)
-                && !(operation === 'detach' && node.nodeId === nodeId)
-            )),
-        ]
-        const requestedEdgeIds = new Set(requestedState.edges.map((edge) => edge.edgeId))
-        const edges = [
-            ...requestedState.edges,
-            ...currentState.edges.filter((edge) => (
-                !requestedEdgeIds.has(edge.edgeId)
-                && !(operation === 'detach' && (edge.sourceNodeId === nodeId || edge.targetNodeId === nodeId))
-            )),
-        ]
-        return { ...requestedState, nodes, edges }
+        return rebaseCanvasMembershipState({
+            requestedState,
+            currentState: renderer?.getCanvasState(),
+            operation,
+            removedNodeIds,
+        })
     }
 
     function cloneViewport(viewportValue: Viewport | null | undefined): Viewport | null {
@@ -567,9 +554,13 @@
             },
             onDocumentContentChange: () => {},
             onAiChatThreadContentChange: () => {},
-            onAssetDetach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
+            onAssetDetach: async ({ assetId, nodeId, removedNodeIds, canvasState: requestedCanvasState }) => {
                 return await runCanvasMembershipMutation(workspaceId, async () => {
-                    const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, 'detach')
+                    const nextCanvasState = rebaseRequestedCanvasMembershipState(
+                        requestedCanvasState,
+                        'detach',
+                        removedNodeIds,
+                    )
                     const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
                     if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
                     const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
@@ -590,7 +581,7 @@
             },
             onAssetAttach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
                 return await runCanvasMembershipMutation(workspaceId, async () => {
-                    const nextCanvasState = rebaseCanvasMembershipState(requestedCanvasState, nodeId, 'attach')
+                    const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, 'attach')
                     const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
                     if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
                     const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)

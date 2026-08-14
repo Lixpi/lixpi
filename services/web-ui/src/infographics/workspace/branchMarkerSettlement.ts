@@ -1,6 +1,14 @@
 'use strict'
 
-import type { CanvasNode, CanvasState } from '@lixpi/constants'
+import type {
+    BranchForkCanvasNode,
+    BranchLineCanvasNode,
+    BranchOriginCanvasNode,
+    CanvasNode,
+    CanvasState,
+} from '@lixpi/constants'
+
+type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 
 export type PreflightBranchMarkerSettlement = {
     state: CanvasState
@@ -32,4 +40,28 @@ export function removePreflightBranchMarkersForThread(
         },
         removedNodeIds,
     }
+}
+
+export function getSupersededBranchMarkerNodeIdsForAuthoritativePlan(args: {
+    state: CanvasState
+    plannedMarkers: readonly BranchMarkerNode[]
+    generationRequestId: string
+}): string[] {
+    const authoritativeMarkers = args.plannedMarkers.filter(marker =>
+        marker.generationRequestId === args.generationRequestId)
+    if (authoritativeMarkers.length === 0) return []
+
+    const authoritativeNodeIds = new Set(authoritativeMarkers.map(marker => marker.nodeId))
+    const authoritativeThreadIds = new Set(authoritativeMarkers.flatMap(marker =>
+        marker.conversationAssetId ? [marker.conversationAssetId] : []))
+    return args.state.nodes.flatMap(node => {
+        if (node.type !== 'branchOrigin' && node.type !== 'branchFork' && node.type !== 'branchLine') return []
+        if (authoritativeNodeIds.has(node.nodeId)) return []
+        const isProvisionalPlanMarker = node.generationRequestId === args.generationRequestId
+        const isInitialPreflightMarker = node.pendingState?.phase === 'preflight'
+            && Boolean(node.conversationAssetId)
+            && authoritativeThreadIds.has(node.conversationAssetId!)
+            && node.generationRequestId === node.conversationAssetId
+        return isProvisionalPlanMarker || isInitialPreflightMarker ? [node.nodeId] : []
+    })
 }

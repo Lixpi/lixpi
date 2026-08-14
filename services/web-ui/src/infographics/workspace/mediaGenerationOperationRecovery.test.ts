@@ -150,6 +150,44 @@ describe('media generation operation recovery', () => {
         })
     })
 
+    it('does not misclassify request reference ambiguity as provider verification', () => {
+        const state: CanvasState = {
+            ...canvasState(),
+            nodes: [operationNode(), pendingOutputNode()],
+        }
+        const result = applyMediaGenerationRequestToOperationNodes(state, request({
+            status: 'awaiting-reference-resolution',
+            unresolvedBindings: [{
+                bindingId: 'binding-1',
+                promptRange: { from: 0, to: 8 },
+                originalText: 'portrait',
+                matcherVersion: '1',
+                candidates: [
+                    { assetId: 'asset-1', score: 0.9, previewRenditionName: 'thumbnail' },
+                    { assetId: 'asset-2', score: 0.8, previewRenditionName: 'thumbnail' },
+                ],
+            }],
+            runs: [{
+                generationRun: 0,
+                reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
+                reasoningIndex: 0,
+                provider: 'Stability',
+                modelId: 'Stability:sd3.5-large',
+                status: 'pending',
+                operationNodeId: 'operation-1',
+                outputNodeId: 'pending-image-media-run-1',
+                mediaRunId: 'media-run-1',
+            }],
+        }))
+
+        expect(result.state.nodes.find(node => node.nodeId === 'pending-image-media-run-1')).toMatchObject({
+            generationProgress: {
+                status: 'pending',
+                message: 'Choose which attached Asset the prompt refers to.',
+            },
+        })
+    })
+
     it('does not combine candidates from later unresolved bindings into the active picker', () => {
         const result = applyMediaGenerationRequestToOperationNodes(canvasState(), request({
             status: 'awaiting-reference-resolution',

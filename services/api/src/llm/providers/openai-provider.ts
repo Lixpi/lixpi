@@ -39,6 +39,7 @@ import {
     STAINLESS_TRANSPORT_FAULT_NAMES,
     TRANSPORT_RETRY_BUDGET_MS,
 } from '../utils/transport-retry.ts'
+import { prependImageReferencePromptLegend } from './image-reference-adapters.ts'
 
 type ImageRefFile = Pick<ResolvedImageGenerationReference,
     'role' |
@@ -60,6 +61,43 @@ export const buildOpenAIImageReferenceFiles = async (
     mediaType: reference.mediaType,
     sha256: reference.sha256,
 })))
+
+export const appendOpenAIImageGenerationReferences = (
+    inputMessages: Array<{ role: string; content: any }>,
+    references: readonly ResolvedImageGenerationReference[],
+): void => {
+    let lastUserMessage: { role: string; content: any } | undefined
+    for (let index = inputMessages.length - 1; index >= 0; index--) {
+        if (inputMessages[index]?.role === 'user') {
+            lastUserMessage = inputMessages[index]
+            break
+        }
+    }
+    if (!lastUserMessage) throw new Error('No user prompt found for image generation')
+    const existingContent = Array.isArray(lastUserMessage.content)
+        ? lastUserMessage.content
+        : [{ type: 'input_text', text: String(lastUserMessage.content ?? '') }]
+    const prompt = existingContent.flatMap(block => (
+        block?.type === 'input_text' || block?.type === 'text'
+            ? [String(block.text ?? '')]
+            : []
+    )).join('\n')
+    const nonTextContent = existingContent.filter(block => (
+        block?.type !== 'input_text' && block?.type !== 'text'
+    ))
+    lastUserMessage.content = [
+        {
+            type: 'input_text',
+            text: prependImageReferencePromptLegend(prompt, references),
+        },
+        ...nonTextContent,
+        ...references.map(reference => ({
+            type: 'input_image',
+            image_url: reference.dataUrl,
+            detail: 'high',
+        })),
+    ]
+}
 
 export class OpenAIProvider extends BaseProvider {
     readonly providerName: ProviderName = 'OpenAI'
@@ -109,25 +147,7 @@ export class OpenAIProvider extends BaseProvider {
 
         const resolvedImageGenerationReferences = state.resolvedImageGenerationReferences ?? []
         if (enableImageGeneration && !modelVersion.startsWith('gpt-image-') && resolvedImageGenerationReferences.length > 0) {
-            let lastUserMessage: { role: string; content: any } | undefined
-            for (let index = inputMessages.length - 1; index >= 0; index--) {
-                if (inputMessages[index]?.role === 'user') {
-                    lastUserMessage = inputMessages[index]
-                    break
-                }
-            }
-            if (!lastUserMessage) throw new Error('No user prompt found for image generation')
-            const existingContent = Array.isArray(lastUserMessage.content)
-                ? lastUserMessage.content
-                : [{ type: 'input_text', text: String(lastUserMessage.content ?? '') }]
-            lastUserMessage.content = [
-                ...existingContent,
-                ...resolvedImageGenerationReferences.map(reference => ({
-                    type: 'input_image',
-                    image_url: reference.dataUrl,
-                    detail: 'high',
-                })),
-            ]
+            appendOpenAIImageGenerationReferences(inputMessages, resolvedImageGenerationReferences)
         }
 
         let instructions: string | undefined
@@ -490,9 +510,8 @@ export class OpenAIProvider extends BaseProvider {
     }): Promise<Partial<ProviderState>> {
         const update: Partial<ProviderState> = {}
         let prompt = ''
-        const referenceFiles = await buildOpenAIImageReferenceFiles(
-            args.state.resolvedImageGenerationReferences ?? [],
-        )
+        const resolvedReferences = args.state.resolvedImageGenerationReferences ?? []
+        const referenceFiles = await buildOpenAIImageReferenceFiles(resolvedReferences)
 
         // Extract the prompt from the last user message. Reference images are
         // already resolved once by BaseProvider's provider-neutral contract.
@@ -519,6 +538,7 @@ export class OpenAIProvider extends BaseProvider {
         if (!prompt) throw new Error('No user prompt found for image generation')
 
         const hasReferences = referenceFiles.length > 0
+        prompt = prependImageReferencePromptLegend(prompt, resolvedReferences)
         const imageReferenceCapabilities = args.state.aiModelMetaInfo.imageReferenceCapabilities
         const inputFidelityRequestValue = imageReferenceCapabilities?.inputFidelity === 'high' ? 'high' : undefined
         // The SDK's own retry loop is disabled so every reattempt goes through

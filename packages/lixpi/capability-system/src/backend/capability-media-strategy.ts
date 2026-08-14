@@ -32,6 +32,11 @@ export type CapabilityMediaModelMeta = {
 
 export type CapabilityMediaSharedState = {
     authoritativePrompt: string
+    editTargetAssetId?: string
+    mediaReferenceAliases: ReadonlyArray<{
+        assetId: string
+        alias: string
+    }>
     sourceSubjectIdentityClassifications: readonly SubjectIdentityClassification[]
     capabilityInstructions: readonly string[]
     capabilityReferences: ReadonlyArray<{

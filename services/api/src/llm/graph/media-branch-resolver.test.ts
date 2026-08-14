@@ -466,6 +466,40 @@ describe('resolveMediaBranch', () => {
         expect(update.mediaBranchResolution?.branchId).not.toBe('stale-branch-from-vlm')
     })
 
+    it('restores the active target when an edit-existing resolution omits it', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: '',
+            parentCandidateId: '',
+            includeGeneratedCandidateIds: [],
+            confidence: 0.9,
+            rationale: 'The active character sheet is being corrected.',
+            decisions: [],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'correct the clothing on this character sheet using the original reference',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [baseCandidates[0]!, acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+        })
+        expect(update.mediaBranchResolution?.rationale).toContain(
+            'restored the active target omitted from an edit_existing resolution',
+        )
+    })
+
     it('keeps the only accepted generated Asset as parent when the VLM is ambiguous', async () => {
         const acceptedCandidate = {
             ...baseCandidates[2]!,

@@ -57,6 +57,7 @@ const createContext = (): CapabilityMediaExecutionContext => ({
     },
     sharedState: {
         authoritativePrompt: 'Create a courier.',
+        mediaReferenceAliases: [],
         sourceSubjectIdentityClassifications: [],
         capabilityInstructions: [],
         capabilityReferences: [],
@@ -84,14 +85,23 @@ const fidelityRequest: CharacterFidelityAssessmentRequest = {
 
 describe('Character Creator API platform adapter', () => {
     it('renders through the selected provider and model without catalog defaults', async () => {
-        const process = vi.fn(async () => ({
-            generatedImages: [Buffer.from([1, 2, 3]).toString('base64')],
-            imageReferenceAdaptation: {
-                included: [{ role: 'original-source' }],
-                omitted: [{ role: 'pose-reference' }],
-            },
-        }))
+        const process = vi.fn(async (request: {
+            captureOnlyImagePartialHandler?: (
+                imageBase64: string,
+                providerPartialIndex: number,
+            ) => Promise<void>
+        }) => {
+            await request.captureOnlyImagePartialHandler?.('BA==', 1)
+            return {
+                generatedImages: [Buffer.from([1, 2, 3]).toString('base64')],
+                imageReferenceAdaptation: {
+                    included: [{ role: 'original-source' }],
+                    omitted: [{ role: 'pose-reference' }],
+                },
+            }
+        })
         const remove = vi.fn()
+        const onImagePartial = vi.fn(async () => undefined)
         const registry = { createTransient: vi.fn(() => ({ process })), remove, stop: vi.fn() }
         const ports = createCharacterCreatorRuntimePorts({ registry: registry as never, natsService: {} as never })
         const plan = buildCharacterSheetRenderPlan({
@@ -111,6 +121,7 @@ describe('Character Creator API platform adapter', () => {
                 role: 'original-source',
                 fileName: 'source.png',
             }],
+            onImagePartial,
         })
 
         expect(registry.createTransient).toHaveBeenCalledWith(
@@ -122,10 +133,36 @@ describe('Character Creator API platform adapter', () => {
             imageSize: '1536x1024',
             capabilityMediaExecutionPlan: plan,
             captureOnlyImageGeneration: true,
+            captureOnlyImagePartialHandler: expect.any(Function),
         }))
+        expect(onImagePartial).toHaveBeenCalledWith('BA==', 1)
         expect(result.image).toBe(Buffer.from([1, 2, 3]).toString('base64'))
         expect(result.includedReferenceRoles).toEqual(['original-source'])
         expect(result.omittedReferenceRoles).toEqual(['pose-reference'])
+        expect(remove).toHaveBeenCalledOnce()
+    })
+
+    it('propagates a stopped nested provider as cancellation instead of missing output', async () => {
+        const process = vi.fn(async () => ({ cancelledByUser: true }))
+        const remove = vi.fn()
+        const registry = { createTransient: vi.fn(() => ({ process })), remove, stop: vi.fn() }
+        const ports = createCharacterCreatorRuntimePorts({ registry: registry as never, natsService: {} as never })
+        const plan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-1',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Character study',
+        })
+        const panel = plan.panels[0]!
+
+        await expect(ports.imageGeneration.generate({
+            context: createContext(),
+            plan,
+            operationKey: `${plan.capabilityRunId}:${panel.panelId}:1`,
+            usageMode: 'character-creator',
+            prompt: 'one panel',
+            references: [],
+        })).rejects.toMatchObject({ name: 'AbortError' })
+
         expect(remove).toHaveBeenCalledOnce()
     })
 
@@ -145,6 +182,8 @@ describe('Character Creator API platform adapter', () => {
             usageMode: 'character-creator',
             prompt: 'run',
             references: [
+                { url: 'data:image/png;base64,BA==', role: 'edit-target', fileName: 'EDIT_TARGET_body-back.png' },
+                { url: 'data:image/png;base64,BQ==', role: 'edit-target-identity', fileName: 'EDIT_TARGET_IDENTITY_FACE.png' },
                 { url: 'data:image/png;base64,AQ==', role: 'canonical-anchor', fileName: 'body-front.png' },
                 { url: 'data:image/png;base64,Ag==', role: 'adjacent-angle', fileName: 'head-front.png' },
                 { url: 'data:image/png;base64,Aw==', role: 'opposite-angle', fileName: 'body-back.png' },
@@ -153,6 +192,8 @@ describe('Character Creator API platform adapter', () => {
 
         expect(process).toHaveBeenCalledWith(expect.objectContaining({
             imageGenerationReferences: expect.arrayContaining([
+                expect.objectContaining({ role: 'edit-target', fileName: 'EDIT_TARGET_body-back.png' }),
+                expect.objectContaining({ role: 'edit-target-identity', fileName: 'EDIT_TARGET_IDENTITY_FACE.png' }),
                 expect.objectContaining({ role: 'canonical-anchor', fileName: 'body-front.png' }),
                 expect.objectContaining({ role: 'adjacent-angle', fileName: 'head-front.png' }),
                 expect.objectContaining({ role: 'opposite-angle', fileName: 'body-back.png' }),

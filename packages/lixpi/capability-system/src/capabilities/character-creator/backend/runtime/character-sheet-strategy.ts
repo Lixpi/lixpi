@@ -38,9 +38,12 @@ import {
 } from './panel-renderer.ts'
 import {
     assessCharacterPanel,
+    getCharacterPanelStructuralFailures,
     type CharacterPanelAssessment,
     type CharacterPanelVlmAssessorPort,
 } from './panel-assessor.ts'
+import { selectCharacterPanelReferenceEntries } from './panel-reference-selection.ts'
+import { loadCharacterPoseReference } from './pose-reference.ts'
 import { composeCharacterSheet } from './character-sheet-compositor.ts'
 import {
     CHARACTER_SHEET_TRACE_SCHEMA_VERSION,
@@ -608,7 +611,7 @@ function formatDimensionName(value: string): string {
 function summarizeEvidence(evidence: CharacterEvidenceProfile): string {
     const observed = evidence.facts.filter(fact => fact.visibility === 'observed').length
     const inferred = evidence.facts.length - observed
-    return `${observed} observed trait(s), ${inferred} inferred trait(s), ${evidence.palette.length} palette value(s), and ${evidence.conflicts.length} conflict(s) found. Medium: ${evidence.medium}.`
+    return `${observed} observed trait(s), ${inferred} inferred trait(s), ${evidence.palette.length} palette value(s), and ${evidence.conflicts.length} conflict(s) found. Medium: ${evidence.medium}. Edit target: ${evidence.editTargetPolicy}.`
 }
 
 function summarizeReferencePack(entries: CharacterReferencePack['entries']): string {
@@ -733,40 +736,20 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     workspaceId: state.workspaceId,
                     userId: state.userId,
                     assets: this.deps.referenceAssets,
+                    panels: plan.panels,
                 }),
             })
             const storedComponents = new Map<string, ResolvedCharacterReference>()
             for (const source of sources) {
-                if (source.sourceKind === 'composition-component' && source.componentId) {
+                if (source.sourceKind === 'composition-component'
+                    && source.assetId === state.sharedState.editTargetAssetId
+                    && source.componentId) {
                     storedComponents.set(source.componentId, source)
                 }
             }
             const assetSources = sources.filter(source => source.sourceKind === 'asset-rendition')
-            const evidenceSources = assetSources.length > 0 ? assetSources : sources
-            const regenerationDecision = selectCharacterPanelsForRegeneration({
-                prompt: completeRequest,
-                panels: plan.panels,
-                availableComponentIds: new Set(storedComponents.keys()),
-            })
-            const reusedPanelIds = new Set(regenerationDecision.reusePanelIds)
-            for (const panel of plan.panels) {
-                const stored = storedComponents.get(panel.panelId)
-                if (!stored || !reusedPanelIds.has(panel.panelId)) continue
-                renderedPanels.set(panel.panelId, {
-                    bytes: stored.bytes,
-                    reused: true,
-                    includedReferenceRoles: ['composition-component'],
-                    omittedReferenceRoles: [],
-                })
-            }
-            console.info('[CharacterCreatorRegeneration] decision', {
-                capabilityRunId: plan.capabilityRunId,
-                mode: regenerationDecision.mode,
-                reason: regenerationDecision.reason,
-                storedPanelIds: [...storedComponents.keys()],
-                regeneratePanelIds: regenerationDecision.regeneratePanelIds,
-                reusePanelIds: regenerationDecision.reusePanelIds,
-            })
+            const evidenceSources = sources.filter(source => !(source.sourceKind === 'composition-component'
+                && source.assetId === state.sharedState.editTargetAssetId))
             preparationSourceCount = evidenceSources.length
             preparationStage = 'analyzing-evidence'
             await reportProgress({
@@ -788,7 +771,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     }),
                     execute: () => analyzeCharacterEvidence({
                         sources: evidenceSources,
+                        editTargets: [...storedComponents.values()],
+                        referenceAliases: state.sharedState.mediaReferenceAliases,
+                        panels: plan.panels,
                         userPrompt: completeRequest,
+                        editTargetPresent: storedComponents.size > 0,
                         analyzer: this.deps.evidenceAnalyzer ?? vlmPorts.evidenceAnalyzer,
                         signal: options.signal,
                     }),
@@ -798,6 +785,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 evidenceAnalysisWarning = formatRuntimeWarning('Source evidence analysis was unavailable', error)
                 evidence = {
                     medium: 'unknown',
+                    editTargetPolicy: storedComponents.size > 0
+                        ? 'preserve-panel'
+                        : 'not-present',
+                    regenerationScope: 'full-sheet',
+                    affectedPanelIds: plan.panels.map(panel => panel.panelId),
                     facts: [],
                     promptDirectives: [],
                     promptChangedFeatures: [],
@@ -813,6 +805,31 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     conflicts: [],
                 }
             }
+            const regenerationDecision = selectCharacterPanelsForRegeneration({
+                panels: plan.panels,
+                availableComponentIds: new Set(storedComponents.keys()),
+                regenerationScope: evidence.regenerationScope,
+                affectedPanelIds: evidence.affectedPanelIds,
+            })
+            const reusedPanelIds = new Set(regenerationDecision.reusePanelIds)
+            for (const panel of plan.panels) {
+                const stored = storedComponents.get(panel.panelId)
+                if (!stored || !reusedPanelIds.has(panel.panelId)) continue
+                renderedPanels.set(panel.panelId, {
+                    bytes: stored.bytes,
+                    reused: true,
+                    includedReferenceRoles: ['composition-component'],
+                    omittedReferenceRoles: [],
+                })
+            }
+            console.info('[CharacterCreatorRegeneration] decision', {
+                capabilityRunId: plan.capabilityRunId,
+                mode: regenerationDecision.mode,
+                reason: regenerationDecision.reason,
+                storedPanelIds: [...storedComponents.keys()],
+                regeneratePanelIds: regenerationDecision.regeneratePanelIds,
+                reusePanelIds: regenerationDecision.reusePanelIds,
+            })
             preparationEvidenceSummary = summarizeEvidence(evidence)
             preparationStage = 'building-reference-pack'
             await reportProgress({
@@ -833,8 +850,10 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     message: `Reference-pack construction is active: preparing lossless identity crops and model-compatible source references from ${evidenceSources.length} original source image(s); ${formatElapsedTime(elapsedMs)}.`,
                 }),
                 execute: () => buildCharacterReferencePack({
-                    sources: evidenceSources,
+                    sources,
                     evidence,
+                    editTargetAssetId: state.sharedState.editTargetAssetId,
+                    referenceAliases: state.sharedState.mediaReferenceAliases,
                     capabilities: modelCapabilities,
                     store,
                 }),
@@ -875,6 +894,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             let providerOperationAttempts = 0
             let partialIndex = 0
             const livePartialPanels = new Map<string, Buffer>()
+            const reviewOnlyPanels = new Map<string, RenderedPanel>()
             const progressivePublishQueue = new AsyncSerialQueue()
             const publishProgressiveSheet = async (source: string): Promise<void> => {
                 if (!options.publishImagePartial) return
@@ -883,6 +903,9 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         ([panelId, rendered]): [string, Buffer] => [panelId, rendered.bytes],
                     ),
                 )
+                for (const [panelId, rendered] of reviewOnlyPanels) {
+                    if (!visiblePanels.has(panelId)) visiblePanels.set(panelId, rendered.bytes)
+                }
                 for (const [panelId, bytes] of livePartialPanels) visiblePanels.set(panelId, bytes)
                 if (visiblePanels.size === 0) return
                 const snapshot = [...visiblePanels.entries()].map(([panelId, bytes]) => ({
@@ -907,7 +930,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             nextPartialIndex,
                         )
                     } catch (error) {
-                        console.warn('[CharacterCreatorPartial] sheet projection unavailable', {
+                        console.warn('[CharacterCreatorProjection] accepted-sheet projection unavailable', {
                             capabilityRunId: plan.capabilityRunId,
                             source,
                             partialIndex: nextPartialIndex,
@@ -959,7 +982,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 execute: () => runner.run({
                     initialResults: initialPanelResults,
                     signal: options.signal,
-                    allowTerminalFailure: () => true,
+                    allowTerminalFailure: (_panel, error) => !isAbortFailure(error),
                     onNodeBlocked: async (panel, blocked) => {
                         renderFailures.set(
                             panel.panelId,
@@ -979,9 +1002,14 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             panel.outputBindings,
                             executionContext.boundOutputs,
                         )
+                        const selectedReferenceEntries = selectCharacterPanelReferenceEntries(
+                            referencePack.entries,
+                            panel,
+                            evidence,
+                        )
                         const references: CharacterImageReference[] = [
                             ...generatedReferences,
-                            ...referencePack.entries,
+                            ...selectedReferenceEntries,
                             ...capabilityReferences,
                         ]
                         void reportProgressSafely({
@@ -1004,7 +1032,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             })
                                 .filter(fact => fact.visibility === 'observed')
                                 .slice(0, 16)
-                                .map(fact => `${fact.feature}: ${fact.value}`)
+                                .map(fact => `${evidence.promptChangedFeatures.some(feature => (
+                                    normalizeEvidenceFeature(feature) === normalizeEvidenceFeature(fact.feature)
+                                )) ? '[REQUEST-CHANGED] ' : ''}${formatEvidenceSourceAlias(
+                                    fact.sourceAssetId,
+                                    state.sharedState.mediaReferenceAliases,
+                                )}${fact.feature}: ${fact.value}`)
                                 .join('; ')
                             const prompt = buildCharacterPanelPrompt({
                                 panel,
@@ -1017,6 +1050,16 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 capabilityInstructions,
                                 capabilityReferenceCount: capabilityReferences.length,
                                 generatedReferenceBindings: panel.outputBindings,
+                                editTargetReferences: references.filter(reference => (
+                                    reference.role === 'edit-target'
+                                    || reference.role === 'edit-target-identity'
+                                )),
+                                originalSourceReferenceCount: selectedReferenceEntries.filter(entry => (
+                                    entry.role === 'original-source'
+                                    || entry.role === 'face-crop'
+                                    || entry.role === 'body-outfit-crop'
+                                    || entry.role === 'prop-crop'
+                                )).length,
                             })
                             providerOperationAttempts += 1
                             const rendered = await renderCharacterPanel({
@@ -1039,23 +1082,71 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 },
                                 signal: options.signal,
                             })
-                            let coordinate: CharacterFidelityObjectCoordinate | undefined
-                            try {
-                                const stored = await store.putWithCoordinate({
-                                    mediaKind: 'image',
-                                    slot: `candidate-${panel.panelId}`,
-                                    bytes: rendered.bytes,
-                                    mimeType: 'image/png',
-                                    revision: 1,
-                                })
-                                coordinate = stored.coordinate
-                            } catch (error) {
-                                if (options.signal?.aborted) throw error
+                            const stored = await store.putWithCoordinate({
+                                mediaKind: 'image',
+                                slot: `candidate-${panel.panelId}`,
+                                bytes: rendered.bytes,
+                                mimeType: 'image/png',
+                                revision: 1,
+                            })
+                            reviewOnlyPanels.set(panel.panelId, {
+                                ...rendered,
+                                coordinate: stored.coordinate,
+                            })
+                            assessmentEligiblePanelIds.add(panel.panelId)
+                            const poseReference = await loadCharacterPoseReference(panel)
+                            const assessment = await assessCharacterPanel({
+                                panel,
+                                attemptId: `${plan.capabilityRunId}:${panel.panelId}:1`,
+                                candidateBytes: rendered.bytes,
+                                candidateCoordinate: stored.coordinate,
+                                sourceCoordinates: selectedReferenceEntries
+                                    .filter(entry => entry.role === 'edit-target'
+                                        || entry.role === 'edit-target-identity'
+                                        || entry.role === 'original-source'
+                                        || entry.role === 'face-crop')
+                                    .slice(0, 5)
+                                    .map(entry => entry.coordinate),
+                                sourceDataUrls: selectedReferenceEntries
+                                    .filter(entry => entry.role === 'edit-target'
+                                        || entry.role === 'edit-target-identity'
+                                        || entry.role === 'original-source'
+                                        || entry.role === 'face-crop'
+                                        || entry.role === 'body-outfit-crop')
+                                    .map(entry => entry.url),
+                                authoritativePrompt,
+                                capabilityInstructions,
+                                capabilityReferenceDataUrls: capabilityReferences
+                                    .map(reference => reference.url)
+                                    .filter(isInlineImageDataUrl),
+                                ...(poseReference ? { poseReferenceDataUrl: poseReference.url } : {}),
+                                evidence,
+                                vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
+                                fidelity,
+                                signal: options.signal,
+                            })
+                            assessments.set(panel.panelId, assessment)
+                            const structuralFailures = getCharacterPanelStructuralFailures(panel, assessment)
+                            console.info('[CharacterCreatorStructuralAssessment]', {
+                                capabilityRunId: plan.capabilityRunId,
+                                panelId: panel.panelId,
+                                releaseFailures: structuralFailures,
+                                dimensions: assessment.dimensions.map(dimension => ({
+                                    dimension: dimension.dimension,
+                                    score: dimension.score,
+                                    mismatchCodes: dimension.mismatchCodes,
+                                })),
+                            })
+                            if (structuralFailures.length > 0) {
+                                throw new Error(
+                                    `CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:${panel.panelId}:${structuralFailures.join(',')}`,
+                                )
                             }
                             livePartialPanels.delete(panel.panelId)
+                            reviewOnlyPanels.delete(panel.panelId)
                             renderedPanels.set(panel.panelId, {
                                 ...rendered,
-                                ...(coordinate ? { coordinate } : {}),
+                                coordinate: stored.coordinate,
                             })
                             completedRenders += 1
                             runningPanelIds.delete(panel.panelId)
@@ -1075,8 +1166,20 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                             return rendered
                         } catch (error) {
                             runningPanelIds.delete(panel.panelId)
+                            const livePartial = livePartialPanels.get(panel.panelId)
+                            if (options.signal?.aborted || isAbortFailure(error)) {
+                                livePartialPanels.delete(panel.panelId)
+                                reviewOnlyPanels.delete(panel.panelId)
+                                throw error
+                            }
+                            if (!reviewOnlyPanels.has(panel.panelId) && livePartial) {
+                                reviewOnlyPanels.set(panel.panelId, {
+                                    bytes: livePartial,
+                                    includedReferenceRoles: [...new Set(references.map(reference => reference.role))],
+                                    omittedReferenceRoles: [],
+                                })
+                            }
                             livePartialPanels.delete(panel.panelId)
-                            if (options.signal?.aborted) throw error
                             renderFailures.set(panel.panelId, (error as Error).message || 'Panel generation failed')
                             completedRenders += 1
                             await reportProgress({
@@ -1097,32 +1200,22 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     },
                 }),
             })
-            if (!renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)) {
-                const failure = renderFailures.get(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
-                throw new Error([
-                    'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE',
-                    failure,
-                ].filter(Boolean).join(':'))
+            const availablePanels = new Map(renderedPanels)
+            for (const [panelId, rendered] of reviewOnlyPanels) {
+                if (!availablePanels.has(panelId)) availablePanels.set(panelId, rendered)
             }
-            if (!renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)) {
-                const failure = renderFailures.get(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
-                throw new Error([
-                    'CHARACTER_SHEET_OUTFIT_ANCHOR_UNAVAILABLE',
-                    failure,
-                ].filter(Boolean).join(':'))
+            if (availablePanels.size === 0) {
+                const firstFailure = plan.panels
+                    .map(panel => renderFailures.get(panel.panelId))
+                    .find((failure): failure is string => Boolean(failure))
+                throw new Error(firstFailure ?? 'CHARACTER_SHEET_NO_RENDERED_PANELS')
             }
-            if (!renderedPanels.has(CHARACTER_BACK_ANCHOR_PANEL_ID)) {
-                const failure = renderFailures.get(CHARACTER_BACK_ANCHOR_PANEL_ID)
-                throw new Error([
-                    'CHARACTER_SHEET_BACK_ANCHOR_UNAVAILABLE',
-                    failure,
-                ].filter(Boolean).join(':'))
-            }
-            if (renderedPanels.size === 0) throw new Error('CHARACTER_SHEET_NO_RENDERED_PANELS')
 
             const assessablePanels = plan.panels.filter(panel => {
                 const rendered = renderedPanels.get(panel.panelId)
-                return rendered?.coordinate && panel.panelId !== observedPropSpec?.panelId
+                return rendered?.coordinate
+                    && !assessments.has(panel.panelId)
+                    && panel.panelId !== observedPropSpec?.panelId
             })
             for (const panel of assessablePanels) assessmentEligiblePanelIds.add(panel.panelId)
             await reportProgress({
@@ -1166,11 +1259,16 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 candidateBytes: rendered.bytes,
                                 candidateCoordinate: rendered.coordinate!,
                                 sourceCoordinates: referencePack.entries
-                                    .filter(entry => entry.role === 'original-source' || entry.role === 'face-crop')
+                                    .filter(entry => entry.role === 'edit-target'
+                                        || entry.role === 'edit-target-identity'
+                                        || entry.role === 'original-source'
+                                        || entry.role === 'face-crop')
                                     .slice(0, 5)
                                     .map(entry => entry.coordinate),
                                 sourceDataUrls: referencePack.entries
-                                    .filter(entry => entry.role === 'original-source'
+                                    .filter(entry => entry.role === 'edit-target'
+                                        || entry.role === 'edit-target-identity'
+                                        || entry.role === 'original-source'
                                         || entry.role === 'face-crop'
                                         || entry.role === 'body-outfit-crop')
                                     .map(entry => entry.url),
@@ -1223,7 +1321,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 phase: 'composing',
                 completedSteps: 0,
                 totalSteps: 2,
-                message: `Fitting ${renderedPanels.size} available shot(s) into the final 3840×2560 character sheet.`,
+                message: `Fitting ${availablePanels.size} available shot(s) into the final 3840×2560 character sheet.`,
             })
             const composition = await executeWithProgressHeartbeat({
                 signal: options.signal,
@@ -1232,11 +1330,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     phase: 'composing',
                     completedSteps: 0,
                     totalSteps: 2,
-                    message: `Final sheet composition is active: fitting ${renderedPanels.size} available shot(s) into the deterministic 3840×2560 layout; ${formatElapsedTime(elapsedMs)}.`,
+                    message: `Final sheet composition is active: fitting ${availablePanels.size} available shot(s) into the deterministic 3840×2560 layout; ${formatElapsedTime(elapsedMs)}.`,
                 }),
                 execute: () => (this.deps.compositor ?? composeCharacterSheet)({
                     panelSpecs: plan.panels,
-                    panels: [...renderedPanels.entries()].map(([panelId, rendered]) => ({
+                    panels: [...availablePanels.entries()].map(([panelId, rendered]) => ({
                         panelId,
                         bytes: rendered.bytes,
                     })),
@@ -1276,11 +1374,11 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 phase: 'composing',
                 completedSteps: 2,
                 totalSteps: 2,
-                message: `Character sheet complete: ${renderedPanels.size} available shot(s), ${fidelityReviewCount} fidelity review flag(s), ${renderFailures.size} render error(s). Finalizing the generated asset.`,
+                message: `Character sheet complete: ${availablePanels.size} available shot(s), ${fidelityReviewCount} fidelity review flag(s), ${renderFailures.size} render error(s). Finalizing the generated asset.`,
             })
             const panelTraces = plan.panels.map(panel => buildPanelTrace({
                 panel,
-                rendered: renderedPanels.get(panel.panelId),
+                rendered: availablePanels.get(panel.panelId),
                 assessment: assessments.get(panel.panelId),
                 failure: renderFailures.get(panel.panelId),
                 observed: panel.panelId === observedPropSpec?.panelId,
@@ -1296,7 +1394,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 modelVersion: state.imageModel.modelVersion,
                 compositor: 'sharp-character-sheet-3840x2560-v3',
                 summary: reviewIssueCount > 0
-                    ? `${renderedPanels.size} of ${plan.panels.length} shots rendered; ${reviewIssueCount} execution or comparison issues need review.`
+                    ? `${availablePanels.size} of ${plan.panels.length} shots retained; ${reviewIssueCount} execution or comparison issues need review.`
                     : `${plan.panels.length} shots rendered and passed the configured comparison thresholds.`,
                 automaticRetries: 0,
                 recommendation: reviewIssueCount > 0
@@ -1336,10 +1434,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     capabilityId: 'global.character-creator',
                     sourceAssetIds: [...new Set(assetSources.map(source => source.assetId))],
                     components: plan.panels.flatMap(panel => {
-                        const rendered = renderedPanels.get(panel.panelId)
+                        const rendered = availablePanels.get(panel.panelId)
                         return rendered ? [{
                             componentId: panel.panelId,
-                            role: 'character-sheet-panel',
+                            role: renderedPanels.has(panel.panelId)
+                                ? 'character-sheet-panel'
+                                : 'character-sheet-panel-review-only',
                             title: panel.title,
                             imageBase64: rendered.bytes.toString('base64'),
                             mimeType: 'image/png' as const,
@@ -1450,7 +1550,9 @@ function buildPanelTrace(args: {
             },
         } : {}),
         ...(args.assessment?.vlmError ? { vlmEvaluationError: args.assessment.vlmError } : {}),
-        ...(comparisonUnavailable ? {
+        ...(args.failure ? {
+            warning: args.failure,
+        } : comparisonUnavailable ? {
             warning: args.assessment?.vlmError?.message
                 ?? 'Per-dimension comparison was unavailable; the rendered shot was preserved.',
         } : {}),
@@ -1472,6 +1574,15 @@ async function runInBatches<Item>(
         await Promise.allSettled(items.slice(offset, offset + concurrency).map(execute))
         if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
     }
+}
+
+function isAbortFailure(error: unknown): boolean {
+    const candidate = error as { name?: unknown; message?: unknown }
+    const name = typeof candidate?.name === 'string' ? candidate.name : ''
+    const message = typeof candidate?.message === 'string' ? candidate.message : String(error ?? '')
+    return name === 'AbortError'
+        || name === 'APIUserAbortError'
+        || /(?:^|\b)abort(?:ed)?(?:\b|$)/iu.test(message)
 }
 
 function decodeDataUrl(value: string): Buffer {
@@ -1522,6 +1633,15 @@ function buildSharedCapabilityReferences(
     })
 }
 
+function formatEvidenceSourceAlias(
+    sourceAssetId: string | undefined,
+    references: ReadonlyArray<{ assetId: string; alias: string }>,
+): string {
+    if (!sourceAssetId) return ''
+    const alias = references.find(reference => reference.assetId === sourceAssetId)?.alias
+    return alias ? `[${alias}] ` : ''
+}
+
 function isInlineImageDataUrl(value: string): boolean {
     return /^data:image\/(?:gif|jpeg|png|webp);base64,/u.test(value)
 }
@@ -1530,6 +1650,10 @@ function formatRuntimeWarning(prefix: string, error: unknown): string {
     const detail = error instanceof Error ? error.message : String(error)
     const normalized = detail.replace(/\s+/gu, ' ').trim().slice(0, 240)
     return normalized ? `${prefix}: ${normalized}` : prefix
+}
+
+function normalizeEvidenceFeature(value: string): string {
+    return value.trim().toLocaleLowerCase('en-US')
 }
 
 function formatAssessmentFailureProgress(failure: string): string {

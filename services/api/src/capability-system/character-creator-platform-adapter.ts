@@ -20,6 +20,7 @@ import { callStructuredVlm } from '../llm/structured-vlm/structured-vlm-client.t
 import AssetModel from '../models/asset.ts'
 import { getContentAddressedBlob } from '../services/blob-storage.ts'
 import { TransientMediaStore } from '../services/transient-media-store.ts'
+import { throwIfProviderCancelled } from '../llm/providers/provider-cancellation.ts'
 
 const DEFAULT_FIDELITY_TIMEOUT_MS = 15_000
 
@@ -163,6 +164,7 @@ const generateCapabilityImage = async (args: {
             workflowId: args.context.workflowId,
             metricsOperationId: args.context.metricsOperationId,
         })
+        throwIfProviderCancelled(result, args.signal)
         if (result.error) throw new Error(result.error)
         const image = result.generatedImages?.[0]
         if (!image) throw new Error('CAPABILITY_IMAGE_PROVIDER_OUTPUT_MISSING')

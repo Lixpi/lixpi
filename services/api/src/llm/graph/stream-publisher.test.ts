@@ -668,6 +668,58 @@ describe('StreamPublisher extraction progress', () => {
         ]))
     })
 
+    it('suppresses provider failures after cancellation begins while still removing the request projection', async () => {
+        const nats = makeFakeNats()
+        const cancelledRun = {
+            ...generationRun,
+            mediaRunId: 'reasoning-1:image:0',
+            lineageAssignment: {
+                assetId: 'asset-1',
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                mediaRunId: 'reasoning-1:image:0',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                mediaIndex: 0,
+                branchId: 'branch-1',
+                lineageParentNodeId: 'line-1',
+                referenceAssetIds: [],
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                promptText: 'adjust the selected output',
+                createdAt: 1,
+            },
+        } as const
+        const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic', cancelledRun)
+
+        publisher.beginMediaGenerationRequestCancellation('request-1')
+        publisher.imageGenerationError('Abort')
+        publisher.error('Stopped by user')
+        publisher.mediaGenerationRequestComplete('request-1', {
+            removeProjectedPendingNodes: true,
+        })
+        await publisher.drainPendingWrites()
+        await flushPipelinePublishes()
+
+        expect(canvasProjectionMocks.settleFailedGeneratedMediaRunOnCanvas).not.toHaveBeenCalled()
+        expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledOnce()
+        expect(canvasProjectionMocks.settleMediaGenerationRequestOnCanvas).toHaveBeenCalledWith({
+            workspaceId: 'ws1',
+            generationRequestId: 'request-1',
+            removeProjectedPendingNodes: true,
+        })
+        expect(nats.published.some(entry => [
+            STREAM_STATUS.ERROR,
+            STREAM_STATUS.IMAGE_ERROR,
+            STREAM_STATUS.VIDEO_ERROR,
+        ].includes(entry.payload?.content?.status))).toBe(false)
+        expect(nats.published.filter(entry =>
+            entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE
+        )).toHaveLength(1)
+    })
+
     it('deduplicates media request completion calls and avoids duplicate settle writes', async () => {
         const nats = makeFakeNats()
         const publisher = new StreamPublisher(nats.fake, 'ws1', 'thread1', 'Anthropic')
@@ -703,7 +755,7 @@ describe('StreamPublisher extraction progress', () => {
         ]))
     })
 
-    it('drains response writes after settling canvas projections when both are queued', async () => {
+    it('publishes request completion only after terminal canvas settlement', async () => {
         const nats = makeFakeNats()
         const callOrder: string[] = []
 
@@ -726,8 +778,8 @@ describe('StreamPublisher extraction progress', () => {
 
         expect(callOrder).toEqual([
             'canvas-settle-start',
-            'response-write-start',
             'canvas-settle-end',
+            'response-write-start',
             'response-write-end',
         ])
     })

@@ -124,6 +124,59 @@ function getGeneratedMediaForConversation(nodes: CanvasNode[], conversationAsset
     return nodes.filter((node): node is MediaCanvasNode => isGeneratedMediaForConversation(node, conversationAssetId))
 }
 
+function hasDirectedCanvasPath(
+    sourceNodeId: string,
+    targetNodeId: string,
+    edges: WorkspaceEdge[],
+): boolean {
+    const targetsBySource = new Map<string, string[]>()
+    for (const edge of edges) {
+        const targets = targetsBySource.get(edge.sourceNodeId) ?? []
+        targets.push(edge.targetNodeId)
+        targetsBySource.set(edge.sourceNodeId, targets)
+    }
+    const visited = new Set<string>([sourceNodeId])
+    const queue = [sourceNodeId]
+    while (queue.length > 0) {
+        const currentNodeId = queue.shift()
+        if (!currentNodeId) continue
+        for (const nextNodeId of targetsBySource.get(currentNodeId) ?? []) {
+            if (nextNodeId === targetNodeId) return true
+            if (visited.has(nextNodeId)) continue
+            visited.add(nextNodeId)
+            queue.push(nextNodeId)
+        }
+    }
+    return false
+}
+
+function inferStructuralActiveTargetNodeId(
+    referenceNodeIds: string[],
+    nodes: CanvasNode[],
+    edges: WorkspaceEdge[],
+): string | undefined {
+    if (referenceNodeIds.length === 1) return referenceNodeIds[0]
+
+    const referenceNodeIdSet = new Set(referenceNodeIds)
+    const referencedMedia = nodes.filter((node): node is MediaCanvasNode =>
+        isMediaCanvasNode(node) && referenceNodeIdSet.has(node.nodeId))
+    const generatedMedia = referencedMedia.filter(node => Boolean(node.generatedBy))
+    if (generatedMedia.length !== 1) return undefined
+
+    const generatedTarget = generatedMedia[0]
+    const relatedNodeIds = new Set([
+        ...(generatedTarget.generatedBy?.sourceContextNodeIds ?? []),
+        ...(generatedTarget.generatedBy?.referenceImageNodeIds ?? []),
+        generatedTarget.generatedBy?.parentMediaNodeId ?? '',
+        generatedTarget.generatedBy?.parentImageNodeId ?? '',
+    ].filter(Boolean))
+    const otherReferences = referencedMedia.filter(node => node.nodeId !== generatedTarget.nodeId)
+    const allReferencesBelongToGeneratedTarget = otherReferences.every(node =>
+        relatedNodeIds.has(node.nodeId)
+        || hasDirectedCanvasPath(node.nodeId, generatedTarget.nodeId, edges))
+    return allReferencesBelongToGeneratedTarget ? generatedTarget.nodeId : undefined
+}
+
 // Resolve the still the resolver sees for a candidate. For videos this is the
 // representative mid-frame (falling back to the frame-0 poster); the MP4 itself
 // is never sent to the VLM — only the explicit "extend video" action ships it.
@@ -216,7 +269,11 @@ function createBaseContextCandidate(
         parentMediaNodeId,
         parentImageNodeId: parentMediaNodeId,
         ancestorNodeIds: parentMediaNodeId ? [parentMediaNodeId, media.nodeId] : [media.nodeId],
-        sourceContextNodeIds: [media.nodeId],
+        sourceContextNodeIds: uniqueValues([
+            ...(generatedBy?.sourceContextNodeIds ?? []),
+            ...(generatedBy?.referenceImageNodeIds ?? []),
+            media.nodeId,
+        ]),
         sourceMessageId: generatedBy?.responseMessageId,
         promptText: getMediaPromptText(media),
         visualEntitySummary: generatedBy?.visualEntitySummary ?? generatedBy?.entitySummary,
@@ -258,16 +315,19 @@ export function buildMediaBranchCandidateSnapshot({
     contextMediaNodeIds = [],
 }: BuildMediaBranchCandidateSnapshotParams): MediaBranchCandidateSnapshot {
     const explicitContextNodeIds = uniqueValues(contextMediaNodeIds)
+    const resolvedActiveTargetNodeId = activeTargetNodeId
+        ?? inferStructuralActiveTargetNodeId(explicitContextNodeIds, nodes, edges)
     const contextMedia = getContextMediaNodes(nodes, explicitContextNodeIds)
     const candidatesById = new Map<string, MediaBranchCandidateImage>()
 
     for (const media of contextMedia) {
-        addCandidate(candidatesById, createBaseContextCandidate(media, activeTargetNodeId, nodes, edges))
+        addCandidate(candidatesById, createBaseContextCandidate(media, resolvedActiveTargetNodeId, nodes, edges))
     }
 
     const candidates = Array.from(candidatesById.values())
-    const activeTargetCandidateId = activeTargetNodeId && candidates.some(candidate => candidate.nodeId === activeTargetNodeId)
-        ? `node:${activeTargetNodeId}`
+    const activeTargetCandidateId = resolvedActiveTargetNodeId
+        && candidates.some(candidate => candidate.nodeId === resolvedActiveTargetNodeId)
+        ? `node:${resolvedActiveTargetNodeId}`
         : undefined
     const explicitReferenceCandidateIds = candidates.map(candidate => candidate.candidateId)
     return {
@@ -306,7 +366,7 @@ export function buildExplicitMediaCandidateSnapshot({
     prompt,
     referenceNodeIds = [],
 }: BuildExplicitMediaCandidateSnapshotParams): MediaBranchCandidateSnapshot {
-    const activeTargetNodeId = referenceNodeIds.length === 1 ? referenceNodeIds[0] : undefined
+    const activeTargetNodeId = inferStructuralActiveTargetNodeId(referenceNodeIds, nodes, edges)
     const referenceNodeIdSet = new Set(referenceNodeIds)
     const candidatesById = new Map<string, MediaBranchCandidateImage>()
     for (const node of nodes) {

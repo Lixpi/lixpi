@@ -6,8 +6,10 @@ import {
     createMediaGenerationProgress,
     getMediaGenerationProgressCollisionRect,
     getMediaGenerationProgressPosition,
+    isPersistedMediaGenerationActive,
     resolveBranchMarkerMediaRequestStatuses,
     resolveBranchMarkerGlobalProgressStatuses,
+    settleBranchMarkerProgressStatusForTerminalMedia,
     shouldRenderLiveMediaGenerationProgress,
 } from './mediaGenerationProgress.ts'
 
@@ -54,6 +56,35 @@ const renderedItemIds = (element: HTMLElement): string[] => [
 ].map(item => item.dataset.itemId!)
 
 describe('media generation progress disclosure', () => {
+    it('recovers active generation state from persisted output data after reload', () => {
+        for (const progressStatus of ['pending', 'running', 'awaiting-provider-verification'] as const) {
+            expect(isPersistedMediaGenerationActive({
+                progressStatus,
+                reviewStatus: 'candidate',
+                mediaGenerationPhase: 'ready',
+            })).toBe(true)
+        }
+
+        for (const progressStatus of ['completed', 'failed', 'cancelled'] as const) {
+            expect(isPersistedMediaGenerationActive({
+                progressStatus,
+                reviewStatus: 'candidate',
+                mediaGenerationPhase: 'pending-before-first-frame',
+            })).toBe(false)
+        }
+
+        expect(isPersistedMediaGenerationActive({
+            progressStatus: undefined,
+            reviewStatus: 'candidate',
+            mediaGenerationPhase: 'pending-before-first-frame',
+        })).toBe(true)
+        expect(isPersistedMediaGenerationActive({
+            progressStatus: 'running',
+            reviewStatus: 'accepted',
+            mediaGenerationPhase: 'pending-before-first-frame',
+        })).toBe(false)
+    })
+
     it('never mounts accepted terminal history as live canvas progress during Asset hydration', () => {
         expect(shouldRenderLiveMediaGenerationProgress({
             progressStatus: 'completed',
@@ -140,6 +171,30 @@ describe('media generation progress disclosure', () => {
             capability: 'completed',
             lineage: 'completed',
         })
+    })
+
+    it('settles stale Capability progress after every visible media run is terminal', () => {
+        expect(resolveBranchMarkerGlobalProgressStatuses({
+            hasReasoningResponse: true,
+            isReasoningReceiving: false,
+            branchPending: false,
+            branchActive: false,
+            requestNodeCount: 1,
+            mediaRequestStatuses: ['completed'],
+            capabilityRunStatuses: ['running'],
+        })).toEqual({
+            reasoning: 'completed',
+            capability: 'completed',
+            lineage: 'completed',
+        })
+        expect(settleBranchMarkerProgressStatusForTerminalMedia(
+            'running',
+            ['completed'],
+        )).toBe('completed')
+        expect(settleBranchMarkerProgressStatusForTerminalMedia(
+            'failed',
+            ['completed'],
+        )).toBe('failed')
     })
 
     it('ignores a stale hidden operation status once its output is terminal', () => {

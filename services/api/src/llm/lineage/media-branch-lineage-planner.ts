@@ -277,7 +277,9 @@ export class MediaBranchLineagePlanner {
         snapshot: MediaBranchCandidateSnapshot | undefined,
         referenceNodeIds: string[],
     ): SourceDecision {
-        const sourceNodeId = resolution ? this.getLineageSourceNodeId(resolution, snapshot) : undefined
+        const sourceNodeId = resolution
+            ? this.getLineageSourceNodeId(resolution, snapshot)
+            : this.getProvisionalLineageSourceNodeId(snapshot)
         if (sourceNodeId) {
             const sourceCandidate = this.getCandidateByNodeId(snapshot, sourceNodeId)
             return {
@@ -303,6 +305,15 @@ export class MediaBranchLineagePlanner {
         return {
             placementAnchorNodeId: referenceNodeIds[0],
         }
+    }
+
+    private getProvisionalLineageSourceNodeId(
+        snapshot: MediaBranchCandidateSnapshot | undefined,
+    ): string | undefined {
+        const activeTargetCandidateId = snapshot?.activeTargetCandidateId
+        if (!activeTargetCandidateId) return undefined
+        const candidate = snapshot.candidates.find(item => item.candidateId === activeTargetCandidateId)
+        return this.isGeneratedLineageCandidate(candidate) ? candidate?.nodeId : undefined
     }
 
     private getCandidateByNodeId(

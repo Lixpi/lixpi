@@ -33,7 +33,11 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     }
 }
 
-const createRouter = (processResult: { generatedVideos?: string[]; error?: string } = { generatedVideos: ['nats-obj://workspace-workspace-1-files/video-file'] }) => {
+const createRouter = (processResult: {
+    generatedVideos?: string[]
+    error?: string
+    cancelledByUser?: boolean
+} = { generatedVideos: ['nats-obj://workspace-workspace-1-files/video-file'] }) => {
     const process = vi.fn(async () => processResult)
     const createTransient = vi.fn(() => ({ process }))
     const router = new VideoRouter({ createTransient } as any)
@@ -163,6 +167,12 @@ describe('VideoRouter', () => {
         const result = await router.execute(createState())
 
         expect(result).toEqual({ error: 'Video generation failed: provider completed without a generated video' })
+    })
+
+    it('propagates provider cancellation instead of recording missing output as a failure', async () => {
+        const { router } = createRouter({ cancelledByUser: true })
+
+        await expect(router.execute(createState())).rejects.toMatchObject({ name: 'AbortError' })
     })
 
     it('does not leak capability reference images into media references when videoSourceForExtension is present', async () => {

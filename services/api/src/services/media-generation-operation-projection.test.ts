@@ -322,6 +322,36 @@ describe('media generation operation-node projection', () => {
         expect(operation).toMatchObject({ status: 'in-progress', message: 'Resuming.', requestRevision: 3 })
     })
 
+    it('keeps the provider run pending while the request awaits an Asset reference', async () => {
+        await projectMediaGenerationOperationNodes({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            runs: [run({
+                mediaRunId: 'media-run-1',
+                outputAssetId: 'output-asset-1',
+                outputNodeId: 'output-node-1',
+            })],
+            bindings: [binding],
+        })
+        await updateMediaGenerationOperationNode({
+            workspaceId: 'workspace-1',
+            operationNodeId: 'operation-request-1-0',
+            status: 'action-required',
+            message: 'Choose a reference.',
+            candidateAssetIds: ['asset-1', 'asset-2'],
+            unresolvedBindingId: 'binding-1',
+            requestRevision: 2,
+        })
+
+        const output = canvasState.nodes.find(node => node.nodeId === 'output-node-1')
+        expect(output).toMatchObject({
+            generationProgress: {
+                status: 'pending',
+                message: 'Choose a reference.',
+            },
+        })
+    })
+
     it('projects terminal failure without illegally removing the reserved Asset node', async () => {
         const failedRun = run({
             mediaType: 'image',

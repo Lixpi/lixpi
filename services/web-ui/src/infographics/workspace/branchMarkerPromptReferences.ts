@@ -114,8 +114,28 @@ export function getBranchMarkerPromptParts(
     userMessage: ProseMirrorJsonNode | undefined,
     fallbackText: string,
 ): BranchMarkerPromptPart[] {
-    const parts = normalizePromptParts(collectRawPromptParts(userMessage))
-    return parts.length > 0 ? parts : [{ type: 'text', text: fallbackText.replace(/\s+/g, ' ').trim() }]
+    return resolveBranchMarkerPromptParts({
+        persistedUserMessage: userMessage,
+        fallbackText,
+    })
+}
+
+export function resolveBranchMarkerPromptParts({
+    persistedUserMessage,
+    submittedParts = [],
+    fallbackText,
+}: {
+    persistedUserMessage?: ProseMirrorJsonNode
+    submittedParts?: readonly BranchMarkerPromptPart[]
+    fallbackText: string
+}): BranchMarkerPromptPart[] {
+    const persistedParts = normalizePromptParts(collectRawPromptParts(persistedUserMessage))
+    if (persistedParts.length > 0) return persistedParts
+
+    const normalizedSubmittedParts = normalizePromptParts(submittedParts)
+    if (normalizedSubmittedParts.length > 0) return normalizedSubmittedParts
+
+    return [{ type: 'text', text: fallbackText.replace(/\s+/g, ' ').trim() }]
 }
 
 export function getBranchMarkerPromptDisplayText(parts: readonly BranchMarkerPromptPart[]): string {

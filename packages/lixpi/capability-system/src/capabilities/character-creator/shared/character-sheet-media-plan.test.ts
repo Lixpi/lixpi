@@ -35,6 +35,9 @@ describe('CharacterSheetRenderPlan', () => {
             CHARACTER_BACK_ANCHOR_PANEL_ID,
         ])
         expect(plan.panels.every(panel => panel.acceptanceDimensions.includes('depiction-medium'))).toBe(true)
+        expect(plan.panels.every(panel => panel.acceptanceDimensions.includes('single-panel-composition'))).toBe(true)
+        expect(plan.panels.every(panel => panel.acceptanceDimensions.includes('template-conformance'))).toBe(true)
+        expect(plan.panels.every(panel => panel.acceptanceDimensions.includes('target-view'))).toBe(true)
         expect(plan.panels.find(panel => panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID)).toMatchObject({
             dependsOn: [CHARACTER_IDENTITY_ANCHOR_PANEL_ID],
             outputBindings: [{

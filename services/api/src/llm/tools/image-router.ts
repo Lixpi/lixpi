@@ -21,6 +21,11 @@ import { buildImageGenerationReferences, type ImageGenerationReference } from '.
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import { settleGeneratedAssetComposition } from '../../services/generated-asset-storage.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
+import {
+    createProviderCancellationError,
+    isProviderCancellationError,
+    throwIfProviderCancelled,
+} from '../providers/provider-cancellation.ts'
 
 // Short fingerprint for a reference image URL — enough to spot duplicates
 // or wrong-image issues in logs without dumping base64.
@@ -165,6 +170,7 @@ export class ImageRouter {
                 const result = await strategy.execute(context, state.capabilityMediaExecutionPlan, {
                     ...options,
                     reportProgress: async progress => {
+                        if (options.signal?.aborted) return
                         if (!state.durableGenerationRequestId || !generationRun?.mediaModelId) return
                         try {
                             await requestService.recordRunProgress({
@@ -180,6 +186,7 @@ export class ImageRouter {
                         }
                     },
                     publishImagePartial: async (imageBase64, partialIndex) => {
+                        if (options.signal?.aborted) return
                         if (!imagePublisher) return
                         try {
                             await imagePublisher.partial(imageBase64, partialIndex)
@@ -188,6 +195,7 @@ export class ImageRouter {
                         }
                     },
                 })
+                if (options.signal?.aborted) throw createProviderCancellationError(options.signal)
                 if (result.error) {
                     const problem = await recordRunStatus('failed', { message: result.error, code: result.errorCode })
                     return presentFailure(result.error, result.errorCode, result.errorType, problem)
@@ -221,6 +229,8 @@ export class ImageRouter {
                 await recordRunStatus('completed')
                 return result
             } catch (error) {
+                if (options.signal?.aborted) throw createProviderCancellationError(options.signal)
+                if (isProviderCancellationError(error)) throw error
                 const message = (error as Error).message
                 const problem = await recordRunStatus('failed', error)
                 return presentFailure(message, undefined, undefined, problem)
@@ -312,6 +322,7 @@ export class ImageRouter {
                 passReferences: referenceImages,
                 captureOnly: options.captureOnly ?? false,
             })
+            throwIfProviderCancelled(finalState, options.signal)
 
             if (finalState.error) {
                 err(`[ImageRouter] Image generation failed: ${finalState.error}`)
@@ -338,6 +349,8 @@ export class ImageRouter {
                     : undefined,
             }
         } catch (e: any) {
+            if (options.signal?.aborted) throw createProviderCancellationError(options.signal)
+            if (isProviderCancellationError(e)) throw e
             const message = e?.message ?? String(e)
             err(`[ImageRouter] Image generation failed: ${message}`)
             const problem = await recordRunStatus('failed', e).catch(persistenceError => {
@@ -372,6 +385,7 @@ const buildCapabilityMediaExecutionContext = (
     }
     if (!plan) throw new Error('CAPABILITY_MEDIA_EXECUTION_PLAN_REQUIRED')
     const promptAuthority = resolveCapabilityAuthoritativePrompt(state, generatedMediaPrompt)
+    const editTargetAssetId = resolveCapabilityEditTargetAssetId(state)
     info(`[ImageRouter] capability media prompt authority ${JSON.stringify({
         workspaceId: state.workspaceId,
         aiChatThreadId: state.aiChatThreadId,
@@ -402,6 +416,13 @@ const buildCapabilityMediaExecutionContext = (
         },
         sharedState: {
             authoritativePrompt: promptAuthority.prompt,
+            ...(editTargetAssetId ? { editTargetAssetId } : {}),
+            mediaReferenceAliases: (state.providerSafeMediaIntent?.bindings
+                ?? state.mediaReferenceBindings
+                ?? []).map(binding => ({
+                assetId: binding.assetId,
+                alias: binding.alias,
+            })),
             sourceSubjectIdentityClassifications: [...new Set(
                 (state.mediaReferenceBindings ?? []).map(binding => binding.subjectIdentity.classification),
             )],
@@ -426,6 +447,19 @@ const buildCapabilityMediaExecutionContext = (
         metricsOperationId: state.metricsOperationId,
         metricsAdmissionApproved: state.metricsAdmissionApproved,
     }
+}
+
+const resolveCapabilityEditTargetAssetId = (state: ProviderState): string | undefined => {
+    const resolution = state.mediaBranchResolution
+    if (resolution?.operationKind !== 'edit_existing') return undefined
+    const targetCandidateId = resolution.targetCandidateId
+        ?? state.mediaBranchCandidateSnapshot?.activeTargetCandidateId
+    if (!targetCandidateId) throw new Error('CAPABILITY_MEDIA_EDIT_TARGET_REQUIRED')
+    const target = state.mediaBranchCandidateSnapshot?.candidates.find(candidate =>
+        candidate.candidateId === targetCandidateId
+    )
+    if (!target) throw new Error('CAPABILITY_MEDIA_EDIT_TARGET_UNKNOWN')
+    return target.assetId
 }
 
 const resolveCapabilityAuthoritativePrompt = (

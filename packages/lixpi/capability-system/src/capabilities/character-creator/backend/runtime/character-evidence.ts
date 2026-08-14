@@ -3,6 +3,10 @@
 export type CharacterSourceMedium = 'photograph' | 'illustration' | 'render' | 'mixed' | 'unknown'
 export type CharacterEvidenceVisibility = 'observed' | 'inferred'
 export type CharacterTargetAngle = 'front' | 'three-quarter-front' | 'profile' | 'three-quarter-back' | 'back' | 'unspecified'
+export type CharacterEditTargetPolicy = 'not-present' | 'preserve-panel' | 'identity-only' | 'discard'
+export type CharacterEvidenceRegion = 'face' | 'body' | 'outfit' | 'hands' | 'feet' | 'prop'
+export type CharacterEvidenceRequestAuthority = 'assigned' | 'supporting' | 'unassigned'
+export type CharacterRegenerationScope = 'full-sheet' | 'selected-panels'
 
 export type CharacterSourceRegion = {
     x: number
@@ -14,6 +18,8 @@ export type CharacterSourceRegion = {
 export type CharacterEvidenceFact = {
     feature: string
     value: string
+    region?: CharacterEvidenceRegion
+    requestAuthority?: CharacterEvidenceRequestAuthority
     visibility: CharacterEvidenceVisibility
     sourceAssetId?: string
     sourceRegion?: CharacterSourceRegion
@@ -25,11 +31,14 @@ export type CharacterEvidenceFact = {
 export type CharacterSourceCoverage = {
     sourceAssetId: string
     angles: CharacterTargetAngle[]
-    regions: Array<'face' | 'body' | 'outfit' | 'hands' | 'feet' | 'prop'>
+    regions: CharacterEvidenceRegion[]
 }
 
 export type CharacterEvidenceProfile = {
     medium: CharacterSourceMedium
+    editTargetPolicy: CharacterEditTargetPolicy
+    regenerationScope?: CharacterRegenerationScope
+    affectedPanelIds?: string[]
     facts: CharacterEvidenceFact[]
     promptDirectives: string[]
     promptChangedFeatures: string[]
@@ -48,6 +57,7 @@ export type CharacterEvidenceProfile = {
 export function emptyCharacterEvidenceProfile(): CharacterEvidenceProfile {
     return {
         medium: 'unknown',
+        editTargetPolicy: 'not-present',
         facts: [],
         promptDirectives: [],
         promptChangedFeatures: [],

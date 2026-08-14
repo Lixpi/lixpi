@@ -106,6 +106,11 @@ const catalogModelIdFor = (model: AiModelMetaInfo): string =>
 const modalityForKind = (kind: string): Modality =>
     kind === 'chat_video' ? 'video' : kind === 'chat_image' ? 'image' : 'tokens'
 
+const isUserStopReason = (reason: unknown): boolean => {
+    const candidate = reason as { message?: unknown }
+    return typeof candidate?.message === 'string' && candidate.message === 'Stopped by user'
+}
+
 const normalizeModelOption = (
     requested: string | number | undefined,
     options: Array<{ value?: string; label?: string }> | undefined,
@@ -151,6 +156,7 @@ export abstract class BaseProvider {
     private pipelineProseMirrorContentHandler: ProseMirrorContentHandler | undefined
     private pipelineProseMirrorSnapshotProvider: ProseMirrorSnapshotProvider | undefined
     private publishMirroredMediaLive = true
+    private userStopRequested = false
 
     constructor(
         protected readonly _instanceKey: string,
@@ -247,9 +253,11 @@ export abstract class BaseProvider {
 
     // Run a request through the LangGraph workflow.
     async process(requestData: Record<string, any>): Promise<ProviderState> {
+        this.userStopRequested = false
         this.abortController = new AbortController()
         const parentAbortSignal = requestData.abortSignal as AbortSignal | undefined
         const abortFromParent = (): void => {
+            if (isUserStopReason(parentAbortSignal?.reason)) this.userStopRequested = true
             this.abortController?.abort(parentAbortSignal?.reason ?? new Error('Parent request aborted'))
         }
         if (parentAbortSignal?.aborted) {
@@ -452,33 +460,50 @@ export abstract class BaseProvider {
             })
         } catch (e: any) {
             const message = e?.message ?? String(e)
-            if (this.abortController.signal.aborted) {
+            const cancelledByUser = this.userStopRequested
+            if (cancelledByUser) {
+                info(`Workflow cancelled by user for ${this.instanceKey}`)
+            } else if (this.abortController.signal.aborted) {
                 err(`Circuit breaker / abort fired for ${this.instanceKey}: ${message}`)
             } else {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
-            if (initialState.generationRun?.requestKind !== 'media-generation-matrix') {
+            const isMatrixChild = initialState.generationRun?.requestKind === 'media-generation-matrix'
+            const generationRequestId = initialState.durableGenerationRequestId
+                ?? initialState.generationRun?.generationRequestId
+            if (cancelledByUser && generationRequestId) {
+                this.streamPublisher.beginMediaGenerationRequestCancellation(generationRequestId)
+                if (!isMatrixChild) {
+                    await this.streamPublisher.cancelProseMirrorGenerationRequest(generationRequestId)
+                    this.streamPublisher.mediaGenerationRequestComplete(generationRequestId, {
+                        removeProjectedPendingNodes: true,
+                    })
+                }
+            } else if (!isMatrixChild) {
                 try {
                     await this.failUnfinishedDurableRuns(initialState)
                 } catch (settlementError) {
                     err(`[BaseProvider] Failed to settle unfinished durable runs for ${this.instanceKey}:`, settlementError)
                 }
             }
-            this.streamPublisher.error(initialState.durableGenerationRequestId
-                ? 'The provider could not complete this generation attempt.'
-                : message)
-            if (initialState.generationRun?.requestKind !== 'media-generation-matrix') {
+            if (!cancelledByUser) {
+                this.streamPublisher.error(initialState.durableGenerationRequestId
+                    ? 'The provider could not complete this generation attempt.'
+                    : message)
+            }
+            if (!cancelledByUser && !isMatrixChild) {
                 this.streamPublisher.completeKnownMediaGenerationRequests()
             }
             this.streamPublisher.end()
             await this.streamPublisher.drainPendingWrites()
             await this.streamPublisher.finishProseMirrorStream()
-            return {
+            const terminalState = {
                 ...initialState,
-                error: message,
                 streamActive: false,
+                ...(cancelledByUser ? { cancelledByUser: true } : {}),
                 aiRequestFinishedAt: Date.now(),
             }
+            return cancelledByUser ? terminalState : { ...terminalState, error: message }
         } finally {
             parentAbortSignal?.removeEventListener('abort', abortFromParent)
             try {
@@ -492,6 +517,7 @@ export abstract class BaseProvider {
 
     async stop(): Promise<void> {
         info(`Stopping stream for instance: ${this.instanceKey}`)
+        this.userStopRequested = true
         this.abortController?.abort(new Error('Stopped by user'))
     }
 

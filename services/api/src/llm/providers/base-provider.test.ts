@@ -376,16 +376,16 @@ describe('BaseProvider request validation', () => {
             enableImageGeneration: true,
             imageGenerationReferences: [{
                 url: 'data:image/png;base64,c291cmNl',
-                role: 'original-source',
-                fileName: 'original-source-1',
+                role: 'edit-target-identity',
+                fileName: 'EDIT_TARGET_IDENTITY_FACE',
             }],
         })
 
         expect(invoke).toHaveBeenCalledOnce()
         expect(result.resolvedImageGenerationReferences).toEqual([
             expect.objectContaining({
-                role: 'original-source',
-                fileName: 'original-source-1.png',
+                role: 'edit-target-identity',
+                fileName: 'EDIT_TARGET_IDENTITY_FACE.png',
                 mediaType: 'image/png',
                 byteLength: 6,
                 bytes: Buffer.from('source'),
@@ -1096,6 +1096,128 @@ describe('BaseProvider streamTokens failure path', () => {
 })
 
 describe('BaseProvider process failure path', () => {
+    it('settles a direct user stop as cancellation without publishing a provider failure', async () => {
+        const beginCancellation = vi.spyOn(StreamPublisher.prototype, 'beginMediaGenerationRequestCancellation')
+        const cancelTranscript = vi.spyOn(StreamPublisher.prototype, 'cancelProseMirrorGenerationRequest')
+            .mockResolvedValue(undefined)
+        const completeRequest = vi.spyOn(StreamPublisher.prototype, 'mediaGenerationRequestComplete')
+            .mockImplementation(() => undefined)
+        const publishError = vi.spyOn(StreamPublisher.prototype, 'error')
+
+        try {
+            const provider = new TestProvider('ws1:thread1', {
+                natsService: makeFakeNats().fake,
+                usageReporter: {} as any,
+                runImageRouter: vi.fn(),
+                runVideoRouter: vi.fn(),
+            } as BaseProviderDeps)
+            let markInvocationStarted!: () => void
+            const invocationStarted = new Promise<void>((resolve) => {
+                markInvocationStarted = resolve
+            })
+            ;(provider as any).app = {
+                invoke: vi.fn(async (_state: ProviderState, options: { signal: AbortSignal }) => {
+                    markInvocationStarted()
+                    return await new Promise<ProviderState>((_resolve, reject) => {
+                        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+                    })
+                }),
+            }
+
+            const resultPromise = provider.process({
+                organizationId: 'organization-1',
+                workspaceId: 'ws1',
+                aiChatThreadId: 'thread1',
+                aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+                messages: [],
+                durableGenerationRequestId: 'request-1',
+                generationRun: {
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'request-1:reasoning:0',
+                    reasoningModelId: 'Anthropic:claude',
+                    reasoningIndex: 0,
+                    requestKind: 'single-media',
+                },
+            })
+            await invocationStarted
+            await provider.stop()
+            const result = await resultPromise
+
+            expect(result.error).toBeUndefined()
+            expect(result.cancelledByUser).toBe(true)
+            expect(beginCancellation).toHaveBeenCalledWith('request-1')
+            expect(cancelTranscript).toHaveBeenCalledWith('request-1')
+            expect(completeRequest).toHaveBeenCalledWith('request-1', {
+                removeProjectedPendingNodes: true,
+            })
+            expect(publishError).not.toHaveBeenCalled()
+        } finally {
+            beginCancellation.mockRestore()
+            cancelTranscript.mockRestore()
+            completeRequest.mockRestore()
+            publishError.mockRestore()
+        }
+    })
+
+    it('inherits user-stop cancellation from an aborted parent request', async () => {
+        const beginCancellation = vi.spyOn(StreamPublisher.prototype, 'beginMediaGenerationRequestCancellation')
+        const completeRequest = vi.spyOn(StreamPublisher.prototype, 'mediaGenerationRequestComplete')
+            .mockImplementation(() => undefined)
+        const publishError = vi.spyOn(StreamPublisher.prototype, 'error')
+
+        try {
+            const provider = new TestProvider('ws1:thread1:request-1:reasoning:0', {
+                natsService: makeFakeNats().fake,
+                usageReporter: {} as any,
+                runImageRouter: vi.fn(),
+                runVideoRouter: vi.fn(),
+            } as BaseProviderDeps)
+            const parentAbortController = new AbortController()
+            let markInvocationStarted!: () => void
+            const invocationStarted = new Promise<void>((resolve) => {
+                markInvocationStarted = resolve
+            })
+            ;(provider as any).app = {
+                invoke: vi.fn(async (_state: ProviderState, options: { signal: AbortSignal }) => {
+                    markInvocationStarted()
+                    return await new Promise<ProviderState>((_resolve, reject) => {
+                        options.signal.addEventListener('abort', () => reject(new Error('Abort')), { once: true })
+                    })
+                }),
+            }
+
+            const resultPromise = provider.process({
+                organizationId: 'organization-1',
+                workspaceId: 'ws1',
+                aiChatThreadId: 'thread1',
+                aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+                messages: [],
+                abortSignal: parentAbortController.signal,
+                durableGenerationRequestId: 'request-1',
+                generationRun: {
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'request-1:reasoning:0',
+                    reasoningModelId: 'Anthropic:claude',
+                    reasoningIndex: 0,
+                    requestKind: 'media-generation-matrix',
+                },
+            })
+            await invocationStarted
+            parentAbortController.abort(new Error('Stopped by user'))
+            const result = await resultPromise
+
+            expect(result.error).toBeUndefined()
+            expect(result.cancelledByUser).toBe(true)
+            expect(beginCancellation).toHaveBeenCalledWith('request-1')
+            expect(completeRequest).not.toHaveBeenCalled()
+            expect(publishError).not.toHaveBeenCalled()
+        } finally {
+            beginCancellation.mockRestore()
+            completeRequest.mockRestore()
+            publishError.mockRestore()
+        }
+    })
+
     it('calls media-request completion and drainage hooks when process-level graph execution fails', async () => {
         const completeKnownMediaGenerationRequests = vi.spyOn(
             StreamPublisher.prototype as any,

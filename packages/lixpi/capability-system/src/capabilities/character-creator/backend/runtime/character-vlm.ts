@@ -2,7 +2,13 @@
 
 import type { AiModelInferenceCapabilities, ProviderName } from '@lixpi/constants'
 
+import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
 import type { CharacterEvidenceAnalysis, CharacterEvidenceAnalyzerPort } from './evidence-analyzer.ts'
+import type {
+    CharacterEditTargetPolicy,
+    CharacterEvidenceRegion,
+    CharacterRegenerationScope,
+} from './character-evidence.ts'
 import type {
     CharacterPanelVlmAssessmentResult,
     CharacterPanelVlmAssessorPort,
@@ -29,6 +35,10 @@ type RawEvidenceFact = NonNullable<CharacterEvidenceAnalysis['facts']>[number] &
 
 type RawEvidenceAnalysis = Omit<CharacterEvidenceAnalysis, 'facts'> & {
     facts: RawEvidenceFact[]
+    editTargetApprovedRegions: CharacterEvidenceRegion[]
+    editTargetRejectedRegions: CharacterEvidenceRegion[]
+    regenerationScope: CharacterRegenerationScope
+    affectedPanelIds: string[]
     palette: string[]
     costumeNotes: string[]
     materialNotes: string[]
@@ -62,18 +72,24 @@ class CharacterPanelAssessmentResponseError extends Error {
 
 const EVIDENCE_SYSTEM_PROMPT = [
     'Analyze the supplied character references as an observation set for consistent image generation.',
+    'Original reference inputs and editable prior-panel inputs are labeled separately. Derive observed facts only from original references. Use editable prior panels only to determine what the request approves, rejects, or replaces.',
     'Record the visible identity, design, construction, proportion, material, depiction, target-geometry, source-coverage, and crop evidence required by the response schema.',
     'Read the complete character request as authoritative. Extract every explicit requested visual attribute, design change, state change, transformation, material change, costume change, and depiction instruction into promptDirectives without substituting a capability-authored interpretation.',
     'Resolve an obvious misspelling conservatively from the surrounding request. Put the corrected intended term in promptDirectives only when context makes that correction unambiguous; otherwise preserve the user term instead of inventing a meaning.',
     'Never reinterpret an unknown or misspelled character term as a depiction-medium or visual-style change unless the request explicitly asks for that change. A requested subject or design transformation does not imply a depiction-medium change.',
-    'List in promptChangedFeatures the exact feature names from facts that those directives override. Explicit requested changes outrank source pixels; stable identity evidence remains authoritative only where the request does not change it.',
+    'List in promptChangedFeatures the exact feature names from facts that those directives override. Set each fact region from the closed region axis. Set requestAuthority to assigned only when the request assigns that source to the target trait, supporting when the request explicitly makes it secondary context, and unassigned otherwise. Explicit requested changes outrank source pixels; stable identity evidence remains authoritative only where the request does not change it.',
     'Mark a fact observed only when pixels directly support it. Mark hidden geometry, unseen views, and prompt-derived details inferred.',
+    'Every observed fact must name the exact asset ID of the original reference that supplies its pixels in sourceAssetId. Use null only for inferred facts. Never use an editable prior-panel asset ID as observed source evidence.',
     'Use conflictGroupId when references disagree about one feature. Never average conflicting alternatives.',
+    'Return editTargetApprovedRegions and editTargetRejectedRegions from the closed region axis. Classify editTargetPolicy from those region decisions and the request: preserve-panel for mixed retained and changed regions, identity-only when only the face region is approved and any non-face region is rejected, discard when every region is rejected, and not-present when no editable prior panel exists.',
+    'Classify regenerationScope against the supplied panel IDs. Return selected-panels only when the request clearly limits every visible change to a strict subset; otherwise return full-sheet. affectedPanelIds must contain every panel where any requested change would be visible.',
     'Coordinates are pixel coordinates in the named source image. Keep them inside that image.',
 ].join(' ')
 
 const PANEL_SYSTEM_PROMPT = [
     'Judge one generated character panel against the complete authoritative request, shared Capability instructions and references, supplied source images, structured evidence, and target panel requirements.',
+    'The candidate must be one isolated shot, never a contact sheet, montage, lineup, split view, inset composition, or collection of alternate poses. Score single-panel-composition below the acceptance threshold and report a MULTIPLE_SHOTS mismatch whenever more than the one requested shot is visible.',
+    'When a grayscale pose template is supplied, compare the candidate against that template for subject count, camera direction, crop, subject scale, posture, limb placement, and silhouette. Score template-conformance below the review threshold for material crop, scale, posture, or silhouette deviation. Do not use ordinary crop or scale variance as evidence of an extra shot or wrong target view.',
     'The request and shared Capability instructions outrank the unmodified source state. A recognizable source identity that ignores a requested transformation is a request-compliance failure.',
     'The structured evidence medium is the required baseline depiction medium unless the authoritative request or shared Capability instructions explicitly change it. Treat any unrequested depiction-medium or visual-style conversion as both a depiction-medium and request-compliance failure.',
     'Score each requested dimension from 0 to 1. Weight directly observed evidence over polish.',
@@ -95,7 +111,7 @@ export function createCharacterVlmPorts(args: CharacterVlmArgs): {
                     inferenceCapabilities: args.inferenceCapabilities,
                     systemPrompt: EVIDENCE_SYSTEM_PROMPT,
                     userMessages: buildEvidenceMessages(request),
-                    schema: buildEvidenceSchema(),
+                    schema: buildEvidenceSchema(request.panels ?? []),
                     temperature: 0.1,
                     maxTokens: 8_192,
                     maxOutputTokensCeiling: args.maxOutputTokensCeiling,
@@ -198,23 +214,58 @@ export function describeCharacterPanelAssessmentFailure(
 
 const buildEvidenceMessages = (
     request: Parameters<CharacterEvidenceAnalyzerPort['analyze']>[0],
-): CharacterVlmMessage[] => [{
-    role: 'user',
-    content: [
-        { type: 'input_text', text: `Character request: ${request.userPrompt}` },
-        ...request.sources.flatMap(source => [
+): CharacterVlmMessage[] => {
+    const referenceAliases = new Map((request.referenceAliases ?? []).map(reference => [
+        reference.assetId,
+        reference.alias,
+    ]))
+    const panelContract = (request.panels ?? []).map(panel => ({
+        panelId: panel.panelId,
+        kind: panel.kind,
+        target: panel.target,
+        crop: panel.crop,
+    }))
+    return [{
+        role: 'user',
+        content: [
+            { type: 'input_text', text: `Character request: ${request.userPrompt}` },
             {
                 type: 'input_text',
-                text: `Source asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
+                text: `Planned panel contract: ${JSON.stringify(panelContract)}.`,
             },
-            {
-                type: 'input_image',
-                image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
-                detail: 'high',
-            },
-        ]),
-    ],
-}]
+            ...request.sources.flatMap((source, index) => [
+                {
+                    type: 'input_text',
+                    text: [
+                        `Original reference ${referenceAliases.get(source.assetId) ?? `SOURCE_${index + 1}`}.`,
+                        `Asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
+                        'This input may provide observed facts and source regions.',
+                    ].join(' '),
+                },
+                {
+                    type: 'input_image',
+                    image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
+                    detail: 'high',
+                },
+            ]),
+            ...(request.editTargets ?? []).flatMap((source, index) => [
+                {
+                    type: 'input_text',
+                    text: [
+                        `Editable prior panel ${referenceAliases.get(source.assetId) ?? `EDIT_TARGET_${index + 1}`}.`,
+                        `Panel ${source.componentId ?? 'unknown'}; asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
+                        'Use this input only to determine approved and rejected edit-target regions. Do not record it as original-source evidence.',
+                    ].join(' '),
+                },
+                {
+                    type: 'input_image',
+                    image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
+                    detail: 'high',
+                },
+            ]),
+        ],
+    }]
+}
 
 const buildPanelMessages = (
     request: Parameters<CharacterPanelVlmAssessorPort['assess']>[0],
@@ -230,6 +281,7 @@ const buildPanelMessages = (
                 `Target: ${request.panel.target}`,
                 `Crop: ${request.panel.crop}`,
                 `Required dimensions: ${request.panel.acceptanceDimensions.join(', ')}`,
+                'Categorical single-panel-composition and target-view or action-pose dimensions are release gates. Treat an extra pose, extra character view, inset, montage, or wrong camera view as a concrete categorical mismatch. Template-conformance and framing are review dimensions: score their crop, scale, clearance, and silhouette differences without turning those differences alone into a categorical structural failure.',
                 `Evidence: ${JSON.stringify(request.evidence)}`,
             ].join('\n'),
         },
@@ -241,12 +293,18 @@ const buildPanelMessages = (
             { type: 'input_text', text: `Shared Capability reference ${index + 1}. Apply only according to the shared Capability instructions.` },
             { type: 'input_image', image_url: imageUrl, detail: 'high' },
         ]),
+        ...(request.poseReferenceDataUrl ? [
+            { type: 'input_text', text: 'Exact grayscale spatial template for this panel. Compare structure only; ignore its identity and design.' },
+            { type: 'input_image', image_url: request.poseReferenceDataUrl, detail: 'high' },
+        ] : []),
         { type: 'input_text', text: 'Candidate to assess.' },
         { type: 'input_image', image_url: request.candidateDataUrl, detail: 'high' },
     ],
 }]
 
-const buildEvidenceSchema = (): CharacterVlmJsonSchema => ({
+const buildEvidenceSchema = (
+    panels: readonly CharacterPanelSpec[],
+): CharacterVlmJsonSchema => ({
     name: 'character_evidence',
     description: 'Observed and inferred character evidence from source images.',
     schema: {
@@ -254,6 +312,28 @@ const buildEvidenceSchema = (): CharacterVlmJsonSchema => ({
         additionalProperties: false,
         properties: {
             medium: { type: 'string', enum: ['photograph', 'illustration', 'render', 'mixed', 'unknown'] },
+            editTargetPolicy: {
+                type: 'string',
+                enum: ['not-present', 'preserve-panel', 'identity-only', 'discard'],
+            },
+            editTargetApprovedRegions: {
+                type: 'array',
+                items: { type: 'string', enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'] },
+            },
+            editTargetRejectedRegions: {
+                type: 'array',
+                items: { type: 'string', enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'] },
+            },
+            regenerationScope: {
+                type: 'string',
+                enum: ['full-sheet', 'selected-panels'],
+            },
+            affectedPanelIds: {
+                type: 'array',
+                items: panels.length > 0
+                    ? { type: 'string', enum: panels.map(panel => panel.panelId) }
+                    : { type: 'string' },
+            },
             promptDirectives: { type: 'array', items: { type: 'string' } },
             promptChangedFeatures: { type: 'array', items: { type: 'string' } },
             facts: {
@@ -264,6 +344,14 @@ const buildEvidenceSchema = (): CharacterVlmJsonSchema => ({
                     properties: {
                         feature: { type: 'string' },
                         value: { type: 'string' },
+                        region: {
+                            type: 'string',
+                            enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'],
+                        },
+                        requestAuthority: {
+                            type: 'string',
+                            enum: ['assigned', 'supporting', 'unassigned'],
+                        },
                         visibility: { type: 'string', enum: ['observed', 'inferred'] },
                         sourceAssetId: { type: ['string', 'null'] },
                         sourceRegion: {
@@ -293,7 +381,7 @@ const buildEvidenceSchema = (): CharacterVlmJsonSchema => ({
                         conflictGroupId: { type: ['string', 'null'] },
                     },
                     required: [
-                        'feature', 'value', 'visibility', 'sourceAssetId', 'sourceRegion',
+                        'feature', 'value', 'region', 'requestAuthority', 'visibility', 'sourceAssetId', 'sourceRegion',
                         'targetAngles', 'confidence', 'conflictGroupId',
                     ],
                 },
@@ -326,7 +414,9 @@ const buildEvidenceSchema = (): CharacterVlmJsonSchema => ({
             },
         },
         required: [
-            'medium', 'promptDirectives', 'promptChangedFeatures', 'facts', 'palette', 'costumeNotes', 'materialNotes',
+            'medium', 'editTargetPolicy', 'editTargetApprovedRegions', 'editTargetRejectedRegions',
+            'regenerationScope', 'affectedPanelIds', 'promptDirectives', 'promptChangedFeatures',
+            'facts', 'palette', 'costumeNotes', 'materialNotes',
             'distinguishingDetailNotes', 'sourceCoverage',
         ],
     },
@@ -366,6 +456,11 @@ const normalizeEvidence = (value: unknown): CharacterEvidenceAnalysis => {
     }
     return {
         ...analysis,
+        editTargetPolicy: normalizeEditTargetPolicy(analysis.editTargetPolicy),
+        editTargetApprovedRegions: normalizeEvidenceRegions(analysis.editTargetApprovedRegions),
+        editTargetRejectedRegions: normalizeEvidenceRegions(analysis.editTargetRejectedRegions),
+        regenerationScope: normalizeRegenerationScope(analysis.regenerationScope),
+        affectedPanelIds: normalizeStringList(analysis.affectedPanelIds),
         promptDirectives: normalizeStringList(analysis.promptDirectives),
         promptChangedFeatures: normalizeStringList(analysis.promptChangedFeatures),
         facts: analysis.facts.map(({ sourceAssetId, sourceRegion, conflictGroupId, ...fact }) => ({
@@ -375,6 +470,32 @@ const normalizeEvidence = (value: unknown): CharacterEvidenceAnalysis => {
             ...(conflictGroupId ? { conflictGroupId } : {}),
         })),
     }
+}
+
+const normalizeEditTargetPolicy = (value: unknown): CharacterEditTargetPolicy => {
+    if (value === 'not-present' || value === 'preserve-panel' || value === 'identity-only' || value === 'discard') {
+        return value
+    }
+    throw new Error('CHARACTER_EVIDENCE_EDIT_TARGET_POLICY_INVALID')
+}
+
+const normalizeEvidenceRegions = (value: unknown): CharacterEvidenceRegion[] => {
+    if (!Array.isArray(value)) return []
+    return [...new Set(value.flatMap(region => (
+        region === 'face'
+        || region === 'body'
+        || region === 'outfit'
+        || region === 'hands'
+        || region === 'feet'
+        || region === 'prop'
+            ? [region]
+            : []
+    )))]
+}
+
+const normalizeRegenerationScope = (value: unknown): CharacterRegenerationScope => {
+    if (value === 'full-sheet' || value === 'selected-panels') return value
+    throw new Error('CHARACTER_EVIDENCE_REGENERATION_SCOPE_INVALID')
 }
 
 const normalizeStringList = (value: unknown): string[] => Array.isArray(value)
@@ -398,6 +519,9 @@ const normalizePanelDimensions = (
                 dimensionsType: describeValueType(rawDimensions),
                 dimensionsKeys: isRecord(rawDimensions) ? Object.keys(rawDimensions) : [],
                 dimensionsShape: summarizeDimensionPayloadShape(rawDimensions),
+                ...(typeof rawDimensions === 'string'
+                    ? { dimensionsPreview: rawDimensions.slice(0, 320) }
+                    : {}),
                 expectedDimensions: [...expectedDimensions],
             },
         )

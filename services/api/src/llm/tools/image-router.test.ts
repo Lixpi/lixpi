@@ -64,7 +64,12 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     }
 }
 
-type ProcessResult = { generatedImages?: string[]; error?: string; imageUsage?: ProviderState['imageUsage'] }
+type ProcessResult = {
+    generatedImages?: string[]
+    error?: string
+    imageUsage?: ProviderState['imageUsage']
+    cancelledByUser?: boolean
+}
 
 const createRouter = (
     processResult: ProcessResult | ProcessResult[] = { generatedImages: ['nats-obj://workspace-workspace-1-files/cat.png'] },
@@ -272,7 +277,13 @@ describe('ImageRouter', () => {
             generatedImages: ['nats-obj://workspace-workspace-1-files/cat.png'],
         }))
 
-        await execution
+        await expect(execution).rejects.toMatchObject({ name: 'AbortError' })
+    })
+
+    it('propagates provider cancellation instead of recording missing output as a failure', async () => {
+        const { router } = createRouter({ cancelledByUser: true })
+
+        await expect(router.execute(createState())).rejects.toMatchObject({ name: 'AbortError' })
     })
 
     it('delegates a Character Creator media plan to its registered strategy and returns the final PNG for normal settlement', async () => {
@@ -311,6 +322,8 @@ describe('ImageRouter', () => {
             generatedImagePrompt: 'Create an adorable chibi cartoon with a large head and small body.',
             providerSafeMediaIntent: { safePrompt: 'Create a combie character out of this photo.' } as any,
             mediaReferenceBindings: [{
+                assetId: 'asset-1',
+                alias: 'REFERENCE_1',
                 subjectIdentity: { classification: 'self' },
             }] as any,
             capabilityUsagePrompt: 'Apply the sibling visual-style Capability.',
@@ -320,6 +333,14 @@ describe('ImageRouter', () => {
                 { capabilityId: 'character-creator', runId: 'character-run', output: {} },
                 { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
             ],
+            mediaBranchCandidateSnapshot: {
+                activeTargetCandidateId: 'node:sheet-target',
+                candidates: [{ candidateId: 'node:sheet-target', assetId: 'asset-1' }],
+            } as any,
+            mediaBranchResolution: {
+                operationKind: 'edit_existing',
+                targetCandidateId: null,
+            } as any,
             generationRun: {
                 generationRequestId: 'request-1',
                 reasoningRunId: 'reasoning-1',
@@ -363,6 +384,8 @@ describe('ImageRouter', () => {
                 imageModel: expect.objectContaining({ provider: 'Google' }),
                 sharedState: {
                     authoritativePrompt: 'Create a combie character out of this photo.',
+                    editTargetAssetId: 'asset-1',
+                    mediaReferenceAliases: [{ assetId: 'asset-1', alias: 'REFERENCE_1' }],
                     sourceSubjectIdentityClassifications: ['self'],
                     capabilityInstructions: ['Apply the sibling visual-style Capability.'],
                     capabilityReferences: [{

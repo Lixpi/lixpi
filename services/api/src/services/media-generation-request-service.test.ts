@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
     },
     assetModel: {
         get: vi.fn(),
+        removeAssetSurfaceReferenceSystem: vi.fn(),
     },
     canvasProjection: {
         settleFailed: vi.fn(),
@@ -233,6 +234,7 @@ beforeEach(() => {
     mocks.blobModel.addReference.mockResolvedValue(undefined)
     mocks.blobModel.removeReference.mockResolvedValue(undefined)
     mocks.mediaRequestModel.create.mockResolvedValue(undefined)
+    mocks.assetModel.removeAssetSurfaceReferenceSystem.mockResolvedValue({ success: true })
 })
 
 describe('media generation checkpoint safety', () => {
@@ -498,6 +500,86 @@ describe('media generation request lineage binding', () => {
 })
 
 describe('media generation request terminal settlement', () => {
+    it('ignores late progress and status writes after durable cancellation', async () => {
+        const cancelledRequest: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'cancelled',
+            runs: [{ ...pendingRun(), status: 'running' }],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(cancelledRequest)
+        const service = new MediaGenerationRequestService()
+        const run = cancelledRequest.runs[0]!
+
+        const progressResult = await service.recordRunProgress({
+            generationRequestId: cancelledRequest.generationRequestId,
+            workspaceId: cancelledRequest.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            progress: {
+                phase: 'rendering',
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Late provider progress',
+            },
+        })
+        const statusResult = await service.recordRunStatus({
+            generationRequestId: cancelledRequest.generationRequestId,
+            workspaceId: cancelledRequest.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'failed',
+        })
+
+        expect(progressResult).toBe(cancelledRequest)
+        expect(statusResult).toBe(cancelledRequest)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+        expect(mocks.canvasProjection.settleFailed).not.toHaveBeenCalled()
+    })
+
+    it('cancels the latest active request revision for an authoritative output deletion', async () => {
+        const activeRequest: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            revision: 5,
+            runs: [{ ...pendingRun(), status: 'running' }],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(activeRequest)
+        mocks.mediaRequestModel.transition.mockImplementation(async ({ request }) => request)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).cancelCurrent({
+            generationRequestId: activeRequest.generationRequestId,
+            workspaceId: activeRequest.workspaceId,
+            userId: activeRequest.userId,
+        })
+
+        expect(result).toMatchObject({ status: 'cancelled', revision: 6 })
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({ status: 'cancelled', revision: 6 }),
+            expectedRevision: 5,
+        })
+        expect(mocks.operationProjection.removeAll).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'media-request-1',
+            terminalStatus: 'cancelled',
+            discardUnboundOutputNodes: true,
+        })
+        expect(mocks.assetModel.removeAssetSurfaceReferenceSystem).toHaveBeenCalledWith({
+            assetId: 'asset-image-1',
+            organizationId: 'organization-1',
+            surfaceId: 'conversation#conversation-1#media#media-request-1:reasoning:0:image:0',
+        })
+        expect(mocks.blobModel.removeReference).toHaveBeenCalledWith(expect.objectContaining({
+            referenceKey: 'mediaGenerationRequest#media-request-1#checkpoint',
+        }))
+    })
+
     it('dismisses an already-terminal request even when the rendered card revision is stale', async () => {
         const terminalRequest: MediaGenerationRequest = {
             ...deferredRequest(),

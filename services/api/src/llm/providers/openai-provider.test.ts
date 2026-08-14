@@ -3,7 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AiModelInferenceCapabilities, ImageReferenceCapabilities } from '@lixpi/constants'
 
-import { OpenAIProvider } from './openai-provider.ts'
+import {
+    appendOpenAIImageGenerationReferences,
+    OpenAIProvider,
+} from './openai-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
@@ -193,10 +196,14 @@ describe('OpenAIProvider panel-reference ingestion', () => {
     it('uploads prioritized panel references to the image-edit endpoint', async () => {
         const captured = await processWithCharacterReferences('gpt-image-2', 'provider-managed')
         const files = getUploadedFiles(captured.formData)
+        const prompt = String(captured.formData.get('prompt'))
 
         expect(captured.request.url).toBe('https://api.openai.com/v1/images/edits')
         expect(captured.formData.get('model')).toBe('gpt-image-2')
-        expect(captured.formData.get('prompt')).toBe('Render a front portrait using the authoritative source and face crop.')
+        expect(prompt).toContain('INPUT IMAGE ORDER')
+        expect(prompt).toContain('INPUT IMAGE 1 — AUTHORITATIVE ORIGINAL SOURCE')
+        expect(prompt).toContain('INPUT IMAGE 2 — FACE IDENTITY CROP')
+        expect(prompt).toContain('Render a front portrait using the authoritative source and face crop.')
         expect(files.map(file => ({
             name: file.name,
             type: file.type,
@@ -217,6 +224,40 @@ describe('OpenAIProvider panel-reference ingestion', () => {
             ),
         )
         expect(captured.formData.get('input_fidelity')).toBeNull()
+    })
+
+    it('serializes the same scoped role state for the Responses image path', () => {
+        const referenceBytes = Buffer.from('approved-face-construction')
+        const messages: Array<{ role: string; content: any }> = [{
+            role: 'user',
+            content: 'Rebuild the clothing from the original drawing.',
+        }]
+
+        appendOpenAIImageGenerationReferences(messages, [{
+            url: 'identity-crop-url',
+            role: 'edit-target-identity',
+            fileName: 'EDIT_TARGET_IDENTITY_FACE.png',
+            bytes: referenceBytes,
+            dataUrl: `data:image/png;base64,${referenceBytes.toString('base64')}`,
+            mediaType: 'image/png',
+            byteLength: referenceBytes.byteLength,
+            sha256: 'a'.repeat(64),
+        }])
+
+        expect(messages[0]?.content).toEqual([
+            expect.objectContaining({
+                type: 'input_text',
+                text: expect.stringContaining('INPUT IMAGE 1 — EDIT-TARGET IDENTITY CROP ONLY'),
+            }),
+            {
+                type: 'input_image',
+                image_url: `data:image/png;base64,${referenceBytes.toString('base64')}`,
+                detail: 'high',
+            },
+        ])
+        expect(messages[0]?.content[0]?.text).toContain(
+            'Rebuild the clothing from the original drawing.',
+        )
     })
 
     it.each(['gpt-image-1', 'gpt-image-1.5'])(

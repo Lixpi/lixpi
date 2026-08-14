@@ -42,19 +42,23 @@ const makeStore = (): CharacterTransientMediaStorePort => {
 
 const evidence = (): CharacterEvidenceProfile => ({
     medium: 'illustration',
+    editTargetPolicy: 'not-present',
     promptDirectives: [],
     promptChangedFeatures: [],
     facts: [
         {
-            feature: 'face', value: 'clear front face', visibility: 'observed', sourceAssetId: 'asset-front',
+            feature: 'face', value: 'clear front face', region: 'face', requestAuthority: 'supporting',
+            visibility: 'observed', sourceAssetId: 'asset-front',
             sourceRegion: { x: 40, y: 20, width: 180, height: 160 }, targetAngles: ['front'], confidence: 1,
         },
         {
-            feature: 'body outfit', value: 'full coat', visibility: 'observed', sourceAssetId: 'asset-front',
+            feature: 'body outfit', value: 'full coat', region: 'outfit', requestAuthority: 'assigned',
+            visibility: 'observed', sourceAssetId: 'asset-front',
             sourceRegion: { x: -20, y: 180, width: 800, height: 1000 }, targetAngles: ['front'], confidence: 0.9,
         },
         {
-            feature: 'prop', value: 'walking staff', visibility: 'observed', sourceAssetId: 'asset-profile',
+            feature: 'carried element placement', value: 'observed configuration', region: 'prop',
+            requestAuthority: 'assigned', visibility: 'observed', sourceAssetId: 'asset-profile',
             sourceRegion: { x: 500, y: 100, width: 300, height: 900 }, targetAngles: ['profile'], confidence: 0.8,
         },
     ],
@@ -88,6 +92,10 @@ describe('buildCharacterReferencePack', () => {
                 },
             ],
             evidence: evidence(),
+            referenceAliases: [
+                { assetId: 'asset-front', alias: 'REFERENCE_1' },
+                { assetId: 'asset-profile', alias: 'REFERENCE_2' },
+            ],
             capabilities,
             store,
         })
@@ -103,6 +111,104 @@ describe('buildCharacterReferencePack', () => {
             .every(entry => entry.width * entry.height <= capabilities.maxOutputPixels)).toBe(true)
         expect(pack.entries.every(entry => entry.url.startsWith('data:image/png;base64,'))).toBe(true)
         expect(pack.entries.every(entry => entry.coordinate.organizationId === 'org-1')).toBe(true)
+        expect(pack.entries.map(entry => entry.fileName)).toEqual([
+            'REFERENCE_1.png',
+            'REFERENCE_2.png',
+            'REFERENCE_1_FACE_CROP.png',
+            'REFERENCE_1_BODY_OUTFIT_CROP.png',
+            'REFERENCE_2_PROP_CROP.png',
+        ])
         expect(store.putWithCoordinate).toHaveBeenCalledTimes(5)
+    })
+
+    it('marks an existing sheet component as the edit target instead of another original source', async () => {
+        const bytes = await sharp({
+            create: { width: 256, height: 256, channels: 3, background: '#334455' },
+        }).png().toBuffer()
+
+        const pack = await buildCharacterReferencePack({
+            sources: [{
+                assetId: 'sheet-1',
+                organizationId: 'org-1',
+                rendition: 'composition-component',
+                sourceKind: 'composition-component',
+                componentId: 'body-front',
+                compositionAssetId: 'sheet-1',
+                blobHash: 'component-hash',
+                mimeType: 'image/png',
+                bytes,
+                width: 256,
+                height: 256,
+            }],
+            evidence: { ...evidence(), facts: [] },
+            editTargetAssetId: 'sheet-1',
+            capabilities,
+            store: makeStore(),
+        })
+
+        expect(pack.entries).toEqual([
+            expect.objectContaining({
+                role: 'edit-target',
+                fileName: 'EDIT_TARGET_body-front.png',
+                componentId: 'body-front',
+                compositionAssetId: 'sheet-1',
+            }),
+        ])
+    })
+
+    it('keeps only a face-region edit target when the prior sheet is authoritative for identity alone', async () => {
+        const bytes = await sharp({
+            create: { width: 512, height: 512, channels: 3, background: '#334455' },
+        }).png().toBuffer()
+        const store = makeStore()
+
+        const pack = await buildCharacterReferencePack({
+            sources: [
+                {
+                    assetId: 'sheet-1',
+                    organizationId: 'org-1',
+                    rendition: 'composition-component',
+                    sourceKind: 'composition-component',
+                    componentId: 'head-front-neutral',
+                    compositionAssetId: 'sheet-1',
+                    blobHash: 'head-hash',
+                    mimeType: 'image/png',
+                    bytes,
+                    width: 512,
+                    height: 512,
+                },
+                {
+                    assetId: 'sheet-1',
+                    organizationId: 'org-1',
+                    rendition: 'composition-component',
+                    sourceKind: 'composition-component',
+                    componentId: 'body-front',
+                    compositionAssetId: 'sheet-1',
+                    blobHash: 'body-hash',
+                    mimeType: 'image/png',
+                    bytes,
+                    width: 512,
+                    height: 512,
+                },
+            ],
+            evidence: {
+                ...evidence(),
+                facts: [],
+                editTargetPolicy: 'identity-only',
+            },
+            editTargetAssetId: 'sheet-1',
+            capabilities,
+            store,
+        })
+
+        expect(pack.entries).toHaveLength(1)
+        expect(pack.entries[0]).toMatchObject({
+            role: 'edit-target-identity',
+            fileName: 'EDIT_TARGET_IDENTITY_FACE.png',
+            componentId: 'head-front-neutral',
+        })
+        expect(pack.entries[0]?.width).toBeLessThan(512)
+        expect(pack.entries[0]?.height).toBeLessThan(512)
+        expect(store.putWithCoordinate).toHaveBeenCalledOnce()
     })
 })

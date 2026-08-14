@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
     },
     mediaRequestService: {
         create: vi.fn(),
+        cancelCurrent: vi.fn(),
         getCheckpoint: vi.fn(),
         pauseForBranchResolution: vi.fn(),
     },
@@ -93,6 +94,7 @@ vi.mock('../../models/media-generation-request.ts', () => ({
 vi.mock('../../services/media-generation-request-service.ts', () => ({
     MediaGenerationRequestService: class {
         create = mocks.mediaRequestService.create
+        cancelCurrent = mocks.mediaRequestService.cancelCurrent
         getCheckpoint = mocks.mediaRequestService.getCheckpoint
         pauseForBranchResolution = mocks.mediaRequestService.pauseForBranchResolution
     },
@@ -228,6 +230,7 @@ describe('AI interaction message routing', () => {
             createdAt: 1,
             updatedAt: 1,
         }))
+        mocks.mediaRequestService.cancelCurrent.mockResolvedValue({ status: 'cancelled' })
         mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValue({
             streamName: 'PIPELINE_EVENTS_workspace-1',
             subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.conv-1`,
@@ -991,7 +994,31 @@ describe('AI interaction message routing', () => {
             aiChatThreadId: 'conv-1',
             generationRequestId: 'request-stop',
         })
+        expect(mocks.mediaRequestService.cancelCurrent).toHaveBeenCalledWith({
+            generationRequestId: 'request-stop',
+            workspaceId: 'workspace-1',
+            userId: 'user-1',
+        })
         expect(result).toEqual({ status: 'stopped', generationRequestId: 'request-stop' })
+    })
+
+    it('starts durable cancellation without waiting for provider shutdown', async () => {
+        let finishMatrixStop!: () => void
+        mocks.llmModule.stopMediaGenerationMatrix.mockReturnValueOnce(new Promise<void>((resolve) => {
+            finishMatrixStop = resolve
+        }))
+
+        const stopRequest = getHandler(SUBJECTS.CHAT_STOP_MESSAGE)({
+            user: { userId: 'user-1' },
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'conv-1',
+            generationRequestId: 'request-stop',
+        })
+
+        await vi.waitFor(() => expect(mocks.mediaRequestService.cancelCurrent).toHaveBeenCalledOnce())
+        expect(mocks.llmModule.stop).toHaveBeenCalledWith('workspace-1:conv-1')
+        finishMatrixStop()
+        await expect(stopRequest).resolves.toMatchObject({ status: 'stopped' })
     })
 
     it('replays persisted pipeline events from the next stream sequence', async () => {

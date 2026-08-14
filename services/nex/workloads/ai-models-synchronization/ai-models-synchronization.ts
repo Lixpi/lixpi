@@ -662,10 +662,11 @@ export class AiModelsSync {
             }
         },
         // Anthropic model defaults sourced from the official Models overview.
-        // Sonnet 5 uses its full 1M context window and 128k synchronous output limit.
+        // Claude 5 uses its full 1M context window and 128k synchronous output limit.
         Anthropic: {
             exact: {},
             prefix: [
+                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
                 { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '10.00' } } } } } },
                 { prefix: 'claude-opus-4-7', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
                 { prefix: 'claude-opus-4-6', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },

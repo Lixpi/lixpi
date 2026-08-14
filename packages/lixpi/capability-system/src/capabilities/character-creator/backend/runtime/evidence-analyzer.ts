@@ -1,13 +1,23 @@
 'use strict'
 
+import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
+
 import {
     emptyCharacterEvidenceProfile,
+    type CharacterEditTargetPolicy,
+    type CharacterEvidenceRegion,
     type CharacterEvidenceProfile,
+    type CharacterRegenerationScope,
 } from './character-evidence.ts'
 import type { ResolvedCharacterReference } from './reference-resolver.ts'
 
 export type CharacterEvidenceAnalysis = {
     medium: CharacterEvidenceProfile['medium']
+    editTargetPolicy?: CharacterEditTargetPolicy
+    editTargetApprovedRegions?: CharacterEvidenceRegion[]
+    editTargetRejectedRegions?: CharacterEvidenceRegion[]
+    regenerationScope?: CharacterRegenerationScope
+    affectedPanelIds?: string[]
     facts?: CharacterEvidenceProfile['facts']
     promptDirectives?: string[]
     promptChangedFeatures?: string[]
@@ -21,28 +31,59 @@ export type CharacterEvidenceAnalysis = {
 export type CharacterEvidenceAnalyzerPort = {
     analyze: (args: {
         sources: readonly ResolvedCharacterReference[]
+        editTargets?: readonly ResolvedCharacterReference[]
+        referenceAliases?: ReadonlyArray<{ assetId: string; alias: string }>
+        panels?: readonly CharacterPanelSpec[]
         userPrompt: string
+        editTargetPresent?: boolean
         signal?: AbortSignal
     }) => Promise<CharacterEvidenceAnalysis>
 }
 
 export async function analyzeCharacterEvidence(args: {
     sources: readonly ResolvedCharacterReference[]
+    editTargets?: readonly ResolvedCharacterReference[]
+    referenceAliases?: ReadonlyArray<{ assetId: string; alias: string }>
+    panels?: readonly CharacterPanelSpec[]
     userPrompt: string
     analyzer?: CharacterEvidenceAnalyzerPort
+    editTargetPresent?: boolean
     signal?: AbortSignal
 }): Promise<CharacterEvidenceProfile> {
-    if (args.sources.length === 0) return emptyCharacterEvidenceProfile()
+    if (args.sources.length === 0 && (args.editTargets?.length ?? 0) === 0) {
+        return {
+            ...emptyCharacterEvidenceProfile(),
+            editTargetPolicy: args.editTargetPresent ? 'preserve-panel' : 'not-present',
+        }
+    }
     if (!args.analyzer) throw new Error('CHARACTER_EVIDENCE_ANALYZER_REQUIRED')
     const analysis = await args.analyzer.analyze(args)
-    const facts = (analysis.facts ?? []).map(fact => ({
+    const facts = resolveUnambiguousObservedSources(analysis.facts ?? [], args.sources).map(fact => ({
         ...fact,
         confidence: clampConfidence(fact.confidence),
     }))
     validateEvidenceCoordinates(facts, analysis.sourceCoverage ?? [], args.sources)
     const conflicts = findConflicts(facts)
+    const panelIds = new Set((args.panels ?? []).map(panel => panel.panelId))
+    const affectedPanelIds = unique(analysis.affectedPanelIds ?? [])
+        .filter(panelId => panelIds.size === 0 || panelIds.has(panelId))
+    const regenerationScope = resolveRegenerationScope(
+        analysis.regenerationScope,
+        affectedPanelIds,
+        panelIds,
+    )
     return {
         medium: analysis.medium,
+        editTargetPolicy: resolveEditTargetPolicy({
+            editTargetPresent: Boolean(args.editTargetPresent),
+            reportedPolicy: analysis.editTargetPolicy,
+            approvedRegions: analysis.editTargetApprovedRegions ?? [],
+            rejectedRegions: analysis.editTargetRejectedRegions ?? [],
+        }),
+        regenerationScope,
+        affectedPanelIds: regenerationScope === 'full-sheet' && panelIds.size > 0
+            ? [...panelIds]
+            : affectedPanelIds,
         facts,
         promptDirectives: unique(analysis.promptDirectives ?? []),
         promptChangedFeatures: unique(analysis.promptChangedFeatures ?? []),
@@ -63,7 +104,6 @@ export function selectCharacterEvidenceFacts(args: {
     const changed = new Set(args.promptChangedFeatures.map(normalize))
     const byFeature = new Map<string, CharacterEvidenceProfile['facts']>()
     for (const fact of args.evidence.facts) {
-        if (changed.has(normalize(fact.feature))) continue
         const key = normalize(fact.feature)
         const candidates = byFeature.get(key) ?? []
         candidates.push(fact)
@@ -72,9 +112,12 @@ export function selectCharacterEvidenceFacts(args: {
     return [...byFeature.values()].flatMap(candidates => {
         const observed = candidates.filter(fact => fact.visibility === 'observed')
         const pool = observed.length > 0 ? observed : candidates
-        return [pool.sort((left, right) => targetSpecificity(right, args.targetAngle)
-            - targetSpecificity(left, args.targetAngle) || right.confidence - left.confidence)[0]!]
-    })
+        return [pool.sort((left, right) => requestAuthorityPriority(right.requestAuthority)
+            - requestAuthorityPriority(left.requestAuthority)
+            || targetSpecificity(right, args.targetAngle) - targetSpecificity(left, args.targetAngle)
+            || right.confidence - left.confidence)[0]!]
+    }).sort((left, right) => Number(changed.has(normalize(right.feature)))
+        - Number(changed.has(normalize(left.feature))))
 }
 
 const buildDefaultCoverage = (sources: readonly ResolvedCharacterReference[]): CharacterEvidenceProfile['sourceCoverage'] =>
@@ -83,6 +126,18 @@ const buildDefaultCoverage = (sources: readonly ResolvedCharacterReference[]): C
         angles: ['unspecified'],
         regions: ['face', 'body', 'outfit'],
     }))
+
+const resolveUnambiguousObservedSources = (
+    facts: CharacterEvidenceProfile['facts'],
+    sources: readonly ResolvedCharacterReference[],
+): CharacterEvidenceProfile['facts'] => {
+    const sourceAssetIds = [...new Set(sources.map(source => source.assetId))]
+    const soleSourceAssetId = sourceAssetIds.length === 1 ? sourceAssetIds[0] : undefined
+    if (!soleSourceAssetId) return facts
+    return facts.map(fact => fact.visibility === 'observed' && !fact.sourceAssetId
+        ? { ...fact, sourceAssetId: soleSourceAssetId }
+        : fact)
+}
 
 const findConflicts = (facts: CharacterEvidenceProfile['facts']): CharacterEvidenceProfile['conflicts'] => {
     const groups = new Map<string, number[]>()
@@ -131,6 +186,56 @@ const validateEvidenceCoordinates = (
 
 const targetSpecificity = (fact: CharacterEvidenceProfile['facts'][number], targetAngle: string): number =>
     fact.targetAngles.some(angle => targetAngle.includes(angle)) ? 1 : 0
+
+const requestAuthorityPriority = (
+    authority: CharacterEvidenceProfile['facts'][number]['requestAuthority'],
+): number => authority === 'assigned' ? 2 : authority === 'supporting' ? 1 : 0
+
+const EDIT_TARGET_REGIONS: readonly CharacterEvidenceRegion[] = [
+    'face',
+    'body',
+    'outfit',
+    'hands',
+    'feet',
+    'prop',
+]
+
+const resolveEditTargetPolicy = ({
+    editTargetPresent,
+    reportedPolicy,
+    approvedRegions,
+    rejectedRegions,
+}: {
+    editTargetPresent: boolean
+    reportedPolicy: CharacterEditTargetPolicy | undefined
+    approvedRegions: readonly CharacterEvidenceRegion[]
+    rejectedRegions: readonly CharacterEvidenceRegion[]
+}): CharacterEditTargetPolicy => {
+    if (!editTargetPresent) return 'not-present'
+    const approved = new Set(approvedRegions)
+    const rejected = new Set(rejectedRegions)
+    if (EDIT_TARGET_REGIONS.every(region => rejected.has(region))) return 'discard'
+    if (approved.size > 0
+        && [...approved].every(region => region === 'face')
+        && [...rejected].some(region => region !== 'face')) {
+        return 'identity-only'
+    }
+    if (reportedPolicy === 'identity-only' || reportedPolicy === 'discard') return reportedPolicy
+    return 'preserve-panel'
+}
+
+const resolveRegenerationScope = (
+    reportedScope: CharacterRegenerationScope | undefined,
+    affectedPanelIds: readonly string[],
+    panelIds: ReadonlySet<string>,
+): CharacterRegenerationScope => {
+    if (reportedScope === 'selected-panels'
+        && affectedPanelIds.length > 0
+        && (panelIds.size === 0 || affectedPanelIds.length < panelIds.size)) {
+        return 'selected-panels'
+    }
+    return 'full-sheet'
+}
 
 const clampConfidence = (value: number): number => Math.max(0, Math.min(1, value))
 const normalize = (value: string): string => value.trim().toLocaleLowerCase()

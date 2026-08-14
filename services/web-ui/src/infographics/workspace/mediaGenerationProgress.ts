@@ -2,6 +2,7 @@ import {
     createDefaultMediaGenerationRunProgress,
     mediaGenerationLayoutSettings,
     type GeneratedOutputReviewStatus,
+    type MediaGenerationCanvasPhase,
     type MediaGenerationProgressState,
     type MediaGenerationRunStatus,
     type OperationProgressItem,
@@ -51,6 +52,24 @@ export type BranchMarkerMediaRequestStatusSource = {
     status?: string
 }
 
+export function isPersistedMediaGenerationActive({
+    progressStatus,
+    reviewStatus,
+    mediaGenerationPhase,
+}: {
+    progressStatus: MediaGenerationRunStatus | undefined
+    reviewStatus: GeneratedOutputReviewStatus | undefined
+    mediaGenerationPhase: MediaGenerationCanvasPhase | undefined
+}): boolean {
+    if (reviewStatus === 'accepted' || reviewStatus === 'superseded') return false
+    if (progressStatus) {
+        return progressStatus === 'pending'
+            || progressStatus === 'running'
+            || progressStatus === 'awaiting-provider-verification'
+    }
+    return mediaGenerationPhase === 'pending-before-first-frame'
+}
+
 export function shouldRenderLiveMediaGenerationProgress({
     progressStatus,
     reviewStatus,
@@ -94,6 +113,20 @@ export function resolveBranchMarkerMediaRequestStatuses(
     return statuses
 }
 
+export function isBranchMarkerMediaRequestTerminal(statuses: readonly string[]): boolean {
+    return statuses.length > 0 && statuses.every(status => (
+        status === 'completed' || status === 'failed' || status === 'cancelled'
+    ))
+}
+
+export function settleBranchMarkerProgressStatusForTerminalMedia(
+    status: OperationProgressItem['status'],
+    mediaRequestStatuses: readonly string[],
+): OperationProgressItem['status'] {
+    if (!isBranchMarkerMediaRequestTerminal(mediaRequestStatuses)) return status
+    return status === 'pending' || status === 'running' ? 'completed' : status
+}
+
 export function resolveBranchMarkerGlobalProgressStatuses({
     hasReasoningResponse,
     isReasoningReceiving,
@@ -113,7 +146,9 @@ export function resolveBranchMarkerGlobalProgressStatuses({
 }): BranchMarkerGlobalProgressStatuses {
     const hasFailedCapability = capabilityRunStatuses.includes('failed')
     const hasCancelledCapability = capabilityRunStatuses.includes('cancelled')
-    const hasActiveCapability = capabilityRunStatuses.some(status => status === 'pending' || status === 'running')
+    const hasTerminalMediaRequest = isBranchMarkerMediaRequestTerminal(mediaRequestStatuses)
+    const hasActiveCapability = !hasTerminalMediaRequest
+        && capabilityRunStatuses.some(status => status === 'pending' || status === 'running')
     const hasFailedMediaRequest = mediaRequestStatuses.includes('failed')
     const hasCancelledMediaRequest = mediaRequestStatuses.includes('cancelled')
     const hasAttentionMediaRequest = mediaRequestStatuses.some(status => (

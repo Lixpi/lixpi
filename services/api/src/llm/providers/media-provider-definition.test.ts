@@ -200,4 +200,25 @@ describe('current media provider policy definitions', () => {
         expect(normalize('failed to download provider video output')).toBe('download')
         expect(normalize('object store persist failed')).toBe('persist')
     })
+
+    it('reports a capability structural rejection as unusable provider output rather than transport failure', () => {
+        const problem = normalizeProviderProblem({
+            provider: 'OpenAI',
+            error: new Error(
+                'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE:'
+                + 'CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:head-front-neutral:single-panel-composition',
+            ),
+            context: {
+                generationRequestId: 'request-1',
+                modelId: 'OpenAI:gpt-image-2',
+                stage: 'submit',
+            },
+        })
+
+        expect(problem).toMatchObject({
+            category: 'provider-output',
+            providerCode: 'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE',
+            stage: 'submit',
+        })
+    })
 })

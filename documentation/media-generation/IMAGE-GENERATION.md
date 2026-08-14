@@ -120,23 +120,25 @@ The reference set the text model writes against is not "every attached photo" â€
 
 ## Provider-neutral reference adaptation
 
-`ImageRouter` and Capability media strategies use typed reference roles. Ordinary requests use source/style roles. Character Creator adds `original-source`, `pose-reference`, `face-crop`, `body-outfit-crop`, and `prop-crop` roles.
+`ImageRouter` and Capability media strategies use typed reference roles. Ordinary requests use source/style roles. Character Creator adds `edit-target`, `edit-target-identity`, `original-source`, generated-anchor, pose, crop, and Capability-reference roles.
 
-`BaseProvider` resolves every reference to bytes once. The selected provider definition then adapts the ordered roles to its native API while enforcing `imageReferenceCapabilities`. Identity and original-source slots are reserved before optional controls. The resulting trace records included and omitted roles.
+The unresolved relationships live in the `imageGenerationReferences` LangGraph state channel. `BaseProvider` resolves every reference to bytes once in `resolvedImageGenerationReferences`; the selected provider definition enforces `imageReferenceCapabilities` and stores the budgeted result in `imageReferenceAdaptation`. Identity and original-source slots are reserved before optional controls. The resulting trace records included and omitted roles.
 
-- OpenAI uploads adapted references through the multi-image edit path.
-- Google interleaves role labels with image parts.
+- OpenAI uploads the adapted array and prepends a role/order legend to the request prompt.
+- Google interleaves the same provider-neutral role labels with image parts.
 - Stability uses only the image, style, and structure inputs exposed by the selected endpoint. Style transfer does not satisfy identity conditioning.
 
-A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. The common routing and Character graph do not contain provider-name branches.
+A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. Reference authority, ordering, and omission are determined from the shared graph state and declared model capabilities; the Character graph contains no provider-name branches.
 
 ## Character Creator panel execution
 
 Character Creator bypasses whole-sheet provider generation. Its Capability Tool emits a `CharacterSheetRenderPlan`, its module definition registers the package-owned media strategy, and `ImageRouter` delegates that plan without importing the concrete capability.
 
-The default strategy generates exactly three isolated shots: an uncropped straight-on upper-body identity view, a relaxed straight-on full-body view, and an exact walking profile. Free-form prompt text can request 3 to 10 total shots and prioritize belongings, expressions, back views, face angles, or actions. Each shot gets one provider attempt, receives the original identity evidence directly, and uses its own text-free neutral-mannequin pose reference. The shots are independent and can run concurrently; generated results never become inputs for later shots. A structured reasoning-model assessment compares candidate pixels with authorized source evidence without retrying or changing the candidate. Photographic face-bearing shots also use the internal YuNet/SFace fidelity workload.
+The default strategy generates three required isolated anchors in sequence: a neutral-front identity portrait, a front full-body outfit view, and a back full-body outfit view. The front shot consumes the completed portrait; the back shot consumes both earlier anchors; optional shots wait for all three and then may run concurrently. Free-form prompt text can request 3 to 10 total shots and prioritize belongings, expressions, additional angles, face details, or actions. Each shot gets one provider attempt and its own text-free neutral-mannequin pose reference where the shot contract requires one. A structured reasoning-model assessment compares candidate pixels with authorized source evidence without retrying or changing the candidate. Photographic face-bearing shots also use the internal YuNet/SFace fidelity workload.
 
-Sharp removes near-white margins, fits each visible subject into a compact cell with bounded padding, and assembles the final 3840x2560 PNG. Providers never render the full sheet, and the compositor renders no headings, labels, grids, notes, statuses, swatches, or other typography. Only the final composed PNG enters the ordinary preassigned-Asset settlement path; transient references and candidate shots are deleted at terminal cleanup. See [Character Creator](../library/CHARACTER-CREATOR.md).
+For prior-sheet edits, the branch resolver supplies the active edit-target Asset through shared state. Stored composition components or recovered legacy cells are reauthorized separately from original-source Assets. Evidence analysis assigns one of four authority policies: preserve the matching panel, keep only its approved face identity, discard it, or treat it as absent. Under identity-only authority, the rejected sheet is cropped to the face for the head shot and is completely absent from all body-shot provider inputs. Requested lettering remains allowed and must be rendered exactly; incidental text remains forbidden.
+
+Sharp removes near-white margins, fits each visible subject into a compact cell with bounded padding, and assembles the final 3840x2560 PNG. Providers never render the full sheet, and the compositor renders no headings, labels, grids, notes, statuses, swatches, or other typography. The final PNG and isolated panel components enter the preassigned Asset's media-composition settlement path; transient references and candidate shots are deleted at terminal cleanup. See [Character Creator](../library/CHARACTER-CREATOR.md).
 
 Before this extraction path, the [media reference boundary](./MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) compiles explicit references and uniquely matched free-form Asset mentions to `REFERENCE_n`. Reasoning context contains aliases, safe descriptors, medium, and subject-identity classificationâ€”not mutable titles or filenames. OpenAI GPT Image requests use the registered `moderation: 'low'` profile. A provider rejection is normalized into the durable run problem and is never retried automatically.
 

@@ -662,6 +662,7 @@ export const aiInteractionSubjects = [
                 workspaceContextSnapshot,
                 canvasVisibleArea,
                 mediaGenerationRequest,
+                generationRequestId: submittedGenerationRequestId,
                 resumeGenerationRequestId,
                 resolvedBranchTargetAssetId,
             } = data as {
@@ -1104,6 +1105,7 @@ export const aiInteractionSubjects = [
                 ].filter(Boolean).join('\n\n')
                 const generationRequestId = persistedRequest?.generationRequestId
                     ?? routedMediaGenerationRequest?.generationRequestId
+                    ?? submittedGenerationRequestId
                     ?? `media-${uuid()}`
                 const imageModelIds = routedMediaGenerationRequest?.imageModelIds
                     ?? [routedAiImageModel].filter((value): value is string => Boolean(value))
@@ -1727,19 +1729,28 @@ export const aiInteractionSubjects = [
             ])
 
             if (generationRequestId) {
-                try {
-                    await getLlmModule().stop(instanceKey)
-                } catch (error) {
-                    err(`Failed to stop conversation workflow ${instanceKey}:`, error)
-                }
-                try {
-                    await getLlmModule().stopMediaGenerationMatrix({
+                const llmModule = getLlmModule()
+                const [matrixStopResult, workflowStopResult, durableCancellationResult] = await Promise.allSettled([
+                    llmModule.stopMediaGenerationMatrix({
                         workspaceId,
                         aiChatThreadId: conversationAssetId,
                         ...(!generationRequestId.startsWith('canvas-') ? { generationRequestId } : {}),
-                    })
-                } catch (error) {
-                    err(`Failed to stop media generation request ${generationRequestId}:`, error)
+                    }),
+                    llmModule.stop(instanceKey),
+                    new MediaGenerationRequestService().cancelCurrent({
+                        generationRequestId,
+                        workspaceId,
+                        userId: data.user.userId,
+                    }),
+                ])
+                if (matrixStopResult.status === 'rejected') {
+                    err(`Failed to stop media generation request ${generationRequestId}:`, matrixStopResult.reason)
+                }
+                if (workflowStopResult.status === 'rejected') {
+                    err(`Failed to stop conversation workflow ${instanceKey}:`, workflowStopResult.reason)
+                }
+                if (durableCancellationResult.status === 'rejected') {
+                    warn(`Failed to persist cancellation for media generation request ${generationRequestId}: ${String(durableCancellationResult.reason)}`)
                 }
 
                 try {

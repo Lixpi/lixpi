@@ -5,6 +5,7 @@ import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
+const scssSource = readFileSync(resolve(__dirname, 'workspace-canvas.scss'), 'utf-8')
 
 function expectSourceToContain(sourceText: string, snippet: string, label: string): void {
     expect(sourceText.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
@@ -56,8 +57,10 @@ describe('branch marker lifecycle', () => {
             'screen placement should remove superseded preflight DOM from every marker root',
         ).toBe(true)
         expect(
-            screenPlacementBody.includes('const pendingNodes = screenOwnership.visiblePreflightNodes'),
-            'composer stack measurement should include only visible preflight owners',
+            screenPlacementBody.includes(
+                '...screenOwnership.visiblePreflightNodes.filter(node => !node.parentBranchNodeId),',
+            ),
+            'composer stack measurement should include only unattached visible preflight owners',
         ).toBe(true)
     })
 
@@ -190,6 +193,21 @@ describe('branch marker lifecycle', () => {
             "showSummaryWhenCollapsedItemIds: ['understand-request']",
             'branch reasoning progress',
         )
+        expectSourceToContain(
+            progressBody,
+            'const mediaRequestStatuses = resolveBranchMarkerMediaRequestStatuses(',
+            'terminal branch progress',
+        )
+        expectSourceToContain(
+            progressBody,
+            'settleBranchMarkerProgressStatusForTerminalMedia(\n                getCapabilityRunStatus(run),',
+            'terminal Capability run progress',
+        )
+        expectSourceToContain(
+            progressBody,
+            'settleBranchMarkerProgressStatusForTerminalMedia(\n                    step.status,',
+            'terminal Capability step progress',
+        )
         expectSourceToContain(contentBody, "${globalProgress ? ' has-progress' : ''}", 'branch marker content')
         expectSourceToContain(
             contentBody,
@@ -216,6 +234,23 @@ describe('branch marker lifecycle', () => {
             cleanupBody,
             'destroyMediaGenerationProgressInstance(`branch:${nodeId}`)',
             'branch marker cleanup',
+        )
+    })
+
+    it('reserves active stop-control space only in the branch marker prompt row', () => {
+        expectSourceToContain(
+            scssSource,
+            `.workspace-branch-marker-content.has-progress.has-stop-control {
+    padding-right: 18px;
+}`,
+            'expanded branch marker content',
+        )
+        expectSourceToContain(
+            scssSource,
+            `.workspace-branch-marker-content.has-progress.has-stop-control > .workspace-branch-marker-main > .workspace-branch-marker-message {
+    padding-right: 34px;
+}`,
+            'expanded branch marker prompt row',
         )
     })
 
