@@ -296,6 +296,45 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptNotToContain(recovery, 'loadWorkspaceRouteData(workspaceId)', 'failure recovery')
 	})
 
+	it('applies progress heartbeats as child updates without synchronizing or rerendering canvas nodes', () => {
+		const progressUpdate = extractFunctionBody(ts, 'applyMediaOperationProgressResult')
+		const eventUpdate = extractFunctionBody(ts, 'applyRecoveredMediaGenerationRequestEvent')
+
+		expectExcerptToContain(progressUpdate, 'currentCanvasState = result.state', 'progress-only recovery')
+		expectExcerptToContain(progressUpdate, 'syncLiveMediaGenerationProgressInstancesForState(result.state)', 'progress-only recovery')
+		expectExcerptNotToContain(progressUpdate, 'commitTransientCanvasStatePreservingEditors', 'progress-only recovery')
+		expectExcerptNotToContain(progressUpdate, 'syncCanvasNodeDomGeometry', 'progress-only recovery')
+		expectExcerptNotToContain(progressUpdate, 'syncPixiMediaLayer', 'progress-only recovery')
+		expectExcerptNotToContain(progressUpdate, 'syncBranchMarkerNodeContents', 'progress-only recovery')
+		expectExcerptToContain(
+			eventUpdate,
+			"if (event.status === 'MEDIA_GENERATION_PROGRESS')",
+			'progress event recovery',
+		)
+		expectExcerptToContain(eventUpdate, 'applyMediaOperationProgressResult(result)', 'progress event recovery')
+	})
+
+	it('rebalances media trees only when the reserved progress collision envelope changes', () => {
+		const collisionReflow = extractFunctionBody(ts, 'scheduleMediaGenerationProgressCollisionReflow')
+		const unchangedReturnIndex = collisionReflow.indexOf('if (!heightsChanged) return')
+		const rebalanceIndex = collisionReflow.indexOf('rebalanceGeneratedMediaTrees(')
+
+		expectExcerptToContain(
+			collisionReflow,
+			'Math.max(mediaGenerationProgressCollisionHeights.get(nodeId) ?? 0, height)',
+			'progress collision reflow',
+		)
+		expectExcerptToContain(collisionReflow, 'if (!heightsChanged) return', 'progress collision reflow')
+		expectExcerptNotToContain(
+			collisionReflow,
+			'if (!heightsChanged && nextHeights.size === 0) return',
+			'progress collision reflow',
+		)
+		expect(unchangedReturnIndex, 'unchanged progress height should stop reflow').toBeGreaterThan(-1)
+		expect(rebalanceIndex, 'tree rebalance should happen after the unchanged-height guard')
+			.toBeGreaterThan(unchangedReturnIndex)
+	})
+
 	it('attaches reference ambiguity to the submitted prompt with canonical Asset references', () => {
 		const markerContent = extractFunctionBody(ts, 'createBranchMarkerContent')
 		const referenceResolution = extractFunctionBody(ts, 'createBranchMarkerReferenceResolution')
@@ -991,6 +1030,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 
 	it('does not remount generated media chrome when content identity is unchanged', () => {
 		const syncChrome = extractFunctionBody(ts, 'syncGeneratedMediaChrome')
+		const chromeKey = extractFunctionBody(ts, 'getGeneratedMediaChromeSyncKey')
 		const skipIndex = syncChrome.indexOf('if (nextChromeSyncKey === generatedMediaChromeSyncKey)')
 		const skipReturnIndex = syncChrome.indexOf('return', skipIndex)
 		const destroyIndex = syncChrome.indexOf('destroyGeneratedMediaInfoRenderers()', skipReturnIndex)
@@ -1000,9 +1040,11 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\\u0000reset-generated-media-chrome'")
 		expectSourceToContain(ts, 'generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY')
 		expectExcerptToContain(syncChrome, 'const nextChromeSyncKey = getGeneratedMediaChromeSyncKey({', 'generated media chrome sync')
+		expectExcerptToContain(syncChrome, 'syncLiveMediaGenerationProgressInstances(progressNodes)', 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, 'updateGeneratedMediaChromeLayout()', 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-skip-same-key'", 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-rebuild'", 'generated media chrome sync')
+		expectExcerptNotToContain(chromeKey, 'getJsonChromeKey(node.generationProgress)', 'generated media chrome key')
 		expectSourceToContain(ts, 'function getPlayableVideoChromeKey(node: VideoCanvasNode): string')
 		expectSourceToContain(ts, "videoEl ? 'video-element-ready' : 'video-element-missing'")
 		expectSourceToContain(ts, 'function getBranchMarkerPanelChromeKey(')

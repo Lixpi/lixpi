@@ -402,4 +402,90 @@ describe('media generation progress disclosure', () => {
         expect(progress.element.classList).toContain('workspace-branch-marker-progress')
         progress.destroy()
     })
+
+    it('updates timeline children without remounting the progress surface or running indicator', () => {
+        const initialState = state()
+        initialState.progress.items = initialState.progress.items?.map(item => (
+            item.id === 'problem-root'
+                ? { ...item, status: 'running', summary: 'Provider rendering is active: 2m elapsed.' }
+                : item
+        ))
+        const progress = createMediaGenerationProgress({ id: 'run-1', state: initialState })
+        const surface = progress.element
+        const runningItem = surface.querySelector('[data-item-id="problem-root"]')
+        const runningRail = runningItem?.querySelector('.progress-timeline-rail')
+        const runningMarker = surface.querySelector(
+            '[data-item-id="problem-root"] .progress-ripple-icon',
+        )
+        const nextState = state()
+        nextState.message = 'Provider rendering is active: 2m 5s elapsed.'
+        nextState.updatedAt = 2
+        nextState.progress.message = nextState.message
+        nextState.progress.items = nextState.progress.items?.map(item => (
+            item.id === 'problem-root'
+                ? { ...item, status: 'running', summary: nextState.message }
+                : item
+        ))
+
+        progress.update(nextState)
+
+        expect(progress.element).toBe(surface)
+        expect(surface.querySelector('[data-item-id="problem-root"]')).toBe(runningItem)
+        expect(surface.querySelector('[data-item-id="problem-root"] .progress-timeline-rail'))
+            .toBe(runningRail)
+        expect(surface.querySelector('[data-item-id="problem-root"] .progress-ripple-icon'))
+            .toBe(runningMarker)
+        expect(surface.textContent).toContain('Provider rendering is active: 2m 5s elapsed.')
+        progress.destroy()
+    })
+
+    it('reports layout changes from measured size changes instead of every progress update', () => {
+        let resizeCallback: ResizeObserverCallback | null = null
+        const disconnect = vi.fn()
+        const requestFrame = vi.fn((callback: FrameRequestCallback): number => {
+            callback(0)
+            return 1
+        })
+        class MockResizeObserver {
+            constructor(callback: ResizeObserverCallback) {
+                resizeCallback = callback
+            }
+
+            observe = vi.fn()
+            unobserve = vi.fn()
+            disconnect = disconnect
+        }
+        vi.stubGlobal('ResizeObserver', MockResizeObserver)
+        vi.stubGlobal('requestAnimationFrame', requestFrame)
+
+        try {
+            const onLayoutChange = vi.fn()
+            const progress = createMediaGenerationProgress({
+                id: 'run-1',
+                state: state(),
+                onLayoutChange,
+            })
+            const nextState = state()
+            nextState.message = 'Provider rendering is active: 2m 5s elapsed.'
+            nextState.progress.message = nextState.message
+
+            progress.update(nextState)
+
+            expect(requestFrame).not.toHaveBeenCalled()
+            expect(onLayoutChange).not.toHaveBeenCalled()
+            expect(resizeCallback).not.toBeNull()
+            resizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver)
+            expect(onLayoutChange).toHaveBeenLastCalledWith({ allowCollisionShrink: false })
+
+            const disclosure = progress.element.querySelector<HTMLButtonElement>(
+                '.workspace-media-generation-pipeline-disclosure',
+            )!
+            disclosure.click()
+            expect(onLayoutChange).toHaveBeenLastCalledWith({ allowCollisionShrink: true })
+            progress.destroy()
+            expect(disconnect).toHaveBeenCalledOnce()
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    })
 })

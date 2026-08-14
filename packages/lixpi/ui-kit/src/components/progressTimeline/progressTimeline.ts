@@ -104,6 +104,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
     private readonly renderedRippleIconKeys = new Set<string>()
     private focusedContextItemKeys = new Set<string>()
     private items: ProgressTimelineItem[] = []
+    private renderStructureKey = ''
     private viewMode: ProgressTimelineViewMode
 
     constructor(private readonly config: ProgressTimelineConfig) {
@@ -229,7 +230,9 @@ class ProgressTimeline implements ProgressTimelineInstance {
             ? html`
                 <span className="progress-timeline-heading">
                     <span className="progress-timeline-title">${item.title}</span>
-                    ${item.meta ? html`<small className="progress-timeline-meta">${item.meta}</small>` : null}
+                    ${item.meta
+                        ? html`<small className="progress-timeline-meta" data-timeline-meta-key=${itemKey}>${item.meta}</small>`
+                        : null}
                 </span>
             `
             : source
@@ -260,13 +263,23 @@ class ProgressTimeline implements ProgressTimelineInstance {
             && item.showSummaryWhenCollapsed
             && !isExpanded
             && !isFocusedContext
-            ? html`<small className="progress-timeline-summary progress-timeline-summary-collapsed">${item.summary}</small>`
+            ? html`
+                <small
+                    className="progress-timeline-summary progress-timeline-summary-collapsed"
+                    data-timeline-summary-key=${itemKey}
+                >${item.summary}</small>
+            `
             : null
         const details = isExpanded
             ? html`
                 <span id=${detailsId} className="progress-timeline-details">
                     ${item.summary && !isFocusedContext
-                        ? html`<small className="progress-timeline-summary">${item.summary}</small>`
+                        ? html`
+                            <small
+                                className="progress-timeline-summary"
+                                data-timeline-summary-key=${itemKey}
+                            >${item.summary}</small>
+                        `
                         : null}
                     ${children}
                 </span>
@@ -276,17 +289,14 @@ class ProgressTimeline implements ProgressTimelineInstance {
         const marker = item.status === 'running'
             ? this.createRunningMarker(itemKey)
             : html`<span className="progress-timeline-marker-core"></span>`
-        const sourceDescription = item.source
-            ? `${getSourceKindLabel(item.source.kind)}${item.source.name ? ` ${item.source.name}` : ''}`
-            : ''
-        const itemDescription = [sourceDescription, item.title].filter(Boolean).join('; ') || 'Progress item'
         return html`
             <li
                 className="progress-timeline-item"
                 data-status=${item.status}
                 data-item-id=${item.id}
+                data-timeline-item-key=${itemKey}
                 data-leading=${item.source ? 'source' : 'title'}
-                aria-label=${`${itemDescription}: ${item.status}${item.meta ? `; ${item.meta}` : ''}`}
+                aria-label=${this.getItemAriaLabel(item)}
             >
                 <span className="progress-timeline-rail" aria-hidden="true">
                     <span className="progress-timeline-marker">
@@ -304,14 +314,74 @@ class ProgressTimeline implements ProgressTimelineInstance {
     }
 
     private render(): void {
-        this.renderedRippleIconKeys.clear()
         const renderState = this.buildRenderState()
         this.focusedContextItemKeys = renderState.contextItemKeys
+        const nextRenderStructureKey = this.getRenderStructureKey(renderState)
+        if (this.renderStructureKey === nextRenderStructureKey && this.element.childElementCount > 0) {
+            this.updateRenderedItemContent(renderState.items)
+            return
+        }
+
+        this.renderStructureKey = nextRenderStructureKey
+        this.renderedRippleIconKeys.clear()
         this.element.replaceChildren(...renderState.items.map(item => this.renderItem(item)))
         for (const [itemKey, icon] of this.rippleIconsByItemKey.entries()) {
             if (this.renderedRippleIconKeys.has(itemKey)) continue
             icon.destroy()
             this.rippleIconsByItemKey.delete(itemKey)
+        }
+    }
+
+    private getItemAriaLabel(item: ProgressTimelineItem): string {
+        const sourceDescription = item.source
+            ? `${getSourceKindLabel(item.source.kind)}${item.source.name ? ` ${item.source.name}` : ''}`
+            : ''
+        const itemDescription = [sourceDescription, item.title].filter(Boolean).join('; ') || 'Progress item'
+        return `${itemDescription}: ${item.status}${item.meta ? `; ${item.meta}` : ''}`
+    }
+
+    private getRenderStructureKey(renderState: ProgressTimelineRenderState): string {
+        const projectItem = (item: ProgressTimelineItem): object => ({
+            id: item.id,
+            title: item.title,
+            status: item.status,
+            source: item.source,
+            hasSummary: Boolean(item.summary),
+            showSummaryWhenCollapsed: Boolean(item.showSummaryWhenCollapsed),
+            hasMeta: Boolean(item.meta),
+            children: item.children?.map(projectItem),
+        })
+        return JSON.stringify({
+            viewMode: this.viewMode,
+            expandedItemIds: [...this.expandedItemIds].sort(),
+            collapsedItemIds: [...this.collapsedItemIds].sort(),
+            focusedContextItemKeys: [...renderState.contextItemKeys].sort(),
+            items: renderState.items.map(projectItem),
+        })
+    }
+
+    private updateRenderedItemContent(items: readonly ProgressTimelineItem[]): void {
+        const itemsByKey = new Map<string, ProgressTimelineItem>()
+        const collectItems = (candidates: readonly ProgressTimelineItem[], parentPath: string[] = []): void => {
+            for (const item of candidates) {
+                const itemPath = [...parentPath, item.id]
+                itemsByKey.set(itemPath.join('/'), item)
+                collectItems(item.children ?? [], itemPath)
+            }
+        }
+        collectItems(items)
+
+        for (const itemEl of this.element.querySelectorAll<HTMLElement>('[data-timeline-item-key]')) {
+            const item = itemsByKey.get(itemEl.dataset.timelineItemKey ?? '')
+            if (item) itemEl.ariaLabel = this.getItemAriaLabel(item)
+        }
+        for (const summaryEl of this.element.querySelectorAll<HTMLElement>('[data-timeline-summary-key]')) {
+            const item = itemsByKey.get(summaryEl.dataset.timelineSummaryKey ?? '')
+            if (item) summaryEl.textContent = item.summary ?? ''
+        }
+        for (const metaEl of this.element.querySelectorAll<HTMLElement>('[data-timeline-meta-key]')) {
+            const item = itemsByKey.get(metaEl.dataset.timelineMetaKey ?? '')
+            if (item) metaEl.textContent = item.meta ?? ''
         }
     }
 

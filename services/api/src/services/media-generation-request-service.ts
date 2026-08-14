@@ -1033,18 +1033,10 @@ export class MediaGenerationRequestService {
                 if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
                 throw error
             }
-            const [projectionResult, eventResult] = await Promise.allSettled([
-                updateMediaGenerationOperationNode({
-                    workspaceId,
-                    operationNodeId: run.operationNodeId,
-                    generationRequestId,
-                    generationRun: run.generationRun,
-                    status: 'in-progress',
-                    message: nextProgress.message,
-                    progress: nextProgress,
-                    requestRevision: next.revision,
-                }),
-                this.events().append({
+            // The request record owns durable heartbeat progress. Updating the
+            // Workspace here would republish unchanged canvas geometry every few seconds.
+            try {
+                await this.events().append({
                     userId: request.userId,
                     workspaceId,
                     event: eventFor(next, 'MEDIA_GENERATION_PROGRESS', {
@@ -1056,13 +1048,9 @@ export class MediaGenerationRequestService {
                         progress: nextProgress,
                         message: nextProgress.message,
                     }),
-                }),
-            ])
-            if (projectionResult.status === 'rejected') {
-                warn(`[MediaGenerationRequest] progress projection failed: ${String(projectionResult.reason)}`)
-            }
-            if (eventResult.status === 'rejected') {
-                warn(`[MediaGenerationRequest] progress event failed: ${String(eventResult.reason)}`)
+                })
+            } catch (error) {
+                warn(`[MediaGenerationRequest] progress event failed: ${String(error)}`)
             }
             return next
         }

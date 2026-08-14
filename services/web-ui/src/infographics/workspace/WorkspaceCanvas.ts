@@ -246,6 +246,7 @@ import {
     settleBranchMarkerProgressStatusForTerminalMedia,
     shouldRenderLiveMediaGenerationProgress,
     type MediaGenerationProgressInstance,
+    type MediaGenerationProgressLayoutChange,
 } from '$src/infographics/workspace/mediaGenerationProgress.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import AuthService from '$src/services/auth-service.ts'
@@ -1098,6 +1099,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const mediaGenerationProgressInstances = new Map<string, MediaGenerationProgressInstance>()
     const mediaGenerationProgressCollisionHeights = new Map<string, number>()
+    const mediaGenerationProgressCollisionShrinkNodeIds = new Set<string>()
     let mediaGenerationProgressCollisionReflowRaf: number | null = null
     let applyingMediaGenerationProgressCollisionReflow = false
     const capabilityProgressRunsByThreadId = new Map<string, Map<string, BranchMarkerCapabilityProgressRun>>()
@@ -4441,7 +4443,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             progressNodes.map((node) => [
                 node.nodeId,
                 node.assetId,
-                getJsonChromeKey(node.generationProgress),
             ].join('\u001f')).join('\u001e'),
             playableVideoNodes.map(getPlayableVideoChromeKey).join('\u001e'),
             expandedBranchOrigins.join('\u001e'),
@@ -4487,10 +4488,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         })
     }
 
-    function scheduleMediaGenerationProgressCollisionReflow(): void {
+    function scheduleMediaGenerationProgressCollisionReflow(allowShrinkNodeId?: string): void {
+        if (allowShrinkNodeId) mediaGenerationProgressCollisionShrinkNodeIds.add(allowShrinkNodeId)
         if (mediaGenerationProgressCollisionReflowRaf !== null) return
         mediaGenerationProgressCollisionReflowRaf = requestAnimationFrame(() => {
             mediaGenerationProgressCollisionReflowRaf = null
+            const allowShrinkNodeIds = new Set(mediaGenerationProgressCollisionShrinkNodeIds)
+            mediaGenerationProgressCollisionShrinkNodeIds.clear()
             if (!currentCanvasState || !mediaChromeViewportEl) return
 
             const nextHeights = new Map<string, number>()
@@ -4499,20 +4503,22 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             )) {
                 const nodeId = progressEl.dataset.mediaGenerationProgressNodeId
                 const height = Math.ceil(progressEl.offsetHeight)
-                if (nodeId && Number.isFinite(height) && height > 0) nextHeights.set(nodeId, height)
+                if (!nodeId || !Number.isFinite(height) || height <= 0) continue
+                const reservedHeight = allowShrinkNodeIds.has(nodeId)
+                    ? height
+                    : Math.max(mediaGenerationProgressCollisionHeights.get(nodeId) ?? 0, height)
+                nextHeights.set(nodeId, reservedHeight)
             }
 
             const heightsChanged = nextHeights.size !== mediaGenerationProgressCollisionHeights.size
                 || [...nextHeights].some(([nodeId, height]) => (
                     Math.abs((mediaGenerationProgressCollisionHeights.get(nodeId) ?? 0) - height) > 1
                 ))
-            if (!heightsChanged && nextHeights.size === 0) return
+            if (!heightsChanged) return
 
-            if (heightsChanged) {
-                mediaGenerationProgressCollisionHeights.clear()
-                for (const [nodeId, height] of nextHeights) {
-                    mediaGenerationProgressCollisionHeights.set(nodeId, height)
-                }
+            mediaGenerationProgressCollisionHeights.clear()
+            for (const [nodeId, height] of nextHeights) {
+                mediaGenerationProgressCollisionHeights.set(nodeId, height)
             }
 
             const currentState = currentCanvasState
@@ -4553,7 +4559,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const progress = createMediaGenerationProgress({
             id: instanceKey,
             state: node.generationProgress,
-            onLayoutChange: () => {
+            onLayoutChange: ({ allowCollisionShrink }: MediaGenerationProgressLayoutChange) => {
                 const currentNode = currentCanvasState?.nodes.find(candidate => candidate.nodeId === node.nodeId)
                 if (!currentNode || (currentNode.type !== 'image' && currentNode.type !== 'video')) return
                 const nodesById = getCanvasNodesById(currentCanvasState?.nodes ?? [])
@@ -4563,12 +4569,46 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     liveNodeOverrides.get(currentNode.nodeId)?.dimensions ?? currentNode.dimensions,
                     getLiveViewport(),
                 )
-                scheduleMediaGenerationProgressCollisionReflow()
+                scheduleMediaGenerationProgressCollisionReflow(
+                    allowCollisionShrink ? currentNode.nodeId : undefined,
+                )
             },
         })
         mediaGenerationProgressInstances.set(instanceKey, progress)
         chromeEl.appendChild(progress.element)
         return chromeEl
+    }
+
+    function getLiveMediaGenerationProgressNodes(
+        canvasState: CanvasState | null,
+    ): Array<ImageCanvasNode | VideoCanvasNode> {
+        const canvasNodes = canvasState?.nodes ?? []
+        return canvasNodes.filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode => (
+            (node.type === 'image' || node.type === 'video')
+            && shouldRenderLiveMediaGenerationProgress({
+                progressStatus: node.generationProgress?.status,
+                reviewStatus: assetsStore.get(node.assetId)?.generatedOutputReview?.status,
+                hasActiveLineage: hasActiveGeneratedOutputLineage(
+                    node,
+                    canvasNodes,
+                    canvasState?.edges ?? [],
+                ),
+                pendingBeforeFirstFrame: node.mediaGenerationPhase === 'pending-before-first-frame',
+            })
+        ))
+    }
+
+    function syncLiveMediaGenerationProgressInstances(
+        progressNodes: Array<ImageCanvasNode | VideoCanvasNode>,
+    ): void {
+        for (const node of progressNodes) {
+            if (!node.generationProgress) continue
+            mediaGenerationProgressInstances.get(`live:${node.nodeId}`)?.update(node.generationProgress)
+        }
+    }
+
+    function syncLiveMediaGenerationProgressInstancesForState(canvasState: CanvasState): void {
+        syncLiveMediaGenerationProgressInstances(getLiveMediaGenerationProgressNodes(canvasState))
     }
 
     function syncGeneratedMediaChrome(canvasState: CanvasState | null = currentCanvasState): void {
@@ -4602,20 +4642,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
                 (node.type === 'image' || node.type === 'video')
                 && pendingBeforeFirstFrameNodeIds.has(node.nodeId))
-        const progressNodes = canvasNodes
-            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode => (
-                (node.type === 'image' || node.type === 'video')
-                && shouldRenderLiveMediaGenerationProgress({
-                    progressStatus: node.generationProgress?.status,
-                    reviewStatus: assetsStore.get(node.assetId)?.generatedOutputReview?.status,
-                    hasActiveLineage: hasActiveGeneratedOutputLineage(
-                        node,
-                        canvasNodes,
-                        canvasState?.edges ?? [],
-                    ),
-                    pendingBeforeFirstFrame: node.mediaGenerationPhase === 'pending-before-first-frame',
-                })
-            ))
+        const progressNodes = getLiveMediaGenerationProgressNodes(canvasState)
         const branchOriginNodes = canvasNodes
             .filter((node: CanvasNode): node is BranchOriginCanvasNode => node.type === 'branchOrigin')
         const branchForkNodes = canvasNodes
@@ -4670,6 +4697,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             branchLineNodes,
         })
         if (nextChromeSyncKey === generatedMediaChromeSyncKey) {
+            syncLiveMediaGenerationProgressInstances(progressNodes)
             if (debugLoggingEnabled) console.info('[CANVAS][generated-media-chrome]', 'sync-skip-same-key', {
                 mediaInfoNodeCount: mediaInfoNodes.length,
                 pendingIconNodeCount: pendingIconNodes.length,
@@ -14676,6 +14704,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         syncConnectionsAfterManualNodeAppend()
     }
 
+    function applyMediaOperationProgressResult(result: MediaGenerationOperationRecoveryResult): void {
+        if (!result.changed || !currentCanvasState) return
+        currentCanvasState = result.state
+        syncLiveMediaGenerationProgressInstancesForState(result.state)
+    }
+
     function applyRecoveredMediaGenerationRequest(request: MediaGenerationRequest): void {
         const knownRevision = mediaOperationRequestRevisions.get(request.generationRequestId) ?? 0
         if (request.revision < knownRevision) return
@@ -14691,9 +14725,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         if (event.requestRevision < knownRevision) return
         mediaOperationRequestRevisions.set(event.generationRequestId, event.requestRevision)
         if (!currentCanvasState) return
-        applyMediaOperationRecoveryResult(
-            applyMediaGenerationRequestEventToOperationNodes(currentCanvasState, event),
-        )
+        const result = applyMediaGenerationRequestEventToOperationNodes(currentCanvasState, event)
+        if (event.status === 'MEDIA_GENERATION_PROGRESS') {
+            applyMediaOperationProgressResult(result)
+            return
+        }
+        applyMediaOperationRecoveryResult(result)
     }
 
     function ensureMediaGenerationOperationRecovery(node: OperationStatusCanvasNode): void {
@@ -16799,6 +16836,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             currentAiChatThreads = mergedAiChatThreads
             if (shouldResetMediaLifecycle) {
                 mediaGenerationProgressCollisionHeights.clear()
+                mediaGenerationProgressCollisionShrinkNodeIds.clear()
             }
             syncActiveAiChatPanelFromState()
 
@@ -16934,6 +16972,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             for (const progress of mediaGenerationProgressInstances.values()) progress.destroy()
             mediaGenerationProgressInstances.clear()
             mediaGenerationProgressCollisionHeights.clear()
+            mediaGenerationProgressCollisionShrinkNodeIds.clear()
             for (const dropdown of branchMarkerReviewDropdowns.values()) dropdown.destroy()
             branchMarkerReviewDropdowns.clear()
             destroyVideoControlInstances()

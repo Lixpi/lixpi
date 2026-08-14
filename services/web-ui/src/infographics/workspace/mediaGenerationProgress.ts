@@ -23,6 +23,7 @@ import { html } from '$src/utils/domTemplates.ts'
 
 export type MediaGenerationProgressInstance = {
     element: HTMLElement
+    update: (state: MediaGenerationProgressState) => void
     destroy: () => void
 }
 
@@ -36,6 +37,10 @@ export type MediaGenerationProgressCollisionRect = {
     y: number
     width: number
     height: number
+}
+
+export type MediaGenerationProgressLayoutChange = {
+    allowCollisionShrink: boolean
 }
 
 export type BranchMarkerGlobalProgressStatuses = {
@@ -212,7 +217,7 @@ type MediaGenerationProgressOptions = {
     className?: string
     defaultExpanded?: boolean
     showSummaryWhenCollapsedItemIds?: readonly string[]
-    onLayoutChange?: () => void
+    onLayoutChange?: (change: MediaGenerationProgressLayoutChange) => void
 }
 
 const toTimelineItem = (
@@ -258,7 +263,10 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
     private readonly disclosureIcon: AnimatedSvgIconInstance<CollapseExpandIconState>
     private readonly disclosureButton: HTMLButtonElement
     private readonly disclosureLabel: HTMLSpanElement
-    private readonly onLayoutChange?: () => void
+    private readonly pipelineStatus: HTMLSpanElement
+    private readonly onLayoutChange?: (change: MediaGenerationProgressLayoutChange) => void
+    private readonly resizeObserver: ResizeObserver | null
+    private readonly showSummaryWhenCollapsedItemIds: ReadonlySet<string>
 
     constructor({
         id,
@@ -269,11 +277,8 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         onLayoutChange,
     }: MediaGenerationProgressOptions) {
         this.onLayoutChange = onLayoutChange
-        const fallbackProgress = createDefaultMediaGenerationRunProgress(state.status, state.message)
-        const collapsedSummaryItemIds = new Set(showSummaryWhenCollapsedItemIds)
-        const items = (state.progress.items ?? fallbackProgress.items ?? []).map(item => (
-            toTimelineItem(item, state.status === 'failed', collapsedSummaryItemIds)
-        ))
+        this.showSummaryWhenCollapsedItemIds = new Set(showSummaryWhenCollapsedItemIds)
+        const items = this.getTimelineItems(state)
         const timelineId = `workspace-media-generation-pipeline-${id.replace(/[^A-Za-z0-9_-]/gu, '-')}`
         this.timeline = createProgressTimeline({
             ariaLabel: 'Media generation pipeline',
@@ -306,6 +311,9 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.disclosureButton = this.element.querySelector(
             '.workspace-media-generation-pipeline-disclosure',
         ) as HTMLButtonElement
+        this.pipelineStatus = this.element.querySelector(
+            '.workspace-media-generation-pipeline-status',
+        ) as HTMLSpanElement
         this.disclosureLabel = html`
             <span className="workspace-media-generation-pipeline-disclosure-label"></span>
         ` as HTMLSpanElement
@@ -314,9 +322,21 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.disclosureButton.addEventListener('click', this.toggleView)
         this.syncDisclosure(false)
         this.element.appendChild(this.timeline.element)
+        this.resizeObserver = onLayoutChange && typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(() => onLayoutChange({ allowCollisionShrink: false }))
+            : null
+        this.resizeObserver?.observe(this.element)
+    }
+
+    update(state: MediaGenerationProgressState): void {
+        const items = this.getTimelineItems(state)
+        this.timeline.setItems(items)
+        this.pipelineStatus.textContent = getPipelineStatus(items)
+        this.syncDisclosure(false)
     }
 
     destroy(): void {
+        this.resizeObserver?.disconnect()
         this.disclosureButton.removeEventListener('pointerdown', this.stopEvent)
         this.disclosureButton.removeEventListener('click', this.toggleView)
         this.timeline.destroy()
@@ -335,11 +355,22 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.disclosureIcon.setState(nextView === 'all' ? 'expanded' : 'collapsed', { animate: true })
         this.timeline.setViewMode(nextView)
         this.syncDisclosure(true)
-        requestAnimationFrame(() => this.onLayoutChange?.())
+        requestAnimationFrame(() => this.onLayoutChange?.({ allowCollisionShrink: true }))
     }
 
     private getDisclosureIconState(): CollapseExpandIconState {
         return this.timeline.getViewState().mode === 'all' ? 'expanded' : 'collapsed'
+    }
+
+    private getTimelineItems(state: MediaGenerationProgressState): ProgressTimelineItem[] {
+        const fallbackProgress = createDefaultMediaGenerationRunProgress(state.status, state.message)
+        return (state.progress.items ?? fallbackProgress.items ?? []).map(item => (
+            toTimelineItem(
+                item,
+                state.status === 'failed',
+                this.showSummaryWhenCollapsedItemIds,
+            )
+        ))
     }
 
     private syncDisclosure(animateIcon: boolean): void {

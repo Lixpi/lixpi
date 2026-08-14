@@ -500,6 +500,51 @@ describe('media generation request lineage binding', () => {
 })
 
 describe('media generation request terminal settlement', () => {
+    it('publishes live progress without rewriting the Workspace canvas projection', async () => {
+        const run = {
+            ...pendingRun(),
+            status: 'running' as const,
+            progress: {
+                phase: 'rendering' as const,
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Provider rendering is active: 2m elapsed.',
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            runs: [run],
+        }
+        const eventLog = { append: vi.fn(async () => undefined) }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).recordRunProgress({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            progress: {
+                ...run.progress,
+                message: 'Provider rendering is active: 2m 5s elapsed.',
+            },
+        })
+
+        expect(result.revision).toBe(2)
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledOnce()
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_PROGRESS',
+                payload: expect.objectContaining({
+                    message: 'Provider rendering is active: 2m 5s elapsed.',
+                }),
+            }),
+        }))
+    })
+
     it('ignores late progress and status writes after durable cancellation', async () => {
         const cancelledRequest: MediaGenerationRequest = {
             ...deferredRequest(),
