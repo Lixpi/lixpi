@@ -17,6 +17,12 @@
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
+    import {
+        getStashedViewportStorageKey,
+        encodeStashedViewport,
+        parseStashedViewport,
+        shouldApplyStashedViewport,
+    } from '$src/components/workspaceViewportStash.ts'
     import { rebaseCanvasMembershipState } from '$src/infographics/workspace/canvasMembershipStateRebase.ts'
     import AssetService from '$src/services/asset-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
@@ -255,10 +261,6 @@
         return true
     }
 
-    function getStashedViewportStorageKey(targetWorkspaceId: string): string {
-        return `lixpi.pendingViewport.${targetWorkspaceId}`
-    }
-
     function stashPendingViewportForUnload(): void {
         if (!workspaceId || !pendingViewportSave) return
         if (viewportsMatch(pendingViewportSave, lastPersistedViewport)) return
@@ -267,7 +269,7 @@
         try {
             localStorage.setItem(
                 getStashedViewportStorageKey(workspaceId),
-                JSON.stringify({ viewport: pendingViewportSave, savedAt: Date.now() }),
+                encodeStashedViewport(pendingViewportSave),
             )
         } catch {
             // Storage unavailable; the network flush below is still attempted.
@@ -284,22 +286,10 @@
         } catch {
             return
         }
-        if (!raw) return
 
-        let parsed: { viewport?: unknown; savedAt?: unknown }
-        try {
-            parsed = JSON.parse(raw)
-        } catch {
-            return
-        }
-        const stashedViewport = cloneViewport(parsed.viewport as Viewport | null | undefined)
-        const savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : null
-        if (!stashedViewport || savedAt === null) return
-
-        // If the unload-time flush did reach the server, the server save is
-        // newer than the stash and the stash is obsolete.
-        const canvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-        if (typeof canvasStateUpdatedAt === 'number' && canvasStateUpdatedAt > savedAt) return
+        const stashedViewport = parseStashedViewport(raw)
+        if (!stashedViewport) return
+        if (!shouldApplyStashedViewport(stashedViewport, canvasState?.viewport)) return
 
         viewport = stashedViewport
         renderer?.setViewport(stashedViewport)
@@ -585,6 +575,7 @@
         if (!paneEl || !viewportEl) return
 
         window.addEventListener('pagehide', stashPendingViewportForUnload)
+
 
         const loadedViewport = cloneViewport(canvasState?.viewport)
         if (loadedViewport) {

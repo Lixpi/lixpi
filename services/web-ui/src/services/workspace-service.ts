@@ -331,6 +331,7 @@ class WorkspaceService {
 
     private async flushCanvasStateSaveQueueUnlocked(workspaceId: string, queue: CanvasSaveQueue): Promise<void> {
         let activeRequestEpoch = queue.authoritativeEpoch
+        let staleRefetchRequeueUsed = false
 
         try {
             while (queue.pendingRequest) {
@@ -378,6 +379,24 @@ class WorkspaceService {
                     workspaceStore.setMetaValues({ requiresSave: false })
                     if (routeStillOwnsWorkspace) {
                         await this.getWorkspace({ workspaceId })
+                        // Server-side generation runs bump canvasStateUpdatedAt
+                        // continuously, so a viewport save can exhaust its stale
+                        // retries through no conflict of its own. The refetch
+                        // above yields a fresh token — re-queue the viewport on
+                        // top of the refetched state instead of dropping it.
+                        if (request.persistViewport && !staleRefetchRequeueUsed) {
+                            staleRefetchRequeueUsed = true
+                            const refetchedCanvasState = workspaceStore.getData('canvasState')
+                            if (refetchedCanvasState) {
+                                queue.pendingRequest = {
+                                    canvasState: { ...refetchedCanvasState, viewport: request.canvasState.viewport },
+                                    persistViewport: true,
+                                    sequence: ++this.canvasSaveRequestSequence,
+                                }
+                                workspaceStore.updateCanvasState(queue.pendingRequest.canvasState)
+                                continue
+                            }
+                        }
                     }
                     queue.pendingRequest = null
                     return

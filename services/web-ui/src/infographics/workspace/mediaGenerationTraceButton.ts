@@ -41,8 +41,8 @@ class MediaGenerationTraceButton implements MediaGenerationTraceButtonInstance {
             <button
                 type="button"
                 className="media-generation-trace-button nopan"
-                aria-label="Open generation trace"
-                title="Generation trace"
+                aria-label="Open generation details"
+                title="Generation details"
             >${this.rippleIcon.element}</button>
         ` as HTMLButtonElement
         this.element.addEventListener('click', (event) => {
@@ -60,7 +60,7 @@ class MediaGenerationTraceButton implements MediaGenerationTraceButtonInstance {
         this.element.dataset.status = status
         this.element.classList.toggle('is-active', active)
         this.element.classList.toggle('is-selected', selected)
-        this.element.classList.toggle('is-static', !active)
+        this.element.hidden = !active
         this.element.setAttribute('aria-expanded', String(selected))
         if (active && !wasActive) this.rippleIcon.syncActive()
         if (!active) this.rippleIcon.reset()

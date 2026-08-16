@@ -371,23 +371,6 @@ export type MediaNodeSettings = {
             infoButtonHoverColor: string
         }
     }
-    generatedMediaInfoPanel: {
-        widthMultiplier: number
-        minWidth: number
-        maxWidth: number | null
-        horizontalOffset: number
-        branchMarkerTopOffset: number
-        layerZIndex: number
-        styles: {
-            background: string
-            border: string
-            borderRadius: string
-            boxShadow: string
-            color: string
-            overflow: string
-            padding: string
-        }
-    }
     useZoomCompensatedResizeHandleScaling: boolean
     resizeHandle: {
         size: number
@@ -1008,7 +991,7 @@ export const settings: Settings = {
             },
         },
 
-        // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused elsewhere (e.g. generated-media info panels) but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
+        // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused by generated-output details but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
         contextPreview: {
             styles: {
                 // Color for the top context controls row.
@@ -1171,11 +1154,11 @@ export const settings: Settings = {
             borderRadius: 30,
         },
 
-        // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
+        // Provenance/descriptor controls below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; details render in the right sidebar.
         generatedMediaChrome: {
             // Base screen-pixel icon/button size at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
             iconSize: mediaGenerationLayoutSettings.generatedMediaChrome.iconSize,
-            // Base screen-pixel gap at 100% and higher zoom on both sides of the icon strip: media-to-icons and icons-to-info-panel. Shared with the API collision boxes via @lixpi/constants.
+            // Base screen-pixel gap between media and the control strip at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
             gap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
             // Scale applied to generated-media badges rendered inside AI chat history cards.
             chatScale: 0.72,
@@ -1199,32 +1182,6 @@ export const settings: Settings = {
                 // Interactive chrome icons match the provider icon at rest and darken on hover.
                 infoButtonColor: '#4d5963',
                 infoButtonHoverColor: '#181e23',
-            },
-        },
-
-        // Expanded provenance/descriptor panel opened from generated-media chrome and branch-lineage markers.
-        generatedMediaInfoPanel: {
-            // Panel width as a proportion of the media/lineage width that anchors it.
-            widthMultiplier: 1,
-            // Minimum canvas-unit panel width after widthMultiplier is applied. Use 0 to keep the anchor width as the floor.
-            minWidth: 0,
-            // Optional maximum canvas-unit panel width after widthMultiplier is applied. Use null for no cap.
-            maxWidth: null,
-            // Canvas-unit horizontal offset from the anchor's left edge.
-            horizontalOffset: 0,
-            // Canvas-unit vertical offset below a branch-lineage marker.
-            branchMarkerTopOffset: 10,
-            // Stacking level for the viewport-transformed info panel layer.
-            layerZIndex: 5,
-            styles: {
-                background: '#fff',
-                border: '1px solid rgba(34, 40, 49, 0.08)',
-                borderRadius: '20px',
-                // Twice the prior intensity (alpha doubled 0.14 → 0.28, with a deeper spread) so the floating detail modal reads as clearly lifted above the canvas.
-                boxShadow: '0 16px 44px rgba(20, 24, 30, 0.28)',
-                color: '#252b33',
-                overflow: 'visible',
-                padding: '0.55rem 0.75rem',
             },
         },
 
