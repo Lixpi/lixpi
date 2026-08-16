@@ -150,6 +150,7 @@ Projection-only atom block for the pipeline timeline embedded in sealed generate
 - Attrs: `id`, structured `state`, and `showSummaryWhenCollapsedItemIds`.
 - The durable state remains owned by the matching `aiGeneratedImage` / `aiGeneratedVideo` node. Generated-media projection clones place this presentation node immediately after the submitted user message.
 - Standalone assistant preamble is absorbed into `Understand request` instead of being rendered twice. The matching trace's reasoning-authored media prompt becomes one top-level pipeline step after shared lineage resolution; its expanded summary reuses the trace prompt's purple surface and left border. Trace rendering suppresses its old standalone prompt section while retaining per-run references, resolver audit, Capability comparison, and output details.
+- Every pipeline step may carry a durable `trace`: the model calls it made, the params each was called with, the References and Capabilities passed to each one, its reasoning, and resulting facts. `$src/components/executionTrace` expands that trace into the timeline's detail block, rendering each Asset, Capability, Tool, and Skill as the same `prompt-reference-chip` and hover card a user message uses. Hosts supply the adapter because only they own the Asset and Capability resolvers those hover cards need.
 - `renderContext.mediaGenerationProgress` mounts the shared recursive pipeline component. Every sealed history projection starts with all levels expanded, whether opened from media info or a branch-lineage node, and it does not reuse focused live-progress disclosure state. Ordinary live conversation editors never synthesize this projection node.
 
 ### `aiGeneratedImage`
@@ -314,6 +315,7 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 ## Files
 
 - `aiChatThreadPlugin.ts`: orchestration, stream handling, request construction, decorations, plugin state, NodeView registration.
+- `capabilityChatRunProgress.ts`: per-run Capability progress timelines mounted into the streaming response, given `renderContext.promptReferencePreviewRenderer` so step traces render Asset and Capability hover cards.
 - `aiChatThreadNode.ts`: thread schema and minimal wrapper NodeView.
 - `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
 - `aiResponseMessageNode.ts`: assistant response schema and shell NodeView.

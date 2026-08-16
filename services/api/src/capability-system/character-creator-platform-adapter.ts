@@ -126,6 +126,7 @@ const generateCapabilityImage = async (args: {
     const provider = args.registry.createTransient(instanceKey, providerName)
     const stopForAbort = (): void => { void args.registry.stop(instanceKey) }
     args.signal?.addEventListener('abort', stopForAbort, { once: true })
+    const resolvedImageSize = resolvePanelImageSize(args.context.imageModel.requestedSize, modelMeta)
     const references: ImageGenerationReference[] = args.references.map(reference => ({
         ...reference,
         fileName: reference.fileName ?? `${reference.role}.png`,
@@ -138,7 +139,7 @@ const generateCapabilityImage = async (args: {
             workspaceId: args.context.workspaceId,
             aiChatThreadId: args.context.conversationAssetId,
             enableImageGeneration: true,
-            imageSize: resolvePanelImageSize(args.context.imageModel.requestedSize, modelMeta),
+            imageSize: resolvedImageSize,
             imageGenerationReferences: references,
             capabilityMediaExecutionPlan: args.plan,
             capabilityUsageMode: args.usageMode,
@@ -171,6 +172,7 @@ const generateCapabilityImage = async (args: {
         return {
             image,
             providerOperationId: result.aiVendorRequestId ?? result.responseId,
+            resolvedImageSize,
             includedReferenceRoles: result.imageReferenceAdaptation?.included.map(reference => reference.role)
                 ?? references.map(reference => reference.role),
             omittedReferenceRoles: result.imageReferenceAdaptation?.omitted.map(reference => reference.role) ?? [],

@@ -2,6 +2,9 @@
 
 import type {
     CharacterFidelityObjectCoordinate,
+    ExecutionTrace,
+    ExecutionTraceHandle,
+    ExecutionTraceModelCall,
     MediaGenerationRunProgress,
     OperationProgressItem,
 } from '@lixpi/constants'
@@ -72,6 +75,7 @@ type RenderedPanel = {
     reused?: boolean
     coordinate?: CharacterFidelityObjectCoordinate
     providerOperationId?: string
+    resolvedImageSize?: string
     includedReferenceRoles: string[]
     omittedReferenceRoles: string[]
 }
@@ -97,6 +101,11 @@ type CharacterProgressSnapshot = {
     observedPanelIds: ReadonlySet<string>
     compositionStage: 'pending' | 'assembling' | 'sealing' | 'completed'
     sourceWarning?: string
+    // Durable per-item execution traces, keyed by progress item id. Every model
+    // call the pipeline made — with its params and the references handed to it —
+    // is recorded here as the run proceeds and sealed with the item. Status-only
+    // callers that build a snapshot to ask a single question omit it.
+    traces?: ReadonlyMap<string, ExecutionTrace>
 }
 
 const CHARACTER_PROGRESS_HEARTBEAT_MS = 5_000
@@ -272,7 +281,7 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
     const availablePanelCount = snapshot.renderedPanels.size
     const plannedShotTitles = snapshot.plan.panels.map(panel => panel.title).join(', ')
 
-    return [
+    return attachProgressTraces([
         {
             id: 'validate-and-plan',
             title: 'Validate request and plan shots',
@@ -357,7 +366,51 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
                 },
             ],
         },
-    ]
+    ], snapshot.traces ?? new Map())
+}
+
+// The provider is handed a mix of Asset-backed references and generated or pose
+// references that have no Asset of their own. Asset-backed ones become handles
+// the reader can hover; the rest are named by role so nothing is invisible.
+function buildPanelReferenceHandles(
+    references: readonly CharacterImageReference[],
+    selectedReferenceEntries: readonly { role: string; sourceAssetId?: string }[],
+): ExecutionTraceHandle[] {
+    const assetIdByRole = new Map(selectedReferenceEntries.flatMap(entry => (
+        entry.sourceAssetId ? [[entry.role, entry.sourceAssetId] as const] : []
+    )))
+    return references.map((reference): ExecutionTraceHandle => {
+        const assetId = assetIdByRole.get(reference.role)
+        return assetId
+            ? {
+                kind: 'media',
+                id: assetId,
+                displayName: assetId,
+                mediaKind: 'image',
+                role: reference.role,
+            }
+            : {
+                kind: 'media',
+                id: reference.fileName ?? reference.role,
+                displayName: reference.fileName ?? reference.role,
+                mediaKind: 'image',
+                role: reference.role,
+                note: 'Generated during this run',
+            }
+    })
+}
+
+// Traces are recorded against progress item ids while the run proceeds, then
+// grafted onto the item tree here so the timeline and the trace stay one object.
+function attachProgressTraces(
+    items: OperationProgressItem[],
+    traces: ReadonlyMap<string, ExecutionTrace>,
+): OperationProgressItem[] {
+    return items.map(item => ({
+        ...item,
+        ...(traces.get(item.id) ? { trace: traces.get(item.id) } : {}),
+        ...(item.children ? { children: attachProgressTraces(item.children, traces) } : {}),
+    }))
 }
 
 function formatRenderProgressSummary(panelId: string, snapshot: CharacterProgressSnapshot): string {
@@ -671,6 +724,70 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
         const assessmentEligiblePanelIds = new Set<string>()
         const runningAssessmentPanelIds = new Set<string>()
         const observedPanelIds = new Set<string>()
+        const progressTraces = new Map<string, ExecutionTrace>()
+        const recordTrace = (itemId: string, update: (current: ExecutionTrace) => ExecutionTrace): void => {
+            progressTraces.set(itemId, update(
+                progressTraces.get(itemId) ?? { traceVersion: 'execution-trace-v1' },
+            ))
+        }
+        const recordModelCall = (itemId: string, modelCall: ExecutionTraceModelCall): void => {
+            recordTrace(itemId, current => ({
+                ...current,
+                modelCalls: [
+                    ...(current.modelCalls ?? []).filter(existing => existing.id !== modelCall.id),
+                    modelCall,
+                ],
+            }))
+        }
+        const recordPanelAssessmentTrace = (panelId: string, assessment: CharacterPanelAssessment): void => {
+            recordModelCall(`assess:${panelId}`, {
+                id: `assess-vlm:${panelId}`,
+                role: 'assessor',
+                provider: state.reasoningModel.provider,
+                modelId: assessment.vlmAssessor || state.reasoningModel.modelVersion,
+                purpose: 'Compare the rendered shot against the sources across the fidelity dimensions.',
+                params: assessment.dimensions.map(dimension => ({
+                    name: dimension.dimension,
+                    value: String(dimension.score),
+                })),
+                inputHandles: sourceAssetHandles('comparison-source'),
+                ...(assessment.vlmError ? { errorMessage: assessment.vlmError.message } : {}),
+            })
+            if (assessment.fidelityModelIds) {
+                recordModelCall(`assess:${panelId}`, {
+                    id: `assess-face:${panelId}`,
+                    role: 'assessor',
+                    provider: 'lixpi-fidelity',
+                    modelId: assessment.fidelityModelIds.recognizer,
+                    purpose: 'Measure facial similarity between the rendered shot and the sources.',
+                    params: [
+                        { name: 'detector', value: assessment.fidelityModelIds.detector },
+                        { name: 'recognizer', value: assessment.fidelityModelIds.recognizer },
+                        ...(typeof assessment.fidelityMetric.cosineSimilarity === 'number'
+                            ? [{ name: 'cosineSimilarity', value: assessment.fidelityMetric.cosineSimilarity.toFixed(4) }]
+                            : []),
+                    ],
+                    ...(assessment.fidelityError ? { errorMessage: assessment.fidelityError.message } : {}),
+                })
+            }
+            recordTrace(`assess:${panelId}`, current => ({
+                ...current,
+                facts: [
+                    { label: 'Overall score', value: assessment.score.toFixed(2) },
+                    { label: 'Verdict', value: assessment.valid ? 'passed' : 'needs review' },
+                    ...(assessment.failedDimensions.length
+                        ? [{ label: 'Failed dimensions', value: assessment.failedDimensions.join(', ') }]
+                        : []),
+                ],
+            }))
+        }
+        const sourceAssetHandles = (role: string): ExecutionTraceHandle[] => plan.sourceAssetIds.map(assetId => ({
+            kind: 'media' as const,
+            id: assetId,
+            displayName: assetId,
+            mediaKind: 'image' as const,
+            role,
+        }))
         let preparationStage: CharacterProgressSnapshot['preparationStage'] = 'resolving-references'
         let preparationSourceCount: number | undefined
         let preparationEvidenceSummary: string | undefined
@@ -699,6 +816,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     observedPanelIds: new Set(observedPanelIds),
                     compositionStage,
                     ...(evidenceAnalysisWarning ? { sourceWarning: evidenceAnalysisWarning } : {}),
+                    traces: new Map(progressTraces),
                 }),
             }
             await progressReportQueue.run(async () => {
@@ -751,6 +869,14 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             const evidenceSources = sources.filter(source => !(source.sourceKind === 'composition-component'
                 && source.assetId === state.sharedState.editTargetAssetId))
             preparationSourceCount = evidenceSources.length
+            recordTrace('resolve-source-references', current => ({
+                ...current,
+                handles: sourceAssetHandles('source-reference'),
+                facts: [
+                    { label: 'Authorized source images', value: String(evidenceSources.length) },
+                    { label: 'Stored panels reused', value: String(storedComponents.size) },
+                ],
+            }))
             preparationStage = 'analyzing-evidence'
             await reportProgress({
                 phase: 'preparing',
@@ -759,6 +885,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 message: `${evidenceSources.length} original source image(s) and ${storedComponents.size} stored panel(s) loaded. Analyzing identity, outfit, materials, and source coverage.`,
             })
             let evidence: CharacterEvidenceProfile
+            const evidenceAnalysisStartedAt = Date.now()
             try {
                 evidence = await executeWithProgressHeartbeat({
                     signal: options.signal,
@@ -780,9 +907,38 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         signal: options.signal,
                     }),
                 })
+                recordModelCall('analyze-identity-evidence', {
+                    id: 'evidence-analysis',
+                    role: 'resolver',
+                    provider: state.reasoningModel.provider,
+                    modelId: state.reasoningModel.modelVersion,
+                    purpose: 'Read the supplied references for observed identity, outfit, material, palette, and coverage evidence.',
+                    params: [
+                        ...(state.reasoningModel.maxCompletionSize
+                            ? [{ name: 'maxOutputTokens', value: String(state.reasoningModel.maxCompletionSize) }]
+                            : []),
+                        { name: 'sources', value: String(evidenceSources.length) },
+                        { name: 'editTargets', value: String(storedComponents.size) },
+                    ],
+                    prompt: completeRequest,
+                    inputHandles: sourceAssetHandles('evidence-source'),
+                    startedAt: evidenceAnalysisStartedAt,
+                    completedAt: Date.now(),
+                })
             } catch (error) {
                 if (options.signal?.aborted) throw error
                 evidenceAnalysisWarning = formatRuntimeWarning('Source evidence analysis was unavailable', error)
+                recordModelCall('analyze-identity-evidence', {
+                    id: 'evidence-analysis',
+                    role: 'resolver',
+                    provider: state.reasoningModel.provider,
+                    modelId: state.reasoningModel.modelVersion,
+                    purpose: 'Read the supplied references for observed identity and outfit evidence.',
+                    inputHandles: sourceAssetHandles('evidence-source'),
+                    startedAt: evidenceAnalysisStartedAt,
+                    completedAt: Date.now(),
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                })
                 evidence = {
                     medium: 'unknown',
                     editTargetPolicy: storedComponents.size > 0
@@ -859,6 +1015,27 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 }),
             })
             preparationReferenceSummary = summarizeReferencePack(referencePack.entries)
+            recordTrace('build-reference-pack', current => ({
+                ...current,
+                handles: referencePack.entries.flatMap(entry => entry.sourceAssetId
+                    ? [{
+                        kind: 'media' as const,
+                        id: entry.sourceAssetId,
+                        displayName: entry.sourceAssetId,
+                        mediaKind: 'image' as const,
+                        role: entry.role,
+                    }]
+                    : []),
+                facts: [
+                    { label: 'Reference entries', value: String(referencePack.entries.length) },
+                    ...referencePack.entries.map(entry => ({
+                        label: entry.role,
+                        value: `${entry.width}×${entry.height}`,
+                    })),
+                    { label: 'Max reference images', value: String(modelCapabilities.maxReferenceImages) },
+                    { label: 'Max identity references', value: String(modelCapabilities.maxIdentityReferenceImages) },
+                ],
+            }))
             preparationStage = 'completed'
             await reportProgress({
                 phase: 'preparing',
@@ -1062,6 +1239,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 )).length,
                             })
                             providerOperationAttempts += 1
+                            const panelRenderStartedAt = Date.now()
                             const rendered = await renderCharacterPanel({
                                 imageGeneration: this.deps.imageGeneration,
                                 context: state,
@@ -1082,6 +1260,40 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 },
                                 signal: options.signal,
                             })
+                            recordModelCall(`render:${panel.panelId}`, {
+                                id: `render:${panel.panelId}`,
+                                role: 'media',
+                                provider: state.imageModel.provider,
+                                modelId: state.imageModel.modelVersion,
+                                purpose: `Render ${panel.title}.`,
+                                params: [
+                                    // What the provider was actually called with, which the
+                                    // adapter resolves from the model's supported sizes.
+                                    { name: 'size', value: rendered.resolvedImageSize ?? String(state.imageModel.requestedSize ?? 'auto') },
+                                    { name: 'attempt', value: '1' },
+                                    { name: 'referenceImages', value: String(references.length) },
+                                    { name: 'conditioning', value: modelCapabilities.conditioningModes.join(', ') },
+                                ],
+                                prompt,
+                                inputHandles: buildPanelReferenceHandles(references, selectedReferenceEntries),
+                                ...(rendered.providerOperationId
+                                    ? { providerOperationId: rendered.providerOperationId }
+                                    : {}),
+                                startedAt: panelRenderStartedAt,
+                                completedAt: Date.now(),
+                            })
+                            recordTrace(`render:${panel.panelId}`, current => ({
+                                ...current,
+                                facts: [
+                                    { label: 'References accepted by provider', value: rendered.includedReferenceRoles.join(', ') || 'none reported' },
+                                    ...(rendered.omittedReferenceRoles.length
+                                        ? [{ label: 'References omitted by provider', value: rendered.omittedReferenceRoles.join(', ') }]
+                                        : []),
+                                    ...(panel.outputBindings.length
+                                        ? [{ label: 'Generated anchors attached', value: panel.outputBindings.map(binding => binding.referenceRole).join(', ') }]
+                                        : []),
+                                ],
+                            }))
                             const stored = await store.putWithCoordinate({
                                 mediaKind: 'image',
                                 slot: `candidate-${panel.panelId}`,
@@ -1126,6 +1338,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 signal: options.signal,
                             })
                             assessments.set(panel.panelId, assessment)
+                            recordPanelAssessmentTrace(panel.panelId, assessment)
                             const structuralFailures = getCharacterPanelStructuralFailures(panel, assessment)
                             console.info('[CharacterCreatorStructuralAssessment]', {
                                 capabilityRunId: plan.capabilityRunId,
@@ -1283,6 +1496,7 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                                 signal: options.signal,
                             })
                             assessments.set(panel.panelId, assessment)
+                            recordPanelAssessmentTrace(panel.panelId, assessment)
                         } catch (error) {
                             if (options.signal?.aborted) throw error
                             const failure = describeCharacterPanelAssessmentFailure(error)
@@ -1345,6 +1559,15 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     final: true,
                 }),
             })
+            recordTrace('assemble-sheet', current => ({
+                ...current,
+                facts: [
+                    { label: 'Compositor', value: 'sharp-character-sheet-3840x2560-v3' },
+                    { label: 'Shots placed', value: String(availablePanels.size) },
+                    { label: 'Shots unavailable', value: String(renderFailures.size) },
+                    { label: 'Output', value: '3840×2560 PNG' },
+                ],
+            }))
             compositionStage = 'sealing'
             await reportProgress({
                 phase: 'composing',

@@ -50,31 +50,24 @@ describe('ai-chat-thread.scss', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
         expectSourceToContain(scss, '.ai-user-message-wrapper')
         expectSourceToContain(scss, '.ai-user-message')
-        expectSourceToContain(scss, '--prompt-reference-color: #d7e6ff;')
-        expectSourceToContain(scss, '--prompt-reference-capability-module-color: #eca983;')
+        expectSourceToContain(scss, '@include prompt-reference-chip-on-dark-surface;')
         expectSourceToContain(scss, '.ai-submit-button')
     })
 
-    it('uses the branch-marker reference palette for historical user messages', () => {
+    // The user message and the branch marker no longer each declare a palette;
+    // they take the same one from the shared partial, so they cannot drift.
+    it('takes the dark reference palette from the shared partial, declaring no colors of its own', () => {
         const workspaceScss = readFileSync(
             resolve(__dirname, '../../../../infographics/workspace/workspace-canvas.scss'),
             'utf-8',
         )
 
-        expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-color')).toBe(
-            getPropertyValue(
-                workspaceScss,
-                '.workspace-branch-marker-message-text {',
-                '--prompt-reference-color',
-            ),
-        )
-        expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-capability-module-color')).toBe(
-            getPropertyValue(
-                workspaceScss,
-                '.workspace-branch-marker-message-text {',
-                '--prompt-reference-capability-module-color',
-            ),
-        )
+        expectSourceToContain(scss, "@import '$src/sass/_prompt-reference-chip.scss';")
+        expectSourceToContain(workspaceScss, '@include prompt-reference-chip-on-dark-surface;')
+        expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-color')).toBeUndefined()
+        expect(
+            getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-capability-module-color'),
+        ).toBeUndefined()
     })
 
     it('covers response message and reasoning shell styles', () => {

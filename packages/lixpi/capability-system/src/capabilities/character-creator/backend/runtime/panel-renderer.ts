@@ -26,6 +26,7 @@ import {
 export type CharacterPanelRenderResult = {
     bytes: Buffer
     providerOperationId?: string
+    resolvedImageSize?: string
     includedReferenceRoles: string[]
     omittedReferenceRoles: string[]
 }
@@ -93,6 +94,7 @@ export async function renderCharacterPanel(args: {
     return {
         bytes,
         providerOperationId: result.providerOperationId,
+        resolvedImageSize: result.resolvedImageSize,
         includedReferenceRoles: result.includedReferenceRoles,
         omittedReferenceRoles: result.omittedReferenceRoles,
     }

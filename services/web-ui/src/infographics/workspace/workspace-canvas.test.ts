@@ -1174,14 +1174,9 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const scss = loadScss()
 		const historyTextRule = extractBlock(scss, '.media-history-button-text')
 		const historyChipRule = extractBlock(scss, '.media-history-button-text .prompt-reference-chip')
-		const historyCapabilityRule = extractBlock(
-			scss,
-			'.media-history-button-text .prompt-reference-chip-capability-module',
-		)
 
-		expectExcerptToContain(historyTextRule, '--prompt-reference-capability-module-color: #eca983;', 'history trigger badge')
+		expectExcerptToContain(historyTextRule, '@include prompt-reference-chip-on-dark-surface;', 'history trigger badge')
 		expectExcerptToContain(historyChipRule, 'font-size: inherit;', 'history trigger badge')
-		expectExcerptToContain(historyCapabilityRule, 'color: var(--prompt-reference-capability-module-color);', 'history trigger badge')
 	})
 
 	it('renders the info panel in a viewport-transformed decoupled layer', () => {
@@ -3489,9 +3484,15 @@ describe('canvas node deletion', () => {
 	it('rejects a selected lineage marker authoritatively and locally removes an unpersisted orphan', () => {
 		const deletion = extractFunctionBody(ts, 'deleteCanvasNodes')
 
-		expectExcerptToContain(deletion, 'if (isBranchMarkerNode(node))', 'deleteCanvasNodes')
-		expectExcerptToContain(deletion, "await rejectGeneratedOutput('branch-lineage', node.nodeId)", 'deleteCanvasNodes')
-		expectExcerptToContain(deletion, "if (outcome === 'not-found')", 'deleteCanvasNodes branch marker handling')
+		// Review stays the authoritative removal for a lineage marker; a detach is
+		// the fallback for anything review cannot own, orphans included.
+		expectExcerptToContain(deletion, 'isBranchMarkerNode(node)', 'deleteCanvasNodes')
+		expectExcerptToContain(deletion, "? 'branch-lineage' as const", 'deleteCanvasNodes')
+		expectExcerptToContain(
+			deletion,
+			"if (reviewScope && await rejectGeneratedOutput(reviewScope, node.nodeId) === 'applied') continue",
+			'deleteCanvasNodes',
+		)
 		expectExcerptToContain(deletion, 'await detachCanvasNode(node.nodeId)', 'deleteCanvasNodes branch marker handling')
 		expectSourceToContain(ts, "if (result.error === 'GENERATED_OUTPUT_NOT_FOUND') return 'not-found'")
 	})
@@ -3501,5 +3502,86 @@ describe('canvas node deletion', () => {
 		expectSourceToContain(ts, 'const nextState = pruneCanvasContextChips(unprunedNextState, removedNodeIds)')
 		expectSourceToContain(ts, 'resolveGeneratedMediaTreeState(remainingNodes, updatedEdges)')
 		expectSourceToContain(ts, 'commitTransientCanvasStatePreservingEditors(committedState)')
+	})
+})
+
+// =============================================================================
+// CANVAS SELECTION DELETION RESILIENCE
+// =============================================================================
+
+describe('Workspace canvas — selection deletion', () => {
+	function extractDeleteCanvasNodes(source: string): string {
+		const start = source.indexOf('async function deleteCanvasNodes(')
+		expect(start >= 0, 'deleteCanvasNodes should exist').toBe(true)
+		const end = source.indexOf('\n    }', start)
+		return source.slice(start, end)
+	}
+
+	// A marquee selection routinely mixes healthy nodes with wreckage from an
+	// interrupted run. Deleting it must remove everything it can; one node that
+	// cannot be reviewed or detached may never abort the rest.
+	it('attempts every selected node independently instead of aborting the selection', () => {
+		const body = extractDeleteCanvasNodes(loadTs())
+
+		expectExcerptNotToContain(body, 'break', 'deleteCanvasNodes')
+		expectExcerptToContain(body, 'undeletedNodeIds.push(node.nodeId)', 'deleteCanvasNodes')
+		expectExcerptToContain(
+			body,
+			'[CANVAS][node-deletion] Skipping a node that could not be deleted:',
+			'deleteCanvasNodes',
+		)
+	})
+
+	it('falls back to a plain detach whenever generated-output review does not apply', () => {
+		const body = extractDeleteCanvasNodes(loadTs())
+
+		expectExcerptToContain(
+			body,
+			"if (reviewScope && await rejectGeneratedOutput(reviewScope, node.nodeId) === 'applied') continue",
+			'deleteCanvasNodes',
+		)
+		expectExcerptToContain(body, 'await detachCanvasNode(node.nodeId)', 'deleteCanvasNodes')
+	})
+
+	// Generated-media membership is API-owned, so a local canvas commit is a
+	// no-op for these nodes. Removing one has to go through the API, exactly as
+	// the stop control does, or the next projection puts it straight back.
+	it('cancels the owning run for a generated-media node review cannot remove', () => {
+		const body = extractDeleteCanvasNodes(loadTs())
+		const source = loadTs()
+
+		expectExcerptToContain(body, 'if (await cancelOwningMediaGenerationRun(node)) continue', 'deleteCanvasNodes')
+		expectExcerptToContain(source, 'async function cancelOwningMediaGenerationRun(', 'WorkspaceCanvas.ts')
+		expectExcerptToContain(source, 'await cancelMediaGenerationRequest({', 'cancelOwningMediaGenerationRun')
+	})
+
+	it('resolves the cancel revision from the request when no operation node survived', () => {
+		const source = loadTs()
+		const start = source.indexOf('async function cancelOwningMediaGenerationRun(')
+		const body = source.slice(start, source.indexOf('\n    }', start))
+
+		expectExcerptToContain(body, 'operation?.requestRevision', 'cancelOwningMediaGenerationRun')
+		expectExcerptToContain(
+			body,
+			'await getMediaGenerationRequest({ generationRequestId: cancelRequestId, workspaceId })',
+			'cancelOwningMediaGenerationRun',
+		)
+		expectExcerptToContain(body, "cancelRequestId.startsWith('canvas-')", 'cancelOwningMediaGenerationRun')
+	})
+
+	// A node can outlive its Asset when a run dies before the Asset record is
+	// written. The missing reference is the reason to finish the removal.
+	it('completes the canvas removal when the Asset behind a node is already gone', () => {
+		const source = loadTs()
+		const start = source.indexOf('async function detachCanvasNode(')
+		const body = source.slice(start, source.indexOf('\n    }', start))
+
+		expectExcerptToContain(body, 'if (!isMissingAssetDetachError(error)) throw error', 'detachCanvasNode')
+		expectExcerptToContain(body, 'commitCanvasState(nextState)', 'detachCanvasNode')
+		expectExcerptToContain(
+			source,
+			"return error instanceof Error && error.message === 'NOT_FOUND'",
+			'isMissingAssetDetachError',
+		)
 	})
 })

@@ -40,6 +40,7 @@ Backend code owns the reusable Capability engine:
 - dependency validation and deterministic ready-node scheduling through `CapabilityDagRunner`;
 - required and optional media-output bindings through `CapabilityMediaDagRunner`, including module-defined binding metadata, declared-output-only delivery, parallel release of ready consumers, and blocked-node settlement when a required producer has no output;
 - run dispatch and cancellation;
+- per-step execution traces: the runner hands each action a recorder through its execution context, so a step records the model calls it makes, the params each was called with, the Assets and Capabilities passed to each one, its reasoning, and resulting facts while it runs. The trace is emitted on that step's run events, including failure and cancellation events, so an aborted step still explains what it had already done. Actions may also declare `collectInputHandles` and `collectOutputHandles` so a step names what it was handed before it produces anything. Durable handles carry an entity id and a readable fallback, never a copied title, so a sealed trace does not drift. Recorded params report what a provider was actually called with rather than what was requested: a media request carries only a size preference, so the platform adapter reports the size it resolved against the model's supported sizes and the trace records that;
 - first-class Capability-module registration and Tool/Skill package installation;
 - provider-neutral model-tool definitions and provider payload conversion.
 

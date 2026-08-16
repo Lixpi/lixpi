@@ -282,18 +282,20 @@ describe('branch marker prompt content', () => {
         const ruleStart = scss.indexOf(selector)
         const ruleEnd = scss.indexOf('\n}', ruleStart)
         const rule = ruleStart >= 0 && ruleEnd >= 0 ? scss.slice(ruleStart, ruleEnd) : ''
-        const capabilitySelector = '.workspace-branch-marker-message-text .prompt-reference-chip-capability-module {'
-        const capabilityRuleStart = scss.indexOf(capabilitySelector)
-        const capabilityRuleEnd = scss.indexOf('\n}', capabilityRuleStart)
-        const capabilityRule = capabilityRuleStart >= 0 && capabilityRuleEnd >= 0
-            ? scss.slice(capabilityRuleStart, capabilityRuleEnd)
+        // The dark palette is declared once on the marker surface, so every chip
+        // inside it — prompt line, reference row, pipeline trace — inherits it.
+        // Anchored to the newline so this finds the top-level rule rather than the
+        // indented responsive override that shares the selector.
+        const markerSurfaceStart = scss.indexOf('\n.workspace-branch-marker-content {')
+        const markerSurfaceEnd = scss.indexOf('\n}', markerSurfaceStart)
+        const markerSurfaceRule = markerSurfaceStart >= 0 && markerSurfaceEnd >= 0
+            ? scss.slice(markerSurfaceStart, markerSurfaceEnd)
             : ''
 
         expectSourceToContain(rule, 'font-size: inherit;')
-        expectSourceToContain(scss, '--prompt-reference-color: #d7e6ff;')
-        expectSourceToContain(rule, 'color: var(--prompt-reference-color);')
-        expectSourceToContain(scss, '--prompt-reference-capability-module-color: #eca983;')
-        expectSourceToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color);')
+        expectSourceToContain(markerSurfaceRule, '@include prompt-reference-chip-on-dark-surface;')
+        expectSourceNotToContain(scss, '--prompt-reference-color: #d7e6ff;')
+        expectSourceNotToContain(scss, '--prompt-reference-capability-module-color: #eca983;')
         expectSourceNotToContain(scss, '.workspace-branch-marker-message > .prompt-reference-chip {')
         expectSourceNotToContain(scss, '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
     })

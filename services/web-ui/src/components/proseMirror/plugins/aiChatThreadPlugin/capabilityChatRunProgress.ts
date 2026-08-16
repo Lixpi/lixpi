@@ -1,6 +1,8 @@
 import type { CapabilityRunEvent } from '@lixpi/constants'
 import type { EditorView } from 'prosemirror-view'
 
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+
 import {
     createCapabilityRunProgress,
     type CapabilityProgressState,
@@ -17,10 +19,12 @@ export function getLastCapabilityChatProgressMount(root: HTMLElement): HTMLEleme
 export class CapabilityChatRunProgressController {
     private readonly progressByRunId = new Map<string, CapabilityRunProgressInstance>()
 
+    constructor(private readonly previewRenderer?: PromptReferencePreviewRenderer) {}
+
     applyEvent(view: EditorView, event: CapabilityRunEvent): void {
         let progress = this.progressByRunId.get(event.runId)
         if (!progress) {
-            progress = createCapabilityRunProgress()
+            progress = createCapabilityRunProgress(undefined, this.previewRenderer)
             progress.element.dataset.capabilityRunId = event.runId
             this.progressByRunId.set(event.runId, progress)
         }

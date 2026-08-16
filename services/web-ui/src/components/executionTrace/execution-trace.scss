@@ -1,0 +1,174 @@
+// Execution trace detail block. Rendered inside a progress timeline item, so it
+// inherits the host's timeline typography variables and never sets its own
+// colors outright — a trace on the dark canvas marker and a trace in a light
+// provenance document use the same markup.
+.execution-trace {
+    display: grid;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: var(--progress-timeline-summary-size, 11px);
+    line-height: 1.4;
+}
+
+.execution-trace-section {
+    display: grid;
+    gap: 4px;
+}
+
+.execution-trace-section-title {
+    margin: 0;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: inherit;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.execution-trace-prose {
+    margin: 0;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.execution-trace-section-error .execution-trace-prose,
+.execution-trace-model-call-error {
+    color: var(--progress-timeline-danger, rgb(255 138 128 / 92%));
+}
+
+.execution-trace-handles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.execution-trace-handle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.execution-trace-handle-role,
+.execution-trace-handle-note {
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: 0.92em;
+}
+
+.execution-trace-handle-note {
+    font-style: italic;
+}
+
+.execution-trace-model-calls {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.execution-trace-model-call {
+    display: grid;
+    gap: 4px;
+    padding: 6px 8px;
+    border-left: 2px solid var(--progress-timeline-rail, rgb(255 255 255 / 18%));
+    border-radius: 0 6px 6px 0;
+    background: var(--progress-timeline-detail-surface, rgb(255 255 255 / 6%));
+}
+
+.execution-trace-model-call-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.execution-trace-model-call-role {
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: 0.92em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.execution-trace-model-call-id {
+    color: var(--progress-timeline-primary, currentColor);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.execution-trace-model-call-provider,
+.execution-trace-model-call-footer,
+.execution-trace-model-call-operation {
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: 0.92em;
+}
+
+.execution-trace-model-call-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+}
+
+.execution-trace-model-call-operation {
+    overflow-wrap: anywhere;
+}
+
+.execution-trace-model-call-handles {
+    display: grid;
+    gap: 3px;
+}
+
+.execution-trace-model-call-handles-label {
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: 0.92em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.execution-trace-params {
+    display: grid;
+    gap: 2px 10px;
+    margin: 0;
+}
+
+.execution-trace-param {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    dt {
+        color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    }
+
+    dd {
+        margin: 0;
+        color: var(--progress-timeline-primary, currentColor);
+        overflow-wrap: anywhere;
+    }
+}
+
+.execution-trace-text-summary {
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &::before {
+        content: '▸ ';
+    }
+}
+
+.execution-trace-text[open] .execution-trace-text-summary::before {
+    content: '▾ ';
+}
+
+.execution-trace-text-body {
+    margin-top: 3px;
+    padding-left: 10px;
+}

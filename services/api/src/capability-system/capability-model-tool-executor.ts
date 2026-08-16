@@ -284,6 +284,7 @@ function buildGenerationTraceSteps(
             ...(event.safeInputSummary ? { inputSummary: event.safeInputSummary } : {}),
             ...(event.safeOutputSummary ? { outputSummary: event.safeOutputSummary } : {}),
             ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+            ...(event.trace ? { trace: event.trace } : {}),
         }]
     })
 }

@@ -1,6 +1,7 @@
 export {
     createProgressTimeline,
     type ProgressTimelineConfig,
+    type ProgressTimelineDetailRender,
     type ProgressTimelineInstance,
     type ProgressTimelineItem,
     type ProgressTimelineItemSource,

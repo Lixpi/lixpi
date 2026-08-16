@@ -690,12 +690,87 @@ export type OperationProgressItemStatus =
     | 'cancelled'
     | 'skipped'
 
+// A handle names one thing the pipeline passed around — an Asset, a Capability
+// module, a Tool, a Skill, or a generated Artifact. The UI renders handles with
+// the same chip and hover card the prompt editor uses, so a trace row and a user
+// message refer to the same entity in the same visual language.
+export type ExecutionTraceHandleKind =
+    | 'capability-module'
+    | 'tool'
+    | 'skill'
+    | 'media'
+    | 'capability-artifact'
+
+export type ExecutionTraceHandle = {
+    kind: ExecutionTraceHandleKind
+    // moduleId for capability/tool/skill handles, assetId for media and artifacts.
+    id: string
+    displayName: string
+    mediaKind?: 'image' | 'video' | 'audio' | 'document'
+    nodeId?: string
+    artifactTypeId?: string
+    // Why this handle was part of the step: 'target', 'message-reference',
+    // 'pose-reference', 'output', and so on.
+    role?: string
+    note?: string
+}
+
+export type ExecutionTraceParam = {
+    name: string
+    value: string
+}
+
+// One model invocation made while a step ran, with everything the model was
+// given: the params it was called with and the handles that went into its input.
+export type ExecutionTraceModelCall = {
+    id: string
+    role: 'reasoning' | 'media' | 'resolver' | 'assessor' | 'compositor'
+    provider: string
+    modelId: string
+    purpose?: string
+    params?: ExecutionTraceParam[]
+    prompt?: string
+    systemPrompt?: string
+    inputHandles?: ExecutionTraceHandle[]
+    outputHandles?: ExecutionTraceHandle[]
+    responseExcerpt?: string
+    providerOperationId?: string
+    startedAt?: number
+    completedAt?: number
+    tokenUsage?: {
+        input?: number
+        output?: number
+        reasoning?: number
+    }
+    errorMessage?: string
+}
+
+export type ExecutionTraceFact = {
+    label: string
+    value: string
+}
+
+// The durable, per-step record of what actually happened. Carried by progress
+// items and Capability run events alike, so live progress, sealed provenance,
+// and replayed history all render from one shape.
+export type ExecutionTrace = {
+    traceVersion: 'execution-trace-v1'
+    reasoning?: string
+    handles?: ExecutionTraceHandle[]
+    modelCalls?: ExecutionTraceModelCall[]
+    facts?: ExecutionTraceFact[]
+    inputSummary?: string
+    outputSummary?: string
+    errorMessage?: string
+}
+
 export type OperationProgressItem = {
     id: string
     title: string
     status: OperationProgressItemStatus
     summary?: string
     meta?: string
+    trace?: ExecutionTrace
     children?: OperationProgressItem[]
 }
 
@@ -1012,6 +1087,7 @@ export type CapabilityGenerationTraceStep = {
     inputSummary?: string
     outputSummary?: string
     errorMessage?: string
+    trace?: ExecutionTrace
 }
 
 export type CapabilityGenerationTrace = {
@@ -1756,6 +1832,7 @@ export type CapabilityRunEvent = {
     stepStatus?: CapabilityRunStepStatus
     safeInputSummary?: string
     safeOutputSummary?: string
+    trace?: ExecutionTrace
     outputAssetIds?: string[]
     canvasGeometry?: CanvasGeometryUpdate
     errorCode?: string

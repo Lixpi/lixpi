@@ -63,6 +63,7 @@ import { setAiGeneratedVideoCallbacks, aiGeneratedVideoNodeView, type AiGenerate
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import { routeSegmentEventToCanvas } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedMediaCanvasRouter.ts'
 import { CapabilityChatRunProgressController } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/capabilityChatRunProgress.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 const IS_RECEIVING_TEMP_DEBUG_STATE = false    // For debug purposes only
 
@@ -100,6 +101,7 @@ export type AiChatThreadRenderContext = {
     traceDetailsOptions?: ImageGenerationTraceDetailsOptions
     contextPreview?: AiUserMessageContextPreviewRenderer
     mediaGenerationProgress?: AiMediaGenerationProgressRenderer
+    promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
 }
 type ImageSegmentType = 'image_partial' | 'image_complete' | 'image_error' | 'image_branch_resolved' | 'image_branch_resolution_error' | 'image_generation_trace'
 type VideoSegmentType = 'video_pending' | 'video_generating' | 'video_complete' | 'video_error' | 'video_generation_trace'
@@ -980,7 +982,7 @@ class AiChatThreadPluginClass {
     private onReceivingStateChange: ((threadId: string, receiving: boolean) => void) | null
     private renderContext: AiChatThreadRenderContext
     private unsubscribeFromSegments: (() => void) | null = null
-    private readonly capabilityRunProgress = new CapabilityChatRunProgressController()
+    private readonly capabilityRunProgress: CapabilityChatRunProgressController
 
     constructor({
         sendAiRequestHandler,
@@ -997,6 +999,9 @@ class AiChatThreadPluginClass {
         this.stopAiRequestHandler = stopAiRequestHandler
         this.onReceivingStateChange = onReceivingStateChange ?? null
         this.renderContext = renderContext ?? {}
+        this.capabilityRunProgress = new CapabilityChatRunProgressController(
+            this.renderContext.promptReferencePreviewRenderer,
+        )
     }
 
     // ========== STREAMING MANAGEMENT ==========

@@ -98,3 +98,93 @@ describe('CapabilityRunProgress replay', () => {
         expect(progress.element.textContent).toContain('Could not replay this Tool run.')
     })
 })
+
+// =============================================================================
+// EXECUTION TRACES
+// =============================================================================
+
+describe('capability run progress — execution traces', () => {
+    const trace = {
+        traceVersion: 'execution-trace-v1' as const,
+        modelCalls: [{
+            id: 'render',
+            role: 'media' as const,
+            provider: 'openai',
+            modelId: 'openai:gpt-image-1',
+            params: [{ name: 'size', value: '1024x1536' }],
+        }],
+    }
+
+    it('projects the newest trace onto its step', () => {
+        const state = projectCapabilityRunEvents(run, [
+            event({ sequence: 1, eventType: 'STEP_STARTED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'running' }),
+            event({ sequence: 2, eventType: 'STEP_COMPLETED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'completed', trace }),
+        ])
+
+        expect(state.steps[0]?.trace).toEqual(trace)
+    })
+
+    it('keeps an earlier trace when a later event carries none', () => {
+        const state = projectCapabilityRunEvents(run, [
+            event({ sequence: 1, eventType: 'STEP_STARTED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'running', trace }),
+            event({ sequence: 2, eventType: 'STEP_COMPLETED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'completed' }),
+        ])
+
+        expect(state.steps[0]?.trace).toEqual(trace)
+    })
+
+    it('renders the traced model call inline while its step is still running', () => {
+        const progress = createCapabilityRunProgress()
+        progress.render(run, [
+            event({ sequence: 1, eventType: 'STEP_STARTED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'running', trace }),
+        ])
+
+        expect(progress.element.querySelector('.execution-trace')).not.toBeNull()
+        expect(progress.element.textContent).toContain('gpt-image-1')
+        expect(progress.element.textContent).toContain('1024x1536')
+        progress.destroy()
+    })
+
+    // A clean completed step collapses by default, so its trace is reachable
+    // through the disclosure rather than expanded into the settled timeline.
+    it('keeps a completed step trace behind its disclosure toggle', () => {
+        const progress = createCapabilityRunProgress()
+        progress.render(run, [
+            event({ sequence: 1, eventType: 'STEP_COMPLETED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'completed', trace }),
+        ])
+
+        expect(progress.element.querySelector('.execution-trace')).toBeNull()
+        expect(progress.element.querySelector('.progress-timeline-toggle')).not.toBeNull()
+        progress.destroy()
+    })
+
+    it('gives a step with no trace no disclosure toggle of its own', () => {
+        const progress = createCapabilityRunProgress()
+        progress.render(run, [
+            event({ sequence: 1, eventType: 'STEP_COMPLETED', stepId: 'generate', stepTitle: 'Generate sheet', stepStatus: 'completed' }),
+        ])
+
+        expect(progress.element.querySelector('.execution-trace')).toBeNull()
+        expect(progress.element.querySelector('.progress-timeline-toggle')).toBeNull()
+        progress.destroy()
+    })
+
+    it('renders a failed step trace immediately, without waiting for disclosure', () => {
+        const progress = createCapabilityRunProgress()
+        progress.render(run, [
+            event({
+                sequence: 1,
+                eventType: 'STEP_FAILED',
+                stepId: 'generate',
+                stepTitle: 'Generate sheet',
+                stepStatus: 'failed',
+                errorMessage: 'Provider refused',
+                trace: { ...trace, errorMessage: 'Provider refused' },
+            }),
+        ])
+
+        expect(progress.element.querySelector('.execution-trace')).not.toBeNull()
+        expect(progress.element.textContent).toContain('Provider refused')
+        progress.destroy()
+    })
+})

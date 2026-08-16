@@ -1,6 +1,6 @@
 'use strict'
 
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import type { CapabilityJsonValue, ExecutionTraceHandle } from '@lixpi/constants'
 
 import {
     type CapabilityActionExecutionContext,
@@ -27,8 +27,14 @@ export function registerCharacterCreatorActions(
         validateInput: validateObject,
         validateOutput: validateObject,
         authorize: authorizeCharacterCreator,
-        execute: input => validateCharacterCreatorRequest(input),
+        execute: (input, context) => {
+            const request = validateCharacterCreatorRequest(input)
+            context.trace.addFact('Prompt characters', String(request.prompt.length))
+            context.trace.addFact('Accepted references', String(request.referenceAssetIds.length))
+            return request
+        },
         classifyRetry: () => 'terminal',
+        collectInputHandles: input => characterReferenceHandles(input.referenceAssetIds),
         summarizeInput: input => `Checking a ${stringLength(input.prompt)}-character request with ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
         summarizeOutput: output => `Request valid. ${formatReferenceCount(arrayLength(asRecord(output)?.referenceAssetIds))} accepted for character planning.`,
     })
@@ -40,9 +46,26 @@ export function registerCharacterCreatorActions(
         authorize: authorizeCharacterCreator,
         execute: (input, context) => buildPlanOutput(input, context),
         classifyRetry: () => 'terminal',
+        collectInputHandles: input => characterReferenceHandles(input.referenceAssetIds),
         summarizeInput: input => `Building the character-shot graph from ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
         summarizeOutput: output => `Render plan ready: ${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)} shot(s). The portrait, front full-body, and back full-body anchors run sequentially before optional shots are released; one provider attempt per shot.`,
     })
+}
+
+// Asset titles are resolved by the client from its Asset store, so the durable
+// handle carries the Asset identity and a readable fallback rather than a title
+// that could drift after the trace is sealed.
+function characterReferenceHandles(value: unknown): ExecutionTraceHandle[] {
+    if (!Array.isArray(value)) return []
+    return value.flatMap(assetId => typeof assetId === 'string' && assetId.trim()
+        ? [{
+            kind: 'media' as const,
+            id: assetId,
+            displayName: assetId,
+            mediaKind: 'image' as const,
+            role: 'character-reference',
+        }]
+        : [])
 }
 
 function buildPlanOutput(
@@ -54,6 +77,10 @@ function buildPlanOutput(
         sourceAssetIds: readStringArray(input.referenceAssetIds, 'referenceAssetIds', true),
         userPrompt: readString(input.prompt, 'prompt'),
     })
+    context.trace.addFact('Planned shots', String(plan.panels.length))
+    for (const panel of plan.panels) {
+        context.trace.addFact(panel.panelId, panel.title)
+    }
     return {
         mediaGenerationMode: 'character-creator',
         preserveUserPrompt: true,

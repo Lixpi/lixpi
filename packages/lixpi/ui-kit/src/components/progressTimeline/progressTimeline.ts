@@ -36,7 +36,16 @@ export type ProgressTimelineItem = {
     summary?: string
     showSummaryWhenCollapsed?: boolean
     meta?: string
+    // Opaque payload the host expands into a rich detail block through
+    // `renderItemDetail`. The timeline stays domain-free: it decides when the
+    // block is visible, the host decides what a trace looks like.
+    detail?: unknown
     children?: ProgressTimelineItem[]
+}
+
+export type ProgressTimelineDetailRender = {
+    element: HTMLElement
+    destroy?: () => void
 }
 
 export type ProgressTimelineViewMode = 'all' | 'focused'
@@ -55,6 +64,12 @@ export type ProgressTimelineConfig = {
     defaultViewMode?: ProgressTimelineViewMode
     preserveTopLevelItemsInFocusedView?: boolean
     expandAllItemsInAllView?: boolean
+    renderItemDetail?: (detail: unknown, item: ProgressTimelineItem) => ProgressTimelineDetailRender | null
+    // Stable identity for a detail payload. Rendered detail blocks are rebuilt
+    // only when this changes, so hover cards survive streamed progress updates.
+    // An empty string declares that this payload has nothing to render, and the
+    // item is treated as having no detail at all.
+    getItemDetailKey?: (detail: unknown, item: ProgressTimelineItem) => string
 }
 
 export type ProgressTimelineInstance = {
@@ -102,6 +117,8 @@ class ProgressTimeline implements ProgressTimelineInstance {
     private readonly itemStatusById: Map<string, ProgressTimelineItemStatus>
     private readonly rippleIconsByItemKey = new Map<string, ProgressRippleIconInstance>()
     private readonly renderedRippleIconKeys = new Set<string>()
+    private readonly detailRendersByItemKey = new Map<string, ProgressTimelineDetailRender & { detailKey: string }>()
+    private readonly renderedDetailKeys = new Set<string>()
     private focusedContextItemKeys = new Set<string>()
     private items: ProgressTimelineItem[] = []
     private renderStructureKey = ''
@@ -180,14 +197,61 @@ class ProgressTimeline implements ProgressTimelineInstance {
 
     destroy(): void {
         this.destroyRippleIcons()
+        this.renderedDetailKeys.clear()
+        this.destroyUnrenderedDetails()
         this.element.remove()
+    }
+
+    // An empty detail key means the host has nothing to show for this payload, so
+    // the item must not gain a disclosure toggle that would open onto nothing.
+    private hasRenderableDetail(item: ProgressTimelineItem): boolean {
+        return this.getItemDetailKey(item) !== ''
+    }
+
+    private getItemDetailKey(item: ProgressTimelineItem): string {
+        if (item.detail == null || !this.config.renderItemDetail) return ''
+        if (this.config.getItemDetailKey) return this.config.getItemDetailKey(item.detail, item)
+        try {
+            return JSON.stringify(item.detail) ?? ''
+        } catch {
+            return ''
+        }
+    }
+
+    // Detail blocks own hover cards and popovers, so they are reused across
+    // rebuilds whenever their payload is unchanged and destroyed exactly once
+    // when they fall out of the rendered tree.
+    private resolveItemDetail(itemKey: string, item: ProgressTimelineItem): HTMLElement | null {
+        const detailKey = this.getItemDetailKey(item)
+        if (!detailKey) return null
+        const existing = this.detailRendersByItemKey.get(itemKey)
+        if (existing && existing.detailKey === detailKey) {
+            this.renderedDetailKeys.add(itemKey)
+            return existing.element
+        }
+        existing?.destroy?.()
+        this.detailRendersByItemKey.delete(itemKey)
+        const rendered = this.config.renderItemDetail?.(item.detail, item)
+        if (!rendered) return null
+        rendered.element.classList.add('progress-timeline-detail')
+        this.detailRendersByItemKey.set(itemKey, { ...rendered, detailKey })
+        this.renderedDetailKeys.add(itemKey)
+        return rendered.element
+    }
+
+    private destroyUnrenderedDetails(): void {
+        for (const [itemKey, rendered] of this.detailRendersByItemKey.entries()) {
+            if (this.renderedDetailKeys.has(itemKey)) continue
+            rendered.destroy?.()
+            this.detailRendersByItemKey.delete(itemKey)
+        }
     }
 
     private renderItem(item: ProgressTimelineItem, parentPath: string[] = []): HTMLLIElement {
         const itemPath = [...parentPath, item.id]
         const itemKey = itemPath.join('/')
         const isFocusedContext = this.viewMode === 'focused' && this.focusedContextItemKeys.has(itemKey)
-        const hasDetails = Boolean(item.summary || item.children?.length)
+        const hasDetails = Boolean(item.summary || item.children?.length || this.hasRenderableDetail(item))
         const needsAttention = item.status === 'attention'
             || item.status === 'failed'
             || item.status === 'cancelled'
@@ -281,6 +345,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
                             >${item.summary}</small>
                         `
                         : null}
+                    ${this.resolveItemDetail(itemKey, item)}
                     ${children}
                 </span>
             `
@@ -324,12 +389,14 @@ class ProgressTimeline implements ProgressTimelineInstance {
 
         this.renderStructureKey = nextRenderStructureKey
         this.renderedRippleIconKeys.clear()
+        this.renderedDetailKeys.clear()
         this.element.replaceChildren(...renderState.items.map(item => this.renderItem(item)))
         for (const [itemKey, icon] of this.rippleIconsByItemKey.entries()) {
             if (this.renderedRippleIconKeys.has(itemKey)) continue
             icon.destroy()
             this.rippleIconsByItemKey.delete(itemKey)
         }
+        this.destroyUnrenderedDetails()
     }
 
     private getItemAriaLabel(item: ProgressTimelineItem): string {
@@ -349,6 +416,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
             hasSummary: Boolean(item.summary),
             showSummaryWhenCollapsed: Boolean(item.showSummaryWhenCollapsed),
             hasMeta: Boolean(item.meta),
+            detailKey: this.getItemDetailKey(item),
             children: item.children?.map(projectItem),
         })
         return JSON.stringify({

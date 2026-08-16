@@ -1,4 +1,12 @@
 @import '$src/sass/_transitions.scss';
+@import '$src/sass/_prompt-reference-chip.scss';
+
+// Emitted once, app-wide: this stylesheet is pulled in by the global
+// `sass/styles.scss`. Every chip reads these unless a dark surface above it
+// overrides them with `prompt-reference-chip-on-dark-surface`.
+:root {
+    @include prompt-reference-chip-on-light-surface;
+}
 
 .prompt-reference-picker {
     position: absolute;
@@ -182,7 +190,7 @@
     padding: 0;
     border: 0;
     background: transparent;
-    color: var(--prompt-reference-color, #3d649c);
+    color: var(--prompt-reference-color);
     font-size: inherit;
     line-height: 1;
     vertical-align: baseline;
@@ -196,15 +204,15 @@
 }
 
 .prompt-reference-chip-capability-module {
-    color: var(--prompt-reference-capability-module-color, #a55324);
+    color: var(--prompt-reference-capability-module-color);
 }
 
 .prompt-reference-chip-tool {
-    color: #39766f;
+    color: var(--prompt-reference-tool-color);
 }
 
 .prompt-reference-chip-skill {
-    color: #6d4fb2;
+    color: var(--prompt-reference-skill-color);
 }
 
 .prompt-reference-chip-icon {

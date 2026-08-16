@@ -35,6 +35,10 @@ export type CharacterImageReference = {
 export type CharacterImageGenerationResult = {
     image: string
     providerOperationId?: string
+    // The size the provider was actually called with. The request carries only a
+    // preference; the platform adapter resolves it against the model's supported
+    // sizes, and the trace must report what was sent, not what was asked for.
+    resolvedImageSize?: string
     includedReferenceRoles: string[]
     omittedReferenceRoles: string[]
 }

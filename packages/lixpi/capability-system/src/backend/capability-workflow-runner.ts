@@ -12,6 +12,7 @@ import {
     type CapabilityReasoningModelVariant,
     type CapabilityValueBinding,
     type CapabilityWorkflowStep,
+    type ExecutionTrace,
 } from '@lixpi/constants'
 
 import {
@@ -24,6 +25,7 @@ import { CapabilityError, isCapabilityError } from '../shared/capability-errors.
 import { validateJsonSchemaValue } from '../shared/capability-json-schema.ts'
 import { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
 import { CapabilityDagRunner } from './capability-dag-runner.ts'
+import { createCapabilityTraceRecorder } from './capability-trace-recorder.ts'
 
 export type CapabilityRunPersistence = {
     createRun: (run: CapabilityRun) => Promise<void>
@@ -70,6 +72,7 @@ type StepExecutionResult = {
     canvasGeometry?: CanvasGeometryUpdate
     safeInputSummary: string
     safeOutputSummary?: string
+    trace?: ExecutionTrace
     error?: unknown
 }
 
@@ -244,6 +247,7 @@ export class CapabilityWorkflowRunner {
                             stepStatus: 'completed',
                             safeInputSummary: result.safeInputSummary,
                             safeOutputSummary: result.safeOutputSummary,
+                            ...(result.trace ? { trace: result.trace } : {}),
                             outputAssetIds: result.outputAssetIds,
                             ...(result.canvasGeometry ? { canvasGeometry: result.canvasGeometry } : {}),
                         })
@@ -255,6 +259,7 @@ export class CapabilityWorkflowRunner {
                             stepTitle: result.step.title,
                             stepStatus: 'cancelled',
                             safeInputSummary: result.safeInputSummary,
+                            ...(result.trace ? { trace: result.trace } : {}),
                         })
                         firstFailure ??= result
                     } else {
@@ -266,6 +271,7 @@ export class CapabilityWorkflowRunner {
                             stepTitle: result.step.title,
                             stepStatus: 'failed',
                             safeInputSummary: result.safeInputSummary,
+                            ...(result.trace ? { trace: result.trace } : {}),
                             errorCode: error.code,
                             errorMessage: error.message,
                         })
@@ -348,6 +354,13 @@ export class CapabilityWorkflowRunner {
         const action = this.options.registry.get(args.step.action)
         const input = resolveInputBindings(args.step.input, args.bindingContext)
         const safeInputSummary = action.summarizeInput?.(input) ?? summarizeValue(input)
+        const trace = createCapabilityTraceRecorder()
+        trace.addHandles(...action.collectInputHandles?.(input) ?? [])
+        const settleTrace = (settled: {
+            outputSummary?: string
+            errorMessage?: string
+        } = {}): ExecutionTrace | undefined => trace.snapshot({ inputSummary: safeInputSummary, ...settled })
+        const startedTrace = settleTrace()
         await args.emit({
             eventType: 'STEP_STARTED',
             runStatus: 'running',
@@ -355,6 +368,7 @@ export class CapabilityWorkflowRunner {
             stepTitle: args.step.title,
             stepStatus: 'running',
             safeInputSummary,
+            ...(startedTrace ? { trace: startedTrace } : {}),
         })
 
         const validation = action.validateInput(input)
@@ -364,6 +378,7 @@ export class CapabilityWorkflowRunner {
                 status: 'failed',
                 outputAssetIds: [],
                 safeInputSummary,
+                trace: settleTrace({ errorMessage: `Action ${action.key} input is invalid: ${validation.message}` }),
                 error: new CapabilityError(
                     'CAPABILITY_ACTION_INPUT_INVALID',
                     `Action ${action.key} input is invalid: ${validation.message}`,
@@ -389,6 +404,7 @@ export class CapabilityWorkflowRunner {
                 status: 'failed',
                 outputAssetIds: [],
                 safeInputSummary,
+                trace: settleTrace({ errorMessage: `Action ${action.key} is not authorized for this run` }),
                 error: new CapabilityError(
                     'CAPABILITY_ACTION_NOT_ALLOWED',
                     `Action ${action.key} is not authorized for this run`,
@@ -407,6 +423,7 @@ export class CapabilityWorkflowRunner {
                     plan: args.request.plan,
                     getResource: (capabilityId, resourceId) => args.request.plan.getResource(capabilityId, resourceId),
                     getRunEvents: args.getRunEvents,
+                    trace,
                 })
                 const outputValidation = action.validateOutput(output)
                 if (!outputValidation.valid) {
@@ -423,16 +440,31 @@ export class CapabilityWorkflowRunner {
                     canvasGeometry: action.collectCanvasGeometry?.(output),
                     safeInputSummary,
                     safeOutputSummary: action.summarizeOutput?.(output) ?? summarizeValue(output),
+                    trace: this.settleCompletedStepTrace(action, output, settleTrace),
                 }
             } catch (error) {
                 if (isCancellation(error, args.request.signal)) {
-                    return { step: args.step, status: 'cancelled', outputAssetIds: [], safeInputSummary, error }
+                    return {
+                        step: args.step,
+                        status: 'cancelled',
+                        outputAssetIds: [],
+                        safeInputSummary,
+                        trace: settleTrace(),
+                        error,
+                    }
                 }
                 const mayRetry = attempt < maxAttempts
                     && !isCapabilityError(error)
                     && action.classifyRetry(error) === 'retryable'
                 if (!mayRetry) {
-                    return { step: args.step, status: 'failed', outputAssetIds: [], safeInputSummary, error }
+                    return {
+                        step: args.step,
+                        status: 'failed',
+                        outputAssetIds: [],
+                        safeInputSummary,
+                        trace: settleTrace({ errorMessage: errorMessageOf(error) }),
+                        error,
+                    }
                 }
                 await abortableDelay(args.step.retry?.backoffMs ?? 0, args.request.signal)
             }
@@ -443,7 +475,24 @@ export class CapabilityWorkflowRunner {
             status: 'failed',
             outputAssetIds: [],
             safeInputSummary,
+            trace: settleTrace({ errorMessage: `Action ${action.key} exhausted retries` }),
             error: new CapabilityError('CAPABILITY_ACTION_FAILED', `Action ${action.key} exhausted retries`),
+        }
+    }
+
+    private settleCompletedStepTrace(
+        action: Readonly<CapabilityActionDefinition>,
+        output: unknown,
+        settleTrace: (settled?: { outputSummary?: string; errorMessage?: string }) => ExecutionTrace | undefined,
+    ): ExecutionTrace | undefined {
+        const outputHandles = action.collectOutputHandles?.(output) ?? []
+        const settled = settleTrace({
+            outputSummary: action.summarizeOutput?.(output) ?? summarizeValue(output),
+        })
+        if (!settled || outputHandles.length === 0) return settled
+        return {
+            ...settled,
+            handles: [...settled.handles ?? [], ...outputHandles],
         }
     }
 
@@ -611,6 +660,10 @@ function summarizeValue(value: unknown): string {
     if (typeof value === 'object') return `object(${Object.keys(value).slice(0, 12).join(',')})`
     if (typeof value === 'string') return `string(${value.length})`
     return typeof value
+}
+
+function errorMessageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
 }
 
 function normalizeActionError(error: unknown, actionKey: string): CapabilityError {

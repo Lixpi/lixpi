@@ -184,9 +184,14 @@ function mergeMediaProgressItem(
     ]
     const selected = keepCurrentStatus ? current : incoming
 
+    // A trace only ever accumulates, so the newest one wins regardless of which
+    // status was retained; a status rollback must not roll the trace back with it.
+    const trace = incoming.trace ?? current.trace
+
     return {
         ...selected,
         status: keepCurrentStatus ? current.status : incoming.status,
+        ...(trace ? { trace } : {}),
         ...(children.length > 0 ? { children } : {}),
     }
 }

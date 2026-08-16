@@ -237,6 +237,11 @@
     display: block;
 }
 
+.progress-timeline-detail {
+    display: block;
+    margin-top: 6px;
+}
+
 .progress-timeline-title {
     overflow: hidden;
     color: var(--progress-timeline-primary, currentColor);

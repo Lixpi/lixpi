@@ -722,3 +722,98 @@ describe('media generation request terminal settlement', () => {
         expect(mocks.operationProjection.update).not.toHaveBeenCalled()
     })
 })
+
+// =============================================================================
+// EXECUTION TRACE MERGING ACROSS PROGRESS WRITES
+// =============================================================================
+
+describe('media generation run progress trace merging', () => {
+    const tracedItem = (trace?: Record<string, unknown>) => ({
+        id: 'render:body-front',
+        title: 'Front body',
+        status: 'running' as const,
+        ...(trace ? { trace } : {}),
+    })
+    const renderTrace = {
+        traceVersion: 'execution-trace-v1',
+        modelCalls: [{
+            id: 'render',
+            role: 'media',
+            provider: 'OpenAI',
+            modelId: 'OpenAI:gpt-image-2',
+            params: [{ name: 'size', value: '1024x1536' }],
+        }],
+    }
+
+    const recordProgress = async (
+        currentItems: unknown[],
+        incomingItems: unknown[],
+    ): Promise<MediaGenerationRequest> => {
+        const run = {
+            ...pendingRun(),
+            status: 'running' as const,
+            progress: {
+                phase: 'rendering' as const,
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Rendering.',
+                items: currentItems as never,
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            runs: [run],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        await new MediaGenerationRequestService({ append: vi.fn(async () => undefined) } as never).recordRunProgress({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            progress: {
+                phase: 'rendering',
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Rendering, still.',
+                items: incomingItems as never,
+            },
+        })
+
+        return mocks.mediaRequestModel.transition.mock.calls.at(-1)?.[0].request as MediaGenerationRequest
+    }
+
+    beforeEach(() => {
+        mocks.mediaRequestModel.transition.mockReset()
+    })
+
+    it('keeps a recorded trace when a later progress write carries none', async () => {
+        const next = await recordProgress([tracedItem(renderTrace)], [tracedItem()])
+
+        expect(next.runs[0]?.progress?.items?.[0]?.trace).toEqual(renderTrace)
+    })
+
+    it('replaces an older trace with the newer one', async () => {
+        const newerTrace = { ...renderTrace, facts: [{ label: 'Overall score', value: '0.91' }] }
+
+        const next = await recordProgress([tracedItem(renderTrace)], [tracedItem(newerTrace)])
+
+        expect(next.runs[0]?.progress?.items?.[0]?.trace).toEqual(newerTrace)
+    })
+
+    it('carries a trace forward on child items too', async () => {
+        const parent = (childTrace?: Record<string, unknown>) => ({
+            id: 'render-shots',
+            title: 'Generate shots',
+            status: 'running' as const,
+            children: [tracedItem(childTrace)],
+        })
+
+        const next = await recordProgress([parent(renderTrace)], [parent()])
+
+        expect(next.runs[0]?.progress?.items?.[0]?.children?.[0]?.trace).toEqual(renderTrace)
+    })
+})

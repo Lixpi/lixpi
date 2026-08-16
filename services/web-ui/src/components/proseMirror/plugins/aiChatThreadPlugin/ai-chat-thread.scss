@@ -3,7 +3,9 @@
 @use '@lixpi/ui-kit/styles/info-bubble';
 @import '$src/components/proseMirror/ProseMirrorMixings.scss';
 @import '$src/sass/components/animations';
+@import '$src/sass/_prompt-reference-chip.scss';
 @import '$src/components/contextPreview/context-preview.scss';
+@import '$src/components/executionTrace/execution-trace.scss';
 @import '$src/components/capabilityRun/capability-run.scss';
 
 $aiChatThreadMinHeight: 50px;
@@ -160,8 +162,7 @@ $userMessageTextColor: #fff;
     }
 
     .ai-user-message {
-        --prompt-reference-color: #d7e6ff;
-        --prompt-reference-capability-module-color: #eca983;
+        @include prompt-reference-chip-on-dark-surface;
 
         display: table;
         max-width: 85%;

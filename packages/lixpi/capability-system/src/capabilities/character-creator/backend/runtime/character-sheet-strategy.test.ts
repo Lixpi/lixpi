@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises'
 import sharp from 'sharp'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { OperationProgressItem } from '@lixpi/constants'
+
 import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
 import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
@@ -40,6 +42,9 @@ type CharacterImageGenerationRequest = Parameters<
 const providerResult = (request: CharacterImageGenerationRequest) => ({
     image: panelPng.toString('base64'),
     providerOperationId: request.operationKey,
+    // The platform adapter resolves the requested size against the model's
+    // supported sizes and reports back what it actually sent.
+    resolvedImageSize: '1024x1536',
     includedReferenceRoles: [...new Set(request.references.map(reference => reference.role))],
     omittedReferenceRoles: [],
 })
@@ -1049,5 +1054,116 @@ describe('CharacterSheetStrategy', () => {
         ].map(async url => await readFile(url, 'utf8')))
 
         expect(sources.join('\n')).not.toMatch(/\b(?:OpenAI|Google|Stability)\b/u)
+    })
+})
+
+// =============================================================================
+// PIPELINE EXECUTION TRACES
+// =============================================================================
+
+describe('CharacterSheetStrategy — execution traces', () => {
+    beforeAll(async () => {
+        panelPng = await sharp({
+            create: { width: 256, height: 256, channels: 3, background: '#6688aa' },
+        }).png().toBuffer()
+    })
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mocks.getAuthorizedAsset.mockResolvedValue({
+            assetId: 'asset-1',
+            organizationId: 'org-1',
+            media: {
+                renditions: {
+                    canonical: { status: 'ready', blobHash: 'blob-1', mimeType: 'image/png' },
+                },
+            },
+        })
+        mocks.readBlob.mockResolvedValue(panelPng)
+        mocks.render.mockImplementation(async request => providerResult(request))
+    })
+
+    const runWithProgress = async (): Promise<OperationProgressItem[]> => {
+        const snapshots: OperationProgressItem[][] = []
+        const executionPlan = buildCharacterSheetRenderPlan({
+            capabilityRunId: 'run-1',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'A courier',
+        })
+        await strategy(async () => assessment(false)).execute(context(), executionPlan, {
+            reportProgress: async progress => {
+                if (progress.items) snapshots.push(progress.items)
+            },
+        })
+        return snapshots.at(-1) ?? []
+    }
+
+    const findItem = (items: readonly OperationProgressItem[], id: string): OperationProgressItem | undefined => {
+        for (const item of items) {
+            if (item.id === id) return item
+            const nested = findItem(item.children ?? [], id)
+            if (nested) return nested
+        }
+        return undefined
+    }
+
+    it('traces the source references it resolved for the request', async () => {
+        const items = await runWithProgress()
+
+        const resolve = findItem(items, 'resolve-source-references')
+        expect(resolve?.trace?.handles).toEqual([{
+            kind: 'media',
+            id: 'asset-1',
+            displayName: 'asset-1',
+            mediaKind: 'image',
+            role: 'source-reference',
+        }])
+        expect(resolve?.trace?.facts).toContainEqual({ label: 'Authorized source images', value: '1' })
+    })
+
+    it('traces the image model, its size param, its prompt, and its references for each rendered shot', async () => {
+        const items = await runWithProgress()
+
+        const render = findItem(items, 'render:head-front-neutral')
+        const modelCall = render?.trace?.modelCalls?.[0]
+        expect(modelCall).toMatchObject({
+            role: 'media',
+            provider: 'OpenAI',
+            modelId: 'image-v1',
+        })
+        expect(modelCall?.params).toContainEqual({ name: 'size', value: '1024x1536' })
+        expect(modelCall?.params).toContainEqual({ name: 'attempt', value: '1' })
+        expect(modelCall?.prompt).toBeTruthy()
+        expect(modelCall?.inputHandles?.length).toBeGreaterThan(0)
+        expect(render?.trace?.facts?.some(fact => fact.label === 'References accepted by provider')).toBe(true)
+    })
+
+    it('names generated anchors handed to a later shot as run-generated rather than as Assets', async () => {
+        const items = await runWithProgress()
+
+        const backShot = findItem(items, 'render:body-back')
+        const generated = backShot?.trace?.modelCalls?.[0]?.inputHandles
+            ?.filter(handle => handle.note === 'Generated during this run') ?? []
+
+        expect(generated.map(handle => handle.role)).toContain('canonical-anchor')
+    })
+
+    it('traces the assessor model and its per-dimension scores for each shot', async () => {
+        const items = await runWithProgress()
+
+        const assess = findItem(items, 'assess:head-front-neutral')
+        const modelCall = assess?.trace?.modelCalls?.[0]
+        expect(modelCall).toMatchObject({ role: 'assessor', modelId: 'test/reasoning-v1' })
+        expect(modelCall?.params).toContainEqual({ name: 'target-view', value: '0.95' })
+        expect(assess?.trace?.facts).toContainEqual({ label: 'Verdict', value: 'passed' })
+    })
+
+    it('traces the compositor and what it placed', async () => {
+        const items = await runWithProgress()
+
+        expect(findItem(items, 'assemble-sheet')?.trace?.facts).toContainEqual({
+            label: 'Compositor',
+            value: 'sharp-character-sheet-3840x2560-v3',
+        })
     })
 })

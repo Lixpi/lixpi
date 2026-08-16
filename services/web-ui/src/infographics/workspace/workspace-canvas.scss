@@ -4,7 +4,9 @@
 @import '$src/sass/_transitions.scss';
 @import '$src/sass/_variables.scss';
 @import '$src/sass/components/animations';
+@import '$src/sass/_prompt-reference-chip.scss';
 @import '$src/components/contextPreview/context-preview.scss';
+@import '$src/components/executionTrace/execution-trace.scss';
 
 :root {
     --workspace-canvas-padding-top: 32px;
@@ -779,7 +781,7 @@
 }
 
 .media-history-button-text {
-    --prompt-reference-capability-module-color: #eca983;
+    @include prompt-reference-chip-on-dark-surface;
 
     display: block;
     min-width: 0;
@@ -794,13 +796,8 @@
 }
 
 .media-history-button-text .prompt-reference-chip {
-    color: inherit;
     font-size: inherit;
     line-height: inherit;
-}
-
-.media-history-button-text .prompt-reference-chip-capability-module {
-    color: var(--prompt-reference-capability-module-color);
 }
 
 @keyframes workspace-media-analyzing-pulse {
@@ -2113,7 +2110,7 @@
 }
 
 .workspace-branch-reference-resolution {
-    --prompt-reference-color: #d7e6ff;
+    @include prompt-reference-chip-on-dark-surface;
 
     position: absolute;
     right: 0;
@@ -2170,7 +2167,6 @@
     }
 
     .prompt-reference-chip {
-        color: var(--prompt-reference-color);
         font-size: inherit;
         line-height: inherit;
     }
@@ -2349,6 +2345,11 @@
 }
 
 .workspace-branch-marker-content {
+    // The dark palette is declared once on the marker surface, so chips inherit
+    // it at any depth — the prompt line, the reference row, and every chip in
+    // the pipeline execution trace alike.
+    @include prompt-reference-chip-on-dark-surface;
+
     position: relative;
     z-index: 16;
     display: flex;
@@ -2898,18 +2899,8 @@
 }
 
 .workspace-branch-marker-message-text .prompt-reference-chip {
-    color: var(--prompt-reference-color);
     font-size: inherit;
     line-height: inherit;
-}
-
-.workspace-branch-marker-message-text {
-    --prompt-reference-color: #d7e6ff;
-    --prompt-reference-capability-module-color: #eca983;
-}
-
-.workspace-branch-marker-message-text .prompt-reference-chip-capability-module {
-    color: var(--prompt-reference-capability-module-color);
 }
 
 .workspace-branch-marker-message-icon {

@@ -10,6 +10,7 @@ import {
 import { getGeneratedMediaProgressCollisionRect } from '@lixpi/canvas-engine'
 import {
     createProgressTimeline,
+    type ProgressTimelineDetailRender,
     type ProgressTimelineInstance,
     type ProgressTimelineItem,
 } from '@lixpi/ui-kit/components/progress-timeline'
@@ -218,6 +219,11 @@ type MediaGenerationProgressOptions = {
     defaultExpanded?: boolean
     showSummaryWhenCollapsedItemIds?: readonly string[]
     onLayoutChange?: (change: MediaGenerationProgressLayoutChange) => void
+    // Expands the durable per-step ExecutionTrace into the timeline's detail
+    // block. Hosts own this because trace handles need Asset and Capability
+    // lookups to render their hover cards.
+    renderItemDetail?: (detail: unknown) => ProgressTimelineDetailRender | null
+    getItemDetailKey?: (detail: unknown) => string
 }
 
 const toTimelineItem = (
@@ -228,6 +234,7 @@ const toTimelineItem = (
     ...item,
     status: operationFailed && item.status === 'running' ? 'failed' : item.status,
     ...(showSummaryWhenCollapsedItemIds.has(item.id) ? { showSummaryWhenCollapsed: true } : {}),
+    ...(item.trace ? { detail: item.trace } : {}),
     ...(item.children ? {
         children: item.children.map(child => toTimelineItem(
             child,
@@ -275,6 +282,8 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         defaultExpanded = false,
         showSummaryWhenCollapsedItemIds = [],
         onLayoutChange,
+        renderItemDetail,
+        getItemDetailKey,
     }: MediaGenerationProgressOptions) {
         this.onLayoutChange = onLayoutChange
         this.showSummaryWhenCollapsedItemIds = new Set(showSummaryWhenCollapsedItemIds)
@@ -289,6 +298,8 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
             defaultViewMode: defaultExpanded ? 'all' : 'focused',
             preserveTopLevelItemsInFocusedView: true,
             expandAllItemsInAllView: true,
+            ...(renderItemDetail ? { renderItemDetail: (detail: unknown) => renderItemDetail(detail) } : {}),
+            ...(getItemDetailKey ? { getItemDetailKey: (detail: unknown) => getItemDetailKey(detail) } : {}),
         })
         this.timeline.element.id = timelineId
         this.disclosureIcon = createCollapseExpandIcon({

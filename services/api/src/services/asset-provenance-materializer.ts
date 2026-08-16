@@ -7,6 +7,7 @@ import {
     NATS_SUBJECTS,
     settleMediaGenerationRunProgress,
     type Asset,
+    type ExecutionTraceHandle,
     type MediaBranchLineagePlan,
     type MediaGenerationProgressState,
     type MediaGenerationRunMeta,
@@ -85,23 +86,79 @@ export const getReasoningPreambleSummary = (
 export const includeLineageProgressInAssetProvenance = (
     progress: MediaGenerationProgressState,
     reasoningSummary = '',
+    generationRun?: MediaGenerationRunMeta,
 ): MediaGenerationProgressState => {
+    const referenceHandles: ExecutionTraceHandle[] = (
+        generationRun?.lineageAssignment?.referenceAssetIds ?? []
+    ).map(assetId => ({
+        kind: 'media' as const,
+        id: assetId,
+        displayName: assetId,
+        mediaKind: 'image' as const,
+        role: 'message-reference',
+    }))
     const sharedItems: OperationProgressItem[] = [
         {
             id: 'lineage:understand-request',
             title: 'Understand request',
             status: 'completed',
             ...(reasoningSummary ? { summary: reasoningSummary } : {}),
+            // A content-less trace is never sealed: it would give the reader a
+            // disclosure that opens onto nothing.
+            ...(reasoningSummary || referenceHandles.length || generationRun ? {
+                trace: {
+                    traceVersion: 'execution-trace-v1' as const,
+                    ...(reasoningSummary ? { reasoning: reasoningSummary } : {}),
+                    ...(referenceHandles.length ? { handles: referenceHandles } : {}),
+                    ...(generationRun ? {
+                        modelCalls: [{
+                            id: `reasoning:${generationRun.reasoningRunId}`,
+                            role: 'reasoning' as const,
+                            provider: String(generationRun.reasoningModelId).split(':')[0] ?? '',
+                            modelId: generationRun.reasoningModelId,
+                            purpose: 'Read the request, choose the Capabilities and references, and drive media generation.',
+                            ...(generationRun.lineageAssignment?.promptText
+                                ? { prompt: generationRun.lineageAssignment.promptText }
+                                : {}),
+                            ...(referenceHandles.length ? { inputHandles: referenceHandles } : {}),
+                        }],
+                    } : {}),
+                },
+            } : {}),
         },
         {
             id: 'lineage:resolve-capabilities-and-references',
             title: 'Resolve capabilities, tools, and references',
             status: 'completed',
+            ...(referenceHandles.length ? {
+                trace: {
+                    traceVersion: 'execution-trace-v1' as const,
+                    handles: referenceHandles,
+                },
+            } : {}),
         },
         {
             id: 'lineage:resolve-branch-lineage',
             title: 'Resolve branch lineage and media runs',
             status: 'completed',
+            ...(generationRun ? {
+                trace: {
+                    traceVersion: 'execution-trace-v1' as const,
+                    facts: [
+                        { label: 'Generation request', value: generationRun.generationRequestId },
+                        { label: 'Reasoning run', value: generationRun.reasoningRunId },
+                        ...(generationRun.mediaRunId
+                            ? [{ label: 'Media run', value: generationRun.mediaRunId }]
+                            : []),
+                        ...(generationRun.mediaModelId
+                            ? [{ label: 'Media model', value: generationRun.mediaModelId }]
+                            : []),
+                        ...(generationRun.lineageAssignment?.branchId
+                            ? [{ label: 'Branch', value: generationRun.lineageAssignment.branchId }]
+                            : []),
+                    ],
+                },
+            } : {}),
         },
     ]
     return {
@@ -269,6 +326,7 @@ const materializeAssetProvenanceAttempt = async ({
     const generationProgress = includeLineageProgressInAssetProvenance(
         mediaGenerationProgress,
         getReasoningPreambleSummary(conversationSnapshot?.doc, generationRun),
+        generationRun,
     )
     const projection = conversationSnapshot
         ? buildGeneratedMediaTurnProjectionFromThreadContent(

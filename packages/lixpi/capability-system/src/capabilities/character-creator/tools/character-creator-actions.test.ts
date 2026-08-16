@@ -3,10 +3,13 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 
 import { CapabilityActionRegistry } from '../../../backend/capability-action-registry.ts'
+import { createCapabilityTraceRecorder } from '../../../backend/capability-trace-recorder.ts'
 import { validateJsonSchemaValue } from '../../../shared/capability-json-schema.ts'
 import { registerCharacterCreatorActions } from './character-creator-actions.ts'
 
-function executionContext() {
+// The workflow runner gives every step a live recorder, so a directly invoked
+// action gets a real one here rather than a stub that hides trace mistakes.
+function executionContext(trace = createCapabilityTraceRecorder()) {
     return {
         userId: 'user-1',
         workspaceId: 'workspace-1',
@@ -21,6 +24,7 @@ function executionContext() {
         variant: { axis: 'request' as const, variantKey: 'request' as const },
         getResource: () => undefined,
         getRunEvents: () => [],
+        trace,
     }
 }
 

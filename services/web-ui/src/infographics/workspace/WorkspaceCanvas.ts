@@ -36,6 +36,8 @@ import {
     type AssetMeta,
     type CanvasGeometryUpdate,
     type CapabilityRunEvent,
+    type ExecutionTrace,
+    type ExecutionTraceHandle,
     type MediaBranchCandidateSnapshot,
     type MediaBranchVlmResolution,
     type MediaBranchLineagePlan,
@@ -74,6 +76,7 @@ import {
     createMediaPromptReferencePreview,
     type PromptReferencePreviewRenderer,
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import { createExecutionTraceTimelineDetailAdapter } from '$src/components/executionTrace/index.ts'
 import {
     parseAiModelSelectionAttr,
     serializeAiModelSelectionAttr,
@@ -414,6 +417,7 @@ type BranchMarkerCapabilityProgressStep = {
     title: string
     status: NonNullable<CapabilityRunEvent['stepStatus']>
     summary?: string
+    trace?: ExecutionTrace
 }
 type BranchMarkerCapabilityProgressRun = {
     runId: string
@@ -1482,6 +1486,50 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         refreshContextChipTray()
     }
 
+    // NOT_FOUND from a detach means the Asset record is gone or already tombstoned,
+    // which is a reason to finish removing the node, not to abort the deletion.
+    function isMissingAssetDetachError(error: unknown): boolean {
+        return error instanceof Error && error.message === 'NOT_FOUND'
+    }
+
+    // Generated-media membership is API-owned: a client canvas snapshot is never
+    // persisted over it, so removing such a node locally does nothing and the next
+    // projection puts it straight back. An unfinished run's node therefore has to
+    // be removed the same way the stop control removes it — by cancelling the run,
+    // which durably drops its nodes, edges, and generation-only Asset references.
+    async function cancelOwningMediaGenerationRun(node: CanvasNode): Promise<boolean> {
+        if (node.type !== 'image' && node.type !== 'video') return false
+        const mediaRunId = node.generationProgress?.mediaRunId
+        const generationRequestId = node.generationProgress?.generationRequestId
+            ?? node.generatedBy?.generationRequestId
+        const operation = (currentCanvasState?.nodes ?? []).find((candidate): candidate is OperationStatusCanvasNode => (
+            candidate.type === 'operationStatus'
+            && candidate.operation === 'media-generation'
+            && Boolean(candidate.generationRequestId)
+            && candidate.requestRevision !== undefined
+            && (candidate.outputNodeId === node.nodeId
+                || (Boolean(mediaRunId) && candidate.mediaRunId === mediaRunId)
+                || (Boolean(generationRequestId) && candidate.generationRequestId === generationRequestId))
+        ))
+        // The operation node carries the revision the cancel needs. When the run
+        // died before that node was persisted, the request record still knows its
+        // own revision, so the node is still removable.
+        const cancelRequestId = operation?.generationRequestId ?? generationRequestId
+        if (!cancelRequestId || cancelRequestId.startsWith('canvas-')) return false
+        const requestRevision = operation?.requestRevision
+            ?? (await getMediaGenerationRequest({ generationRequestId: cancelRequestId, workspaceId }))
+                .request?.revision
+        if (requestRevision === undefined) return false
+
+        await cancelMediaGenerationRequest({
+            generationRequestId: cancelRequestId,
+            workspaceId,
+            requestRevision,
+        })
+        if (operation) removeOperationStatusNodeInternal(operation.nodeId, 'media-generation')
+        return true
+    }
+
     async function detachCanvasNode(nodeId: string): Promise<void> {
         if (!currentCanvasState) return
 
@@ -1504,15 +1552,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const nextState = pruneCanvasContextChips(unprunedNextState, removedNodeIds)
         const assetId = 'assetId' in deletedNode ? deletedNode.assetId : undefined
         if (assetId && onAssetDetach) {
-            const committedState = await onAssetDetach({
-                assetId,
-                nodeId,
-                removedNodeIds,
-                canvasState: nextState,
-            })
-            commitTransientCanvasStatePreservingEditors(committedState)
-            removeLocalContextChips(removedNodeIds)
-            return
+            try {
+                const committedState = await onAssetDetach({
+                    assetId,
+                    nodeId,
+                    removedNodeIds,
+                    canvasState: nextState,
+                })
+                commitTransientCanvasStatePreservingEditors(committedState)
+                removeLocalContextChips(removedNodeIds)
+                return
+            } catch (error) {
+                // A node can outlive its Asset: a generation interrupted before the
+                // Asset record was written leaves a placed node pointing at an id
+                // that never materialized, and a previous partial delete leaves one
+                // already in `deleting`. There is no reference left to detach, so the
+                // canvas removal must still go through instead of stranding the node.
+                if (!isMissingAssetDetachError(error)) throw error
+                console.warn('[CANVAS][node-deletion] Detaching a node whose Asset no longer exists:', {
+                    nodeId,
+                    assetId,
+                })
+            }
         }
         commitCanvasState(nextState)
         removeLocalContextChips(removedNodeIds)
@@ -1534,46 +1595,61 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         canvasNodeDeletionInProgress = true
         setSelectedNodes(new Set())
 
+        // Deleting a selection is per-node work. One node that cannot be reviewed,
+        // cancelled, or detached — a run whose Assets never materialized, a review
+        // the API refuses — must never strand the rest of the selection on the
+        // canvas, so every node is attempted independently and failures are
+        // collected rather than thrown.
+        const undeletedNodeIds: string[] = []
         try {
             for (const nodeId of nodeIds) {
                 const node = currentCanvasState?.nodes.find((candidate) => candidate.nodeId === nodeId)
                 if (!node) continue
 
-                if (node.type === 'operationStatus') {
-                    if (node.operation === 'media-generation'
-                        && node.generationRequestId
-                        && node.requestRevision !== undefined) {
-                        await cancelMediaGenerationRequest({
-                            generationRequestId: node.generationRequestId,
-                            workspaceId,
-                            requestRevision: node.requestRevision,
-                        })
-                    }
-                    removeOperationStatusNodeInternal(node.nodeId, node.operation)
-                    continue
-                }
-
-                if (isBranchMarkerNode(node)) {
-                    const outcome = await rejectGeneratedOutput('branch-lineage', node.nodeId)
-                    if (outcome === 'not-found') {
-                        await detachCanvasNode(node.nodeId)
+                try {
+                    if (node.type === 'operationStatus') {
+                        if (node.operation === 'media-generation'
+                            && node.generationRequestId
+                            && node.requestRevision !== undefined) {
+                            await cancelMediaGenerationRequest({
+                                generationRequestId: node.generationRequestId,
+                                workspaceId,
+                                requestRevision: node.requestRevision,
+                            })
+                        }
+                        removeOperationStatusNodeInternal(node.nodeId, node.operation)
                         continue
                     }
-                    if (outcome !== 'applied') break
-                    continue
-                }
 
-                if (isRejectableGeneratedOutputNode(node)) {
-                    const outcome = await rejectGeneratedOutput('output-node', node.nodeId)
-                    if (outcome !== 'applied') break
-                    continue
-                }
+                    // Generated outputs are removed through review so the API owns
+                    // lineage cleanup. When review cannot own it, the node still has
+                    // to leave the canvas, so a plain detach is the fallback.
+                    const reviewScope = isBranchMarkerNode(node)
+                        ? 'branch-lineage' as const
+                        : isRejectableGeneratedOutputNode(node)
+                            ? 'output-node' as const
+                            : null
+                    if (reviewScope && await rejectGeneratedOutput(reviewScope, node.nodeId) === 'applied') continue
 
-                await detachCanvasNode(node.nodeId)
+                    // Review could not own it. If it belongs to an unfinished run,
+                    // cancelling that run is the only removal the API will keep.
+                    if (await cancelOwningMediaGenerationRun(node)) continue
+
+                    await detachCanvasNode(node.nodeId)
+                } catch (error) {
+                    undeletedNodeIds.push(node.nodeId)
+                    console.error('[CANVAS][node-deletion] Skipping a node that could not be deleted:', {
+                        nodeId: node.nodeId,
+                        error,
+                    })
+                }
             }
         } catch (error) {
             console.error('[CANVAS][node-deletion] Unable to delete canvas selection:', error)
         } finally {
+            if (undeletedNodeIds.length > 0) {
+                console.error('[CANVAS][node-deletion] Some nodes in the selection remain:', undeletedNodeIds)
+            }
             canvasNodeDeletionInProgress = false
         }
     }
@@ -2376,6 +2452,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     state,
                     defaultExpanded: true,
                     showSummaryWhenCollapsedItemIds,
+                    ...getExecutionTraceTimelineDetail(),
                 })
                 : undefined,
         })
@@ -4559,6 +4636,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const progress = createMediaGenerationProgress({
             id: instanceKey,
             state: node.generationProgress,
+            ...getExecutionTraceTimelineDetail(),
             onLayoutChange: ({ allowCollisionShrink }: MediaGenerationProgressLayoutChange) => {
                 const currentNode = currentCanvasState?.nodes.find(candidate => candidate.nodeId === node.nodeId)
                 if (!currentNode || (currentNode.type !== 'image' && currentNode.type !== 'video')) return
@@ -6627,6 +6705,16 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             capabilityModuleCache,
             ...options,
         }
+    }
+
+    // Every timeline on the canvas expands its per-step ExecutionTrace the same
+    // way, with Asset and Capability hover cards resolved against this canvas.
+    function getExecutionTraceTimelineDetail() {
+        return createExecutionTraceTimelineDetailAdapter({
+            previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),
+            inlinePopover: true,
+            preferredPlacement: 'top',
+        })
     }
 
     function createCapabilityArtifactAssetReferenceView({
@@ -11006,7 +11094,39 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             })
         })
         if (hasPersistedActiveOutput) return true
-        const everyGeneratedOutputCompleted = generatedOutputNodes.length > 0
+        // A pending output persists with `generationProgress` only — `generatedBy`
+        // lineage is attached when the output materializes. After a reload the
+        // in-memory placement maps are empty, so the marker must recognize such a
+        // run through the persisted lineage assignment or the shared generation
+        // request; otherwise a restored in-flight branch loses its stop control.
+        const hasPersistedActiveRunForMarker = (currentCanvasState?.nodes ?? []).some(candidate => {
+            if (candidate.type !== 'image' && candidate.type !== 'video') return false
+            const progress = candidate.generationProgress
+            if (!progress) return false
+            if (!isPersistedMediaGenerationActive({
+                progressStatus: progress.status,
+                reviewStatus: assetsStore.get(candidate.assetId)?.generatedOutputReview?.status,
+                mediaGenerationPhase: candidate.mediaGenerationPhase,
+            })) return false
+            const assignment = progress.lineageAssignment
+            if (assignment
+                && (assignment.branchOriginNodeId === node.nodeId
+                    || assignment.branchForkNodeId === node.nodeId
+                    || assignment.branchLineNodeId === node.nodeId)) return true
+            return Boolean(
+                node.generationRequestId
+                && !node.generationRequestId.startsWith('canvas-')
+                && progress.generationRequestId === node.generationRequestId,
+            )
+        })
+        if (hasPersistedActiveRunForMarker) return true
+        // Capability artifacts (e.g. a character sheet) complete long before the
+        // media runs they belong to are even persisted under the marker. While
+        // artifacts are the only outputs hanging off the marker, they say nothing
+        // about the group being done, so they must not conclude it — otherwise
+        // the stop control disappears mid-generation.
+        const hasGeneratedMediaOutput = generatedOutputNodes.some(outputNode => outputNode.type !== 'capabilityArtifact')
+        const everyGeneratedOutputCompleted = hasGeneratedMediaOutput
             && generatedOutputNodes.every(outputNode => outputNode.type === 'capabilityArtifact'
                 ? Boolean(assetsStore.get(outputNode.assetId)?.documents.capabilityArtifact)
                 : assetsStore.get(outputNode.assetId)?.media?.renditions.original?.status === 'ready')
@@ -11102,6 +11222,36 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         return preview?.responseText.trim()
             || node.provenance?.reasoningResponseText?.trim()
             || ''
+    }
+
+    // The prompt's own Capability, Tool, Skill, and Asset references are what the
+    // reasoning model was handed, so the trace reuses them verbatim rather than
+    // re-deriving a second, drifting list.
+    function getBranchMarkerPromptTraceHandles(
+        node: BranchMarkerNode,
+        preview: BranchMarkerConversationPreview | null | undefined,
+    ): ExecutionTraceHandle[] {
+        return getBranchMarkerPromptPartsForNode(node, preview).flatMap((part): ExecutionTraceHandle[] => {
+            if (part.type === 'text') return []
+            if (part.type === 'media') {
+                return [{
+                    kind: 'media',
+                    id: part.reference.assetId,
+                    displayName: part.reference.displayName,
+                    mediaKind: part.reference.mediaKind,
+                    ...(part.reference.nodeId ? { nodeId: part.reference.nodeId } : {}),
+                    role: 'message-reference',
+                }]
+            }
+            return [{
+                kind: part.type,
+                id: part.type === 'capability-module'
+                    ? part.reference.moduleId
+                    : part.reference.capabilityId,
+                displayName: part.reference.displayName,
+                role: 'requested-by-user',
+            }]
+        })
     }
 
     function getBranchMarkerPromptPartsForNode(
@@ -15537,6 +15687,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     ?? event.safeOutputSummary
                     ?? event.safeInputSummary
                     ?? existing?.summary,
+                ...(event.trace ?? existing?.trace
+                    ? { trace: event.trace ?? existing?.trace }
+                    : {}),
             })
         }
         runs.set(event.runId, run)
@@ -15608,6 +15761,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     mediaRequestStatuses,
                 ),
                 ...(step.summary ? { summary: step.summary } : {}),
+                ...(step.trace ? { trace: step.trace } : {}),
             })),
         }))
         const statuses = resolveBranchMarkerGlobalProgressStatuses({
@@ -15620,6 +15774,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             capabilityRunStatuses: capabilityRuns.map(run => run.status),
         })
         const reasoningSummary = responseText.replace(/\s+/g, ' ').trim()
+        const promptHandles = getBranchMarkerPromptTraceHandles(node, threadPreview)
+        const reasoningModelDescriptor = getBranchMarkerReasoningModelDescriptors(node)[0]
+        const mediaModelDescriptors = getBranchMarkerMediaModelCircleDescriptors(
+            node,
+            currentCanvasState?.nodes ?? [],
+        )
         const items: OperationProgressItem[] = [
             {
                 id: 'understand-request',
@@ -15629,17 +15789,51 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     summary: reasoningSummary,
                     showSummaryWhenCollapsed: true,
                 } : {}),
+                trace: {
+                    traceVersion: 'execution-trace-v1',
+                    ...(reasoningSummary ? { reasoning: reasoningSummary } : {}),
+                    ...(promptHandles.length ? { handles: promptHandles } : {}),
+                    ...(reasoningModelDescriptor ? {
+                        modelCalls: [{
+                            id: `reasoning:${node.generationRequestId}`,
+                            role: 'reasoning' as const,
+                            provider: reasoningModelDescriptor.modelProvider ?? '',
+                            modelId: reasoningModelDescriptor.modelId,
+                            purpose: 'Read the request, choose the Capabilities and references, and drive media generation.',
+                            inputHandles: promptHandles,
+                        }],
+                    } : {}),
+                },
             },
             {
                 id: 'resolve-capabilities-and-references',
                 title: 'Resolve capabilities, tools, and references',
                 status: statuses.capability,
+                trace: {
+                    traceVersion: 'execution-trace-v1',
+                    ...(promptHandles.length ? { handles: promptHandles } : {}),
+                    facts: [
+                        { label: 'Capability runs', value: String(capabilityRuns.length) },
+                        { label: 'References attached', value: String(promptHandles.filter(handle => handle.kind === 'media').length) },
+                    ],
+                },
                 ...(capabilityItems.length ? { children: capabilityItems } : {}),
             },
             {
                 id: 'resolve-branch-lineage',
                 title: 'Resolve branch lineage and media runs',
                 status: statuses.lineage,
+                trace: {
+                    traceVersion: 'execution-trace-v1',
+                    facts: [
+                        { label: 'Generation request', value: node.generationRequestId },
+                        { label: 'Media runs', value: String(requestNodes.length) },
+                        ...mediaModelDescriptors.map(descriptor => ({
+                            label: `${descriptor.label} model`,
+                            value: descriptor.modelId,
+                        })),
+                    ],
+                },
             },
         ]
         destroyMediaGenerationProgressInstance(instanceKey)
@@ -15647,6 +15841,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             id: instanceKey,
             className: 'workspace-branch-marker-progress',
             showSummaryWhenCollapsedItemIds: ['understand-request'],
+            ...getExecutionTraceTimelineDetail(),
             state: {
                 generationRequestId: node.generationRequestId,
                 status: active || pending ? 'running' : 'completed',
