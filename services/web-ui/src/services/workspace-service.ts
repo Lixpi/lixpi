@@ -250,19 +250,36 @@ class WorkspaceService {
             && currentCanvasStateUpdatedAt > canvasStateUpdatedAt) return
 
         const queue = this.canvasSaveQueues.get(workspaceId)
+        // An authoritative state carries the server's viewport, which lags the
+        // user's live pan/zoom. Dropping a queued viewport save here would lose
+        // that pan/zoom permanently, so re-queue it on top of the adopted state.
+        const pendingViewport = queue?.pendingRequest?.persistViewport
+            ? queue.pendingRequest.canvasState.viewport
+            : null
         if (queue) {
             queue.authoritativeEpoch += 1
             queue.pendingRequest = null
             queue.staleRetryCount = 0
+            if (pendingViewport) {
+                queue.pendingRequest = {
+                    canvasState: { ...canvasState, viewport: pendingViewport },
+                    persistViewport: true,
+                    sequence: ++this.canvasSaveRequestSequence,
+                }
+            }
         }
 
-        workspaceStore.updateCanvasState(canvasState)
+        workspaceStore.updateCanvasState(pendingViewport ? { ...canvasState, viewport: pendingViewport } : canvasState)
         workspaceStore.setDataValues({
             canvasStateUpdatedAt,
             updatedAt: canvasStateUpdatedAt,
         })
         workspaceStore.setMetaValues({ requiresSave: false })
         workspacesStore.updateWorkspace(workspaceId, { updatedAt: canvasStateUpdatedAt })
+
+        if (queue?.pendingRequest && !queue.inFlight) {
+            void this.flushCanvasStateSaveQueue(workspaceId, queue)
+        }
     }
 
     private getCanvasSaveQueue(workspaceId: string): CanvasSaveQueue {

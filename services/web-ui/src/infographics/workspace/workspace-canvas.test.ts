@@ -115,6 +115,10 @@ function loadSidePanelScss(): string {
 	return readSourceFile('../../../packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss', 'packages/lixpi/ui-kit/src/components/sidePanel/side-panel.scss')
 }
 
+function loadMediaModelBadgeScss(): string {
+	return readSourceFile('../../../packages/lixpi/ui-kit/src/components/mediaModelBadge/media-model-badge.scss', 'packages/lixpi/ui-kit/src/components/mediaModelBadge/media-model-badge.scss')
+}
+
 function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
@@ -314,25 +318,15 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptToContain(eventUpdate, 'applyMediaOperationProgressResult(result)', 'progress event recovery')
 	})
 
-	it('rebalances media trees only when the reserved progress collision envelope changes', () => {
-		const collisionReflow = extractFunctionBody(ts, 'scheduleMediaGenerationProgressCollisionReflow')
-		const unchangedReturnIndex = collisionReflow.indexOf('if (!heightsChanged) return')
-		const rebalanceIndex = collisionReflow.indexOf('rebalanceGeneratedMediaTrees(')
+	it('updates the selected sidebar trace directly from progress heartbeats', () => {
+		const progressSync = extractFunctionBody(ts, 'syncLiveMediaGenerationProgressInstancesForState')
 
-		expectExcerptToContain(
-			collisionReflow,
-			'Math.max(mediaGenerationProgressCollisionHeights.get(nodeId) ?? 0, height)',
-			'progress collision reflow',
-		)
-		expectExcerptToContain(collisionReflow, 'if (!heightsChanged) return', 'progress collision reflow')
-		expectExcerptNotToContain(
-			collisionReflow,
-			'if (!heightsChanged && nextHeights.size === 0) return',
-			'progress collision reflow',
-		)
-		expect(unchangedReturnIndex, 'unchanged progress height should stop reflow').toBeGreaterThan(-1)
-		expect(rebalanceIndex, 'tree rebalance should happen after the unchanged-height guard')
-			.toBeGreaterThan(unchangedReturnIndex)
+		expectExcerptToContain(progressSync, 'syncMediaGenerationTraceButtons(canvasState)', 'trace heartbeat sync')
+		expectExcerptToContain(progressSync, 'activeMediaGenerationTraceProgress?.update(activeTraceState)', 'trace heartbeat sync')
+		expectExcerptToContain(progressSync, 'activeMediaGenerationTraceStatusEl.textContent = formatSessionStatus(activeTraceState.status)', 'trace status sync')
+		expectExcerptNotToContain(progressSync, 'commitCanvasState', 'trace heartbeat sync')
+		expectSourceNotToContain(ts, 'scheduleMediaGenerationProgressCollisionReflow')
+		expectSourceNotToContain(ts, 'function createMediaGenerationProgressChrome')
 	})
 
 	it('attaches reference ambiguity to the submitted prompt with canonical Asset references', () => {
@@ -431,7 +425,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	})
 
 	it('keeps generated media model chrome free of badge and button shadows', () => {
-		const badgeBlock = extractBlock(scss, '.media-model-badge')
+		const badgeBlock = extractBlock(loadMediaModelBadgeScss(), '.media-model-badge')
 		const infoButtonBlock = extractBlock(scss, '.media-info-button')
 
 		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(0)
@@ -446,10 +440,11 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 	it('renders generated media icon chrome with bounded screen-space zoom scaling', () => {
 		const ts = loadTs()
+		const badgeScss = loadMediaModelBadgeScss()
 		const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer')
 		const actionsBlock = extractBlock(scss, '.workspace-generated-media-actions')
-		const badgeBlock = extractBlock(scss, '.media-model-badge')
-		const badgeIconBlock = extractBlockContainingSelector(scss, '.media-model-badge-icon,\n.media-model-badge svg')
+		const badgeBlock = extractBlock(badgeScss, '.media-model-badge')
+		const badgeIconBlock = extractBlockContainingSelector(badgeScss, '.media-model-badge-icon,\n.media-model-badge svg')
 		const infoButtonBlock = extractBlock(scss, '.media-info-button')
 		const infoIconBlock = extractBlock(infoButtonBlock, 'svg')
 		const panelBlock = extractBlock(scss, '.canvas-generated-media-info-panel')
@@ -480,7 +475,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
 		expectSourceToContain(ts, 'const modelId = getGeneratedMediaModelId(node)')
 		expectSourceToContain(ts, 'const modelProvider = getGeneratedMediaModelProvider(node, modelId)')
-		expectSourceToContain(ts, 'const modelBadge = createMediaModelBadge({ modelId, modelProvider })')
+		expectSourceToContain(ts, 'const modelBadge = createMediaModelBadge(resolveMediaModelBadgeConfig({ modelId, modelProvider }))')
 		expectSourceNotToContain(ts, 'LIXPI_ZOOM_SCALING_DEBUG')
 		expectSourceNotToContain(ts, 'logGeneratedMediaChromeDebug')
 		expectSourceNotToContain(ts, 'getDebugRect')
@@ -992,7 +987,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(refreshBody, 'queueCanvasMediaAnalysis(node.nodeId, getMediaDescriptorStillAssetId(node))', 'refreshCompletedGeneratedMediaAsset')
 	})
 
-	it('keeps the bounded icon strip to badge + info button only, with the panel decoupled', () => {
+	it('keeps the bounded icon strip to trace + badge + info controls, with the timeline in the sidebar', () => {
 		// The screen-space chrome strip carries ONLY the provider badge + info
 		// button for BOTH images and videos. The expandable info panel is built
 		// separately as constant-size screen-space content, so the two affordances
@@ -1002,10 +997,12 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		expect(chromeStart).toBeGreaterThan(-1)
 		expect(chromeEnd).toBeGreaterThan(chromeStart)
+		expectExcerptToContain(mediaChrome, 'createMediaGenerationTraceControl(node)', 'media chrome strip')
 		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome strip')
 		expectExcerptToContain(mediaChrome, 'applyGeneratedMediaChromeGeometry(', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedMediaInfoPanel', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedOutputHistoryButton(node)', 'media chrome strip')
+		expectExcerptNotToContain(mediaChrome, 'createMediaGenerationProgress({', 'media chrome strip')
 	})
 
 	it('keeps the video controls overlay free of the info button', () => {
@@ -1028,6 +1025,58 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
 	})
 
+	it('opens a node-scoped generation timeline in the existing right sidebar', () => {
+		const settingsSource = loadSettings()
+		const workspaceSvelte = loadWorkspaceCanvasSvelte()
+		const openTrace = extractFunctionBody(ts, 'openMediaGenerationTrace')
+		const renderPanel = extractFunctionBody(ts, 'renderActiveAiChatPanel')
+		const resolveTraceState = extractFunctionBody(ts, 'getMediaGenerationTraceState')
+		const createTraceControl = extractFunctionBody(ts, 'createMediaGenerationTraceControl')
+		const traceButtonBlock = extractBlock(loadScss(), '.media-generation-trace-button')
+		const traceRippleBlock = extractBlock(loadScss(), '.media-generation-trace-button-ripple')
+		const tracePanelBlock = extractBlock(loadScss(), '.workspace-media-generation-trace-panel')
+		const traceBodyBlock = extractBlock(loadScss(), '.workspace-media-generation-trace-panel-body')
+		const traceProgressBlock = extractBlock(loadScss(), '.workspace-media-generation-sidebar-progress')
+		const sidebarBlock = extractBlock(loadScss(), '.workspace-ai-chat-floating-panel')
+		const sidebarProseMirrorBlock = extractBlock(
+			loadScss(),
+			'.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror'
+		)
+
+		expectExcerptToContain(openTrace, 'activeMediaGenerationTraceNodeId = nodeId', 'open generation trace')
+		expectExcerptToContain(openTrace, "topLevelMode: 'aiThreads'", 'open generation trace')
+		expectExcerptToContain(openTrace, 'renderActiveAiChatPanel()', 'open generation trace')
+		expectExcerptToContain(resolveTraceState, 'if (node.generationProgress) return node.generationProgress', 'live generation trace state')
+		expectExcerptToContain(resolveTraceState, 'getGeneratedMediaProgressFromThreadContent(', 'sealed generation trace state')
+		expectExcerptToContain(createTraceControl, 'const traceState = getMediaGenerationTraceState(node)', 'persistent generation trace control')
+		expectExcerptToContain(createTraceControl, 'status: traceState.status', 'persistent generation trace control')
+		expectExcerptToContain(renderPanel, 'workspace-media-generation-trace-panel', 'right sidebar generation trace')
+		expectExcerptToContain(renderPanel, 'state: mediaGenerationTraceState', 'right sidebar generation trace')
+		expectExcerptToContain(renderPanel, 'defaultExpanded: true', 'right sidebar generation trace')
+		expectExcerptToContain(renderPanel, '...getExecutionTraceTimelineDetail()', 'right sidebar generation trace')
+		expectExcerptToContain(traceButtonBlock, 'position: relative', 'generation trace button geometry')
+		expectExcerptToContain(traceButtonBlock, 'overflow: visible', 'generation trace button geometry')
+		expectExcerptToContain(traceRippleBlock, 'width: 20px', 'generation trace ripple geometry')
+		expectExcerptToContain(traceRippleBlock, 'height: 20px', 'generation trace ripple geometry')
+		expectExcerptToContain(tracePanelBlock, 'width: 100%', 'tab-aligned generation trace panel')
+		expectExcerptToContain(tracePanelBlock, 'box-sizing: border-box', 'tab-aligned generation trace panel')
+		expectExcerptToContain(tracePanelBlock, 'border-radius: 12px', 'generation trace outer surface')
+		expectExcerptToContain(tracePanelBlock, 'background: #fff', 'generation trace outer surface')
+		expectExcerptToContain(traceBodyBlock, 'padding: 0 8px 12px', 'compact generation trace padding')
+		expectExcerptToContain(traceBodyBlock, 'overflow-x: hidden', 'generation trace horizontal overflow')
+		expectExcerptToContain(traceBodyBlock, 'overflow-y: auto', 'generation trace vertical overflow')
+		expectSourceToContain(settingsSource, 'contentFontSize: 14')
+		expectSourceToContain(workspaceSvelte, '--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px')
+		expectExcerptNotToContain(sidebarBlock, '--workspace-right-sidebar-content-font-size:', 'sidebar content typography')
+		expectExcerptToContain(sidebarProseMirrorBlock, 'font-size: var(--workspace-right-sidebar-content-font-size)', 'sidebar message typography')
+		expectExcerptToContain(traceProgressBlock, '--progress-timeline-title-size: var(--workspace-right-sidebar-content-font-size)', 'timeline title typography')
+		expectExcerptToContain(traceProgressBlock, '--progress-timeline-summary-size: var(--workspace-right-sidebar-content-font-size)', 'timeline summary typography')
+		expectExcerptToContain(traceProgressBlock, 'font-size: var(--workspace-right-sidebar-content-font-size)', 'timeline trace typography')
+		expectSourceNotToContain(ts, "{ label: 'Generation request', value: node.generationRequestId }")
+		expectSourceNotToContain(loadScss(), '.media-generation-trace-button.is-static .media-generation-trace-button-ripple .marker-animated-layer')
+		expectSourceNotToContain(loadScss(), '.workspace-generated-media-actions .media-generation-trace-button > span')
+	})
+
 	it('does not remount generated media chrome when content identity is unchanged', () => {
 		const syncChrome = extractFunctionBody(ts, 'syncGeneratedMediaChrome')
 		const chromeKey = extractFunctionBody(ts, 'getGeneratedMediaChromeSyncKey')
@@ -1040,7 +1089,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\\u0000reset-generated-media-chrome'")
 		expectSourceToContain(ts, 'generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY')
 		expectExcerptToContain(syncChrome, 'const nextChromeSyncKey = getGeneratedMediaChromeSyncKey({', 'generated media chrome sync')
-		expectExcerptToContain(syncChrome, 'syncLiveMediaGenerationProgressInstances(progressNodes)', 'generated media chrome sync')
+		expectExcerptToContain(syncChrome, 'syncMediaGenerationTraceButtons(canvasState)', 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, 'updateGeneratedMediaChromeLayout()', 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-skip-same-key'", 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-rebuild'", 'generated media chrome sync')
@@ -2000,6 +2049,11 @@ describe('Right side panel — TS infrastructure', () => {
 	const ts = loadTs()
 
 	it('delegates right side panel state to SidePanel with content-agnostic settings', () => {
+		const settingsSource = loadSettings()
+		const rightSidePanelStart = settingsSource.indexOf('rightSidePanel: {')
+		const rightSidePanelEnd = settingsSource.indexOf('navigationSidePanel: {', rightSidePanelStart)
+		const rightSidePanelSettings = settingsSource.slice(rightSidePanelStart, rightSidePanelEnd)
+
 		expectSourceToContain(ts, 'const RIGHT_SIDE_PANEL_SETTINGS = settings.rightSidePanel')
 		expectSourceToContain(ts, 'function ensureActiveRightSidePanel(): SidePanelInstance')
 		expectSourceToContain(ts, 'const { defaultDimensions, dimensions, resizeHandle, toggle, animation, overlay, drag } = RIGHT_SIDE_PANEL_SETTINGS')
@@ -2014,6 +2068,11 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'settings.aiChatThread.rightSidePanel')
 		expectSourceNotToContain(ts, 'AI_CHAT_PANEL_MIN_WIDTH')
 		expectSourceNotToContain(ts, 'workspace-ai-chat-sidebar')
+		expect(rightSidePanelStart).toBeGreaterThan(-1)
+		expect(rightSidePanelEnd).toBeGreaterThan(rightSidePanelStart)
+		expectExcerptToContain(rightSidePanelSettings, 'width: 494', 'right side panel default width')
+		expectExcerptToContain(rightSidePanelSettings, 'contentFontSize: 14', 'right side panel content font size')
+		expectExcerptToContain(rightSidePanelSettings, 'enabled: false', 'right side panel overlay')
 	})
 
 	it('updateSelectionDrivenUi never references a detached floating input under any node', () => {
@@ -2381,6 +2440,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(svelte, 'const rightSidePanelSettings = settings.rightSidePanel')
 		expectSourceToContain(svelte, '--workspace-right-side-panel-width')
 		expectSourceToContain(svelte, '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)')
+		expectSourceToContain(svelte, '--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px')
 		expectSourceToContain(svelte, 'class:workspace-canvas-right-side-panel-open')
 		// The glass backdrop is owned by the SidePanel component.
 		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')

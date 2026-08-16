@@ -16,6 +16,7 @@ Use public package imports:
 
 ```typescript
 import { createProgressTimeline } from '@lixpi/ui-kit/components/progress-timeline'
+import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { createSidePanel } from '@lixpi/ui-kit/components/side-panel'
 import { appendSvgPathIcon, xIcon } from '@lixpi/ui-kit/svg'
 ```
@@ -35,6 +36,7 @@ The shared animated collapse/expand icon describes the available action: collaps
 - Dropdown
 - Help tooltip
 - Info bubble
+- Media model badge
 - Progress timeline
 - Side panel
 - Sliding switch

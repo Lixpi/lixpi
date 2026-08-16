@@ -500,7 +500,7 @@ describe('media generation request lineage binding', () => {
 })
 
 describe('media generation request terminal settlement', () => {
-    it('publishes live progress without rewriting the Workspace canvas projection', async () => {
+    it('keeps heartbeat progress in JetStream without writing DynamoDB or Workspace geometry', async () => {
         const run = {
             ...pendingRun(),
             status: 'running' as const,
@@ -516,7 +516,10 @@ describe('media generation request terminal settlement', () => {
             status: 'running',
             runs: [run],
         }
-        const eventLog = { append: vi.fn(async () => undefined) }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+        }
         mocks.mediaRequestModel.get.mockResolvedValue(request)
         mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
 
@@ -532,10 +535,11 @@ describe('media generation request terminal settlement', () => {
             },
         })
 
-        expect(result.revision).toBe(2)
-        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledOnce()
+        expect(result.revision).toBe(1)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
         expect(mocks.operationProjection.update).not.toHaveBeenCalled()
         expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            expectedLastSubjectSequence: 0,
             event: expect.objectContaining({
                 status: 'MEDIA_GENERATION_PROGRESS',
                 payload: expect.objectContaining({
@@ -543,6 +547,79 @@ describe('media generation request terminal settlement', () => {
                 }),
             }),
         }))
+    })
+
+    it('flushes the accumulated JetStream trace to DynamoDB once when the run finishes', async () => {
+        const run = { ...pendingRun(), status: 'running' as const }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            runs: [run],
+        }
+        const streamedProgress = {
+            phase: 'assessing' as const,
+            completedSteps: 2,
+            totalSteps: 3,
+            message: 'Assessment passed.',
+            items: [{
+                id: 'assess',
+                title: 'Assess result',
+                status: 'completed' as const,
+                trace: {
+                    traceVersion: 'execution-trace-v1' as const,
+                    facts: [{ label: 'Overall score', value: '0.91' }],
+                },
+            }],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => ({
+                userId: request.userId,
+                workspaceId: request.workspaceId,
+                event: {
+                    eventId: 'progress-1',
+                    generationRequestId: request.generationRequestId,
+                    sequence: request.revision,
+                    status: 'MEDIA_GENERATION_PROGRESS',
+                    requestRevision: request.revision,
+                    payload: { generationRun: 0, progress: streamedProgress },
+                    createdAt: 2,
+                },
+                streamSequence: 12,
+            })),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        await new MediaGenerationRequestService(eventLog as never).recordRunStatus({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'completed',
+        })
+
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledOnce()
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({
+                status: 'completed',
+                runs: [expect.objectContaining({
+                    status: 'completed',
+                    progress: expect.objectContaining({
+                        items: [expect.objectContaining({
+                            trace: streamedProgress.items[0].trace,
+                        })],
+                    }),
+                })],
+            }),
+            expectedRevision: 1,
+        })
+        expect(eventLog.purgeRequest).toHaveBeenCalledWith({
+            workspaceId: request.workspaceId,
+            generationRequestId: request.generationRequestId,
+        })
     })
 
     it('ignores late progress and status writes after durable cancellation', async () => {
@@ -593,6 +670,7 @@ describe('media generation request terminal settlement', () => {
         }
         const eventLog = {
             append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
             purgeRequest: vi.fn(async () => undefined),
         }
         mocks.mediaRequestModel.getAuthorized.mockResolvedValue(activeRequest)
@@ -656,7 +734,11 @@ describe('media generation request terminal settlement', () => {
             ...deferredRequest(),
             runs: [pendingRun()],
         }
-        const eventLog = { append: vi.fn(async () => undefined) }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+            purgeRequest: vi.fn(async () => undefined),
+        }
         mocks.mediaRequestModel.get.mockResolvedValue(request)
         mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
 
@@ -768,7 +850,10 @@ describe('media generation run progress trace merging', () => {
         mocks.mediaRequestModel.get.mockResolvedValue(request)
         mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
 
-        await new MediaGenerationRequestService({ append: vi.fn(async () => undefined) } as never).recordRunProgress({
+        return await new MediaGenerationRequestService({
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+        } as never).recordRunProgress({
             generationRequestId: request.generationRequestId,
             workspaceId: request.workspaceId,
             mediaModelId: run.modelId,
@@ -782,8 +867,6 @@ describe('media generation run progress trace merging', () => {
                 items: incomingItems as never,
             },
         })
-
-        return mocks.mediaRequestModel.transition.mock.calls.at(-1)?.[0].request as MediaGenerationRequest
     }
 
     beforeEach(() => {

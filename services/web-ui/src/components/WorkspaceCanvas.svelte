@@ -106,6 +106,9 @@
         `--workspace-right-side-panel-width: min(${rightSidePanelSettings.defaultDimensions.width}px, calc(100vw - ${rightSidePanelSettings.dimensions.maxPaneMargin}px))`,
         '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)',
         `--workspace-right-side-panel-content-inset: ${rightSidePanelSettings.layout.contentInset}px`,
+        `--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px`,
+        `--workspace-right-sidebar-tag-pill-font-size: ${rightSidePanelSettings.typography.tagPillFontSize}px`,
+        `--workspace-right-sidebar-tag-pill-font-weight: ${rightSidePanelSettings.typography.tagPillFontWeight}`,
         `--side-panel-backdrop-fill: ${rightSidePanelSettings.styles.backdropFill}`,
         `--side-panel-backdrop-fill-opaque: ${rightSidePanelSettings.styles.backdropFillOpaque}`,
         `--side-panel-toggle-color: ${rightSidePanelSettings.styles.toggleColor}`,
@@ -200,8 +203,8 @@
 
     function getCanvasStateViewport(newCanvasState: CanvasState, options: PersistCanvasStateOptions): Viewport {
         return cloneViewport(options.viewportOverride)
-            ?? cloneViewport(renderer?.getViewport?.())
             ?? cloneViewport(newCanvasState.viewport)
+            ?? cloneViewport(renderer?.getViewport?.())
             ?? cloneViewport(viewport)
             ?? { x: 0, y: 0, zoom: 1 }
     }
@@ -250,6 +253,57 @@
         })
         lastPersistedViewport = viewportToPersist
         return true
+    }
+
+    function getStashedViewportStorageKey(targetWorkspaceId: string): string {
+        return `lixpi.pendingViewport.${targetWorkspaceId}`
+    }
+
+    function stashPendingViewportForUnload(): void {
+        if (!workspaceId || !pendingViewportSave) return
+        if (viewportsMatch(pendingViewportSave, lastPersistedViewport)) return
+        // A hard reload can kill the page before the debounced network save
+        // lands, so stash the viewport locally as well as flushing it.
+        try {
+            localStorage.setItem(
+                getStashedViewportStorageKey(workspaceId),
+                JSON.stringify({ viewport: pendingViewportSave, savedAt: Date.now() }),
+            )
+        } catch {
+            // Storage unavailable; the network flush below is still attempted.
+        }
+        persistViewportState(pendingViewportSave)
+    }
+
+    function restoreStashedViewport(targetWorkspaceId: string): void {
+        const storageKey = getStashedViewportStorageKey(targetWorkspaceId)
+        let raw: string | null = null
+        try {
+            raw = localStorage.getItem(storageKey)
+            if (raw) localStorage.removeItem(storageKey)
+        } catch {
+            return
+        }
+        if (!raw) return
+
+        let parsed: { viewport?: unknown; savedAt?: unknown }
+        try {
+            parsed = JSON.parse(raw)
+        } catch {
+            return
+        }
+        const stashedViewport = cloneViewport(parsed.viewport as Viewport | null | undefined)
+        const savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : null
+        if (!stashedViewport || savedAt === null) return
+
+        // If the unload-time flush did reach the server, the server save is
+        // newer than the stash and the stash is obsolete.
+        const canvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+        if (typeof canvasStateUpdatedAt === 'number' && canvasStateUpdatedAt > savedAt) return
+
+        viewport = stashedViewport
+        renderer?.setViewport(stashedViewport)
+        persistViewportState(stashedViewport)
     }
 
     function handleViewportChange(newViewport: Viewport) {
@@ -530,6 +584,8 @@
     onMount(() => {
         if (!paneEl || !viewportEl) return
 
+        window.addEventListener('pagehide', stashPendingViewportForUnload)
+
         const loadedViewport = cloneViewport(canvasState?.viewport)
         if (loadedViewport) {
             viewport = loadedViewport
@@ -641,7 +697,16 @@
         }
     })
 
+    let stashRestoredWorkspaceId: string | null = null
+    $effect(() => {
+        if (!workspaceId || loadedWorkspaceId !== workspaceId || !canvasState) return
+        if (stashRestoredWorkspaceId === workspaceId) return
+        stashRestoredWorkspaceId = workspaceId
+        restoreStashedViewport(workspaceId)
+    })
+
     onDestroy(() => {
+        window.removeEventListener('pagehide', stashPendingViewportForUnload)
         if (saveDebounceTimer) {
             clearTimeout(saveDebounceTimer)
             saveDebounceTimer = null

@@ -230,19 +230,28 @@ const toTimelineItem = (
     item: OperationProgressItem,
     operationFailed: boolean,
     showSummaryWhenCollapsedItemIds: ReadonlySet<string>,
-): ProgressTimelineItem => ({
-    ...item,
-    status: operationFailed && item.status === 'running' ? 'failed' : item.status,
-    ...(showSummaryWhenCollapsedItemIds.has(item.id) ? { showSummaryWhenCollapsed: true } : {}),
-    ...(item.trace ? { detail: item.trace } : {}),
-    ...(item.children ? {
-        children: item.children.map(child => toTimelineItem(
-            child,
-            operationFailed,
-            showSummaryWhenCollapsedItemIds,
-        )),
-    } : {}),
-})
+): ProgressTimelineItem => {
+    const traceDuplicatesSummary = Boolean(
+        item.summary?.trim()
+        && item.trace?.reasoning?.trim() === item.summary.trim(),
+    )
+    return {
+        ...item,
+        status: operationFailed && item.status === 'running' ? 'failed' : item.status,
+        ...(showSummaryWhenCollapsedItemIds.has(item.id) || traceDuplicatesSummary
+            ? { showSummaryWhenCollapsed: true }
+            : {}),
+        ...(traceDuplicatesSummary ? { hideSummaryWhenExpanded: true } : {}),
+        ...(item.trace ? { detail: item.trace } : {}),
+        ...(item.children ? {
+            children: item.children.map(child => toTimelineItem(
+                child,
+                operationFailed,
+                showSummaryWhenCollapsedItemIds,
+            )),
+        } : {}),
+    }
+}
 
 const collectStatuses = (item: ProgressTimelineItem): ProgressTimelineItem['status'][] => [
     item.status,

@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid'
 
 import {
     createDefaultMediaGenerationRunProgress,
+    mergeMediaGenerationRunProgress,
     settleMediaGenerationRunProgress,
     type AiModelId,
     type AssetRequesterContext,
@@ -17,7 +18,6 @@ import {
     type MediaGenerationProblem,
     type MediaBranchLineagePlan,
     type MediaGenerationRunProgress,
-    type OperationProgressItem,
 } from '@lixpi/constants'
 import {
     getMediaGenerationOperationNodeId,
@@ -138,6 +138,19 @@ const eventFor = (request: MediaGenerationRequest, status: MediaGenerationReques
     createdAt: request.updatedAt,
 })
 
+const isMediaGenerationRequestTerminal = (status: MediaGenerationRequestStatus): boolean => (
+    status === 'completed'
+    || status === 'completed-with-errors'
+    || status === 'failed'
+    || status === 'cancelled'
+)
+
+const isJetStreamExpectationFailure = (error: unknown): boolean => {
+    const candidate = error as { code?: unknown; message?: unknown }
+    return candidate.code === 10071
+        || /expected.*sequence|wrong last sequence|last subject sequence/iu.test(String(candidate.message ?? ''))
+}
+
 const getReferenceResolutionAction = (
     unresolvedBindings: readonly UnresolvedReferenceBinding[],
 ): { bindingId: string; candidateAssetIds: string[] } | undefined => {
@@ -147,70 +160,6 @@ const getReferenceResolutionAction = (
         bindingId: unresolved.bindingId,
         candidateAssetIds: [...new Set(unresolved.candidates.map(candidate => candidate.assetId))],
     }
-}
-
-const mediaProgressPhaseOrder: MediaGenerationRunProgress['phase'][] = [
-    'preparing',
-    'rendering',
-    'assessing',
-    'composing',
-]
-
-const mediaProgressItemStatusRank: Record<OperationProgressItem['status'], number> = {
-    pending: 0,
-    running: 1,
-    completed: 2,
-    failed: 2,
-    cancelled: 2,
-    skipped: 2,
-}
-
-function mergeMediaProgressItem(
-    current: OperationProgressItem,
-    incoming: OperationProgressItem,
-): OperationProgressItem {
-    const currentRank = mediaProgressItemStatusRank[current.status]
-    const incomingRank = mediaProgressItemStatusRank[incoming.status]
-    const keepCurrentStatus = currentRank > incomingRank
-        || (currentRank === incomingRank && currentRank === 2 && current.status !== incoming.status)
-    const currentChildrenById = new Map((current.children ?? []).map(child => [child.id, child]))
-    const incomingChildIds = new Set((incoming.children ?? []).map(child => child.id))
-    const children = [
-        ...(incoming.children ?? []).map(child => {
-            const currentChild = currentChildrenById.get(child.id)
-            return currentChild ? mergeMediaProgressItem(currentChild, child) : child
-        }),
-        ...(current.children ?? []).filter(child => !incomingChildIds.has(child.id)),
-    ]
-    const selected = keepCurrentStatus ? current : incoming
-
-    // A trace only ever accumulates, so the newest one wins regardless of which
-    // status was retained; a status rollback must not roll the trace back with it.
-    const trace = incoming.trace ?? current.trace
-
-    return {
-        ...selected,
-        status: keepCurrentStatus ? current.status : incoming.status,
-        ...(trace ? { trace } : {}),
-        ...(children.length > 0 ? { children } : {}),
-    }
-}
-
-function mergeMediaProgressItems(
-    current: OperationProgressItem[] | undefined,
-    incoming: OperationProgressItem[] | undefined,
-): OperationProgressItem[] | undefined {
-    if (!current?.length) return incoming
-    if (!incoming?.length) return current
-    const currentById = new Map(current.map(item => [item.id, item]))
-    const incomingIds = new Set(incoming.map(item => item.id))
-    return [
-        ...incoming.map(item => {
-            const currentItem = currentById.get(item.id)
-            return currentItem ? mergeMediaProgressItem(currentItem, item) : item
-        }),
-        ...current.filter(item => !incomingIds.has(item.id)),
-    ]
 }
 
 function deriveRequestStatus(runs: readonly MediaGenerationRun[]): MediaGenerationRequestStatus {
@@ -223,24 +172,6 @@ function deriveRequestStatus(runs: readonly MediaGenerationRun[]): MediaGenerati
             ? 'completed'
             : completedCount > 0 ? 'completed-with-errors' : 'failed'
         : hasActionRequired ? 'action-required' : 'running'
-}
-
-function mergeMediaGenerationRunProgress(
-    current: MediaGenerationRunProgress | undefined,
-    incoming: MediaGenerationRunProgress,
-): MediaGenerationRunProgress {
-    if (!current) return incoming
-    const currentPhaseIndex = mediaProgressPhaseOrder.indexOf(current.phase)
-    const incomingPhaseIndex = mediaProgressPhaseOrder.indexOf(incoming.phase)
-    if (incomingPhaseIndex < currentPhaseIndex) return current
-    if (incomingPhaseIndex === currentPhaseIndex && incoming.completedSteps < current.completedSteps) return current
-    if (incomingPhaseIndex > currentPhaseIndex || incoming.completedSteps > current.completedSteps) return incoming
-
-    const items = mergeMediaProgressItems(current.items, incoming.items)
-    return {
-        ...incoming,
-        ...(items ? { items } : {}),
-    }
 }
 
 const createDurableRunsFromLineagePlan = (lineagePlan: MediaBranchLineagePlan): MediaGenerationRun[] => {
@@ -280,6 +211,24 @@ export class MediaGenerationRequestService {
 
     private events(): MediaGenerationRequestEventLog {
         return this.eventLog ?? MediaGenerationRequestEventLog.fromSingleton()
+    }
+
+    private async getStreamedRunProgress(
+        request: Pick<MediaGenerationRequest, 'workspaceId' | 'generationRequestId'>,
+        generationRun: number,
+    ): Promise<{ progress?: MediaGenerationRunProgress; streamSequence: number }> {
+        const envelope = await this.events().getLatestRunProgress({
+            workspaceId: request.workspaceId,
+            generationRequestId: request.generationRequestId,
+            generationRun,
+        })
+        const progress = envelope?.event.payload.progress
+        return {
+            ...(progress && typeof progress === 'object'
+                ? { progress: progress as MediaGenerationRunProgress }
+                : {}),
+            streamSequence: envelope?.streamSequence ?? 0,
+        }
     }
 
     async create({
@@ -626,13 +575,28 @@ export class MediaGenerationRequestService {
         const cancelledRuns = authorized.runs.filter(run => (
             !['completed', 'failed', 'cancelled'].includes(run.status)
         ))
+        const streamedProgressByRun = new Map(await Promise.all(cancelledRuns.map(async run => {
+            const streamed = await this.getStreamedRunProgress(authorized, run.generationRun)
+            return [run.generationRun, streamed.progress] as const
+        })))
         const now = Date.now()
         const next: MediaGenerationRequest = {
             ...authorized,
             status: 'cancelled',
             runs: authorized.runs.map(run => ['completed', 'failed', 'cancelled'].includes(run.status)
                 ? run
-                : { ...run, status: 'cancelled' }),
+                : {
+                    ...run,
+                    status: 'cancelled',
+                    completedAt: now,
+                    progress: settleMediaGenerationRunProgress(
+                        streamedProgressByRun.get(run.generationRun) ?? run.progress,
+                        'cancelled',
+                        streamedProgressByRun.get(run.generationRun)?.message
+                            ?? run.progress?.message
+                            ?? 'Media generation cancelled.',
+                    ),
+                }),
             revision: authorized.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
@@ -883,12 +847,16 @@ export class MediaGenerationRequestService {
                     supportCode: uuid(),
                     action: 'none',
                 }
+                const streamed = await this.getStreamedRunProgress(request, generationRun)
+                const accumulatedProgress = streamed.progress
+                    ? mergeMediaGenerationRunProgress(targetRun.progress, streamed.progress)
+                    : targetRun.progress
                 const runs = request.runs.map(run => run.generationRun === generationRun ? {
                     ...run,
                     status: 'failed' as const,
                     problem,
                     completedAt: now,
-                    progress: settleMediaGenerationRunProgress(run.progress, 'failed', problemDetail),
+                    progress: settleMediaGenerationRunProgress(accumulatedProgress, 'failed', problemDetail),
                 } : run)
                 const status = deriveRequestStatus(runs)
                 const next: MediaGenerationRequest = {
@@ -949,12 +917,18 @@ export class MediaGenerationRequestService {
                 return request
             }
             if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
+            const streamed = status === 'running'
+                ? { progress: undefined, streamSequence: 0 }
+                : await this.getStreamedRunProgress(request, run.generationRun)
             const now = Date.now()
             const runs = request.runs.map(candidate => {
                 if (candidate.generationRun !== run.generationRun) return candidate
+                const accumulatedProgress = streamed.progress
+                    ? mergeMediaGenerationRunProgress(candidate.progress, streamed.progress)
+                    : candidate.progress
                 const statusMessage = status === 'completed'
-                    ? candidate.progress?.message ?? 'Media generation completed.'
-                    : problem?.detail ?? candidate.progress?.message ?? 'Media generation failed.'
+                    ? accumulatedProgress?.message ?? 'Media generation completed.'
+                    : problem?.detail ?? accumulatedProgress?.message ?? 'Media generation failed.'
                 return {
                     ...candidate,
                     status,
@@ -962,7 +936,7 @@ export class MediaGenerationRequestService {
                         ? { startedAt: candidate.startedAt ?? now }
                         : {
                             completedAt: now,
-                            progress: settleMediaGenerationRunProgress(candidate.progress, status, statusMessage),
+                            progress: settleMediaGenerationRunProgress(accumulatedProgress, status, statusMessage),
                         }),
                     ...(problem ? { problem: { ...problem, generationRun: candidate.generationRun } } : {}),
                 }
@@ -1018,8 +992,11 @@ export class MediaGenerationRequestService {
             ))
             if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
             if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
-            const nextProgress = mergeMediaGenerationRunProgress(run.progress, progress)
-            if (nextProgress === run.progress) return request
+            const streamed = await this.getStreamedRunProgress(request, run.generationRun)
+            const currentProgress = streamed.progress
+                ? mergeMediaGenerationRunProgress(run.progress, streamed.progress)
+                : run.progress
+            const nextProgress = mergeMediaGenerationRunProgress(currentProgress, progress)
             const now = Date.now()
             const runs = request.runs.map(candidate => candidate.generationRun === run.generationRun
                 ? { ...candidate, progress: nextProgress }
@@ -1028,18 +1005,10 @@ export class MediaGenerationRequestService {
                 ...request,
                 status: request.status === 'submitted' ? 'running' : request.status,
                 runs,
-                revision: request.revision + 1,
+                revision: request.revision,
                 updatedAt: now,
                 statusUpdatedAt: request.status === 'submitted' ? now : request.statusUpdatedAt,
             }
-            try {
-                await MediaGenerationRequestModel.transition({ request: next, expectedRevision: request.revision })
-            } catch (error) {
-                if (isTransactionConditionalCheckFailure(error) && attempt < 7) continue
-                throw error
-            }
-            // The request record owns durable heartbeat progress. Updating the
-            // Workspace here would republish unchanged canvas geometry every few seconds.
             try {
                 await this.events().append({
                     userId: request.userId,
@@ -1053,9 +1022,11 @@ export class MediaGenerationRequestService {
                         progress: nextProgress,
                         message: nextProgress.message,
                     }),
+                    expectedLastSubjectSequence: streamed.streamSequence,
                 })
             } catch (error) {
-                warn(`[MediaGenerationRequest] progress event failed: ${String(error)}`)
+                if (isJetStreamExpectationFailure(error) && attempt < 7) continue
+                throw error
             }
             return next
         }
@@ -1138,7 +1109,14 @@ export class MediaGenerationRequestService {
         if (eventResult.status === 'rejected') {
             warn(`[MediaGenerationRequest] status event failed: ${String(eventResult.reason)}`)
         }
-        if (request.status === 'completed') await this.releaseCheckpoint(request)
+        if (request.status === 'completed' || request.status === 'cancelled') {
+            await this.releaseCheckpoint(request)
+        } else if (isMediaGenerationRequestTerminal(request.status)) {
+            await this.events().purgeRequest({
+                workspaceId: request.workspaceId,
+                generationRequestId: request.generationRequestId,
+            })
+        }
     }
 
     async cleanupWorkspace(workspaceId: string): Promise<number> {

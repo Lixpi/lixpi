@@ -6,6 +6,16 @@ export type TagPillCloseVisibility = 'always' | 'hover'
 export type TagPillLabelAlign = 'start' | 'center'
 export type TagPillClosePlacement = 'start' | 'end'
 
+export type TagPillColors = {
+    fill?: string
+    fillActive?: string
+    fillHover?: string
+    stroke?: string
+    strokeActive?: string
+    text?: string
+    closeHover?: string
+}
+
 export type TagPillSizing = {
     size?: number
     minWidth?: number
@@ -30,6 +40,7 @@ export type TagPillConfig = TagPillSizing & {
     icon?: string
     iconColor?: string
     textColor?: string
+    colors?: TagPillColors
     selected?: boolean
     hovered?: boolean
     disabled?: boolean
@@ -51,6 +62,7 @@ export type TagPillRenderState = Partial<Pick<
     | 'icon'
     | 'iconColor'
     | 'textColor'
+    | 'colors'
     | 'selected'
     | 'hovered'
     | 'disabled'
@@ -97,7 +109,9 @@ const ICON_CAP_HEIGHT_RATIO = 0.9
 const ICON_GAP = 3
 const TEXT_WIDTH_FACTOR = 0.58
 
-const COLORS = {
+type TagPillPalette = Required<TagPillColors>
+
+const COLORS: Readonly<Record<TagPillVariant, TagPillPalette>> = {
     neutral: {
         fill: 'rgba(108, 117, 135, 0.08)',
         fillActive: 'rgba(255, 255, 255, 0.72)',
@@ -180,6 +194,7 @@ class TagPill implements TagPillInstance {
     private iconGap: number
     private iconColor: string
     private textColor: string
+    private colors: TagPillColors
     private textWidthFactor: number
     private labelWidth: number
     private autoWidthSignature = ''
@@ -219,6 +234,7 @@ class TagPill implements TagPillInstance {
         this.iconGap = config.iconGap ?? ICON_GAP
         this.iconColor = config.iconColor ?? ''
         this.textColor = config.textColor ?? ''
+        this.colors = { ...config.colors }
         this.textWidthFactor = config.textWidthFactor ?? TEXT_WIDTH_FACTOR
         this.labelWidth = estimateLabelWidth(this.label, this.fontSize, this.textWidthFactor)
         this.explicitWidth = config.width !== undefined
@@ -324,6 +340,23 @@ class TagPill implements TagPillInstance {
             .style('overflow', 'visible')
     }
 
+    private updateHostSvgSurface(fill: string, stroke: string, radius: number): void {
+        const node = this.parent.node?.()
+        if (node?.tagName?.toLowerCase() !== 'svg') return
+
+        this.parent
+            .style('background-color', fill)
+            .style('border-radius', `${radius}px`)
+            .style('box-shadow', stroke === 'transparent' ? 'none' : `inset 0 0 0 1px ${stroke}`)
+    }
+
+    private getPalette(): TagPillPalette {
+        return {
+            ...COLORS[this.variant],
+            ...this.colors,
+        }
+    }
+
     private bindEvents(): void {
         this.group
             .on('mouseenter', () => {
@@ -350,8 +383,15 @@ class TagPill implements TagPillInstance {
                 if (event.key !== 'Enter' && event.key !== ' ') return
                 this.handleClose(event)
             })
-            .on('mouseenter', () => this.closeBackground.attr('fill', COLORS[this.variant].closeHover))
-            .on('mouseleave', () => this.closeBackground.attr('fill', 'transparent'))
+            .on('mouseenter', () => {
+                const closeHover = this.getPalette().closeHover
+                this.closeBackground
+                    .attr('fill', closeHover)
+                    .style('fill', closeHover)
+            })
+            .on('mouseleave', () => this.closeBackground
+                .attr('fill', 'transparent')
+                .style('fill', 'transparent'))
     }
 
     private handleClick(event: Event): void {
@@ -396,14 +436,17 @@ class TagPill implements TagPillInstance {
         this.iconGap = state.iconGap ?? this.iconGap
         this.iconColor = state.iconColor ?? this.iconColor
         this.textColor = state.textColor ?? this.textColor
+        this.colors = state.colors ? { ...this.colors, ...state.colors } : this.colors
         this.textWidthFactor = state.textWidthFactor ?? this.textWidthFactor
 
-        const palette = COLORS[this.variant]
+        const palette = this.getPalette()
         this.text
             .attr('font-size', this.fontSize)
             .attr('font-weight', this.fontWeight)
             .attr('fill', this.textColor || palette.text)
             .attr('opacity', this.disabled ? 0.58 : 1)
+            .style('fill', this.textColor || palette.text, 'important')
+            .style('opacity', this.disabled ? 0.58 : 1, 'important')
             .text(this.label)
 
         if (!this.explicitWidth) {
@@ -443,6 +486,7 @@ class TagPill implements TagPillInstance {
         const opacity = this.disabled ? 0.45 : this.selected || this.hovered ? 1 : 0.7
 
         this.updateHostSvgGeometry()
+        this.updateHostSvgSurface(fill, stroke, radius)
 
         this.group
             .attr('transform', `translate(${this.x}, ${this.y})`)
@@ -461,6 +505,11 @@ class TagPill implements TagPillInstance {
             .attr('stroke', stroke)
             .attr('stroke-width', 1)
             .attr('opacity', opacity)
+            .style('display', 'block')
+            .style('fill', fill)
+            .style('stroke', stroke)
+            .style('stroke-width', '1px')
+            .style('opacity', opacity)
 
         this.text
             .attr('x', textX)

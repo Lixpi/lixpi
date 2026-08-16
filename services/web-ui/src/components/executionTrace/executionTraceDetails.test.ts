@@ -2,13 +2,22 @@ import { describe, expect, it } from 'vitest'
 
 import type { ExecutionTrace } from '@lixpi/constants'
 
+import { colorPalette, settings } from '$src/settings.ts'
+
 import {
     createExecutionTraceDetail,
+    formatExecutionTraceDisplayValue,
     formatExecutionTraceDuration,
+    formatExecutionTraceFieldLabel,
     formatExecutionTraceHandleRole,
     formatExecutionTraceModelId,
     formatExecutionTraceTokenUsage,
+    getExecutionTraceDisplayFacts,
+    getExecutionTraceTagPillColors,
+    getExecutionTraceTagValues,
     getExecutionTraceKey,
+    getExecutionTraceTagPillVariant,
+    isExecutionTraceInternalIdValue,
     isRenderableExecutionTrace,
 } from './executionTraceDetails.ts'
 import { createExecutionTraceTimelineDetailAdapter } from './executionTraceTimelineDetail.ts'
@@ -42,6 +51,65 @@ describe('executionTraceDetails — formatters', () => {
     it('humanizes a handle role without shouting the remaining words', () => {
         expect(formatExecutionTraceHandleRole('character-reference')).toBe('Character reference')
         expect(formatExecutionTraceHandleRole('edit_target_identity')).toBe('Edit target identity')
+    })
+
+    it('humanizes camel-case and delimiter-separated field labels', () => {
+        expect(formatExecutionTraceFieldLabel('referenceImages')).toBe('Reference images')
+        expect(formatExecutionTraceFieldLabel('overall-score')).toBe('Overall score')
+        expect(formatExecutionTraceFieldLabel('conditioning')).toBe('Guidance applied')
+        expect(formatExecutionTraceFieldLabel('failed-dimensions')).toBe('Checks needing review')
+        expect(formatExecutionTraceFieldLabel('references-accepted-by-provider')).toBe('Reference roles used')
+    })
+
+    it('formats decimal scores as readable percentages', () => {
+        expect(formatExecutionTraceDisplayValue('0.87')).toBe('87%')
+        expect(formatExecutionTraceDisplayValue('0.875')).toBe('87.5%')
+        expect(formatExecutionTraceDisplayValue('1.0')).toBe('100%')
+        expect(formatExecutionTraceDisplayValue('3')).toBe('3')
+        expect(formatExecutionTraceDisplayValue('1:1')).toBe('1:1')
+    })
+
+    it('groups duplicate result facts without losing their count', () => {
+        expect(getExecutionTraceDisplayFacts([
+            { label: 'edit-target', value: '1242×2496' },
+            { label: 'edit-target', value: '1242×2496' },
+            { label: 'overall-score', value: '0.87' },
+        ])).toEqual([
+            { label: 'Edit targets (2)', value: '1242×2496' },
+            { label: 'Overall score', value: '87%' },
+        ])
+    })
+
+    it('identifies categorical trace values that belong in tag pills', () => {
+        expect(getExecutionTraceTagValues('edit, identity, style')).toEqual(['edit', 'identity', 'style'])
+        expect(getExecutionTraceTagValues('canonical-anchor')).toEqual(['canonical-anchor'])
+        expect(getExecutionTraceTagValues('passed')).toEqual(['passed'])
+        expect(getExecutionTraceTagValues('1024×1280')).toEqual([])
+        expect(getExecutionTraceTagValues('a very long categorical value that must wrap as text')).toEqual([])
+    })
+
+    it('uses distinct pill variants for statuses and adjacent categorical values', () => {
+        expect(getExecutionTraceTagPillVariant('passed')).toBe('explicit')
+        expect(getExecutionTraceTagPillVariant('failed')).toBe('auto')
+        expect(getExecutionTraceTagPillVariant('identity', 0)).toBe('explicit')
+        expect(getExecutionTraceTagPillVariant('style', 1)).toBe('auto')
+    })
+
+    it('assigns visible semantic colors and cycles category colors', () => {
+        expect(getExecutionTraceTagPillColors('passed').fillActive).toBe(colorPalette.perfectLightGreen)
+        expect(getExecutionTraceTagPillColors('failed').fillActive).toBe(colorPalette.codeRedHover)
+        expect(getExecutionTraceTagPillColors('pending').fillActive).toBe(colorPalette.codeYellowHover)
+        expect(getExecutionTraceTagPillColors('identity', 0).fillActive)
+            .toBe(settings.gradient.styles.shiftingColors[2])
+        expect(getExecutionTraceTagPillColors('style', 1).fillActive).toBe(colorPalette.perfectLightGreen)
+        expect(getExecutionTraceTagPillColors('pose', 2).fillActive)
+            .toBe(settings.gradient.styles.shiftingColors[1])
+    })
+
+    it('identifies UUID-bearing internal values even when they have a provider prefix', () => {
+        expect(isExecutionTraceInternalIdValue('media-b614f5f4-5d58-4291-9399-daaeba5d6d54')).toBe(true)
+        expect(isExecutionTraceInternalIdValue('google-143583f1-7c3b-48ca-9f4a-13baeeebb6e8')).toBe(true)
+        expect(isExecutionTraceInternalIdValue('Gemini 3 Pro Image')).toBe(false)
     })
 
     it('formats sub-second and multi-second durations differently', () => {
@@ -133,9 +201,106 @@ describe('createExecutionTraceDetail — rendered content', () => {
         const call = detail.element.querySelector('.execution-trace-model-call') as HTMLElement
         expect(call.dataset.modelCallRole).toBe('media')
         expect(call.querySelector('.execution-trace-model-call-role')?.textContent).toBe('Media model')
-        expect(call.querySelector('.execution-trace-model-call-id')?.textContent).toBe('gpt-image-1')
-        expect(call.querySelector('.execution-trace-model-call-provider')?.textContent).toBe('openai')
+        expect(call.querySelector('.execution-trace-model-call-header > .execution-trace-value-tag')).toBeNull()
+        expect(call.querySelector('.media-model-badge-model')?.textContent).toBe('gpt-image-1')
+        expect(call.querySelector('.media-model-badge-provider')?.textContent).toBe('openai')
+        expect(call.querySelector('.media-model-badge-icon svg')).not.toBeNull()
+        expect(call.textContent).toContain('Parameters')
+        expect(call.textContent).toContain('Output size')
         expect(call.textContent).toContain('1024x1536')
+        detail.destroy()
+    })
+
+    it('renders parameters, results, and metadata as list items without table structures', () => {
+        const detail = createExecutionTraceDetail({
+            trace: makeTrace({
+                facts: [{ label: 'References accepted', value: 'canonical-anchor, edit-target' }],
+                modelCalls: [{
+                    id: 'render',
+                    role: 'media',
+                    provider: 'openai',
+                    modelId: 'openai:gpt-image-1',
+                    params: [
+                        { name: 'size', value: '1024x1536' },
+                        { name: 'conditioning', value: 'edit, identity, pose' },
+                    ],
+                    providerOperationId: 'op-1',
+                    startedAt: 0,
+                    completedAt: 2000,
+                }],
+            }),
+        })
+
+        expect(detail.element.querySelector('table, thead, tbody, tr, th, td, dl, dt, dd')).toBeNull()
+        expect(detail.element.querySelectorAll('.execution-trace-value-item')).toHaveLength(4)
+        const tagLabels = [...detail.element.querySelectorAll('.execution-trace-value-item .tag-pill-label')]
+            .map(node => node.textContent)
+        expect(tagLabels).toEqual([
+            'Edit',
+            'Identity',
+            'Pose',
+            'Canonical anchor',
+            'Edit target',
+        ])
+        const tagBackground = detail.element.querySelector('.execution-trace-value-tag .tag-pill-background')
+        expect(tagBackground?.getAttribute('fill')).not.toBe('transparent')
+        expect(tagBackground?.getAttribute('stroke')).toBe('transparent')
+        expect((tagBackground as SVGElement | null)?.style.getPropertyValue('fill')).not.toBe('')
+        expect((tagBackground as SVGElement | null)?.style.getPropertyValue('stroke')).toBe('transparent')
+        const firstValueTag = detail.element.querySelector<SVGSVGElement>(
+            '.execution-trace-value-item .execution-trace-value-tag',
+        )
+        expect(firstValueTag?.tagName.toLowerCase()).toBe('svg')
+        expect(firstValueTag?.style.width).toBe(`${firstValueTag?.getAttribute('width')}px`)
+        expect(firstValueTag?.style.backgroundColor).toBe(settings.gradient.styles.shiftingColors[2])
+        expect(firstValueTag?.style.getPropertyPriority('background')).toBe('important')
+        expect(firstValueTag?.style.borderRadius).toBe('9px')
+        expect(firstValueTag?.style.boxShadow).toBe('none')
+        expect(firstValueTag?.querySelector('.tag-pill-label')?.getAttribute('font-size')).toBe('11')
+        expect(firstValueTag?.querySelector('.tag-pill-label')?.getAttribute('y')).toBe('9')
+        expect(firstValueTag?.querySelector('.tag-pill-label')?.getAttribute('dominant-baseline')).toBe('central')
+        const valueTagFills = [...detail.element.querySelectorAll(
+            '.execution-trace-value-item .tag-pill-background',
+        )].map(node => node.getAttribute('fill'))
+        expect(valueTagFills.slice(0, 3)).toEqual([
+            settings.gradient.styles.shiftingColors[2],
+            colorPalette.perfectLightGreen,
+            settings.gradient.styles.shiftingColors[1],
+        ])
+        expect(new Set(valueTagFills).size).toBeGreaterThan(2)
+        expect(detail.element.querySelectorAll('.execution-trace-value-item-tags')).toHaveLength(2)
+        expect(detail.element.textContent).toContain('Outcome')
+        expect(detail.element.textContent).toContain('Guidance applied')
+        expect(detail.element.textContent).not.toContain('op-1')
+        detail.destroy()
+    })
+
+    it('hides UUID-bearing parameters and result facts', () => {
+        const detail = createExecutionTraceDetail({
+            trace: makeTrace({
+                facts: [
+                    { label: 'Generation request', value: 'media-b614f5f4-5d58-4291-9399-daaeba5d6d54' },
+                    { label: 'Media runs', value: '3' },
+                ],
+                modelCalls: [{
+                    id: 'render',
+                    role: 'media',
+                    provider: 'google',
+                    modelId: 'google:gemini-3-pro-image',
+                    params: [
+                        { name: 'operation', value: 'google-143583f1-7c3b-48ca-9f4a-13baeeebb6e8' },
+                        { name: 'size', value: '1:1' },
+                    ],
+                }],
+            }),
+        })
+
+        const text = detail.element.textContent ?? ''
+        expect(text).not.toContain('Generation request')
+        expect(text).not.toContain('b614f5f4-5d58-4291-9399-daaeba5d6d54')
+        expect(text).not.toContain('143583f1-7c3b-48ca-9f4a-13baeeebb6e8')
+        expect(text).toContain('Media runs')
+        expect(text).toContain('1:1')
         detail.destroy()
     })
 
@@ -178,7 +343,7 @@ describe('createExecutionTraceDetail — rendered content', () => {
         detail.destroy()
     })
 
-    it('renders a model call footer only when it has timing, usage, or an operation id', () => {
+    it('renders a model call footer only when it has timing or usage', () => {
         const bare = createExecutionTraceDetail({
             trace: makeTrace({
                 modelCalls: [{ id: 'a', role: 'media', provider: 'openai', modelId: 'm' }],
@@ -197,12 +362,14 @@ describe('createExecutionTraceDetail — rendered content', () => {
                     providerOperationId: 'op-1',
                     startedAt: 0,
                     completedAt: 2000,
+                    tokenUsage: { input: 10, output: 5 },
                 }],
             }),
         })
         const footer = detailed.element.querySelector('.execution-trace-model-call-footer')
         expect(footer?.textContent).toContain('2.0 s')
-        expect(footer?.textContent).toContain('op-1')
+        expect(footer?.textContent).toContain('10 in · 5 out')
+        expect(footer?.textContent).not.toContain('op-1')
         detailed.destroy()
     })
 })
@@ -230,6 +397,32 @@ describe('createExecutionTraceDetail — handles', () => {
             'Some Tool',
             'Some Skill',
         ])
+        detail.destroy()
+    })
+
+    it('gives standalone Tool and Skill handles the shared capability hover-card trigger', () => {
+        const detail = createExecutionTraceDetail({
+            previewRenderer: {
+                getNode: () => undefined,
+                getCapabilityModule: async () => ({}) as never,
+                environment: {
+                    getDocuments: () => [],
+                    getThreads: () => [],
+                    getApiBaseUrl: () => '',
+                    getAuthToken: async () => '',
+                },
+            },
+            trace: makeTrace({
+                handles: [
+                    { kind: 'tool', id: 'module.tool', displayName: 'Some Tool' },
+                    { kind: 'skill', id: 'module.skill', displayName: 'Some Skill' },
+                ],
+            }),
+        })
+
+        expect(detail.element.querySelectorAll('.capability-description-preview')).toHaveLength(2)
+        expect(detail.element.querySelector('.prompt-reference-chip-tool .help-tooltip-trigger')).not.toBeNull()
+        expect(detail.element.querySelector('.prompt-reference-chip-skill .help-tooltip-trigger')).not.toBeNull()
         detail.destroy()
     })
 
@@ -284,9 +477,9 @@ describe('createExecutionTraceDetail — handles', () => {
             }),
         })
 
-        const labels = [...detail.element.querySelectorAll('.execution-trace-model-call-handles-label')]
+        const labels = [...detail.element.querySelectorAll('.execution-trace-model-call-handles .execution-trace-field-label')]
             .map(node => node.textContent)
-        expect(labels).toEqual(['Given', 'Produced'])
+        expect(labels).toEqual(['Inputs', 'Outputs'])
         expect(chipNames(detail.element)).toEqual(['Given asset', 'Produced asset'])
         detail.destroy()
     })

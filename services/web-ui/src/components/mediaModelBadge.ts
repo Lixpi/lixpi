@@ -1,7 +1,10 @@
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { getAiModelIcon, getAiProviderColorIcon, getAiProviderIcon } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiProviderIcons.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import {
+    applyMediaModelBadgeStyleProperties as applySharedMediaModelBadgeStyleProperties,
+    type MediaModelBadgeConfig as SharedMediaModelBadgeConfig,
+} from '@lixpi/ui-kit/components/media-model-badge'
 
 type MediaModelCatalogEntry = {
     provider?: string
@@ -41,9 +44,23 @@ function normalize(value: string | null | undefined): string {
 }
 
 function splitMediaModelId(modelId: string): MediaModelParts {
-    const [provider, ...modelParts] = modelId.split(':')
-    if (modelParts.length === 0) return { provider: '', model: provider || '' }
-    return { provider: provider || '', model: modelParts.join(':') }
+    const colonIndex = modelId.indexOf(':')
+    if (colonIndex > 0) {
+        return {
+            provider: modelId.slice(0, colonIndex),
+            model: modelId.slice(colonIndex + 1),
+        }
+    }
+
+    const slashIndex = modelId.indexOf('/')
+    if (slashIndex > 0) {
+        return {
+            provider: modelId.slice(0, slashIndex),
+            model: modelId.slice(slashIndex + 1),
+        }
+    }
+
+    return { provider: '', model: modelId }
 }
 
 function normalizeScale(scale: number | null | undefined): number {
@@ -103,47 +120,31 @@ export function getMediaModelBadgeMeta(config: MediaModelBadgeConfig): MediaMode
     }
 }
 
-export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElement | null {
+export function resolveMediaModelBadgeConfig(config: MediaModelBadgeConfig): SharedMediaModelBadgeConfig {
     const { providerTitle, modelTitle, icon, label } = getMediaModelBadgeMeta(config)
-    const visibleLabel = config.iconOnly ? '' : label
-    if (!icon && !visibleLabel) return null
-
-    const separator = providerTitle && modelTitle
-        ? settings.mediaNode.generatedMediaChrome.modelBadgeSeparator
-        : ''
-
-    return html`
-        <div className=${`media-model-badge${config.iconOnly ? ' media-model-badge-icon-only' : ''}`} title=${label}>
-            ${icon ? html`<span className="media-model-badge-icon" innerHTML=${icon}></span>` : null}
-            ${visibleLabel ? html`<span className="media-model-badge-name">${
-                providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null
-            }${separator}${
-                modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null
-            }</span>` : null}
-        </div>
-    ` as HTMLElement
-}
-
-export function renderMediaModelBadge(host: HTMLElement, config: MediaModelBadgeConfig): void {
-    const modelBadge = createMediaModelBadge(config)
-    host.replaceChildren()
-    if (modelBadge) {
-        host.appendChild(modelBadge)
+    return {
+        providerTitle,
+        modelTitle,
+        icon,
+        label,
+        separator: settings.mediaNode.generatedMediaChrome.modelBadgeSeparator,
+        iconOnly: config.iconOnly,
     }
-    host.hidden = !modelBadge
 }
 
 export function applyMediaModelBadgeStyleProperties(host: HTMLElement, options: MediaModelBadgeStyleOptions = {}): void {
     const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
     const scale = normalizeScale(options.scale)
-    host.style.setProperty('--workspace-generated-media-chrome-icon-size', `${settings.mediaNode.generatedMediaChrome.iconSize * scale}px`)
-    host.style.setProperty('--workspace-generated-media-chrome-top-gap', `${settings.mediaNode.generatedMediaChrome.gap * scale}px`)
-    host.style.setProperty('--workspace-media-model-badge-icon-gap', scaleCssLength(generatedMediaChromeStyles.modelBadgeIconGap, scale))
-    host.style.setProperty('--workspace-media-model-badge-provider-color', generatedMediaChromeStyles.modelBadgeProviderColor)
-    host.style.setProperty('--workspace-media-model-badge-model-color', generatedMediaChromeStyles.modelBadgeModelColor)
-    host.style.setProperty('--workspace-media-model-badge-name-font-size', scaleCssLength(generatedMediaChromeStyles.modelBadgeNameFontSize, scale))
-    host.style.setProperty('--workspace-media-model-badge-name-font-weight', String(generatedMediaChromeStyles.modelBadgeNameFontWeight))
-    host.style.setProperty('--workspace-media-model-badge-name-line-height', String(generatedMediaChromeStyles.modelBadgeNameLineHeight))
+    applySharedMediaModelBadgeStyleProperties(host, {
+        iconSize: `${settings.mediaNode.generatedMediaChrome.iconSize * scale}px`,
+        topGap: `${settings.mediaNode.generatedMediaChrome.gap * scale}px`,
+        iconGap: scaleCssLength(generatedMediaChromeStyles.modelBadgeIconGap, scale),
+        providerColor: generatedMediaChromeStyles.modelBadgeProviderColor,
+        modelColor: generatedMediaChromeStyles.modelBadgeModelColor,
+        nameFontSize: scaleCssLength(generatedMediaChromeStyles.modelBadgeNameFontSize, scale),
+        nameFontWeight: String(generatedMediaChromeStyles.modelBadgeNameFontWeight),
+        nameLineHeight: String(generatedMediaChromeStyles.modelBadgeNameLineHeight),
+    })
     host.style.setProperty('--workspace-media-info-button-color', generatedMediaChromeStyles.infoButtonColor)
     host.style.setProperty('--workspace-media-info-button-hover-color', generatedMediaChromeStyles.infoButtonHoverColor)
 }

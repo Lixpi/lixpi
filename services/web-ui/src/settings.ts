@@ -95,6 +95,11 @@ export type RightSidePanelSettings = {
     layout: {
         contentInset: number
     }
+    typography: {
+        contentFontSize: number
+        tagPillFontSize: number
+        tagPillFontWeight: number
+    }
     resizeHandle: {
         offset: number
         grabWidth: number
@@ -810,7 +815,7 @@ export const settings: Settings = {
     rightSidePanel: {
         defaultDimensions: {
             // Screen-pixel width before the user has resized the panel.
-            width: 380,
+            width: 494,
         },
         dimensions: {
             // Minimum screen-pixel width while resizing.
@@ -821,6 +826,13 @@ export const settings: Settings = {
         layout: {
             // Inner horizontal inset for the panel content column.
             contentInset: 10,
+        },
+        typography: {
+            // Screen-pixel size shared by regular messages and generation-trace content.
+            contentFontSize: 14,
+            // Screen-pixel typography for execution-trace tag pills in the sidebar timeline.
+            tagPillFontSize: 12,
+            tagPillFontWeight: 400,
         },
         resizeHandle: {
             // Horizontal offset in pixels from the panel's left edge to the resize handle center.
@@ -853,7 +865,7 @@ export const settings: Settings = {
         },
         overlay: {
             // Full-canvas dark glass tint layer behind the side panel.
-            enabled: true,
+            enabled: false,
             closeOnPointerDown: true,
             fill: 'rgba(15, 23, 42, 0.18)',
             fillOpaque: 'rgba(15, 23, 42, 0.22)',

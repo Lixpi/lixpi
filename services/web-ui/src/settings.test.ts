@@ -110,6 +110,7 @@ describe('settings - grouped configuration', () => {
 	})
 
 	it('keeps scalar UI settings finite and numerically valid', () => {
+		expectFiniteNumber(settings.rightSidePanel.typography.contentFontSize, 'settings.rightSidePanel.typography.contentFontSize')
 		expectFiniteNumber(settings.aiChatThread.panelTabs.minTabWidth, 'settings.aiChatThread.panelTabs.minTabWidth')
 		expectFiniteNumber(settings.aiChatThread.panelTabs.height, 'settings.aiChatThread.panelTabs.height')
 		expectFiniteNumber(

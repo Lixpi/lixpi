@@ -317,6 +317,128 @@ describe('media generation operation recovery', () => {
         })
     })
 
+    it('preserves complete execution traces while replaying JetStream progress', () => {
+        const output = pendingOutputNode()
+        const event: MediaGenerationRequestEvent = {
+            eventId: 'progress-with-trace',
+            generationRequestId: 'request-1',
+            sequence: 2,
+            status: 'MEDIA_GENERATION_PROGRESS',
+            requestRevision: 1,
+            payload: {
+                status: 'running',
+                runStatus: 'running',
+                generationRun: 0,
+                mediaRunId: 'media-run-1',
+                outputNodeId: output.nodeId,
+                progress: {
+                    phase: 'assessing',
+                    completedSteps: 2,
+                    totalSteps: 3,
+                    message: 'Comparing the rendered result.',
+                    items: [{
+                        id: 'assess',
+                        title: 'Assess result',
+                        status: 'running',
+                        trace: {
+                            traceVersion: 'execution-trace-v1',
+                            reasoning: 'The framing matches the requested target.',
+                            handles: [{
+                                kind: 'media',
+                                id: 'asset-1',
+                                displayName: 'Source image',
+                                mediaKind: 'image',
+                                role: 'comparison-source',
+                            }],
+                            modelCalls: [{
+                                id: 'assessment-1',
+                                role: 'assessor',
+                                provider: 'Anthropic',
+                                modelId: 'Anthropic:claude-opus-5',
+                                purpose: 'Compare the result with its sources.',
+                                params: [{ name: 'framing', value: '0.91' }],
+                                inputHandles: [{
+                                    kind: 'media',
+                                    id: 'asset-1',
+                                    displayName: 'Source image',
+                                    mediaKind: 'image',
+                                }],
+                                tokenUsage: { input: 120, output: 30, reasoning: 18 },
+                            }],
+                            facts: [{ label: 'Overall score', value: '0.91' }],
+                        },
+                    }],
+                },
+            },
+            createdAt: 2,
+        }
+
+        const result = applyMediaGenerationRequestEventToOperationNodes({
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [output],
+            edges: [],
+        }, event)
+        const updated = result.state.nodes[0] as GeneratedMediaNode
+        const trace = updated.generationProgress?.progress.items?.[0]?.trace
+
+        expect(trace?.reasoning).toBe('The framing matches the requested target.')
+        expect(trace?.handles?.[0]).toMatchObject({ id: 'asset-1', role: 'comparison-source' })
+        expect(trace?.modelCalls?.[0]).toMatchObject({
+            role: 'assessor',
+            params: [{ name: 'framing', value: '0.91' }],
+            tokenUsage: { input: 120, output: 30, reasoning: 18 },
+        })
+        expect(trace?.facts).toEqual([{ label: 'Overall score', value: '0.91' }])
+    })
+
+    it('does not erase accumulated trace items when a later status event has only generic progress', () => {
+        const output = pendingOutputNode({
+            generationProgress: {
+                ...pendingOutputNode().generationProgress!,
+                progress: {
+                    phase: 'assessing',
+                    completedSteps: 2,
+                    totalSteps: 3,
+                    message: 'Assessment is active.',
+                    items: [{
+                        id: 'assess',
+                        title: 'Assess result',
+                        status: 'running',
+                        trace: {
+                            traceVersion: 'execution-trace-v1',
+                            facts: [{ label: 'Framing', value: '0.91' }],
+                        },
+                    }],
+                },
+            },
+        })
+        const event: MediaGenerationRequestEvent = {
+            eventId: 'generic-running-status',
+            generationRequestId: 'request-1',
+            sequence: 3,
+            status: 'MEDIA_GENERATION_REQUEST_STATUS',
+            requestRevision: 2,
+            payload: {
+                status: 'running',
+                runStatus: 'running',
+                generationRun: 0,
+                mediaRunId: 'media-run-1',
+                outputNodeId: output.nodeId,
+            },
+            createdAt: 3,
+        }
+
+        const result = applyMediaGenerationRequestEventToOperationNodes({
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [output],
+            edges: [],
+        }, event)
+        const progress = (result.state.nodes[0] as GeneratedMediaNode).generationProgress?.progress
+
+        expect(progress?.phase).toBe('assessing')
+        expect(progress?.items?.[0]?.trace?.facts).toEqual([{ label: 'Framing', value: '0.91' }])
+    })
+
     it('replaces a failed pending output with the existing operation card in its reserved slot', () => {
         const output = pendingOutputNode()
         const operation = operationNode({

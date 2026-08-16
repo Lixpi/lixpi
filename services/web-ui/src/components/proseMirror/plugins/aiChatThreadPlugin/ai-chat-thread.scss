@@ -1,6 +1,7 @@
 // AI Chat Thread Styles
 @use '@lixpi/ui-kit/styles/dropdown';
 @use '@lixpi/ui-kit/styles/info-bubble';
+@use '@lixpi/ui-kit/styles/media-model-badge';
 @import '$src/components/proseMirror/ProseMirrorMixings.scss';
 @import '$src/sass/components/animations';
 @import '$src/sass/_prompt-reference-chip.scss';
@@ -614,47 +615,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     width: 100%;
     margin-top: var(--workspace-generated-media-chrome-top-gap, 8px);
     min-height: var(--workspace-generated-media-chrome-icon-size, 34px);
-}
-
-.ai-generated-media-model-chrome .media-model-badge {
-    min-width: 0;
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    gap: var(--workspace-media-model-badge-icon-gap, 3px);
-    color: var(--workspace-media-model-badge-provider-color, #4d5963);
-    line-height: 1;
-    pointer-events: none;
-}
-
-.ai-generated-media-model-chrome .media-model-badge-icon,
-.ai-generated-media-model-chrome .media-model-badge svg {
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
-    fill: currentColor;
-}
-
-.ai-generated-media-model-chrome .media-model-badge-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.ai-generated-media-model-chrome .media-model-badge-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--workspace-media-model-badge-provider-color, #4d5963);
-    font-size: var(--workspace-media-model-badge-name-font-size, 15px);
-    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
-    line-height: var(--workspace-media-model-badge-name-line-height, 1.5);
-}
-
-.ai-generated-media-model-chrome .media-model-badge-model {
-    color: var(--workspace-media-model-badge-model-color, #181e23);
 }
 
 .ai-generated-media-section-title {

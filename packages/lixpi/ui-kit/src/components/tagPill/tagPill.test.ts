@@ -69,6 +69,53 @@ describe('createTagPill', () => {
         expect(background.getAttribute('width')).toBe('160')
     })
 
+    it('accepts a complete caller-owned color palette and updates it through render state', () => {
+        const { svg, tagPill } = mountWithConfig({
+            selected: true,
+            closable: true,
+            colors: {
+                fill: '#eef4ff',
+                fillActive: '#dbe8ff',
+                fillHover: '#cadcff',
+                stroke: '#aac4ef',
+                strokeActive: '#7fa7e2',
+                text: '#295b9a',
+                closeHover: '#bdd2f2',
+            },
+        })
+        const background = backgrounds(svg)[0]!
+        const closeBackground = svg.querySelector('.tag-pill-close-background')!
+
+        expect(background.getAttribute('fill')).toBe('#dbe8ff')
+        expect(background.getAttribute('stroke')).toBe('#7fa7e2')
+        expect(labels(svg)[0]!.getAttribute('fill')).toBe('#295b9a')
+        expect((background as SVGElement).style.getPropertyValue('fill')).toBe('#dbe8ff')
+        expect((background as SVGElement).style.getPropertyValue('stroke')).toBe('#7fa7e2')
+        expect((labels(svg)[0] as SVGElement).style.getPropertyValue('fill')).toBe('#295b9a')
+        expect((labels(svg)[0] as SVGElement).style.getPropertyPriority('fill')).toBe('important')
+        expect(labels(svg)[0]!.getAttribute('dominant-baseline')).toBe('central')
+        expect(labels(svg)[0]!.hasAttribute('dy')).toBe(false)
+        expect(svg.style.backgroundColor).toBe('#dbe8ff')
+        expect(svg.style.borderRadius).toBe('12px')
+        expect(svg.style.boxShadow).toBe('inset 0 0 0 1px #7fa7e2')
+
+        closes(svg)[0]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+        expect(closeBackground.getAttribute('fill')).toBe('#bdd2f2')
+        expect((closeBackground as SVGElement).style.getPropertyValue('fill')).toBe('#bdd2f2')
+
+        tagPill.render({
+            selected: false,
+            hovered: true,
+            colors: { fillHover: '#bfd4ff', text: '#174a8a' },
+        })
+        expect(background.getAttribute('fill')).toBe('#bfd4ff')
+        expect(background.getAttribute('stroke')).toBe('#aac4ef')
+        expect(labels(svg)[0]!.getAttribute('fill')).toBe('#174a8a')
+        expect((background as SVGElement).style.getPropertyValue('fill')).toBe('#bfd4ff')
+        expect((labels(svg)[0] as SVGElement).style.getPropertyValue('fill')).toBe('#174a8a')
+        expect(svg.style.backgroundColor).toBe('#bfd4ff')
+    })
+
     it('fires click and close callbacks', () => {
         const { svg, onClick, onClose } = mount(false, false, false, true)
         const pill = groups(svg)[0]!

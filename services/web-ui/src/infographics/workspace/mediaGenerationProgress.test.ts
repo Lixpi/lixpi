@@ -292,6 +292,47 @@ describe('media generation progress disclosure', () => {
         progress.destroy()
     })
 
+    it('does not repeat reasoning when the summary and trace carry the same text', () => {
+        const reasoning = 'Preserve the source palette and widen the composition.'
+        const progress = createMediaGenerationProgress({
+            id: 'reasoning-trace-run',
+            renderItemDetail: detail => {
+                const element = document.createElement('div')
+                element.className = 'rendered-trace'
+                element.textContent = (detail as { reasoning?: string }).reasoning ?? ''
+                return { element }
+            },
+            state: {
+                generationRequestId: 'reasoning-trace-request',
+                status: 'completed',
+                message: 'Completed.',
+                updatedAt: 1,
+                progress: {
+                    phase: 'composing',
+                    completedSteps: 1,
+                    totalSteps: 1,
+                    message: 'Completed.',
+                    items: [{
+                        id: 'understand-request',
+                        title: 'Understand request',
+                        status: 'completed',
+                        summary: reasoning,
+                        trace: { traceVersion: 'execution-trace-v1', reasoning },
+                    }],
+                },
+            },
+        })
+        const collapsedItem = progress.element.querySelector<HTMLElement>('[data-item-id="understand-request"]')!
+        expect(collapsedItem.querySelector('.progress-timeline-summary-collapsed')?.textContent).toBe(reasoning)
+
+        collapsedItem.querySelector<HTMLButtonElement>('.progress-timeline-toggle')!.click()
+
+        const expandedItem = progress.element.querySelector<HTMLElement>('[data-item-id="understand-request"]')!
+        expect(expandedItem.querySelector('.progress-timeline-summary')).toBeNull()
+        expect(expandedItem.querySelector('.rendered-trace')?.textContent).toBe(reasoning)
+        progress.destroy()
+    })
+
     it('keeps top-level steps visible, focuses problem details, and expands every nested level on demand', () => {
         vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
             callback(0)

@@ -16,6 +16,7 @@
         "./components/dropdown": "./src/components/dropdown/index.ts",
         "./components/help-tooltip": "./src/components/helpTooltip/index.ts",
         "./components/info-bubble": "./src/components/infoBubble/index.ts",
+        "./components/media-model-badge": "./src/components/mediaModelBadge/index.ts",
         "./components/progress-timeline": "./src/components/progressTimeline/index.ts",
         "./components/side-panel": "./src/components/sidePanel/index.ts",
         "./components/sliding-switch": "./src/components/slidingSwitch/index.ts",
@@ -42,6 +43,11 @@
             "sass": "./styles/info-bubble.scss",
             "style": "./styles/info-bubble.scss",
             "default": "./styles/info-bubble.scss"
+        },
+        "./styles/media-model-badge": {
+            "sass": "./styles/media-model-badge.scss",
+            "style": "./styles/media-model-badge.scss",
+            "default": "./styles/media-model-badge.scss"
         },
         "./styles/progress-timeline": {
             "sass": "./styles/progress-timeline.scss",

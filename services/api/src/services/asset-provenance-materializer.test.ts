@@ -97,6 +97,39 @@ describe('asset provenance generation progress', () => {
 
         expect(summary).toBe('I will build the requested character.')
     })
+
+    it('preserves assistant preamble paragraph boundaries in history', () => {
+        const summary = getReasoningPreambleSummary({
+            type: 'doc',
+            content: [{
+                type: 'aiReasoningSection',
+                attrs: {
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'reasoning-1',
+                },
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'I inspected the references.' },
+                            { type: 'text', text: 'The visual direction is clear.' },
+                        ],
+                    },
+                    {
+                        type: 'paragraph',
+                        content: [{ type: 'text', text: 'I will now generate the media.' }],
+                    },
+                ],
+            }],
+        }, {
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+        })
+
+        expect(summary).toBe(
+            'I inspected the references. The visual direction is clear.\n\nI will now generate the media.',
+        )
+    })
 })
 
 // =============================================================================

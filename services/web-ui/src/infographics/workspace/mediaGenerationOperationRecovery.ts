@@ -1,8 +1,14 @@
 import {
     createDefaultMediaGenerationRunProgress,
+    mergeMediaGenerationRunProgress,
     settleMediaGenerationRunProgress,
     type CanvasNode,
     type CanvasState,
+    type ExecutionTrace,
+    type ExecutionTraceFact,
+    type ExecutionTraceHandle,
+    type ExecutionTraceModelCall,
+    type ExecutionTraceParam,
     type MediaGenerationProblem,
     type MediaGenerationProgressState,
     type MediaGenerationRun,
@@ -153,7 +159,14 @@ function projectProgressToMediaNodes({
                 outputNodeId,
                 mediaRunId,
             )) return node
-            const nextProgressState = { ...node.generationProgress, ...progressState }
+            const nextProgressState = {
+                ...node.generationProgress,
+                ...progressState,
+                progress: mergeMediaGenerationRunProgress(
+                    node.generationProgress?.progress,
+                    progressState.progress,
+                ),
+            }
             if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgressState)) return node
             updatedNodeIds.push(node.nodeId)
             return { ...node, generationProgress: nextProgressState }
@@ -641,6 +654,130 @@ function readStringArray(value: unknown): string[] | undefined {
     return strings.length > 0 ? strings : undefined
 }
 
+function readTraceHandle(value: unknown): ExecutionTraceHandle | undefined {
+    if (!value || typeof value !== 'object') return undefined
+    const candidate = value as Record<string, unknown>
+    const kinds = new Set<ExecutionTraceHandle['kind']>([
+        'capability-module',
+        'tool',
+        'skill',
+        'media',
+        'capability-artifact',
+    ])
+    if (typeof candidate.kind !== 'string'
+        || !kinds.has(candidate.kind as ExecutionTraceHandle['kind'])
+        || typeof candidate.id !== 'string'
+        || typeof candidate.displayName !== 'string') return undefined
+    const mediaKinds = new Set(['image', 'video', 'audio', 'document'])
+    return {
+        kind: candidate.kind as ExecutionTraceHandle['kind'],
+        id: candidate.id,
+        displayName: candidate.displayName,
+        ...(typeof candidate.mediaKind === 'string' && mediaKinds.has(candidate.mediaKind)
+            ? { mediaKind: candidate.mediaKind as NonNullable<ExecutionTraceHandle['mediaKind']> }
+            : {}),
+        ...(typeof candidate.nodeId === 'string' ? { nodeId: candidate.nodeId } : {}),
+        ...(typeof candidate.artifactTypeId === 'string' ? { artifactTypeId: candidate.artifactTypeId } : {}),
+        ...(typeof candidate.role === 'string' ? { role: candidate.role } : {}),
+        ...(typeof candidate.note === 'string' ? { note: candidate.note } : {}),
+    }
+}
+
+function readTraceParam(value: unknown): ExecutionTraceParam | undefined {
+    if (!value || typeof value !== 'object') return undefined
+    const candidate = value as Record<string, unknown>
+    return typeof candidate.name === 'string' && typeof candidate.value === 'string'
+        ? { name: candidate.name, value: candidate.value }
+        : undefined
+}
+
+function readTraceFact(value: unknown): ExecutionTraceFact | undefined {
+    if (!value || typeof value !== 'object') return undefined
+    const candidate = value as Record<string, unknown>
+    return typeof candidate.label === 'string' && typeof candidate.value === 'string'
+        ? { label: candidate.label, value: candidate.value }
+        : undefined
+}
+
+function readTraceModelCall(value: unknown): ExecutionTraceModelCall | undefined {
+    if (!value || typeof value !== 'object') return undefined
+    const candidate = value as Record<string, unknown>
+    const roles = new Set<ExecutionTraceModelCall['role']>([
+        'reasoning',
+        'media',
+        'resolver',
+        'assessor',
+        'compositor',
+    ])
+    if (typeof candidate.id !== 'string'
+        || typeof candidate.role !== 'string'
+        || !roles.has(candidate.role as ExecutionTraceModelCall['role'])
+        || typeof candidate.provider !== 'string'
+        || typeof candidate.modelId !== 'string') return undefined
+    const params = Array.isArray(candidate.params)
+        ? candidate.params.map(readTraceParam).filter((item): item is ExecutionTraceParam => Boolean(item))
+        : undefined
+    const inputHandles = Array.isArray(candidate.inputHandles)
+        ? candidate.inputHandles.map(readTraceHandle).filter((item): item is ExecutionTraceHandle => Boolean(item))
+        : undefined
+    const outputHandles = Array.isArray(candidate.outputHandles)
+        ? candidate.outputHandles.map(readTraceHandle).filter((item): item is ExecutionTraceHandle => Boolean(item))
+        : undefined
+    const tokenUsageCandidate = candidate.tokenUsage && typeof candidate.tokenUsage === 'object'
+        ? candidate.tokenUsage as Record<string, unknown>
+        : undefined
+    const tokenUsage = tokenUsageCandidate
+        ? {
+            ...(typeof tokenUsageCandidate.input === 'number' ? { input: tokenUsageCandidate.input } : {}),
+            ...(typeof tokenUsageCandidate.output === 'number' ? { output: tokenUsageCandidate.output } : {}),
+            ...(typeof tokenUsageCandidate.reasoning === 'number' ? { reasoning: tokenUsageCandidate.reasoning } : {}),
+        }
+        : undefined
+    return {
+        id: candidate.id,
+        role: candidate.role as ExecutionTraceModelCall['role'],
+        provider: candidate.provider,
+        modelId: candidate.modelId,
+        ...(typeof candidate.purpose === 'string' ? { purpose: candidate.purpose } : {}),
+        ...(params?.length ? { params } : {}),
+        ...(typeof candidate.prompt === 'string' ? { prompt: candidate.prompt } : {}),
+        ...(typeof candidate.systemPrompt === 'string' ? { systemPrompt: candidate.systemPrompt } : {}),
+        ...(inputHandles?.length ? { inputHandles } : {}),
+        ...(outputHandles?.length ? { outputHandles } : {}),
+        ...(typeof candidate.responseExcerpt === 'string' ? { responseExcerpt: candidate.responseExcerpt } : {}),
+        ...(typeof candidate.providerOperationId === 'string' ? { providerOperationId: candidate.providerOperationId } : {}),
+        ...(typeof candidate.startedAt === 'number' ? { startedAt: candidate.startedAt } : {}),
+        ...(typeof candidate.completedAt === 'number' ? { completedAt: candidate.completedAt } : {}),
+        ...(tokenUsage && Object.keys(tokenUsage).length > 0 ? { tokenUsage } : {}),
+        ...(typeof candidate.errorMessage === 'string' ? { errorMessage: candidate.errorMessage } : {}),
+    }
+}
+
+function readExecutionTrace(value: unknown): ExecutionTrace | undefined {
+    if (!value || typeof value !== 'object') return undefined
+    const candidate = value as Record<string, unknown>
+    if (candidate.traceVersion !== 'execution-trace-v1') return undefined
+    const handles = Array.isArray(candidate.handles)
+        ? candidate.handles.map(readTraceHandle).filter((item): item is ExecutionTraceHandle => Boolean(item))
+        : undefined
+    const modelCalls = Array.isArray(candidate.modelCalls)
+        ? candidate.modelCalls.map(readTraceModelCall).filter((item): item is ExecutionTraceModelCall => Boolean(item))
+        : undefined
+    const facts = Array.isArray(candidate.facts)
+        ? candidate.facts.map(readTraceFact).filter((item): item is ExecutionTraceFact => Boolean(item))
+        : undefined
+    return {
+        traceVersion: 'execution-trace-v1',
+        ...(typeof candidate.reasoning === 'string' ? { reasoning: candidate.reasoning } : {}),
+        ...(handles?.length ? { handles } : {}),
+        ...(modelCalls?.length ? { modelCalls } : {}),
+        ...(facts?.length ? { facts } : {}),
+        ...(typeof candidate.inputSummary === 'string' ? { inputSummary: candidate.inputSummary } : {}),
+        ...(typeof candidate.outputSummary === 'string' ? { outputSummary: candidate.outputSummary } : {}),
+        ...(typeof candidate.errorMessage === 'string' ? { errorMessage: candidate.errorMessage } : {}),
+    }
+}
+
 function readProblem(value: unknown): MediaGenerationProblem | undefined {
     return value && typeof value === 'object' ? value as MediaGenerationProblem : undefined
 }
@@ -664,12 +801,14 @@ function readProgressItem(value: unknown): OperationProgressItem | undefined {
     const children = Array.isArray(candidate.children)
         ? candidate.children.map(readProgressItem).filter((item): item is OperationProgressItem => Boolean(item))
         : undefined
+    const trace = readExecutionTrace(candidate.trace)
     return {
         id: candidate.id,
         title: candidate.title,
         status: candidate.status as OperationProgressItem['status'],
         ...(typeof candidate.summary === 'string' ? { summary: candidate.summary } : {}),
         ...(typeof candidate.meta === 'string' ? { meta: candidate.meta } : {}),
+        ...(trace ? { trace } : {}),
         ...(children?.length ? { children } : {}),
     }
 }
@@ -775,6 +914,10 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         if (!progress && runStatus !== 'running' && runStatus !== 'failed') {
             return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
         }
+        const existingMediaProgress = state.nodes.find(node => (
+            isGeneratedMediaNode(node)
+            && mediaNodeMatches(node, event.generationRequestId, generationRun, outputNodeId, mediaRunId)
+        ))?.generationProgress?.progress
         const status = runStatus === 'failed' ? 'failed' : 'running'
         const message = problem?.detail
             ?? progressMessage
@@ -790,7 +933,7 @@ export function applyMediaGenerationRequestEventToOperationNodes(
                 generationRequestId: event.generationRequestId,
                 status,
                 message,
-                progress,
+                progress: progress ?? existingMediaProgress,
                 generationRun,
                 mediaRunId,
                 updatedAt: event.createdAt,

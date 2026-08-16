@@ -5,6 +5,8 @@ import type {
     ExecutionTraceModelCall,
     ExecutionTraceParam,
 } from '@lixpi/constants'
+import type { TagPillColors, TagPillVariant } from '@lixpi/ui-kit/components/tag-pill'
+import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 
 import {
     createCapabilityPromptReferencePreview,
@@ -12,6 +14,11 @@ import {
     createPromptReferenceChipElement,
     type PromptReferencePreviewRenderer,
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import {
+    applyMediaModelBadgeStyleProperties,
+    resolveMediaModelBadgeConfig,
+} from '$src/components/mediaModelBadge.ts'
+import { colorPalette, settings } from '$src/settings.ts'
 import { html } from '$src/utils/domTemplates.ts'
 
 export type ExecutionTraceDetailInstance = {
@@ -37,6 +44,111 @@ const MODEL_CALL_ROLE_LABELS: Readonly<Record<ExecutionTraceModelCall['role'], s
     compositor: 'Compositor',
 }
 
+const TRACE_TAG_MAX_LABEL_LENGTH = 28
+const TRACE_UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu
+const TRACE_CATEGORICAL_TAG_VARIANTS = ['explicit', 'auto'] as const satisfies readonly TagPillVariant[]
+const TRACE_FIELD_LABELS = new Map<string, string>([
+    ['attempt', 'Provider attempt'],
+    ['conditioning', 'Guidance applied'],
+    ['failed dimensions', 'Checks needing review'],
+    ['generated anchors attached', 'Generated anchors used'],
+    ['max identity references', 'Identity reference limit'],
+    ['max reference images', 'Provider reference limit'],
+    ['reference entries', 'References prepared'],
+    ['reference images', 'Reference images'],
+    ['references accepted by provider', 'Reference roles used'],
+    ['shots placed', 'Shots included'],
+    ['shots unavailable', 'Missing shots'],
+    ['size', 'Output size'],
+])
+const SINGLE_VALUE_TAGS = new Set([
+    'complete',
+    'completed',
+    'failed',
+    'false',
+    'passed',
+    'pending',
+    'skipped',
+    'true',
+])
+const POSITIVE_VALUE_TAGS = new Set(['complete', 'completed', 'passed', 'true'])
+const CAUTION_VALUE_TAGS = new Set(['failed', 'false', 'pending', 'skipped'])
+const TRACE_TAG_POSITIVE_COLORS = {
+    fill: colorPalette.perfectLightGreen,
+    fillActive: colorPalette.perfectLightGreen,
+    fillHover: colorPalette.yetAnotherLightGreen,
+    stroke: 'transparent',
+    strokeActive: 'transparent',
+    text: colorPalette.nightBlue,
+    closeHover: 'rgba(66, 73, 79, 0.1)',
+} as const satisfies TagPillColors
+const TRACE_TAG_DANGER_COLORS = {
+    fill: colorPalette.codeRedHover,
+    fillActive: colorPalette.codeRedHover,
+    fillHover: colorPalette.offWhite,
+    stroke: 'transparent',
+    strokeActive: 'transparent',
+    text: colorPalette.nightBlue,
+    closeHover: 'rgba(66, 73, 79, 0.1)',
+} as const satisfies TagPillColors
+const TRACE_TAG_CAUTION_COLORS = {
+    fill: colorPalette.codeYellowHover,
+    fillActive: colorPalette.codeYellowHover,
+    fillHover: colorPalette.offWhite,
+    stroke: 'transparent',
+    strokeActive: 'transparent',
+    text: colorPalette.nightBlue,
+    closeHover: 'rgba(66, 73, 79, 0.1)',
+} as const satisfies TagPillColors
+const TRACE_TAG_VIOLET_COLORS = {
+    fill: settings.gradient.styles.shiftingColors[1],
+    fillActive: settings.gradient.styles.shiftingColors[1],
+    fillHover: settings.gradient.styles.shiftingColors[3],
+    stroke: 'transparent',
+    strokeActive: 'transparent',
+    text: colorPalette.nightBlue,
+    closeHover: 'rgba(66, 73, 79, 0.1)',
+} as const satisfies TagPillColors
+const TRACE_CATEGORICAL_TAG_COLORS = [
+    {
+        fill: settings.gradient.styles.shiftingColors[2],
+        fillActive: settings.gradient.styles.shiftingColors[2],
+        fillHover: settings.gradient.styles.shiftingColors[1],
+        stroke: 'transparent',
+        strokeActive: 'transparent',
+        text: colorPalette.nightBlue,
+        closeHover: 'rgba(66, 73, 79, 0.1)',
+    },
+    {
+        fill: colorPalette.perfectLightGreen,
+        fillActive: colorPalette.perfectLightGreen,
+        fillHover: colorPalette.yetAnotherLightGreen,
+        stroke: 'transparent',
+        strokeActive: 'transparent',
+        text: colorPalette.nightBlue,
+        closeHover: 'rgba(66, 73, 79, 0.1)',
+    },
+    TRACE_TAG_VIOLET_COLORS,
+    {
+        fill: settings.gradient.styles.shiftingColors[3],
+        fillActive: settings.gradient.styles.shiftingColors[3],
+        fillHover: settings.gradient.styles.shiftingColors[0],
+        stroke: 'transparent',
+        strokeActive: 'transparent',
+        text: colorPalette.nightBlue,
+        closeHover: 'rgba(66, 73, 79, 0.1)',
+    },
+    {
+        fill: settings.gradient.styles.shiftingColors[0],
+        fillActive: settings.gradient.styles.shiftingColors[0],
+        fillHover: colorPalette.codeYellowHover,
+        stroke: 'transparent',
+        strokeActive: 'transparent',
+        text: colorPalette.nightBlue,
+        closeHover: 'rgba(66, 73, 79, 0.1)',
+    },
+] as const satisfies readonly TagPillColors[]
+
 // The trace stores raw provider ids (`openai:gpt-image-1`). The provider prefix
 // is rendered separately, so the model line stays readable at canvas sizes.
 export function formatExecutionTraceModelId(modelId: string): string {
@@ -50,6 +162,84 @@ export function formatExecutionTraceHandleRole(role: string): string {
         .filter(Boolean)
         .map((part, index) => index === 0 ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : part)
         .join(' ')
+}
+
+export function formatExecutionTraceFieldLabel(label: string): string {
+    const words = label
+        .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+        .split(/[-_\s]+/u)
+        .filter(Boolean)
+        .join(' ')
+    if (!words) return label
+    const mappedLabel = TRACE_FIELD_LABELS.get(words.toLowerCase())
+    return mappedLabel ?? `${words.charAt(0).toUpperCase()}${words.slice(1)}`
+}
+
+export function formatExecutionTraceDisplayValue(value: string): string {
+    if (!/^(?:0?\.\d+|1\.0+)$/u.test(value.trim())) return value
+    const percentage = Number(value) * 100
+    if (!Number.isFinite(percentage)) return value
+    return `${Number(percentage.toFixed(1))}%`
+}
+
+export function formatExecutionTraceTagLabel(label: string): string {
+    return formatExecutionTraceFieldLabel(label)
+}
+
+export function getExecutionTraceTagPillVariant(label: string, index = 0): TagPillVariant {
+    const normalizedLabel = label.trim().toLowerCase()
+    if (POSITIVE_VALUE_TAGS.has(normalizedLabel)) return 'explicit'
+    if (CAUTION_VALUE_TAGS.has(normalizedLabel)) return 'auto'
+    return TRACE_CATEGORICAL_TAG_VARIANTS[index % TRACE_CATEGORICAL_TAG_VARIANTS.length]
+}
+
+export function getExecutionTraceTagPillColors(label: string, index = 0): TagPillColors {
+    const normalizedLabel = label.trim().toLowerCase()
+    if (POSITIVE_VALUE_TAGS.has(normalizedLabel)) return TRACE_TAG_POSITIVE_COLORS
+    if (normalizedLabel === 'failed' || normalizedLabel === 'false') return TRACE_TAG_DANGER_COLORS
+    if (normalizedLabel === 'pending' || normalizedLabel === 'skipped') return TRACE_TAG_CAUTION_COLORS
+    return TRACE_CATEGORICAL_TAG_COLORS[index % TRACE_CATEGORICAL_TAG_COLORS.length]!
+}
+
+export function getExecutionTraceTagValues(value: string): string[] {
+    const values = value.split(',').map(item => item.trim()).filter(Boolean)
+    if (values.length === 0 || values.some(item => item.length > TRACE_TAG_MAX_LABEL_LENGTH)) return []
+    if (values.length > 1) return values
+
+    const [singleValue] = values
+    if (SINGLE_VALUE_TAGS.has(singleValue.toLowerCase())) return values
+    return /^[a-z0-9]+(?:-[a-z0-9]+)+$/u.test(singleValue) ? values : []
+}
+
+export function isExecutionTraceInternalIdValue(value: string): boolean {
+    return TRACE_UUID_PATTERN.test(value)
+}
+
+export function getExecutionTraceDisplayFacts(
+    facts: readonly ExecutionTraceFact[],
+): ExecutionTraceFact[] {
+    const groupedFacts = new Map<string, ExecutionTraceFact & { count: number }>()
+    for (const fact of facts) {
+        if (isExecutionTraceInternalIdValue(fact.value)) continue
+        const key = `${fact.label}\u0000${fact.value}`
+        const existing = groupedFacts.get(key)
+        if (existing) {
+            existing.count += 1
+            continue
+        }
+        groupedFacts.set(key, {
+            label: formatExecutionTraceFieldLabel(fact.label),
+            value: formatExecutionTraceDisplayValue(fact.value),
+            count: 1,
+        })
+    }
+
+    return [...groupedFacts.values()].map(({ count, ...fact }) => count > 1
+        ? {
+            ...fact,
+            label: `${fact.label}${fact.label.endsWith('s') ? '' : 's'} (${count})`,
+        }
+        : fact)
 }
 
 export function formatExecutionTraceDuration(startedAt?: number, completedAt?: number): string {
@@ -189,10 +379,10 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
                 return preview.dom
             }
         }
-        // Only Capability modules have a description sheet to hover; Tools and
-        // Skills referenced on their own render as the same chip without a card,
-        // exactly as they do in a user message.
-        if (handle.kind === 'capability-module' && previewRenderer?.getCapabilityModule) {
+        if (
+            (handle.kind === 'capability-module' || handle.kind === 'tool' || handle.kind === 'skill')
+            && previewRenderer?.getCapabilityModule
+        ) {
             const preview = createCapabilityPromptReferencePreview(
                 { moduleId: handle.id, displayName: handle.displayName },
                 previewRenderer,
@@ -223,21 +413,43 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     private renderModelCall(modelCall: ExecutionTraceModelCall): HTMLElement {
         const duration = formatExecutionTraceDuration(modelCall.startedAt, modelCall.completedAt)
         const tokenUsage = formatExecutionTraceTokenUsage(modelCall.tokenUsage)
+        const visibleParams = modelCall.params?.filter(param => !isExecutionTraceInternalIdValue(param.value)) ?? []
+        const modelBadge = createMediaModelBadge(resolveMediaModelBadgeConfig({
+            modelId: modelCall.modelId,
+            modelProvider: modelCall.provider,
+        }))
+        const modelHeader = html`
+            <div className="execution-trace-model-call-header">
+                <span className="execution-trace-model-call-role">${MODEL_CALL_ROLE_LABELS[modelCall.role]}</span>
+                ${modelBadge}
+            </div>
+        ` as HTMLElement
+        applyMediaModelBadgeStyleProperties(modelHeader, {
+            scale: settings.mediaNode.generatedMediaChrome.chatScale,
+        })
         return html`
             <li className="execution-trace-model-call" data-model-call-role=${modelCall.role}>
-                <div className="execution-trace-model-call-header">
-                    <span className="execution-trace-model-call-role">${MODEL_CALL_ROLE_LABELS[modelCall.role]}</span>
-                    <span className="execution-trace-model-call-id">${formatExecutionTraceModelId(modelCall.modelId)}</span>
-                    <span className="execution-trace-model-call-provider">${modelCall.provider}</span>
-                </div>
+                ${modelHeader}
                 ${modelCall.purpose
-                    ? html`<p className="execution-trace-prose">${modelCall.purpose}</p>`
+                    ? html`
+                        <div className="execution-trace-field">
+                            <span className="execution-trace-field-label">Purpose</span>
+                            <p className="execution-trace-prose">${modelCall.purpose}</p>
+                        </div>
+                    `
                     : null}
-                ${modelCall.params?.length ? this.renderParams(modelCall.params) : null}
+                ${visibleParams.length
+                    ? html`
+                        <div className="execution-trace-field">
+                            <span className="execution-trace-field-label">Parameters</span>
+                            ${this.renderParams(visibleParams)}
+                        </div>
+                    `
+                    : null}
                 ${modelCall.inputHandles?.length
                     ? html`
                         <div className="execution-trace-model-call-handles">
-                            <span className="execution-trace-model-call-handles-label">Given</span>
+                            <span className="execution-trace-field-label">Inputs</span>
                             ${this.renderHandleList(modelCall.inputHandles)}
                         </div>
                     `
@@ -248,7 +460,7 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
                 ${modelCall.outputHandles?.length
                     ? html`
                         <div className="execution-trace-model-call-handles">
-                            <span className="execution-trace-model-call-handles-label">Produced</span>
+                            <span className="execution-trace-field-label">Outputs</span>
                             ${this.renderHandleList(modelCall.outputHandles)}
                         </div>
                     `
@@ -256,15 +468,12 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
                 ${modelCall.errorMessage
                     ? html`<p className="execution-trace-prose execution-trace-model-call-error">${modelCall.errorMessage}</p>`
                     : null}
-                ${duration || tokenUsage || modelCall.providerOperationId
+                ${duration || tokenUsage
                     ? html`
-                        <div className="execution-trace-model-call-footer">
-                            ${duration ? html`<span>${duration}</span>` : null}
-                            ${tokenUsage ? html`<span>${tokenUsage}</span>` : null}
-                            ${modelCall.providerOperationId
-                                ? html`<span className="execution-trace-model-call-operation">${modelCall.providerOperationId}</span>`
-                                : null}
-                        </div>
+                        ${this.renderValueList([
+                            ...(duration ? [{ label: 'Duration', value: duration }] : []),
+                            ...(tokenUsage ? [{ label: 'Tokens', value: tokenUsage }] : []),
+                        ], 'execution-trace-model-call-footer')}
                     `
                     : null}
             </li>
@@ -272,31 +481,77 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     }
 
     private renderParams(params: readonly ExecutionTraceParam[]): HTMLElement {
+        return this.renderValueList(params.map(param => ({
+            label: formatExecutionTraceFieldLabel(param.name),
+            value: formatExecutionTraceDisplayValue(param.value),
+        })))
+    }
+
+    private renderFacts(facts: readonly ExecutionTraceFact[]): HTMLElement | null {
+        const displayFacts = getExecutionTraceDisplayFacts(facts)
+        if (displayFacts.length === 0) return null
         return html`
-            <dl className="execution-trace-params">
-                ${params.map(param => html`
-                    <div className="execution-trace-param">
-                        <dt>${param.name}</dt>
-                        <dd>${param.value}</dd>
-                    </div>
-                `)}
-            </dl>
+            <section className="execution-trace-section">
+                <h4 className="execution-trace-section-title">Outcome</h4>
+                ${this.renderValueList(displayFacts)}
+            </section>
         ` as HTMLElement
     }
 
-    private renderFacts(facts: readonly ExecutionTraceFact[]): HTMLElement {
+    private renderValueList(
+        items: ReadonlyArray<{
+            label: string
+            value: string
+            valueClassName?: string
+            allowTags?: boolean
+        }>,
+        className = '',
+    ): HTMLElement {
         return html`
-            <section className="execution-trace-section">
-                <dl className="execution-trace-params">
-                    ${facts.map(fact => html`
-                        <div className="execution-trace-param">
-                            <dt>${fact.label}</dt>
-                            <dd>${fact.value}</dd>
-                        </div>
-                    `)}
-                </dl>
-            </section>
+            <ul className="execution-trace-value-list ${className}">
+                ${items.map((item) => {
+                    const tagValues = item.allowTags === false ? [] : getExecutionTraceTagValues(item.value)
+                    const itemClassName = tagValues.length
+                        ? 'execution-trace-value-item execution-trace-value-item-tags'
+                        : 'execution-trace-value-item'
+                    return html`
+                        <li className=${itemClassName}>
+                            <span className="execution-trace-value-label">${item.label}</span>
+                            ${this.renderValue(item.value, tagValues, item.valueClassName)}
+                        </li>
+                    `
+                })}
+            </ul>
         ` as HTMLElement
+    }
+
+    private renderValue(value: string, tagValues: readonly string[], valueClassName = ''): HTMLElement {
+        if (tagValues.length === 0) {
+            return html`<span className="execution-trace-value-text ${valueClassName}">${value}</span>` as HTMLElement
+        }
+        return html`
+            <span className="execution-trace-value-tags ${valueClassName}">
+                ${tagValues.map((tagValue, index) => this.renderValueTag(
+                    tagValue,
+                    getExecutionTraceTagPillColors(tagValue, index),
+                ))}
+            </span>
+        ` as HTMLElement
+    }
+
+    private renderValueTag(
+        label: string,
+        colors: TagPillColors,
+    ): HTMLElement {
+        const displayLabel = formatExecutionTraceTagLabel(label)
+        const selectedFill = colors.fillActive ?? colors.fill ?? 'transparent'
+        const selectedStroke = colors.strokeActive ?? colors.stroke ?? 'transparent'
+        const tagStyle = {
+            background: selectedFill,
+            boxShadow: selectedStroke === 'transparent' ? 'none' : `inset 0 0 0 1px ${selectedStroke}`,
+            color: colors.text ?? colorPalette.nightBlue,
+        }
+        return html`<span className="execution-trace-value-tag" style=${tagStyle} title=${displayLabel}>${displayLabel}</span>` as HTMLElement
     }
 
     private renderCollapsibleText(title: string, text: string): HTMLElement {

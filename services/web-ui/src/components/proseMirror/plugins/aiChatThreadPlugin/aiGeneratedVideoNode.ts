@@ -8,7 +8,8 @@ import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaGenerationRun
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '@lixpi/ui-kit/components/video-controls'
-import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
+import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     aiGeneratedVideoNodeSpec,
@@ -177,9 +178,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     wrapper.addEventListener('click', handleClick)
 
     const updateModelChrome = (): void => {
-        renderMediaModelBadge(modelChromeElement, {
+        renderMediaModelBadge(modelChromeElement, resolveMediaModelBadgeConfig({
             modelId: node.attrs.mediaModelId || node.attrs.videoModel,
-        })
+        }))
     }
 
     const clearErrorPlaceholder = (): void => {

@@ -35,6 +35,7 @@ export type ProgressTimelineItem = {
     source?: ProgressTimelineItemSource
     summary?: string
     showSummaryWhenCollapsed?: boolean
+    hideSummaryWhenExpanded?: boolean
     meta?: string
     // Opaque payload the host expands into a rich detail block through
     // `renderItemDetail`. The timeline stays domain-free: it decides when the
@@ -337,7 +338,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
         const details = isExpanded
             ? html`
                 <span id=${detailsId} className="progress-timeline-details">
-                    ${item.summary && !isFocusedContext
+                    ${item.summary && !item.hideSummaryWhenExpanded && !isFocusedContext
                         ? html`
                             <small
                                 className="progress-timeline-summary"
@@ -415,6 +416,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
             source: item.source,
             hasSummary: Boolean(item.summary),
             showSummaryWhenCollapsed: Boolean(item.showSummaryWhenCollapsed),
+            hideSummaryWhenExpanded: Boolean(item.hideSummaryWhenExpanded),
             hasMeta: Boolean(item.meta),
             detailKey: this.getItemDetailKey(item),
             children: item.children?.map(projectItem),

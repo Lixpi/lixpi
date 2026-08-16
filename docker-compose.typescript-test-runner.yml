@@ -190,6 +190,7 @@ services:
             - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/shared/constants/ts/metrics-contracts.ts:cached
             - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/shared/constants/ts/index.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/shared/constants/ts/media-generation-layout-settings.ts:cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.test.ts:/usr/src/service/shared/constants/ts/media-generation-progress.test.ts:cached
             - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/shared/constants/ts/media-generation-progress.ts:cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.test.ts:/usr/src/service/shared/constants/ts/workspace-persistence-settings.test.ts:cached
             - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/shared/constants/ts/workspace-persistence-settings.ts:cached

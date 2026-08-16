@@ -10,6 +10,7 @@ import {
     type ExecutionTraceHandle,
     type MediaBranchLineagePlan,
     type MediaGenerationProgressState,
+    type MediaGenerationRunProgress,
     type MediaGenerationRunMeta,
     type OperationProgressItem,
 } from '@lixpi/constants'
@@ -25,6 +26,7 @@ import BlobModel, { buildBlobReferenceOperations, buildBlobReferenceRemovalOpera
 import MediaGenerationRequestModel from '../models/media-generation-request.ts'
 import { enqueueBlobDeletion, enqueueProvenanceRebuild } from './asset-maintenance-queue.ts'
 import AssetDocumentService from './asset-document-service.ts'
+import { MediaGenerationRequestEventLog } from './media-generation-request-event-log.ts'
 
 const { ORG_NAME, STAGE } = process.env
 
@@ -74,7 +76,11 @@ export const getReasoningPreambleSummary = (
             const preamble = firstInvocationIndex >= 0
                 ? content.slice(0, firstInvocationIndex)
                 : content
-            summary = collectDocumentText(preamble).replace(/\s+/gu, ' ').trim().slice(0, 600)
+            summary = preamble
+                .map(block => collectDocumentText(block).replace(/\s+/gu, ' ').trim())
+                .filter(Boolean)
+                .join('\n\n')
+                .slice(0, 600)
             return
         }
         if (Array.isArray(node.content)) node.content.forEach(visit)
@@ -302,7 +308,20 @@ const materializeAssetProvenanceAttempt = async ({
         || (run.reasoningIndex === generationRun.reasoningIndex
             && run.modelId === generationRun.mediaModelId)
     ))
-    const progressMessage = durableRun?.progress?.message
+    const streamedProgress = durableRun
+        ? await MediaGenerationRequestEventLog.fromSingleton().getLatestRunProgress({
+            workspaceId,
+            generationRequestId: generationRun.generationRequestId,
+            generationRun: durableRun.generationRun,
+        }).then(envelope => {
+            const progress = envelope?.event.payload.progress
+            return progress && typeof progress === 'object'
+                ? progress as MediaGenerationRunProgress
+                : undefined
+        }).catch(() => undefined)
+        : undefined
+    const effectiveProgress = streamedProgress ?? durableRun?.progress
+    const progressMessage = effectiveProgress?.message
         ?? (terminalStatus === 'completed'
             ? 'Media generation completed.'
             : terminalStatus === 'cancelled'
@@ -313,7 +332,7 @@ const materializeAssetProvenanceAttempt = async ({
         status: terminalStatus,
         message: progressMessage,
         progress: settleMediaGenerationRunProgress(
-            durableRun?.progress,
+            effectiveProgress,
             terminalStatus,
             progressMessage,
         ),

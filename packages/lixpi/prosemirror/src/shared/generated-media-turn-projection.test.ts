@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
     buildBranchMarkerTurnProjectionFromThreadContent,
     buildGeneratedMediaTurnProjectionFromThreadContent,
+    getGeneratedMediaProgressFromThreadContent,
 } from './generated-media-turn-projection.ts'
 import {
     collectProseMirrorText,
@@ -213,6 +214,50 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
 })
 
 describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
+    it('resolves a completed media timeline from sealed thread content', () => {
+        const generationProgress = {
+            generationRequestId: 'request-1',
+            mediaRunId: 'media-run-1',
+            status: 'completed' as const,
+            message: 'Done.',
+            progress: {
+                phase: 'composing' as const,
+                completedSteps: 1,
+                totalSteps: 1,
+                message: 'Done.',
+                items: [{ id: 'generate', title: 'Generate media', status: 'completed' as const }],
+            },
+            updatedAt: 10,
+        }
+        const content: ProseMirrorJsonNode = {
+            type: 'doc',
+            content: [{
+                type: 'aiChatThread',
+                attrs: { threadId: 'thread-1' },
+                content: [responseMessage(
+                    { id: 'response-1' },
+                    [{
+                        type: 'aiGeneratedImage',
+                        attrs: {
+                            assetId: 'asset-1',
+                            mediaRunId: 'media-run-1',
+                            generationProgress,
+                        },
+                    }],
+                )],
+            }],
+        }
+
+        const resolved = getGeneratedMediaProgressFromThreadContent(content, {
+            responseMessageId: 'response-1',
+            mediaRunId: 'media-run-1',
+            assetId: 'asset-1',
+        })
+
+        expect(resolved).toEqual(generationProgress)
+        expect(resolved).not.toBe(generationProgress)
+    })
+
     it('starts history with one pipeline that absorbs the preamble and media prompt', () => {
         const mediaPrompt = [
             'Use the reference image to create one consistent character sheet.',

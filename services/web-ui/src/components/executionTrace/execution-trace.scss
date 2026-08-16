@@ -1,45 +1,58 @@
-// Execution trace detail block. Rendered inside a progress timeline item, so it
-// inherits the host's timeline typography variables and never sets its own
-// colors outright — a trace on the dark canvas marker and a trace in a light
-// provenance document use the same markup.
 .execution-trace {
     display: grid;
-    gap: 8px;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     margin-top: 2px;
+    color: var(--progress-timeline-primary, currentColor);
     font-size: var(--progress-timeline-summary-size, 11px);
-    line-height: 1.4;
+    font-weight: 450;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 .execution-trace-section {
     display: grid;
-    gap: 4px;
+    gap: 5px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
-.execution-trace-section-title {
+.execution-trace-section-title,
+.execution-trace-field-label {
     margin: 0;
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
-    font-size: inherit;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    color: currentColor;
+    font-size: 0.82em;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    line-height: 1.2;
+    opacity: 0.58;
     text-transform: uppercase;
 }
 
 .execution-trace-prose {
+    min-width: 0;
     margin: 0;
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    color: currentColor;
+    line-height: 1.4;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
 }
 
 .execution-trace-section-error .execution-trace-prose,
 .execution-trace-model-call-error {
-    color: var(--progress-timeline-danger, rgb(255 138 128 / 92%));
+    color: var(--progress-timeline-danger, #d95d57);
 }
 
 .execution-trace-handles {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 6px;
+    gap: 4px 8px;
+    min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -47,15 +60,31 @@
 
 .execution-trace-handle {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
+    min-width: 0;
     max-width: 100%;
+}
+
+.execution-trace-handle .prompt-reference-chip,
+.execution-trace-handle .prompt-reference-chip-content {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+}
+
+.execution-trace-handle .prompt-reference-chip-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .execution-trace-handle-role,
 .execution-trace-handle-note {
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
-    font-size: 0.92em;
+    color: currentColor;
+    font-size: 0.88em;
+    opacity: 0.6;
 }
 
 .execution-trace-handle-note {
@@ -65,6 +94,7 @@
 .execution-trace-model-calls {
     display: grid;
     gap: 6px;
+    min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -72,103 +102,199 @@
 
 .execution-trace-model-call {
     display: grid;
-    gap: 4px;
-    padding: 6px 8px;
-    border-left: 2px solid var(--progress-timeline-rail, rgb(255 255 255 / 18%));
-    border-radius: 0 6px 6px 0;
-    background: var(--progress-timeline-detail-surface, rgb(255 255 255 / 6%));
+    gap: 6px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 2px 0 2px 11px;
+    border: 0;
+    border-left: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 0;
+    background: transparent;
 }
 
 .execution-trace-model-call-header {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .execution-trace-model-call-role {
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
-    font-size: 0.92em;
-    letter-spacing: 0.04em;
+    flex: 0 0 auto;
+    color: currentColor;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    line-height: 1.2;
+    opacity: 0.62;
     text-transform: uppercase;
 }
 
-.execution-trace-model-call-id {
-    color: var(--progress-timeline-primary, currentColor);
-    font-weight: 600;
-    overflow-wrap: anywhere;
+.execution-trace-model-call-header .media-model-badge {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
-.execution-trace-model-call-provider,
-.execution-trace-model-call-footer,
-.execution-trace-model-call-operation {
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
-    font-size: 0.92em;
-}
-
-.execution-trace-model-call-footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-}
-
-.execution-trace-model-call-operation {
-    overflow-wrap: anywhere;
-}
-
+.execution-trace-field,
 .execution-trace-model-call-handles {
     display: grid;
     gap: 3px;
+    min-width: 0;
 }
 
-.execution-trace-model-call-handles-label {
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
-    font-size: 0.92em;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-
-.execution-trace-params {
-    display: grid;
-    gap: 2px 10px;
+.execution-trace-value-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
     margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
-.execution-trace-param {
+.execution-trace .execution-trace-handles,
+.execution-trace .execution-trace-model-calls,
+.execution-trace .execution-trace-value-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.execution-trace-value-item {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    align-items: baseline;
+    gap: 1px 6px;
+    min-width: 0;
+    padding: 0 0 0 9px;
+    font-size: 1em;
+    line-height: 1.35;
+}
 
-    dt {
-        color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
-    }
+.execution-trace-value-item::before {
+    content: '';
+    position: absolute;
+    top: 0.66em;
+    left: 1px;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.34;
+}
 
-    dd {
-        margin: 0;
-        color: var(--progress-timeline-primary, currentColor);
-        overflow-wrap: anywhere;
-    }
+.execution-trace-value-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: currentColor;
+    font-size: 1em;
+    font-weight: 500;
+    line-height: 1.35;
+    opacity: 0.66;
+    overflow-wrap: break-word;
+}
+
+.execution-trace-value-label::after {
+    content: ':';
+}
+
+.execution-trace-value-text {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: currentColor;
+    font-size: 1em;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.execution-trace-value-item-tags {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 4px;
+    padding-top: 1px;
+    padding-bottom: 2px;
+}
+
+.execution-trace-value-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 5px;
+    min-width: 0;
+    max-width: 100%;
+    line-height: 1;
+}
+
+.execution-trace-value-tag {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    max-width: 100%;
+    padding: 4px;
+    border-radius: 999px;
+    font-size: var(--execution-trace-tag-pill-font-size);
+    font-weight: var(--execution-trace-tag-pill-font-weight);
+    line-height: 1;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.execution-trace-model-call-footer {
+    gap: 3px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-top: 1px;
+}
+
+.execution-trace-text {
+    min-width: 0;
 }
 
 .execution-trace-text-summary {
-    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    color: currentColor;
     cursor: pointer;
+    font-size: 0.88em;
+    font-weight: 650;
     list-style: none;
+    opacity: 0.62;
+}
 
-    &::-webkit-details-marker {
-        display: none;
-    }
+.execution-trace-text-summary::-webkit-details-marker {
+    display: none;
+}
 
-    &::before {
-        content: '▸ ';
-    }
+.execution-trace-text-summary::before {
+    content: '\203A';
+    display: inline-block;
+    width: 10px;
+    transform-origin: 45% 50%;
+    transition: transform 140ms ease;
 }
 
 .execution-trace-text[open] .execution-trace-text-summary::before {
-    content: '▾ ';
+    transform: rotate(90deg);
 }
 
 .execution-trace-text-body {
-    margin-top: 3px;
-    padding-left: 10px;
+    max-height: none;
+    margin-top: 4px;
+    padding: 1px 0 1px 10px;
+    overflow: visible;
+    border-left: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 0;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.94em;
 }

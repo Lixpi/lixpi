@@ -403,6 +403,24 @@ function getProjectedMediaGenerationProgress(
     return generationProgress as MediaGenerationProgressState
 }
 
+export function getGeneratedMediaProgressFromThreadContent(
+    threadContent: unknown,
+    locator: GeneratedMediaTurnLocator,
+): MediaGenerationProgressState | null {
+    const root = parseProseMirrorJsonContent(threadContent)
+    if (!root) return null
+
+    let progress: MediaGenerationProgressState | null = null
+    const visit = (node: ProseMirrorJsonNode): void => {
+        if (progress) return
+        progress = getProjectedMediaGenerationProgress(node, locator)
+        if (progress) return
+        for (const child of node.content ?? []) visit(child)
+    }
+    visit(root)
+    return progress ? structuredClone(progress) : null
+}
+
 function isGenerationInvocationAnchor(
     node: ProseMirrorJsonNode,
     locator: GeneratedMediaTurnLocator,
