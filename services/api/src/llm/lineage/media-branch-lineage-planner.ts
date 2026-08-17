@@ -138,6 +138,7 @@ export class MediaBranchLineagePlanner {
             branchId,
             promptText,
             promptFingerprint,
+            referenceAssetIds,
             referenceNodeIds,
             providedReferenceNodeIds,
             sourceContextNodeIds,
@@ -154,6 +155,7 @@ export class MediaBranchLineagePlanner {
             branchId,
             promptText,
             promptFingerprint,
+            referenceAssetIds,
             referenceNodeIds,
             providedReferenceNodeIds,
             sourceContextNodeIds,
@@ -356,6 +358,7 @@ export class MediaBranchLineagePlanner {
         branchId: string
         promptText: string
         promptFingerprint?: string
+        referenceAssetIds: string[]
         referenceNodeIds: string[]
         providedReferenceNodeIds: string[]
         sourceContextNodeIds: string[]
@@ -375,6 +378,7 @@ export class MediaBranchLineagePlanner {
             provenance: {
                 kind: 'branch-root-fork-decision',
                 promptText: args.promptText,
+                referenceAssetIds: args.referenceAssetIds,
                 providedReferenceNodeIds: args.providedReferenceNodeIds,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
@@ -399,6 +403,7 @@ export class MediaBranchLineagePlanner {
             provenance: {
                 kind: 'reasoning-run',
                 promptText: args.promptText,
+                referenceAssetIds: args.referenceAssetIds,
                 providedReferenceNodeIds: args.providedReferenceNodeIds,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
@@ -434,6 +439,7 @@ export class MediaBranchLineagePlanner {
             provenance: {
                 kind: 'branch-continuation',
                 promptText: args.promptText,
+                referenceAssetIds: args.referenceAssetIds,
                 providedReferenceNodeIds: args.providedReferenceNodeIds,
                 referenceNodeIds: args.referenceNodeIds,
                 sourceContextNodeIds: args.sourceContextNodeIds,
@@ -537,6 +543,7 @@ type MediaMarkerArgs = {
     branchId: string
     promptText: string
     promptFingerprint?: string
+    referenceAssetIds: string[]
     referenceNodeIds: string[]
     providedReferenceNodeIds: string[]
     sourceContextNodeIds: string[]

@@ -94,9 +94,9 @@ export const includeLineageProgressInAssetProvenance = (
     reasoningSummary = '',
     generationRun?: MediaGenerationRunMeta,
 ): MediaGenerationProgressState => {
-    const referenceHandles: ExecutionTraceHandle[] = (
-        generationRun?.lineageAssignment?.referenceAssetIds ?? []
-    ).map(assetId => ({
+    const referenceHandles: ExecutionTraceHandle[] = [...new Set(
+        generationRun?.lineageAssignment?.referenceAssetIds ?? [],
+    )].map(assetId => ({
         kind: 'media' as const,
         id: assetId,
         displayName: assetId,

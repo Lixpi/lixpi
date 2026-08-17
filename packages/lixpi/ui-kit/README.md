@@ -16,6 +16,7 @@ Use public package imports:
 
 ```typescript
 import { createProgressTimeline } from '@lixpi/ui-kit/components/progress-timeline'
+import { createCanvasNodeFooter } from '@lixpi/ui-kit/components/canvas-node-footer'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { createSidePanel } from '@lixpi/ui-kit/components/side-panel'
 import { createBlockCardTilesList } from '@lixpi/ui-kit/components/block-card-tiles-list'
@@ -24,6 +25,7 @@ import { appendSvgPathIcon, xIcon } from '@lixpi/ui-kit/svg'
 
 ```scss
 @use '@lixpi/ui-kit/styles/progress-timeline';
+@use '@lixpi/ui-kit/styles/canvas-node-footer';
 @use '@lixpi/ui-kit/styles/side-panel';
 @use '@lixpi/ui-kit/styles/block-card-tiles-list';
 ```
@@ -35,6 +37,7 @@ The shared animated collapse/expand icon describes the available action: collaps
 ## Components
 
 - Bubble menu
+- Canvas node footer
 - Dropdown
 - Help tooltip
 - Info bubble

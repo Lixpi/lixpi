@@ -17,7 +17,6 @@ type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLi
 export type BranchMarkerDimensionOptions = {
     responseLine?: boolean
     responseText?: string
-    screenFixed?: boolean
 }
 
 // Marker text can grow while reasoning streams. Preserve the connector's
@@ -71,10 +70,6 @@ export function getBranchMarkerMinWidth(): number {
     return Math.round(marker.baseSize * marker.minWidthMultiplier)
 }
 
-export function getBranchMarkerScreenFixedMinWidth(): number {
-    return Math.round(marker.baseSize * 1.1)
-}
-
 // Match the natural single-line height (vertical padding + one message line) so
 // a one-line marker isn't inflated relative to a wrapped two-line one.
 function getMarkerMinHeight(): number {
@@ -99,33 +94,12 @@ function getMarkerPromptLineCount(promptText: string, width: number): number {
     return promptPreview.length > charsPerLine ? 2 : 1
 }
 
-// Sizing for the screen-fixed preflight pose: the prompt stays on one line up to
-// a wider ceiling (then truncates), while the response row adds height only once
-// streamed text is visible. Shorter and wider than the on-canvas pill.
-function getScreenFixedDimensions(promptText: string, responseLine: boolean, responseText = ''): { width: number; height: number } {
-    const minWidth = getBranchMarkerScreenFixedMinWidth()
-    const maxWidth = getBranchMarkerMinWidth() * marker.screenFixedMaxWidthGrowth
-    const promptPreview = getBranchMarkerPromptPreview(promptText)
-    const responsePreview = getBranchMarkerResponsePreview(responseText)
-    const previewCharCount = Math.max(promptPreview.length, responsePreview.length)
-    const desiredWidth = marker.screenFixedHorizontalPadding + previewCharCount * marker.approxCharWidth
-    const responseHeight = responseLine
-        ? marker.screenFixedSeparatorHeight + getResponseLineHeight()
-        : 0
-    return {
-        width: Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth))),
-        height: marker.screenFixedVerticalPadding + getMessageLineHeight() + responseHeight,
-    }
-}
-
-// Single estimator both sides use. On-canvas pose by default; pass
-// screenFixed: true for the preflight composer-attached pose.
+// The API and browser use this single on-canvas estimator for every marker
+// phase, including preflight.
 export function estimateBranchMarkerDimensions(
     promptText: string,
     options: BranchMarkerDimensionOptions = {},
 ): { width: number; height: number } {
-    if (options.screenFixed) return getScreenFixedDimensions(promptText, Boolean(options.responseLine), options.responseText)
-
     const width = getMarkerWidthForText(promptText, options.responseText)
     const promptLineCount = getMarkerPromptLineCount(promptText, width)
     const responseHeight = options.responseLine

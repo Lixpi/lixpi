@@ -1,4 +1,5 @@
 @use '@lixpi/ui-kit/styles/bubble-menu';
+@use '@lixpi/ui-kit/styles/canvas-node-footer';
 @use '@lixpi/ui-kit/styles/dropdown';
 @use '@lixpi/ui-kit/styles/media-model-badge';
 @use '@lixpi/ui-kit/styles/progress-timeline';
@@ -485,61 +486,6 @@
     pointer-events: none;
 }
 
-.workspace-generated-media-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    pointer-events: auto;
-}
-
-.workspace-generated-media-pending-actions {
-    justify-content: flex-start;
-}
-
-.media-generation-trace-button {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
-    padding: 0;
-    border: 0;
-    outline: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--workspace-media-info-button-color, #4d5963);
-    cursor: pointer;
-    pointer-events: auto;
-    overflow: visible;
-    transition: hoverTransition(color, $defaultHoverTransitionDuration);
-}
-
-.media-generation-trace-button:hover,
-.media-generation-trace-button:focus-visible,
-.media-generation-trace-button.is-selected {
-    color: var(--workspace-media-info-button-hover-color, #181e23);
-}
-
-.media-generation-trace-button[hidden] {
-    display: none;
-}
-
-.media-generation-trace-button-ripple {
-    display: block;
-    width: 20px;
-    height: 20px;
-    pointer-events: none;
-}
-
-.media-generation-trace-button-ripple svg {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
 .workspace-generated-media-pending-icon {
     position: absolute;
     width: var(--workspace-generated-media-chrome-icon-size, 34px);
@@ -557,138 +503,9 @@
     }
 }
 
-.media-info-button {
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--workspace-media-info-button-color, #4d5963);
-    transition: hoverTransition(color, $defaultHoverTransitionDuration);
-    padding: 0;
-    outline: none;
-    cursor: pointer;
-    pointer-events: auto;
-
-    > span {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: var(--workspace-generated-media-chrome-icon-size, 34px);
-        height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    }
-
-    svg {
-        width: 79.5918%;
-        height: 79.5918%;
-        fill: currentColor;
-    }
-
-    &:hover {
-        color: var(--workspace-media-info-button-hover-color, #181e23);
-        background: transparent;
-    }
-
-    &.is-active {
-        color: var(--workspace-media-info-button-hover-color, #181e23);
-        background: transparent;
-    }
-
-    &:focus,
-    &:focus-visible {
-        outline: none;
-    }
-
-    // Unobtrusive pulse while a freshly uploaded media object is being analyzed
-    // to generate its descriptor. The title/aria-label explains it on hover.
-    &.is-analyzing {
-        color: $steelBlue;
-        animation: workspace-media-analyzing-pulse 1.4s ease-in-out infinite;
-    }
-}
-
-.media-info-model-separator {
-    position: relative;
-    width: 1px;
-    height: 70%;
-    flex: 0 0 1px;
-    pointer-events: none;
-
-    &::before {
-        --media-info-model-separator-mask: linear-gradient(
-            90deg,
-            transparent 0,
-            transparent 5px,
-            rgba(0, 0, 0, 0.18) 10px,
-            #000 14px,
-            #000 calc(100% - 14px),
-            rgba(0, 0, 0, 0.18) calc(100% - 10px),
-            transparent calc(100% - 5px),
-            transparent 100%
-        );
-
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: var(--workspace-generated-media-chrome-icon-size, 34px);
-        height: 1px;
-        background: var(
-            --workspace-branch-marker-separator-gradient,
-            linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)
-        );
-        border-radius: 999px;
-        filter: invert(1);
-        opacity: 0.64;
-        mask-image: var(--media-info-model-separator-mask);
-        -webkit-mask-image: var(--media-info-model-separator-mask);
-        transform: translate(-50%, -50%) rotate(90deg);
-        transform-origin: center;
-    }
-}
-
-.media-review-action-separator {
-    margin-right: 1px;
-    margin-left: -1px;
-}
-
-.media-history-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    min-width: 160px;
-    margin-left: auto;
-    padding: 0 16px;
-    gap: 7px;
-    overflow: hidden;
-    color: var(--workspace-branch-origin-icon-color);
-    background: var(--workspace-branch-origin-background-color);
-    border: 1px solid var(--workspace-branch-origin-border-color);
-    border-radius: 9999px;
-    box-shadow: var(--workspace-branch-origin-box-shadow);
-    font-size: 16px;
-    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
-    line-height: 1;
-    text-overflow: clip;
-    white-space: nowrap;
-    cursor: pointer;
-    pointer-events: auto;
-    transition: hoverTransition(filter, $defaultHoverTransitionDuration);
-
-    &:hover,
-    &.is-active {
-        filter: brightness(0.94);
-    }
-
-    &:focus-visible {
-        outline: 2px solid currentColor;
-        outline-offset: 2px;
-    }
+.canvas-node-footer-info-button.is-analyzing {
+    color: $steelBlue;
+    animation: workspace-media-analyzing-pulse 1.4s ease-in-out infinite;
 }
 
 .media-review-action,
@@ -749,9 +566,8 @@
     height: 88%;
 }
 
-.workspace-generated-media-actions .media-info-button > span,
-.workspace-generated-media-actions .media-model-badge-icon,
-.workspace-generated-media-actions .media-review-action-icon {
+.canvas-node-footer .media-model-badge-icon,
+.canvas-node-footer .media-review-action-icon {
     transform: scale(0.8823529);
     transform-origin: center;
 }
@@ -761,31 +577,6 @@
     align-items: center;
     gap: 4px;
     pointer-events: auto;
-}
-
-.media-history-reasoning-icon {
-    flex: 0 0 14px;
-    pointer-events: none;
-}
-
-.media-history-button-text {
-    @include prompt-reference-chip-on-dark-surface;
-
-    display: block;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: clip;
-    white-space: nowrap;
-}
-
-.media-history-button:has(.context-preview-inline.is-open),
-.media-history-button-text:has(.context-preview-inline.is-open) {
-    overflow: visible;
-}
-
-.media-history-button-text .prompt-reference-chip {
-    font-size: inherit;
-    line-height: inherit;
 }
 
 @keyframes workspace-media-analyzing-pulse {
@@ -1959,68 +1750,6 @@
     cursor: pointer;
     overflow: visible;
     padding: 0;
-}
-
-.workspace-branch-marker-moving {
-    transition:
-        left var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1),
-        top var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1),
-        width var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1),
-        height var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1),
-        transform var(--workspace-branch-marker-move-duration, 420ms) cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: left, top, width, height, transform;
-}
-
-// Screen-fixed before a canvas destination is computed: keep the prompt on a
-// single line at the input's type size. It grows wider (see
-// getBranchMarkerScreenFixedDimensions) and truncates rather than wrapping.
-.workspace-branch-marker-screen-fixed {
-    .workspace-branch-marker-content {
-        gap: 6px;
-        padding: 7px 14px;
-    }
-
-    .workspace-branch-marker-content.has-stop-control {
-        padding-right: 42px;
-    }
-
-    .workspace-branch-marker-spinner {
-        flex-basis: 12px;
-        width: 12px;
-        height: 12px;
-        border-width: 1.8px;
-    }
-
-    .workspace-branch-marker-stop-control {
-        right: 9px;
-        width: 22px;
-        height: 22px;
-    }
-
-    .workspace-branch-marker-main {
-        gap: 0;
-    }
-
-    .workspace-branch-marker-message {
-        gap: 6px;
-        min-height: 1.12em;
-        padding: 0;
-    }
-
-    .workspace-branch-marker-message-text {
-        white-space: nowrap;
-        -webkit-line-clamp: 1;
-    }
-
-    .workspace-branch-marker-separator {
-        margin: 3px auto;
-    }
-
-    .workspace-branch-marker-response {
-        gap: 5px;
-        min-height: 1.12em;
-        padding: 0;
-    }
 }
 
 .workspace-branch-marker-content {

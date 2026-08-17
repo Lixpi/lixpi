@@ -432,6 +432,10 @@ export type BranchOriginProvenance = {
     kind: 'branch-root-fork-decision'
     promptText: string
     reasoningResponseText?: string
+    // Canonical referenced Asset set. Prompt documents preserve every inline
+    // mention separately; execution traces must not treat those occurrences as
+    // separate inputs. Optional only for persisted pre-field marker records.
+    referenceAssetIds?: string[]
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -443,6 +447,7 @@ export type BranchForkProvenance = {
     kind: 'reasoning-run'
     promptText: string
     reasoningResponseText?: string
+    referenceAssetIds?: string[]
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -458,6 +463,7 @@ export type BranchLineProvenance = {
     kind: 'branch-continuation'
     promptText: string
     reasoningResponseText?: string
+    referenceAssetIds?: string[]
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -618,6 +624,13 @@ export type MediaGenerationRequestCompletePayload = {
 
 export type MediaPromptSegment =
     | { kind: 'text'; text: string; from: number; to: number }
+    | {
+        kind: 'non-media-reference'
+        referenceType: 'capability-artifact' | 'capability-module' | 'tool' | 'skill'
+        displayName: string
+        from: number
+        to: number
+    }
     | {
         kind: 'reference'
         referenceType: 'media'

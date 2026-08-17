@@ -34,37 +34,32 @@ function extractFunctionBody(functionName: string): string {
 }
 
 describe('branch marker lifecycle', () => {
-    it('retires the screen-fixed preflight marker as soon as API media placeholders take over', () => {
-        const rememberBody = extractFunctionBody('rememberPlannedBranchMarkerRecord')
-        const clearBody = extractFunctionBody('clearPendingBranchMarkerStateForRun')
-        const screenPlacementBody = extractFunctionBody('syncPendingBranchMarkerScreenPlacements')
+    it('places every preflight marker in canvas-world geometry before rendering it', () => {
+        const persistedInsertBody = extractFunctionBody('insertPendingBranchMarkerForPersistedCanvasThread')
+        const canvasRunInsertBody = extractFunctionBody('insertPendingBranchMarkerForCanvasRun')
+        const lineageInsertBody = extractFunctionBody('insertPendingBranchMarkersFromLineagePlan')
 
-        expect(rememberBody).toContain('deletePendingBranchMarkerAliasesForNodeId(previousRecord.nodeId)')
-        expect(clearBody).toContain('syncPendingBranchMarkerScreenPlacements()')
-        expect(screenPlacementBody).toContain('if (!branchMarker) {')
-        expect(screenPlacementBody).toContain('cleanupBranchMarkerArtifacts([nodeId])')
+        for (const insertBody of [persistedInsertBody, canvasRunInsertBody, lineageInsertBody]) {
+            expectSourceToContain(
+                insertBody,
+                'getRootBranchMarkerPositionBeforeGeneratedMedia(',
+                'preflight canvas position',
+            )
+            expectSourceNotToContain(insertBody, 'screenFixed', 'preflight canvas position')
+            expectSourceNotToContain(insertBody, 'pendingBranchMarkerOverlayEl', 'preflight canvas position')
+        }
+        expectSourceToContain(
+            persistedInsertBody,
+            'appendBranchLineNodeToDOM(pendingNode)',
+            'persisted preflight viewport render',
+        )
+        expectSourceNotToContain(source, 'workspace-branch-marker-moving', 'branch marker lifecycle')
+        expectSourceNotToContain(source, 'syncPendingBranchMarkerScreenPlacements', 'branch marker lifecycle')
+        expectSourceNotToContain(scssSource, '.workspace-branch-marker-moving', 'branch marker styles')
+        expectSourceNotToContain(scssSource, '.workspace-branch-marker-screen-fixed', 'branch marker styles')
     })
 
-    it('removes superseded preflight DOM before measuring the composer stack', () => {
-        const screenPlacementBody = extractFunctionBody('syncPendingBranchMarkerScreenPlacements')
-
-        expect(
-            screenPlacementBody.includes('resolvePreflightBranchMarkerScreenOwnership('),
-            'screen placement should resolve visible preflight ownership',
-        ).toBe(true)
-        expect(
-            screenPlacementBody.includes('cleanupBranchMarkerArtifacts(screenOwnership.supersededPreflightNodeIds)'),
-            'screen placement should remove superseded preflight DOM from every marker root',
-        ).toBe(true)
-        expect(
-            screenPlacementBody.includes(
-                '...screenOwnership.visiblePreflightNodes.filter(node => !node.parentBranchNodeId),',
-            ),
-            'composer stack measurement should include only unattached visible preflight owners',
-        ).toBe(true)
-    })
-
-    it('sweeps late composer preflight markers when the API request completes', () => {
+    it('sweeps late viewport preflight markers when the API request completes', () => {
         const settleBody = extractFunctionBody('settleMediaGenerationRequest')
 
         expect(settleBody).toContain('removePreflightBranchMarkersForThread(currentCanvasState, threadId)')
@@ -81,35 +76,32 @@ describe('branch marker lifecycle', () => {
             'final run settlement should remove the thread-scoped placement alias',
         ).toBe(true)
         expect(finishBody).toContain('removePreflightBranchMarkersForThread(currentCanvasState, threadId)')
-        expect(finishBody).toContain('removeOrphanedBranchMarkerOverlayElements(')
+        expect(finishBody).toContain('removeOrphanedBranchMarkerElements(')
         expect(
-            finishBody.includes('removeOrphanedBranchMarkerOverlayElements(\n            viewportEl,'),
+            finishBody.includes('removeOrphanedBranchMarkerElements(\n            viewportEl,'),
             'final run settlement should sweep stale branch-marker copies stranded in the viewport',
         ).toBe(true)
-        expect(finishBody).toContain('removeBranchMarkerOverlayElementsForConversation(')
         expect(finishBody).toContain('settleDetachedCanvasRun(threadId)')
         expect(finishBody).toContain('scheduleDetachedCanvasRunTeardown(threadId)')
     })
 
-    it('recovers an alias-lost overlay marker before appending the planned marker', () => {
+    it('replaces the preflight viewport element directly with the planned marker', () => {
         const ensureRecordBody = extractFunctionBody('ensurePendingBranchMarkerRecordForApiRun')
-        const deferSnapshotBody = extractFunctionBody('shouldDeferApiCanvasSnapshotBranchMarkerRender')
+        const promoteBody = extractFunctionBody('promotePendingBranchMarkerElement')
         const snapshotSyncBody = extractFunctionBody('syncApiCanvasSnapshotNodesToDOM')
         const syncPlannedBody = extractFunctionBody('syncPlannedBranchMarkerResolution')
         const resolvePlannedBody = extractFunctionBody('resolvePendingBranchMarkerWithLineagePlan')
 
-        expect(ensureRecordBody).toContain('recoverPendingBranchMarkerRecordFromOverlay(threadId, generationRun)')
-        expect(deferSnapshotBody).toContain('findPendingBranchMarkerOverlayIdentity(')
-        expect(snapshotSyncBody.match(/shouldDeferApiCanvasSnapshotBranchMarkerRender\(node\)/g)).toHaveLength(3)
+        expect(ensureRecordBody).toContain('recoverPendingBranchMarkerRecordFromCanvasState(threadId, generationRun)')
+        expectSourceToContain(promoteBody, 'replaceBranchMarkerDomCopies({', 'planned marker viewport handoff')
+        expectSourceToContain(promoteBody, 'viewportEl,', 'planned marker viewport handoff')
+        expectSourceNotToContain(promoteBody, 'overlayEl', 'planned marker viewport handoff')
+        expectSourceNotToContain(promoteBody, 'applyStyle(', 'planned marker viewport handoff')
         expect(syncPlannedBody.includes(
             'promotePendingBranchMarkerElement(previousRecord.nodeId, plannedNode)',
-        ), 'incremental planned-marker sync should not trust a stale record id').toBe(false)
-        expect(syncPlannedBody).toContain('resolveVisiblePendingBranchMarkerOwner(')
-        expect(syncPlannedBody.includes(
-            'promotePendingBranchMarkerElement(screenFixedOwnerNodeId, plannedNode)',
-        ), 'incremental planned-marker sync should consume the recovered screen-fixed owner').toBe(true)
-        expect(resolvePlannedBody).toContain('resolveVisiblePendingBranchMarkerOwner(')
-        expect(resolvePlannedBody).toContain('promotePendingBranchMarkerElement(visibleOwnerNodeId, plannedNodeWithPending)')
+        ), 'incremental planned-marker sync should replace the recorded viewport owner').toBe(true)
+        expect(resolvePlannedBody).toContain('promotePendingBranchMarkerElement(record.nodeId, plannedNodeWithPending)')
+        expectSourceNotToContain(snapshotSyncBody, 'shouldDefer', 'API canvas snapshot marker sync')
         expect(syncPlannedBody.includes(
             "console.info('[CANVAS] incremental branch marker ownership handoff'",
         ), 'incremental ownership handoff should emit a diagnostic').toBe(true)
@@ -153,16 +145,6 @@ describe('branch marker lifecycle', () => {
             editorBody.includes('onError: () => failDetachedCanvasRun(threadId)'),
             'detached AI services should route top-level API errors into canvas cleanup',
         ).toBe(true)
-    })
-
-    it('keeps preflight ownership while structural render has not moved it into the overlay yet', () => {
-        const matchingRecordBody = extractFunctionBody('getMatchingScreenFixedPendingBranchMarkerRecord')
-        const threadRecordBody = extractFunctionBody('getScreenFixedPendingBranchMarkerRecordForThread')
-
-        expect(matchingRecordBody).toContain('if (markerEl) return record')
-        expect(threadRecordBody).toContain('if (markerEl) return record')
-        expect(matchingRecordBody).not.toContain('markerEl?.parentElement === pendingBranchMarkerOverlayEl')
-        expect(threadRecordBody).not.toContain('markerEl?.parentElement === pendingBranchMarkerOverlayEl')
     })
 
     it('chooses one structural render owner when preflight and planned markers coexist', () => {
@@ -222,7 +204,7 @@ describe('branch marker lifecycle', () => {
         )
         expectSourceToContain(
             chromeSyncBody,
-            'destroyMediaGenerationTraceButtons()',
+            'destroyGeneratedOutputNodeFooters()',
             'media chrome rebuild',
         )
         expectSourceNotToContain(

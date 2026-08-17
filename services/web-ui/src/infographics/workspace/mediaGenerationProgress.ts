@@ -87,6 +87,22 @@ export function settleReadyMediaGenerationProgress(
     }
 }
 
+export function resolveMediaGenerationHistoryProgress({
+    projectedState,
+    liveState,
+    matchesLiveTarget,
+}: {
+    projectedState: MediaGenerationProgressState
+    liveState: MediaGenerationProgressState | null
+    matchesLiveTarget: boolean
+}): MediaGenerationProgressState {
+    if (!matchesLiveTarget || !liveState) return projectedState
+    if (liveState.status !== 'pending'
+        && liveState.status !== 'running'
+        && liveState.status !== 'awaiting-provider-verification') return projectedState
+    return liveState
+}
+
 export function isPersistedMediaGenerationActive({
     progressStatus,
     reviewStatus,

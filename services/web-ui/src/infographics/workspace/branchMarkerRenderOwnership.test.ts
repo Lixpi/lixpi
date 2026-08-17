@@ -11,7 +11,6 @@ import {
     getSupersededPreflightNodeIdsForPlannedOwner,
     hasCompletePlannedBranchMarkerGeometry,
     resolveBranchMarkerRenderOwnership,
-    resolvePreflightBranchMarkerScreenOwnership,
 } from './branchMarkerRenderOwnership.ts'
 
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
@@ -109,7 +108,7 @@ describe('planned branch marker geometry readiness', () => {
         )).toBe(true)
     })
 
-    it('rejects a screen-fixed preflight marker using the planned node identity', () => {
+    it('rejects a preflight marker using the planned node identity', () => {
         const preflight = makePreflight('planned-origin', 'thread-1')
 
         expect(hasCompletePlannedBranchMarkerGeometry(
@@ -242,25 +241,5 @@ describe('branch marker structural render ownership', () => {
         const ownership = resolveBranchMarkerRenderOwnership(nodes, new Set(['planned-2']))
 
         expect(ownership.suppressedNodeIds.size).toBe(0)
-    })
-})
-
-describe('branch marker screen-fixed ownership', () => {
-    it('does not reserve composer stack space for a superseded preflight marker from an older thread', () => {
-        const stalePreflight = makePreflight('stale-preflight', 'old-thread')
-        const startedPlanned = makePlannedOrigin('started-planned', 'old-thread')
-        const currentPreflight = makePreflight('current-preflight', 'current-thread')
-
-        const ownership = resolvePreflightBranchMarkerScreenOwnership(
-            [stalePreflight, startedPlanned, currentPreflight],
-            new Set([startedPlanned.nodeId]),
-        )
-
-        expect(ownership.visiblePreflightNodes.map(node => node.nodeId)).toEqual([
-            currentPreflight.nodeId,
-        ])
-        expect([...ownership.supersededPreflightNodeIds]).toEqual([
-            stalePreflight.nodeId,
-        ])
     })
 })

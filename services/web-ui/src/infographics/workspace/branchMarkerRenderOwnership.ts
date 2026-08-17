@@ -15,11 +15,6 @@ export type BranchMarkerRenderOwnership = {
     visibleOwnerBySuppressedNodeId: Map<string, string>
 }
 
-export type PreflightBranchMarkerScreenOwnership = {
-    visiblePreflightNodes: BranchMarkerNode[]
-    supersededPreflightNodeIds: Set<string>
-}
-
 type PlannedBranchMarkerIdentity = {
     nodeId: string
     type: BranchMarkerNode['type']
@@ -185,21 +180,4 @@ export function resolveBranchMarkerRenderOwnership(
     }
 
     return { suppressedNodeIds, visibleOwnerBySuppressedNodeId }
-}
-
-export function resolvePreflightBranchMarkerScreenOwnership(
-    nodes: BranchMarkerNode[],
-    startedPlannedNodeIds: ReadonlySet<string>,
-): PreflightBranchMarkerScreenOwnership {
-    const ownership = resolveBranchMarkerRenderOwnership(nodes, startedPlannedNodeIds)
-    const preflightNodes = nodes.filter(node => node.pendingState?.phase === 'preflight')
-    const supersededPreflightNodeIds = new Set(
-        preflightNodes
-            .filter(node => ownership.suppressedNodeIds.has(node.nodeId))
-            .map(node => node.nodeId),
-    )
-    return {
-        visiblePreflightNodes: preflightNodes.filter(node => !supersededPreflightNodeIds.has(node.nodeId)),
-        supersededPreflightNodeIds,
-    }
 }
