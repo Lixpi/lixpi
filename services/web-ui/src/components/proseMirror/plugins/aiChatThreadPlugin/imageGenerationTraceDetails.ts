@@ -36,6 +36,7 @@ type RenderImageGenerationTraceDetailsParams = {
 
 export type ImageGenerationTraceDetailsOptions = {
     className?: string
+    hideToolPrompt?: boolean
     getAdditionalReferenceImageSources?: (reference: ImageGenerationTraceReference) => string[]
     // Lets the host render its own reference tile (e.g. the canvas context-preview
     // tile: thumbnail-only with a rich hover card). When it returns an element that
@@ -99,6 +100,48 @@ const uniqueImageSources = (sources: string[]): string[] => {
         seen.add(source)
         return true
     })
+}
+
+function getReferenceIdentity(reference: ImageGenerationTraceReference): string {
+    if (reference.assetId) return `asset:${reference.assetId}`
+    if (reference.nodeId) return `node:${reference.nodeId}`
+    if (reference.imageUrl) return `image:${reference.imageUrl}`
+    return `reference:${reference.id}`
+}
+
+function getReferenceRolePriority(reference: ImageGenerationTraceReference): number {
+    switch (reference.role) {
+        case 'target': return 5
+        case 'comparison-target': return 4
+        case 'message-reference': return 3
+        case 'capability-reference': return 2
+        default: return 1
+    }
+}
+
+// Historical traces may contain the same Asset twice when browser branch
+// context and workspace context assigned different candidate IDs. Rendering is
+// Asset-identity based and keeps the strongest role at the original position.
+export function deduplicateImageGenerationTraceReferences(
+    references: ImageGenerationTraceReference[],
+): ImageGenerationTraceReference[] {
+    const distinctReferences: ImageGenerationTraceReference[] = []
+    const referenceIndexByIdentity = new Map<string, number>()
+
+    for (const reference of references) {
+        const identity = getReferenceIdentity(reference)
+        const existingIndex = referenceIndexByIdentity.get(identity)
+        if (existingIndex === undefined) {
+            referenceIndexByIdentity.set(identity, distinctReferences.length)
+            distinctReferences.push(reference)
+            continue
+        }
+        if (getReferenceRolePriority(reference) > getReferenceRolePriority(distinctReferences[existingIndex]!)) {
+            distinctReferences[existingIndex] = reference
+        }
+    }
+
+    return distinctReferences
 }
 
 const getReferenceImageSources = (
@@ -264,6 +307,12 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                     <div className="ai-image-generation-section-label">Execution steps</div>
                     <ol className="ai-capability-generation-steps"></ol>
                 </section>
+                <section className="ai-capability-media-review-section">
+                    <div className="ai-image-generation-section-label">Capability media comparison</div>
+                    <p className="ai-capability-media-review-summary"></p>
+                    <ol className="ai-capability-media-review-steps"></ol>
+                    <p className="ai-capability-media-review-recommendation"></p>
+                </section>
             </div>
         </div>
     ` as HTMLElement
@@ -282,6 +331,10 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
     const capabilitySection = wrapper.querySelector('.ai-capability-generation-details-section') as HTMLElement
     const capabilityMetadata = wrapper.querySelector('.ai-capability-generation-metadata') as HTMLElement
     const capabilitySteps = wrapper.querySelector('.ai-capability-generation-steps') as HTMLElement
+    const capabilityReviewSection = wrapper.querySelector('.ai-capability-media-review-section') as HTMLElement
+    const capabilityReviewSummary = wrapper.querySelector('.ai-capability-media-review-summary') as HTMLElement
+    const capabilityReviewSteps = wrapper.querySelector('.ai-capability-media-review-steps') as HTMLElement
+    const capabilityReviewRecommendation = wrapper.querySelector('.ai-capability-media-review-recommendation') as HTMLElement
 
     let renderedSignature = ''
     let renderedTrace: GenerationTrace | null = null
@@ -289,9 +342,10 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
 
     const renderReferenceGrid = (trace: GenerationTrace) => {
         if (renderedReferenceTrace === trace) return
+        const referenceImages = deduplicateImageGenerationTraceReferences(trace.referenceImages)
 
-        if (trace.referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...trace.referenceImages.map((reference) =>
+        if (referenceImages.length > 0) {
+            referenceGrid.replaceChildren(...referenceImages.map((reference) =>
                 options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
         } else {
             referenceGrid.replaceChildren(html`
@@ -308,6 +362,9 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         toolPromptFallbackText,
     }: RenderImageGenerationTraceDetailsParams) => {
         const trace = getImageGenerationTrace(attrs)
+        const capabilityReview = trace?.traceVersion === 'image-generation-trace-v1'
+            ? trace.capabilityReview
+            : undefined
         const capabilityTrace = attrs.capabilityGenerationTrace ?? null
         const hasTrace = Boolean(trace)
         const fallbackText = toolPromptFallbackText ?? trace?.toolPrompt ?? ''
@@ -320,6 +377,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             forceToolPromptFallback ? 'force-fallback' : 'content-fallback',
             fallbackText,
             capabilityTrace?.capabilityRunId ?? '',
+            capabilityReview?.summary ?? '',
         ].join('|')
 
         if (signature === renderedSignature && trace === renderedTrace) {
@@ -332,6 +390,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
 
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
         wrapper.classList.toggle('has-capability-generation-trace', Boolean(capabilityTrace))
+        wrapper.classList.toggle('has-capability-media-review', Boolean(capabilityReview))
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
 
         capabilitySection.hidden = !capabilityTrace
@@ -359,8 +418,29 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             capabilitySteps.replaceChildren()
         }
 
+        capabilityReviewSection.hidden = !capabilityReview
+        if (capabilityReview) {
+            capabilityReviewSummary.textContent = `${capabilityReview.summary} Automatic retries: ${capabilityReview.automaticRetries}.`
+            capabilityReviewSteps.replaceChildren(...capabilityReview.steps.map(step => html`
+                <li className="ai-capability-media-review-step" data=${{ status: step.status }}>
+                    <span className="ai-capability-media-review-step-title">${step.title}</span>
+                    <span className="ai-capability-media-review-step-status">
+                        ${formatImageGenerationTraceRole(step.status)}${step.score === undefined ? '' : ` · ${Math.round(step.score * 100)}%`}
+                    </span>
+                    ${step.issues.length > 0
+                        ? html`<span className="ai-capability-media-review-step-issues">${step.issues.join(', ')}</span>`
+                        : null}
+                </li>
+            `))
+            capabilityReviewRecommendation.textContent = capabilityReview.recommendation ?? ''
+        } else {
+            capabilityReviewSummary.textContent = ''
+            capabilityReviewSteps.replaceChildren()
+            capabilityReviewRecommendation.textContent = ''
+        }
+
         const shouldShowFallback = Boolean(fallbackText && (forceToolPromptFallback || childCount === 0))
-        toolPromptSection.hidden = Boolean(capabilityTrace)
+        toolPromptSection.hidden = Boolean(capabilityTrace) || Boolean(options.hideToolPrompt)
         toolPromptSection.classList.toggle('has-content', hasTrace || childCount > 0 || shouldShowFallback)
         toolPromptFallback.textContent = shouldShowFallback ? fallbackText : ''
         toolPromptFallback.hidden = !shouldShowFallback

@@ -1,4 +1,4 @@
-import { brokenImageIcon } from '$src/svgIcons/index.ts'
+import { brokenImageIcon } from '@lixpi/ui-kit/svg'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
@@ -7,8 +7,9 @@ import { NodeSelection } from 'prosemirror-state'
 import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '$src/components/videoControls/index.ts'
-import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '@lixpi/ui-kit/components/video-controls'
+import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
+import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     aiGeneratedVideoNodeSpec,
@@ -177,9 +178,9 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     wrapper.addEventListener('click', handleClick)
 
     const updateModelChrome = (): void => {
-        renderMediaModelBadge(modelChromeElement, {
+        renderMediaModelBadge(modelChromeElement, resolveMediaModelBadgeConfig({
             modelId: node.attrs.mediaModelId || node.attrs.videoModel,
-        })
+        }))
     }
 
     const clearErrorPlaceholder = (): void => {

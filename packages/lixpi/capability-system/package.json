@@ -23,6 +23,7 @@
         "prosemirror-model": "*",
         "prosemirror-state": "*",
         "prosemirror-view": "*",
+        "sharp": "*",
         "uuid": "*"
     }
 }

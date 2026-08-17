@@ -14,6 +14,8 @@ import { html } from '$src/utils/domTemplates.ts'
 import { resolveMediaUrl } from '$src/utils/mediaUrls.ts'
 import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import { createExecutionTraceTimelineDetailAdapter } from '$src/components/executionTrace/index.ts'
+import { createMediaGenerationProgress } from '$src/infographics/workspace/mediaGenerationProgress.ts'
 import {
     mountAssetSubjectIdentityControl,
     type AssetSubjectIdentityControlInstance,
@@ -389,6 +391,17 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                 documentType: 'assetProvenance',
                 contextPreview: this.options.contextPreview,
                 promptReferencePreviewRenderer: this.options.promptReferencePreviewRenderer,
+                mediaGenerationProgress: ({ id, state, showSummaryWhenCollapsedItemIds }) => createMediaGenerationProgress({
+                    id: `provenance:${asset.assetId}:${id}`,
+                    state,
+                    defaultExpanded: true,
+                    showSummaryWhenCollapsedItemIds,
+                    ...createExecutionTraceTimelineDetailAdapter({
+                        ...(this.options.promptReferencePreviewRenderer
+                            ? { previewRenderer: this.options.promptReferencePreviewRenderer }
+                            : {}),
+                    }),
+                }),
             })
         }
     }

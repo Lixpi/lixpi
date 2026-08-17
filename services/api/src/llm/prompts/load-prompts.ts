@@ -14,12 +14,9 @@ export const IMAGE_GENERATION_INSTRUCTIONS = read('./image_generation_instructio
 export const VIDEO_GENERATION_INSTRUCTIONS = read('./video_generation_instructions.txt')
 export const ANTHROPIC_CODE_BLOCK_HACK = read('./anthropic_code_block_hack.txt')
 
-// The v0 STYLE_EXTRACTION_INSTRUCTIONS was a monolithic chat-LLM system prompt
-// biased toward watercolor / paper-tooth / dry-brush terminology — it caused the
-// "digital cat labeled as watercolor" failure. Extraction now lives in its own
-// dedicated 6-stage Tool whose package definition lives under
+// Style extraction lives in its own dedicated 6-stage Tool whose package definition lives under
 // packages/lixpi/capability-system/src/capabilities/style-extraction/ and whose API runtime adapter
-// supplies the service-bound pipeline stages. Nothing in the chat graph needs an extraction system prompt.
+// supplies the service-bound pipeline stages. The base chat graph therefore carries no extraction examples.
 
 export const getSystemPrompt = (
     includeImageGeneration: boolean = false,

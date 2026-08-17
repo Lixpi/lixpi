@@ -6,6 +6,7 @@ import {
     SealedResolvedCapabilityPlan,
 } from '@lixpi/capability-system/backend'
 import type {
+    AiModelInferenceCapabilities,
     CapabilityManifest,
     CapabilityResourceRef,
     ResolvedCapabilityPlan,
@@ -143,13 +144,25 @@ function configure(provider: OpenAIProvider | AnthropicProvider) {
     return publisher
 }
 
+const inferenceCapabilities = (provider: 'OpenAI' | 'Anthropic'): AiModelInferenceCapabilities => ({
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: provider !== 'OpenAI',
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: provider === 'OpenAI',
+    supportedInputKinds: ['image', 'video-frame', 'document-text'],
+})
+
 function state(provider: 'OpenAI' | 'Anthropic') {
     return {
         workspaceId: 'workspace-1',
         aiChatThreadId: 'thread-1',
         messages: [{ role: 'user', content: 'Find a character Tool' }],
         modelVersion: provider === 'OpenAI' ? 'gpt-5' : 'claude-sonnet-4-5',
-        aiModelMetaInfo: { modelVersion: provider === 'OpenAI' ? 'gpt-5' : 'claude-sonnet-4-5' },
+        aiModelMetaInfo: {
+            modelVersion: provider === 'OpenAI' ? 'gpt-5' : 'claude-sonnet-4-5',
+            inferenceCapabilities: inferenceCapabilities(provider),
+        },
         maxCompletionSize: 1000,
         temperature: 0.7,
         eventMeta: { userId: 'user-1', organizationId: 'organization-1' },

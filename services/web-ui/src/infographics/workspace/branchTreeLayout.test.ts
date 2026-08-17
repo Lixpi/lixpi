@@ -58,6 +58,49 @@ const loose = (id: string, x: number, y: number): CanvasNode => ({
     position: { x, y }, dimensions: { width: SIZE, height: SIZE },
 } as ImageCanvasNode)
 
+const failedMedia = (
+    id: string,
+    x: number,
+    y: number,
+    parentMediaNodeId: string,
+    mediaIndex: number,
+): CanvasNode => ({
+    nodeId: id,
+    type: 'operationStatus',
+    operation: 'media-generation',
+    status: 'failed',
+    title: 'Generating with OpenAI:gpt-image-2',
+    message: 'The provider rejected this attempt.',
+    generationRequestId: 'request-1',
+    generationRun: mediaIndex,
+    mediaRunId: `media-${mediaIndex}`,
+    outputNodeId: `pending-${mediaIndex}`,
+    plannedMediaType: 'image',
+    lineageAssignment: {
+        assetId: `asset-${mediaIndex}`,
+        generationRequestId: 'request-1',
+        reasoningRunId: 'reasoning-1',
+        mediaRunId: `media-${mediaIndex}`,
+        reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+        reasoningIndex: 0,
+        mediaModelId: 'OpenAI:gpt-image-2',
+        mediaType: 'image',
+        mediaIndex,
+        branchId: 'branch-A',
+        parentMediaNodeId,
+        lineageParentNodeId: parentMediaNodeId,
+        referenceAssetIds: [],
+        referenceNodeIds: [],
+        sourceContextNodeIds: [],
+        promptText: 'Transform the reference.',
+        createdAt: mediaIndex,
+    },
+    position: { x, y },
+    dimensions: { width: 360, height: 104 },
+    createdAt: 1,
+    updatedAt: 2,
+})
+
 const edge = (source: string, target: string): WorkspaceEdge => ({
     edgeId: `edge-${source}-${target}`, sourceNodeId: source, targetNodeId: target,
 })
@@ -85,6 +128,22 @@ describe('buildBranchTrees', () => {
         expect(trees[0].rootId).toBe('R')
         expect(new Set(trees[0].memberIds)).toEqual(new Set(['R', 'A', 'B']))
         expect(trees[0].childrenByParentId.get('R')).toEqual(['A', 'B'])
+    })
+
+    it('keeps a failed provider card in the same lineage tree as successful siblings', () => {
+        const nodes = [
+            genMedia('R', 0, 0, { createdAt: 1 }),
+            genMedia('ready', 0, 0, { parentMediaNodeId: 'R', createdAt: 2 }),
+            failedMedia('failed', 0, 0, 'R', 1),
+        ]
+        ;(nodes[1] as ImageCanvasNode).generatedBy!.reasoningIndex = 0
+        ;(nodes[1] as ImageCanvasNode).generatedBy!.mediaIndex = 0
+
+        const trees = buildBranchTrees(nodes, [])
+
+        expect(trees).toHaveLength(1)
+        expect(new Set(trees[0].memberIds)).toEqual(new Set(['R', 'ready', 'failed']))
+        expect(trees[0].childrenByParentId.get('R')).toEqual(['ready', 'failed'])
     })
 
     it('does not infer generation trees from workspace lineage edges', () => {
@@ -502,9 +561,97 @@ describe('applyBranchTreeLayout', () => {
         expect((aCenter + bCenter) / 2).toBeCloseTo(rCenter, 6)
         expect(posOf(out, 'B').y - (posOf(out, 'A').y + 450)).toBe(OPTS.siblingGap)
     })
+
+    it('moves a sibling row down for tall external progress without shifting its media column', () => {
+        const root = genMedia('R', 0, 0, { createdAt: 1 })
+        const top = genMedia('A', 1, 1, { parentMediaNodeId: 'R', createdAt: 2 })
+        const bottom = genMedia('B', 2, 2, { parentMediaNodeId: 'R', createdAt: 3 })
+        const progressHeight = 1400
+        const collisionRect = (node: CanvasNode, worldPosition: { x: number; y: number }) => ({
+            x: worldPosition.x,
+            y: worldPosition.y,
+            width: node.dimensions.width,
+            height: node.nodeId === 'A' ? progressHeight : node.dimensions.height,
+        })
+
+        const out = applyBranchTreeLayout([root, top, bottom], [], {
+            ...OPTS,
+            getNodeCollisionRect: collisionRect,
+        })
+        const topOut = out.find(node => node.nodeId === 'A')!
+        const bottomOut = out.find(node => node.nodeId === 'B')!
+        const topRect = collisionRect(topOut, topOut.position)
+        const bottomRect = collisionRect(bottomOut, bottomOut.position)
+
+        expect(topOut.position.x).toBe(bottomOut.position.x)
+        expect(bottomRect.y - (topRect.y + topRect.height)).toBe(OPTS.siblingGap)
+    })
+
+    it('keeps a mixed success/failure fork balanced around its parent', () => {
+        const root = genMedia('R', 0, 0, { createdAt: 1 })
+        const ready = genMedia('ready', 1, 1, {
+            parentMediaNodeId: 'R',
+            createdAt: 2,
+            height: 450,
+        }) as ImageCanvasNode
+        ready.generatedBy!.reasoningIndex = 0
+        ready.generatedBy!.mediaIndex = 0
+        const failed = failedMedia('failed', 2, 2, 'R', 1)
+
+        const out = applyBranchTreeLayout([root, ready, failed], [], OPTS)
+        const rootOut = out.find(node => node.nodeId === 'R')!
+        const readyOut = out.find(node => node.nodeId === 'ready')!
+        const failedOut = out.find(node => node.nodeId === 'failed')!
+        const rootCenter = rootOut.position.y + rootOut.dimensions.height / 2
+        const readyCenter = readyOut.position.y + readyOut.dimensions.height / 2
+        const failedCenter = failedOut.position.y + failedOut.dimensions.height / 2
+
+        expect(readyCenter).toBeLessThan(rootCenter)
+        expect(failedCenter).toBeGreaterThan(rootCenter)
+        expect((readyCenter + failedCenter) / 2).toBeCloseTo(rootCenter, 6)
+        expect(failedOut.position.y - (readyOut.position.y + readyOut.dimensions.height)).toBe(OPTS.siblingGap)
+    })
 })
 
 describe('rebalanceBranchTreesAndResolve', () => {
+    it('separates a generated tree from title chrome above an existing media node', () => {
+        const titleInset = 72
+        const generated = genMedia('generated', 0, 0, {
+            createdAt: 1,
+            width: 800,
+            height: 500,
+        })
+        const existing = {
+            ...loose('existing', 0, 540),
+            dimensions: { width: 800, height: 500 },
+        } as CanvasNode
+        const collisionRect = (node: CanvasNode, position: { x: number; y: number }) => ({
+            x: position.x,
+            y: position.y - titleInset,
+            width: node.dimensions.width,
+            height: titleInset + node.dimensions.height,
+        })
+
+        const out = rebalanceBranchTreesAndResolve([generated, existing], [], {
+            ...OPTS,
+            collisionIterations: 100,
+            collisionMargin: 0,
+            collisionOverlapThreshold: 0,
+            getNodeCollisionRect: collisionRect,
+            getNodeCollisionMargin: () => 0,
+            getNodeCollisionOverlapThreshold: () => 0,
+        })
+        const generatedOut = out.find(node => node.nodeId === 'generated')!
+        const existingOut = out.find(node => node.nodeId === 'existing')!
+        const generatedRect = collisionRect(generatedOut, generatedOut.position)
+        const existingRect = collisionRect(existingOut, existingOut.position)
+
+        expect(generated.position.y + generated.dimensions.height).toBeLessThan(existing.position.y)
+        expect(generatedRect.y + generatedRect.height).toBeLessThanOrEqual(existingRect.y)
+        expect(generatedOut.position.y).not.toBe(generated.position.y)
+        expect(existingOut.position.y).not.toBe(existing.position.y)
+    })
+
     it('moves a whole tree as a rigid block away from a loose node', () => {
         // Loose node sits on top of where the fork's lower child lands.
         const nodes: CanvasNode[] = [

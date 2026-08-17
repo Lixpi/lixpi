@@ -2,9 +2,9 @@
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn } from '@lixpi/debug-tools'
+import { PROVIDER_NAMES, type CapabilityJsonValue, type ProviderName } from '@lixpi/constants'
 
 import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
-import { PROVIDER_NAMES, type ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -27,6 +27,7 @@ export type ProviderConstructor = new (
 type MediaRouterOptions = {
     onProseMirrorContent?: ProseMirrorContentHandler
     getProseMirrorSnapshot?: ProseMirrorSnapshotProvider
+    onCapabilityMediaTrace?: (trace: CapabilityJsonValue) => void
     signal?: AbortSignal
 }
 

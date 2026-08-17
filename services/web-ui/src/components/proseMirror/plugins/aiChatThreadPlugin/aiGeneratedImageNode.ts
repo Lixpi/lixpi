@@ -1,12 +1,20 @@
-import { brokenImageIcon } from '$src/svgIcons/index.ts'
+import { brokenImageIcon } from '@lixpi/ui-kit/svg'
+import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
-import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaBranchLineagePlan, MediaGenerationRunMeta, WorkspaceContextResolution } from '@lixpi/constants'
+import type {
+    CanvasGeometryUpdate,
+    CapabilityRunEvent,
+    MediaBranchVlmResolution,
+    MediaBranchLineagePlan,
+    MediaGenerationRunMeta,
+    WorkspaceContextResolution,
+} from '@lixpi/constants'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeType,
@@ -18,6 +26,10 @@ export {
 }
 
 export type AiGeneratedImageCallbacks = {
+    onCapabilityRunEventToCanvas?: (data: {
+        threadId: string
+        event: CapabilityRunEvent
+    }) => void
     onAddToCanvas?: (data: {
         imageUrl: string
         assetId: string
@@ -146,9 +158,9 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     wrapper.addEventListener('click', handleClick)
 
     const updateModelChrome = (): void => {
-        renderMediaModelBadge(modelChromeElement, {
+        renderMediaModelBadge(modelChromeElement, resolveMediaModelBadgeConfig({
             modelId: node.attrs.mediaModelId,
-        })
+        }))
     }
 
     const updateDisplay = async () => {

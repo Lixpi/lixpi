@@ -13,12 +13,12 @@ import type { ProviderName } from '@lixpi/constants'
 export const VIDEO_TOOL_NAME = 'generate_video'
 
 const TOOL_DESCRIPTION =
-    'Generate a short video clip (with synchronized audio) from a text prompt. ' +
-    'When the user requests a video, animation, clip, motion, or asks to "animate" something, ' +
-    'call this tool with a vivid, cinematic prompt describing the scene, subject motion, camera ' +
-    'movement, lighting, mood, pacing, and any spoken dialogue or sound effects. ' +
-    'Do NOT include any harmful, violent, or explicit content in the prompt. ' +
-    'Always craft a safe, moderation-compliant prompt.'
+    'Generate moving visual media from the user request and authorized references. ' +
+    'Call this tool only when the user explicitly requests a video, clip, animation, filming, animating, ' +
+    'or continuation of a source video. Action or event verbs that can be depicted in one still image do not ' +
+    'establish video intent. Preserve the request scope, ' +
+    'temporal intent, and reference roles; do not add unrequested semantic or aesthetic content. ' +
+    'The prompt must be safe and moderation-compliant.'
 
 const BASE_PARAMETERS = {
     type: 'object',
@@ -26,10 +26,8 @@ const BASE_PARAMETERS = {
         prompt: {
             type: 'string',
             description:
-                'A detailed, cinematic prompt for video generation. Describe the subject and its ' +
-                'motion, camera movement, setting, lighting, color, mood, and pacing. Put spoken ' +
-                'dialogue in double quotes and describe sound effects explicitly. ' +
-                'Must be safe and moderation-compliant.',
+                'The exact moving-media prompt derived from the user request and authorized reference roles. ' +
+                'It must preserve requested temporal behavior, avoid invented content, and be moderation-compliant.',
         },
     },
     required: ['prompt'],

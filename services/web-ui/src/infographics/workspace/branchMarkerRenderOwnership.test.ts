@@ -4,9 +4,12 @@ import type {
     BranchForkCanvasNode,
     BranchLineCanvasNode,
     BranchOriginCanvasNode,
+    MediaBranchLineagePlan,
 } from '@lixpi/constants'
 import { describe, expect, it } from 'vitest'
 import {
+    getSupersededPreflightNodeIdsForPlannedOwner,
+    hasCompletePlannedBranchMarkerGeometry,
     resolveBranchMarkerRenderOwnership,
     resolvePreflightBranchMarkerScreenOwnership,
 } from './branchMarkerRenderOwnership.ts'
@@ -67,6 +70,83 @@ function makePlannedFork(nodeId: string, threadId: string, reasoningIndex: numbe
     }
 }
 
+function makeLineagePlan(): MediaBranchLineagePlan {
+    return {
+        planVersion: 'media-branch-lineage-v1',
+        generationRequestId: 'request-1',
+        branchId: 'branch-1',
+        promptText: 'create a character',
+        referenceAssetIds: [],
+        referenceNodeIds: [],
+        sourceContextNodeIds: [],
+        branchOrigin: {
+            nodeId: 'planned-origin',
+            generationRequestId: 'request-1',
+            branchId: 'branch-1',
+            provenance: {
+                kind: 'branch-root-fork-decision',
+                promptText: 'create a character',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                forked: false,
+                forkCount: 0,
+            },
+        },
+        branchForks: [],
+        branchLines: [],
+        runAssignments: [],
+        createdAt: 1,
+    }
+}
+
+describe('planned branch marker geometry readiness', () => {
+    it('accepts the complete matching planned marker set', () => {
+        const plannedOrigin = makePlannedOrigin('planned-origin', 'thread-1')
+
+        expect(hasCompletePlannedBranchMarkerGeometry(
+            [plannedOrigin],
+            makeLineagePlan(),
+        )).toBe(true)
+    })
+
+    it('rejects a screen-fixed preflight marker using the planned node identity', () => {
+        const preflight = makePreflight('planned-origin', 'thread-1')
+
+        expect(hasCompletePlannedBranchMarkerGeometry(
+            [preflight],
+            makeLineagePlan(),
+        )).toBe(false)
+    })
+
+    it('rejects incomplete or unrelated planned marker geometry', () => {
+        const lineagePlan = makeLineagePlan()
+        lineagePlan.branchForks.push({
+            nodeId: 'planned-fork',
+            generationRequestId: 'request-1',
+            branchId: 'branch-1',
+            reasoningRunId: 'reasoning-0',
+            reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
+            reasoningIndex: 0,
+            provenance: {
+                kind: 'reasoning-run',
+                promptText: 'create a character',
+                referenceNodeIds: [],
+                sourceContextNodeIds: [],
+                reasoningRunId: 'reasoning-0',
+                reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
+                reasoningIndex: 0,
+            },
+        })
+        const plannedOrigin = makePlannedOrigin('planned-origin', 'thread-1')
+        const unrelatedFork = makePlannedFork('other-fork', 'thread-1', 0)
+
+        expect(hasCompletePlannedBranchMarkerGeometry(
+            [plannedOrigin, unrelatedFork],
+            lineagePlan,
+        )).toBe(false)
+    })
+})
+
 describe('branch marker structural render ownership', () => {
     it('renders only the preflight marker before its planned media starts', () => {
         const preflight = makePreflight('preflight-1', 'thread-1')
@@ -89,6 +169,50 @@ describe('branch marker structural render ownership', () => {
 
         expect([...ownership.suppressedNodeIds]).toEqual(['preflight-1'])
         expect(ownership.visibleOwnerBySuppressedNodeId.get('preflight-1')).toBe('planned-1')
+    })
+
+    it('allows only one visible owner when duplicate preflight nodes race the same planned run', () => {
+        const firstPreflight = makePreflight('preflight-1', 'thread-1')
+        const duplicatePreflight = makePreflight('preflight-duplicate', 'thread-1')
+        const planned = makePlannedOrigin('planned-1', 'thread-1')
+
+        const beforeStart = resolveBranchMarkerRenderOwnership(
+            [firstPreflight, duplicatePreflight, planned],
+            new Set(),
+        )
+        expect([...beforeStart.suppressedNodeIds].sort()).toEqual([
+            'planned-1',
+            'preflight-duplicate',
+        ])
+
+        const afterStart = resolveBranchMarkerRenderOwnership(
+            [firstPreflight, duplicatePreflight, planned],
+            new Set([planned.nodeId]),
+        )
+        expect([...afterStart.suppressedNodeIds].sort()).toEqual([
+            'preflight-1',
+            'preflight-duplicate',
+        ])
+        expect(getSupersededPreflightNodeIdsForPlannedOwner(
+            [firstPreflight, duplicatePreflight, planned],
+            planned,
+        ).sort()).toEqual([
+            'preflight-1',
+            'preflight-duplicate',
+        ])
+    })
+
+    it('allows only one visible preflight owner before the lineage plan arrives', () => {
+        const firstPreflight = makePreflight('preflight-1', 'thread-1')
+        const duplicatePreflight = makePreflight('preflight-duplicate', 'thread-1')
+
+        const ownership = resolveBranchMarkerRenderOwnership(
+            [firstPreflight, duplicatePreflight],
+            new Set(),
+        )
+
+        expect([...ownership.suppressedNodeIds]).toEqual(['preflight-duplicate'])
+        expect(ownership.visibleOwnerBySuppressedNodeId.get('preflight-duplicate')).toBe('preflight-1')
     })
 
     it('matches multi-model markers by reasoning identity without suppressing siblings', () => {

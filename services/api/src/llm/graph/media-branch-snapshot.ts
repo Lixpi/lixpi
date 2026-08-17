@@ -35,6 +35,84 @@ export function buildCandidateTranscriptContext(
     ].filter((line): line is string => typeof line === 'string').join('\n')
 }
 
+function mergeCandidateGroup(
+    candidates: MediaBranchCandidateImage[],
+    activeTargetCandidateId: string | undefined,
+    resolvedTargetCandidateId: string | undefined,
+): MediaBranchCandidateImage {
+    const canonical = candidates.find((candidate) => candidate.candidateId === activeTargetCandidateId)
+        ?? candidates.find((candidate) => candidate.candidateId === resolvedTargetCandidateId)
+        ?? candidates[0]!
+    const fallback = Object.assign({}, ...candidates) as MediaBranchCandidateImage
+
+    return {
+        ...fallback,
+        ...canonical,
+        candidateId: canonical.candidateId,
+        assetId: canonical.assetId,
+        roleHints: [...new Set(candidates.flatMap((candidate) => candidate.roleHints))],
+        ancestorNodeIds: [...new Set(candidates.flatMap((candidate) => candidate.ancestorNodeIds))],
+        sourceContextNodeIds: [...new Set(candidates.flatMap((candidate) => candidate.sourceContextNodeIds))],
+        entityTags: [...new Set(candidates.flatMap((candidate) => candidate.entityTags ?? []))],
+        styleTags: [...new Set(candidates.flatMap((candidate) => candidate.styleTags ?? []))],
+    }
+}
+
+// One underlying Asset is one resolver/provider reference even when the same
+// canvas media entered through two snapshots with different candidate IDs
+// (`node:<nodeId>` from the browser and `<nodeId>` from workspace context).
+// Preserve the active-target identity, merge its contextual roles, and remap
+// every snapshot pointer to that canonical candidate.
+export function deduplicateMediaBranchSnapshotCandidatesByAsset(
+    snapshot: MediaBranchCandidateSnapshot,
+): MediaBranchCandidateSnapshot {
+    const candidatesByAssetId = new Map<string, MediaBranchCandidateImage[]>()
+    for (const candidate of snapshot.candidates) {
+        const candidates = candidatesByAssetId.get(candidate.assetId) ?? []
+        candidates.push(candidate)
+        candidatesByAssetId.set(candidate.assetId, candidates)
+    }
+
+    const candidateIdAliases = new Map<string, string>()
+    const candidates = [...candidatesByAssetId.values()].map((candidateGroup) => {
+        const canonical = mergeCandidateGroup(
+            candidateGroup,
+            snapshot.activeTargetCandidateId,
+            snapshot.resolvedTargetCandidateId,
+        )
+        for (const candidate of candidateGroup) candidateIdAliases.set(candidate.candidateId, canonical.candidateId)
+        return canonical
+    })
+    const candidateIds = new Set(candidates.map((candidate) => candidate.candidateId))
+    const remapCandidateId = (candidateId: string | undefined): string | undefined => {
+        if (!candidateId) return undefined
+        const remappedCandidateId = candidateIdAliases.get(candidateId) ?? candidateId
+        return candidateIds.has(remappedCandidateId) ? remappedCandidateId : undefined
+    }
+    const activeTargetCandidateId = remapCandidateId(snapshot.activeTargetCandidateId)
+    const resolvedTargetCandidateId = remapCandidateId(snapshot.resolvedTargetCandidateId)
+    const explicitReferenceCandidateIds = [...new Set(
+        (snapshot.explicitReferenceCandidateIds ?? [])
+            .map((candidateId) => remapCandidateId(candidateId))
+            .filter((candidateId): candidateId is string => Boolean(candidateId)),
+    )]
+    const normalized: MediaBranchCandidateSnapshot = {
+        ...snapshot,
+        candidates,
+        transcriptContext: buildCandidateTranscriptContext(candidates, snapshot.promptText, activeTargetCandidateId),
+    }
+    if (activeTargetCandidateId) normalized.activeTargetCandidateId = activeTargetCandidateId
+    else delete normalized.activeTargetCandidateId
+    if (resolvedTargetCandidateId) normalized.resolvedTargetCandidateId = resolvedTargetCandidateId
+    else delete normalized.resolvedTargetCandidateId
+    if (explicitReferenceCandidateIds.length > 0) {
+        normalized.explicitReferenceCandidateIds = explicitReferenceCandidateIds
+    } else {
+        delete normalized.explicitReferenceCandidateIds
+    }
+    return normalized
+}
+
 // Only explicitly attached references may reach branch resolution. Rebuild the
 // transcript from that allowlist even when the browser submits extra candidates
 // or omits the allowlist entirely.
@@ -48,15 +126,20 @@ export function restrictSnapshotToExplicitRefs(
     const activeTargetCandidateId = snapshot.activeTargetCandidateId && explicitCandidateIds.has(snapshot.activeTargetCandidateId)
         ? snapshot.activeTargetCandidateId
         : undefined
-    if (candidates.length === snapshot.candidates.length
-        && activeTargetCandidateId === snapshot.activeTargetCandidateId) return snapshot
+    const resolvedTargetCandidateId = snapshot.resolvedTargetCandidateId
+        && explicitCandidateIds.has(snapshot.resolvedTargetCandidateId)
+        ? snapshot.resolvedTargetCandidateId
+        : undefined
 
     const restricted: MediaBranchCandidateSnapshot = {
         ...snapshot,
         candidates,
+        explicitReferenceCandidateIds: candidates.map((candidate) => candidate.candidateId),
         transcriptContext: buildCandidateTranscriptContext(candidates, snapshot.promptText, activeTargetCandidateId),
     }
     if (activeTargetCandidateId) restricted.activeTargetCandidateId = activeTargetCandidateId
     else delete restricted.activeTargetCandidateId
-    return restricted
+    if (resolvedTargetCandidateId) restricted.resolvedTargetCandidateId = resolvedTargetCandidateId
+    else delete restricted.resolvedTargetCandidateId
+    return deduplicateMediaBranchSnapshotCandidatesByAsset(restricted)
 }

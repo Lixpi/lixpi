@@ -36,7 +36,7 @@ describe('generated media review controls', () => {
     const scssSource = readSourceFile('workspace-canvas.scss')
     const layoutSource = readSourceFile('../../views/layouts/layout.svelte')
     const settingsSource = readSourceFile('../../settings.ts')
-    const iconSource = readSourceFile('../../svgIcons/index.ts')
+    const iconSource = readSourceFile('../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts')
 
     it('uses the shared icon set and pure dropdown for review actions', () => {
         expectSourceToContain(canvasSource, 'checkMarkIcon,', 'WorkspaceCanvas.ts')
@@ -49,9 +49,9 @@ describe('generated media review controls', () => {
         expectSourceToContain(canvasSource, 'buttonIcon: refreshIcon', 'WorkspaceCanvas.ts')
         expectSourceToContain(canvasSource, "title: 'Regenerate variants'", 'WorkspaceCanvas.ts')
         expectSourceToContain(canvasSource, "title: 'Regenerate prompt'", 'WorkspaceCanvas.ts')
-        expectSourceToContain(iconSource, 'export const checkMarkIcon', 'svgIcons/index.ts')
-        expectSourceToContain(iconSource, 'export const refreshIcon', 'svgIcons/index.ts')
-        expectSourceToContain(iconSource, 'export const infoLetterIcon', 'svgIcons/index.ts')
+        expectSourceToContain(iconSource, 'export const checkMarkIcon', 'ui-kit/svg/svgIcons.ts')
+        expectSourceToContain(iconSource, 'export const refreshIcon', 'ui-kit/svg/svgIcons.ts')
+        expectSourceToContain(iconSource, 'export const infoLetterIcon', 'ui-kit/svg/svgIcons.ts')
     })
 
     it('keeps branch and media review controls zoom-scaled and visually unified', () => {

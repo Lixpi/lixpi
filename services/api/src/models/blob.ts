@@ -22,6 +22,7 @@ import {
 import { enqueueBlobDeletion } from '../services/asset-maintenance-queue.ts'
 
 const { ORG_NAME, STAGE } = process.env
+const BLOB_DELETION_CLAIM_TIMEOUT_MS = 5 * 60 * 1000
 
 const blobsTableName = (): string => getDynamoDbTableStageName('BLOBS', ORG_NAME, STAGE)
 const blobReferencesTableName = (): string => getDynamoDbTableStageName('BLOB_REFERENCES', ORG_NAME, STAGE)
@@ -527,13 +528,14 @@ const BlobModel = {
         if (blob.referenceCount !== 0) return false
         if (blob.status === 'staging') return false
 
-        const deletionClaim = `${Date.now()}-${crypto.randomUUID()}`
+        const claimTime = Date.now()
+        const deletionClaim = `${claimTime}-${crypto.randomUUID()}`
         try {
             await dynamoDBService.updateItem({
                 tableName: blobsTableName(),
                 key: { blobKey: blob.blobKey },
                 updateExpression: 'SET #status = :deleting, #deletionClaim = :deletionClaim, #updatedAt = :updatedAt',
-                conditionExpression: '#referenceCount = :zero AND attribute_not_exists(#deletionClaim)',
+                conditionExpression: '#referenceCount = :zero AND (attribute_not_exists(#deletionClaim) OR #updatedAt <= :staleBefore)',
                 expressionAttributeNames: {
                     '#status': 'status',
                     '#deletionClaim': 'deletionClaim',
@@ -543,7 +545,8 @@ const BlobModel = {
                 expressionAttributeValues: {
                     ':deleting': 'deleting',
                     ':deletionClaim': deletionClaim,
-                    ':updatedAt': Date.now(),
+                    ':updatedAt': claimTime,
+                    ':staleBefore': claimTime - BLOB_DELETION_CLAIM_TIMEOUT_MS,
                     ':zero': 0,
                 },
                 logConditionalCheckFailures: false,
@@ -554,8 +557,33 @@ const BlobModel = {
             return false
         }
 
-        await deleteContentAddressedBlob({ ...blob, status: 'deleting' })
+        const releaseDeletionClaim = async (): Promise<void> => {
+            try {
+                await dynamoDBService.updateItem({
+                    tableName: blobsTableName(),
+                    key: { blobKey: blob.blobKey },
+                    updateExpression: 'SET #updatedAt = :updatedAt REMOVE #deletionClaim',
+                    conditionExpression: '#referenceCount = :zero AND #deletionClaim = :deletionClaim',
+                    expressionAttributeNames: {
+                        '#referenceCount': 'referenceCount',
+                        '#deletionClaim': 'deletionClaim',
+                        '#updatedAt': 'updatedAt',
+                    },
+                    expressionAttributeValues: {
+                        ':zero': 0,
+                        ':deletionClaim': deletionClaim,
+                        ':updatedAt': Date.now(),
+                    },
+                    logConditionalCheckFailures: false,
+                    origin: 'Blob.deleteZeroReferenceBlob.releaseClaim',
+                })
+            } catch (error) {
+                if (!isTransactionConditionalCheckFailure(error)) throw error
+            }
+        }
+
         try {
+            await deleteContentAddressedBlob({ ...blob, status: 'deleting' })
             await dynamoDBService.transactWrite({
                 operations: [{
                     type: 'delete',
@@ -578,8 +606,9 @@ const BlobModel = {
             })
             return true
         } catch (error) {
-            if (!isTransactionConditionalCheckFailure(error)) throw error
-            return false
+            if (isTransactionConditionalCheckFailure(error)) return false
+            await releaseDeletionClaim()
+            throw error
         }
     },
 

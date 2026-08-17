@@ -1,0 +1,322 @@
+.progress-timeline {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: inherit;
+}
+
+.progress-timeline-item {
+    // Height of the first text line in the content column — the line the status
+    // marker must be vertically centred on. Title/summary sizes are injected per
+    // host via custom properties, so this must be derived, never hardcoded.
+    --progress-timeline-first-line-height: calc(var(--progress-timeline-title-size, 12px) * 1.35);
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    column-gap: 9px;
+    min-width: 0;
+}
+
+.progress-timeline-item[data-leading='source'] {
+    // Source rows lead with 9px caps text next to an 11px icon; the flex row's
+    // height is whichever is taller.
+    --progress-timeline-first-line-height: max(calc(var(--progress-timeline-source-size, 9px) * 1.2), 11px);
+}
+
+.progress-timeline-rail {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    min-height: 30px;
+}
+
+.progress-timeline-rail::after {
+    content: '';
+    position: absolute;
+    // Marker offset + 8px marker + 2px gap.
+    top: calc((var(--progress-timeline-first-line-height) - 8px) / 2 + 10px);
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--progress-timeline-line, rgb(255 255 255 / 20%));
+    transform: translateX(-50%);
+}
+
+.progress-timeline-item:last-child > .progress-timeline-rail::after {
+    display: none;
+}
+
+.progress-timeline-marker {
+    position: relative;
+    z-index: 1;
+    width: 8px;
+    height: 8px;
+    margin-top: calc((var(--progress-timeline-first-line-height) - 8px) / 2);
+    isolation: isolate;
+    overflow: visible;
+}
+
+.progress-timeline-marker-core {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    box-sizing: border-box;
+    border: 2px solid var(--progress-timeline-pending-border, rgb(255 255 255 / 48%));
+    border-radius: 50%;
+    background: var(--progress-timeline-surface, #5d656d);
+}
+
+.progress-ripple-icon {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+}
+
+.progress-ripple-icon-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.progress-timeline-item[data-status='completed'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+    border-color: var(--progress-timeline-completed, #72d4a9);
+    background: var(--progress-timeline-completed, #72d4a9);
+}
+
+.progress-timeline-item[data-status='attention'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+    border-color: var(--progress-timeline-attention, #e1b45f);
+    background: var(--progress-timeline-attention, #e1b45f);
+}
+
+.progress-timeline-item[data-status='failed'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core,
+.progress-timeline-item[data-status='cancelled'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+    border-color: var(--progress-timeline-failed, #ff8b8b);
+    background: var(--progress-timeline-failed, #ff8b8b);
+}
+
+.progress-timeline-item[data-status='skipped'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+    border-style: dashed;
+    opacity: 0.58;
+}
+
+.progress-timeline-content {
+    min-width: 0;
+    padding: 0 0 10px;
+}
+
+.progress-timeline-source {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    margin: 0 0 2px;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: var(--progress-timeline-source-size, 9px);
+    font-weight: 400;
+    line-height: 1.2;
+}
+
+.progress-timeline-source-primary {
+    margin-bottom: 0;
+}
+
+.progress-timeline-source-kind {
+    flex: 0 0 auto;
+    font-weight: 400;
+    letter-spacing: 0.055em;
+    text-transform: uppercase;
+}
+
+.progress-timeline-source-icon {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    justify-content: center;
+    flex: 0 0 11px;
+    width: 11px;
+    height: 11px;
+    color: currentColor;
+    line-height: 0;
+}
+
+.progress-timeline-source-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.progress-timeline-source-icon svg * {
+    fill: currentColor;
+}
+
+.progress-timeline-source-name {
+    overflow: hidden;
+    min-width: 0;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.progress-timeline-source[data-source-kind='capability'] {
+    color: var(--progress-timeline-capability, #eca983);
+}
+
+.progress-timeline-source[data-source-kind='tool'] {
+    color: var(--progress-timeline-tool, #d7e6ff);
+}
+
+.progress-timeline-source[data-source-kind='skill'] {
+    color: var(--progress-timeline-skill, #b7dfd8);
+}
+
+.progress-timeline-title-row {
+    display: block;
+    min-width: 0;
+}
+
+.progress-timeline-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+}
+
+.progress-timeline-toggle {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 20px 0 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.progress-timeline-chevron {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    line-height: 0;
+    transform: translateY(-50%);
+}
+
+.progress-timeline-chevron svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.progress-timeline-chevron svg * {
+    fill: currentColor;
+}
+
+.progress-timeline-details {
+    display: block;
+}
+
+.progress-timeline-detail {
+    display: block;
+    margin-top: 6px;
+}
+
+.progress-timeline-title {
+    overflow: hidden;
+    color: var(--progress-timeline-primary, currentColor);
+    font-size: var(--progress-timeline-title-size, 12px);
+    font-weight: var(--progress-timeline-title-weight, 400);
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.progress-timeline-summary {
+    display: block;
+    margin-top: 1px;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: var(--progress-timeline-summary-size, 11px);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.progress-timeline-summary-collapsed {
+    box-sizing: border-box;
+    overflow: hidden;
+    padding-right: 3ch;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
+.progress-timeline-meta {
+    overflow: hidden;
+    max-width: 148px;
+    color: var(--progress-timeline-secondary, rgb(255 255 255 / 62%));
+    font-size: var(--progress-timeline-summary-size, 11px);
+    font-weight: 400;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.progress-timeline-children {
+    display: grid;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.progress-timeline-children .progress-timeline-item {
+    grid-template-columns: 11px minmax(0, 1fr);
+    column-gap: 7px;
+}
+
+.progress-timeline-children .progress-timeline-rail {
+    min-height: 24px;
+}
+
+.progress-timeline-children .progress-timeline-rail::after {
+    // Marker offset + 6px marker + 2px gap.
+    top: calc((var(--progress-timeline-first-line-height) - 6px) / 2 + 8px);
+}
+
+.progress-timeline-children .progress-timeline-marker {
+    width: 6px;
+    height: 6px;
+    margin-top: calc((var(--progress-timeline-first-line-height) - 6px) / 2);
+}
+
+.progress-timeline-children .progress-ripple-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.progress-timeline-children .progress-timeline-marker-core {
+    border-width: 1px;
+}
+
+.progress-timeline-children .progress-timeline-content {
+    padding-bottom: 7px;
+}

@@ -7,7 +7,7 @@ description: The workspace canvas renderer spine — the DOM interaction shell, 
 
 The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. Two renderers cooperate, split by workload rather than by node type:
 
-- **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state.
+- **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned generated-output details panel, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The selected generated-output target and panel UI state are persisted in canvas state.
 - **PIXI v8** owns high-volume pixels, connector strokes, and canvas chrome: image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays.
 
 This page covers that split and the machinery that keeps DOM and PIXI in lockstep: the layer stack, the viewport bridge, viewport state ownership, the sync pipeline, render scheduling, and the PIXI initialization contract.
@@ -121,11 +121,9 @@ flowchart TB
             VIDEO_CHROME[Visible video surface<br/>shared SVG controls]
         end
         subgraph GeneratedChrome[".workspace-generated-media-chrome-layer (z-index 1, screen-space)"]
-            IMG_CHROME[Generated-media model label<br/>+ info button strip]
+            IMG_CHROME[Generated-media info button<br/>+ active ripple + model/actions]
         end
-        subgraph InfoPanelLayer[".workspace-generated-media-info-panel-layer (z-index 5, screen-space)"]
-            INFO_PANEL[Expanded info panel<br/>constant-size, decoupled]
-        end
+        RIGHT_PANEL[Singleton right side panel<br/>generated-output details]
     end
 
     Viewport --> PixiCanvas
@@ -135,10 +133,10 @@ flowchart TB
     WORLD --> FG
     GeneratedChrome --> PixiCanvas
     PixiCanvas --> MediaChromeViewport
-    PixiCanvas --> InfoPanelLayer
+    IMG_CHROME -. opens .-> RIGHT_PANEL
 ```
 
-The PIXI media canvas sits **above** the DOM viewport and the generated-media icon strip, so active traveling generation outlines render over provider badges and info buttons. Completed video DOM surfaces sit in `.workspace-media-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Generated media model labels and info buttons sit in `.workspace-generated-media-chrome-layer`, a screen-space DOM overlay projected from media node bounds with bounded zoom compensation; the strip contains only the provider badge and info button, its width tracks the media node's projected width, and its top gap lives under `settings.mediaNode.generatedMediaChrome`. The PIXI media layer has `pointer-events: none`, so the visually lower info button remains clickable. The expandable provenance panels are fully decoupled from that strip: they render in `.workspace-generated-media-info-panel-layer`, a separate screen-space DOM overlay positioned from the same media node bounds and matched to the media node's on-screen width, but their content is not nested in or transformed by the icon strip. The lower zoom breakpoint and related size knobs for the zoom-compensated canvas-chrome families live in `settings.ts`: `settings.connector.scaling`, `settings.canvasBubbleMenu.zoomScaling`, `settings.mediaNode.generatedMediaChrome`, and `settings.mediaNode.resizeHandle`. Provenance panels expand to their full content height, so long prompts and reference metadata are not cropped. Video chrome uses the same viewport transform as the media world and is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
+The PIXI media canvas sits **above** the DOM viewport and the generated-media control strip, so active traveling generation outlines render over provider badges and info buttons. Completed video DOM surfaces sit in `.workspace-media-chrome-viewport`, a separate CSS-transformed DOM overlay above the PIXI media canvas. Generated media model labels, info buttons, and active-only progress ripples sit in `.workspace-generated-media-chrome-layer`, a screen-space DOM overlay projected from media node bounds with bounded zoom compensation. The info button is always first; the ripple sits immediately to its right while generation is active and is absent for terminal runs. The strip width tracks the media node's projected width, and its top gap lives under `settings.mediaNode.generatedMediaChrome`. The PIXI media layer has `pointer-events: none`, so the visually lower controls remain clickable. Media info, active progress, accepted history, and branch-lineage clicks all open the singleton right side panel through the same generated-output details component. That sidebar combines Asset metadata with the producing chat projection and live JetStream-replayed or sealed recursive timeline. Its metadata title keeps the full details typography, its `Generation details` heading sits inside history below the metadata separator, and the sidebar body owns one vertical scroll surface while long prompt/reasoning content remains unbounded inside that flow. The lower zoom breakpoint and related size knobs for the zoom-compensated canvas-chrome families live in `settings.ts`: `settings.connector.scaling`, `settings.canvasBubbleMenu.zoomScaling`, `settings.mediaNode.generatedMediaChrome`, and `settings.mediaNode.resizeHandle`. Video chrome uses the same viewport transform as the media world and is positioned over the PIXI poster sprite so browser playback, seeking, Picture-in-Picture, fullscreen, and the shared SVG controls documented in [Video Player Controls](../media-generation/VIDEO-PLAYER-CONTROLS.md) stay independent from connector rendering. Image/video node DOM shells are kept as `<div data-node-id>` elements for two reasons:
 
 Screen-fixed composer chrome has an additional PIXI glass layer: `workspace-pixi-screen-glass` sits above the PIXI edge/world stack and below the DOM composer/action controls. Before each PIXI render, `pixiMediaLayer` hides that glass layer, captures the current PIXI stage into a render texture, then shows the layer and draws the captured pixels back through a rounded 10px border mask with a per-target liquid normal-map displacement filter and baked closed-strip glass material. Because the source is the PIXI stage, the border refracts PIXI-rendered edges, image/video sprites, generating outlines, and foreground overlays; browser DOM surfaces remain outside the PIXI refraction source.
 

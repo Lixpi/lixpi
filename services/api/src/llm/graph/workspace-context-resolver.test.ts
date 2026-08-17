@@ -532,6 +532,41 @@ describe('resolveWorkspaceContext', () => {
         expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBeUndefined()
     })
 
+    it('does not duplicate an explicit asset already present under the browser candidate ID', async () => {
+        const { deps, callLlm } = createDeps({ selections: [] })
+        const browserCandidate: MediaBranchCandidateImage = {
+            ...baseCandidates[0]!,
+            candidateId: 'node:goat-image',
+            roleHints: ['base-context', 'active-target'],
+        }
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'goat-image'
+                    ? { ...node, isExplicitChip: true }
+                    : node),
+            },
+            mediaBranchCandidateSnapshot: {
+                ...createState().mediaBranchCandidateSnapshot!,
+                activeTargetCandidateId: browserCandidate.candidateId,
+                explicitReferenceCandidateIds: [browserCandidate.candidateId],
+                candidates: [browserCandidate],
+            },
+        }), deps)
+
+        expect(callLlm).not.toHaveBeenCalled()
+        expect(update.mediaBranchCandidateSnapshot?.candidates).toHaveLength(1)
+        expect(update.mediaBranchCandidateSnapshot?.candidates[0]).toMatchObject({
+            candidateId: 'node:goat-image',
+            nodeId: 'goat-image',
+            assetId: 'asset-goat-image',
+        })
+        expect(update.mediaBranchCandidateSnapshot?.explicitReferenceCandidateIds).toEqual(['node:goat-image'])
+        expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBe('node:goat-image')
+        expect(update.mediaBranchCandidateSnapshot?.transcriptContext.match(/assetId=asset-goat-image/g)).toHaveLength(1)
+    })
+
     it('keeps non-media explicit chips exclusive too and yields no media candidates', async () => {
         const { deps, callLlm } = createDeps({ selections: [] })
 

@@ -15,7 +15,10 @@ import {
     getDynamoDbTableStageName,
     type AiModel,
     type AiModelId,
+    type AiModelInferenceCapabilities,
+    type AiModelInputKind,
     type DefaultAiModelCapability,
+    type ImageReferenceCapabilities,
     type ImageSizeMode,
     type ImageSizeOption,
 } from '@lixpi/constants'
@@ -105,6 +108,201 @@ const SEEDANCE_DURATIONS: ImageSizeOption[] = [
     { value: '15', label: '15s' },
 ]
 
+const OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    maxReferenceImages: 16,
+    maxIdentityReferenceImages: 5,
+    conditioningModes: ['edit', 'identity', 'style'],
+    inputFidelity: 'provider-managed',
+    supportsIterativeEdit: true,
+    supportsMask: true,
+    supportsStructureControl: false,
+    supportsPoseControl: false,
+    supportsDeterministicSeed: false,
+    maxOutputPixels: 1572864,
+    supportedAspectRatios: ['1:1', '3:2', '2:3'],
+}
+
+const OPENAI_HIGH_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    ...OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES,
+    inputFidelity: 'high',
+}
+
+const OPENAI_STANDARD_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    ...OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES,
+    inputFidelity: 'standard',
+}
+
+const GOOGLE_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    maxReferenceImages: 14,
+    maxIdentityReferenceImages: 5,
+    conditioningModes: ['edit', 'identity', 'style', 'structure', 'pose'],
+    inputFidelity: 'provider-managed',
+    supportsIterativeEdit: true,
+    supportsMask: false,
+    supportsStructureControl: true,
+    supportsPoseControl: true,
+    supportsDeterministicSeed: false,
+    maxOutputPixels: 4194304,
+    supportedAspectRatios: ['1:1', '3:2', '2:3', '16:9', '9:16', '4:3', '3:4', '4:5', '5:4', '21:9'],
+}
+
+const STABILITY_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    maxReferenceImages: 2,
+    maxIdentityReferenceImages: 0,
+    conditioningModes: ['edit', 'style', 'structure'],
+    inputFidelity: 'standard',
+    supportsIterativeEdit: true,
+    supportsMask: false,
+    supportsStructureControl: true,
+    supportsPoseControl: false,
+    supportsDeterministicSeed: true,
+    maxOutputPixels: 4194304,
+    supportedAspectRatios: ['1:1', '21:9', '16:9', '3:2', '5:4', '4:5', '2:3', '9:16', '9:21'],
+}
+
+const OPENAI_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: true,
+    supportedInputKinds: ['image', 'video-frame', 'document-text'],
+}
+
+const OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...OPENAI_INFERENCE_CAPABILITIES,
+    supportsTemperature: false,
+}
+
+const ANTHROPIC_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: false,
+    supportedInputKinds: ['image', 'video-frame', 'document-text'],
+}
+
+const ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...ANTHROPIC_INFERENCE_CAPABILITIES,
+    thinkingMode: 'anthropic-manual',
+    requiresAutoToolChoiceWithThinking: true,
+}
+
+const ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...ANTHROPIC_INFERENCE_CAPABILITIES,
+    thinkingMode: 'anthropic-adaptive',
+    requiresAutoToolChoiceWithThinking: true,
+}
+
+const ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES,
+    supportsTemperature: false,
+}
+
+const GOOGLE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: false,
+    supportedInputKinds: ['image', 'video-frame', 'audio', 'document-text'],
+}
+
+const GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...GOOGLE_INFERENCE_CAPABILITIES,
+    thinkingMode: 'google-budget',
+}
+
+const GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...GOOGLE_INFERENCE_CAPABILITIES,
+    thinkingMode: 'google-level',
+}
+
+const NON_REASONING_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: false,
+    supportsSystemPrompt: false,
+    requiresClosedJsonSchema: false,
+    supportedInputKinds: ['document-text'],
+}
+
+const IMAGE_REFERENCE_CONDITIONING_MODES = new Set([
+    'edit',
+    'identity',
+    'style',
+    'structure',
+    'pose',
+])
+
+const AI_MODEL_INPUT_KINDS = new Set<AiModelInputKind>([
+    'image',
+    'video-frame',
+    'audio',
+    'document-text',
+])
+
+export function assertValidInferenceCapabilities(model: AiModel): AiModel {
+    const profile = model.inferenceCapabilities
+    if (!profile) throw new Error(`INFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
+    if (typeof profile.requiresAutoToolChoiceWithThinking !== 'boolean'
+        || typeof profile.supportsTemperature !== 'boolean'
+        || typeof profile.supportsSystemPrompt !== 'boolean'
+        || typeof profile.requiresClosedJsonSchema !== 'boolean') {
+        throw new Error(`INFERENCE_CAPABILITIES_FLAGS_INVALID:${model.provider}:${model.model}`)
+    }
+    if (profile.supportedInputKinds.length === 0
+        || new Set(profile.supportedInputKinds).size !== profile.supportedInputKinds.length
+        || profile.supportedInputKinds.some(kind => !AI_MODEL_INPUT_KINDS.has(kind))) {
+        throw new Error(`INFERENCE_CAPABILITIES_INPUTS_INVALID:${model.provider}:${model.model}`)
+    }
+    const anthropicThinking = profile.thinkingMode === 'anthropic-manual'
+        || profile.thinkingMode === 'anthropic-adaptive'
+    const googleThinking = profile.thinkingMode === 'google-budget'
+        || profile.thinkingMode === 'google-level'
+    if ((anthropicThinking && model.provider !== 'Anthropic')
+        || (googleThinking && model.provider !== 'Google')
+        || profile.requiresAutoToolChoiceWithThinking !== anthropicThinking) {
+        throw new Error(`INFERENCE_CAPABILITIES_THINKING_INVALID:${model.provider}:${model.model}`)
+    }
+    return model
+}
+
+export function assertValidImageReferenceCapabilities(model: AiModel): AiModel {
+    const supportsImageGeneration = model.modalities.some(({ modality }) => modality === 'image_generation')
+    const profile = model.imageReferenceCapabilities
+    if (!supportsImageGeneration) {
+        if (profile) throw new Error(`IMAGE_REFERENCE_CAPABILITIES_UNEXPECTED:${model.provider}:${model.model}`)
+        return model
+    }
+    if (!profile) throw new Error(`IMAGE_REFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
+    if (!Number.isInteger(profile.maxReferenceImages) || profile.maxReferenceImages < 0
+        || !Number.isInteger(profile.maxIdentityReferenceImages) || profile.maxIdentityReferenceImages < 0
+        || profile.maxIdentityReferenceImages > profile.maxReferenceImages) {
+        throw new Error(`IMAGE_REFERENCE_CAPABILITIES_LIMITS_INVALID:${model.provider}:${model.model}`)
+    }
+    if (profile.conditioningModes.length === 0
+        || new Set(profile.conditioningModes).size !== profile.conditioningModes.length
+        || profile.conditioningModes.some(mode => !IMAGE_REFERENCE_CONDITIONING_MODES.has(mode))) {
+        throw new Error(`IMAGE_REFERENCE_CAPABILITIES_MODES_INVALID:${model.provider}:${model.model}`)
+    }
+    if (!['provider-managed', 'standard', 'high'].includes(profile.inputFidelity)
+        || !Number.isInteger(profile.maxOutputPixels) || profile.maxOutputPixels <= 0
+        || profile.supportedAspectRatios.length === 0
+        || profile.supportedAspectRatios.some(ratio => !/^\d+:\d+$/u.test(ratio))) {
+        throw new Error(`IMAGE_REFERENCE_CAPABILITIES_PROFILE_INVALID:${model.provider}:${model.model}`)
+    }
+    if (profile.maxIdentityReferenceImages > 0 && !profile.conditioningModes.includes('identity')) {
+        throw new Error(`IMAGE_REFERENCE_CAPABILITIES_IDENTITY_INVALID:${model.provider}:${model.model}`)
+    }
+    if (profile.supportsStructureControl !== profile.conditioningModes.includes('structure')
+        || profile.supportsPoseControl !== profile.conditioningModes.includes('pose')) {
+        throw new Error(`IMAGE_REFERENCE_CAPABILITIES_CONTROLS_INVALID:${model.provider}:${model.model}`)
+    }
+    return model
+}
+
 // OpenAI API types (using SDK types)
 type OpenAIModel = OpenAI.Models.Model
 type AnthropicModel = {
@@ -132,7 +330,7 @@ type ProviderBlacklist = {
 // Default model capability/settings per provider.
 type ModelDefaults = Pick<
     AiModel,
-    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'supportsSystemPrompt' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName' | 'imageInputFidelity'
+    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'inferenceCapabilities' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName' | 'imageReferenceCapabilities'
 > & {
     imagePromptMaxChars?: number
     imageSizeMode?: ImageSizeMode
@@ -372,7 +570,7 @@ export class AiModelsSync {
                 // ChatGPT-4o alias page shows 128k context, 16,384 max output tokens
                 'chatgpt-4o-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '15.00' } } } } },
                 // GPT-5 Chat latest explicit alias
-                'gpt-5-chat-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } },
+                'gpt-5-chat-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } },
             },
             prefix: [
                 {
@@ -381,6 +579,7 @@ export class AiModelsSync {
                     maxCompletionSize: 128000,
                     modalities: ['text', 'image'],
                     defaultTemperature: 1,    // Supports only default value 1.
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } }
                 },
                 // GPT-5 Chat family: 128k context, 16,384 max output
@@ -392,21 +591,24 @@ export class AiModelsSync {
                 // GPT-4o Realtime family: 32k context, 4,096 max output; supports audio
                 { prefix: 'gpt-4o-realtime', values: { contextWindow: 32000, maxCompletionSize: 4096, modalities: ['text', 'image', 'audio'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '20.00' } } }, audio: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '40.00', completion: '80.00' } } } },
                 // O3 Deep Research: 200k context, 100k max output
-                { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '40.00' } } } } } },
+                { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '40.00' } } } } } },
                 // O4 Mini Deep Research: 200k context, 100k max output (per page)
-                { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
+                { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
+                { prefix: 'o1', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
+                { prefix: 'o3', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
+                { prefix: 'o4', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
                 // GPT Image family: image generation models
-                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high', requestValue: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'standard' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
-                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high', requestValue: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
+                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
+                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
+                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_STANDARD_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
+                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
             ],
             contains: [],
             fallback: {
                 contextWindow: 0,
                 maxCompletionSize: 0,
                 defaultTemperature: 0.7,
-                supportsSystemPrompt: true,
+                inferenceCapabilities: OPENAI_INFERENCE_CAPABILITIES,
                 modalities: ['text'],
                 pricing: {
                     currency: 'USD',
@@ -459,26 +661,31 @@ export class AiModelsSync {
                 }
             }
         },
-        // Anthropic model defaults sourced from official docs (Models overview):
-        // - Context window: generally 200k (Sonnet 4 can be 1M with beta header; we default to 200k)
-        // - Max output tokens: varies by family
+        // Anthropic model defaults sourced from the official Models overview.
+        // Claude 5 uses its full 1M context window and 128k synchronous output limit.
         Anthropic: {
             exact: {},
             prefix: [
-                { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
+                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
+                { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '10.00' } } } } } },
+                { prefix: 'claude-opus-4-7', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
+                { prefix: 'claude-opus-4-6', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
+                { prefix: 'claude-sonnet-4-6', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
+                { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
+                { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
+                { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
                 { prefix: 'claude-haiku-4', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
-                { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
+                { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
                 { prefix: 'claude-3-5-haiku', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
                 { prefix: 'claude-3-haiku', values: { contextWindow: 200000, maxCompletionSize: 4096, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
+                { prefix: 'claude-mythos', values: { inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES } },
             ],
             contains: [],
             fallback: {
                 contextWindow: 0,
                 maxCompletionSize: 0,
                 defaultTemperature: 0.7,
-                supportsSystemPrompt: true,
+                inferenceCapabilities: ANTHROPIC_INFERENCE_CAPABILITIES,
                 modalities: ['text', 'image'],
                 pricing: {
                     currency: 'USD',
@@ -516,47 +723,50 @@ export class AiModelsSync {
                     contextWindow: 1048576,
                     maxCompletionSize: 65536,
                     modalities: ['text', 'image', 'image_generation'],
-                    imageInputFidelity: { level: 'high' },
+                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
+                    imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES,
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
                 },
                 'gemini-2.5-flash-image': {
                     contextWindow: 1048576,
                     maxCompletionSize: 65536,
                     modalities: ['text', 'image', 'image_generation'],
-                    imageInputFidelity: { level: 'high' },
+                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
+                    imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES,
                     pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
                 },
             },
             prefix: [
                 // Gemini 2.5 Pro family (text-only)
-                { prefix: 'gemini-2.5-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                { prefix: 'gemini-2.5-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
                 // Gemini 2.5 Flash family (text-only, image generation only in gemini-2.5-flash-image)
-                { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
                 // Gemini 3 Pro Image (Nano Banana Pro)
-                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
                 // Gemini 3.1 Flash Image (Nano Banana 2)
-                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], imageInputFidelity: { level: 'high' }, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
                 // Gemini 3.1 Pro
-                { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
                 // Gemini 3.1 Flash
-                { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
                 // Gemini 3 Flash
-                { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-3.', values: { inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES } },
                 // VEO 3 / 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
-                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
-                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
-                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
+                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
             ],
             contains: [],
             fallback: {
                 contextWindow: 0,
                 maxCompletionSize: 0,
                 defaultTemperature: 0.7,
-                supportsSystemPrompt: true,
+                inferenceCapabilities: GOOGLE_INFERENCE_CAPABILITIES,
                 modalities: ['text'],
                 pricing: {
                     currency: 'USD',
@@ -639,12 +849,12 @@ export class AiModelsSync {
             exact: {
                 'stability-ultra': {
                     modalities: ['image_generation'],
-                    imageInputFidelity: { level: 'high' },
+                    imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
                     pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } }
                 },
                 'sd3.5-large': {
                     modalities: ['image_generation'],
-                    imageInputFidelity: { level: 'high' },
+                    imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
                     pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } }
                 },
             },
@@ -655,8 +865,9 @@ export class AiModelsSync {
                 contextWindow: 0,
                 maxCompletionSize: 0,
                 defaultTemperature: 0,
-                supportsSystemPrompt: false,
+                inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
                 modalities: ['image_generation'],
+                imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
                 pricing: {
                     currency: 'USD',
                     resaleMargin: '1',
@@ -719,7 +930,7 @@ export class AiModelsSync {
                 contextWindow: 0,
                 maxCompletionSize: 0,
                 defaultTemperature: 0.7,
-                supportsSystemPrompt: false,
+                inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
                 modalities: ['video', 'video_generation'],
                 videoAspectRatios: SEEDANCE_ASPECT_RATIOS,
                 videoResolutions: SEEDANCE_RESOLUTIONS,
@@ -776,18 +987,15 @@ export class AiModelsSync {
             contextWindow: typeof p.contextWindow === 'number' ? p.contextWindow : fallback.contextWindow,
             maxCompletionSize: typeof p.maxCompletionSize === 'number' ? p.maxCompletionSize : fallback.maxCompletionSize,
             defaultTemperature: typeof p.defaultTemperature === 'number' ? p.defaultTemperature : fallback.defaultTemperature,
-            supportsSystemPrompt: typeof p.supportsSystemPrompt === 'boolean' ? p.supportsSystemPrompt : fallback.supportsSystemPrompt,
+            inferenceCapabilities: p.inferenceCapabilities
+                ? structuredClone(p.inferenceCapabilities as AiModelInferenceCapabilities)
+                : structuredClone(fallback.inferenceCapabilities),
             modalities: Array.isArray(p.modalities) ? p.modalities : fallback.modalities,
             imageSizeMode: typeof p.imageSizeMode === 'string' ? p.imageSizeMode : fallback.imageSizeMode,
             imageSizes: Array.isArray(p.imageSizes) ? p.imageSizes : fallback.imageSizes,
-            imageInputFidelity: p.imageInputFidelity?.level
-                ? {
-                    level: p.imageInputFidelity.level,
-                    ...(p.imageInputFidelity.requestValue
-                        ? { requestValue: p.imageInputFidelity.requestValue }
-                        : {}),
-                }
-                : fallback.imageInputFidelity,
+            imageReferenceCapabilities: p.imageReferenceCapabilities
+                ? structuredClone(p.imageReferenceCapabilities as ImageReferenceCapabilities)
+                : fallback.imageReferenceCapabilities,
             videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
             videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
@@ -921,24 +1129,27 @@ export class AiModelsSync {
     }
 
     // Fetch available Anthropic models from the AWS Bedrock foundation-model catalog and
-    // project the Bedrock ids back onto the exact vendor-API snapshot ids the rest of the
-    // platform persists (`anthropic.claude-haiku-4-5-20251001-v1:0` ->
-    // `claude-haiku-4-5-20251001`).
+    // project the Bedrock ids back onto the exact vendor-API ids the rest of the platform
+    // persists. Bedrock uses both dated `-vN` ids and current pinned, dateless ids.
     private projectBedrockAnthropicModel(
         bedrockModelId: string,
         displayName: string | undefined,
     ): AnthropicModel | undefined {
-        const match = /^anthropic\.(.+?)(?:-(\d{8}))?-v\d+(?::\d+)?$/i.exec(bedrockModelId)
-        if (!match) return undefined
+        const match = /^anthropic\.(claude-[^:]+?)(?:-v\d+(?::\d+)?)?$/i.exec(bedrockModelId)
+        if (!match?.[1]) return undefined
 
-        const modelId = match[2] ? `${match[1]}-${match[2]}` : match[1]!
+        const modelId = match[1]
+        if (!modelId.startsWith('claude-')) return undefined
+
+        const releaseDate = /-(\d{8})$/u.exec(modelId)?.[1]
+
         return {
             id: modelId,
             display_name: displayName || modelId,
             // Bedrock exposes no creation timestamp; the release date embedded in the
             // model id is the closest equivalent the catalog can carry.
-            ...(match[2] && {
-                created_at: `${match[2].slice(0, 4)}-${match[2].slice(4, 6)}-${match[2].slice(6, 8)}`,
+            ...(releaseDate && {
+                created_at: `${releaseDate.slice(0, 4)}-${releaseDate.slice(4, 6)}-${releaseDate.slice(6, 8)}`,
             }),
         }
     }
@@ -1075,7 +1286,7 @@ export class AiModelsSync {
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
-            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            inferenceCapabilities: modelDefaults.inferenceCapabilities,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
@@ -1083,7 +1294,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
-            imageInputFidelity: modelDefaults.imageInputFidelity,
+            imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1098,7 +1309,7 @@ export class AiModelsSync {
             }
         }
 
-        return model
+        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model))
     }
 
     // Map Anthropic model to our AiModel format
@@ -1118,7 +1329,7 @@ export class AiModelsSync {
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
-            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            inferenceCapabilities: modelDefaults.inferenceCapabilities,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
@@ -1126,7 +1337,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
-            imageInputFidelity: modelDefaults.imageInputFidelity,
+            imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1141,7 +1352,7 @@ export class AiModelsSync {
             }
         }
 
-        return model
+        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model))
     }
 
     // Map Google model to our AiModel format
@@ -1165,7 +1376,7 @@ export class AiModelsSync {
             contextWindow,
             maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
-            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            inferenceCapabilities: modelDefaults.inferenceCapabilities,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
@@ -1173,7 +1384,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
-            imageInputFidelity: modelDefaults.imageInputFidelity,
+            imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
@@ -1192,7 +1403,7 @@ export class AiModelsSync {
             }
         }
 
-        return model
+        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model))
     }
 
     // Update existing models sequentially to avoid overwhelming DynamoDB
@@ -1548,7 +1759,7 @@ export class AiModelsSync {
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
-            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            inferenceCapabilities: modelDefaults.inferenceCapabilities,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
@@ -1556,7 +1767,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
-            imageInputFidelity: modelDefaults.imageInputFidelity,
+            imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
@@ -1571,7 +1782,7 @@ export class AiModelsSync {
             }
         }
 
-        return aiModel
+        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel))
     }
 
     // Synchronize Stability AI models with database
@@ -1691,7 +1902,7 @@ export class AiModelsSync {
             contextWindow: modelDefaults.contextWindow,
             maxCompletionSize: modelDefaults.maxCompletionSize,
             defaultTemperature: modelDefaults.defaultTemperature,
-            supportsSystemPrompt: modelDefaults.supportsSystemPrompt,
+            inferenceCapabilities: modelDefaults.inferenceCapabilities,
             color: modelDefaults.color,
             iconName: modelDefaults.iconName,
             colorIconName: modelDefaults.colorIconName || modelDefaults.iconName,
@@ -1699,7 +1910,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
-            imageInputFidelity: modelDefaults.imageInputFidelity,
+            imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
@@ -1718,7 +1929,7 @@ export class AiModelsSync {
             }
         }
 
-        return aiModel
+        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel))
     }
 
     // Synchronize BytePlus (Seedance) models with database. Mirrors the Stability

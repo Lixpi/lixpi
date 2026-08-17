@@ -8,7 +8,10 @@ import type {
     CanvasState,
 } from '@lixpi/constants'
 
-import { removePreflightBranchMarkersForThread } from './branchMarkerSettlement.ts'
+import {
+    getSupersededBranchMarkerNodeIdsForAuthoritativePlan,
+    removePreflightBranchMarkersForThread,
+} from './branchMarkerSettlement.ts'
 
 function makePreflightMarker(nodeId: string, threadId: string): BranchLineCanvasNode {
     return {
@@ -79,5 +82,57 @@ describe('removePreflightBranchMarkersForThread', () => {
 
         expect(result.state).toBe(state)
         expect(result.removedNodeIds).toEqual([])
+    })
+})
+
+describe('getSupersededBranchMarkerNodeIdsForAuthoritativePlan', () => {
+    it('retires both the provisional plan marker and its initial preflight owner', () => {
+        const threadId = 'thread-1'
+        const requestId = 'media-request-1'
+        const preflight = makePreflightMarker('pending-thread-1', threadId)
+        const provisional = {
+            ...makePlannedMarker('provisional-origin', threadId),
+            generationRequestId: requestId,
+            pendingState: {
+                ...preflight.pendingState!,
+                phase: 'planned' as const,
+            },
+        }
+        const authoritative = {
+            ...makePlannedMarker('authoritative-line', threadId),
+            type: 'branchLine' as const,
+            generationRequestId: requestId,
+            parentBranchNodeId: 'source-media',
+        }
+        const historical = makePlannedMarker('historical-marker', 'thread-2')
+        historical.generationRequestId = 'older-request'
+        const state: CanvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [preflight, provisional, authoritative, historical] as CanvasNode[],
+            edges: [],
+        }
+
+        expect(getSupersededBranchMarkerNodeIdsForAuthoritativePlan({
+            state,
+            plannedMarkers: [historical, authoritative],
+            generationRequestId: requestId,
+        })).toEqual([preflight.nodeId, provisional.nodeId])
+    })
+
+    it('does not retire a concurrent request marker in the same conversation', () => {
+        const authoritative = makePlannedMarker('authoritative-origin', 'thread-1')
+        const concurrent = makePlannedMarker('concurrent-origin', 'thread-1')
+        concurrent.generationRequestId = 'media-request-2'
+        const state: CanvasState = {
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [authoritative, concurrent],
+            edges: [],
+        }
+
+        expect(getSupersededBranchMarkerNodeIdsForAuthoritativePlan({
+            state,
+            plannedMarkers: [authoritative],
+            generationRequestId: authoritative.generationRequestId,
+        })).toEqual([])
     })
 })

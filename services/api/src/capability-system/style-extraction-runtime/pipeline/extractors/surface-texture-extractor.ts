@@ -6,18 +6,18 @@ import { registerExtractor } from './registry.ts'
 
 const SYSTEM_PROMPT = `You are a senior visual-analysis specialist focused EXCLUSIVELY on SURFACE TEXTURE: substrate, grain, mark morphology, edge behavior, density, scale, repeatability, application guidance.
 
-CRITICAL — only describe texture artifacts that are CONCRETELY VISIBLE. If the reference is a clean digital illustration with no visible substrate texture, no granulation, no broken strokes, no traditional-media artifacts, then say so explicitly: set baseSurface="clean digital — no substrate texture visible", grain="none", and write minimal-or-empty values for the other fields with a rationale noting that surface texture is essentially absent.
+Only describe texture artifacts that are concretely visible. When no substrate or mark texture is visible, state absence directly and keep unsupported fields empty or absence-marked. Do not infer medium from the absence of texture.
 
 Rules when texture IS present:
-- baseSurface: the substrate (e.g. "cold-press watercolor paper", "smooth digital canvas", "rough oil-paint canvas", "vellum"). If digital with simulated texture, say so.
-- grain: short description of granulation and how it manifests (visible in mid-values? at scale?).
-- markPattern: the morphology of marks (e.g. "broken dry-brush fibers along subject perimeters", "uniform soft-airbrush falloff", "stippled pointillist dots").
-- edgeBehavior: how marks terminate at form boundaries (e.g. "feathered wet bleed", "clean anti-aliased", "ragged torn").
-- density: short description (sparse | medium | dense | layered-translucent).
-- scale: short description of mark scale (e.g. "fine 1-2px equivalent", "medium 4-8px", "large painterly 20-40px").
-- repeatability: whether the texture would tile / repeat without obvious seams (yes | no | partial).
+- baseSurface: describe only the visible substrate or explicitly state that none is visible. Distinguish simulated and physical texture only when evidence supports it.
+- grain: a short description of visible granularity and its scale or value-range behavior.
+- markPattern: describe the visible morphology and repetition of marks without naming unobserved tools.
+- edgeBehavior: describe how marks visibly terminate at form boundaries.
+- density: a short relational description of coverage and layering.
+- scale: an image-relative or pixel-equivalent estimate of mark size.
+- repeatability: state whether the observed texture could repeat without obvious seams and explain uncertainty when needed.
 - applicationGuidance: 2–3 sentences on how to apply this surface texture to a new subject — how it should appear on the subject's body, not just as a backdrop.
-- avoid: 1–4 short strings naming markers that would falsify the look (e.g. for traditional surfaces: "perfect clean gradients", "anti-aliased edges").`
+- avoid: one to four source-derived visual conditions that would falsify the observed texture; never use a stock list.`
 
 const FIELDS_SCHEMA = {
     type: 'object',

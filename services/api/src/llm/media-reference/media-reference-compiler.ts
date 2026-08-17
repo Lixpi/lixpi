@@ -19,6 +19,7 @@ import {
 
 import {
     getMediaReferenceBindingVariants,
+    isIdentifyingMediaReferencePhrase,
     matchMediaReferencePhrase,
     MEDIA_REFERENCE_MAX_BINDINGS,
     normalizeMediaReferenceVariant,
@@ -140,15 +141,25 @@ const replaceFreeFormMatches = ({
             const end = endMatch.index + endMatch[0].length
             if (replacements.some(replacement => start < replacement.to && end > replacement.from)) continue
             const phrase = text.slice(start, end)
+            if (!isIdentifyingMediaReferencePhrase(phrase)) continue
+            const match = matchMediaReferencePhrase({
+                phrase,
+                bindings,
+                promptRange: { from: offset + start, to: offset + end },
+            })
             const persistedResolution = resolvedReferences.find(resolution =>
                 normalizeMediaReferenceVariant(resolution.originalText) === normalizeMediaReferenceVariant(phrase))
-            if (persistedResolution) {
+            const persistedResolutionIsCurrentCandidate = persistedResolution && (
+                (match.kind === 'unique' && match.binding?.assetId === persistedResolution.assetId)
+                || (match.kind === 'ambiguous' && match.unresolved?.candidates
+                    .some(candidate => candidate.assetId === persistedResolution.assetId))
+            )
+            if (persistedResolution && persistedResolutionIsCurrentCandidate) {
                 const binding = bindings.find(candidate => candidate.assetId === persistedResolution.assetId)
                 if (!binding) throw new Error(`MEDIA_REFERENCE_RESOLUTION_ASSET_NOT_BOUND:${persistedResolution.assetId}`)
                 replacements.push({ from: start, to: end, value: binding.alias })
                 break
             }
-            const match = matchMediaReferencePhrase({ phrase, bindings, promptRange: { from: offset + start, to: offset + end } })
             if (match.kind === 'unique' && match.binding) {
                 replacements.push({ from: start, to: end, value: match.binding.alias })
                 break

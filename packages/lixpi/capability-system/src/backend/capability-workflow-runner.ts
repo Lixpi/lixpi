@@ -10,9 +10,9 @@ import {
     type CapabilityRunEvent,
     type CapabilityRunOrigin,
     type CapabilityReasoningModelVariant,
-    type CapabilityRunStepStatus,
     type CapabilityValueBinding,
     type CapabilityWorkflowStep,
+    type ExecutionTrace,
 } from '@lixpi/constants'
 
 import {
@@ -24,6 +24,8 @@ import { validateCapabilityManifest } from '../shared/capability-validation.ts'
 import { CapabilityError, isCapabilityError } from '../shared/capability-errors.ts'
 import { validateJsonSchemaValue } from '../shared/capability-json-schema.ts'
 import { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
+import { CapabilityDagRunner } from './capability-dag-runner.ts'
+import { createCapabilityTraceRecorder } from './capability-trace-recorder.ts'
 
 export type CapabilityRunPersistence = {
     createRun: (run: CapabilityRun) => Promise<void>
@@ -70,6 +72,7 @@ type StepExecutionResult = {
     canvasGeometry?: CanvasGeometryUpdate
     safeInputSummary: string
     safeOutputSummary?: string
+    trace?: ExecutionTrace
     error?: unknown
 }
 
@@ -173,7 +176,11 @@ export class CapabilityWorkflowRunner {
         await emit({ eventType: 'RUN_STARTED', runStatus: 'running' })
 
         const workflow = resolved.manifest.tool.workflow
-        const statuses = new Map(workflow.steps.map(step => [step.stepId, 'pending' as CapabilityRunStepStatus]))
+        const dag = new CapabilityDagRunner(workflow.steps.map(step => ({
+            nodeId: step.stepId,
+            dependsOn: step.dependsOn,
+            step,
+        })))
         const stepOutputs = new Map<string, unknown>()
         const bindingContext: BindingContext = {
             input: request.input,
@@ -183,14 +190,13 @@ export class CapabilityWorkflowRunner {
         }
 
         try {
-            while ([...statuses.values()].some(status => status === 'pending')) {
+            while (dag.hasPending()) {
                 if (request.signal?.aborted) {
-                    await this.cancelPendingSteps(workflow.steps, statuses, emit)
+                    await this.cancelPendingSteps(dag, emit)
                     throw cancelledError(request.signal)
                 }
 
-                const ready = workflow.steps.filter(step => statuses.get(step.stepId) === 'pending'
-                    && step.dependsOn.every(dependency => isSettledSuccess(statuses.get(dependency))))
+                const ready = dag.getReadyNodes().map(node => node.step)
                 if (ready.length === 0) {
                     throw new CapabilityError(
                         'CAPABILITY_WORKFLOW_INVALID',
@@ -201,7 +207,7 @@ export class CapabilityWorkflowRunner {
                 const executable: CapabilityWorkflowStep[] = []
                 for (const step of ready) {
                     if (step.condition && !evaluateCondition(step.condition, bindingContext)) {
-                        statuses.set(step.stepId, 'skipped')
+                        dag.setStatus(step.stepId, 'skipped')
                         await emit({
                             eventType: 'STEP_SKIPPED',
                             runStatus: 'running',
@@ -211,7 +217,7 @@ export class CapabilityWorkflowRunner {
                         })
                         continue
                     }
-                    statuses.set(step.stepId, 'running')
+                    dag.setStatus(step.stepId, 'running')
                     executable.push(step)
                 }
 
@@ -229,7 +235,7 @@ export class CapabilityWorkflowRunner {
                 let firstFailure: StepExecutionResult | undefined
 
                 for (const result of results) {
-                    statuses.set(result.step.stepId, result.status)
+                    dag.setStatus(result.step.stepId, result.status)
                     if (result.status === 'completed') {
                         stepOutputs.set(result.step.stepId, result.output)
                         run.outputAssetIds = deduplicateStrings([...run.outputAssetIds, ...result.outputAssetIds])
@@ -241,6 +247,7 @@ export class CapabilityWorkflowRunner {
                             stepStatus: 'completed',
                             safeInputSummary: result.safeInputSummary,
                             safeOutputSummary: result.safeOutputSummary,
+                            ...(result.trace ? { trace: result.trace } : {}),
                             outputAssetIds: result.outputAssetIds,
                             ...(result.canvasGeometry ? { canvasGeometry: result.canvasGeometry } : {}),
                         })
@@ -252,6 +259,7 @@ export class CapabilityWorkflowRunner {
                             stepTitle: result.step.title,
                             stepStatus: 'cancelled',
                             safeInputSummary: result.safeInputSummary,
+                            ...(result.trace ? { trace: result.trace } : {}),
                         })
                         firstFailure ??= result
                     } else {
@@ -263,6 +271,7 @@ export class CapabilityWorkflowRunner {
                             stepTitle: result.step.title,
                             stepStatus: 'failed',
                             safeInputSummary: result.safeInputSummary,
+                            ...(result.trace ? { trace: result.trace } : {}),
                             errorCode: error.code,
                             errorMessage: error.message,
                         })
@@ -275,7 +284,7 @@ export class CapabilityWorkflowRunner {
                     outputAssetIds: run.outputAssetIds,
                 })
                 if (firstFailure) {
-                    await this.cancelPendingSteps(workflow.steps, statuses, emit)
+                    await this.cancelPendingSteps(dag, emit)
                     if (firstFailure.status === 'cancelled') throw cancelledError(request.signal)
                     throw normalizeActionError(firstFailure.error, firstFailure.step.action)
                 }
@@ -345,6 +354,13 @@ export class CapabilityWorkflowRunner {
         const action = this.options.registry.get(args.step.action)
         const input = resolveInputBindings(args.step.input, args.bindingContext)
         const safeInputSummary = action.summarizeInput?.(input) ?? summarizeValue(input)
+        const trace = createCapabilityTraceRecorder()
+        trace.addHandles(...action.collectInputHandles?.(input) ?? [])
+        const settleTrace = (settled: {
+            outputSummary?: string
+            errorMessage?: string
+        } = {}): ExecutionTrace | undefined => trace.snapshot({ inputSummary: safeInputSummary, ...settled })
+        const startedTrace = settleTrace()
         await args.emit({
             eventType: 'STEP_STARTED',
             runStatus: 'running',
@@ -352,6 +368,7 @@ export class CapabilityWorkflowRunner {
             stepTitle: args.step.title,
             stepStatus: 'running',
             safeInputSummary,
+            ...(startedTrace ? { trace: startedTrace } : {}),
         })
 
         const validation = action.validateInput(input)
@@ -361,6 +378,7 @@ export class CapabilityWorkflowRunner {
                 status: 'failed',
                 outputAssetIds: [],
                 safeInputSummary,
+                trace: settleTrace({ errorMessage: `Action ${action.key} input is invalid: ${validation.message}` }),
                 error: new CapabilityError(
                     'CAPABILITY_ACTION_INPUT_INVALID',
                     `Action ${action.key} input is invalid: ${validation.message}`,
@@ -386,6 +404,7 @@ export class CapabilityWorkflowRunner {
                 status: 'failed',
                 outputAssetIds: [],
                 safeInputSummary,
+                trace: settleTrace({ errorMessage: `Action ${action.key} is not authorized for this run` }),
                 error: new CapabilityError(
                     'CAPABILITY_ACTION_NOT_ALLOWED',
                     `Action ${action.key} is not authorized for this run`,
@@ -404,6 +423,7 @@ export class CapabilityWorkflowRunner {
                     plan: args.request.plan,
                     getResource: (capabilityId, resourceId) => args.request.plan.getResource(capabilityId, resourceId),
                     getRunEvents: args.getRunEvents,
+                    trace,
                 })
                 const outputValidation = action.validateOutput(output)
                 if (!outputValidation.valid) {
@@ -420,16 +440,31 @@ export class CapabilityWorkflowRunner {
                     canvasGeometry: action.collectCanvasGeometry?.(output),
                     safeInputSummary,
                     safeOutputSummary: action.summarizeOutput?.(output) ?? summarizeValue(output),
+                    trace: this.settleCompletedStepTrace(action, output, settleTrace),
                 }
             } catch (error) {
                 if (isCancellation(error, args.request.signal)) {
-                    return { step: args.step, status: 'cancelled', outputAssetIds: [], safeInputSummary, error }
+                    return {
+                        step: args.step,
+                        status: 'cancelled',
+                        outputAssetIds: [],
+                        safeInputSummary,
+                        trace: settleTrace(),
+                        error,
+                    }
                 }
                 const mayRetry = attempt < maxAttempts
                     && !isCapabilityError(error)
                     && action.classifyRetry(error) === 'retryable'
                 if (!mayRetry) {
-                    return { step: args.step, status: 'failed', outputAssetIds: [], safeInputSummary, error }
+                    return {
+                        step: args.step,
+                        status: 'failed',
+                        outputAssetIds: [],
+                        safeInputSummary,
+                        trace: settleTrace({ errorMessage: errorMessageOf(error) }),
+                        error,
+                    }
                 }
                 await abortableDelay(args.step.retry?.backoffMs ?? 0, args.request.signal)
             }
@@ -440,18 +475,33 @@ export class CapabilityWorkflowRunner {
             status: 'failed',
             outputAssetIds: [],
             safeInputSummary,
+            trace: settleTrace({ errorMessage: `Action ${action.key} exhausted retries` }),
             error: new CapabilityError('CAPABILITY_ACTION_FAILED', `Action ${action.key} exhausted retries`),
         }
     }
 
+    private settleCompletedStepTrace(
+        action: Readonly<CapabilityActionDefinition>,
+        output: unknown,
+        settleTrace: (settled?: { outputSummary?: string; errorMessage?: string }) => ExecutionTrace | undefined,
+    ): ExecutionTrace | undefined {
+        const outputHandles = action.collectOutputHandles?.(output) ?? []
+        const settled = settleTrace({
+            outputSummary: action.summarizeOutput?.(output) ?? summarizeValue(output),
+        })
+        if (!settled || outputHandles.length === 0) return settled
+        return {
+            ...settled,
+            handles: [...settled.handles ?? [], ...outputHandles],
+        }
+    }
+
     private async cancelPendingSteps(
-        steps: CapabilityWorkflowStep[],
-        statuses: Map<string, CapabilityRunStepStatus>,
+        dag: CapabilityDagRunner<{ nodeId: string; dependsOn: string[]; step: CapabilityWorkflowStep }>,
         emit: (event: Omit<CapabilityRunEvent, 'runId' | 'sequence' | 'timestamp'>) => Promise<void>,
     ): Promise<void> {
-        for (const step of steps) {
-            if (statuses.get(step.stepId) !== 'pending') continue
-            statuses.set(step.stepId, 'cancelled')
+        for (const node of dag.cancelPending()) {
+            const step = node.step
             await emit({
                 eventType: 'STEP_CANCELLED',
                 runStatus: 'running',
@@ -612,6 +662,10 @@ function summarizeValue(value: unknown): string {
     return typeof value
 }
 
+function errorMessageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+}
+
 function normalizeActionError(error: unknown, actionKey: string): CapabilityError {
     if (isCapabilityError(error)) return error
     return new CapabilityError(
@@ -620,10 +674,6 @@ function normalizeActionError(error: unknown, actionKey: string): CapabilityErro
         {},
         { cause: error },
     )
-}
-
-function isSettledSuccess(status: CapabilityRunStepStatus | undefined): boolean {
-    return status === 'completed' || status === 'skipped'
 }
 
 function isCancellation(error: unknown, signal: AbortSignal | undefined): boolean {

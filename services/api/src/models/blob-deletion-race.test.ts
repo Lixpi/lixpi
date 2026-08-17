@@ -78,4 +78,40 @@ describe('Blob deletion and store race', () => {
         })).toBe(false)
         expect(mocks.deleteContentAddressedBlob).not.toHaveBeenCalled()
     })
+
+    it('releases its deletion claim when Object Store deletion fails so a retry can proceed', async () => {
+        getItem.mockResolvedValue(deletingBlob)
+        updateItem.mockResolvedValue(undefined)
+        mocks.deleteContentAddressedBlob.mockRejectedValueOnce(new Error('storage unavailable'))
+
+        await expect(BlobModel.deleteZeroReferenceBlob({
+            organizationId: 'org',
+            blobHash: 'hash',
+        })).rejects.toThrow('storage unavailable')
+
+        expect(updateItem).toHaveBeenCalledTimes(2)
+        expect(updateItem.mock.calls[1]?.[0]).toMatchObject({
+            updateExpression: 'SET #updatedAt = :updatedAt REMOVE #deletionClaim',
+            conditionExpression: '#referenceCount = :zero AND #deletionClaim = :deletionClaim',
+            origin: 'Blob.deleteZeroReferenceBlob.releaseClaim',
+        })
+    })
+
+    it('can take over a stale deletion claim after the worker timeout', async () => {
+        getItem.mockResolvedValue({ ...deletingBlob, deletionClaim: 'abandoned-claim' })
+        updateItem.mockResolvedValue(undefined)
+        transactWrite.mockResolvedValue(undefined)
+        mocks.deleteContentAddressedBlob.mockResolvedValue(undefined)
+
+        expect(await BlobModel.deleteZeroReferenceBlob({
+            organizationId: 'org',
+            blobHash: 'hash',
+        })).toBe(true)
+
+        expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
+            conditionExpression: '#referenceCount = :zero AND (attribute_not_exists(#deletionClaim) OR #updatedAt <= :staleBefore)',
+        }))
+        expect(mocks.deleteContentAddressedBlob).toHaveBeenCalledTimes(1)
+        expect(transactWrite).toHaveBeenCalledTimes(1)
+    })
 })

@@ -1,17 +1,21 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
     getMediaModelBadgeMeta,
-    createMediaModelBadge,
-    renderMediaModelBadge,
     applyMediaModelBadgeStyleProperties,
+    resolveMediaModelBadgeConfig,
+    type MediaModelBadgeConfig,
 } from '$src/components/mediaModelBadge.ts'
+import {
+    createMediaModelBadge as createSharedMediaModelBadge,
+    renderMediaModelBadge as renderSharedMediaModelBadge,
+} from '@lixpi/ui-kit/components/media-model-badge'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { settings } from '$src/settings.ts'
 import {
     geminiIcon,
     gptAvatarIcon,
     stabilityIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 
 function setMockModels(models: Array<{ provider?: string; model?: string; title?: string; providerTitle?: string; colorIconName?: string }>): void {
     aiModelsStore.setAiModels(models as any)
@@ -19,6 +23,14 @@ function setMockModels(models: Array<{ provider?: string; model?: string; title?
 
 function createHost(): HTMLElement {
     return document.createElement('div')
+}
+
+function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElement | null {
+    return createSharedMediaModelBadge(resolveMediaModelBadgeConfig(config))
+}
+
+function renderMediaModelBadge(host: HTMLElement, config: MediaModelBadgeConfig): void {
+    renderSharedMediaModelBadge(host, resolveMediaModelBadgeConfig(config))
 }
 
 afterEach(() => {
@@ -134,6 +146,27 @@ describe('getMediaModelBadgeMeta', () => {
         expect(meta.providerTitle).toBe('Google')
         expect(meta.modelTitle).toBe('Gemini 2.5')
         expect(meta.label).toBe(`Google${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}Gemini 2.5`)
+    })
+
+    it('splits provider/model ids without repeating the provider in the model title', () => {
+        setMockModels([
+            {
+                provider: 'Anthropic',
+                model: 'claude-opus-5',
+                title: 'Claude Opus 5',
+                providerTitle: 'Anthropic',
+            },
+        ])
+
+        const meta = getMediaModelBadgeMeta({
+            modelId: 'Anthropic/claude-opus-5',
+            modelProvider: 'Anthropic',
+        })
+
+        expect(meta.providerTitle).toBe('Anthropic')
+        expect(meta.modelTitle).toBe('Claude Opus 5')
+        expect(meta.label).toBe(`Anthropic${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}Claude Opus 5`)
+        expect(meta.label).not.toContain('Anthropic/claude-opus-5')
     })
 
     it('uses provider iconography for monochrome mode even when a model icon exists', () => {

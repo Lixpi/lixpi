@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     createObjectStore: vi.fn(),
+    deleteObject: vi.fn(),
     getObject: vi.fn(),
     getObjectInfo: vi.fn(),
     getObjectStore: vi.fn(),
@@ -18,13 +19,18 @@ vi.mock('@lixpi/nats-service', () => ({
     },
 }))
 
-import { getBlobObjectKey, putContentAddressedBlob } from './blob-storage.ts'
+import {
+    deleteContentAddressedBlob,
+    getBlobObjectKey,
+    putContentAddressedBlob,
+} from './blob-storage.ts'
 
 describe('Content-addressed blob storage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mocks.getInstance.mockReturnValue({
             createObjectStore: mocks.createObjectStore,
+            deleteObject: mocks.deleteObject,
             getObject: mocks.getObject,
             getObjectInfo: mocks.getObjectInfo,
             getObjectStore: mocks.getObjectStore,
@@ -73,5 +79,25 @@ describe('Content-addressed blob storage', () => {
         })).resolves.toMatchObject({ byteSize: bytes.byteLength })
 
         expect(mocks.putObject).not.toHaveBeenCalled()
+    })
+
+    it('treats an Object Store tombstone as already deleted', async () => {
+        mocks.getObjectInfo.mockResolvedValue({ deleted: true })
+
+        await deleteContentAddressedBlob({
+            blobKey: 'organization-1#hash',
+            blobHash: 'hash',
+            organizationId: 'organization-1',
+            bucketName: 'blobs-organization-1-files',
+            objectKey: 'sha256/aa/hash',
+            mimeType: 'image/png',
+            byteSize: 10,
+            status: 'deleting',
+            referenceCount: 0,
+            createdAt: 1,
+            updatedAt: 2,
+        })
+
+        expect(mocks.deleteObject).not.toHaveBeenCalled()
     })
 })

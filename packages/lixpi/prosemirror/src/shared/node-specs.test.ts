@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import { createProseMirrorSchema, DOCUMENT_TYPE } from './schema-builder.ts'
-import { normalizeReferenceNodeIds, aiPromptInputNodeType, aiPromptInputNodeSpec, aiUserMessageNodeSpec, aiGeneratedImageNodeSpec, aiGeneratedVideoNodeSpec, aiLineageEventNodeSpec, aiResponseMessageNodeSpec } from './node-specs.ts'
+import {
+    aiGeneratedImageNodeSpec,
+    aiGeneratedVideoNodeSpec,
+    aiLineageEventNodeSpec,
+    aiMediaGenerationProgressNodeSpec,
+    aiPromptInputNodeSpec,
+    aiPromptInputNodeType,
+    aiResponseMessageNodeSpec,
+    aiUserMessageNodeSpec,
+    normalizeReferenceNodeIds,
+} from './node-specs.ts'
 
 function fakeDom(attrs: Record<string, string | null>, querySelector?: (selector: string) => Record<string, any> | null): HTMLElement {
     return {
@@ -201,6 +211,30 @@ describe('aiLineageEventNodeSpec', () => {
 
         expect(dom.class).toBe('ai-lineage-event ai-lineage-event-branch-fork')
         expect(dom['data-lineage-event-kind']).toBe('branch-fork')
+    })
+})
+
+describe('aiMediaGenerationProgressNodeSpec', () => {
+    it('keeps the structured progress state in provenance projections', () => {
+        const schema = createProseMirrorSchema(DOCUMENT_TYPE.ASSET_PROVENANCE)
+        const state = {
+            generationRequestId: 'request-1',
+            status: 'completed',
+            message: 'Done.',
+            progress: {
+                phase: 'composing',
+                completedSteps: 1,
+                totalSteps: 1,
+                message: 'Done.',
+            },
+            updatedAt: 1,
+        }
+        const node = schema.nodes.aiMediaGenerationProgress.create({ id: 'request-1', state })
+        const dom = aiMediaGenerationProgressNodeSpec.toDOM(node as any)[1] as Record<string, string>
+
+        expect(node.attrs.state).toEqual(state)
+        expect(dom.class).toBe('ai-media-generation-progress')
+        expect(dom['data-media-generation-progress-id']).toBe('request-1')
     })
 })
 

@@ -77,6 +77,7 @@ type MediaGenerationRequestSubmissionAcknowledgment = {
     generationRequestId: string
     status: 'submitted' | 'awaiting-reference-resolution'
     requestRevision: number
+    canvasGeometry?: CanvasGeometryUpdate
     mediaEventSubject: string
 }
 
@@ -359,6 +360,15 @@ export default class AiInteractionService {
                     status: data.status,
                     requestRevision: data.requestRevision,
                 })
+                if (data.canvasGeometry) {
+                    this.segmentsReceiver.receiveSegment({
+                        type: 'canvas_geometry_resolved',
+                        canvasGeometry: data.canvasGeometry,
+                        aiProvider: '',
+                        conversationAssetId: this.conversationAssetId,
+                        usesServerProseMirror: true,
+                    })
+                }
                 return
             }
 
@@ -641,6 +651,7 @@ export default class AiInteractionService {
     }
 
     async sendChatMessage({
+        generationRequestId,
         aiReasoningModels,
         useMultipleReasoningModels,
         useMultipleImageModels,
@@ -679,6 +690,10 @@ export default class AiInteractionService {
             conversationAssetId: this.conversationAssetId,
             aiReasoningModels: reasoningModelIds,
             organizationId: this.organizationId
+        }
+
+        if (generationRequestId) {
+            payload.generationRequestId = generationRequestId
         }
 
         if (mediaBranchCandidateSnapshot) {
@@ -736,7 +751,7 @@ export default class AiInteractionService {
         if (regeneration || totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
-                generationRequestId: uuidv4(),
+                generationRequestId: generationRequestId ?? uuidv4(),
                 outputMediaTypes,
                 useMultipleReasoningModels: reasoningModelsEnabled,
                 useMultipleImageModels: imageModelsEnabled,

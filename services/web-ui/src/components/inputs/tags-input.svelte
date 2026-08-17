@@ -7,7 +7,7 @@
         tagIcon,
         plusIcon,
         xIcon
-    } from '$src/svgIcons'
+    } from '@lixpi/ui-kit/svg'
 
     import { popOutTransition, fadeTransition } from '$src/constants/svelteAnimationTransitions'
     import { applyStyle } from '$src/utils/domTemplates.ts'

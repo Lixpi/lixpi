@@ -92,6 +92,15 @@ describe('media reference matching and compilation', () => {
         expect(scoreMediaReferenceVariant('shelbi', 'shelby')).toBeGreaterThanOrEqual(0.78)
     })
 
+    it.each(['in the', 'with', 'the'])(
+        'does not treat the function-word phrase %j as an Asset reference',
+        phrase => {
+            const descriptor = 'A figure in the foreground stands with a coat against the wall'
+
+            expect(scoreMediaReferenceVariant(phrase, descriptor)).toBe(0)
+        },
+    )
+
     it('collapses duplicate Asset placements and assigns stable positional aliases', () => {
         const asset = makeAsset({ assetId: 'asset-1', title: 'Shelby' })
         const bindings = createMediaReferenceBindings({
@@ -142,7 +151,7 @@ describe('media reference matching and compilation', () => {
         expect(compiled.intent.promptFingerprint).toMatch(/^[a-f0-9]{64}$/u)
     })
 
-    it('uses bounded descriptor aliases and leaves unmatched public-figure text untouched', () => {
+    it('does not treat descriptive Asset metadata or unmatched public-figure text as an Asset identity', () => {
         const bindings = createMediaReferenceBindings({
             assets: [makeAsset({
                 assetId: 'asset-1',
@@ -151,7 +160,7 @@ describe('media reference matching and compilation', () => {
                 entityTags: ['steam locomotive'],
             })],
         })
-        const descriptorMatch = compileMediaReferenceIntent({
+        const descriptiveText = compileMediaReferenceIntent({
             prompt: textPrompt('Use the steam locomotive at dusk'),
             bindings,
         })
@@ -160,7 +169,7 @@ describe('media reference matching and compilation', () => {
             bindings,
         })
 
-        expect(descriptorMatch.intent.safePrompt).toBe('Use REFERENCE_1 at dusk')
+        expect(descriptiveText.intent.safePrompt).toBe('Use the steam locomotive at dusk')
         expect(unboundName.intent.safePrompt).toBe('Make Tom Cruise wave')
     })
 
@@ -179,7 +188,57 @@ describe('media reference matching and compilation', () => {
 
         expect(result.kind).toBe('ambiguous')
         expect(result.unresolved?.candidates.map(candidate => candidate.assetId)).toEqual(['asset-1', 'asset-2'])
-        expect(result.unresolved?.matcherVersion).toBe('bounded-local-v1')
+        expect(result.unresolved?.matcherVersion).toBe('bounded-local-v3')
+    })
+
+    it('does not pause the exact correction prompt on incidental descriptive language', () => {
+        const bindings = createMediaReferenceBindings({
+            assets: [
+                makeAsset({
+                    assetId: 'source-drawing',
+                    title: 'Urban Street Art',
+                    summary: 'A figure wearing a gray coat stands against a wall with a canvas bag',
+                    entityTags: ['figure', 'coat', 'red scarf', 'street art'],
+                }),
+                makeAsset({
+                    assetId: 'character-sheet',
+                    title: 'Cyborg Character Design',
+                    summary: 'Three views of an android character with mechanical body parts and human hair',
+                    entityTags: ['android', 'cyborg', 'human hair', 'character design'],
+                }),
+            ],
+        })
+        const prompt = textPrompt([
+            'This character sheet was created out of this reference drawing.',
+            "But there's an error in the last shot, arms are not covered with jacked, it contradicts the previous shot!",
+            'Also remove hair completely, but add a bunch of flexible antennas that resemble the hair.',
+            'And change the words on the bag to `Lixpi` (in red) `ai` (in black).',
+            'Use Character Creator to create an improved variant of this character.',
+        ].join(' '))
+
+        const compiled = compileMediaReferenceIntent({ prompt, bindings })
+
+        expect(compiled.unresolvedBindings).toEqual([])
+        expect(compiled.intent.safePrompt).toContain('in the last shot')
+        expect(compiled.intent.safePrompt).toContain('covered with jacked')
+        expect(compiled.intent.safePrompt).toContain('(in red)')
+    })
+
+    it('does not ask which Asset owns a descriptive trait shared by attached references', () => {
+        const bindings = createMediaReferenceBindings({
+            assets: [
+                makeAsset({ assetId: 'asset-1', title: 'Source Drawing', entityTags: ['red scarf'] }),
+                makeAsset({ assetId: 'asset-2', title: 'Character Sheet', entityTags: ['red scarf'] }),
+            ],
+        })
+
+        const compiled = compileMediaReferenceIntent({
+            prompt: textPrompt('Keep the red scarf and write Lixpi in red on the bag'),
+            bindings,
+        })
+
+        expect(compiled.unresolvedBindings).toEqual([])
+        expect(compiled.intent.safePrompt).toBe('Keep the red scarf and write Lixpi in red on the bag')
     })
 
     it('uses a persisted user resolution to compile the same request deterministically', () => {
@@ -197,6 +256,25 @@ describe('media reference matching and compilation', () => {
 
         expect(compiled.unresolvedBindings).toEqual([])
         expect(compiled.intent.safePrompt).toBe('Use REFERENCE_2')
+    })
+
+    it('ignores legacy persisted resolutions that do not identify an Asset by its current identity variants', () => {
+        const bindings = createMediaReferenceBindings({
+            assets: [makeAsset({ assetId: 'asset-1', title: 'Character Sheet' })],
+        })
+        const compiled = compileMediaReferenceIntent({
+            prompt: textPrompt('Write Lixpi (in red) and fix the coat with the attached reference'),
+            bindings,
+            resolvedReferences: [
+                { originalText: 'the', assetId: 'asset-1' },
+                { originalText: 'with', assetId: 'asset-1' },
+                { originalText: 'coat', assetId: 'asset-1' },
+                { originalText: 'in red', assetId: 'asset-1' },
+            ],
+        })
+
+        expect(compiled.unresolvedBindings).toEqual([])
+        expect(compiled.intent.safePrompt).toBe('Write Lixpi (in red) and fix the coat with the attached reference')
     })
 
     it('rejects nested reasoning/provider payload leaks and sanitizes known display text', () => {

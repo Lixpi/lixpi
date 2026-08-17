@@ -63,7 +63,7 @@ Within the Image API path, the presence of reference images selects the endpoint
 
 Reference-image data URLs are converted to `BytesIO` file objects via `_data_url_to_file()` before being passed to the SDK. The streaming response yields `ImageGenPartialImageEvent` objects (each carrying progressive base64) and a terminal `ImageGenCompletedEvent` (final base64 + usage data). `partial_images=3` is what drives the up-to-three progressive previews the canvas paints into the placeholder node.
 
-Reference-conditioned Character Creator requires high-fidelity image input handling. The NEX model-synchronization workload stores `imageInputFidelity` on each image-model record: `level` describes the effective routed fidelity and optional `requestValue` describes a vendor parameter that must be sent. `ImageRouter` accepts reference-conditioned Character Creator only when the selected record declares `level: high`; the OpenAI adapter forwards `requestValue` without inspecting the model ID.
+Every synchronized image model carries a required `imageReferenceCapabilities` profile. It declares total and identity-reference budgets, supported conditioning modes, fidelity behavior, iterative-edit and control support, output pixel limits, and aspect ratios. Provider adapters consume the selected model's profile instead of inferring behavior from model names. OpenAI's adapter sends explicit input-fidelity values only when synchronized metadata requires one.
 
 ### OpenAI — Responses API Models (`gpt-4.1`, `gpt-5`, …)
 
@@ -117,6 +117,28 @@ all three block formats:
 {% callout type="note" %}
 The reference set the text model writes against is not "every attached photo" — it is the exact VLM-approved set produced by `resolveMediaBranch` *before* the text model streams. Which media become target, base-context, style-reference, comparison-target, or excluded — and how those choices drive canvas placement and branch lineage — is owned by [Branch Lineage](./BRANCH-LINEAGE.md). This section only covers the per-provider *format* of the blocks `extractReferenceImages()` reads.
 {% /callout %}
+
+## Provider-neutral reference adaptation
+
+`ImageRouter` and Capability media strategies use typed reference roles. Ordinary requests use source/style roles. Character Creator adds `edit-target`, `edit-target-identity`, `original-source`, generated-anchor, pose, crop, and Capability-reference roles.
+
+The unresolved relationships live in the `imageGenerationReferences` LangGraph state channel. `BaseProvider` resolves every reference to bytes once in `resolvedImageGenerationReferences`; the selected provider definition enforces `imageReferenceCapabilities` and stores the budgeted result in `imageReferenceAdaptation`. Identity and original-source slots are reserved before optional controls. The resulting trace records included and omitted roles.
+
+- OpenAI uploads the adapted array and prepends a role/order legend to the request prompt.
+- Google interleaves the same provider-neutral role labels with image parts.
+- Stability uses only the image, style, and structure inputs exposed by the selected endpoint. Style transfer does not satisfy identity conditioning.
+
+A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. Reference authority, ordering, and omission are determined from the shared graph state and declared model capabilities; the Character graph contains no provider-name branches.
+
+## Character Creator panel execution
+
+Character Creator bypasses whole-sheet provider generation. Its Capability Tool emits a `CharacterSheetRenderPlan`, its module definition registers the package-owned media strategy, and `ImageRouter` delegates that plan without importing the concrete capability.
+
+The default strategy generates three required isolated anchors in sequence: a neutral-front identity portrait, a front full-body outfit view, and a back full-body outfit view. The front shot consumes the completed portrait; the back shot consumes both earlier anchors; optional shots wait for all three and then may run concurrently. Free-form prompt text can request 3 to 10 total shots and prioritize belongings, expressions, additional angles, face details, or actions. Each shot gets one provider attempt and its own text-free neutral-mannequin pose reference where the shot contract requires one. A structured reasoning-model assessment compares candidate pixels with authorized source evidence without retrying or changing the candidate. Photographic face-bearing shots also use the internal YuNet/SFace fidelity workload.
+
+For prior-sheet edits, the branch resolver supplies the active edit-target Asset through shared state. Stored composition components or recovered legacy cells are reauthorized separately from original-source Assets. Evidence analysis assigns one of four authority policies: preserve the matching panel, keep only its approved face identity, discard it, or treat it as absent. Under identity-only authority, the rejected sheet is cropped to the face for the head shot and is completely absent from all body-shot provider inputs. Requested lettering remains allowed and must be rendered exactly; incidental text remains forbidden.
+
+Sharp removes near-white margins, fits each visible subject into a compact cell with bounded padding, and assembles the final 3840x2560 PNG. Providers never render the full sheet, and the compositor renders no headings, labels, grids, notes, statuses, swatches, or other typography. The final PNG and isolated panel components enter the preassigned Asset's media-composition settlement path; transient references and candidate shots are deleted at terminal cleanup. See [Character Creator](../library/CHARACTER-CREATOR.md).
 
 Before this extraction path, the [media reference boundary](./MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) compiles explicit references and uniquely matched free-form Asset mentions to `REFERENCE_n`. Reasoning context contains aliases, safe descriptors, medium, and subject-identity classification—not mutable titles or filenames. OpenAI GPT Image requests use the registered `moderation: 'low'` profile. A provider rejection is normalized into the durable run problem and is never retried automatically.
 

@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "additionalProperties": false,
-    "required": ["mediaGenerationMode", "preserveUserPrompt", "visualInstructions", "referenceImages", "referenceImageTraceUrls"],
+    "required": ["mediaGenerationMode", "preserveUserPrompt", "capabilityMediaExecutionPlan"],
     "properties": {
         "mediaGenerationMode": {
             "const": "character-creator",
@@ -12,18 +12,59 @@
             "const": true,
             "description": "Keeps the user's character request as the image-generation prompt while applying Tool instructions separately."
         },
-        "visualInstructions": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Character-sheet generation brief applied to every selected media-model run."
-        },
-        "referenceImages": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 }
-        },
-        "referenceImageTraceUrls": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 }
+        "capabilityMediaExecutionPlan": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "capabilityRunId", "sourceAssetIds", "userPrompt", "panels", "layoutId", "semanticRetryLimit"],
+            "properties": {
+                "kind": { "const": "character-sheet" },
+                "capabilityRunId": { "type": "string", "minLength": 1 },
+                "sourceAssetIds": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "uniqueItems": true,
+                    "items": { "type": "string", "minLength": 1 }
+                },
+                "userPrompt": { "type": "string", "minLength": 1, "maxLength": 8000 },
+                "layoutId": { "const": "character-sheet-3840x2560" },
+                "semanticRetryLimit": { "const": 0 },
+                "panels": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 10,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["panelId", "kind", "title", "target", "crop", "dependsOn", "outputBindings", "required", "condition", "acceptanceDimensions"],
+                        "properties": {
+                            "panelId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                            "kind": { "enum": ["body", "head", "prop", "action"] },
+                            "title": { "type": "string", "minLength": 1 },
+                            "target": { "type": "string", "minLength": 1 },
+                            "crop": { "enum": ["full-body", "upper-body", "prop", "action"] },
+                            "dependsOn": { "type": "array", "items": { "type": "string" } },
+                            "outputBindings": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": ["bindingKey", "sourceNodeId", "required", "referenceRole", "fileName"],
+                                    "properties": {
+                                        "bindingKey": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                                        "sourceNodeId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                                        "required": { "type": "boolean" },
+                                        "referenceRole": { "enum": ["canonical-anchor", "adjacent-angle", "opposite-angle"] },
+                                        "fileName": { "type": "string", "pattern": "^GENERATED_[A-Z0-9_]+\\.png$" }
+                                    }
+                                }
+                            },
+                            "required": { "type": "boolean" },
+                            "condition": { "enum": ["always", "generate-when-no-observed-prop"] },
+                            "acceptanceDimensions": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+                        }
+                    }
+                }
+            }
         }
     }
 }

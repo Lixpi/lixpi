@@ -12,22 +12,29 @@ import {
     normalizeProviderProblem,
     type MediaProviderDefinition,
 } from './media-provider-definition.ts'
+import {
+    GOOGLE_IMAGE_REFERENCE_ADAPTER,
+    OPENAI_IMAGE_REFERENCE_ADAPTER,
+    STABILITY_IMAGE_REFERENCE_ADAPTER,
+} from './image-reference-adapters.ts'
 
 const createDefinition = ({
     provider,
     constructor,
     mediaCapabilities,
+    imageReferenceAdapter,
     moderation,
     verification,
     documentationUrls,
     retentionNotes,
     sensitiveDataNotes,
 }: Pick<MediaProviderDefinition,
-    'provider' | 'constructor' | 'mediaCapabilities' | 'moderation' | 'verification' | 'documentationUrls' | 'retentionNotes' | 'sensitiveDataNotes'
+    'provider' | 'constructor' | 'mediaCapabilities' | 'imageReferenceAdapter' | 'moderation' | 'verification' | 'documentationUrls' | 'retentionNotes' | 'sensitiveDataNotes'
 >): MediaProviderDefinition => ({
     provider,
     constructor,
     mediaCapabilities,
+    imageReferenceAdapter,
     referenceRules: {
         aliases: 'positional-reference',
         supportedInputs: ['text', 'image', 'video'],
@@ -48,6 +55,7 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
         provider: 'OpenAI',
         constructor: OpenAIProvider,
         mediaCapabilities: ['image'],
+        imageReferenceAdapter: OPENAI_IMAGE_REFERENCE_ADAPTER,
         moderation: {
             policy: 'low',
             settings: () => ({ moderation: 'low' }),
@@ -63,6 +71,7 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
         provider: 'Anthropic',
         constructor: AnthropicProvider,
         mediaCapabilities: [],
+        imageReferenceAdapter: null,
         moderation: {
             policy: 'fixed-provider-policy',
             settings: () => ({}),
@@ -78,6 +87,7 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
         provider: 'Google',
         constructor: GoogleProvider,
         mediaCapabilities: ['image', 'video'],
+        imageReferenceAdapter: GOOGLE_IMAGE_REFERENCE_ADAPTER,
         moderation: {
             policy: 'input-mode-least-restrictive',
             settings: (modelId, inputMode, context) => {
@@ -101,6 +111,7 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
         provider: 'Stability',
         constructor: StabilityProvider,
         mediaCapabilities: ['image'],
+        imageReferenceAdapter: STABILITY_IMAGE_REFERENCE_ADAPTER,
         moderation: {
             policy: 'fixed-provider-policy',
             settings: () => ({}),
@@ -116,6 +127,7 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
         provider: 'BytePlus',
         constructor: BytePlusProvider,
         mediaCapabilities: ['video'],
+        imageReferenceAdapter: null,
         moderation: {
             policy: 'fixed-provider-policy',
             settings: () => ({}),

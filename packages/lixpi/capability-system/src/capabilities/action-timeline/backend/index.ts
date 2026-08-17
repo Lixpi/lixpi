@@ -38,6 +38,48 @@ export function createActionTimelineModule(
         normalizedName: 'action timeline',
         summary: 'Creates reusable, editable timed action and shot plans.',
         tags: ['timeline', 'shot-plan', 'storyboard', 'artifact'],
+        descriptionSheet: {
+            purpose: 'Creates a reusable Artifact that breaks an action or shot into timed prompt segments.',
+            expectedInputs: [
+                {
+                    name: 'Action prompt',
+                    requirement: 'required',
+                    accepts: ['prompt'],
+                    description: 'Describe the action, shot progression, and important beats.',
+                },
+                {
+                    name: 'Reference Assets',
+                    requirement: 'optional',
+                    accepts: ['image', 'video', 'artifact'],
+                    description: 'Attach source Assets that should inform subjects, staging, or visual continuity.',
+                },
+                {
+                    name: 'Duration',
+                    requirement: 'required',
+                    accepts: ['parameters'],
+                    description: 'Set the total timeline duration.',
+                },
+                {
+                    name: 'Precision',
+                    requirement: 'required',
+                    accepts: ['parameters'],
+                    description: 'Set the timing increment used to divide and align action segments.',
+                },
+            ],
+            bestResults: [
+                'Write explicit action beats in the order they should happen.',
+                'Give concrete timing or pacing constraints for important transitions.',
+            ],
+            limitations: [
+                'The result is an editable Artifact plan, not generated image or video media.',
+                'Timing describes intended beats and does not guarantee a media model will reproduce them exactly.',
+            ],
+            executionCharacteristics: {
+                cost: 'low',
+                latency: 'low',
+                summary: 'Produces structured timeline data with one selected reasoning model and no media generation.',
+            },
+        },
         entry: { capabilityId: ACTION_TIMELINE_TOOL_ID, kind: 'tool' },
         tools: [createActionTimelineToolPackage(dependencies)],
         skills: createActionTimelineSkillPackages(dependencies.capabilityStorage),

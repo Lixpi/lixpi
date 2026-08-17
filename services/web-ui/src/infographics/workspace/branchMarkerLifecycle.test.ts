@@ -5,6 +5,15 @@ import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
+const scssSource = readFileSync(resolve(__dirname, 'workspace-canvas.scss'), 'utf-8')
+
+function expectSourceToContain(sourceText: string, snippet: string, label: string): void {
+    expect(sourceText.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+}
+
+function expectSourceNotToContain(sourceText: string, snippet: string, label: string): void {
+    expect(sourceText.includes(snippet), `${label} should not contain:\n${snippet}`).toBe(false)
+}
 
 function extractFunctionBody(functionName: string): string {
     const signatureIndex = source.indexOf(`function ${functionName}`)
@@ -48,8 +57,10 @@ describe('branch marker lifecycle', () => {
             'screen placement should remove superseded preflight DOM from every marker root',
         ).toBe(true)
         expect(
-            screenPlacementBody.includes('const pendingNodes = screenOwnership.visiblePreflightNodes'),
-            'composer stack measurement should include only visible preflight owners',
+            screenPlacementBody.includes(
+                '...screenOwnership.visiblePreflightNodes.filter(node => !node.parentBranchNodeId),',
+            ),
+            'composer stack measurement should include only unattached visible preflight owners',
         ).toBe(true)
     })
 
@@ -160,5 +171,123 @@ describe('branch marker lifecycle', () => {
         expect(renderNodesBody).toContain('resolveBranchMarkerRenderOwnership(')
         expect(renderNodesBody).toContain('branchMarkerRenderOwnership.suppressedNodeIds.has(node.nodeId)')
         expect(renderNodesBody).toContain("console.info('[CANVAS] branch marker structural ownership'")
+    })
+
+    it('keeps shared request progress inside the branch marker surface', () => {
+        const contentBody = extractFunctionBody('createBranchMarkerContent')
+        const progressBody = extractFunctionBody('createBranchMarkerGlobalProgress')
+        const chromeSyncBody = extractFunctionBody('syncGeneratedMediaChrome')
+        const cleanupBody = extractFunctionBody('cleanupBranchMarkerArtifacts')
+
+        expectSourceToContain(progressBody, "className: 'workspace-branch-marker-progress'", 'branch progress factory')
+        expectSourceToContain(progressBody, 'return progress.element', 'branch progress factory')
+        expectSourceNotToContain(progressBody, 'workspace-branch-generation-progress-chrome', 'branch progress factory')
+        expectSourceToContain(
+            progressBody,
+            "const reasoningSummary = responseText.replace(/\\s+/g, ' ').trim()",
+            'branch reasoning progress',
+        )
+        expectSourceToContain(progressBody, 'summary: reasoningSummary', 'branch reasoning progress')
+        expectSourceToContain(
+            progressBody,
+            "showSummaryWhenCollapsedItemIds: ['understand-request']",
+            'branch reasoning progress',
+        )
+        expectSourceToContain(
+            progressBody,
+            'const mediaRequestStatuses = resolveBranchMarkerMediaRequestStatuses(',
+            'terminal branch progress',
+        )
+        expectSourceToContain(
+            progressBody,
+            'settleBranchMarkerProgressStatusForTerminalMedia(\n                getCapabilityRunStatus(run),',
+            'terminal Capability run progress',
+        )
+        expectSourceToContain(
+            progressBody,
+            'settleBranchMarkerProgressStatusForTerminalMedia(\n                    step.status,',
+            'terminal Capability step progress',
+        )
+        expectSourceToContain(contentBody, "${globalProgress ? ' has-progress' : ''}", 'branch marker content')
+        expectSourceToContain(
+            contentBody,
+            '${globalProgress ? html`<div className="workspace-branch-marker-separator"></div>` : null}',
+            'branch marker content',
+        )
+        expectSourceToContain(contentBody, '${globalProgress}\n                </div>', 'branch marker main content')
+        expectSourceToContain(
+            contentBody,
+            "content.style.setProperty('--workspace-branch-marker-header-center'",
+            'branch marker progress geometry',
+        )
+        expectSourceToContain(
+            chromeSyncBody,
+            'destroyMediaGenerationTraceButtons()',
+            'media chrome rebuild',
+        )
+        expectSourceNotToContain(
+            chromeSyncBody,
+            'destroyMediaGenerationProgressInstances()',
+            'media chrome rebuild',
+        )
+        expectSourceToContain(
+            cleanupBody,
+            'destroyMediaGenerationProgressInstance(`branch:${nodeId}`)',
+            'branch marker cleanup',
+        )
+    })
+
+    it('reserves active stop-control space only in the branch marker prompt row', () => {
+        expectSourceToContain(
+            scssSource,
+            `.workspace-branch-marker-content.has-progress.has-stop-control {
+    padding-right: 18px;
+}`,
+            'expanded branch marker content',
+        )
+        expectSourceToContain(
+            scssSource,
+            `.workspace-branch-marker-content.has-progress.has-stop-control > .workspace-branch-marker-main > .workspace-branch-marker-message {
+    padding-right: 34px;
+}`,
+            'expanded branch marker prompt row',
+        )
+    })
+
+    it('anchors review controls below the complete rendered branch marker surface', () => {
+        const reviewControlsBody = extractFunctionBody('syncBranchMarkerReviewControls')
+
+        expectSourceToContain(
+            reviewControlsBody,
+            "nodeEl.querySelector<HTMLElement>(':scope > .workspace-branch-marker-content')",
+            'branch review control host',
+        )
+        expectSourceToContain(
+            reviewControlsBody,
+            'const controlsHost = content ?? nodeEl',
+            'branch review control host',
+        )
+        expectSourceToContain(
+            reviewControlsBody,
+            'controlsHost.appendChild(controls)',
+            'branch review control host',
+        )
+    })
+
+    it('shows media attribution after the first frame even before the Asset catalog refresh arrives', () => {
+        const syncChromeBody = extractFunctionBody('syncGeneratedMediaChrome')
+        const modelBody = extractFunctionBody('getGeneratedMediaModelId')
+
+        expectSourceToContain(syncChromeBody, '|| node.generatedBy', 'generated media chrome eligibility')
+        expectSourceToContain(
+            syncChromeBody,
+            '|| node.generationProgress?.mediaModelId',
+            'generated media chrome eligibility',
+        )
+        expectSourceToContain(
+            modelBody,
+            "node.generationProgress?.mediaModelId ?? ''",
+            'generated media model fallback',
+        )
     })
 })

@@ -27,6 +27,14 @@ const mocks = vi.hoisted(() => ({
         mediaDescriptor: {
             defaultVlmModelId: 'Anthropic:claude-haiku-4-5',
             defaultVlmMaxTokens: 8192,
+            defaultVlmInferenceCapabilities: {
+                thinkingMode: 'none',
+                requiresAutoToolChoiceWithThinking: false,
+                supportsTemperature: true,
+                supportsSystemPrompt: true,
+                requiresClosedJsonSchema: false,
+                supportedInputKinds: ['image', 'video-frame', 'document-text'],
+            },
         },
     },
     debug: {
@@ -126,6 +134,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
             provider: 'Anthropic',
             model: 'claude-haiku-4-5',
             maxCompletionSize: 4096,
+            inferenceCapabilities: mocks.settings.mediaDescriptor.defaultVlmInferenceCapabilities,
         })
         mocks.blob.get.mockResolvedValue({ bucketName: 'blob-bucket', objectKey: 'blob-key' })
         mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({ doc: { text: 'Launch notes and priorities' } })
@@ -156,6 +165,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         expect(mocks.mediaDescriptor.describeMediaStill).toHaveBeenCalledWith({
             provider: 'Anthropic',
             modelVersion: 'claude-haiku-4-5',
+            inferenceCapabilities: mocks.settings.mediaDescriptor.defaultVlmInferenceCapabilities,
             imageUrl: 'nats-obj://blob-bucket/blob-key',
             natsService: { connectionId: 'nats-1' },
             maxTokens: 4096,
@@ -172,6 +182,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
             provider: 'OpenAI',
             model: 'gpt-4.1',
             maxCompletionSize: 2048,
+            inferenceCapabilities: mocks.settings.mediaDescriptor.defaultVlmInferenceCapabilities,
         })
 
         const handler = getHandler()
@@ -184,6 +195,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         expect(mocks.mediaDescriptor.describeTextContent).toHaveBeenCalledWith({
             provider: 'OpenAI',
             modelVersion: 'gpt-4.1',
+            inferenceCapabilities: mocks.settings.mediaDescriptor.defaultVlmInferenceCapabilities,
             text: 'Launch notes and priorities',
             title: textAsset.title,
             natsService: { connectionId: 'nats-1' },
@@ -238,6 +250,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         mocks.aiModel.getAiModel.mockResolvedValue({
             provider: 'Anthropic',
             model: 'claude-haiku-4-5',
+            inferenceCapabilities: mocks.settings.mediaDescriptor.defaultVlmInferenceCapabilities,
         })
         const handler = getHandler()
         await handler({

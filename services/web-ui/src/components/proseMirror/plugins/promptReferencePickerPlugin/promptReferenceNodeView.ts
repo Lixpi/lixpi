@@ -1,4 +1,5 @@
 import type {
+    CapabilityModuleMeta,
     CanvasNode,
     MediaPromptReference,
     PromptReferenceType,
@@ -31,12 +32,13 @@ import {
     promptIcon,
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import {
     capabilityArtifactFrontendRegistry,
     ensureCapabilityStyles,
     getCapabilityArtifactIcon,
 } from '$src/installed-capabilities.ts'
+import { CapabilityModulePromiseCache, createCapabilityPromptReferencePreview } from './capabilityPromptReferencePreview.ts'
 
 const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media' | 'capability-artifact'>, string> = {
     'capability-module': atomIcon,
@@ -57,6 +59,8 @@ export type PromptReferencePreviewRenderer = {
     environment: ContextPreviewEnvironment
     inlinePopover?: boolean
     preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
+    getCapabilityModule?: (moduleId: string) => Promise<CapabilityModuleMeta>
+    capabilityModuleCache?: CapabilityModulePromiseCache
 }
 
 export type PromptReferencePreviewInstance = {
@@ -260,6 +264,11 @@ export class PromptReferenceNodeView implements NodeView {
                 ...mediaReference,
                 displayName: descriptor.displayName,
             }, previewRenderer)
+            : referenceType === 'capability-module' && previewRenderer?.getCapabilityModule
+                ? createCapabilityPromptReferencePreview({
+                    moduleId: String(node.attrs.moduleId ?? ''),
+                    displayName: descriptor.displayName,
+                }, previewRenderer)
             : null
         this.dom = this.previewTile?.dom
             ?? createPromptReferenceChipElement(descriptor)

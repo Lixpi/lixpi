@@ -3,7 +3,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { STREAM_STATUS, type CapabilityGenerationTrace, type MediaGenerationRunMeta } from '@lixpi/constants'
 
-import { AiChatProseMirrorStreamAssembler } from './ai-chat-stream-assembler.ts'
+import {
+    AiChatProseMirrorStreamAssembler,
+    settlePersistedGenerationNode,
+} from './ai-chat-stream-assembler.ts'
 
 type JsonNode = {
     type?: string
@@ -113,5 +116,109 @@ describe('AiChatProseMirrorStreamAssembler Capability generation history', () =>
             }),
         })
         expect(JSON.stringify(reasoningSection)).toContain('The action timeline is ready.')
+    })
+
+    it('removes unfinished request media while preserving completed media on cancellation', () => {
+        const persistedDocument: JsonNode = {
+            type: 'doc',
+            content: [{
+                type: 'aiResponseMessage',
+                attrs: {
+                    generationRequestId: 'request-1',
+                    isInitialRenderAnimation: true,
+                    isReceivingAnimation: true,
+                },
+                content: [
+                    {
+                        type: 'aiGeneratedImage',
+                        attrs: {
+                            generationRequestId: 'request-1',
+                            isPartial: true,
+                            imageData: 'data:image/png;base64,unfinished',
+                        },
+                    },
+                    {
+                        type: 'aiGeneratedImage',
+                        attrs: {
+                            generationRequestId: 'request-1',
+                            isPartial: false,
+                            imageData: '/api/assets/completed/renditions/canonical',
+                        },
+                    },
+                    {
+                        type: 'aiGeneratedVideo',
+                        attrs: {
+                            generationRequestId: 'request-1',
+                            isPending: true,
+                        },
+                    },
+                ],
+            }],
+        }
+
+        const settled = settlePersistedGenerationNode(persistedDocument, 'request-1')
+
+        expect(settled.changed).toBe(true)
+        expect(findNode(settled.node!, node => (
+            node.type === 'aiGeneratedImage' && node.attrs?.isPartial === true
+        ))).toBeUndefined()
+        expect(findNode(settled.node!, node => (
+            node.type === 'aiGeneratedImage' && node.attrs?.isPartial === false
+        ))).toBeDefined()
+        expect(findNode(settled.node!, node => node.type === 'aiGeneratedVideo')).toBeUndefined()
+        expect(findNode(settled.node!, node => node.type === 'aiResponseMessage')?.attrs).toMatchObject({
+            isInitialRenderAnimation: false,
+            isReceivingAnimation: false,
+        })
+    })
+
+    it('removes a live partial image when its generation request is cancelled', async () => {
+        const generationRun: MediaGenerationRunMeta = {
+            requestKind: 'media-generation-matrix',
+            generationRequestId: 'request-1',
+            reasoningRunId: 'reasoning-1',
+            reasoningModelId: 'Google:gemini-2.5-flash',
+            reasoningIndex: 0,
+            mediaRunId: 'reasoning-1:image:0',
+            mediaModelId: 'OpenAI:gpt-image-2',
+            mediaType: 'image',
+            mediaIndex: 0,
+        }
+        const assembler = new AiChatProseMirrorStreamAssembler({
+            organizationId: 'organization-1',
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+            leaseId: 'lease-1',
+            leaseHolderId: 'holder-1',
+            provider: 'Google',
+            generationRun,
+            transport: createTransport() as any,
+        })
+        ;(assembler as any).persistFinalSnapshot = vi.fn(async () => undefined)
+        assembler.handleContent({
+            status: STREAM_STATUS.START_STREAM,
+            aiProvider: 'Google',
+            generationRun,
+        })
+        assembler.handleContent({
+            status: STREAM_STATUS.IMAGE_PARTIAL,
+            aiProvider: 'Google',
+            generationRun,
+            imageUrl: '/api/transient-media/workspaces/workspace-1/objects/partial.png',
+            assetId: 'asset-1',
+            partialIndex: 1,
+        })
+        await assembler.flushPendingWork()
+        expect(findNode(
+            assembler.snapshotForProjection() as JsonNode,
+            node => node.type === 'aiGeneratedImage' && node.attrs?.isPartial === true,
+        )).toBeDefined()
+
+        await assembler.cancelGenerationRequest('request-1')
+
+        expect(findNode(
+            assembler.snapshotForProjection() as JsonNode,
+            node => node.type === 'aiGeneratedImage',
+        )).toBeUndefined()
     })
 })

@@ -160,7 +160,7 @@ el.style.height = `${h}px`
 ```
 Single-property assignments (`el.style.display = 'none'`) are still fine.
 
-For SVG icons, import them from `$src/svgIcons/index.ts` and inject via `innerHTML` — never inline SVG markup in component code.
+For SVG icons, import them from `@lixpi/ui-kit/svg` and inject via `innerHTML` — never inline SVG markup in component code.
 
 The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 

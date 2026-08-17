@@ -59,6 +59,7 @@
         "@lixpi/canvas-engine": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/prosemirror": "workspace:*",
+        "@lixpi/ui-kit": "workspace:*",
         "pixi.js": "*",
         "rbush": "*",
         "@types/rbush": "*",

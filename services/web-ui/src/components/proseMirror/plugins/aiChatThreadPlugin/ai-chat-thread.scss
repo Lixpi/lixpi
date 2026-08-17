@@ -1,13 +1,33 @@
 // AI Chat Thread Styles
+@use '@lixpi/ui-kit/styles/dropdown';
+@use '@lixpi/ui-kit/styles/info-bubble';
+@use '@lixpi/ui-kit/styles/media-model-badge';
 @import '$src/components/proseMirror/ProseMirrorMixings.scss';
 @import '$src/sass/components/animations';
-@import '$src/components/dropdown/dropdown.scss';
-@import '$src/components/infoBubble/infoBubble.scss';
+@import '$src/sass/_prompt-reference-chip.scss';
 @import '$src/components/contextPreview/context-preview.scss';
+@import '$src/components/executionTrace/execution-trace.scss';
 @import '$src/components/capabilityRun/capability-run.scss';
 
 $aiChatThreadMinHeight: 50px;
 $aiChatThreadMediaMaxWidth: 500px;
+
+@mixin ai-generation-prompt-surface {
+    margin: 0;
+    padding: 0.45rem 0.65rem;
+    border-left: 2px solid rgba(115, 87, 184, 0.34);
+    border-radius: 0 4px 4px 0;
+    background: rgba(115, 87, 184, 0.06);
+    color: rgba(26, 39, 68, 0.82);
+    font-family: inherit;
+    font-size: 0.76rem;
+    font-style: normal;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    opacity: 1;
+}
 
 // User message bubble colors
 $userMessageBubbleColor: linear-gradient(135deg, #636d75 0%, #6c747c 100%);
@@ -143,8 +163,7 @@ $userMessageTextColor: #fff;
     }
 
     .ai-user-message {
-        --prompt-reference-color: #d7e6ff;
-        --prompt-reference-capability-module-color: #eca983;
+        @include prompt-reference-chip-on-dark-surface;
 
         display: table;
         max-width: 85%;
@@ -363,7 +382,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 border-radius: 999px;
                 background: var(--workspace-branch-origin-background-color, #53616c);
                 color: var(--workspace-branch-origin-icon-color, #fff);
-                box-shadow: var(--workspace-branch-origin-box-shadow, 0 6px 18px rgba(42, 48, 57, 0.18));
+                box-shadow: none;
 
                 svg {
                     display: block;
@@ -598,47 +617,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     min-height: var(--workspace-generated-media-chrome-icon-size, 34px);
 }
 
-.ai-generated-media-model-chrome .media-model-badge {
-    min-width: 0;
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 1 1 auto;
-    display: flex;
-    align-items: center;
-    gap: var(--workspace-media-model-badge-icon-gap, 3px);
-    color: var(--workspace-media-model-badge-provider-color, #4d5963);
-    line-height: 1;
-    pointer-events: none;
-}
-
-.ai-generated-media-model-chrome .media-model-badge-icon,
-.ai-generated-media-model-chrome .media-model-badge svg {
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
-    fill: currentColor;
-}
-
-.ai-generated-media-model-chrome .media-model-badge-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.ai-generated-media-model-chrome .media-model-badge-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--workspace-media-model-badge-provider-color, #4d5963);
-    font-size: var(--workspace-media-model-badge-name-font-size, 15px);
-    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
-    line-height: var(--workspace-media-model-badge-name-line-height, 1.5);
-}
-
-.ai-generated-media-model-chrome .media-model-badge-model {
-    color: var(--workspace-media-model-badge-model-color, #181e23);
-}
-
 .ai-generated-media-section-title {
     margin: 0 0 0.45rem;
     color: rgba(0, 0, 0, 0.45);
@@ -677,21 +655,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-tool-prompt-section .ai-generation-trace-content:not(:empty),
     .ai-image-generation-tool-prompt-fallback,
     .ai-image-generation-final-prompt {
-        margin: 0;
-        padding: 0.45rem 0.65rem;
-        max-height: 14rem;
-        overflow-y: auto;
-        border-left: 2px solid rgba(115, 87, 184, 0.34);
-        border-radius: 0 4px 4px 0;
-        background: rgba(115, 87, 184, 0.06);
-        color: rgba(26, 39, 68, 0.82);
-        font-family: inherit;
-        font-size: 0.76rem;
-        font-style: normal;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow-wrap: anywhere;
+        @include ai-generation-prompt-surface;
     }
 
     .ai-image-generation-tool-prompt-section .ai-generation-trace-content:empty {
@@ -728,7 +692,8 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     .ai-image-generation-final-prompt-section,
     .ai-image-generation-reference-section,
     .ai-image-generation-resolver-section,
-    .ai-capability-generation-details-section {
+    .ai-capability-generation-details-section,
+    .ai-capability-media-review-section {
         margin: 0;
 
         // Fading gradient separator between sections — mirrors the branch lineage
@@ -772,6 +737,59 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
     .ai-capability-generation-details-section .ai-image-generation-section-label {
         display: block;
+    }
+
+    .ai-capability-media-review-section .ai-image-generation-section-label {
+        display: block;
+    }
+
+    .ai-capability-media-review-summary,
+    .ai-capability-media-review-recommendation {
+        margin: 0 0 0.65rem;
+        color: rgba(0, 0, 0, 0.62);
+        font-size: 0.72rem;
+        line-height: 1.4;
+    }
+
+    .ai-capability-media-review-recommendation {
+        margin: 0.65rem 0 0;
+    }
+
+    .ai-capability-media-review-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .ai-capability-media-review-step {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        gap: 0.15rem 0.75rem;
+        padding: 0.48rem 0.56rem;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.035);
+    }
+
+    .ai-capability-media-review-step-title {
+        color: rgba(0, 0, 0, 0.68);
+        font-size: 0.72rem;
+        font-weight: 650;
+    }
+
+    .ai-capability-media-review-step-status {
+        color: rgba(0, 0, 0, 0.48);
+        font-size: 0.68rem;
+    }
+
+    .ai-capability-media-review-step-issues {
+        grid-column: 1 / -1;
+        color: #a63f3f;
+        font-size: 0.7rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
     }
 
     .ai-capability-generation-metadata {
@@ -965,4 +983,12 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         font-size: 0.7rem;
         line-height: 1.35;
     }
+}
+
+.workspace-media-generation-progress
+    .progress-timeline-item[data-item-id='lineage:media-generation-prompt']
+    > .progress-timeline-content
+    > .progress-timeline-details
+    > .progress-timeline-summary {
+    @include ai-generation-prompt-surface;
 }

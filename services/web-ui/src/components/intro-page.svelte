@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition'
-	import { aiRobotFaceIcon } from '$src/svgIcons/index.ts'
+	import { aiRobotFaceIcon } from '@lixpi/ui-kit/svg'
 </script>
 
 <div class="intro-page flex justify-center items-center" in:fade|global="{{ duration: 250 }}">

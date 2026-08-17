@@ -21,7 +21,7 @@ const aiModelsStoreState = vi.hoisted(() => ({
     subscribers: new Set<(state: any) => void>(),
 }))
 
-vi.mock('$src/components/dropdown/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/dropdown', () => ({
     createPureDropdown: vi.fn((config: any) => {
         const instance = {
             dom: document.createElement('div'),
@@ -35,7 +35,7 @@ vi.mock('$src/components/dropdown/index.ts', () => ({
     }),
 }))
 
-vi.mock('$src/components/tagPill/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/tag-pill', () => ({
     createTagPill: vi.fn((parent: any, config: any) => {
         const group = parent.append('g')
             .attr('data-test-tag-pill-id', config.id)

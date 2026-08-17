@@ -28,6 +28,83 @@ const candidate = (overrides: Partial<MediaBranchCandidateImage>): MediaBranchCa
 }
 
 describe('MediaBranchLineagePlanner', () => {
+    it('continues an unambiguous active generated branch before semantic resolution finishes', () => {
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-provisional-continuation',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            mediaBranchCandidateSnapshot: {
+                resolverVersion: 'image-branch-vlm-v1',
+                conversationAssetId: 'thread-1',
+                regionNodeId: 'standalone:thread-1',
+                activeTargetCandidateId: 'node:derived-output',
+                explicitReferenceCandidateIds: ['node:source-input', 'node:derived-output'],
+                promptText: 'adjust only the derived output',
+                promptFingerprint: 'prompt-provisional',
+                transcriptContext: '',
+                candidates: [
+                    candidate({
+                        candidateId: 'node:source-input',
+                        nodeId: 'source-input',
+                        roleHints: ['base-context'],
+                    }),
+                    candidate({
+                        candidateId: 'node:derived-output',
+                        nodeId: 'derived-output',
+                        roleHints: ['generated-variant', 'branch-leaf', 'active-target'],
+                        branchId: 'branch-existing',
+                        sourceContextNodeIds: ['source-input', 'derived-output'],
+                    }),
+                ],
+            },
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.sourceNodeId).toBe('derived-output')
+        expect(plan.placementAnchorNodeId).toBe('derived-output')
+        expect(plan.branchId).toBe('branch-existing')
+        expect(plan.branchOrigin).toBeUndefined()
+        expect(plan.branchLines).toEqual([
+            expect.objectContaining({
+                parentBranchNodeId: 'derived-output',
+                branchId: 'branch-existing',
+            }),
+        ])
+        expect(plan.runAssignments[0]).toMatchObject({
+            parentMediaNodeId: 'derived-output',
+            lineageParentNodeId: plan.branchLines[0]?.nodeId,
+        })
+    })
+
+    it('does not turn an active base reference into a generated lineage continuation', () => {
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-provisional-root',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            mediaBranchCandidateSnapshot: {
+                resolverVersion: 'image-branch-vlm-v1',
+                conversationAssetId: 'thread-1',
+                regionNodeId: 'standalone:thread-1',
+                activeTargetCandidateId: 'node:source-input',
+                explicitReferenceCandidateIds: ['node:source-input'],
+                promptText: 'create a new output using the reference',
+                promptFingerprint: 'prompt-root',
+                transcriptContext: '',
+                candidates: [candidate({
+                    candidateId: 'node:source-input',
+                    nodeId: 'source-input',
+                    roleHints: ['base-context', 'active-target'],
+                })],
+            },
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.sourceNodeId).toBeUndefined()
+        expect(plan.placementAnchorNodeId).toBe('source-input')
+        expect(plan.branchOrigin).toBeDefined()
+        expect(plan.branchLines).toEqual([])
+    })
+
     it('places a preassigned Capability output through the normal lineage topology without creating another Asset', () => {
         const plan = planner.buildPlan({
             generationRequestId: 'request-character',
@@ -181,6 +258,65 @@ describe('MediaBranchLineagePlanner', () => {
             promptText: 'stylize the portrait',
             promptFingerprint: 'prompt-fp',
             createdAt: 1700000000000,
+        })
+    })
+
+    it('continues from accepted generated media under a new server branch id', () => {
+        const snapshot: MediaBranchCandidateSnapshot = {
+            resolverVersion: 'image-branch-vlm-v1',
+            conversationAssetId: 'thread-1',
+            regionNodeId: 'standalone:thread-1',
+            promptText: 'fix the coat sleeves',
+            promptFingerprint: 'accepted-edit-fp',
+            transcriptContext: 'context',
+            candidates: [candidate({
+                nodeId: 'accepted-character-sheet',
+                roleHints: ['generated-variant', 'branch-leaf'],
+                parentMediaNodeId: 'historical-parent',
+            })],
+        }
+        const resolution: MediaBranchVlmResolution = {
+            resolverKind: 'structured-vlm',
+            resolverVersion: 'image-branch-vlm-v1',
+            resolverModelProvider: 'OpenAI',
+            resolverModelId: 'gpt-4.1',
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: 'accepted-character-sheet',
+            parentCandidateId: 'accepted-character-sheet',
+            branchId: 'stale-accepted-branch',
+            includeGeneratedCandidateIds: ['accepted-character-sheet'],
+            referenceCandidateIds: ['accepted-character-sheet'],
+            sourceContextNodeIds: ['accepted-character-sheet'],
+            styleReferenceCandidateIds: [],
+            excludedCandidateIds: [],
+            entityTags: ['character'],
+            styleTags: [],
+            confidence: 1,
+            rationale: 'stale resolver output',
+            decisions: [],
+        }
+
+        const plan = planner.buildPlan({
+            generationRequestId: 'request-accepted-edit',
+            reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+            imageModelIds: ['OpenAI:gpt-image-1'],
+            mediaBranchCandidateSnapshot: snapshot,
+            mediaBranchResolution: resolution,
+            createdAt: 1700000000000,
+        })
+
+        expect(plan.branchId).toBe('branch-request-accepted-edit')
+        expect(plan.sourceNodeId).toBe('accepted-character-sheet')
+        expect(plan.placementAnchorNodeId).toBe('accepted-character-sheet')
+        expect(plan.branchOrigin).toBeUndefined()
+        expect(plan.branchLines).toEqual([expect.objectContaining({
+            parentBranchNodeId: 'accepted-character-sheet',
+            branchId: 'branch-request-accepted-edit',
+        })])
+        expect(plan.runAssignments[0]).toMatchObject({
+            parentMediaNodeId: 'accepted-character-sheet',
+            operationKind: 'edit_existing',
         })
     })
 

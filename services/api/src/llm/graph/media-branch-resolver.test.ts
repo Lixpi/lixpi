@@ -428,6 +428,147 @@ describe('resolveMediaBranch', () => {
         })
     })
 
+    it('targets an accepted generated Asset and assigns a new continuation branch', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+            branchId: undefined,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            branchId: 'stale-branch-from-vlm',
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+            decisions: [{
+                candidateId: acceptedCandidate.candidateId,
+                role: 'target',
+                reason: 'selected character sheet',
+            }],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'fix the coat sleeves on this accepted character sheet',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+            referenceCandidateIds: [acceptedCandidate.candidateId],
+        })
+        expect(update.mediaBranchResolution?.branchId).toMatch(/^branch-/)
+        expect(update.mediaBranchResolution?.branchId).not.toBe('stale-branch-from-vlm')
+    })
+
+    it('restores the active target when an edit-existing resolution omits it', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: '',
+            parentCandidateId: '',
+            includeGeneratedCandidateIds: [],
+            confidence: 0.9,
+            rationale: 'The active character sheet is being corrected.',
+            decisions: [],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'correct the clothing on this character sheet using the original reference',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [baseCandidates[0]!, acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+        })
+        expect(update.mediaBranchResolution?.rationale).toContain(
+            'restored the active target omitted from an edit_existing resolution',
+        )
+    })
+
+    it('keeps the only accepted generated Asset as parent when the VLM is ambiguous', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+            branchId: undefined,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'ambiguous',
+            operationKind: 'new_image',
+            targetCandidateId: '',
+            parentCandidateId: '',
+            branchId: 'stale-branch-from-vlm',
+            includeGeneratedCandidateIds: [],
+            confidence: 0.1,
+            rationale: 'The edit referent was not resolved confidently.',
+            decisions: [],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'fix this accepted character sheet',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'edit-active-branch',
+            operationKind: 'edit_existing',
+            targetCandidateId: acceptedCandidate.candidateId,
+            parentCandidateId: acceptedCandidate.candidateId,
+            includeGeneratedCandidateIds: [acceptedCandidate.candidateId],
+            referenceCandidateIds: [acceptedCandidate.candidateId],
+        })
+        expect(update.mediaBranchResolution?.branchId).toMatch(/^branch-/)
+        expect(update.mediaBranchResolution?.branchId).not.toBe('stale-branch-from-vlm')
+        expect(update.mediaBranchResolution?.rationale).toContain('retained the only explicit generated Asset')
+    })
+
+    it('does not force an ambiguous new-subject request to edit its only generated style reference', async () => {
+        const acceptedCandidate = {
+            ...baseCandidates[2]!,
+            roleHints: ['base-context', 'generated-variant', 'active-target'] as const,
+            branchId: undefined,
+        }
+        const { deps } = createDeps(createParsedResolution({
+            mode: 'ambiguous',
+            operationKind: 'new_image',
+            targetCandidateId: '',
+            parentCandidateId: '',
+            branchId: 'stale-branch-from-vlm',
+            confidence: 0.1,
+            rationale: 'The referent was not resolved confidently.',
+            decisions: [],
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            promptText: 'draw a goat in the style of this image',
+            activeTargetCandidateId: acceptedCandidate.candidateId,
+            candidates: [acceptedCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            targetCandidateId: null,
+            parentCandidateId: undefined,
+            referenceCandidateIds: [acceptedCandidate.candidateId],
+        })
+    })
+
     it('keeps explicit new-subject requests targetless even when a generated image is active', async () => {
         const { deps } = createDeps(createParsedResolution({
             mode: 'fresh-branch',
@@ -532,6 +673,34 @@ describe('resolveMediaBranch', () => {
         await expect(resolveMediaBranch(createState(), deps)).rejects.toThrow('MEDIA_BRANCH_REFERENCE_AMBIGUITY:The referent is unclear.')
         expect(publisher.mediaBranchResolutionError).toHaveBeenCalledOnce()
         expect(publisher.mediaBranchResolved).not.toHaveBeenCalled()
+    })
+
+    it('starts a fresh branch when duplicate candidates collapse to one Asset', async () => {
+        const duplicatePortraitCandidate = {
+            ...baseCandidates[0]!,
+            candidateId: 'portrait-source-copy',
+            nodeId: 'portrait-source-copy',
+            ancestorNodeIds: ['portrait-source-copy'],
+            sourceContextNodeIds: ['portrait-source-copy'],
+        }
+        const { deps, publisher } = createDeps(createParsedResolution({
+            mode: 'ambiguous',
+            confidence: 0.1,
+            rationale: 'The referent is unclear.',
+        }))
+
+        const update = await resolveMediaBranch(createState({
+            candidates: [baseCandidates[0]!, duplicatePortraitCandidate],
+        }), deps)
+
+        expect(update.mediaBranchResolution).toMatchObject({
+            mode: 'fresh-branch',
+            operationKind: 'new_image',
+            targetCandidateId: null,
+            referenceCandidateIds: ['portrait-source'],
+        })
+        expect(publisher.mediaBranchResolutionError).not.toHaveBeenCalled()
+        expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
     })
 
     // Temporary skip: API integration behavior changed; re-enable after stabilization.

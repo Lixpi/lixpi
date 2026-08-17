@@ -8,11 +8,8 @@ import {
 } from '@lixpi/constants'
 import type { CapabilityPackageSeedContext } from '../../../backend/capability-module.ts'
 import {
-    CHARACTER_IMAGE_PROMPT_RESOURCE_ID,
     CHARACTER_IMAGE_PROMPT_SKILL_ID,
-    CHARACTER_SHEET_LAYOUT_RESOURCE_ID,
     CHARACTER_SHEET_LAYOUT_SKILL_ID,
-    REFERENCE_FIDELITY_RESOURCE_ID,
     REFERENCE_FIDELITY_SKILL_ID,
 } from '../skills/index.ts'
 import { CHARACTER_CREATOR_TOOL_ID } from '../shared/character-creator-routing.ts'
@@ -68,14 +65,6 @@ const outputSchemaSource: ResourceSource = {
     name: 'Character Creator Output Schema',
 }
 
-const exampleSource: ResourceSource = {
-    resourceId: 'character-sheet-example',
-    fileName: 'character-sheet-example.jpg',
-    mediaType: 'image/jpeg',
-    role: 'example',
-    name: 'Character Sheet One-Shot Example',
-}
-
 export async function seedCharacterCreatorTool(
     context: CapabilityPackageSeedContext,
     storage: CharacterCreatorCapabilityStorage,
@@ -83,11 +72,10 @@ export async function seedCharacterCreatorTool(
 ): Promise<void> {
     const inputSchema = await storeToolResource(storage, storageOwnerId, inputSchemaSource)
     const outputSchema = await storeToolResource(storage, storageOwnerId, outputSchemaSource)
-    const example = await storeToolResource(storage, storageOwnerId, exampleSource)
     await storage.seedBuiltInCapability({
         allowedActions: context.allowedActions,
-        manifest: buildCharacterCreatorManifest({ inputSchema, outputSchema, example }),
-        summary: 'Creates or designs characters through a structured multi-view character-sheet workflow using the selected image-model matrix.',
+        manifest: buildCharacterCreatorManifest({ inputSchema, outputSchema }),
+        summary: 'Plans configurable 3-to-10-shot character sheets with progressive results and no automatic retries.',
         tags: ['character', 'image', 'turnaround', 'global'],
         parentModuleId: context.parentModuleId,
         catalogExposure: context.catalogExposure,
@@ -98,20 +86,19 @@ export async function seedCharacterCreatorTool(
 export function buildCharacterCreatorManifest(resources: {
     inputSchema: CapabilityResourceRef
     outputSchema: CapabilityResourceRef
-    example: CapabilityResourceRef
 }): CapabilityManifest {
     return {
         schemaVersion: 1,
         capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.tool,
         kind: 'tool',
         name: 'Character Creator',
-        description: 'Use for any request to create, design, or develop a character. Adds structured character-sheet instructions and layout references to ordinary multi-model image generation.',
+        description: 'Use for a request to create, design, or develop a character sheet. It uses a required three-shot identity-and-turnaround plan and accepts 3 to 10 user-prioritized shots. Every shot runs once and the final sheet contains imagery only.',
         references: [
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.layoutSkill, kind: 'skill', import: ['layout'] },
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.referenceFidelitySkill, kind: 'skill', import: ['reference-fidelity'] },
             { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.imagePromptSkill, kind: 'skill', import: ['image-prompt'] },
         ],
-        resources: [resources.inputSchema, resources.outputSchema, resources.example],
+        resources: [resources.inputSchema, resources.outputSchema],
         tool: {
             toolType: 'character-creator',
             inputSchema: resources.inputSchema,
@@ -138,39 +125,21 @@ export function buildCharacterCreatorManifest(resources: {
                         progress: {},
                     },
                     {
-                        stepId: 'build-prompt',
-                        title: 'Build character prompt',
-                        action: 'character.build-prompt',
+                        stepId: 'build-render-plan',
+                        title: 'Build character render plan',
+                        action: 'character.build-render-plan',
                         dependsOn: ['validate-request'],
                         input: {
                             prompt: { source: 'step', stepId: 'validate-request', path: ['prompt'] },
                             referenceAssetIds: { source: 'step', stepId: 'validate-request', path: ['referenceAssetIds'] },
-                            layout: {
-                                source: 'resource',
-                                capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.layoutSkill,
-                                resourceId: CHARACTER_SHEET_LAYOUT_RESOURCE_ID,
-                            },
-                            referenceFidelity: {
-                                source: 'resource',
-                                capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.referenceFidelitySkill,
-                                resourceId: REFERENCE_FIDELITY_RESOURCE_ID,
-                            },
-                            promptInstructions: {
-                                source: 'resource',
-                                capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.imagePromptSkill,
-                                resourceId: CHARACTER_IMAGE_PROMPT_RESOURCE_ID,
-                            },
-                            oneShotExample: { source: 'resource', resourceId: resources.example.resourceId },
                         },
                         progress: {},
                     },
                 ],
                 outputs: {
-                    mediaGenerationMode: { source: 'step', stepId: 'build-prompt', path: ['mediaGenerationMode'] },
-                    preserveUserPrompt: { source: 'step', stepId: 'build-prompt', path: ['preserveUserPrompt'] },
-                    visualInstructions: { source: 'step', stepId: 'build-prompt', path: ['visualInstructions'] },
-                    referenceImages: { source: 'step', stepId: 'build-prompt', path: ['referenceImages'] },
-                    referenceImageTraceUrls: { source: 'step', stepId: 'build-prompt', path: ['referenceImageTraceUrls'] },
+                    mediaGenerationMode: { source: 'step', stepId: 'build-render-plan', path: ['mediaGenerationMode'] },
+                    preserveUserPrompt: { source: 'step', stepId: 'build-render-plan', path: ['preserveUserPrompt'] },
+                    capabilityMediaExecutionPlan: { source: 'step', stepId: 'build-render-plan', path: ['capabilityMediaExecutionPlan'] },
                 },
             },
         },

@@ -1,0 +1,29 @@
+// The single source of truth for reference-chip color.
+//
+// A reference chip — an Asset, Capability module, Tool, or Skill — must look
+// identical everywhere it appears: a user message, a branch-marker prompt line,
+// a pipeline execution trace, a media history button. Only the surface behind it
+// changes, so only the palette changes with it.
+//
+// `.prompt-reference-chip` in prompt-reference-picker.scss reads these custom
+// properties with the light values as its fallbacks, which makes light surfaces
+// free. A dark surface includes `prompt-reference-chip-on-dark-surface` once at
+// the top of the container that owns the dark background; every chip nested
+// inside it, at any depth, then inherits the correct palette. Never restate a
+// chip color anywhere else.
+//
+// This file emits no CSS, so it is safe to import from any stylesheet.
+
+@mixin prompt-reference-chip-on-light-surface {
+    --prompt-reference-color: #3d649c;
+    --prompt-reference-capability-module-color: #a55324;
+    --prompt-reference-tool-color: #39766f;
+    --prompt-reference-skill-color: #6d4fb2;
+}
+
+@mixin prompt-reference-chip-on-dark-surface {
+    --prompt-reference-color: #d7e6ff;
+    --prompt-reference-capability-module-color: #eca983;
+    --prompt-reference-tool-color: #7fd3c9;
+    --prompt-reference-skill-color: #c3b1f0;
+}

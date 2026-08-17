@@ -74,6 +74,7 @@ export const runAxisVlm = async <T = Record<string, any>>(args: {
     const result = await callStructuredVlm<AxisVlmResponse<T>>({
         provider: args.state.input.analysisProvider,
         modelVersion: args.state.input.analysisModel.modelVersion,
+        inferenceCapabilities: args.state.input.analysisModel.inferenceCapabilities,
         systemPrompt: args.systemPrompt,
         userMessages: messages,
         schema,

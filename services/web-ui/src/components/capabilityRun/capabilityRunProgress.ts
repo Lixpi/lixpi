@@ -2,7 +2,16 @@ import type {
     CapabilityRun,
     CapabilityRunEvent,
     CapabilityRunStepStatus,
+    ExecutionTrace,
 } from '@lixpi/constants'
+import {
+    createProgressTimeline,
+    type ProgressTimelineInstance,
+    type ProgressTimelineItem,
+} from '@lixpi/ui-kit/components/progress-timeline'
+
+import { createExecutionTraceTimelineDetailAdapter } from '$src/components/executionTrace/index.ts'
+import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 
 import type { CapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
 import { html } from '$src/utils/domTemplates.ts'
@@ -13,6 +22,7 @@ export type CapabilityProgressStep = {
     status: CapabilityRunStepStatus
     summary?: string
     error?: string
+    trace?: ExecutionTrace
 }
 
 export type CapabilityProgressState = {
@@ -52,6 +62,7 @@ export function projectCapabilityRunEvents(
         step.status = event.stepStatus
         step.summary = event.safeOutputSummary ?? event.safeInputSummary ?? step.summary
         step.error = event.errorMessage ?? step.error
+        step.trace = event.trace ?? step.trace
         if (!stepsById.has(event.stepId)) {
             stepsById.set(event.stepId, step)
             state.steps.push(step)
@@ -71,13 +82,22 @@ export type CapabilityRunProgressInstance = {
 
 class CapabilityRunProgress implements CapabilityRunProgressInstance {
     readonly element = html`<section className="capability-run-progress" aria-live="polite"></section>` as HTMLElement
+    private readonly timeline: ProgressTimelineInstance
     private replaySequence = 0
     private run: CapabilityRun | null = null
     private readonly eventsBySequence = new Map<number, CapabilityRunEvent>()
     private unsubscribeFromLiveEvents: (() => void) | null = null
     private projectedState: CapabilityProgressState | null = null
 
-    constructor(private readonly client?: Pick<CapabilityCatalogClient, 'replay' | 'subscribeToRunEvents'>) {}
+    constructor(
+        private readonly client?: Pick<CapabilityCatalogClient, 'replay' | 'subscribeToRunEvents'>,
+        previewRenderer?: PromptReferencePreviewRenderer,
+    ) {
+        this.timeline = createProgressTimeline({
+            ariaLabel: 'Tool run progress',
+            ...createExecutionTraceTimelineDetailAdapter(previewRenderer ? { previewRenderer } : {}),
+        })
+    }
 
     async replay(runId: string): Promise<void> {
         if (!this.client) throw new Error('Capability run replay requires a catalog client')
@@ -142,23 +162,20 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         if (!this.run) return
         const state = projectCapabilityRunEvents(this.run, [...this.eventsBySequence.values()])
         this.projectedState = state
-        const steps = state.steps.map((step) => html`
-            <li className=${`capability-run-step capability-run-step-${step.status}`}>
-                <span className="capability-run-step-marker" aria-hidden="true"></span>
-                <span>
-                    <strong>${step.title}</strong>
-                    ${step.summary ? html`<small>${step.summary}</small>` : null}
-                    ${step.error ? html`<small className="capability-run-step-error">${step.error}</small>` : null}
-                </span>
-            </li>
-        `)
+        const steps: ProgressTimelineItem[] = state.steps.map((step) => ({
+            id: step.stepId,
+            title: step.title,
+            status: step.status,
+            summary: step.error ?? step.summary,
+            ...(step.trace ? { detail: step.trace } : {}),
+        }))
+        this.timeline.setItems(steps)
         this.element.replaceChildren(html`
             <header className="capability-run-progress-header">
                 <strong>Tool run</strong>
                 <span>${state.status}</span>
             </header>
-            <ol className="capability-run-steps">${steps}</ol>
-        `)
+        `, this.timeline.element)
     }
 
     private stopLiveEventsIfSettled(): void {
@@ -171,14 +188,16 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
         this.replaySequence += 1
         this.unsubscribeFromLiveEvents?.()
         this.unsubscribeFromLiveEvents = null
+        this.timeline.destroy()
         this.element.remove()
     }
 }
 
 export function createCapabilityRunProgress(
     client?: Pick<CapabilityCatalogClient, 'replay' | 'subscribeToRunEvents'>,
+    previewRenderer?: PromptReferencePreviewRenderer,
 ): CapabilityRunProgressInstance {
-    return new CapabilityRunProgress(client)
+    return new CapabilityRunProgress(client, previewRenderer)
 }
 
 function createStreamedCapabilityRun(event: CapabilityRunEvent): CapabilityRun {

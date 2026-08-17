@@ -16,7 +16,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | Page | What it covers |
 |------|----------------|
 | [Product Overview](PRODUCT-OVERVIEW.md) | The product thesis: canvas primitives, artifact piping, character consistency, the image/video pipelines, multi-model support |
-| [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, subject naming, key design decisions, horizontal scaling |
+| [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, Capability ownership boundaries, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to keep docs accurate, flexible, Markdoc-compatible, and readable as the architecture changes |
@@ -40,7 +40,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | Page | What it covers |
 |------|----------------|
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Service responsibilities, NATS as the backbone, subject conventions, design decisions, scaling |
-| [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | The shared LangGraph workflow, `ProviderState`, the post-stream 3-way router, dual-model routing, tool injection/extraction, `ImageRouter`/`VideoRouter`, stream lifecycle, usage |
+| [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md) | Authoritative context, Capability preflight, selected reasoning/media axes, media strategies, lineage, settlement, cancellation, and cleanup |
 | [Streaming & Events](platform/STREAMING-AND-EVENTS.md) | Live AI pipeline subjects, JetStream replay logs, ProseMirror step streams, and the stream-event catalog |
 | [Data Storage](platform/DATA-STORAGE.md) | Asset/Blob tables, typed references, scope projections, organization Object Store layout, deletion/repair, and revision-2 portability |
 | [Authentication](platform/AUTHENTICATION.md) | Dual auth model, NATS auth callout, `@lixpi/auth-service`, LocalAuth0 |
@@ -68,7 +68,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | The workspace-owned AI chat panel, standalone chats, Capability runs, tabs, Sessions, and persistence |
+| [Workspace Composer & Generated Output Details](ai-chat/CHAT-PANEL-AND-SESSIONS.md) | Conversation Assets, detached streaming authority, the canvas composer, and the persisted unified generated-output details panel |
 | [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md) | Prompt reference atoms, composer context chips, authorization, and explicit-only media candidate routing |
 | [Media & Content Descriptors](ai-chat/MEDIA-DESCRIPTORS.md) | The `ContentDescriptor` shape, sourcing paths, self-heal, the canvas indicator |
 
@@ -86,9 +86,9 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Capability modules, standalone packages, `/` and media-first `@` references, sealed resolution, workflow execution, scopes, and progress |
+| [Tools and Skills](library/TOOLS-AND-SKILLS.md) | Self-contained Capability modules, typed host ports, description sheets, standalone packages, sealed execution, scopes, and progress |
 | [Capability Storage and Operations](library/CAPABILITY-STORAGE.md) | Catalog tables, Blob-backed packages, run logs, limits, backup, restore, repair, and garbage collection |
-| [Character Creator](library/CHARACTER-CREATOR.md) | Capability composition, fixed sheet contract, shared model matrix, reference normalization, and branch lineage |
+| [Character Creator](library/CHARACTER-CREATOR.md) | Panel graph, source evidence, provider capability adapters, fidelity assessment, deterministic composition, and normal Asset settlement |
 | [Action Timeline](library/ACTION-TIMELINE.md) | Reusable timed prompt Artifacts, prompt-derived timing, editing, references, library behavior, and model admission |
 | [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md) | The built-in Capability module's Tool DAG, specialist actions, standalone visual-style output, and generic progress |
 | [Style Extraction Pipeline](library/STYLE-EXTRACTION-PIPELINE.md) | Router, parallel axis specialists, crops, synthesis, samples, validation, and visual-style persistence |

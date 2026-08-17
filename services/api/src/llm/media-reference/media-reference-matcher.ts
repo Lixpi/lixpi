@@ -4,13 +4,89 @@ import { v4 as uuid } from 'uuid'
 
 import type { MediaReferenceBinding, UnresolvedReferenceBinding } from '@lixpi/constants'
 
-export const MEDIA_REFERENCE_MATCHER_VERSION = 'bounded-local-v1'
+export const MEDIA_REFERENCE_MATCHER_VERSION = 'bounded-local-v3'
 export const MEDIA_REFERENCE_UNIQUE_THRESHOLD = 0.78
 export const MEDIA_REFERENCE_WINNING_MARGIN = 0.12
 export const MEDIA_REFERENCE_MAX_BINDINGS = 32
 export const MEDIA_REFERENCE_MAX_CANDIDATES = 5
 
 const GENERIC_SUFFIXES = new Set(['asset', 'audio', 'document', 'file', 'image', 'img', 'media', 'photo', 'picture', 'video'])
+const NON_IDENTIFYING_TOKENS = new Set([
+    'a',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'been',
+    'being',
+    'but',
+    'by',
+    'can',
+    'could',
+    'did',
+    'do',
+    'does',
+    'for',
+    'from',
+    'had',
+    'has',
+    'have',
+    'he',
+    'her',
+    'here',
+    'him',
+    'his',
+    'how',
+    'i',
+    'if',
+    'in',
+    'into',
+    'is',
+    'it',
+    'its',
+    'may',
+    'me',
+    'might',
+    'my',
+    'no',
+    'not',
+    'of',
+    'on',
+    'or',
+    'our',
+    'she',
+    'should',
+    'so',
+    'than',
+    'that',
+    'the',
+    'their',
+    'them',
+    'then',
+    'there',
+    'these',
+    'they',
+    'this',
+    'those',
+    'to',
+    'us',
+    'was',
+    'we',
+    'were',
+    'what',
+    'when',
+    'where',
+    'which',
+    'while',
+    'who',
+    'will',
+    'with',
+    'would',
+    'you',
+    'your',
+])
 
 const singularizeToken = (token: string): string => {
     if (token.endsWith('ies') && token.length > 4) return `${token.slice(0, -3)}y`
@@ -33,6 +109,13 @@ export const normalizeMediaReferenceVariant = (value: string): string => value
     .join(' ')
 
 const tokenSet = (value: string): Set<string> => new Set(value.split(' ').filter(Boolean))
+const identifyingTokenSet = (value: string): Set<string> => new Set(
+    [...tokenSet(value)].filter(token => !NON_IDENTIFYING_TOKENS.has(token)),
+)
+
+export const isIdentifyingMediaReferencePhrase = (value: string): boolean => (
+    identifyingTokenSet(normalizeMediaReferenceVariant(value)).size > 0
+)
 
 const tokenSimilarity = (left: string, right: string): number => {
     const a = tokenSet(left)
@@ -82,9 +165,10 @@ export const scoreMediaReferenceVariant = (phrase: string, variant: string): num
     const normalizedPhrase = normalizeMediaReferenceVariant(phrase)
     const normalizedVariant = normalizeMediaReferenceVariant(variant)
     if (!normalizedPhrase || !normalizedVariant) return 0
+    const phraseTokens = identifyingTokenSet(normalizedPhrase)
+    if (phraseTokens.size === 0) return 0
     if (normalizedPhrase === normalizedVariant) return 1
-    const phraseTokens = tokenSet(normalizedPhrase)
-    const variantTokens = tokenSet(normalizedVariant)
+    const variantTokens = identifyingTokenSet(normalizedVariant)
     const boundedSubsetScore = normalizedPhrase.length >= 3
         && phraseTokens.size > 0
         && [...phraseTokens].every(token => variantTokens.has(token))
@@ -106,7 +190,6 @@ export const scoreMediaReferenceVariant = (phrase: string, variant: string): num
 export const getMediaReferenceBindingVariants = (binding: MediaReferenceBinding): string[] => [...new Set([
     binding.displayNameSnapshot,
     ...binding.forbiddenNameVariants,
-    ...binding.semanticDescriptor.split(/[,;|]/u),
 ].map(value => value.trim()).filter(Boolean))]
 
 export type MediaReferenceMatch = {

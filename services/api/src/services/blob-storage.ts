@@ -112,7 +112,8 @@ export const getContentAddressedBlob = async ({
 
 export const deleteContentAddressedBlob = async (blob: BlobRecord): Promise<void> => {
     const natsService = getNatsService()
-    if (!await natsService.getObjectInfo(blob.bucketName, blob.objectKey)) return
+    const info = await natsService.getObjectInfo(blob.bucketName, blob.objectKey)
+    if (!info || info.deleted) return
     await natsService.deleteObject(blob.bucketName, blob.objectKey)
 }
 

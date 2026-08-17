@@ -2,11 +2,11 @@ import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
-vi.mock('$src/components/dropdown/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/dropdown', () => ({
     createPureDropdown: vi.fn(),
 }))
 
-import { createPureDropdown } from '$src/components/dropdown/index.ts'
+import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import {
     transformModelsToOptions,
     createGenericAiModelDropdown,

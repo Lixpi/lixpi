@@ -255,7 +255,19 @@ describe('AiModel.getAiModel', () => {
             providerTitle: 'Google',
             imageSizeMode: 'resolution',
             imageSizes: [{ value: '1024x1024' }],
-            imageInputFidelity: { level: 'high' },
+            imageReferenceCapabilities: {
+                maxReferenceImages: 14,
+                maxIdentityReferenceImages: 5,
+                conditioningModes: ['edit', 'identity', 'style'],
+                inputFidelity: 'provider-managed',
+                supportsIterativeEdit: true,
+                supportsMask: false,
+                supportsStructureControl: true,
+                supportsPoseControl: true,
+                supportsDeterministicSeed: false,
+                maxOutputPixels: 4194304,
+                supportedAspectRatios: ['1:1'],
+            },
             modalities: [{ modality: 'image_generation' }],
             pricing: {
                 input: 0.1,
@@ -279,7 +291,10 @@ describe('AiModel.getAiModel', () => {
             providerTitle: 'Google',
             imageSizeMode: 'resolution',
             imageSizes: [{ value: '1024x1024' }],
-            imageInputFidelity: { level: 'high' },
+            imageReferenceCapabilities: expect.objectContaining({
+                maxReferenceImages: 14,
+                inputFidelity: 'provider-managed',
+            }),
         })
         expect(model).not.toHaveProperty('pricing')
     })

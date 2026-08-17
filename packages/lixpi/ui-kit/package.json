@@ -1,0 +1,81 @@
+{
+    "name": "@lixpi/ui-kit",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "exports": {
+        ".": "./src/index.ts",
+        "./animation": "./src/animation/index.ts",
+        "./svg": "./src/svg/index.ts",
+        "./svg/animated": "./src/svg/animated/index.ts",
+        "./components/bubble-menu": "./src/components/bubbleMenu/index.ts",
+        "./components/dropdown": "./src/components/dropdown/index.ts",
+        "./components/help-tooltip": "./src/components/helpTooltip/index.ts",
+        "./components/info-bubble": "./src/components/infoBubble/index.ts",
+        "./components/media-model-badge": "./src/components/mediaModelBadge/index.ts",
+        "./components/progress-timeline": "./src/components/progressTimeline/index.ts",
+        "./components/side-panel": "./src/components/sidePanel/index.ts",
+        "./components/block-card-tiles-list": "./src/components/blockCardTilesList/index.ts",
+        "./components/sliding-switch": "./src/components/slidingSwitch/index.ts",
+        "./components/sliding-tabs-switch": "./src/components/slidingTabsSwitch/index.ts",
+        "./components/tag-pill": "./src/components/tagPill/index.ts",
+        "./components/toggle-switch": "./src/components/toggleSwitch/index.ts",
+        "./components/video-controls": "./src/components/videoControls/index.ts",
+        "./styles/bubble-menu": {
+            "sass": "./styles/bubble-menu.scss",
+            "style": "./styles/bubble-menu.scss",
+            "default": "./styles/bubble-menu.scss"
+        },
+        "./styles/dropdown": {
+            "sass": "./styles/dropdown.scss",
+            "style": "./styles/dropdown.scss",
+            "default": "./styles/dropdown.scss"
+        },
+        "./styles/help-tooltip": {
+            "sass": "./styles/help-tooltip.scss",
+            "style": "./styles/help-tooltip.scss",
+            "default": "./styles/help-tooltip.scss"
+        },
+        "./styles/info-bubble": {
+            "sass": "./styles/info-bubble.scss",
+            "style": "./styles/info-bubble.scss",
+            "default": "./styles/info-bubble.scss"
+        },
+        "./styles/media-model-badge": {
+            "sass": "./styles/media-model-badge.scss",
+            "style": "./styles/media-model-badge.scss",
+            "default": "./styles/media-model-badge.scss"
+        },
+        "./styles/progress-timeline": {
+            "sass": "./styles/progress-timeline.scss",
+            "style": "./styles/progress-timeline.scss",
+            "default": "./styles/progress-timeline.scss"
+        },
+        "./styles/side-panel": {
+            "sass": "./styles/side-panel.scss",
+            "style": "./styles/side-panel.scss",
+            "default": "./styles/side-panel.scss"
+        },
+        "./styles/block-card-tiles-list": {
+            "sass": "./styles/block-card-tiles-list.scss",
+            "style": "./styles/block-card-tiles-list.scss",
+            "default": "./styles/block-card-tiles-list.scss"
+        }
+    },
+    "dependencies": {
+        "d3-ease": "*",
+        "d3-selection": "*",
+        "d3-transition": "*",
+        "htm": "*"
+    },
+    "devDependencies": {
+        "@types/d3-selection": "*",
+        "@types/d3-transition": "*",
+        "happy-dom": "*",
+        "vitest": "*"
+    }
+}

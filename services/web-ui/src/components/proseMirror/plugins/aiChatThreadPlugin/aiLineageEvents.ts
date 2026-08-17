@@ -1,4 +1,4 @@
-import { branchForkfIcon, branchLineIcon, branchMidIcon } from '$src/svgIcons/index.ts'
+import { branchForkfIcon, branchLineIcon, branchMidIcon } from '@lixpi/ui-kit/svg'
 import { html } from '$src/utils/domTemplates.ts'
 import {
     getAiLineageEventLabel,

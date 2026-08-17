@@ -18,6 +18,7 @@
         "@nats-io/nats-core": "*",
         "@nats-io/transport-node": "*",
         "openai": "*",
+        "onnxruntime-web": "*",
         "@anthropic-ai/sdk": "*",
         "@aws-sdk/client-bedrock": "*",
         "@aws-sdk/credential-providers": "*",

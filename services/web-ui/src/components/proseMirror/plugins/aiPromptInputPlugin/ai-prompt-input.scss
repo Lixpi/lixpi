@@ -6,8 +6,8 @@
 // Input field is vertically centered with controls at the bottom.
 // =============================================================================
 
+@use '@lixpi/ui-kit/styles/help-tooltip';
 @import '$src/sass/_variables.scss';
-@import '$src/components/helpTooltip/help-tooltip.scss';
 
 .ai-prompt-input-floating {
     position: absolute;

@@ -7,6 +7,11 @@ import { info, warn, err } from '@lixpi/debug-tools'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
 import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
+import {
+    createProviderCancellationError,
+    isProviderCancellationError,
+    throwIfProviderCancelled,
+} from '../providers/provider-cancellation.ts'
 import { getVideoMaxReferenceImages } from '../graph/state.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
@@ -108,12 +113,14 @@ export class VideoRouter {
                 provider: problem.provider,
                 modelId: problem.modelId,
                 providerCode: problem.providerCode,
+                providerReason: problem.providerReason,
             })}`)
             await requestService.recordRunStatus({
                 generationRequestId: state.durableGenerationRequestId,
                 workspaceId,
                 mediaModelId: generationRun.mediaModelId,
                 reasoningIndex: generationRun.reasoningIndex,
+                ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
                 status,
                 ...(problem ? { problem } : {}),
             })
@@ -224,6 +231,7 @@ export class VideoRouter {
             }
 
             const finalState = await provider.process(requestData)
+            throwIfProviderCancelled(finalState, options.signal)
             if (finalState.error) {
                 err(`[VideoRouter] Video generation failed: ${finalState.error}`)
                 const problem = await recordRunStatus('failed', { message: finalState.error, code: finalState.errorCode })
@@ -250,6 +258,8 @@ export class VideoRouter {
                 },
             }
         } catch (e: any) {
+            if (options.signal?.aborted) throw createProviderCancellationError(options.signal)
+            if (isProviderCancellationError(e)) throw e
             const message = e?.message ?? String(e)
             err(`[VideoRouter] Video generation failed: ${message}`)
             const problem = await recordRunStatus('failed', e).catch(persistenceError => {

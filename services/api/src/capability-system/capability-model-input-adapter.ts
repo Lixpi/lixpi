@@ -22,7 +22,6 @@ import {
     callStructuredVlm,
     reservedCompletionTokensForStructuredCall,
 } from '../llm/structured-vlm/structured-vlm-client.ts'
-import { detectCapabilities } from '../llm/providers/provider-capabilities.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'
 import { collectDocumentText } from '../services/prosemirror-text.ts'
 import {
@@ -67,9 +66,9 @@ export async function resolveCapabilityModelInputs(request: {
 export function createCapabilityStructuredModelPort(): CapabilityStructuredModelPort {
     return {
         assertSupportedInputs: (variant, inputs) => {
-            const supported = detectCapabilities(variant.provider, variant.modelVersion).supportedInputKinds
+            const supported = variant.inferenceCapabilities.supportedInputKinds
             for (const input of inputs) {
-                if (supported.has(input.kind)) continue
+                if (supported.includes(input.kind)) continue
                 throw new CapabilityError(
                     'MODEL_INPUT_KIND_UNSUPPORTED',
                     `${variant.reasoningModelId} does not support ${input.kind} input from Asset ${input.assetId}`,
@@ -89,6 +88,7 @@ export function createCapabilityStructuredModelPort(): CapabilityStructuredModel
             const result = await callStructuredVlm({
                 provider: request.variant.provider,
                 modelVersion: request.variant.modelVersion,
+                inferenceCapabilities: request.variant.inferenceCapabilities,
                 systemPrompt: request.systemPrompt,
                 userMessages: [{ role: 'user', content: buildModelContent(request.userPrompt, request.inputs) }],
                 schema: {
@@ -132,8 +132,7 @@ export function assessCapabilityModelInputBudget(
     // The runner sends the answer budget plus a thinking reserve, so the context
     // window must be checked against that same total, not the answer alone.
     const reservedCompletionTokens = reservedCompletionTokensForStructuredCall({
-        provider: request.variant.provider,
-        modelVersion: request.variant.modelVersion,
+        inferenceCapabilities: request.variant.inferenceCapabilities,
         maxTokens: request.maxTokens,
         maxOutputTokensCeiling: request.variant.maxCompletionSize,
         enableThinking: true,

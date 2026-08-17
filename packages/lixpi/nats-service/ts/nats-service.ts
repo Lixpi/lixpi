@@ -103,6 +103,25 @@ const encode = (value: any, type: 'json' | 'buffer'): any => {
     }
 }
 
+type ReplyErrorPayload = { error: string } | string
+
+const getReplyErrorMessage = (error: unknown): string => {
+    if (error instanceof Error && error.message) return error.message
+    if (typeof error === 'string' && error) return error
+    if (error && typeof error === 'object' && 'error' in error) {
+        const message = (error as { error?: unknown }).error
+        if (typeof message === 'string' && message) return message
+    }
+
+    const message = String(error)
+    return message && message !== '[object Object]' ? message : 'UNKNOWN_NATS_REPLY_ERROR'
+}
+
+const getReplyErrorPayload = (error: unknown, type: 'json' | 'buffer'): ReplyErrorPayload => {
+    const message = getReplyErrorMessage(error)
+    return type === 'json' ? { error: message } : message
+}
+
 const decode = (value: any, type: 'json' | 'buffer'): any => {
     if (type === 'json') {
         return JSON.parse(value.string())
@@ -611,8 +630,7 @@ export default class NatsService {
                     msg.respond(encode(result, payloadType))
                 } catch (error) {
                     err(`Reply error on subject ${subject}`, error)
-                    // msg.respond(JSON.stringify({ error: (error as Error).message }))
-                    msg.respond(encode(error, payloadType))
+                    msg.respond(encode(getReplyErrorPayload(error, payloadType), payloadType))
                 }
             }
         })()
@@ -852,8 +870,10 @@ export default class NatsService {
                 message.ack()
                 processed += 1
             } catch (error) {
+                // One poisoned message must not abandon the rest of the fetched batch:
+                // nak it for redelivery and keep draining what the consumer handed us.
                 message.nak(options.nakDelayMs)
-                throw error
+                err(`Error processing JetStream message on subject ${message.subject}`, error)
             }
         }
         return processed

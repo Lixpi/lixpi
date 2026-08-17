@@ -36,6 +36,14 @@ def encode(value: Any, payload_type: str) -> bytes:
         return value
 
 
+def get_reply_error_payload(error: Exception, payload_type: str) -> Union[Dict[str, str], str]:
+    """Build a transport-safe error reply for request/reply handlers."""
+    message = str(error) or error.__class__.__name__
+    if payload_type == 'json':
+        return {"error": message}
+    return message
+
+
 def decode(msg: 'Msg', payload_type: str) -> Any:
     """Decode message based on payload type."""
     if payload_type == 'json':
@@ -654,8 +662,7 @@ class NatsService:
 
             except Exception as error:
                 err(f"Reply error on subject {subject}", error)
-                # Send error reply
-                await msg.respond(encode(error, payload_type))
+                await msg.respond(encode(get_reply_error_payload(error, payload_type), payload_type))
 
         # Subscribe with or without queue group
         if queue:
