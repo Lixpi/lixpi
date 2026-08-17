@@ -222,7 +222,7 @@ describe('branch marker lifecycle', () => {
         )
         expectSourceToContain(
             chromeSyncBody,
-            'destroyMediaChromeProgressInstances()',
+            'destroyMediaGenerationTraceButtons()',
             'media chrome rebuild',
         )
         expectSourceNotToContain(

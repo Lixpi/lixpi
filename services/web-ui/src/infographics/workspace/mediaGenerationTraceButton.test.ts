@@ -25,7 +25,7 @@ describe('media generation trace button', () => {
         control.destroy()
     })
 
-    it('stops the ripple and reflects sidebar selection after the run finishes', () => {
+    it('hides the ripple and reflects sidebar selection after the run finishes', () => {
         vi.useFakeTimers()
         const onClick = vi.fn()
         const control = createMediaGenerationTraceButton({
@@ -38,8 +38,9 @@ describe('media generation trace button', () => {
         control.element.click()
 
         expect(control.element.classList.contains('is-active')).toBe(false)
-        expect(control.element.classList.contains('is-static')).toBe(true)
+        expect(control.element.classList.contains('is-static')).toBe(false)
         expect(control.element.classList.contains('is-selected')).toBe(true)
+        expect(control.element.hidden).toBe(true)
         expect(control.element.getAttribute('aria-expanded')).toBe('true')
         expect(control.element.querySelector('.marker-middle')).not.toBeNull()
         expect(control.element.querySelector('.marker-outer')).not.toBeNull()

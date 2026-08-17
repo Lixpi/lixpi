@@ -51,6 +51,7 @@ import {
 import { isCharacterCreatorCapabilitySelected } from '@lixpi/capability-system'
 import type { MediaProviderDefinition } from './media-provider-definition.ts'
 import { assertNoForbiddenMediaReferenceLeak } from '../media-reference/provider-safe-context.ts'
+import { sanitizeMediaReferenceText } from '../media-reference/media-reference-compiler.ts'
 import { resolveImageGenerationReferences } from '../image-generation-references.ts'
 import {
     withTransportRetry,
@@ -468,18 +469,18 @@ export abstract class BaseProvider {
             } else {
                 err(`Workflow failed for ${this.instanceKey}: ${message}`)
             }
-            const isMatrixChild = initialState.generationRun?.requestKind === 'media-generation-matrix'
+            const ownsDurableMediaRequestLifecycle = this.ownsDurableMediaRequestLifecycle(initialState)
             const generationRequestId = initialState.durableGenerationRequestId
                 ?? initialState.generationRun?.generationRequestId
             if (cancelledByUser && generationRequestId) {
                 this.streamPublisher.beginMediaGenerationRequestCancellation(generationRequestId)
-                if (!isMatrixChild) {
+                if (ownsDurableMediaRequestLifecycle) {
                     await this.streamPublisher.cancelProseMirrorGenerationRequest(generationRequestId)
                     this.streamPublisher.mediaGenerationRequestComplete(generationRequestId, {
                         removeProjectedPendingNodes: true,
                     })
                 }
-            } else if (!isMatrixChild) {
+            } else if (!cancelledByUser && ownsDurableMediaRequestLifecycle) {
                 try {
                     await this.failUnfinishedDurableRuns(initialState)
                 } catch (settlementError) {
@@ -491,7 +492,7 @@ export abstract class BaseProvider {
                     ? 'The provider could not complete this generation attempt.'
                     : message)
             }
-            if (!cancelledByUser && !isMatrixChild) {
+            if (!cancelledByUser && ownsDurableMediaRequestLifecycle) {
                 this.streamPublisher.completeKnownMediaGenerationRequests()
             }
             this.streamPublisher.end()
@@ -723,17 +724,17 @@ export abstract class BaseProvider {
                 this.streamPublisher?.setGenerationRun(generationRun)
             }
             if (state.replayMediaPrompts?.length) {
-                return {
+                return this.sanitizeProviderMediaPrompts({
                     ...update,
                     generatedImagePrompt: state.replayMediaPrompts.find(prompt => prompt.mediaType === 'image')?.finalPrompt,
                     generatedVideoPrompt: state.replayMediaPrompts.find(prompt => prompt.mediaType === 'video')?.finalPrompt,
                     streamActive: false,
                     aiRequestFinishedAt: Date.now(),
-                }
+                }, state.providerSafeMediaIntent)
             }
             const implResult = await this.streamImpl(state)
             await this.completePendingCapabilityOutputsAfterStream(state, Boolean(implResult.error))
-            return {
+            return this.sanitizeProviderMediaPrompts({
                 ...update,
                 generationRun: state.generationRun,
                 eventMeta: state.eventMeta,
@@ -748,7 +749,7 @@ export abstract class BaseProvider {
                 ...implResult,
                 streamActive: false,
                 aiRequestFinishedAt: Date.now(),
-            }
+            }, state.providerSafeMediaIntent)
         } catch (e: any) {
             const message = e?.message ?? String(e)
             err(`Streaming error (${this.providerName}): ${message}`)
@@ -857,11 +858,12 @@ export abstract class BaseProvider {
     }
 
     protected async executeImageGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
-        if (state.mediaFanoutPlan && state.generationRun) {
-            return this.executeMediaFanout(state)
+        const providerSafeState = this.sanitizeProviderMediaPrompts(state, state.providerSafeMediaIntent)
+        if (providerSafeState.mediaFanoutPlan && providerSafeState.generationRun) {
+            return this.executeMediaFanout(providerSafeState)
         }
 
-        const trace = buildImageGenerationTrace(state)
+        const trace = buildImageGenerationTrace(providerSafeState)
         if (trace) {
             try {
                 this.streamPublisher?.imageGenerationTrace(trace)
@@ -870,20 +872,20 @@ export abstract class BaseProvider {
             }
         }
 
-        if (!state.capabilityMediaExecutionPlan) {
-            this.assertProviderMediaPayload(state, state.generatedImagePrompt)
+        if (!providerSafeState.capabilityMediaExecutionPlan) {
+            this.assertProviderMediaPayload(providerSafeState, providerSafeState.generatedImagePrompt)
         }
-        const imageResult = await this.deps.runImageRouter(state, {
+        const imageResult = await this.deps.runImageRouter(providerSafeState, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
             onCapabilityMediaTrace: trace => this.publishCapabilityReviewTrace(
-                state,
+                providerSafeState,
                 { capabilityMediaTrace: trace },
-                state.generationRun,
+                providerSafeState.generationRun,
             ),
         })
         if (imageResult.error) {
-            this.streamPublisher?.imageGenerationError(imageResult.error, state.generationRun)
+            this.streamPublisher?.imageGenerationError(imageResult.error, providerSafeState.generationRun)
             this.streamPublisher?.error(imageResult.error, imageResult.errorCode, imageResult.errorType)
         }
         return imageResult
@@ -896,11 +898,12 @@ export abstract class BaseProvider {
     // chat history can render the tool prompt and explicit reference roles
     // even if the VEO operation later fails.
     protected async executeVideoGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
-        if (state.mediaFanoutPlan && state.generationRun) {
-            return this.executeMediaFanout(state)
+        const providerSafeState = this.sanitizeProviderMediaPrompts(state, state.providerSafeMediaIntent)
+        if (providerSafeState.mediaFanoutPlan && providerSafeState.generationRun) {
+            return this.executeMediaFanout(providerSafeState)
         }
 
-        const trace = buildVideoGenerationTrace(state)
+        const trace = buildVideoGenerationTrace(providerSafeState)
         if (trace) {
             try {
                 this.streamPublisher?.videoGenerationTrace(trace)
@@ -909,8 +912,8 @@ export abstract class BaseProvider {
             }
         }
 
-        this.assertProviderMediaPayload(state, state.generatedVideoPrompt)
-        const videoResult = await this.deps.runVideoRouter(state, {
+        this.assertProviderMediaPayload(providerSafeState, providerSafeState.generatedVideoPrompt)
+        const videoResult = await this.deps.runVideoRouter(providerSafeState, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
             ...(this.abortController ? { signal: this.abortController.signal } : {}),
@@ -919,6 +922,31 @@ export abstract class BaseProvider {
             this.streamPublisher?.error(videoResult.error, videoResult.errorCode, videoResult.errorType)
         }
         return videoResult
+    }
+
+    private sanitizeProviderMediaPrompts<T extends Partial<ProviderState>>(
+        state: T,
+        providerSafeMediaIntent: ProviderState['providerSafeMediaIntent'],
+    ): T {
+        const bindings = providerSafeMediaIntent?.bindings
+        if (!bindings?.length) return state
+
+        const generatedImagePrompt = state.generatedImagePrompt
+            ? sanitizeMediaReferenceText(state.generatedImagePrompt, bindings)
+            : state.generatedImagePrompt
+        const generatedVideoPrompt = state.generatedVideoPrompt
+            ? sanitizeMediaReferenceText(state.generatedVideoPrompt, bindings)
+            : state.generatedVideoPrompt
+        if (
+            generatedImagePrompt === state.generatedImagePrompt
+            && generatedVideoPrompt === state.generatedVideoPrompt
+        ) return state
+
+        return {
+            ...state,
+            generatedImagePrompt,
+            generatedVideoPrompt,
+        }
     }
 
     protected assertProviderMediaPayload(state: ProviderState, prompt: string | undefined): void {
@@ -1017,6 +1045,7 @@ export abstract class BaseProvider {
                 && prompt.mediaModelId === catalogModelIdFor(imageModelMetaInfo)
             )
             if (replayPrompt) fanoutState.generatedImagePrompt = replayPrompt.finalPrompt
+            fanoutState = this.sanitizeProviderMediaPrompts(fanoutState, fanoutState.providerSafeMediaIntent)
             const promptValidationPatch = await this.validateImageFanoutPrompt(fanoutState)
             fanoutState = { ...fanoutState, ...promptValidationPatch }
             if (fanoutState.error || (!fanoutState.generatedImagePrompt && !fanoutState.capabilityMediaExecutionPlan)) {
@@ -1039,6 +1068,9 @@ export abstract class BaseProvider {
                 }
             }
 
+            if (!fanoutState.capabilityMediaExecutionPlan) {
+                this.assertProviderMediaPayload(fanoutState, fanoutState.generatedImagePrompt)
+            }
             const imageResult = await this.deps.runImageRouter(fanoutState, {
                 onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
                 getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
@@ -1139,7 +1171,7 @@ export abstract class BaseProvider {
                 prompt.mediaType === 'video'
                 && prompt.mediaModelId === catalogModelIdFor(videoModelMetaInfo)
             )
-            const fanoutState: ProviderState = {
+            let fanoutState: ProviderState = {
                 ...state,
                 generationRun,
                 videoModelMetaInfo,
@@ -1152,6 +1184,7 @@ export abstract class BaseProvider {
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 ...(replayPrompt ? { generatedVideoPrompt: replayPrompt.finalPrompt } : {}),
             }
+            fanoutState = this.sanitizeProviderMediaPrompts(fanoutState, fanoutState.providerSafeMediaIntent)
 
             const trace = buildVideoGenerationTrace(fanoutState)
             if (trace) {
@@ -1162,6 +1195,7 @@ export abstract class BaseProvider {
                 }
             }
 
+            this.assertProviderMediaPayload(fanoutState, fanoutState.generatedVideoPrompt)
             const videoResult = await this.deps.runVideoRouter(fanoutState, {
                 onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
                 getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
@@ -1253,7 +1287,7 @@ export abstract class BaseProvider {
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {
         let terminalSweepError: unknown
-        if (_state.generationRun?.requestKind !== 'media-generation-matrix') {
+        if (this.ownsDurableMediaRequestLifecycle(_state)) {
             try {
                 await this.failUnfinishedDurableRuns(_state)
             } catch (error) {
@@ -1266,6 +1300,12 @@ export abstract class BaseProvider {
         await this.streamPublisher?.finishProseMirrorStream()
         if (terminalSweepError) throw terminalSweepError
         return {}
+    }
+
+    private ownsDurableMediaRequestLifecycle(state: ProviderState): boolean {
+        return !state.enableImageGeneration
+            && !state.enableVideoGeneration
+            && state.generationRun?.requestKind !== 'media-generation-matrix'
     }
 
     private async failUnfinishedDurableRuns(state: ProviderState): Promise<void> {

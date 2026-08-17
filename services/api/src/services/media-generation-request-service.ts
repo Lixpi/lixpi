@@ -916,7 +916,11 @@ export class MediaGenerationRequestService {
                 await this.reconcileRunProjection({ request, run })
                 return request
             }
-            if (['completed', 'failed', 'cancelled'].includes(run.status)) return request
+            const repairsSyntheticUnsettledFailure = status === 'completed'
+                && run.status === 'failed'
+                && run.problem?.type === 'urn:lixpi:media-problem:media-run-unsettled'
+            if (['completed', 'failed', 'cancelled'].includes(run.status)
+                && !repairsSyntheticUnsettledFailure) return request
             const streamed = status === 'running'
                 ? { progress: undefined, streamSequence: 0 }
                 : await this.getStreamedRunProgress(request, run.generationRun)
@@ -929,7 +933,7 @@ export class MediaGenerationRequestService {
                 const statusMessage = status === 'completed'
                     ? accumulatedProgress?.message ?? 'Media generation completed.'
                     : problem?.detail ?? accumulatedProgress?.message ?? 'Media generation failed.'
-                return {
+                const nextRun: MediaGenerationRun = {
                     ...candidate,
                     status,
                     ...(status === 'running'
@@ -940,6 +944,8 @@ export class MediaGenerationRequestService {
                         }),
                     ...(problem ? { problem: { ...problem, generationRun: candidate.generationRun } } : {}),
                 }
+                if (status === 'completed') delete nextRun.problem
+                return nextRun
             })
             const requestStatus = deriveRequestStatus(runs)
             const next: MediaGenerationRequest = {

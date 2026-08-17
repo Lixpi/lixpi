@@ -96,6 +96,7 @@ import {
     formatProviderSafeReferenceContext,
 } from '../../llm/media-reference/provider-safe-context.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
+import { resolveScalarMediaModelSelection } from '../../llm/orchestration/scalar-media-output-routing.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {
@@ -1039,13 +1040,20 @@ export const aiInteractionSubjects = [
                         ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
                         : canonicalMediaGenerationRequest
                 : undefined
-            const routedAiImageModel = actionTimelineSelected ? undefined : aiImageModel
-            const routedAiVideoModel = actionTimelineSelected || characterCreatorRouting.isCharacterCreator
-                ? undefined
-                : aiVideoModel
+            const scalarMediaModelSelection = routedMediaGenerationRequest
+                ? { imageModelId: undefined, videoModelId: undefined }
+                : resolveScalarMediaModelSelection({
+                    prompt: authoritativePromptText,
+                    imageModelId: actionTimelineSelected ? undefined : aiImageModel,
+                    videoModelId: actionTimelineSelected || characterCreatorRouting.isCharacterCreator
+                        ? undefined
+                        : aiVideoModel,
+                    hasVideoSource: Boolean(resolvedVideoSourceForExtension),
+                })
+            const routedAiImageModel = scalarMediaModelSelection.imageModelId
+            const routedAiVideoModel = scalarMediaModelSelection.videoModelId
             const hasMediaModelSelection = Boolean(
-                routedMediaGenerationRequest?.imageModelIds.length
-                || routedMediaGenerationRequest?.videoModelIds.length
+                routedMediaGenerationRequest
                 || routedAiImageModel
                 || routedAiVideoModel,
             )
@@ -1433,7 +1441,8 @@ export const aiInteractionSubjects = [
                                 organizationId,
                                 workspaceId,
                                 aiChatThreadId,
-                                ...(durableMediaRequest ? { generationRequestId: durableMediaRequest.generationRequestId } : {}),
+                                generationRequestId: durableMediaRequest?.generationRequestId
+                                    ?? routedMediaGenerationRequest.generationRequestId,
                             },
                             ...(providerSafeMediaIntent ? {
                                 durableGenerationRequestId: durableMediaRequest?.generationRequestId,

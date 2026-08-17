@@ -1,6 +1,7 @@
 import {
     createDefaultMediaGenerationRunProgress,
     mediaGenerationLayoutSettings,
+    settleMediaGenerationRunProgress,
     type GeneratedOutputReviewStatus,
     type MediaGenerationCanvasPhase,
     type MediaGenerationProgressState,
@@ -58,6 +59,34 @@ export type BranchMarkerMediaRequestStatusSource = {
     status?: string
 }
 
+export function isMediaGenerationOperationSupersededByOutput(
+    operation: Pick<BranchMarkerMediaRequestStatusSource, 'outputNodeId' | 'mediaRunId'>,
+    output: Pick<BranchMarkerMediaRequestStatusSource, 'nodeId' | 'mediaRunId'>,
+): boolean {
+    return Boolean(
+        (operation.outputNodeId && operation.outputNodeId === output.nodeId)
+        || (operation.mediaRunId && operation.mediaRunId === output.mediaRunId)
+    )
+}
+
+export function settleReadyMediaGenerationProgress(
+    state: MediaGenerationProgressState,
+    mediaGenerationPhase: MediaGenerationCanvasPhase | undefined,
+): MediaGenerationProgressState {
+    const isActive = state.status === 'pending'
+        || state.status === 'running'
+        || state.status === 'awaiting-provider-verification'
+    if (mediaGenerationPhase !== 'ready' || !isActive) return state
+
+    const message = 'Media generation completed.'
+    return {
+        ...state,
+        status: 'completed',
+        message,
+        progress: settleMediaGenerationRunProgress(state.progress, 'completed', message),
+    }
+}
+
 export function isPersistedMediaGenerationActive({
     progressStatus,
     reviewStatus,
@@ -68,6 +97,7 @@ export function isPersistedMediaGenerationActive({
     mediaGenerationPhase: MediaGenerationCanvasPhase | undefined
 }): boolean {
     if (reviewStatus === 'accepted' || reviewStatus === 'superseded') return false
+    if (mediaGenerationPhase === 'ready') return false
     if (progressStatus) {
         return progressStatus === 'pending'
             || progressStatus === 'running'
@@ -106,14 +136,11 @@ export function resolveBranchMarkerMediaRequestStatuses(
     sources: readonly BranchMarkerMediaRequestStatusSource[],
 ): string[] {
     const outputSources = sources.filter(source => source.kind === 'output' && Boolean(source.status))
-    const outputNodeIds = new Set(outputSources.map(source => source.nodeId))
-    const outputMediaRunIds = new Set(outputSources.flatMap(source => source.mediaRunId ? [source.mediaRunId] : []))
     const statuses = outputSources.map(source => source.status as string)
 
     for (const source of sources) {
         if (source.kind !== 'operation' || !source.status) continue
-        if (source.outputNodeId && outputNodeIds.has(source.outputNodeId)) continue
-        if (source.mediaRunId && outputMediaRunIds.has(source.mediaRunId)) continue
+        if (outputSources.some(output => isMediaGenerationOperationSupersededByOutput(source, output))) continue
         statuses.push(source.status)
     }
     return statuses

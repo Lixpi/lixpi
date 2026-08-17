@@ -1873,24 +1873,20 @@ export type MarkdownStreamToken = {
     segment?: MarkdownParsedSegment
 }
 
-export type CanvasAiChatSidebarTab = {
-    tabId: string
-    type: 'thread'
-    refId: string
-    title: string
-}
-
 // Right side panel top-level surface: the Capability library, the unified Asset
 // library, or conversation Assets.
 export type CanvasRightSidePanelMode = 'capabilities' | 'artifacts' | 'media' | 'aiThreads'
 
+export type CanvasGeneratedOutputDetailsTarget = {
+    kind: 'output' | 'branch-marker'
+    nodeId: string
+}
+
 export type CanvasAiChatPanelState = {
     isOpen: boolean
-    isSessionHistoryOpen: boolean
     // Which top-level surface the right side panel shows. Defaults to 'aiThreads'.
     topLevelMode: CanvasRightSidePanelMode
-    tabs: CanvasAiChatSidebarTab[]
-    activeTabId?: string
+    generatedOutputDetailsTarget?: CanvasGeneratedOutputDetailsTarget
     // Explicit canvas node ids fed to the bottom-center composer as context
     // chips. When any chip is present, the API uses exactly that chip set and
     // skips automatic relevance expansion.

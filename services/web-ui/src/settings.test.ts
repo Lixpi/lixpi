@@ -111,11 +111,10 @@ describe('settings - grouped configuration', () => {
 
 	it('keeps scalar UI settings finite and numerically valid', () => {
 		expectFiniteNumber(settings.rightSidePanel.typography.contentFontSize, 'settings.rightSidePanel.typography.contentFontSize')
-		expectFiniteNumber(settings.aiChatThread.panelTabs.minTabWidth, 'settings.aiChatThread.panelTabs.minTabWidth')
-		expectFiniteNumber(settings.aiChatThread.panelTabs.height, 'settings.aiChatThread.panelTabs.height')
+		expectFiniteNumber(settings.aiChatThread.panelSwitch.height, 'settings.aiChatThread.panelSwitch.height')
 		expectFiniteNumber(
-			settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor,
-			'settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor',
+			settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor,
+			'settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor',
 		)
 		expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
 		expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
@@ -196,10 +195,10 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.contentDescriptor.editDebounceMs, 'settings.contentDescriptor.editDebounceMs')
 		expectFiniteNumber(settings.workspacePersistence.debounceMs, 'settings.workspacePersistence.debounceMs')
 		expectFiniteNumber(settings.contentDescriptor.minTextLength, 'settings.contentDescriptor.minTextLength')
-		expectFiniteNumber(settings.aiChatThread.panelTabs.transitionDurationMs, 'settings.aiChatThread.panelTabs.transitionDurationMs')
+		expectFiniteNumber(settings.aiChatThread.panelSwitch.transitionDurationMs, 'settings.aiChatThread.panelSwitch.transitionDurationMs')
 		expectFiniteNumber(
-			settings.aiChatThread.panelTabs.transitionMinDurationMs,
-			'settings.aiChatThread.panelTabs.transitionMinDurationMs',
+			settings.aiChatThread.panelSwitch.transitionMinDurationMs,
+			'settings.aiChatThread.panelSwitch.transitionMinDurationMs',
 		)
 	})
 
@@ -214,7 +213,6 @@ describe('settings - grouped configuration', () => {
 	it('keeps all feature flags as booleans', () => {
 		const booleanEntries = [
 			['modelSelectorDropdown.useModalityFilter', settings.modelSelectorDropdown.useModalityFilter],
-			['aiChatThread.showHeader', settings.aiChatThread.showHeader],
 			['aiPromptInput.useShiftingGradientBackground', settings.aiPromptInput.useShiftingGradientBackground],
 			['mediaNode.useZoomCompensatedResizeHandleScaling', settings.mediaNode.useZoomCompensatedResizeHandleScaling],
 			['connector.useZoomCompensatedScaling', settings.connector.useZoomCompensatedScaling],
@@ -233,8 +231,7 @@ describe('settings - grouped configuration', () => {
 			'settings.dropdown.styles': settings.dropdown.styles,
 			'settings.aiChatThread.styles': settings.aiChatThread.styles,
 			'settings.aiPromptInput.modelMenu.styles': settings.aiPromptInput.modelMenu.styles,
-			'settings.aiChatThread.panelTabs.styles': settings.aiChatThread.panelTabs.styles,
-			'settings.aiChatThread.sessionHistory.styles': settings.aiChatThread.sessionHistory.styles,
+			'settings.aiChatThread.panelSwitch.styles': settings.aiChatThread.panelSwitch.styles,
 			'settings.aiChatThread.contextPreview.styles': settings.aiChatThread.contextPreview.styles,
 			'settings.connector.styles': settings.connector.styles,
 			'settings.selection.styles': settings.selection.styles,
@@ -327,7 +324,7 @@ describe('settings - grouped configuration', () => {
 			'nodeBorder',
 			'panelSectionDividerBorder',
 		])
-		expectNoOwnKeys(settings.aiChatThread.panelTabs, ['activeTabBoxShadow', 'activeTabInsetShadow'])
+		expectNoOwnKeys(settings.aiChatThread.panelSwitch, ['activeTabBoxShadow', 'activeTabInsetShadow'])
 		expectNoOwnKeys(settings.connector, ['lineDefaultColor', 'lineFocusColor', 'lineClickAreaWidth'])
 		expectNoOwnKeys(settings.selection, [
 			'marqueeBorderColor',

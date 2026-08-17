@@ -239,12 +239,9 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    max-width: 100%;
-    padding: 4px;
-    border-radius: 999px;
-    font-size: var(--execution-trace-tag-pill-font-size);
-    font-weight: var(--execution-trace-tag-pill-font-weight);
+    height: 18px;
     line-height: 1;
+    overflow: visible;
     text-align: center;
     vertical-align: middle;
     white-space: nowrap;

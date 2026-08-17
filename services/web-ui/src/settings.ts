@@ -147,8 +147,7 @@ export type RightSidePanelSettings = {
 
 export type NavigationSidePanelSettings = Omit<RightSidePanelSettings, 'layout'>
 
-export type AiChatThreadPanelTabsSettings = {
-    minTabWidth: number
+export type RightPanelModeSwitchSettings = {
     height: number
     transitionDurationMs: number
     transitionMinDurationMs: number
@@ -159,20 +158,6 @@ export type AiChatThreadPanelTabsSettings = {
             topColor: string
             bottomColor: string
         }
-    }
-}
-
-export type AiChatThreadSessionHistorySettings = {
-    styles: {
-        controlColor: string
-        controlHoverColor: string
-        historyToggleHoverBackground: string
-        actionHoverBackground: string
-        actionHoverColor: string
-        deleteColor: string
-        hoverBackgroundImage: string
-        threadMarkerBackground: string
-        threadMarkerBoxShadow: string
     }
 }
 
@@ -204,9 +189,7 @@ export type AiChatThreadContextPreviewSettings = {
 }
 
 export type AiChatThreadSettings = {
-    showHeader: boolean
-    panelTabs: AiChatThreadPanelTabsSettings
-    sessionHistory: AiChatThreadSessionHistorySettings
+    panelSwitch: RightPanelModeSwitchSettings
     contextPreview: AiChatThreadContextPreviewSettings
     styles: {
         nodeBoxShadow: string
@@ -937,57 +920,25 @@ export const settings: Settings = {
         },
     },
 
-    // AI chat thread panel presentation and interaction settings. The thread is a
-    // read-only transcript hosted in the right side panel; there is no on-canvas
-    // thread node.
+    // Right side panel mode switch and generated-output detail context previews.
     aiChatThread: {
-        // Hide or show the thread title inside the AI chat panel.
-        showHeader: false,
-
-        // AI Chat panel tab switch geometry.
-        panelTabs: {
-            // Minimum screen-pixel width for each tab before the tab strip scrolls horizontally.
-            minTabWidth: 96,
-            // Screen-pixel height for the AI Chat panel tab switch.
+        panelSwitch: {
+            // Screen-pixel height for the right panel mode switch.
             height: 28,
             // Base active-tab slide duration.
             transitionDurationMs: 160,
-            // Lower bound when jumping across distant tabs.
+            // Lower bound when jumping across distant modes.
             transitionMinDurationMs: 100,
-            // Per-tab distance speedup. Higher values compress long jumps more.
+            // Per-mode distance speedup. Higher values compress long jumps more.
             transitionDistanceSpeedupFactor: 0.28,
             styles: {
-                // Active tab outer shadow. Keep this setting isolated from dropdown shadows.
+                // Active mode outer shadow. Keep this setting isolated from dropdown shadows.
                 activeTabBoxShadow: 'none',
-                // Active tab inset shadow overlay. Keep this setting isolated from dropdown shadows.
+                // Active mode inset shadow overlay. Keep this setting isolated from dropdown shadows.
                 activeTabInsetShadow: {
                     topColor: 'rgba(255, 255, 255, 0.86)',
                     bottomColor: 'rgba(0, 0, 0, 0)',
                 },
-            },
-        },
-
-        // AI Chat panel session history presentation.
-        sessionHistory: {
-            styles: {
-                // Default color for panel session controls.
-                controlColor: '#697388',
-                // Hover/focus color for panel session controls.
-                controlHoverColor: '#39455d',
-                // Hover/focus background for the session-history toggle.
-                historyToggleHoverBackground: 'rgba(105, 115, 136, 0.1)',
-                // Shared prominent hover background for destructive session actions.
-                actionHoverBackground: colorPalette.steelBlue,
-                // Shared prominent hover fill/color for destructive session action icons.
-                actionHoverColor: colorPalette.offWhite,
-                // Default color for session delete controls.
-                deleteColor: '#7a8497',
-                // Hover/focus gradient for session rows. Uses the dropdown hover structure with light blue stops.
-                hoverBackgroundImage: 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)',
-                // Dot color for submitted chat sessions in the history list.
-                threadMarkerBackground: '#5f8fcf',
-                // Ring around the submitted chat session dot.
-                threadMarkerBoxShadow: '0 0 0 3px rgba(95, 143, 207, 0.14)',
             },
         },
 

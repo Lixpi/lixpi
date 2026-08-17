@@ -1,6 +1,6 @@
 import type {
     CanvasAiChatPanelState,
-    CanvasAiChatSidebarTab,
+    CanvasGeneratedOutputDetailsTarget,
     CanvasNode,
     CanvasRightSidePanelMode,
     CanvasState,
@@ -15,25 +15,30 @@ function sanitizeTopLevelMode(mode: CanvasRightSidePanelMode | undefined): Canva
 export function createDefaultAiChatPanelState(): CanvasAiChatPanelState {
     return {
         isOpen: false,
-        isSessionHistoryOpen: false,
         topLevelMode: 'aiThreads',
-        tabs: [],
         contextChips: [],
     }
 }
 
-function sanitizeTabs(tabs: CanvasAiChatSidebarTab[] | undefined): CanvasAiChatSidebarTab[] {
-    const seen = new Set<string>()
-    const sanitizedTabs: CanvasAiChatSidebarTab[] = []
+function sanitizeGeneratedOutputDetailsTarget(
+    target: CanvasGeneratedOutputDetailsTarget | undefined,
+    nodes: CanvasNode[],
+): CanvasGeneratedOutputDetailsTarget | undefined {
+    if (!target?.nodeId) return undefined
 
-    for (const tab of tabs ?? []) {
-        if (!tab?.tabId || !tab.refId || seen.has(tab.tabId)) continue
-        if (tab.type !== 'thread') continue
-        seen.add(tab.tabId)
-        sanitizedTabs.push(tab)
-    }
+    const node = nodes.find((candidate) => candidate.nodeId === target.nodeId)
+    if (!node) return undefined
 
-    return sanitizedTabs
+    const isOutputNode = node.type === 'image'
+        || node.type === 'video'
+        || node.type === 'capabilityArtifact'
+    const isBranchMarkerNode = node.type === 'branchOrigin'
+        || node.type === 'branchFork'
+        || node.type === 'branchLine'
+
+    if (target.kind === 'output' && isOutputNode) return target
+    if (target.kind === 'branch-marker' && isBranchMarkerNode) return target
+    return undefined
 }
 
 // Context chips reference canvas nodes; drop blanks, duplicates, and ids whose
@@ -48,18 +53,15 @@ export function getAiChatPanelState(canvasState: CanvasState | null | undefined)
     if (!canvasState) return defaults
 
     const persisted = canvasState.aiChatPanel
-    const tabs = sanitizeTabs(persisted?.tabs)
-    const candidateActiveTabId = persisted?.activeTabId
-    const activeTabId = candidateActiveTabId && tabs.some((tab) => tab.tabId === candidateActiveTabId)
-        ? candidateActiveTabId
-        : tabs[0]?.tabId
+    const generatedOutputDetailsTarget = sanitizeGeneratedOutputDetailsTarget(
+        persisted?.generatedOutputDetailsTarget,
+        canvasState.nodes,
+    )
 
     return {
         isOpen: persisted?.isOpen === true,
-        isSessionHistoryOpen: persisted?.isSessionHistoryOpen === true,
         topLevelMode: sanitizeTopLevelMode(persisted?.topLevelMode),
-        tabs,
-        ...(activeTabId ? { activeTabId } : {}),
+        ...(generatedOutputDetailsTarget ? { generatedOutputDetailsTarget } : {}),
         contextChips: sanitizeContextChips(persisted?.contextChips, canvasState.nodes),
         ...(persisted?.width !== undefined ? { width: persisted.width } : {}),
     }

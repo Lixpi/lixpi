@@ -14,7 +14,9 @@ export const VIDEO_TOOL_NAME = 'generate_video'
 
 const TOOL_DESCRIPTION =
     'Generate moving visual media from the user request and authorized references. ' +
-    'Call this tool for a request whose intended output changes over time. Preserve the request scope, ' +
+    'Call this tool only when the user explicitly requests a video, clip, animation, filming, animating, ' +
+    'or continuation of a source video. Action or event verbs that can be depicted in one still image do not ' +
+    'establish video intent. Preserve the request scope, ' +
     'temporal intent, and reference roles; do not add unrequested semantic or aesthetic content. ' +
     'The prompt must be safe and moderation-compliant.'
 

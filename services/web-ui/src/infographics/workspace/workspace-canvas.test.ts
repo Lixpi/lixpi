@@ -199,7 +199,25 @@ function extractFunctionBody(source: string, functionName: string): string {
 	const signatureCloseIndex = source.indexOf(')', functionIndex)
 	if (signatureCloseIndex === -1) return ''
 
-	const openIndex = source.indexOf('{', signatureCloseIndex)
+	const trailingSignature = source.slice(signatureCloseIndex + 1)
+	const returnTypeObjectStart = trailingSignature.match(/^\s*:\s*\{/)
+	let bodySearchIndex = signatureCloseIndex
+	if (returnTypeObjectStart) {
+		const returnTypeOpenIndex = signatureCloseIndex + 1 + returnTypeObjectStart[0].lastIndexOf('{')
+		let returnTypeDepth = 0
+		for (let i = returnTypeOpenIndex + 1; i < source.length; i++) {
+			if (source[i] === '{') returnTypeDepth++
+			if (source[i] === '}') {
+				if (returnTypeDepth === 0) {
+					bodySearchIndex = i
+					break
+				}
+				returnTypeDepth--
+			}
+		}
+	}
+
+	const openIndex = source.indexOf('{', bodySearchIndex)
 	if (openIndex === -1) return ''
 
 	let depth = 0
@@ -220,25 +238,14 @@ function extractFunctionBody(source: string, functionName: string): string {
 }
 
 describe('Capability Artifact generated-output chrome parity', () => {
-	it('uses the same metadata panel, editable metadata, and Asset details contract as generated media', () => {
+	it('uses the same unified details renderer, editable metadata, and Asset details contract as generated media', () => {
 		const ts = loadTs()
-		const infoPanel = extractFunctionBody(ts, 'createCapabilityArtifactInfoPanelChrome')
-
-		expectExcerptToContain(
-			infoPanel,
-			'canvas-generated-media-info-panel canvas-generated-media-metadata-panel nopan',
-			'createCapabilityArtifactInfoPanelChrome',
-		)
-		expectExcerptToContain(
-			infoPanel,
-			"mountAssetMetadataEditor(node, metadataEditorMount, 'details')",
-			'createCapabilityArtifactInfoPanelChrome',
-		)
-		expectExcerptToContain(
-			infoPanel,
-			'const assetDetails = createAssetDetailsSection(node)',
-			'createCapabilityArtifactInfoPanelChrome',
-		)
+		const renderDetails = extractFunctionBody(ts, 'renderGeneratedOutputDetailsContent')
+		const artifactDetails = extractFunctionBody(ts, 'appendCapabilityArtifactDetails')
+		expectExcerptToContain(renderDetails, 'appendGeneratedMediaMetadata(body, node, \'sidebar\')', 'generated media details')
+		expectExcerptToContain(renderDetails, 'appendCapabilityArtifactDetails(body, node)', 'Capability Artifact details')
+		expectExcerptToContain(artifactDetails, "mountAssetMetadataEditor(node, metadataEditorMount, 'details', 'sidebar')", 'Capability Artifact details')
+		expectExcerptToContain(artifactDetails, "createAssetDetailsSection(node, 'sidebar')", 'Capability Artifact details')
 	})
 })
 
@@ -318,15 +325,12 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptToContain(eventUpdate, 'applyMediaOperationProgressResult(result)', 'progress event recovery')
 	})
 
-	it('updates the selected sidebar trace directly from progress heartbeats', () => {
+	it('updates the selected unified-sidebar trace directly from progress heartbeats', () => {
 		const progressSync = extractFunctionBody(ts, 'syncLiveMediaGenerationProgressInstancesForState')
-
 		expectExcerptToContain(progressSync, 'syncMediaGenerationTraceButtons(canvasState)', 'trace heartbeat sync')
-		expectExcerptToContain(progressSync, 'activeMediaGenerationTraceProgress?.update(activeTraceState)', 'trace heartbeat sync')
-		expectExcerptToContain(progressSync, 'activeMediaGenerationTraceStatusEl.textContent = formatSessionStatus(activeTraceState.status)', 'trace status sync')
+		expectExcerptToContain(progressSync, 'activeGeneratedOutputDetailsProgress?.update(activeTraceState)', 'trace heartbeat sync')
 		expectExcerptNotToContain(progressSync, 'commitCanvasState', 'trace heartbeat sync')
-		expectSourceNotToContain(ts, 'scheduleMediaGenerationProgressCollisionReflow')
-		expectSourceNotToContain(ts, 'function createMediaGenerationProgressChrome')
+		expectSourceNotToContain(ts, 'activeMediaGenerationTraceProgress')
 	})
 
 	it('attaches reference ambiguity to the submitted prompt with canonical Asset references', () => {
@@ -440,79 +444,22 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 	it('renders generated media icon chrome with bounded screen-space zoom scaling', () => {
 		const ts = loadTs()
-		const badgeScss = loadMediaModelBadgeScss()
 		const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer')
 		const actionsBlock = extractBlock(scss, '.workspace-generated-media-actions')
-		const badgeBlock = extractBlock(badgeScss, '.media-model-badge')
-		const badgeIconBlock = extractBlockContainingSelector(badgeScss, '.media-model-badge-icon,\n.media-model-badge svg')
 		const infoButtonBlock = extractBlock(scss, '.media-info-button')
 		const infoIconBlock = extractBlock(infoButtonBlock, 'svg')
-		const panelBlock = extractBlock(scss, '.canvas-generated-media-info-panel')
-		const traceDetailsBlock = extractBlock(scss, '.canvas-generated-media-projection-editor .canvas-generated-media-trace-details')
-		const promptAndFinalFallbackBlock = scss.match(
-			/\.canvas-generated-media-projection-editor \.ai-image-generation-tool-prompt-fallback,[\s\S]*?\.canvas-generated-media-projection-editor \.ai-image-generation-final-prompt \{[\s\S]*?\}/
-		)?.[0] ?? ''
-		const activeBlock = extractBlock(infoButtonBlock, '&.is-active')
-
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
-		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
-		expectSourceToContain(ts, 'baseGap: settings.mediaNode.generatedMediaChrome.gap,')
 		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),')
-		expectSourceToContain(ts, 'left: `${chromeLayout.left}px`,')
-		expectSourceToContain(ts, 'top: `${chromeLayout.top + extraTopOffsetScreen}px`,')
-		expectSourceToContain(ts, 'width: `${chromeLayout.layoutWidth}px`,')
 		expectSourceToContain(ts, 'transform: `scale(${chromeLayout.screenScale})`,')
-		expectSourceToContain(ts, 'getVisualScale: () => scaleCanvasChromeToScreenForZoom(')
-		expectSourceToContain(ts, 'getAdaptiveBoundedZoomScalingOptions(settings.canvasBubbleMenu.zoomScaling),')
-		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.gap,')
-		expectSourceToContain(ts, 'scaleCanvasChromeToScreenForZoom(\n            settings.mediaNode.generatedMediaChrome.iconSize,')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + iconStripScreenGap) / zoom')
-		expectSourceToContain(ts, 'updateGeneratedMediaChromeLiveTransform(node.nodeId, position, dimensions, getLiveViewport())')
-		expectSourceToContain(ts, 'updateGeneratedMediaChromeLayout()')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl.replaceChildren(')
-		expectSourceToContain(ts, 'mediaChromeViewportEl.replaceChildren(')
-		expectSourceToContain(ts, 'const modelId = getGeneratedMediaModelId(node)')
-		expectSourceToContain(ts, 'const modelProvider = getGeneratedMediaModelProvider(node, modelId)')
-		expectSourceToContain(ts, 'const modelBadge = createMediaModelBadge(resolveMediaModelBadgeConfig({ modelId, modelProvider }))')
-		expectSourceNotToContain(ts, 'LIXPI_ZOOM_SCALING_DEBUG')
-		expectSourceNotToContain(ts, 'logGeneratedMediaChromeDebug')
-		expectSourceNotToContain(ts, 'getDebugRect')
-		expectSourceNotToContain(ts, 'getCanvasChromeZoomMultiplier')
-		expectSourceNotToContain(ts, 'const localScale = scaleCanvasChromeForZoom(1, zoom)')
-		expectSourceNotToContain(ts, 'getTransformedCanvasChromeLayout')
-		expectSourceNotToContain(ts, 'zoom: getCurrentViewportZoom(),')
-		expectSourceNotToContain(ts, 'zoom: number = getCurrentViewportZoom()')
-		expectSourceNotToContain(ts, 'pendingGeneratedMediaChromeZoom')
-		expectSourceNotToContain(ts, 'updateGeneratedMediaChromeZoomScaling')
-		expectSourceNotToContain(ts, 'function getGeneratedMediaInfoWidth')
-		expectExcerptToContain(chromeLayerBlock, 'position: absolute', 'generated media chrome layer block')
-		expectExcerptToContain(chromeLayerBlock, 'inset: 0', 'generated media chrome layer block')
-		expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer block')
-		expectExcerptToContain(actionsBlock, 'width: 100%', 'generated image actions block')
-		expectExcerptToContain(actionsBlock, 'gap: 6px', 'generated image actions block')
-		expectExcerptToContain(badgeBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge block')
-		expectExcerptToContain(badgeIconBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge icon block')
-		expectExcerptToContain(badgeIconBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image model badge icon block')
-		expectExcerptNotToContain(badgeBlock, 'border:', 'image model badge block')
-		expectExcerptNotToContain(badgeBlock, 'box-shadow:', 'image model badge block')
-		expectExcerptToContain(infoButtonBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'height: var(--workspace-generated-media-chrome-icon-size, 34px)', 'image info button block')
-		expectExcerptToContain(infoButtonBlock, 'border: none', 'image info button block')
-		expectExcerptToContain(infoIconBlock, 'width: 79.5918%', 'image info icon block')
-		expectExcerptToContain(infoIconBlock, 'height: 79.5918%', 'image info icon block')
-		expectExcerptNotToContain(infoIconBlock, 'transform:', 'image info icon block')
-		expectExcerptToContain(activeBlock, 'color: var(--workspace-media-info-button-hover-color, #181e23)', 'active image info button block')
-		expectExcerptToContain(activeBlock, 'background: transparent', 'active image info button block')
-		expectExcerptNotToContain(activeBlock, '$steelBlue', 'active image info button block')
-		expectExcerptNotToContain(activeBlock, 'border-color:', 'active image info button block')
-		expectExcerptToContain(panelBlock, 'overflow: var(--workspace-generated-media-info-panel-overflow, visible)', 'generated image info panel block')
-		expectExcerptNotToContain(panelBlock, 'max-height: 440px', 'generated image info panel block')
-		expectExcerptNotToContain(panelBlock, 'overflow: auto', 'generated image info panel block')
-		expectExcerptToContain(traceDetailsBlock, 'margin: 0.95rem 0 0', 'canvas trace details block')
-		expect(promptAndFinalFallbackBlock).toContain('max-height: none')
-		expect(promptAndFinalFallbackBlock).toContain('overflow: visible')
+		expectSourceToContain(ts, ': createMediaModelBadge(resolveMediaModelBadgeConfig({ modelId, modelProvider }))')
+		expectSourceNotToContain(ts, 'generatedMediaInfoPanelLayerEl')
+		expectSourceNotToContain(ts, 'createGeneratedMediaInfoPanelChrome')
+		expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer')
+		expectExcerptToContain(actionsBlock, 'gap: 6px', 'generated media actions')
+		expectExcerptToContain(infoButtonBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'media info button')
+		expectExcerptToContain(infoIconBlock, 'width: 79.5918%', 'media info icon')
 	})
 
 })
@@ -995,6 +942,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		const chromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
+		const liveTransform = extractFunctionBody(ts, 'updateGeneratedMediaChromeLiveTransform')
 		expect(chromeStart).toBeGreaterThan(-1)
 		expect(chromeEnd).toBeGreaterThan(chromeStart)
 		expectExcerptToContain(mediaChrome, 'createMediaGenerationTraceControl(node)', 'media chrome strip')
@@ -1003,6 +951,41 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedMediaInfoPanel', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedOutputHistoryButton(node)', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createMediaGenerationProgress({', 'media chrome strip')
+	})
+
+	it('preserves the media model icon inside the pending generation spinner', () => {
+		const pendingChrome = extractFunctionBody(ts, 'createPendingGeneratedMediaIconChrome')
+
+		expectExcerptToContain(pendingChrome, 'createMediaModelBadge(resolveMediaModelBadgeConfig({', 'pending media spinner')
+		expectExcerptToContain(pendingChrome, 'iconOnly: true', 'pending media spinner')
+		expectExcerptToContain(pendingChrome, '${modelBadge}', 'pending media spinner')
+		expectExcerptNotToContain(pendingChrome, 'createMediaInfoButton(node)', 'pending media spinner')
+		expectExcerptNotToContain(pendingChrome, 'createMediaGenerationTraceControl(node)', 'pending media spinner')
+	})
+
+	it('anchors pending info and trace controls below-left of the visible pre-frame circle', () => {
+		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const chromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', chromeStart)
+		const mediaChrome = ts.slice(chromeStart, chromeEnd)
+		const liveTransform = extractFunctionBody(ts, 'updateGeneratedMediaChromeLiveTransform')
+		const infoButtonIndex = mediaChrome.indexOf('${createMediaInfoButton(node)}')
+		const traceControlIndex = mediaChrome.indexOf('${createMediaGenerationTraceControl(node)}')
+		const pendingActionsBlock = extractBlock(loadScss(), '.workspace-generated-media-pending-actions')
+
+		expect(chromeStart).toBeGreaterThan(-1)
+		expect(chromeEnd).toBeGreaterThan(chromeStart)
+		expectExcerptToContain(mediaChrome, 'isPendingGeneratedMediaBeforeFirstFrame(node.nodeId)', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'getPendingGeneratedMediaBeforeFrameCircleGeometry(', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'pendingCircleGeometry?.position ?? nodeWorldPosition', 'media chrome')
+		expectExcerptToContain(mediaChrome, 'pendingCircleGeometry?.dimensions ?? node.dimensions', 'media chrome')
+		expectExcerptToContain(liveTransform, 'getPendingGeneratedMediaBeforeFrameCircleGeometry(nodeId, position, dimensions)', 'live media chrome transform')
+		expectExcerptToContain(liveTransform, 'pendingCircleGeometry?.position ?? position', 'live media chrome transform')
+		expectExcerptToContain(liveTransform, 'pendingCircleGeometry?.dimensions ?? dimensions', 'live media chrome transform')
+		expectExcerptToContain(mediaChrome, 'workspace-generated-media-pending-actions', 'media chrome')
+		expect(infoButtonIndex).toBeGreaterThan(-1)
+		expect(traceControlIndex).toBeGreaterThan(infoButtonIndex)
+		expectExcerptToContain(pendingActionsBlock, 'justify-content: flex-start', 'pending media actions')
+		expectSourceNotToContain(ts, '&& !pendingBeforeFirstFrameNodeIds.has(node.nodeId)')
 	})
 
 	it('keeps the video controls overlay free of the info button', () => {
@@ -1025,56 +1008,23 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
 	})
 
-	it('opens a node-scoped generation timeline in the existing right sidebar', () => {
-		const settingsSource = loadSettings()
-		const workspaceSvelte = loadWorkspaceCanvasSvelte()
+	it('opens a node-scoped generation timeline through the unified right-sidebar details target', () => {
 		const openTrace = extractFunctionBody(ts, 'openMediaGenerationTrace')
-		const renderPanel = extractFunctionBody(ts, 'renderActiveAiChatPanel')
+		const renderDetails = extractFunctionBody(ts, 'renderGeneratedOutputDetailsContent')
 		const resolveTraceState = extractFunctionBody(ts, 'getMediaGenerationTraceState')
 		const createTraceControl = extractFunctionBody(ts, 'createMediaGenerationTraceControl')
-		const traceButtonBlock = extractBlock(loadScss(), '.media-generation-trace-button')
-		const traceRippleBlock = extractBlock(loadScss(), '.media-generation-trace-button-ripple')
-		const tracePanelBlock = extractBlock(loadScss(), '.workspace-media-generation-trace-panel')
-		const traceBodyBlock = extractBlock(loadScss(), '.workspace-media-generation-trace-panel-body')
+		const detailsBody = extractBlock(loadScss(), '.workspace-generated-output-details-panel-body.workspace-generated-output-details-content')
 		const traceProgressBlock = extractBlock(loadScss(), '.workspace-media-generation-sidebar-progress')
-		const sidebarBlock = extractBlock(loadScss(), '.workspace-ai-chat-floating-panel')
-		const sidebarProseMirrorBlock = extractBlock(
-			loadScss(),
-			'.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror'
-		)
-
-		expectExcerptToContain(openTrace, 'activeMediaGenerationTraceNodeId = nodeId', 'open generation trace')
-		expectExcerptToContain(openTrace, "topLevelMode: 'aiThreads'", 'open generation trace')
-		expectExcerptToContain(openTrace, 'renderActiveAiChatPanel()', 'open generation trace')
-		expectExcerptToContain(resolveTraceState, 'if (node.generationProgress) return node.generationProgress', 'live generation trace state')
+		expectExcerptToContain(openTrace, "openGeneratedOutputDetails({ kind: 'output', nodeId })", 'open generation trace')
+		expectExcerptToContain(resolveTraceState, 'const persistedState = node.generationProgress ??', 'live generation trace state')
 		expectExcerptToContain(resolveTraceState, 'getGeneratedMediaProgressFromThreadContent(', 'sealed generation trace state')
-		expectExcerptToContain(createTraceControl, 'const traceState = getMediaGenerationTraceState(node)', 'persistent generation trace control')
-		expectExcerptToContain(createTraceControl, 'status: traceState.status', 'persistent generation trace control')
-		expectExcerptToContain(renderPanel, 'workspace-media-generation-trace-panel', 'right sidebar generation trace')
-		expectExcerptToContain(renderPanel, 'state: mediaGenerationTraceState', 'right sidebar generation trace')
-		expectExcerptToContain(renderPanel, 'defaultExpanded: true', 'right sidebar generation trace')
-		expectExcerptToContain(renderPanel, '...getExecutionTraceTimelineDetail()', 'right sidebar generation trace')
-		expectExcerptToContain(traceButtonBlock, 'position: relative', 'generation trace button geometry')
-		expectExcerptToContain(traceButtonBlock, 'overflow: visible', 'generation trace button geometry')
-		expectExcerptToContain(traceRippleBlock, 'width: 20px', 'generation trace ripple geometry')
-		expectExcerptToContain(traceRippleBlock, 'height: 20px', 'generation trace ripple geometry')
-		expectExcerptToContain(tracePanelBlock, 'width: 100%', 'tab-aligned generation trace panel')
-		expectExcerptToContain(tracePanelBlock, 'box-sizing: border-box', 'tab-aligned generation trace panel')
-		expectExcerptToContain(tracePanelBlock, 'border-radius: 12px', 'generation trace outer surface')
-		expectExcerptToContain(tracePanelBlock, 'background: #fff', 'generation trace outer surface')
-		expectExcerptToContain(traceBodyBlock, 'padding: 0 8px 12px', 'compact generation trace padding')
-		expectExcerptToContain(traceBodyBlock, 'overflow-x: hidden', 'generation trace horizontal overflow')
-		expectExcerptToContain(traceBodyBlock, 'overflow-y: auto', 'generation trace vertical overflow')
-		expectSourceToContain(settingsSource, 'contentFontSize: 14')
-		expectSourceToContain(workspaceSvelte, '--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px')
-		expectExcerptNotToContain(sidebarBlock, '--workspace-right-sidebar-content-font-size:', 'sidebar content typography')
-		expectExcerptToContain(sidebarProseMirrorBlock, 'font-size: var(--workspace-right-sidebar-content-font-size)', 'sidebar message typography')
+		expectExcerptToContain(resolveTraceState, 'settleReadyMediaGenerationProgress(persistedState, node.mediaGenerationPhase)', 'ready generation trace settlement')
+		expectExcerptToContain(createTraceControl, 'if (!traceState || !isMediaGenerationTraceActive(traceState.status)) return null', 'active trace control')
+		expectExcerptToContain(renderDetails, 'className: \'workspace-media-generation-sidebar-progress\'', 'sidebar timeline')
+		expectExcerptToContain(renderDetails, 'defaultExpanded: true', 'sidebar timeline')
+		expectExcerptToContain(renderDetails, '...getExecutionTraceTimelineDetail()', 'sidebar timeline')
+		expectExcerptToContain(detailsBody, 'overflow-y: auto', 'details scroll surface')
 		expectExcerptToContain(traceProgressBlock, '--progress-timeline-title-size: var(--workspace-right-sidebar-content-font-size)', 'timeline title typography')
-		expectExcerptToContain(traceProgressBlock, '--progress-timeline-summary-size: var(--workspace-right-sidebar-content-font-size)', 'timeline summary typography')
-		expectExcerptToContain(traceProgressBlock, 'font-size: var(--workspace-right-sidebar-content-font-size)', 'timeline trace typography')
-		expectSourceNotToContain(ts, "{ label: 'Generation request', value: node.generationRequestId }")
-		expectSourceNotToContain(loadScss(), '.media-generation-trace-button.is-static .media-generation-trace-button-ripple .marker-animated-layer')
-		expectSourceNotToContain(loadScss(), '.workspace-generated-media-actions .media-generation-trace-button > span')
 	})
 
 	it('does not remount generated media chrome when content identity is unchanged', () => {
@@ -1082,52 +1032,23 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const chromeKey = extractFunctionBody(ts, 'getGeneratedMediaChromeSyncKey')
 		const skipIndex = syncChrome.indexOf('if (nextChromeSyncKey === generatedMediaChromeSyncKey)')
 		const skipReturnIndex = syncChrome.indexOf('return', skipIndex)
-		const destroyIndex = syncChrome.indexOf('destroyGeneratedMediaInfoRenderers()', skipReturnIndex)
-		const generatedChromeReplaceIndex = syncChrome.indexOf('generatedMediaChromeLayerEl.replaceChildren(', skipReturnIndex)
-		const mediaChromeReplaceIndex = syncChrome.indexOf('mediaChromeViewportEl.replaceChildren(', skipReturnIndex)
-
-		expectSourceToContain(ts, "const RESET_GENERATED_MEDIA_CHROME_SYNC_KEY = '\\u0000reset-generated-media-chrome'")
-		expectSourceToContain(ts, 'generatedMediaChromeSyncKey = RESET_GENERATED_MEDIA_CHROME_SYNC_KEY')
-		expectExcerptToContain(syncChrome, 'const nextChromeSyncKey = getGeneratedMediaChromeSyncKey({', 'generated media chrome sync')
+		const replaceIndex = syncChrome.indexOf('generatedMediaChromeLayerEl.replaceChildren(', skipReturnIndex)
 		expectExcerptToContain(syncChrome, 'syncMediaGenerationTraceButtons(canvasState)', 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, 'updateGeneratedMediaChromeLayout()', 'generated media chrome sync')
-		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-skip-same-key'", 'generated media chrome sync')
-		expectExcerptToContain(syncChrome, "console.info('[CANVAS][generated-media-chrome]', 'sync-rebuild'", 'generated media chrome sync')
 		expectExcerptNotToContain(chromeKey, 'getJsonChromeKey(node.generationProgress)', 'generated media chrome key')
-		expectSourceToContain(ts, 'function getPlayableVideoChromeKey(node: VideoCanvasNode): string')
-		expectSourceToContain(ts, "videoEl ? 'video-element-ready' : 'video-element-missing'")
-		expectSourceToContain(ts, 'function getBranchMarkerPanelChromeKey(')
-		expectSourceToContain(ts, "'generated-media-panel',")
-		expectSourceToContain(ts, "'branch-marker-panel',")
-		expect(skipIndex, 'generated media chrome sync should compare the stable chrome key').toBeGreaterThan(-1)
-		expect(skipReturnIndex, 'same-key branch should return before any remount').toBeGreaterThan(skipIndex)
-		expect(destroyIndex, 'renderer teardown should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
-		expect(generatedChromeReplaceIndex, 'generated media chrome DOM replacement should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
-		expect(mediaChromeReplaceIndex, 'media chrome DOM replacement should happen only after the same-key skip branch').toBeGreaterThan(skipReturnIndex)
+		expect(skipIndex).toBeGreaterThan(-1)
+		expect(skipReturnIndex).toBeGreaterThan(skipIndex)
+		expect(replaceIndex).toBeGreaterThan(skipReturnIndex)
 	})
 
 	it('uses the standard chat projection for Capability Artifact lineage history', () => {
-		const originPanel = extractFunctionBody(ts, 'createBranchOriginInfoPanel')
-		const forkPanel = extractFunctionBody(ts, 'createBranchForkInfoPanel')
-		const linePanel = extractFunctionBody(ts, 'createBranchLineInfoPanel')
-		const artifactHistory = extractFunctionBody(ts, 'createCapabilityArtifactHistoryPanelChrome')
-		const panelKey = extractFunctionBody(ts, 'getBranchMarkerPanelChromeKey')
-
-		for (const panelBody of [originPanel, forkPanel, linePanel]) {
-			expectExcerptToContain(panelBody, 'return createBranchMarkerInfoPanel(', 'Capability Artifact branch history')
-			expectExcerptNotToContain(panelBody, 'createCapabilityArtifactBranchHistoryPanel', 'Capability Artifact branch history')
-		}
-		expectExcerptToContain(artifactHistory, 'mountBranchTurnChatProjection({', 'Capability Artifact node history')
-		expectExcerptToContain(artifactHistory, 'canvas-generated-media-history-panel', 'Capability Artifact node history')
-		expectSourceToContain(ts, 'getAiChatThreadContentForProjection(locator.threadId)')
+		const renderDetails = extractFunctionBody(ts, 'renderGeneratedOutputDetailsContent')
+		const artifactHistory = extractFunctionBody(ts, 'mountCapabilityArtifactHistory')
+		expectExcerptToContain(renderDetails, 'activeAiChatPanelProjectionRenderer = mountCapabilityArtifactHistory(history, node)', 'Capability Artifact details')
+		expectExcerptToContain(artifactHistory, 'mountBranchTurnChatProjection({', 'Capability Artifact history')
 		expectSourceToContain(ts, 'buildBranchMarkerTurnProjectionFromThreadContent(')
 		expectSourceToContain(ts, 'allowLatestTurnFallback: false')
-		expectExcerptNotToContain(artifactHistory, '<strong>Generation history</strong>', 'Capability Artifact node history')
-		expectExcerptToContain(panelKey, "'branch-marker-panel'", 'Capability Artifact branch history key')
-		expectExcerptNotToContain(panelKey, 'generated-artifact-panel', 'Capability Artifact branch history key')
-		expectSourceToContain(ts, 'getBranchMarkerGeneratedArtifactNodes(node).length > 0')
-		expectSourceNotToContain(ts, 'function getCapabilityArtifactLineageProjection')
-		expectSourceNotToContain(ts, 'function createCapabilityArtifactBranchHistoryPanel')
+		expectSourceNotToContain(ts, 'createCapabilityArtifactBranchHistoryPanel')
 	})
 
 	it('routes Timeline, lineage, and historical message references through the shared preview renderer', () => {
@@ -1166,40 +1087,16 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceNotToContain(loadScss(), '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
 	})
 
-	it('combines media history into the info panel while retaining the Artifact history trigger', () => {
-		const messagePartsResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessageParts')
-		const messageResolver = extractFunctionBody(ts, 'getGeneratedOutputUserMessageText')
-		const historyButton = extractFunctionBody(ts, 'createGeneratedOutputHistoryButton')
-		const mediaChromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
-		const mediaChromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', mediaChromeStart)
-		const mediaChrome = ts.slice(mediaChromeStart, mediaChromeEnd)
-		const mediaInfoPanel = extractFunctionBody(ts, 'createGeneratedMediaMetadataPanel')
-		const projectionMount = extractFunctionBody(ts, 'mountGeneratedMediaChatProjection')
+	it('combines media metadata and history in the unified details renderer while retaining the Artifact history trigger', () => {
+		const renderDetails = extractFunctionBody(ts, 'renderGeneratedOutputDetailsContent')
+		const detailsProjection = extractFunctionBody(ts, 'mountGeneratedMediaDetailsProjection')
 		const artifactChrome = extractFunctionBody(ts, 'createGeneratedCapabilityArtifactChrome')
-
-		expectExcerptToContain(messagePartsResolver, "node.type === 'capabilityArtifact'", 'generated output history message')
-		expectExcerptToContain(messagePartsResolver, 'buildCapabilityArtifactTurnProjectionContent(node)', 'generated output history message')
-		expectExcerptToContain(messagePartsResolver, 'findAiChatThreadContentNode(root, generatedBy.conversationAssetId)', 'generated output history message')
-		expectExcerptToContain(messagePartsResolver, 'userMessage', 'generated output history message')
-		expectExcerptToContain(messagePartsResolver, 'generatedBy.promptText?.trim() || inputPrompt', 'generated output history message')
-		expectExcerptToContain(messagePartsResolver, 'return getBranchMarkerPromptParts(', 'generated output history message')
-		expectExcerptToContain(messageResolver, 'getBranchMarkerPromptDisplayText(getGeneratedOutputUserMessageParts(node))', 'generated output history message')
-		expectExcerptToContain(historyButton, 'getGeneratedOutputUserMessageParts(node)', 'generated output history trigger')
-		expectExcerptToContain(historyButton, 'getGeneratedOutputUserMessagePreview(messageParts)', 'generated output history trigger')
-		expectExcerptToContain(historyButton, 'renderBranchMarkerPromptParts(previewParts, {', 'generated output history trigger')
-		expectExcerptToContain(historyButton, 'workspace-branch-marker-message-icon media-history-reasoning-icon', 'generated output history trigger')
-		expectExcerptToContain(historyButton, 'title=${message}', 'generated output history trigger')
-		expectSourceToContain(ts, 'GENERATED_OUTPUT_HISTORY_PREVIEW_MAX_CHARACTERS = 22')
-		expectExcerptNotToContain(mediaChrome, 'createGeneratedOutputHistoryButton(node)', 'generated media chrome')
-		expectExcerptToContain(mediaInfoPanel, 'appendGeneratedMediaMetadata(panel, node)', 'generated media info panel')
-		expectExcerptToContain(mediaInfoPanel, 'appendGeneratedMediaHistory(historySection, node, {', 'generated media info panel')
-		expectExcerptToContain(mediaInfoPanel, 'canvas-generated-media-history-section', 'generated media info panel')
-		expectExcerptToContain(projectionMount, 'defaultExpanded: true', 'generated media history pipeline')
-		expectExcerptToContain(projectionMount, 'includeGenerationProgressTimeline,', 'generated media history trace')
-		expectSourceNotToContain(ts, 'defaultProgressTimelineExpanded')
+		expectExcerptToContain(renderDetails, "appendGeneratedMediaMetadata(body, node, 'sidebar')", 'generated media details')
+		expectExcerptToContain(renderDetails, 'appendGeneratedOutputDetailsHistorySection(body)', 'generated media history')
+		expectExcerptToContain(renderDetails, 'mountGeneratedMediaDetailsProjection(history, mediaTarget)', 'generated media history')
+		expectExcerptToContain(detailsProjection, 'includeReasoningModelHeader: true', 'generated media history')
+		expectExcerptToContain(detailsProjection, 'includeGenerationProgressTimeline: true', 'generated media history')
 		expectExcerptToContain(artifactChrome, 'createGeneratedOutputHistoryButton(node)', 'generated Artifact chrome')
-		expectSourceNotToContain(ts, 'function createCapabilityArtifactHistoryButton')
-		expectSourceNotToContain(ts, '<span className="media-history-button-text">History</span>')
 	})
 
 	it('removes the ProseMirror ordered-list indent from every generated-media timeline level', () => {
@@ -1228,27 +1125,13 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(historyChipRule, 'font-size: inherit;', 'history trigger badge')
 	})
 
-	it('renders the info panel in a viewport-transformed decoupled layer', () => {
-		// The info panel is separate from the screen-space icon strip but still
-		// belongs to the viewport overlay, so its content scales naturally with
-		// the media node while the icon strip uses adaptive screen-space chrome.
-		const panelPositionStart = ts.indexOf('function updateGeneratedMediaInfoPanelPosition(')
-		const panelPositionEnd = ts.indexOf('// Video chrome', panelPositionStart)
-		const panelPosition = ts.slice(panelPositionStart, panelPositionEnd)
-
-		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl = createGeneratedMediaInfoPanelLayer()')
-		expectSourceToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaInfoPanelLayerEl],')
-		expectSourceNotToContain(ts, 'viewportOverlayEls: [mediaChromeViewportEl, generatedMediaChromeLayerEl]')
-		expectSourceToContain(ts, 'function createGeneratedMediaInfoPanelChrome(node: ImageCanvasNode | VideoCanvasNode)')
-		expectSourceToContain(ts, "panel.setAttribute('data-media-info-panel-node-id', node.nodeId)")
-		expectSourceToContain(ts, 'generatedMediaInfoPanelLayerEl.replaceChildren(')
-		expectSourceToContain(ts, 'const panelTop = position.y + dimensions.height + (extraTopOffsetScreen + iconStripScreenGap + iconScreenSize + iconStripScreenGap) / zoom')
-		expectSourceToContain(ts, "transform: 'none',")
-		expect(panelPositionStart).toBeGreaterThan(-1)
-		expect(panelPositionEnd).toBeGreaterThan(panelPositionStart)
-		expectExcerptToContain(panelPosition, 'getVideoControlsOutsideOffsetScreen(nodeId, viewport),', 'media info panel position updater')
-		expectExcerptNotToContain(panelPosition, 'const stripRect = strip.getBoundingClientRect()', 'media info panel position updater')
-		expectExcerptNotToContain(panelPosition, 'data-media-chrome-node-id', 'media info panel position updater')
+	it('renders details in the screen-fixed right sidebar instead of a viewport-transformed canvas layer', () => {
+		const renderPanel = extractFunctionBody(ts, 'renderActiveAiChatPanel')
+		expectExcerptToContain(renderPanel, 'createGeneratedOutputDetailsSidebar({', 'right sidebar')
+		expectExcerptToContain(renderPanel, 'paneEl.appendChild(panelEl)', 'right sidebar')
+		expectSourceNotToContain(ts, 'generatedMediaInfoPanelLayerEl')
+		expectSourceNotToContain(ts, 'createGeneratedMediaInfoPanelChrome')
+		expectSourceNotToContain(ts, 'updateGeneratedMediaInfoPanelPosition')
 	})
 })
 
@@ -1470,58 +1353,40 @@ describe('Workspace canvas — parent-child world positioning', () => {
 // Workspace AI chat panel — stable reload path
 // =============================================================================
 
-describe('Workspace canvas — AI panel reload stability', () => {
+describe('Workspace canvas — unified generated-output details reload stability', () => {
 	const ts = loadTs()
 
-	it('tracks the mounted panel thread separately from the selected active thread', () => {
-		expectSourceToContain(ts, 'let activeAiChatPanelThreadId: string | null = null')
-		expectSourceToContain(ts, 'function destroyActiveAiChatPanel(')
-		expectSourceToContain(ts, 'clearActive = false')
-		expectSourceToContain(ts, 'panelThreadId = activeAiChatPanelThreadId ?? activeAiChatThreadId')
-		expectSourceToContain(ts, 'preserveTabsSwitch = false')
-		expectSourceToContain(ts, 'threadEditors.get(panelThreadId)')
-		expectSourceToContain(ts, 'promptInputController.unregisterThreadEditor(panelThreadId)')
-		expectSourceToContain(ts, 'activeAiChatPanelThreadId = panelThreadId')
+	it('uses persisted generated-output details state as the only selected target', () => {
+		expectSourceToContain(ts, 'generatedOutputDetailsTarget: target,')
+		expectSourceToContain(ts, 'const generatedOutputDetailsTarget = aiChatPanelState.generatedOutputDetailsTarget')
+		expectSourceToContain(ts, 'resolveGeneratedOutputDetailsNode(generatedOutputDetailsTarget)')
+		expectSourceNotToContain(ts, 'let activeGeneratedOutputDetailsTarget')
+		expectSourceNotToContain(ts, 'activeAiChatPanelThreadId')
+		expectSourceNotToContain(ts, 'activeAiChatThreadId')
 	})
 
-	it('captures panel thread id in editor callbacks instead of reading mutable active thread state', () => {
-		const fnMatch = ts.match(/function\s+renderActiveAiChatPanel[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
-		expectExcerptToContain(fnBody, "const panelThreadId = activeSidebarTab?.type === 'thread' ? activeSidebarTab.refId : null")
-		expectExcerptToContain(fnBody, 'conversationAssetId: panelThreadId')
-		expectExcerptToContain(fnBody, 'threadId: panelThreadId')
-		expectExcerptToContain(fnBody, 'threadEditors.set(panelThreadId')
-		expectExcerptToContain(fnBody, 'promptInputController.registerThreadEditor(panelThreadId')
-		expectExcerptNotToContain(fnBody, 'threadId: activeAiChatThreadId!')
-		expectExcerptNotToContain(fnBody, 'referenceId: activeAiChatThreadId!')
+	it('restores the unified component after canvas state hydration', () => {
+		expectSourceToContain(ts, 'aiChatPanelState = getAiChatPanelState(currentCanvasState)')
+		expectSourceToContain(ts, 'activeGeneratedOutputDetailsPanel = createGeneratedOutputDetailsSidebar({')
+		expectSourceToContain(ts, 'renderContent: body => renderGeneratedOutputDetailsContent(body, generatedOutputDetailsNode)')
+		expectSourceToContain(ts, 'if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()')
+		expectSourceNotToContain(ts, 'refreshActiveAiChatPanelWhenContentLoads')
+		expectSourceNotToContain(ts, 'threadEditors.set(')
 	})
 
 	it('keys canvas rerender detection on thread id plus loaded/pending content state', () => {
-		const fnMatch = ts.match(/function\s+getAiChatThreadsKey[\s\S]*?^    \}/m)
-		expect(fnMatch).not.toBeNull()
-		const fnBody = fnMatch![0]
+		const fnBody = extractFunctionBody(ts, 'getAiChatThreadsKey')
 		expectExcerptToContain(fnBody, 'return threads')
 		expectExcerptToContain(fnBody, '.filter(t => !isDetachedCanvasThreadId(t.threadId))')
 		expectExcerptToContain(fnBody, '.map(t => `${t.threadId}:${t.content ? \'loaded\' : \'pending\'}`)')
 		expectExcerptToContain(fnBody, '.join(\',\')')
 	})
 
-	it('refreshes only the active panel when deferred thread content arrives', () => {
-		expectSourceToContain(ts, 'function refreshActiveAiChatPanelWhenContentLoads(): void')
-		expectSourceToContain(ts, 'if (activeAiChatPanelHadContent) return')
-		expectSourceToContain(ts, 'renderActiveAiChatPanel(thread)')
-		expectSourceToContain(ts, 'refreshActiveAiChatPanelWhenContentLoads()')
-		expectSourceToContain(ts, 'if (aiChatPanelState.isOpen && !activeAiChatPanelEl) renderActiveAiChatPanel()')
-	})
-
-	it('preserves local visual drag commits when active-panel renders arrive stale', () => {
+	it('preserves local visual drag commits when details renders arrive stale', () => {
 		expectSourceToContain(ts, 'mergeIncomingCanvasStateWithPendingVisualCommit,')
 		expectSourceToContain(ts, 'let pendingLocalCanvasVisualCommit: PendingCanvasVisualCommit | null = null')
 		expectSourceToContain(ts, 'pendingLocalCanvasVisualCommit = createPendingCanvasVisualCommit(persistedCanvasState)')
 		expectSourceToContain(ts, 'const renderStatePlan = mergeIncomingCanvasStateWithPendingVisualCommit({')
-		expectSourceToContain(ts, 'const normalizedCanvasState = renderStatePlan.state')
-		expectSourceToContain(ts, 'preserveActiveGeneratedMediaTrackersInState(persistedCanvasState)')
 		expectSourceToContain(ts, 'currentCanvasState = shouldPreserveLiveViewport && effectiveCanvasState')
 	})
 })
@@ -1690,6 +1555,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		const activeBody = extractFunctionBody(ts, 'isBranchMarkerGenerationActive')
 		const pendingBody = extractFunctionBody(ts, 'isCurrentBranchMarkerPending')
 		const clickBody = extractFunctionBody(ts, 'handleBranchMarkerInfoClick')
+		const baseNodeBody = extractFunctionBody(ts, 'createBaseNodeElement')
 		const branchOriginBody = extractFunctionBody(ts, 'createBranchOriginNode')
 		const branchForkBody = extractFunctionBody(ts, 'createBranchForkNode')
 		const branchLineBody = extractFunctionBody(ts, 'createBranchLineNode')
@@ -1699,9 +1565,11 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(pendingBody, '&& !hasStartedGeneratedMediaForBranchMarkerNode(node.nodeId)', 'branch marker pending click guard')
 		expectExcerptToContain(clickBody, "console.info('[CANVAS][branch-marker-info]', 'info-click'", 'branch marker info click')
 		expectExcerptToContain(clickBody, 'wouldHaveBeenBlockedByPendingState', 'branch marker info click')
-		expectExcerptToContain(clickBody, "if (node.type === 'branchOrigin')", 'branch marker info click')
+		expectExcerptToContain(clickBody, "openGeneratedOutputDetails({ kind: 'branch-marker', nodeId: node.nodeId }, { toggle: true })", 'branch marker info click')
 		expectExcerptNotToContain(clickBody, 'if (blocked) return', 'branch marker info click')
 		expectExcerptNotToContain(clickBody, 'if (wouldHaveBeenBlockedByPendingState) return', 'branch marker info click')
+		expectExcerptToContain(baseNodeBody, 'onClick: interactionOptions.allowSelection === false', 'branch marker native click deferral')
+		expectExcerptToContain(baseNodeBody, '? undefined\n                            : interactionOptions.onClick', 'branch marker native click deferral')
 		expectExcerptToContain(branchOriginBody, 'handleBranchMarkerInfoClick(node.nodeId)', 'branch origin node')
 		expectExcerptToContain(branchForkBody, 'handleBranchMarkerInfoClick(node.nodeId)', 'branch fork node')
 		expectExcerptToContain(branchLineBody, 'handleBranchMarkerInfoClick(node.nodeId)', 'branch line node')
@@ -1840,107 +1708,52 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 // Workspace AI chat panel — session history interactions
 // =============================================================================
 
-describe('Workspace AI chat panel — session history interactions', () => {
+describe('Workspace right panel — single generated-output details renderer', () => {
 	const ts = loadTs()
 	const scss = loadScss()
-	const svgIcons = loadSvgIcons()
 
-	it('uses only the history toggle control in the chat session header', () => {
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
-		expectSourceToContain(ts, 'aria-label="Toggle session history"')
-		expectSourceToContain(ts, 'aria-controls="workspace-ai-chat-panel-sessions"')
-		expectSourceToContain(ts, 'const historyToggleEl = controlsEl.querySelector<HTMLButtonElement>(\'.workspace-ai-chat-panel-history-toggle\')!')
-		expectSourceToContain(ts, 'historyToggleEl.addEventListener(\'click\', () => {')
-		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-new-chat')
-		expectSourceNotToContain(ts, 'startNewAiChatDraft')
-		const sessionHeaderStart = ts.indexOf('const controlsEl = html`<div className="workspace-ai-chat-panel-context-controls">')
-		const sessionsListStart = ts.indexOf('const sessionsEl =', sessionHeaderStart)
-		expect(sessionHeaderStart).toBeGreaterThan(-1)
-		expect(sessionsListStart).toBeGreaterThan(sessionHeaderStart)
-		const sessionHeaderBlock = ts.slice(sessionHeaderStart, sessionsListStart)
-		expectExcerptNotToContain(sessionHeaderBlock, 'xCircleIcon', 'chat session header')
-		expectSourceToContain(svgIcons, 'export const aiChatPanelToggleHistoryIcon')
+	it('routes media info, active generation, and branch lineage through one opener', () => {
+		const mediaInfo = extractFunctionBody(ts, 'createMediaInfoButton')
+		const trace = extractFunctionBody(ts, 'openMediaGenerationTrace')
+		const branchInfo = extractFunctionBody(ts, 'handleBranchMarkerInfoClick')
+		expectExcerptToContain(mediaInfo, 'openGeneratedOutputDetails(target, { toggle: true })', 'media info')
+		expectExcerptToContain(trace, "openGeneratedOutputDetails({ kind: 'output', nodeId })", 'active generation')
+		expectExcerptToContain(branchInfo, "openGeneratedOutputDetails({ kind: 'branch-marker', nodeId: node.nodeId }, { toggle: true })", 'branch lineage')
 	})
 
-	it('styles the session control row and session entry details consistently', () => {
-		const historyToggleBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle')
-		const sessionBlock = extractBlock(scss, '.workspace-ai-chat-panel-session')
-		const titleBlock = extractBlock(scss, '.workspace-ai-chat-panel-session-title')
-		expectExcerptToContain(historyToggleBlock, 'display: grid', 'session controls block')
-		expectExcerptToContain(historyToggleBlock, 'place-items: center', 'session controls block')
-		expectExcerptToContain(historyToggleBlock, 'background: transparent', 'session controls block')
-		const sessionHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-session:focus-within')
-		const historyToggleHoverBlock = extractBlock(scss, '.workspace-ai-chat-panel-history-toggle:focus-visible')
-		expectExcerptToContain(historyToggleHoverBlock, 'background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1))', 'session history toggle focus block')
-		expectExcerptToContain(historyToggleHoverBlock, 'outline: none', 'session history toggle focus block')
-		expectExcerptToContain(sessionHoverBlock, 'background-image:', 'session focus block')
-		expectExcerptToContain(sessionHoverBlock, '--workspace-ai-chat-panel-session-hover-background-image', 'session focus block')
-		expectExcerptToContain(sessionHoverBlock, 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)', 'session focus block')
-		expectSourceToContain(scss, 'max-height: 236px')
-		expectExcerptToContain(sessionBlock, 'display: flex', 'session block')
-		expectExcerptToContain(sessionBlock, 'min-height: 58px', 'session block')
-		expectExcerptToContain(titleBlock, 'font-size: 13px', 'session title block')
-		expectExcerptToContain(titleBlock, 'font-weight: 620', 'session title block')
+	it('mounts only the unified details component on the AI Threads surface', () => {
+		const renderPanel = extractFunctionBody(ts, 'renderActiveAiChatPanel')
+		expectExcerptToContain(renderPanel, 'createGeneratedOutputDetailsSidebar({', 'right panel')
+		expectExcerptToContain(renderPanel, 'renderGeneratedOutputDetailsContent(body, generatedOutputDetailsNode)', 'right panel')
+		expectExcerptToContain(renderPanel, 'workspace-generated-output-details-empty', 'right panel')
+		expectExcerptNotToContain(renderPanel, 'new ProseMirrorEditor', 'right panel')
+		expectExcerptNotToContain(renderPanel, 'workspace-ai-chat-panel-session', 'right panel')
+		expectExcerptNotToContain(renderPanel, 'workspace-ai-chat-panel-tabs', 'right panel')
 	})
 
-	it('keeps an empty-openable panel state when the last tab is closed', () => {
-		const closeBody = extractFunctionBody(ts, 'closeAiChatSidebarTab')
-		const emptyBranchIndex = closeBody.indexOf('if (aiChatSidebarTabs.length === 0) {')
-		const returnIndex = closeBody.indexOf('return', emptyBranchIndex)
+	it('removes every session-list, chat-tab, and transcript renderer entry point', () => {
+		expectSourceNotToContain(ts, 'createSlidingTabsSwitch')
+		expectSourceNotToContain(ts, 'closeAiChatSidebarTab')
+		expectSourceNotToContain(ts, 'deleteAiChatSession')
+		expectSourceNotToContain(ts, 'ensureAiChatSidebarThreadTab')
+		expectSourceNotToContain(ts, 'isSessionHistoryOpen')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-session')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-session')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-tabs')
+	})
 
-		expect(emptyBranchIndex).toBeGreaterThan(-1)
-		expect(returnIndex).toBeGreaterThan(emptyBranchIndex)
-		expectExcerptToContain(closeBody, 'activeAiChatSidebarTabId = null', 'closeAiChatSidebarTab')
-		expectExcerptToContain(closeBody, 'activeAiChatSidebarThreadId = null', 'closeAiChatSidebarTab')
-		expectExcerptToContain(closeBody, 'activeAiChatThreadId = null', 'closeAiChatSidebarTab')
-		expectExcerptToContain(closeBody, 'persistAiChatSidebarState()', 'closeAiChatSidebarTab')
-		expectExcerptToContain(closeBody, 'syncActiveAiChatPanelFromState()', 'closeAiChatSidebarTab')
-		expectExcerptToContain(closeBody, 'renderActiveAiChatPanel()', 'closeAiChatSidebarTab')
-		expectExcerptToContain(closeBody, 'return', 'closeAiChatSidebarTab')
+	it('keeps the unified details body scrollable while nested content expands naturally', () => {
+		const body = extractBlock(scss, '.workspace-generated-output-details-panel-body.workspace-generated-output-details-content')
+		const nested = extractBlockContainingSelector(scss, '.workspace-generated-output-details-panel .ai-chat-thread-node-editor')
+		expectExcerptToContain(body, 'overflow-x: hidden', 'details body')
+		expectExcerptToContain(body, 'overflow-y: auto', 'details body')
+		expectExcerptToContain(nested, 'max-height: none', 'details nested content')
+		expectExcerptToContain(nested, 'overflow: visible', 'details nested content')
 	})
 
 	it('opens the capability library on the Tools surface', () => {
 		expectSourceToContain(ts, "openRightSidePanelToMode('capabilities')")
 		expectSourceToContain(ts, "window.addEventListener('lixpi:open-capability-library', onOpenCapabilityLibrary)")
-	})
-
-	it('adds thread tabs idempotently when opening existing chat sessions', () => {
-		const ensureThreadBody = extractFunctionBody(ts, 'ensureAiChatSidebarThreadTab')
-
-		expectExcerptToContain(ensureThreadBody, 'const threadTabId = `thread:${threadId}`', 'ensureAiChatSidebarThreadTab')
-		expectExcerptToContain(ensureThreadBody, 'if (!aiChatSidebarTabs.some((tab) => tab.tabId === threadTabId))', 'ensureAiChatSidebarThreadTab')
-		expectExcerptToContain(ensureThreadBody, 'unshift(createAiChatThreadSidebarTab(threadId))', 'ensureAiChatSidebarThreadTab')
-		expectExcerptToContain(ensureThreadBody, 'activeAiChatSidebarThreadId = threadId', 'ensureAiChatSidebarThreadTab')
-	})
-
-	it('keeps thread sessions renderable with message count and status metadata', () => {
-		expectSourceToContain(ts, 'function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<string>): number')
-		expectSourceToContain(ts, 'countAiChatSessionMessages(session.content)')
-		expectSourceToContain(ts, '${getAiChatSessionMeta(session)}')
-		expectSourceToContain(ts, 'pluralizeSessionCount(messageCount, \'message\')')
-	})
-
-	it('renders thread session history entries with timestamps', () => {
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-marker-thread')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-content')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-title')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-date')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-session-meta')
-		expectSourceToContain(ts, 'formatSessionUpdatedAt(session.updatedAt)')
-		expectSourceToContain(ts, 'sessionEl.querySelector(\'.workspace-ai-chat-panel-session-open\')?.addEventListener(\'click\', () => {')
-		expectSourceToContain(ts, 'activeAiChatSidebarTabId = `thread:${session.threadId}`')
-		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-session-marker-extraction')
-	})
-
-	it('defines stable session metadata formatters for deterministic labels', () => {
-		expectSourceToContain(ts, 'function formatSessionStatus(status: string): string')
-		expectSourceToContain(ts, ".split(/[-_]/)")
-		expectSourceToContain(ts, 'const minuteMs = 60000')
-		expectSourceToContain(ts, 'return `${days} ${days === 1 ? \'day\' : \'days\'} ago`')
-		expectSourceToContain(ts, 'return `${weeks} ${weeks === 1 ? \'week\' : \'weeks\'} ago`')
-		expectSourceToContain(ts, 'formatSessionUpdatedAt')
-		expectSourceToContain(ts, 'formatSessionTimestamp(updatedAt)')
-		expectSourceToContain(ts, 'Date unavailable')
 	})
 })
 
@@ -1977,17 +1790,25 @@ describe('AI chat thread — workspace CSS overrides for auto-grow', () => {
 // AI chat thread — document title hidden (controlled by setting)
 // =============================================================================
 
-describe('AI chat thread — document title hidden in workspace', () => {
+describe('Generated-output details — media title visibility', () => {
 	const scss = loadScss()
 	const ts = loadTs()
 
-	it('hides .document-title via the hide-title modifier class', () => {
-		expect(scss).toMatch(/\.workspace-ai-chat-thread-node-hide-title\s+\.document-title\s*\{[^}]*display:\s*none/)
+	it('renders the Asset metadata title without a hide-title modifier', () => {
+		const appendMetadata = extractFunctionBody(ts, 'appendGeneratedMediaMetadata')
+		expectExcerptToContain(appendMetadata, 'canvas-asset-metadata-editor is-details nopan', 'generated-output metadata')
+		expectExcerptToContain(appendMetadata, "mountAssetMetadataEditor(node, metadataEditorMount, 'details', owner)", 'generated-output metadata')
+		expectSourceNotToContain(ts, 'workspace-ai-chat-thread-node-hide-title')
+		expectSourceNotToContain(scss, '.workspace-ai-chat-thread-node-hide-title')
 	})
 
-	it('applies document title visibility to the canvas-owned chat panel', () => {
-		expectSourceToContain(ts, 'settings.aiChatThread.showHeader')
-		expectSourceToContain(ts, 'workspace-ai-chat-thread-node-hide-title')
+	it('keeps sidebar metadata title at the full details size', () => {
+		const titleBlock = extractBlock(scss, '.workspace-generated-output-details-content > .canvas-asset-metadata-editor.is-details')
+		const contentBlock = extractBlock(scss, '.workspace-generated-output-details-content')
+		expectExcerptToContain(titleBlock, 'margin-right: 3.5rem', 'details title container')
+		expectExcerptToContain(contentBlock, '&.is-details', 'details metadata editor')
+		expectExcerptToContain(contentBlock, 'h1.document-title', 'details metadata title')
+		expectExcerptToContain(contentBlock, 'font-size: 1.55rem', 'details metadata title')
 	})
 })
 
@@ -2107,25 +1928,15 @@ describe('Right side panel — TS infrastructure', () => {
 		expect(ts).toMatch(/onTriggerConnection.*startConnectionFromMenu|startConnectionFromMenu.*onTriggerConnection/s)
 	})
 
-	it('keeps AI chat thread editor in the canvas-owned singleton panel', () => {
-		const start = ts.indexOf('function renderActiveAiChatPanel')
-		expect(start).toBeGreaterThan(-1)
-		const end = ts.indexOf('function createGlobalCanvasComposer', start)
-		expect(end).toBeGreaterThan(start)
-		const fnBody = ts.slice(start, end)
-
-		expectExcerptToContain(fnBody, 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node')
-		expectExcerptToContain(fnBody, 'new ProseMirrorEditor')
-		expectExcerptToContain(fnBody, 'ensureActiveRightSidePanel()')
-		expectExcerptToContain(fnBody, "const resizeHandle = activeRightSidePanel.element")
-		expectExcerptToContain(fnBody, 'panelEl.appendChild(resizeHandle)')
-		// The glass backdrop element is owned by the SidePanel component.
-		expectExcerptToContain(fnBody, 'paneEl.appendChild(activeRightSidePanel.backdropElement)')
-		expectSourceToContain(ts, 'function handleRightSidePanelResizeStart()')
-		// Prompt entry is rendered by the detached/shared composer below the canvas.
+	it('keeps generated-output details in the canvas-owned singleton panel', () => {
+		const fnBody = extractFunctionBody(ts, 'renderActiveAiChatPanel')
+		expectExcerptToContain(fnBody, 'workspace-ai-chat-floating-panel workspace-ai-chat-thread-node', 'right panel')
+		expectExcerptToContain(fnBody, 'createGeneratedOutputDetailsSidebar({', 'right panel')
+		expectExcerptToContain(fnBody, 'ensureActiveRightSidePanel()', 'right panel')
+		expectExcerptToContain(fnBody, 'panelEl.appendChild(activeRightSidePanel.element)', 'right panel')
+		expectExcerptToContain(fnBody, 'paneEl.appendChild(activeRightSidePanel.backdropElement)', 'right panel')
+		expectExcerptNotToContain(fnBody, 'new ProseMirrorEditor', 'right panel')
 		expectSourceToContain(ts, 'function createGlobalCanvasComposer(): void')
-		expectSourceToContain(ts, "className: 'workspace-canvas-global-composer'")
-		expectSourceNotToContain(ts, `AiChat${'Panel.svelte'}`)
 	})
 
 	it('keeps AI prompt input style values in the shared composer component', () => {
@@ -2163,88 +1974,19 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-close')
 	})
 
-	it('renders a removable context chip tray and sends chip context for standalone chats', () => {
-		// The chip tray replaces the old Follow / Pinned / With Sources controls.
+	it('renders a removable context chip tray and sends chip context for standalone canvas runs', () => {
 		const scss = loadScss()
-
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chips')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
-		expectSourceToContain(ts, 'function destroyContextPreviewTiles(): void')
-		expectSourceToContain(ts, 'contextPreviewTilesByTray: Map<HTMLDivElement, Set<ContextPreviewTileInstance>>')
-		expectSourceToContain(ts, 'for (const trayEl of Array.from(contextPreviewTilesByTray.keys()))')
-		expectSourceToContain(ts, 'function addContextChips(nodeIds: Iterable<string>): void')
-		expectSourceToContain(ts, "node.type === 'capabilityArtifact'")
 		expectSourceToContain(ts, 'function removeContextChip(nodeId: string): void')
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
-		expectSourceToContain(ts, 'function createAiChatPanelContextTrayElement(): HTMLDivElement')
-		expectSourceToContain(ts, 'removeContextChip(nodeId)')
-		expectSourceToContain(ts, 'trayTiles.add(previewTile)')
-		expectSourceToContain(ts, 'const previewTile = createContextPreviewTile({')
-		// Submitting a standalone chat force-includes the explicit chips: context
-		// relevance now resolves server-side from a whole-workspace snapshot, so the
-		// client just flags the chip node ids into that snapshot instead of locally
-		// extracting a selected-context subset.
-		expectSourceToContain(ts, 'const chipNodeIds = aiChatPanelState.contextChips.slice()')
-		expectSourceToContain(ts, 'contextChipNodeIds: explicitContextNodeIds,')
-		// The session-history toggle is retained.
-		expectSourceToContain(ts, 'aiChatPanelToggleHistoryIcon')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-control')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-history-toggle')
-		expectSourceToContain(ts, 'const isSessionHistoryOpen = !aiChatPanelState.isSessionHistoryOpen')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-sessions-hidden')
+		expectSourceToContain(ts, '...(options.explicitContextNodeIds ?? aiChatPanelState.contextChips)')
+		expectSourceToContain(ts, 'contextChipNodeIds: submittedExplicitContextNodeIds,')
 		expectSourceToContain(scss, '--workspace-right-side-panel-content-inset')
-		expectSourceToContain(scss, '.workspace-ai-chat-panel-tabs-switch')
-		// Open tabs are now a D3 sliding switch, not DOM tag-style buttons.
-		expectSourceToContain(ts, "createSlidingTabsSwitch")
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-tabs-switch')
-		expectSourceToContain(ts, "id: 'workspace-ai-chat-panel-tabs'")
-		expectSourceToContain(ts, "onClose: (tabId) => closeAiChatSidebarTab(tabId)")
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.minTabWidth')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.height')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionDurationMs')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionMinDurationMs')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.transitionDistanceSpeedupFactor')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.styles.activeTabBoxShadow')
-		expectSourceToContain(ts, 'settings.aiChatThread.panelTabs.styles.activeTabInsetShadow')
-		expectSourceNotToContain(ts, 'createTagPill')
-		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-title')
-		expectSourceNotToContain(ts, 'workspace-ai-chat-panel-tab-close')
-		expectSourceNotToContain(scss, '.workspace-ai-chat-panel-tab {')
-		// The removed context-mode controls must leave no dangling code.
-		expectSourceNotToContain(ts, "value: 'followSelection'")
-		expectSourceNotToContain(ts, "value: 'pinnedContext'")
-		expectSourceNotToContain(ts, '>With Sources</span>')
-		expectSourceNotToContain(ts, 'createToggleSwitch')
-		expectSourceNotToContain(ts, 'includeUpstreamContext')
-		expectSourceNotToContain(ts, 'contextMode')
-		expectSourceNotToContain(ts, 'getStandaloneContextNodeIds')
-	})
-
-	it('preserves chat tab switch state and resets scroll position when changing tabs', () => {
-		expectSourceToContain(ts, 'const preservedTabsEl = options.preserveTabsSwitch')
-		expectSourceToContain(ts, 'const preservedTabsScrollLeft = preservedTabsEl?.scrollLeft ?? 0')
-		expectSourceToContain(ts, 'preservedTabsEl?.remove()')
-		expectSourceToContain(ts, 'renderActiveAiChatPanel(undefined, { preserveTabsSwitch: true })')
-		expectSourceToContain(ts, 'tabsInitialScrollLeft = getAiChatPanelActiveTabScrollLeft(')
-		expectSourceToContain(ts, 'tabsEl.scrollLeft = tabsInitialScrollLeft')
-		expectSourceToContain(ts, 'resizeActiveAiChatPanelTabsSwitch()')
-		expectSourceToContain(ts, 'function resizeActiveAiChatPanelTabsSwitch(): void')
-		expectSourceToContain(ts, 'function getAiChatPanelActiveTabScrollLeft(')
-		expectSourceToContain(ts, 'function getAiChatPanelTabsViewportWidth(')
-	})
-
-	it('renders a single-tab divider instead of an empty tabs switch and hides it behind history', () => {
-		const scss = loadScss()
-
-		expectSourceToContain(ts, 'const shouldRenderTabs = aiChatSidebarTabs.length > 1')
-		expectSourceToContain(ts, 'const singleTabDividerEl = shouldRenderTabs')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-single-tab-divider')
-		expectSourceToContain(ts, 'workspace-ai-chat-panel-single-tab-divider-hidden')
-		expectSourceToContain(ts, 'singleTabDividerEl?.classList.toggle(\'workspace-ai-chat-panel-single-tab-divider-hidden\', isSessionHistoryOpen)')
-		expectSourceToContain(scss, '.workspace-ai-chat-panel-single-tab-divider')
-		expectSourceToContain(scss, 'border-top: var(--workspace-ai-chat-panel-divider-border')
+		expectSourceNotToContain(ts, 'aiChatPanelToggleHistoryIcon')
+		expectSourceNotToContain(ts, 'createSlidingTabsSwitch')
+		expectSourceNotToContain(ts, 'isSessionHistoryOpen')
 	})
 
 	it('renders removable explicit context chips and patches improved descriptors', () => {
@@ -2280,15 +2022,6 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(contextPreview, "contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,")
 		expectSourceToContain(contextPreview, "'--workspace-ai-chat-panel-context-preview-popover-text-color'")
 		expectSourceToContain(ts, 'const previewTile = createContextPreviewTile({')
-	})
-
-	it('applies session-history styling helper variables to the panel shell', () => {
-		expectSourceToContain(ts, 'function applyAiChatPanelSessionHistorySettings(panelEl: HTMLElement): void')
-		expectSourceToContain(ts, 'settings.aiChatThread.sessionHistory.styles')
-		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-control-color')
-		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-control-hover-color')
-		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-delete-color')
-		expectSourceToContain(ts, '--workspace-ai-chat-panel-session-thread-marker-box-shadow')
 	})
 
 	it('prepares standalone panel media generations for canvas placeholders and branch origins', () => {
@@ -2385,17 +2118,6 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(aiGeneratedImageNode, 'onWorkspaceContextResolvedToCanvas?: (data: {')
 		expectSourceToContain(aiGeneratedImageNode, 'onImageErrorToCanvas?: (data: {')
 		expectSourceToContain(aiGeneratedImageNode, 'resolution: WorkspaceContextResolution')
-	})
-
-	it('keeps submitted-session tabs until explicit delete handlers remove them', () => {
-		const closeStart = ts.indexOf('function closeAiChatSidebarTab')
-		const deleteChatStart = ts.indexOf('async function deleteAiChatSession', closeStart)
-		const closeBody = ts.slice(closeStart, deleteChatStart)
-		const deleteChatBody = ts.slice(deleteChatStart, ts.indexOf('function renderActiveAiChatPanel', deleteChatStart))
-
-		expectExcerptToContain(closeBody, 'aiChatSidebarTabs = aiChatSidebarTabs.filter((tab) => tab.tabId !== tabId)', 'close-tab handler')
-		expectExcerptToContain(closeBody, 'if (aiChatSidebarTabs.length === 0)', 'close-tab handler')
-		expectExcerptToContain(deleteChatBody, 'closeAiChatSidebarTab(`thread:${threadId}`)', 'delete-chat handler')
 	})
 
 	it('uses the reusable SidePanel component as the horizontal resize handle', () => {

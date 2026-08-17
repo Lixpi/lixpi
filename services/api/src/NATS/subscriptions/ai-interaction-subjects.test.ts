@@ -306,7 +306,27 @@ describe('AI interaction message routing', () => {
         expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledTimes(1)
     })
 
-    it('reserves scalar media slots and their branch lineage before reasoning starts', async () => {
+    it('reserves only the image scalar slot for an action-heavy scene without explicit video output', async () => {
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{
+                            type: 'paragraph',
+                            content: [{
+                                type: 'text',
+                                text: 'Create a cinematic show where Robert walks along the alley and notices Jarrod eating trash.',
+                            }],
+                        }],
+                    }],
+                }],
+            },
+            version: 5,
+        })
+
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
             mediaGenerationRequest: undefined,
@@ -317,7 +337,7 @@ describe('AI interaction message routing', () => {
             checkpoint: expect.objectContaining({
                 modelSelection: {
                     reasoningModelIds: ['openai:gpt-4'],
-                    mediaModelIds: ['google:imagen3', 'openai:gpt-4o-video'],
+                    mediaModelIds: ['google:imagen3'],
                 },
             }),
             runs: [
@@ -326,17 +346,11 @@ describe('AI interaction message routing', () => {
                     modelId: 'google:imagen3',
                     status: 'pending',
                 }),
-                expect.objectContaining({
-                    mediaType: 'video',
-                    modelId: 'openai:gpt-4o-video',
-                    status: 'pending',
-                }),
             ],
             initialLineagePlan: expect.objectContaining({
-                branchForks: [expect.objectContaining({ reasoningModelId: 'openai:gpt-4' })],
+                branchForks: [],
                 runAssignments: [
                     expect.objectContaining({ mediaModelId: 'google:imagen3', mediaType: 'image' }),
-                    expect.objectContaining({ mediaModelId: 'openai:gpt-4o-video', mediaType: 'video' }),
                 ],
             }),
         }))
@@ -346,8 +360,61 @@ describe('AI interaction message routing', () => {
             expect.objectContaining({
                 durableMediaRuns: [
                     expect.objectContaining({ mediaType: 'image', status: 'pending' }),
-                    expect.objectContaining({ mediaType: 'video', status: 'pending' }),
                 ],
+                videoModelMetaInfo: null,
+            }),
+        )
+    })
+
+    it('reserves only the video scalar slot when the requested output is explicitly a video', async () => {
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{
+                            type: 'paragraph',
+                            content: [{ type: 'text', text: 'Create a cinematic video where Robert walks through the alley.' }],
+                        }],
+                    }],
+                }],
+            },
+            version: 5,
+        })
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            mediaGenerationRequest: undefined,
+        })
+        await flushPromises()
+
+        expect(mocks.mediaRequestService.create).toHaveBeenCalledWith(expect.objectContaining({
+            checkpoint: expect.objectContaining({
+                modelSelection: {
+                    reasoningModelIds: ['openai:gpt-4'],
+                    mediaModelIds: ['openai:gpt-4o-video'],
+                },
+            }),
+            runs: [expect.objectContaining({
+                mediaType: 'video',
+                modelId: 'openai:gpt-4o-video',
+                status: 'pending',
+            })],
+            initialLineagePlan: expect.objectContaining({
+                runAssignments: [expect.objectContaining({
+                    mediaModelId: 'openai:gpt-4o-video',
+                    mediaType: 'video',
+                })],
+            }),
+        }))
+        expect(mocks.llmModule.process).toHaveBeenCalledWith(
+            'workspace-1:conv-1',
+            'openai',
+            expect.objectContaining({
+                imageModelMetaInfo: null,
+                durableMediaRuns: [expect.objectContaining({ mediaType: 'video', status: 'pending' })],
             }),
         )
     })
@@ -860,9 +927,21 @@ describe('AI interaction message routing', () => {
     })
 
     it('normalizes video options for valid and invalid candidate values', async () => {
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create a video clip.' }] }],
+                    }],
+                }],
+            },
+            version: 5,
+        })
         mocks.aiModel.getAiModel
             .mockResolvedValueOnce({ modelVersion: '1' })
-            .mockResolvedValueOnce({ model: 'imagen', modelVersion: '1' })
             .mockResolvedValueOnce({
                 model: 'gpt-4o-video',
                 modelVersion: '1',
@@ -897,9 +976,21 @@ describe('AI interaction message routing', () => {
     })
 
     it('casts number-based duration to numeric seconds when normalizing video duration', async () => {
+        mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
+            doc: {
+                ...conversationDoc,
+                content: [{
+                    ...conversationDoc.content[0],
+                    content: [{
+                        type: 'aiUserMessage',
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create a video clip.' }] }],
+                    }],
+                }],
+            },
+            version: 5,
+        })
         mocks.aiModel.getAiModel
             .mockResolvedValueOnce({ modelVersion: '1' })
-            .mockResolvedValueOnce({ model: 'imagen', modelVersion: '1' })
             .mockResolvedValueOnce({
                 model: 'gpt-4o-video',
                 modelVersion: '1',
@@ -925,10 +1016,9 @@ describe('AI interaction message routing', () => {
         expect(payload.videoResolution).toBeUndefined()
     })
 
-    it('continues with null image/video metadata when those models are not found', async () => {
+    it('continues with null metadata when the selected scalar image model is not found', async () => {
         mocks.aiModel.getAiModel
             .mockResolvedValueOnce({ modelVersion: '1' })
-            .mockResolvedValueOnce(null)
             .mockResolvedValueOnce(null)
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
@@ -944,7 +1034,7 @@ describe('AI interaction message routing', () => {
             videoModelMetaInfo: null,
         }))
         expect(mocks.warn).toHaveBeenCalledWith('Image model not found: google:missing-image, proceeding without image routing')
-        expect(mocks.warn).toHaveBeenCalledWith('Video model not found: openai:missing-video, proceeding without video routing')
+        expect(mocks.warn).not.toHaveBeenCalledWith('Video model not found: openai:missing-video, proceeding without video routing')
     })
 
     it('publishes an error when LLM processing throws', async () => {

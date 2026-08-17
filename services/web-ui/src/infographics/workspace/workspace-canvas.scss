@@ -493,6 +493,10 @@
     pointer-events: auto;
 }
 
+.workspace-generated-media-pending-actions {
+    justify-content: flex-start;
+}
+
 .media-generation-trace-button {
     position: relative;
     display: inline-flex;
@@ -538,13 +542,12 @@
 
 .workspace-generated-media-pending-icon {
     position: absolute;
-    width: auto;
+    width: var(--workspace-generated-media-chrome-icon-size, 34px);
     height: var(--workspace-generated-media-chrome-icon-size, 34px);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    pointer-events: auto;
+    pointer-events: none;
 
     .media-model-badge {
         width: var(--workspace-generated-media-chrome-icon-size, 34px);
@@ -1377,22 +1380,6 @@
     }
 }
 
-.workspace-ai-chat-panel-tabs {
-    position: relative;
-    z-index: 2;
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    flex: 0 0 auto;
-    overflow-x: auto;
-    padding: 0 0 8px;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-        display: none;
-    }
-}
-
 // Top-level Capabilities / Media / AI Threads switch at the top of the right side panel.
 .workspace-right-panel-mode-switch {
     position: relative;
@@ -1408,46 +1395,6 @@
     display: block;
     width: 100%;
     overflow: visible;
-}
-
-.workspace-ai-chat-panel-tabs-switch {
-    display: block;
-    flex: 0 0 auto;
-    min-width: 100%;
-    overflow: visible;
-}
-
-.workspace-ai-chat-panel-single-tab-divider {
-    position: relative;
-    z-index: 2;
-    box-sizing: border-box;
-    width: 100%;
-    height: 0;
-    flex: 0 0 0;
-    border-top: var(--workspace-ai-chat-panel-divider-border, 1px solid rgba(26, 39, 68, 0.09));
-}
-
-.workspace-ai-chat-panel-single-tab-divider-hidden {
-    display: none;
-}
-
-.workspace-ai-chat-panel-context-controls {
-    display: flex;
-    flex: 0 0 auto;
-    justify-content: flex-end;
-    padding: 10px 0 8px;
-    color: var(--workspace-ai-chat-panel-context-controls-color, #39455d);
-    font-size: 12px;
-}
-
-.workspace-ai-chat-panel-context-mode {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex: 1 1 auto;
-    width: 100%;
-    gap: 8px;
-    min-width: 0;
 }
 
 .workspace-ai-chat-panel-context-chips {
@@ -1547,234 +1494,6 @@
     fill: currentColor;
 }
 
-.workspace-ai-chat-panel-history-control {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
-}
-
-.workspace-ai-chat-panel-history-toggle {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: 0;
-    border-radius: 99px;
-    background: transparent;
-    color: var(--workspace-ai-chat-panel-session-control-color, #697388);
-    cursor: pointer;
-    transition:
-        hoverTransition(background, $defaultHoverTransitionDuration),
-        hoverTransition(color, $defaultHoverTransitionDuration);
-}
-
-.workspace-ai-chat-panel-history-toggle:hover,
-.workspace-ai-chat-panel-history-toggle:focus-visible {
-    background: var(--workspace-ai-chat-panel-session-history-toggle-hover-background, rgba(105, 115, 136, 0.1));
-    color: var(--workspace-ai-chat-panel-session-control-hover-color, #39455d);
-    outline: none;
-}
-
-.workspace-ai-chat-panel-history-toggle-active {
-    color: var(--workspace-ai-chat-panel-session-control-hover-color, #39455d);
-}
-
-.workspace-ai-chat-panel-history-toggle svg {
-    fill: currentColor;
-    width: 15px;
-    height: 15px;
-}
-
-.workspace-ai-chat-panel-sessions {
-    flex: 0 0 auto;
-    max-height: 236px;
-    margin: 0;
-    overflow-y: auto;
-    border-bottom: var(--workspace-ai-chat-panel-divider-border, 1px solid rgba(26, 39, 68, 0.09));
-    padding: 0 4px 10px;
-}
-
-.workspace-ai-chat-panel-sessions-hidden {
-    display: none;
-}
-
-.workspace-ai-chat-panel-sessions-title {
-    padding: 2px 0 6px;
-    color: #697388;
-    font-size: 11px;
-    font-weight: 650;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-
-.workspace-ai-chat-panel-session {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    min-height: 58px;
-    padding: 7px 8px;
-    border-radius: 8px;
-    transition: hoverTransition(background, $defaultHoverTransitionDuration);
-}
-
-.workspace-ai-chat-panel-session:hover,
-.workspace-ai-chat-panel-session:focus-within {
-    background-image: var(
-        --workspace-ai-chat-panel-session-hover-background-image,
-        linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)
-    );
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-}
-
-.workspace-ai-chat-panel-session-open {
-    display: flex;
-    align-items: flex-start;
-    gap: 9px;
-    flex: 1 1 auto;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    color: #39455d;
-    cursor: pointer;
-    font: inherit;
-    text-align: left;
-}
-
-.workspace-ai-chat-panel-session-marker {
-    flex: 0 0 auto;
-    width: 7px;
-    height: 7px;
-    margin-top: 5px;
-    border-radius: 50%;
-    background: #697388;
-}
-
-.workspace-ai-chat-panel-session-marker-thread {
-    background: var(--workspace-ai-chat-panel-session-thread-marker-background, #5f8fcf);
-    box-shadow: var(--workspace-ai-chat-panel-session-thread-marker-box-shadow, 0 0 0 3px rgba(95, 143, 207, 0.14));
-}
-
-.workspace-ai-chat-panel-session-content {
-    display: grid;
-    flex: 1 1 auto;
-    min-width: 0;
-    gap: 2px;
-}
-
-.workspace-ai-chat-panel-session-title,
-.workspace-ai-chat-panel-session-date,
-.workspace-ai-chat-panel-session-meta {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.workspace-ai-chat-panel-session-title {
-    color: #39455d;
-    font-size: 13px;
-    font-weight: 620;
-    line-height: 1.25;
-}
-
-.workspace-ai-chat-panel-session-date {
-    color: #697388;
-    font-size: 11.5px;
-    line-height: 1.25;
-}
-
-.workspace-ai-chat-panel-session-meta {
-    color: #8a93a6;
-    font-size: 11.5px;
-    line-height: 1.25;
-}
-
-.workspace-ai-chat-panel-session-delete {
-    position: relative;
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 20px;
-    height: 20px;
-    margin-top: 2px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--workspace-ai-chat-panel-session-delete-color, #7a8497);
-    cursor: pointer;
-    transition: hoverTransition(color, $defaultHoverTransitionDuration);
-}
-
-.workspace-ai-chat-panel-session-delete::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: transparent;
-    transform: translate(-50%, -50%);
-    transition: hoverTransition(background, $defaultHoverTransitionDuration);
-}
-
-.workspace-ai-chat-panel-session-delete:hover,
-.workspace-ai-chat-panel-session-delete:focus-visible {
-    color: var(--workspace-ai-chat-panel-session-action-hover-color, #{$offWhite});
-    outline: none;
-}
-
-.workspace-ai-chat-panel-session-delete:hover::before,
-.workspace-ai-chat-panel-session-delete:focus-visible::before {
-    background: var(--workspace-ai-chat-panel-session-action-hover-background, #{$steelBlue});
-}
-
-.workspace-ai-chat-panel-session-delete svg {
-    position: relative;
-    z-index: 1;
-    width: 15px;
-    height: 15px;
-    fill: currentColor;
-}
-
-.workspace-ai-chat-panel-session-delete:hover svg,
-.workspace-ai-chat-panel-session-delete:focus-visible svg {
-    fill: var(--workspace-ai-chat-panel-session-action-hover-color, #{$offWhite});
-}
-
-.workspace-ai-chat-panel-empty {
-    padding: 20px 0;
-    color: #697388;
-    font-size: 13px;
-}
-
-.workspace-ai-chat-panel-body {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.workspace-ai-chat-panel-body-pane {
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-anchor: none;
-}
-
-.workspace-ai-chat-panel-body-pane-hidden {
-    display: none !important;
-}
-
 // Screen-fixed, canvas-wide composer at the bottom-center of the viewport.
 // The context tray is outside the input pill so selected references do not
 // consume text-field space.
@@ -1840,11 +1559,6 @@
         margin-top: 0;
         padding-right: 18px;
     }
-}
-
-/* Hide the document title (h1) inside AI chat thread nodes on the canvas (controlled by showHeaderOnAiChatThreadNodes) */
-.workspace-ai-chat-thread-node-hide-title .document-title {
-    display: none;
 }
 
 // The resizable right side panel is rendered by the reusable SidePanel component
@@ -2497,12 +2211,16 @@
     overflow-y: auto;
 }
 
-.workspace-ai-chat-thread-node-hide-title .workspace-generated-output-details-content .canvas-asset-metadata-editor .document-title {
-    display: block;
-}
-
 .workspace-generated-output-details-content > .canvas-asset-metadata-editor.is-details {
     margin-right: 3.5rem;
+}
+
+.workspace-generated-output-details-empty {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 20px 0;
+    color: #697388;
+    font-size: 13px;
 }
 
 .workspace-generated-output-details-history {

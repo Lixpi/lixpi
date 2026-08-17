@@ -19,6 +19,7 @@
         "./components/media-model-badge": "./src/components/mediaModelBadge/index.ts",
         "./components/progress-timeline": "./src/components/progressTimeline/index.ts",
         "./components/side-panel": "./src/components/sidePanel/index.ts",
+        "./components/block-card-tiles-list": "./src/components/blockCardTilesList/index.ts",
         "./components/sliding-switch": "./src/components/slidingSwitch/index.ts",
         "./components/sliding-tabs-switch": "./src/components/slidingTabsSwitch/index.ts",
         "./components/tag-pill": "./src/components/tagPill/index.ts",
@@ -58,6 +59,11 @@
             "sass": "./styles/side-panel.scss",
             "style": "./styles/side-panel.scss",
             "default": "./styles/side-panel.scss"
+        },
+        "./styles/block-card-tiles-list": {
+            "sass": "./styles/block-card-tiles-list.scss",
+            "style": "./styles/block-card-tiles-list.scss",
+            "default": "./styles/block-card-tiles-list.scss"
         }
     },
     "dependencies": {

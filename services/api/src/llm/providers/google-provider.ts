@@ -35,6 +35,7 @@ import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
+import { hasExplicitVideoOutputRequest } from '../orchestration/scalar-media-output-routing.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -51,10 +52,6 @@ type GoogleToolStreamResult = {
     finishReasons: string[]
     functionCallNames: string[]
 }
-
-const EXPLICIT_VIDEO_CREATION_PATTERN =
-    /\b(?:generate|create|make|produce|render)\s+(?:an?\s+|the\s+)?(?:(?:short|cinematic|animated)\s+)*(?:video|clip|animation)\b/i
-const EXPLICIT_VIDEO_VERB_PATTERN = /\b(?:animate|film)\b/i
 
 const getGoogleMessageText = (content: unknown): string => {
     if (typeof content === 'string') return content
@@ -75,8 +72,7 @@ const hasExplicitVideoRequest = (messages: ChatMessage[]): boolean => {
         if (message?.role !== 'user') continue
         const text = getGoogleMessageText(message.content).trim()
         if (!text) continue
-        return EXPLICIT_VIDEO_CREATION_PATTERN.test(text)
-            || EXPLICIT_VIDEO_VERB_PATTERN.test(text)
+        return hasExplicitVideoOutputRequest(text)
     }
     return false
 }

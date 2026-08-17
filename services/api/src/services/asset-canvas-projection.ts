@@ -1290,12 +1290,30 @@ export const projectGeneratedAssetNode = ({
             assignment.generationRequestId,
         )
     const lineage = generatedByLineage(assignment)
+    const activeGenerationProgress = existing?.generationProgress
+        && ['pending', 'running', 'awaiting-provider-verification'].includes(existing.generationProgress.status)
+        ? existing.generationProgress
+        : undefined
+    const generationProgress = !pendingBeforeFirstFrame && activeGenerationProgress
+        ? {
+            ...activeGenerationProgress,
+            status: 'completed' as const,
+            message: 'Media generation completed.',
+            progress: settleMediaGenerationRunProgress(
+                activeGenerationProgress.progress,
+                'completed',
+                'Media generation completed.',
+            ),
+            updatedAt: Date.now(),
+        }
+        : undefined
     const node: GeneratedMediaNode = kind === 'image'
         ? {
             nodeId,
             type: 'image',
             assetId,
             mediaGenerationPhase: pendingBeforeFirstFrame ? 'pending-before-first-frame' : 'ready',
+            ...(generationProgress ? { generationProgress } : {}),
             position,
             dimensions,
             generatedBy: {
@@ -1311,6 +1329,7 @@ export const projectGeneratedAssetNode = ({
             type: 'video',
             assetId,
             mediaGenerationPhase: pendingBeforeFirstFrame ? 'pending-before-first-frame' : 'ready',
+            ...(generationProgress ? { generationProgress } : {}),
             position,
             dimensions,
             generatedBy: {

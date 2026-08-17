@@ -7,8 +7,10 @@ import {
     getMediaGenerationProgressCollisionRect,
     getMediaGenerationProgressPosition,
     isPersistedMediaGenerationActive,
+    isMediaGenerationOperationSupersededByOutput,
     resolveBranchMarkerMediaRequestStatuses,
     resolveBranchMarkerGlobalProgressStatuses,
+    settleReadyMediaGenerationProgress,
     settleBranchMarkerProgressStatusForTerminalMedia,
     shouldRenderLiveMediaGenerationProgress,
 } from './mediaGenerationProgress.ts'
@@ -56,12 +58,12 @@ const renderedItemIds = (element: HTMLElement): string[] => [
 ].map(item => item.dataset.itemId!)
 
 describe('media generation progress disclosure', () => {
-    it('recovers active generation state from persisted output data after reload', () => {
+    it('recovers active generation state only while the persisted output is still pending', () => {
         for (const progressStatus of ['pending', 'running', 'awaiting-provider-verification'] as const) {
             expect(isPersistedMediaGenerationActive({
                 progressStatus,
                 reviewStatus: 'candidate',
-                mediaGenerationPhase: 'ready',
+                mediaGenerationPhase: 'pending-before-first-frame',
             })).toBe(true)
         }
 
@@ -83,6 +85,24 @@ describe('media generation progress disclosure', () => {
             reviewStatus: 'accepted',
             mediaGenerationPhase: 'pending-before-first-frame',
         })).toBe(false)
+        expect(isPersistedMediaGenerationActive({
+            progressStatus: 'running',
+            reviewStatus: 'candidate',
+            mediaGenerationPhase: 'ready',
+        })).toBe(false)
+    })
+
+    it('settles stale active progress when a completed output Asset is already ready', () => {
+        expect(settleReadyMediaGenerationProgress(state(), 'ready')).toMatchObject({
+            status: 'completed',
+            message: 'Media generation completed.',
+            progress: {
+                completedSteps: 3,
+                totalSteps: 3,
+                message: 'Media generation completed.',
+            },
+        })
+        expect(settleReadyMediaGenerationProgress(state(), 'pending-before-first-frame')).toEqual(state())
     })
 
     it('never mounts accepted terminal history as live canvas progress during Asset hydration', () => {
@@ -213,6 +233,14 @@ describe('media generation progress disclosure', () => {
                 status: 'in-progress',
             },
         ])).toEqual(['completed'])
+        expect(isMediaGenerationOperationSupersededByOutput(
+            { outputNodeId: 'output-1', mediaRunId: 'run-1' },
+            { nodeId: 'output-1', mediaRunId: 'run-1' },
+        )).toBe(true)
+        expect(isMediaGenerationOperationSupersededByOutput(
+            { outputNodeId: 'output-2', mediaRunId: 'run-2' },
+            { nodeId: 'output-1', mediaRunId: 'run-1' },
+        )).toBe(false)
     })
 
     it('renders the reasoning-authored media prompt at the styled timeline selector path', () => {

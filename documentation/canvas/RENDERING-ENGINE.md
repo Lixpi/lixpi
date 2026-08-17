@@ -7,7 +7,7 @@ description: The workspace canvas renderer spine — the DOM interaction shell, 
 
 The workspace canvas is a **DOM interaction shell with PIXI v8 visual layers**. Two renderers cooperate, split by workload rather than by node type:
 
-- **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned AI Chat panel and Sessions surface, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The AI Chat panel can be open with zero tabs; its UI state is persisted in canvas state.
+- **DOM** owns text-rich controls and interaction structure: ProseMirror, the workspace-owned generated-output details panel, the right-side Media Library panel, prompt inputs, bubble menus, resize/drag/selection orchestration, parent-child containment, and handles. The selected generated-output target and panel UI state are persisted in canvas state.
 - **PIXI v8** owns high-volume pixels, connector strokes, and canvas chrome: image pixel rendering, video poster/placeholder rendering, generated-image progress outlines, workspace connector pixels, image-node selection chrome, and marquee/group overlays.
 
 This page covers that split and the machinery that keeps DOM and PIXI in lockstep: the layer stack, the viewport bridge, viewport state ownership, the sync pipeline, render scheduling, and the PIXI initialization contract.

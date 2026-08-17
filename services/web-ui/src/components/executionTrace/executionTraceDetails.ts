@@ -5,8 +5,13 @@ import type {
     ExecutionTraceModelCall,
     ExecutionTraceParam,
 } from '@lixpi/constants'
-import type { TagPillColors, TagPillVariant } from '@lixpi/ui-kit/components/tag-pill'
+import {
+    createTagPill,
+    type TagPillColors,
+    type TagPillVariant,
+} from '@lixpi/ui-kit/components/tag-pill'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
+import { select } from 'd3-selection'
 
 import {
     createCapabilityPromptReferencePreview,
@@ -291,6 +296,7 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     readonly element: HTMLElement
 
     private readonly previewInstances: Array<{ destroy: () => void }> = []
+    private valueTagSequence = 0
 
     constructor(private readonly options: CreateExecutionTraceDetailOptions) {
         const trace = options.trace
@@ -534,6 +540,7 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
                 ${tagValues.map((tagValue, index) => this.renderValueTag(
                     tagValue,
                     getExecutionTraceTagPillColors(tagValue, index),
+                    index,
                 ))}
             </span>
         ` as HTMLElement
@@ -542,16 +549,35 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     private renderValueTag(
         label: string,
         colors: TagPillColors,
+        index: number,
     ): HTMLElement {
         const displayLabel = formatExecutionTraceTagLabel(label)
         const selectedFill = colors.fillActive ?? colors.fill ?? 'transparent'
         const selectedStroke = colors.strokeActive ?? colors.stroke ?? 'transparent'
-        const tagStyle = {
-            background: selectedFill,
-            boxShadow: selectedStroke === 'transparent' ? 'none' : `inset 0 0 0 1px ${selectedStroke}`,
-            color: colors.text ?? colorPalette.nightBlue,
-        }
-        return html`<span className="execution-trace-value-tag" style=${tagStyle} title=${displayLabel}>${displayLabel}</span>` as HTMLElement
+        const tag = html`
+            <svg className="execution-trace-value-tag" title=${displayLabel}></svg>
+        ` as unknown as SVGSVGElement
+        const tagPill = createTagPill(select(tag), {
+            id: `execution-trace-value-tag-${this.valueTagSequence++}`,
+            x: 0,
+            y: 0,
+            height: 18,
+            label: displayLabel,
+            fontSize: 11,
+            fontWeight: 400,
+            horizontalPadding: 6,
+            selected: true,
+            variant: getExecutionTraceTagPillVariant(label, index),
+            colors,
+            className: 'execution-trace-value-tag-pill',
+        })
+        tag.style.setProperty('background', selectedFill, 'important')
+        tag.style.borderRadius = '9px'
+        tag.style.boxShadow = selectedStroke === 'transparent'
+            ? 'none'
+            : `inset 0 0 0 1px ${selectedStroke}`
+        this.previewInstances.push(tagPill)
+        return tag
     }
 
     private renderCollapsibleText(title: string, text: string): HTMLElement {

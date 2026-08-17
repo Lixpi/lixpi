@@ -622,6 +622,103 @@ describe('media generation request terminal settlement', () => {
         })
     })
 
+    it('repairs a synthetic unsettled failure when the provider subsequently reports completion', async () => {
+        const run: MediaGenerationRun = {
+            ...pendingRun(),
+            status: 'failed',
+            problem: {
+                problemVersion: '1',
+                type: 'urn:lixpi:media-problem:media-run-unsettled',
+                title: 'Media generation did not complete',
+                detail: 'The generation workflow ended before this provider run reached a terminal result.',
+                category: 'internal',
+                stage: 'submit',
+                generationRequestId: 'media-request-1',
+                generationRun: 0,
+                supportCode: 'support-1',
+                action: 'none',
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'failed',
+            revision: 2,
+            runs: [run],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).recordRunStatus({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'completed',
+        })
+
+        expect(result).toMatchObject({
+            status: 'completed',
+            revision: 3,
+            runs: [{ status: 'completed' }],
+        })
+        expect(result.runs[0]).not.toHaveProperty('problem')
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({ status: 'completed', revision: 3 }),
+            expectedRevision: 2,
+        })
+        expect(mocks.operationProjection.removeOne).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: request.workspaceId,
+            operationNodeId: run.operationNodeId,
+            generationRequestId: request.generationRequestId,
+            generationRun: run.generationRun,
+        }))
+    })
+
+    it('does not overwrite a real provider failure with a late completion write', async () => {
+        const run: MediaGenerationRun = {
+            ...pendingRun(),
+            status: 'failed',
+            problem: {
+                problemVersion: '1',
+                type: 'urn:lixpi:media-problem:provider-failure',
+                title: 'Provider failed',
+                detail: 'The provider rejected the request.',
+                category: 'provider-output',
+                stage: 'submit',
+                generationRequestId: 'media-request-1',
+                generationRun: 0,
+                supportCode: 'support-2',
+                action: 'edit-request',
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'failed',
+            revision: 2,
+            runs: [run],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+
+        const result = await new MediaGenerationRequestService().recordRunStatus({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'completed',
+        })
+
+        expect(result).toBe(request)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.removeOne).not.toHaveBeenCalled()
+    })
+
     it('ignores late progress and status writes after durable cancellation', async () => {
         const cancelledRequest: MediaGenerationRequest = {
             ...deferredRequest(),

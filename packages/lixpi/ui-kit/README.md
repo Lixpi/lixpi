@@ -18,12 +18,14 @@ Use public package imports:
 import { createProgressTimeline } from '@lixpi/ui-kit/components/progress-timeline'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { createSidePanel } from '@lixpi/ui-kit/components/side-panel'
+import { createBlockCardTilesList } from '@lixpi/ui-kit/components/block-card-tiles-list'
 import { appendSvgPathIcon, xIcon } from '@lixpi/ui-kit/svg'
 ```
 
 ```scss
 @use '@lixpi/ui-kit/styles/progress-timeline';
 @use '@lixpi/ui-kit/styles/side-panel';
+@use '@lixpi/ui-kit/styles/block-card-tiles-list';
 ```
 
 The Web UI calls `configureUiKit(settings)` once during startup so package primitives receive the application-owned runtime values. Defaults keep the package usable in isolation and in component tests.
@@ -39,6 +41,7 @@ The shared animated collapse/expand icon describes the available action: collaps
 - Media model badge
 - Progress timeline
 - Side panel
+- Block card tiles list
 - Sliding switch
 - Sliding tabs switch
 - Tag pill

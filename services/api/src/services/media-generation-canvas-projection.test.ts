@@ -702,6 +702,57 @@ describe('asset canvas projection', () => {
         expect(planned.geometryNodes.map(node => node.nodeId)).toContain(planned.nodeId)
     })
 
+    it('terminally settles active output progress when the final Asset original is attached', () => {
+        const pendingNodeId = getPendingGeneratedMediaNodeId(assignment)
+        const progress = createDefaultMediaGenerationRunProgress(
+            'running',
+            'The provider is generating media.',
+        )
+        const pendingState: CanvasState = {
+            ...emptyCanvasState(),
+            nodes: [{
+                nodeId: pendingNodeId,
+                type: 'image',
+                assetId: assignment.assetId,
+                mediaGenerationPhase: 'pending-before-first-frame',
+                generationProgress: {
+                    generationRequestId: assignment.generationRequestId,
+                    mediaRunId: assignment.mediaRunId,
+                    status: 'running',
+                    message: progress.message,
+                    progress,
+                    updatedAt: 1,
+                },
+                position: { x: 100, y: 100 },
+                dimensions: { width: 800, height: 800 },
+            }],
+            edges: [],
+        }
+
+        const settled = projectGeneratedAssetNode({
+            canvasState: pendingState,
+            assetId: assignment.assetId,
+            kind: 'image',
+            aspectRatio: 1,
+            generationRun: generationRun(),
+            conversationAssetId: 'thread-1',
+            pendingBeforeFirstFrame: false,
+        })
+        const output = settled.canvasState.nodes.find(node => node.nodeId === pendingNodeId)
+
+        expect(output).toMatchObject({
+            mediaGenerationPhase: 'ready',
+            generationProgress: {
+                status: 'completed',
+                message: 'Media generation completed.',
+                progress: {
+                    completedSteps: progress.totalSteps,
+                    message: 'Media generation completed.',
+                },
+            },
+        })
+    })
+
     it('produces identical balanced pending trees regardless of sibling stream arrival order', () => {
         const forward = projectMedia(projectMedia(emptyCanvasState(), 0, true), 1, true)
         const reverse = projectMedia(projectMedia(emptyCanvasState(), 1, true), 0, true)
