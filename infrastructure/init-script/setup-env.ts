@@ -69,6 +69,9 @@ type EnvConfig = {
     // When true, anthropicApiKey is ignored and inference goes through AWS Bedrock.
     anthropicUseAwsBedrockInference: boolean
     googleApiKey: string
+    // Veo person-generation policy profile for the deployment's region. `standard`
+    // is the least restrictive profile Google accepts and is the default.
+    googleVeoPersonGenerationProfile: 'standard' | 'restricted'
     stableDiffusionApiKey: string
     // When true, stableDiffusionApiKey is ignored and inference goes through AWS Bedrock.
     stabilityUseAwsBedrockInference: boolean
@@ -634,6 +637,27 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         return null
     }
 
+    const googleVeoPersonGenerationProfile = await prompts.select({
+        message: 'Veo person-generation profile for your Google region',
+        options: [
+            {
+                value: 'standard',
+                label: 'Standard',
+                hint: 'Least restrictive Google allows: allow_all for text and extension, allow_adult for frame-conditioned',
+            },
+            {
+                value: 'restricted',
+                label: 'Restricted',
+                hint: 'For regions where Google only permits allow_adult',
+            },
+        ],
+        initialValue: 'standard',
+    })
+    if (prompts.isCancel(googleVeoPersonGenerationProfile)) {
+        prompts.cancel('Setup cancelled')
+        return null
+    }
+
     const stabilityUseAwsBedrockInference = await prompts.confirm({
         message: 'Run Stability image generation through AWS Bedrock (uses your AWS SSO profile instead of an API key)?',
         initialValue: false,
@@ -717,6 +741,7 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         anthropicApiKey: (anthropicApiKey as string) || '',
         anthropicUseAwsBedrockInference: anthropicUseAwsBedrockInference as boolean,
         googleApiKey: (googleApiKey as string) || '',
+        googleVeoPersonGenerationProfile: googleVeoPersonGenerationProfile as 'standard' | 'restricted',
         stableDiffusionApiKey: (stableDiffusionApiKey as string) || '',
         stabilityUseAwsBedrockInference: stabilityUseAwsBedrockInference as boolean,
         arkApiKey: (arkApiKey as string) || '',
@@ -771,6 +796,7 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{ANTHROPIC_API_KEY}}': config.anthropicApiKey,
         '{{ANTHROPIC_USE_AWS_BEDROCK_INFERENCE}}': String(config.anthropicUseAwsBedrockInference),
         '{{GOOGLE_API_KEY}}': config.googleApiKey,
+        '{{GOOGLE_VEO_PERSON_GENERATION_PROFILE}}': config.googleVeoPersonGenerationProfile,
         '{{STABLE_DIFFUSION_API_KEY}}': config.stableDiffusionApiKey,
         '{{STABILITY_USE_AWS_BEDROCK_INFERENCE}}': String(config.stabilityUseAwsBedrockInference),
         '{{ARK_API_KEY}}': config.arkApiKey,
@@ -931,6 +957,7 @@ async function main(): Promise<void> {
             openaiApiKey: '',
             anthropicApiKey: '',
             googleApiKey: '',
+            googleVeoPersonGenerationProfile: 'standard',
             stableDiffusionApiKey: '',
             arkApiKey: '',
             stripePublicKey: '',

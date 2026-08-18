@@ -629,6 +629,48 @@ describe('resolveWorkspaceContext', () => {
         expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-travel-notes'], 'content')
     })
 
+    it('aliases Asset display names in expanded Artifact context when media bindings are active', async () => {
+        const { deps } = createDeps({ selections: [] })
+        const bindings = [{
+            assetId: 'asset-shelby',
+            assetRevision: 1,
+            mediaKind: 'image' as const,
+            alias: 'REFERENCE_1' as const,
+            displayNameSnapshot: 'Shelby',
+            forbiddenNameVariants: ['Shelby'],
+            semanticDescriptor: 'a portrait',
+            depictionMedium: 'photograph' as const,
+            subjectIdentity: {
+                classification: 'no-person' as const,
+                source: 'automatic-lineage' as const,
+                providerVerifications: [],
+            },
+        }]
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: [{
+                    nodeId: 'timeline-node',
+                    type: 'capabilityArtifact',
+                    artifactTypeId: 'action-timeline',
+                    assetId: 'asset-timeline',
+                    title: 'Travel Timeline',
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+            mediaBranchCandidateSnapshot: undefined,
+            imageModelVersion: undefined,
+            videoModelVersion: undefined,
+            mediaReferenceBindings: bindings,
+        }), deps)
+        const textBlocks = getInputTextBlocks(update)
+
+        expect(textBlocks.some(text => text.includes('REFERENCE_1'))).toBe(true)
+        expect(textBlocks.some(text => text.includes('Shelby'))).toBe(false)
+    })
+
     it('fails closed when an explicitly selected Action Timeline is unavailable', async () => {
         const { deps, callLlm, publisher } = createDeps({ selections: [] })
         deps.getAsset = vi.fn(async () => ({ error: 'ASSET_NOT_FOUND' })) as any

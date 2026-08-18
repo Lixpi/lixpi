@@ -52,6 +52,7 @@ const {
     NATS_AUTH_XKEY_ISSUER_SEED,
     NATS_AUTH_XKEY_ISSUER_PUBLIC,
     GOOGLE_API_KEY,
+    GOOGLE_VEO_PERSON_GENERATION_PROFILE,
     STABLE_DIFFUSION_API_KEY,
     STABILITY_USE_AWS_BEDROCK_INFERENCE,
     ARK_API_KEY,
@@ -363,6 +364,9 @@ export const createInfrastructure = async () => {
             ANTHROPIC_API_KEY: ANTHROPIC_API_KEY ?? '',
             ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ANTHROPIC_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             GOOGLE_API_KEY: GOOGLE_API_KEY ?? '',
+            // Veo person-generation policy profile for the deployment region. The Google
+            // media profile fails every Veo run when it is unset, so it is not defaulted.
+            GOOGLE_VEO_PERSON_GENERATION_PROFILE: GOOGLE_VEO_PERSON_GENERATION_PROFILE ?? '',
             STABLE_DIFFUSION_API_KEY: STABLE_DIFFUSION_API_KEY ?? '',
             STABILITY_USE_AWS_BEDROCK_INFERENCE: STABILITY_USE_AWS_BEDROCK_INFERENCE ?? 'false',
             // BytePlus ModelArk (Seedance video). Accept either env name and emit the

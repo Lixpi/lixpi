@@ -76,6 +76,7 @@ export type MainApiServiceArgs = {
         ANTHROPIC_API_KEY: string
         ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: string
         GOOGLE_API_KEY: string
+        GOOGLE_VEO_PERSON_GENERATION_PROFILE: string
         STABLE_DIFFUSION_API_KEY: string
         STABILITY_USE_AWS_BEDROCK_INFERENCE: string
         ARK_API_KEY: string

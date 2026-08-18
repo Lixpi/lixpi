@@ -6,12 +6,14 @@ import {
     getAiInteractionResponseSubject,
     NATS_SUBJECTS,
 } from '@lixpi/constants'
+import { buildActionTimelineDocument } from '@lixpi/capability-system'
 import { MediaBranchAmbiguityError } from '../../llm/graph/media-branch-resolver.ts'
 
 const mocks = vi.hoisted(() => ({
     nats: {
         getInstance: vi.fn(),
         publish: vi.fn(),
+        getObject: vi.fn(),
     },
     aiModel: {
         getAiModel: vi.fn(),
@@ -54,6 +56,9 @@ const mocks = vi.hoisted(() => ({
     capabilities: {
         resolve: vi.fn(),
     },
+    blob: {
+        get: vi.fn(),
+    },
     llmModule: {
         process: vi.fn(),
         processMediaGenerationMatrix: vi.fn(),
@@ -79,7 +84,7 @@ vi.mock('@lixpi/nats-service', () => ({
     default: {
         getInstance: () => {
             mocks.nats.getInstance()
-            return { publish: mocks.nats.publish }
+            return { publish: mocks.nats.publish, getObject: mocks.nats.getObject }
         },
     },
 }))
@@ -99,7 +104,7 @@ vi.mock('../../services/media-generation-request-service.ts', () => ({
         pauseForBranchResolution = mocks.mediaRequestService.pauseForBranchResolution
     },
 }))
-vi.mock('../../models/blob.ts', () => ({ default: {} }))
+vi.mock('../../models/blob.ts', () => ({ default: mocks.blob }))
 vi.mock('../../services/asset-requester-context.ts', () => ({ getAssetRequesterContext: mocks.requesterContext.get }))
 vi.mock('../../services/asset-document-service.ts', () => ({ default: mocks.assetDocumentService }))
 vi.mock('../../services/ai-interaction-event-relay.ts', () => ({ ensureAiInteractionEventRelay: mocks.eventRelay.ensure }))
@@ -186,6 +191,85 @@ const actionTimelineInputSchema = new TextEncoder().encode(JSON.stringify({
     },
 }))
 
+const actionTimelineArtifactAsset = {
+    assetId: 'timeline-1',
+    organizationId: 'org-1',
+    title: 'Night encounter shot plan',
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    states: { lifecycle: 'active' },
+    documents: { capabilityArtifact: { docId: 'artifact-doc-1' } },
+    artifact: { artifactTypeId: 'action-timeline' },
+    createdAt: 1,
+}
+
+const actionTimelineCitedImageAsset = {
+    assetId: 'timeline-image-1',
+    organizationId: 'org-1',
+    title: 'Night encounter first frame',
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    states: { lifecycle: 'active' },
+    documents: {},
+    subjectIdentity: { classification: 'no-person', source: 'automatic-lineage', providerVerifications: [] },
+    media: {
+        kind: 'image',
+        renditions: { canonical: { status: 'ready', blobHash: 'hash-1', mimeType: 'image/png' } },
+    },
+    createdAt: 1,
+}
+
+const actionTimelineArtifactDoc = buildActionTimelineDocument(
+    { durationMs: 2000, precisionMs: 1000 },
+    [
+        { slotIndex: 0, runs: [{ assetId: 'timeline-image-1' }, { text: ' opens the alley beat.' }] },
+        { slotIndex: 1, runs: [{ text: 'They walk deeper into the alley.' }] },
+    ],
+    new Map([['timeline-image-1', { mediaKind: 'image' as const, displayName: 'Night encounter first frame' }]]),
+)
+
+// Conversation where the user cites an existing Action Timeline Artifact and asks
+// for media from it. The Artifact chip carries a title that reads like a request
+// to create a timeline, which is exactly what must not route to the timeline tool.
+const useReferencedActionTimelineConversation = (promptText: string): void => {
+    mocks.assetDocumentService.loadCurrentSnapshot.mockImplementation(async (_asset: unknown, documentKind: string) => (
+        documentKind === 'capabilityArtifact'
+            ? { doc: actionTimelineArtifactDoc, version: 2 }
+            : {
+                doc: {
+                    ...conversationDoc,
+                    content: [{
+                        ...conversationDoc.content[0],
+                        content: [{
+                            type: 'aiUserMessage',
+                            content: [{
+                                type: 'paragraph',
+                                content: [
+                                    { type: 'text', text: promptText },
+                                    {
+                                        type: 'prompt_reference',
+                                        attrs: {
+                                            referenceType: 'capability-artifact',
+                                            artifactTypeId: 'action-timeline',
+                                            assetId: 'timeline-1',
+                                            displayName: 'Night encounter shot plan',
+                                        },
+                                    },
+                                ],
+                            }],
+                        }],
+                    }],
+                },
+                version: 5,
+            }
+    ))
+    mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) => {
+        if (assetId === 'timeline-1') return actionTimelineArtifactAsset
+        if (assetId === 'timeline-image-1') return actionTimelineCitedImageAsset
+        return conversationAsset
+    })
+}
+
 const makeModule = () => ({
     process: mocks.llmModule.process,
     processMediaGenerationMatrix: mocks.llmModule.processMediaGenerationMatrix,
@@ -231,6 +315,8 @@ describe('AI interaction message routing', () => {
             updatedAt: 1,
         }))
         mocks.mediaRequestService.cancelCurrent.mockResolvedValue({ status: 'cancelled' })
+        mocks.blob.get.mockResolvedValue({ bucketName: 'blobs', objectKey: 'object-1' })
+        mocks.nats.getObject.mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]))
         mocks.pipelineEventLog.replayPipelineEvents.mockResolvedValue({
             streamName: 'PIPELINE_EVENTS_workspace-1',
             subject: `${SUBJECTS.CHAT_PIPELINE_EVENTS}.workspace-1.conv-1`,
@@ -287,6 +373,57 @@ describe('AI interaction message routing', () => {
                 requestRevision: 1,
             }),
         )
+    })
+
+    it('generates video from a referenced Action Timeline Artifact instead of routing to timeline creation', async () => {
+        useReferencedActionTimelineConversation('Generate a video following ')
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            messages: [{ role: 'user', content: 'Generate a video following Night encounter shot plan' }],
+            mediaGenerationRequest: {
+                generationRequestId: 'request-timeline-1',
+                reasoningModelIds: ['openai:gpt-4'],
+                imageModelIds: ['google:imagen3'],
+                videoModelIds: ['openai:gpt-4o-video'],
+            },
+        })
+        await flushPromises()
+
+        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
+            capabilityInputs: {},
+            capabilityReferences: [],
+            mediaGenerationRequest: expect.objectContaining({
+                imageModelIds: [],
+                videoModelIds: ['openai:gpt-4o-video'],
+            }),
+            mediaReferenceBindings: expect.arrayContaining([
+                expect.objectContaining({ assetId: 'timeline-image-1' }),
+            ]),
+        }))
+    })
+
+    it('keeps the timeline creation route off when the prompt itself names a shot plan it references', async () => {
+        useReferencedActionTimelineConversation('Generate a video from this shot plan ')
+
+        await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
+            ...baseMessageData,
+            messages: [{ role: 'user', content: 'Generate a video from this shot plan Night encounter shot plan' }],
+            mediaGenerationRequest: {
+                generationRequestId: 'request-timeline-2',
+                reasoningModelIds: ['openai:gpt-4'],
+                imageModelIds: [],
+                videoModelIds: ['openai:gpt-4o-video'],
+            },
+        })
+        await flushPromises()
+
+        expect(mocks.llmModule.processMediaGenerationMatrix).toHaveBeenCalledWith(expect.objectContaining({
+            capabilityInputs: {},
+            mediaGenerationRequest: expect.objectContaining({
+                videoModelIds: ['openai:gpt-4o-video'],
+            }),
+        }))
     })
 
     it('skips ai model lookup entirely when media generation request path is taken', async () => {
