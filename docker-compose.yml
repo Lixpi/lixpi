@@ -604,10 +604,14 @@ services:
         environment:
             NATS_SERVERS: "nats://lixpi-nats-1:4222,nats://lixpi-nats-2:4222,nats://lixpi-nats-3:4222"
             NATS_PRICING_SERVICE_NKEY_SEED: ${NATS_PRICING_SERVICE_NKEY_SEED}
-            MODEL_PRICING_SNAPSHOTS_TABLE: ${MODEL_PRICING_SNAPSHOTS_TABLE:-}
-            MODEL_PRICING_RECORDS_TABLE: ${MODEL_PRICING_RECORDS_TABLE:-}
-            MODEL_PRICING_AUDIT_TABLE: ${MODEL_PRICING_AUDIT_TABLE:-}
-            MODEL_PRICING_RECONCILIATION_TABLE: ${MODEL_PRICING_RECONCILIATION_TABLE:-}
+            MODEL_PRICING_SNAPSHOTS_TABLE: Model-Pricing-Snapshots-${ORG_NAME}-${STAGE}
+            MODEL_PRICING_RECORDS_TABLE: Model-Pricing-Records-${ORG_NAME}-${STAGE}
+            MODEL_PRICING_AUDIT_TABLE: Model-Pricing-Audit-${ORG_NAME}-${STAGE}
+            MODEL_PRICING_RECONCILIATION_TABLE: Model-Pricing-Reconciliation-${ORG_NAME}-${STAGE}
+            AI_MODELS_LIST_TABLE_NAME: AI-Models-List-${ORG_NAME}-${STAGE}
+            AWS_REGION: ${AWS_REGION:-}
+            DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT:-}
+            MODEL_PRICING_IMPORT_INTERVAL_MS: ${MODEL_PRICING_IMPORT_INTERVAL_MS:-21600000}
         volumes:
             - ./services/model-pricing/src:/usr/src/service/src:cached
             - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
@@ -615,6 +619,8 @@ services:
             - ./packages/lixpi/constants/ts:/usr/src/service/packages/lixpi/constants/ts:ro,cached
             - ./packages/lixpi/debug-tools/ts:/usr/src/service/packages/lixpi/debug-tools/ts:ro,cached
             - ./packages/lixpi/nats-service/ts:/usr/src/service/packages/lixpi/nats-service/ts:ro,cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
         networks:
             - nats
         working_dir: /usr/src/service

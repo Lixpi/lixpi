@@ -22,6 +22,7 @@ export type ModelPricingServiceArgs = {
     vpc: aws.ec2.Vpc
     privateSubnets: aws.ec2.Subnet[]
     tables: Record<string, aws.dynamodb.Table>
+    aiModelsListTable: aws.dynamodb.Table
     environment: Record<string, pulumi.Input<string>>
     pricingServiceNkeySeed: pulumi.Input<string>
     dockerBuildContext: string
@@ -35,6 +36,7 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         vpc,
         privateSubnets,
         tables,
+        aiModelsListTable,
         environment,
         pricingServiceNkeySeed,
         dockerBuildContext,
@@ -86,20 +88,27 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
     })
 
     const dynamoPolicy = new aws.iam.Policy(`${serviceName}-dynamo-policy`, {
-        policy: pulumi.all(Object.values(tables).map(table => table.arn)).apply(tableArns => JSON.stringify({
+        policy: pulumi.all([pulumi.all(Object.values(tables).map(table => table.arn)), aiModelsListTable.arn]).apply(([pricingTableArns, catalogTableArn]) => JSON.stringify({
             Version: '2012-10-17',
-            Statement: [{
-                Effect: 'Allow',
-                Action: [
-                    'dynamodb:GetItem',
-                    'dynamodb:Query',
-                    'dynamodb:PutItem',
-                    'dynamodb:UpdateItem',
-                    'dynamodb:TransactWriteItems',
-                    'dynamodb:DescribeTable',
-                ],
-                Resource: tableArns,
-            }],
+            Statement: [
+                {
+                    Effect: 'Allow',
+                    Action: [
+                        'dynamodb:GetItem',
+                        'dynamodb:Query',
+                        'dynamodb:PutItem',
+                        'dynamodb:UpdateItem',
+                        'dynamodb:TransactWriteItems',
+                        'dynamodb:DescribeTable',
+                    ],
+                    Resource: pricingTableArns,
+                },
+                {
+                    Effect: 'Allow',
+                    Action: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan', 'dynamodb:DescribeTable'],
+                    Resource: catalogTableArn,
+                },
+            ],
         })),
     })
 

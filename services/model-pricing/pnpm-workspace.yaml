@@ -1,4 +1,5 @@
 packages:
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"
+  - "packages/lixpi/dynamodb-service"
   - "packages/lixpi/nats-service/ts"

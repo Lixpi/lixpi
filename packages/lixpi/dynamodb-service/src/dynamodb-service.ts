@@ -162,7 +162,8 @@ export default class DynamoDBService {
         tableName = '',
         key = {},
         consistentRead = false,
-        origin = 'unknown'
+        origin = 'unknown',
+        throwOnError = false
     }) {
         if (!tableName || Object.keys(key).length === 0) {
             console.error(`Error: Table name and key must be provided!, origin: ${origin}`)
@@ -188,6 +189,7 @@ export default class DynamoDBService {
             return response.Item
         } catch (error) {
             console.error(`Error fetching record from DynamoDB ${tableName} table:`, error)
+            if (throwOnError) throw error
         }
     }
 
@@ -483,7 +485,8 @@ export default class DynamoDBService {
     async putItem({
         tableName = '',
         item = {},
-        origin = 'unknown'
+        origin = 'unknown',
+        throwOnError = false,
     }) {
         try {
             const response = await this.dynamodbDocumentClient.send(new PutCommand({
@@ -503,6 +506,7 @@ export default class DynamoDBService {
             return response
         } catch (error) {
             console.error(`Error inserting record to DynamoDB ${tableName} table:`, error)
+            if (throwOnError) throw error
         }
     }
 

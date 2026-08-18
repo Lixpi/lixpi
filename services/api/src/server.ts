@@ -201,7 +201,7 @@ const pricingIdentityConfigs = [
     {
         environmentKey: 'NATS_PRICING_SERVICE_NKEY_PUBLIC',
         userId: 'svc:model-pricing',
-        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
+        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>', 'aiModels.syncCompleted'] } },
     },
     {
         environmentKey: 'NATS_PRICING_OPERATOR_NKEY_PUBLIC',
