@@ -4,6 +4,7 @@ import {
     Graphics,
     Sprite,
     Texture,
+    type RenderTexture,
 } from 'pixi.js'
 import RBush from 'rbush'
 import type {
@@ -171,6 +172,10 @@ type PixiMediaDebugWindow = typeof window & {
     // Set to true, or set localStorage `lixpi.debug.pixiMedia` to `1`, for
     // verbose event payloads and console streaming. The dump exists regardless.
     __lixpiPixiMediaDebug?: boolean
+    // Set to true, or set localStorage `lixpi.debug.pixiMediaEvents` to `1`, to
+    // record the in-memory event log without console streaming. Collection is
+    // off by default because recording an event forces a layout.
+    __lixpiPixiMediaDebugCollect?: boolean
     __lixpiPixiMediaDebugEvents?: PixiMediaDebugEvent[]
     __lixpiGpuBufferDestroyDebugInstalled?: boolean
     __lixpiGpuBufferDestroyDebugVersion?: number
@@ -289,6 +294,15 @@ const PIXI_MEDIA_DEBUG_BUFFER_LIMIT = 2500
 const PIXI_GPU_BUFFER_DESTROY_DEFER_FRAMES = 4
 const PIXI_GPU_BUFFER_DESTROY_DEBUG_VERSION = 2
 
+// Resolved screen-fixed chrome element whose glass border is drawn by the
+// media layer, cached with its last measured corner radius.
+type ScreenGlassBorderTarget = {
+    id: string
+    element: HTMLElement
+    radiusKey: string
+    radius: number
+}
+
 // Schedule a low-priority callback. requestIdleCallback is the right tool;
 // fall back to setTimeout on browsers that lack it (Safari before ~16.4).
 const scheduleIdle: (cb: () => void, timeout?: number) => void = (() => {
@@ -380,6 +394,17 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let renderRaf: number | null = null
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
+    let screenGlassBorderTargets: ScreenGlassBorderTarget[] | null = null
+    let screenGlassBorderRects: PixiGlassBorderDatum[] = []
+    let stageCaptureDirty = true
+    let lastCaptureTexture: RenderTexture | null = null
+    let lastCaptureKey = ''
+    // Debug event collection is opt-in and read once. Every collected event
+    // reads the pane rect, snapshots cache state, and allocates a record, so
+    // leaving collection on made the per-frame render path force a layout
+    // several times per animation frame. Set `lixpi.debug.pixiMedia` in
+    // localStorage (or `window.__lixpiPixiMediaDebug`) before load to enable.
+    const debugCollectionEnabled = isPixiMediaDebugCollectionEnabled()
     const inProgressOutlineAnimation = settings.mediaNode.inProgressOutlineAnimation
     const inProgressOutlineAnimationStyles = inProgressOutlineAnimation.styles
     const inProgressOutlineZoomScaling = getAdaptiveBoundedZoomScalingOptions(inProgressOutlineAnimation.zoomScaling ?? { minZoom: 0.4 })
@@ -400,7 +425,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             durationMs: inProgressOutlineAnimation.animationDurationMs,
         },
         getStrokeScale: () => scaleCanvasChromeWorldSizeForZoom(1, currentViewport.zoom, inProgressOutlineZoomScaling),
-        onFrame: scheduleRender,
+        onFrame: scheduleAnimationRender,
     })
     const glassBorderRenderer = new PixiGlassBorderRenderer({
         container: screenGlassLayer,
@@ -598,15 +623,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                     framesRemaining: PIXI_GPU_BUFFER_DESTROY_DEFER_FRAMES,
                 })
             }
-            host.__lixpiGpuBufferDestroyEvents ??= []
-            host.__lixpiGpuBufferDestroyEvents.push({
-                t: typeof performance === 'undefined' ? Date.now() : performance.now(),
-                stack: new Error().stack,
-                deferred: !alreadyQueued,
-                queueLength: queue.length,
-            })
-            while (host.__lixpiGpuBufferDestroyEvents.length > PIXI_MEDIA_DEBUG_BUFFER_LIMIT) {
-                host.__lixpiGpuBufferDestroyEvents.shift()
+            // Capturing a stack per destroy is the single most expensive part of
+            // this wrapper and Pixi destroys buffers constantly, so the event log
+            // is gated. The deferral itself is functional and always runs.
+            if (debugCollectionEnabled) {
+                host.__lixpiGpuBufferDestroyEvents ??= []
+                host.__lixpiGpuBufferDestroyEvents.push({
+                    t: typeof performance === 'undefined' ? Date.now() : performance.now(),
+                    stack: new Error().stack,
+                    deferred: !alreadyQueued,
+                    queueLength: queue.length,
+                })
+                while (host.__lixpiGpuBufferDestroyEvents.length > PIXI_MEDIA_DEBUG_BUFFER_LIMIT) {
+                    host.__lixpiGpuBufferDestroyEvents.shift()
+                }
             }
             scheduleDeferredGpuBufferDestroys(host)
         }
@@ -656,6 +686,22 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         })
     }
 
+    // Resolved once at layer creation so the hot path never touches
+    // localStorage. Verbose logging implies collection; the separate collect
+    // flag turns the in-memory event log on without console spam. Enabling
+    // either requires a page reload.
+    function isPixiMediaDebugCollectionEnabled(): boolean {
+        const host = getDebugHost()
+        if (!host) return false
+        if (isVerboseDebugEnabled(host)) return true
+        try {
+            return host.__lixpiPixiMediaDebugCollect === true
+                || window.localStorage.getItem('lixpi.debug.pixiMediaEvents') === '1'
+        } catch {
+            return host.__lixpiPixiMediaDebugCollect === true
+        }
+    }
+
     // Runtime switch for verbose event payloads and console streaming. The dump
     // is always installed; this flag only turns on expensive live forensics.
     function isVerboseDebugEnabled(host: PixiMediaDebugWindow): boolean {
@@ -675,6 +721,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // session from retaining unbounded debug state while still preserving the
     // recent path into a failure.
     function debugLog(event: string, details: PixiMediaDebugDetails = {}): void {
+        if (!debugCollectionEnabled) return
         const host = getDebugHost()
         if (!host) return
         host.__lixpiPixiMediaDebugEvents ??= []
@@ -1036,7 +1083,25 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
+    // Any caller other than the traveling-outline animation may have changed
+    // what sits beneath the screen glass, so it invalidates the refraction
+    // capture. Animation-only frames use `scheduleAnimationRender`.
     function scheduleRender(): void {
+        stageCaptureDirty = true
+        scheduleRenderFrame()
+    }
+
+    // Drives frames for the traveling outline. The outline lives in the world
+    // layer and is almost never under the screen-fixed chrome, so re-capturing
+    // the whole stage into a full-viewport render texture 60 times a second
+    // just to refract it is pure waste. The capture is only re-taken when an
+    // animating outline actually overlaps a glass panel.
+    function scheduleAnimationRender(): void {
+        if (!stageCaptureDirty && animatingOutlinesOverlapScreenGlass()) stageCaptureDirty = true
+        scheduleRenderFrame()
+    }
+
+    function scheduleRenderFrame(): void {
         if (destroyed || health !== 'ready') {
             debugLog('render-schedule-skipped', {
                 destroyed,
@@ -1061,6 +1126,7 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     function renderNow(): void {
+        stageCaptureDirty = true
         if (destroyed || health !== 'ready') {
             debugLog('render-now-skipped', {
                 destroyed,
@@ -1083,7 +1149,19 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }))
         syncScreenGlassBorders()
         const captureTexture = glassBorderRenderer.getCaptureTexture()
-        if (captureTexture) {
+        // A freshly created or resized render texture holds no usable capture,
+        // so it always needs one regardless of the dirty flag. The renderer
+        // resizes in place, so the size is compared alongside the identity.
+        const captureKey = captureTexture
+            ? `${captureTexture.width}x${captureTexture.height}@${captureTexture.source?.resolution ?? 1}`
+            : ''
+        if (captureTexture !== lastCaptureTexture || captureKey !== lastCaptureKey) {
+            lastCaptureTexture = captureTexture
+            lastCaptureKey = captureKey
+            stageCaptureDirty = true
+        }
+        if (captureTexture && stageCaptureDirty) {
+            stageCaptureDirty = false
             // Capture the stage with the glass layer hidden. If the layer stayed
             // visible, the next frame would sample and distort the previous
             // glass result, causing feedback and stale-resource pressure.
@@ -1112,7 +1190,41 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     // because the composer/action panels are screen-fixed DOM controls, not
     // world-space canvas nodes.
     function syncScreenGlassBorders(): void {
-        glassBorderRenderer.sync(getScreenGlassBorderDatums(), getPaneViewportSize())
+        screenGlassBorderRects = getScreenGlassBorderDatums()
+        glassBorderRenderer.sync(screenGlassBorderRects, getPaneViewportSize())
+    }
+
+    // True when an animating outline currently sits under a glass panel, which
+    // is the only case where an animation-only frame must re-capture the stage
+    // for the refraction to stay live.
+    function animatingOutlinesOverlapScreenGlass(): boolean {
+        if (screenGlassBorderRects.length === 0 || generatingImageNodeOutlines.size === 0) return false
+
+        const nodesById = lastState ? buildNodesById(lastState.nodes) : new Map()
+        const zoom = currentViewport.zoom || 1
+        for (const nodeId of generatingImageNodeOutlines.keys()) {
+            const node = nodesById.get(nodeId)
+            if (!node) continue
+            const worldPosition = computeWorldPosition(node, nodesById)
+            // Pad by the outline's outward reach so a snake travelling just
+            // outside the node box still counts as overlapping.
+            const padding = (inProgressOutlineAnimation.gap ?? 0) + inProgressOutlineAnimation.snakeWidth
+            const left = worldPosition.x * zoom + currentViewport.x - padding
+            const top = worldPosition.y * zoom + currentViewport.y - padding
+            const right = left + node.dimensions.width * zoom + padding * 2
+            const bottom = top + node.dimensions.height * zoom + padding * 2
+            for (const glass of screenGlassBorderRects) {
+                if (
+                    left < glass.x + glass.width
+                    && right > glass.x
+                    && top < glass.y + glass.height
+                    && bottom > glass.y
+                ) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     // Prefer client dimensions because the Pixi canvas is resized to the pane.
@@ -1140,8 +1252,40 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         if (!glassBorder.enabled) return []
 
         const paneRect = paneEl.getBoundingClientRect()
+        const targets = getScreenGlassBorderTargets()
+        const datums: PixiGlassBorderDatum[] = []
+
+        for (const target of targets) {
+            if (!target.element.isConnected) {
+                screenGlassBorderTargets = null
+                continue
+            }
+            const rect = target.element.getBoundingClientRect()
+            if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) continue
+            // Renderer coordinates are pane-local screen pixels. That keeps the
+            // glass fixed to the DOM chrome while the world pans/zooms below it.
+            datums.push({
+                id: target.id,
+                x: rect.left - paneRect.left,
+                y: rect.top - paneRect.top,
+                width: rect.width,
+                height: rect.height,
+                radius: getCachedElementBorderRadius(target, rect.width, rect.height),
+                visible: true,
+            })
+        }
+
+        return datums
+    }
+
+    // Chrome elements are stable for the life of the pane, so the selector walk
+    // is cached. Resolving three selectors on every rendered frame showed up as
+    // steady main-thread cost while the traveling outline animated.
+    function getScreenGlassBorderTargets(): ScreenGlassBorderTarget[] {
+        if (screenGlassBorderTargets) return screenGlassBorderTargets
+
         const rootEl = paneEl.closest<HTMLElement>('.workspace-canvas')
-        const targets: { id: string; element: HTMLElement | null | undefined }[] = [
+        const candidates: { id: string; element: HTMLElement | null | undefined }[] = [
             {
                 id: 'workspace-action-panel-left',
                 element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-left'),
@@ -1155,26 +1299,27 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-right'),
             },
         ]
-        const datums: PixiGlassBorderDatum[] = []
-
-        for (const target of targets) {
-            if (!target.element) continue
-            const rect = target.element.getBoundingClientRect()
-            if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) continue
-            // Renderer coordinates are pane-local screen pixels. That keeps the
-            // glass fixed to the DOM chrome while the world pans/zooms below it.
-            datums.push({
-                id: target.id,
-                x: rect.left - paneRect.left,
-                y: rect.top - paneRect.top,
-                width: rect.width,
-                height: rect.height,
-                radius: getElementBorderRadius(target.element, rect.width, rect.height),
-                visible: true,
-            })
+        const targets: ScreenGlassBorderTarget[] = []
+        for (const candidate of candidates) {
+            if (!candidate.element) continue
+            targets.push({ id: candidate.id, element: candidate.element, radiusKey: '', radius: 0 })
         }
+        // Only cache once the chrome has actually mounted, otherwise an early
+        // render would pin an empty target list for the session.
+        if (targets.length === candidates.length) screenGlassBorderTargets = targets
+        return targets
+    }
 
-        return datums
+    // `getComputedStyle` forces a style recalc, and the border radius only
+    // changes when the element is resized, so the resolved value is memoized
+    // against the measured box.
+    function getCachedElementBorderRadius(target: ScreenGlassBorderTarget, width: number, height: number): number {
+        const radiusKey = `${width}x${height}`
+        if (target.radiusKey !== radiusKey) {
+            target.radius = getElementBorderRadius(target.element, width, height)
+            target.radiusKey = radiusKey
+        }
+        return target.radius
     }
 
     // Use the largest corner radius so a pill-shaped composer and circular

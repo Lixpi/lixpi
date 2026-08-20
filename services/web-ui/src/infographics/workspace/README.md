@@ -298,7 +298,13 @@ copy(JSON.stringify(window.__lixpiPixiMediaDebugDump?.(), null, 2))
 
 The dump contains the workspace id, renderer health, viewport, pane dimensions, cache counters, one snapshot per PIXI image entry, recent compact media-layer events, and native `GPUBuffer.destroy()` stack traces. URLs are sanitized so object-store auth tokens are not pasted into bug reports.
 
-For verbose event payloads and live console streaming while reproducing a flaky case:
+Event collection is opt-in. Recording an event reads the pane rect and snapshots cache state, which forces a layout several times per rendered frame, so `events` and `gpuBufferDestroys` are empty unless collection was enabled before the layer was created. The dump's live sections (health, viewport, cache, entries) always work. Enable collection without console noise, then reload:
+
+```js
+localStorage.setItem('lixpi.debug.pixiMediaEvents', '1')
+```
+
+For verbose event payloads and live console streaming while reproducing a flaky case (this implies collection):
 
 ```js
 localStorage.setItem('lixpi.debug.pixiMedia', '1')
@@ -602,6 +608,6 @@ During surface resizing, the gradient canvas keeps the existing bitmap visible w
 The thread node gradient and the bottom-center composer gradient are controlled by feature flags in `settings.ts`:
 
 - `settings.aiPromptInput.useShiftingGradientBackground` — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
-- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet.
+- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet. The capture is a second full-stage render, so it is only re-taken when something beneath the glass actually changed. Frames driven purely by the traveling outline animation reuse the previous capture unless an animating outline overlaps a glass panel.
 
 For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).
