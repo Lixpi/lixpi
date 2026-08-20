@@ -10,6 +10,7 @@ import {
     isMediaGenerationOperationSupersededByOutput,
     resolveBranchMarkerMediaRequestStatuses,
     resolveBranchMarkerGlobalProgressStatuses,
+    resolveMediaGenerationHistoryProgress,
     settleReadyMediaGenerationProgress,
     settleBranchMarkerProgressStatusForTerminalMedia,
     shouldRenderLiveMediaGenerationProgress,
@@ -103,6 +104,50 @@ describe('media generation progress disclosure', () => {
             },
         })
         expect(settleReadyMediaGenerationProgress(state(), 'pending-before-first-frame')).toEqual(state())
+    })
+
+    it('keeps sealed history after refresh instead of replacing it with terminal canvas state', () => {
+        const projectedState = {
+            ...state(),
+            status: 'completed' as const,
+            progress: {
+                ...state().progress,
+                items: [
+                    { id: 'lineage:understand-request', title: 'Understand request', status: 'completed' as const },
+                    { id: 'provider', title: 'Prepare provider run', status: 'completed' as const },
+                ],
+            },
+        }
+        const staleCanvasState = {
+            ...state(),
+            status: 'failed' as const,
+            progress: {
+                ...state().progress,
+                items: [{ id: 'generation', title: 'Generate media', status: 'failed' as const }],
+            },
+        }
+
+        expect(resolveMediaGenerationHistoryProgress({
+            projectedState,
+            liveState: staleCanvasState,
+            matchesLiveTarget: true,
+        })).toBe(projectedState)
+    })
+
+    it('streams active canvas progress into the open sealed-history renderer', () => {
+        const projectedState = { ...state(), status: 'completed' as const }
+        const liveState = state()
+
+        expect(resolveMediaGenerationHistoryProgress({
+            projectedState,
+            liveState,
+            matchesLiveTarget: true,
+        })).toBe(liveState)
+        expect(resolveMediaGenerationHistoryProgress({
+            projectedState,
+            liveState,
+            matchesLiveTarget: false,
+        })).toBe(projectedState)
     })
 
     it('never mounts accepted terminal history as live canvas progress during Asset hydration', () => {

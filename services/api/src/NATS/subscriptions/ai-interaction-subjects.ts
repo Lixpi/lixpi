@@ -41,6 +41,7 @@ import {
     type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
+    ACTION_TIMELINE_ARTIFACT_TYPE_ID,
     ACTION_TIMELINE_TOOL_ID,
     resolveCharacterCreatorRouting,
     restrictMediaRequestToCharacterImages,
@@ -48,6 +49,7 @@ import {
 import {
     resolveCapabilities,
     validateJsonSchemaValue,
+    type CapabilityModuleRoute,
 } from '@lixpi/capability-system/backend'
 import {
     getMediaGenerationOperationNodeId,
@@ -96,7 +98,10 @@ import {
     formatProviderSafeReferenceContext,
 } from '../../llm/media-reference/provider-safe-context.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
-import { resolveScalarMediaModelSelection } from '../../llm/orchestration/scalar-media-output-routing.ts'
+import {
+    resolveScalarMediaModelSelection,
+    restrictMediaRequestToExplicitVideoOutput,
+} from '../../llm/orchestration/scalar-media-output-routing.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {
@@ -216,6 +221,31 @@ const collectAuthoritativeMessageText = (node: ProseMirrorJsonNode): string => {
             continue
         } else {
             text += collectAuthoritativeMessageText(child)
+        }
+    }
+    return text
+}
+
+// Text used to route a prompt to a capability module. Prompt-reference atoms
+// contribute their display name to the model-facing prompt, but that name is the
+// title of an Asset the user picked, not something they authored — routing on it
+// makes "Generate a video following <Night encounter action timeline>" look like
+// a request to create a timeline. Reference labels are replaced by a space so the
+// authored words around them stay separated.
+const collectRoutableUserPromptText = (node: ProseMirrorJsonNode): string => {
+    let text = ''
+    for (const child of node.content ?? []) {
+        if (child.type === 'text') {
+            text += child.text ?? ''
+        } else if (child.type === 'hard_break') {
+            text += '\n'
+        } else if (child.type === PROMPT_REFERENCE_NODE_TYPE
+            || child.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+            text += ' '
+        } else if (child.type === aiGeneratedImageNodeType || child.type === aiGeneratedVideoNodeType) {
+            continue
+        } else {
+            text += collectRoutableUserPromptText(child)
         }
     }
     return text
@@ -897,9 +927,25 @@ export const aiInteractionSubjects = [
                 conversationAssetId,
             )
             const moduleCatalog = getLlmModule().capabilityModuleCatalog
-            const latestRoutedModule = typeof moduleCatalog?.routePrompt === 'function'
-                ? moduleCatalog.routePrompt(authoritativePromptText)
-                : undefined
+            // Referencing an existing Action Timeline Artifact is consumption, not
+            // creation: the user wants the timeline's beats and cited Assets to
+            // drive this generation, so the timeline tool must not claim the run
+            // and strip the selected media models.
+            const referencesExistingActionTimeline = latestSubmittedPromptReferences.some(reference => (
+                reference.referenceType === 'capability-artifact'
+                && reference.artifactTypeId === ACTION_TIMELINE_ARTIFACT_TYPE_ID
+            ))
+            const routeCapabilityModule = (prompt: string): CapabilityModuleRoute | undefined => {
+                if (typeof moduleCatalog?.routePrompt !== 'function') return undefined
+                const route = moduleCatalog.routePrompt(prompt)
+                return route?.capabilityId === ACTION_TIMELINE_TOOL_ID && referencesExistingActionTimeline
+                    ? undefined
+                    : route
+            }
+            const routableAuthoritativePromptText = collectRoutableUserPromptText(
+                getLatestAuthoritativeUserMessageNode(authoritativeProseMirrorInitialDoc, conversationAssetId),
+            )
+            const latestRoutedModule = routeCapabilityModule(routableAuthoritativePromptText)
             const clarificationOrigin = getClarificationOriginUserMessage(
                 authoritativeProseMirrorInitialDoc,
                 conversationAssetId,
@@ -907,10 +953,11 @@ export const aiInteractionSubjects = [
             const clarificationOriginPrompt = clarificationOrigin
                 ? collectAuthoritativeMessageText(clarificationOrigin).trim()
                 : ''
-            const clarificationOriginRoute = !latestRoutedModule
-                && clarificationOriginPrompt
-                && typeof moduleCatalog?.routePrompt === 'function'
-                ? moduleCatalog.routePrompt(clarificationOriginPrompt)
+            const routableClarificationOriginPrompt = clarificationOrigin
+                ? collectRoutableUserPromptText(clarificationOrigin).trim()
+                : ''
+            const clarificationOriginRoute = !latestRoutedModule && routableClarificationOriginPrompt
+                ? routeCapabilityModule(routableClarificationOriginPrompt)
                 : undefined
             const clarificationOriginResolution = clarificationOriginRoute?.capabilityId === ACTION_TIMELINE_TOOL_ID
                 ? resolveActionTimelineInput({
@@ -1038,7 +1085,11 @@ export const aiInteractionSubjects = [
                     }
                     : characterCreatorRouting.isCharacterCreator
                         ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
-                        : canonicalMediaGenerationRequest
+                        : restrictMediaRequestToExplicitVideoOutput({
+                            request: canonicalMediaGenerationRequest,
+                            prompt: routableAuthoritativePromptText,
+                            hasVideoSource: Boolean(resolvedVideoSourceForExtension),
+                        })
                 : undefined
             const scalarMediaModelSelection = routedMediaGenerationRequest
                 ? { imageModelId: undefined, videoModelId: undefined }

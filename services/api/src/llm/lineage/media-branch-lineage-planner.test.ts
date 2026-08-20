@@ -240,6 +240,7 @@ describe('MediaBranchLineagePlanner', () => {
         expect(branchLine.provenance).toMatchObject({
             kind: 'branch-continuation',
             promptText: 'stylize the portrait',
+            referenceAssetIds: ['asset:person-generated'],
         })
 
         const assignment = plan.runAssignments[0]
@@ -497,9 +498,11 @@ describe('MediaBranchLineagePlanner', () => {
         })
 
         expect(plan.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
+        expect(plan.referenceAssetIds).toEqual(['candidate-1', 'candidate-2'])
         expect(plan.branchOrigin).toBeUndefined()
         expect(plan.branchForks[0]?.provenance.providedReferenceNodeIds).toEqual(['chip-1', 'chip-3'])
         expect(plan.branchForks[0]?.provenance.referenceNodeIds).toEqual(['candidate-1', 'candidate-2'])
+        expect(plan.branchForks[0]?.provenance.referenceAssetIds).toEqual(['candidate-1', 'candidate-2'])
         expect(plan.branchForks).toHaveLength(2)
         expect(plan.branchForks.every((fork) => fork.parentBranchNodeId === undefined)).toBe(true)
         expect(plan.runAssignments[1]).toMatchObject({
@@ -608,6 +611,7 @@ describe('MediaBranchLineagePlanner', () => {
         expect(plan.sourceNodeId).toBeUndefined()
         expect(plan.placementAnchorNodeId).toBe('reference-b')
         expect(plan.referenceNodeIds).toEqual(['reference-b', 'reference-a'])
+        expect(plan.branchOrigin?.provenance.referenceAssetIds).toEqual(['reference-b', 'reference-a'])
         expect(plan.runAssignments).toHaveLength(1)
         expect(plan.runAssignments[0]?.lineageParentNodeId).toBe(plan.branchOrigin?.nodeId)
     })
@@ -723,6 +727,10 @@ describe('MediaBranchLineagePlanner', () => {
             referenceAssetIds: ['document-library', 'portrait-library'],
             referenceNodeIds: [],
         })
+        expect(plan.branchOrigin?.provenance.referenceAssetIds).toEqual([
+            'document-library',
+            'portrait-library',
+        ])
         expect(plan.runAssignments[0]?.parentMediaNodeId).toBeUndefined()
     })
 })

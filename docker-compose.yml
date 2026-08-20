@@ -495,6 +495,9 @@ services:
             # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
             ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE:-false}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            # Veo person-generation policy profile (standard|restricted). Required for any
+            # Veo call — the Google media profile fails the run when it is unset.
+            GOOGLE_VEO_PERSON_GENERATION_PROFILE: ${GOOGLE_VEO_PERSON_GENERATION_PROFILE}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
             STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}
@@ -669,6 +672,9 @@ services:
             # When true, ANTHROPIC_API_KEY is ignored and inference goes through AWS Bedrock.
             ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: ${ANTHROPIC_USE_AWS_BEDROCK_INFERENCE:-false}
             GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+            # Veo person-generation policy profile (standard|restricted). Required for any
+            # Veo call — the Google media profile fails the run when it is unset.
+            GOOGLE_VEO_PERSON_GENERATION_PROFILE: ${GOOGLE_VEO_PERSON_GENERATION_PROFILE}
             STABLE_DIFFUSION_API_KEY: ${STABLE_DIFFUSION_API_KEY}
             # When true, STABLE_DIFFUSION_API_KEY is ignored and inference goes through AWS Bedrock.
             STABILITY_USE_AWS_BEDROCK_INFERENCE: ${STABILITY_USE_AWS_BEDROCK_INFERENCE:-false}

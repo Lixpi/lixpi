@@ -13,6 +13,7 @@
         "./svg": "./src/svg/index.ts",
         "./svg/animated": "./src/svg/animated/index.ts",
         "./components/bubble-menu": "./src/components/bubbleMenu/index.ts",
+        "./components/canvas-node-footer": "./src/components/canvasNodeFooter/index.ts",
         "./components/dropdown": "./src/components/dropdown/index.ts",
         "./components/help-tooltip": "./src/components/helpTooltip/index.ts",
         "./components/info-bubble": "./src/components/infoBubble/index.ts",
@@ -29,6 +30,11 @@
             "sass": "./styles/bubble-menu.scss",
             "style": "./styles/bubble-menu.scss",
             "default": "./styles/bubble-menu.scss"
+        },
+        "./styles/canvas-node-footer": {
+            "sass": "./styles/canvas-node-footer.scss",
+            "style": "./styles/canvas-node-footer.scss",
+            "default": "./styles/canvas-node-footer.scss"
         },
         "./styles/dropdown": {
             "sass": "./styles/dropdown.scss",

@@ -119,6 +119,10 @@ function loadMediaModelBadgeScss(): string {
 	return readSourceFile('../../../packages/lixpi/ui-kit/src/components/mediaModelBadge/media-model-badge.scss', 'packages/lixpi/ui-kit/src/components/mediaModelBadge/media-model-badge.scss')
 }
 
+function loadCanvasNodeFooterScss(): string {
+	return readSourceFile('../../../packages/lixpi/ui-kit/src/components/canvasNodeFooter/canvas-node-footer.scss', 'packages/lixpi/ui-kit/src/components/canvasNodeFooter/canvas-node-footer.scss')
+}
+
 function loadLayout(): string {
 	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
 }
@@ -327,7 +331,7 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 
 	it('updates the selected unified-sidebar trace directly from progress heartbeats', () => {
 		const progressSync = extractFunctionBody(ts, 'syncLiveMediaGenerationProgressInstancesForState')
-		expectExcerptToContain(progressSync, 'syncMediaGenerationTraceButtons(canvasState)', 'trace heartbeat sync')
+		expectExcerptToContain(progressSync, 'syncGeneratedOutputNodeFooters(canvasState)', 'trace heartbeat sync')
 		expectExcerptToContain(progressSync, 'activeGeneratedOutputDetailsProgress?.update(activeTraceState)', 'trace heartbeat sync')
 		expectExcerptNotToContain(progressSync, 'commitCanvasState', 'trace heartbeat sync')
 		expectSourceNotToContain(ts, 'activeMediaGenerationTraceProgress')
@@ -336,7 +340,6 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 	it('attaches reference ambiguity to the submitted prompt with canonical Asset references', () => {
 		const markerContent = extractFunctionBody(ts, 'createBranchMarkerContent')
 		const referenceResolution = extractFunctionBody(ts, 'createBranchMarkerReferenceResolution')
-		const screenPlacement = extractFunctionBody(ts, 'syncPendingBranchMarkerScreenPlacements')
 		const resolutionStyles = extractBlock(loadScss(), '.workspace-branch-reference-resolution')
 		expectSourceToContain(ts, 'if (isMediaGenerationReferenceResolutionOperation(node)) return false')
 		expectExcerptToContain(markerContent, 'getMediaGenerationReferenceResolutionForMarker(currentCanvasState.nodes, node)', 'branch marker content')
@@ -345,8 +348,6 @@ describe('Workspace canvas — durable media request recovery and identity', () 
 		expectExcerptToContain(referenceResolution, "referenceType: 'media'", 'reference resolution')
 		expectExcerptToContain(referenceResolution, 'resolveMediaGenerationReference({', 'reference resolution')
 		expectExcerptNotToContain(referenceResolution, '<button', 'reference resolution')
-		expectExcerptToContain(screenPlacement, 'getMediaGenerationReferenceResolutionOwner(', 'reference resolution placement')
-		expectExcerptToContain(screenPlacement, '...referenceResolutionOwners,', 'reference resolution placement')
 		expectExcerptToContain(resolutionStyles, 'right: 0', 'reference resolution styles')
 		expectExcerptToContain(resolutionStyles, 'bottom: calc(100% + 7px)', 'reference resolution styles')
 		expectSourceNotToContain(ts, 'workspace-media-operation-candidate')
@@ -430,7 +431,10 @@ describe('workspace node CSS — box-shadow consistency', () => {
 
 	it('keeps generated media model chrome free of badge and button shadows', () => {
 		const badgeBlock = extractBlock(loadMediaModelBadgeScss(), '.media-model-badge')
-		const infoButtonBlock = extractBlock(scss, '.media-info-button')
+		const infoButtonBlock = extractBlock(
+			loadCanvasNodeFooterScss(),
+			'.canvas-node-footer-info-button,\n.canvas-node-footer-progress-button',
+		)
 
 		expect(extractBoxShadowValues(badgeBlock)).toHaveLength(0)
 		expect(extractBoxShadowValues(infoButtonBlock)).toHaveLength(0)
@@ -445,9 +449,13 @@ describe('workspace node CSS — box-shadow consistency', () => {
 	it('renders generated media icon chrome with bounded screen-space zoom scaling', () => {
 		const ts = loadTs()
 		const chromeLayerBlock = extractBlock(scss, '.workspace-generated-media-chrome-layer')
-		const actionsBlock = extractBlock(scss, '.workspace-generated-media-actions')
-		const infoButtonBlock = extractBlock(scss, '.media-info-button')
-		const infoIconBlock = extractBlock(infoButtonBlock, 'svg')
+		const footerScss = loadCanvasNodeFooterScss()
+		const actionsBlock = extractBlock(footerScss, '.canvas-node-footer')
+		const infoButtonBlock = extractBlock(
+			footerScss,
+			'.canvas-node-footer-info-button,\n.canvas-node-footer-progress-button',
+		)
+		const infoIconBlock = extractBlock(footerScss, '.canvas-node-footer-info-icon svg')
 		expectSourceToContain(ts, 'generatedMediaChromeLayerEl = createGeneratedMediaChromeLayer()')
 		expectSourceToContain(ts, 'getCanvasChromeScreenLayout({')
 		expectSourceToContain(ts, 'zoomScaling: getAdaptiveBoundedZoomScalingOptions(settings.mediaNode.generatedMediaChrome.zoomScaling),')
@@ -457,7 +465,7 @@ describe('workspace node CSS — box-shadow consistency', () => {
 		expectSourceNotToContain(ts, 'generatedMediaInfoPanelLayerEl')
 		expectSourceNotToContain(ts, 'createGeneratedMediaInfoPanelChrome')
 		expectExcerptToContain(chromeLayerBlock, 'pointer-events: none', 'generated media chrome layer')
-		expectExcerptToContain(actionsBlock, 'gap: 6px', 'generated media actions')
+		expectExcerptToContain(actionsBlock, 'gap: 6px', 'canvas node footer')
 		expectExcerptToContain(infoButtonBlock, 'width: var(--workspace-generated-media-chrome-icon-size, 34px)', 'media info button')
 		expectExcerptToContain(infoIconBlock, 'width: 79.5918%', 'media info icon')
 	})
@@ -663,11 +671,11 @@ describe('Workspace canvas — generated image preview rendering', () => {
 		const acceptStart = ts.indexOf('function createMediaAcceptButton')
 		const rejectStart = ts.indexOf('function createMediaRejectButton', acceptStart)
 		const regenerateStart = ts.indexOf('function createMediaRegenerationControls', acceptStart)
-		const historyStart = ts.indexOf('function createGeneratedOutputHistoryButton', regenerateStart)
+		const footerStart = ts.indexOf('function isGeneratedOutputProgressActive', regenerateStart)
 		expect(acceptStart).toBeGreaterThan(-1)
 		expect(rejectStart).toBeGreaterThan(acceptStart)
 		expect(regenerateStart).toBeGreaterThan(acceptStart)
-		expect(historyStart).toBeGreaterThan(regenerateStart)
+		expect(footerStart).toBeGreaterThan(regenerateStart)
 
 		expectExcerptToContain(ts.slice(acceptStart, rejectStart), 'if (!node.generatedBy) return null', 'accept control')
 		expectExcerptToContain(
@@ -675,7 +683,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
 			'isGeneratedOutputRejectableForCanvas({',
 			'reject control',
 		)
-		expectExcerptToContain(ts.slice(regenerateStart, historyStart), 'if (!node.generatedBy) return null', 'regeneration control')
+		expectExcerptToContain(ts.slice(regenerateStart, footerStart), 'if (!node.generatedBy) return null', 'regeneration control')
 	})
 
 	it('keeps terminal candidate controls usable while the local Asset cache catches up', () => {
@@ -934,23 +942,19 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(refreshBody, 'queueCanvasMediaAnalysis(node.nodeId, getMediaDescriptorStillAssetId(node))', 'refreshCompletedGeneratedMediaAsset')
 	})
 
-	it('keeps the bounded icon strip to trace + badge + info controls, with the timeline in the sidebar', () => {
-		// The screen-space chrome strip carries ONLY the provider badge + info
-		// button for BOTH images and videos. The expandable info panel is built
-		// separately as constant-size screen-space content, so the two affordances
-		// are fully decoupled.
+	it('renders the bounded media strip through the shared canvas-node footer', () => {
 		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		const chromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		const liveTransform = extractFunctionBody(ts, 'updateGeneratedMediaChromeLiveTransform')
 		expect(chromeStart).toBeGreaterThan(-1)
 		expect(chromeEnd).toBeGreaterThan(chromeStart)
-		expectExcerptToContain(mediaChrome, 'createMediaGenerationTraceControl(node)', 'media chrome strip')
-		expectExcerptToContain(mediaChrome, 'createMediaInfoButton(node)', 'media chrome strip')
+		expectExcerptToContain(mediaChrome, 'createGeneratedOutputNodeFooter(node, [', 'media chrome strip')
 		expectExcerptToContain(mediaChrome, 'applyGeneratedMediaChromeGeometry(', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedMediaInfoPanel', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createGeneratedOutputHistoryButton(node)', 'media chrome strip')
 		expectExcerptNotToContain(mediaChrome, 'createMediaGenerationProgress({', 'media chrome strip')
+		expectSourceToContain(ts, "createCanvasNodeFooter({")
 	})
 
 	it('preserves the media model icon inside the pending generation spinner', () => {
@@ -959,18 +963,14 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(pendingChrome, 'createMediaModelBadge(resolveMediaModelBadgeConfig({', 'pending media spinner')
 		expectExcerptToContain(pendingChrome, 'iconOnly: true', 'pending media spinner')
 		expectExcerptToContain(pendingChrome, '${modelBadge}', 'pending media spinner')
-		expectExcerptNotToContain(pendingChrome, 'createMediaInfoButton(node)', 'pending media spinner')
-		expectExcerptNotToContain(pendingChrome, 'createMediaGenerationTraceControl(node)', 'pending media spinner')
+		expectExcerptNotToContain(pendingChrome, 'createGeneratedOutputNodeFooter', 'pending media spinner')
 	})
 
-	it('anchors pending info and trace controls below-left of the visible pre-frame circle', () => {
+	it('anchors the shared pending footer below-left of the visible pre-frame circle', () => {
 		const chromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
 		const chromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', chromeStart)
 		const mediaChrome = ts.slice(chromeStart, chromeEnd)
 		const liveTransform = extractFunctionBody(ts, 'updateGeneratedMediaChromeLiveTransform')
-		const infoButtonIndex = mediaChrome.indexOf('${createMediaInfoButton(node)}')
-		const traceControlIndex = mediaChrome.indexOf('${createMediaGenerationTraceControl(node)}')
-		const pendingActionsBlock = extractBlock(loadScss(), '.workspace-generated-media-pending-actions')
 
 		expect(chromeStart).toBeGreaterThan(-1)
 		expect(chromeEnd).toBeGreaterThan(chromeStart)
@@ -981,10 +981,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(liveTransform, 'getPendingGeneratedMediaBeforeFrameCircleGeometry(nodeId, position, dimensions)', 'live media chrome transform')
 		expectExcerptToContain(liveTransform, 'pendingCircleGeometry?.position ?? position', 'live media chrome transform')
 		expectExcerptToContain(liveTransform, 'pendingCircleGeometry?.dimensions ?? dimensions', 'live media chrome transform')
-		expectExcerptToContain(mediaChrome, 'workspace-generated-media-pending-actions', 'media chrome')
-		expect(infoButtonIndex).toBeGreaterThan(-1)
-		expect(traceControlIndex).toBeGreaterThan(infoButtonIndex)
-		expectExcerptToContain(pendingActionsBlock, 'justify-content: flex-start', 'pending media actions')
+		expectExcerptToContain(mediaChrome, '${footer}', 'media chrome')
 		expectSourceNotToContain(ts, '&& !pendingBeforeFirstFrameNodeIds.has(node.nodeId)')
 	})
 
@@ -998,8 +995,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const controlsChrome = ts.slice(chromeStart, chromeEnd)
 		expectExcerptToContain(controlsChrome, 'workspace-video-controls-host', 'video controls chrome')
 		expectExcerptToContain(controlsChrome, 'workspace-video-surface', 'video controls chrome')
-		expectExcerptNotToContain(controlsChrome, 'createMediaInfoButton(node)', 'video controls chrome')
-		expectExcerptNotToContain(controlsChrome, 'workspace-generated-media-actions', 'video controls chrome')
+		expectExcerptNotToContain(controlsChrome, 'createGeneratedOutputNodeFooter', 'video controls chrome')
 	})
 
 	it('renders media info chrome for both image and video nodes', () => {
@@ -1008,18 +1004,19 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectSourceToContain(ts, "(node.type === 'image' || node.type === 'video')")
 	})
 
-	it('opens a node-scoped generation timeline through the unified right-sidebar details target', () => {
-		const openTrace = extractFunctionBody(ts, 'openMediaGenerationTrace')
+	it('opens a node-scoped generation timeline through the shared footer and unified details target', () => {
+		const footer = extractFunctionBody(ts, 'createGeneratedOutputNodeFooter')
 		const renderDetails = extractFunctionBody(ts, 'renderGeneratedOutputDetailsContent')
 		const resolveTraceState = extractFunctionBody(ts, 'getMediaGenerationTraceState')
-		const createTraceControl = extractFunctionBody(ts, 'createMediaGenerationTraceControl')
+		const resolveProgress = extractFunctionBody(ts, 'isGeneratedOutputProgressActive')
 		const detailsBody = extractBlock(loadScss(), '.workspace-generated-output-details-panel-body.workspace-generated-output-details-content')
 		const traceProgressBlock = extractBlock(loadScss(), '.workspace-media-generation-sidebar-progress')
-		expectExcerptToContain(openTrace, "openGeneratedOutputDetails({ kind: 'output', nodeId })", 'open generation trace')
+		expectExcerptToContain(footer, 'onOpenDetails: () => openGeneratedOutputDetails(target, { toggle: true })', 'canvas node footer')
 		expectExcerptToContain(resolveTraceState, 'const persistedState = node.generationProgress ??', 'live generation trace state')
 		expectExcerptToContain(resolveTraceState, 'getGeneratedMediaProgressFromThreadContent(', 'sealed generation trace state')
 		expectExcerptToContain(resolveTraceState, 'settleReadyMediaGenerationProgress(persistedState, node.mediaGenerationPhase)', 'ready generation trace settlement')
-		expectExcerptToContain(createTraceControl, 'if (!traceState || !isMediaGenerationTraceActive(traceState.status)) return null', 'active trace control')
+		expectExcerptToContain(resolveProgress, "traceState?.status === 'pending'", 'active footer progress')
+		expectExcerptToContain(resolveProgress, "traceState?.status === 'awaiting-provider-verification'", 'active footer progress')
 		expectExcerptToContain(renderDetails, 'className: \'workspace-media-generation-sidebar-progress\'', 'sidebar timeline')
 		expectExcerptToContain(renderDetails, 'defaultExpanded: true', 'sidebar timeline')
 		expectExcerptToContain(renderDetails, '...getExecutionTraceTimelineDetail()', 'sidebar timeline')
@@ -1033,7 +1030,7 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const skipIndex = syncChrome.indexOf('if (nextChromeSyncKey === generatedMediaChromeSyncKey)')
 		const skipReturnIndex = syncChrome.indexOf('return', skipIndex)
 		const replaceIndex = syncChrome.indexOf('generatedMediaChromeLayerEl.replaceChildren(', skipReturnIndex)
-		expectExcerptToContain(syncChrome, 'syncMediaGenerationTraceButtons(canvasState)', 'generated media chrome sync')
+		expectExcerptToContain(syncChrome, 'syncGeneratedOutputNodeFooters(canvasState)', 'generated media chrome sync')
 		expectExcerptToContain(syncChrome, 'updateGeneratedMediaChromeLayout()', 'generated media chrome sync')
 		expectExcerptNotToContain(chromeKey, 'getJsonChromeKey(node.generationProgress)', 'generated media chrome key')
 		expect(skipIndex).toBeGreaterThan(-1)
@@ -1057,7 +1054,6 @@ describe('Workspace canvas — generated video canvas state', () => {
 		const createCapabilityArtifact = extractFunctionBody(ts, 'createCapabilityArtifactNode')
 		const previewNodeResolver = extractFunctionBody(ts, 'getPromptReferencePreviewNode')
 		const markerContent = extractFunctionBody(ts, 'createBranchMarkerContent')
-		const historyButton = extractFunctionBody(ts, 'createGeneratedOutputHistoryButton')
 
 		expectExcerptToContain(capabilityReferenceView, 'createMediaPromptReferencePreview({', 'Timeline references')
 		expectExcerptToContain(capabilityReferenceView, 'displayName: asset.title.trim()', 'Timeline reference title')
@@ -1082,21 +1078,24 @@ describe('Workspace canvas — generated video canvas state', () => {
 			'Timeline persisted reference hydration',
 		)
 		expectExcerptToContain(markerContent, 'previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true })', 'branch marker references')
-		expectExcerptToContain(historyButton, 'previewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true })', 'history trigger references')
 		expectSourceToContain(ts, 'promptReferencePreviewRenderer: getPromptReferencePreviewRenderer({ inlinePopover: true }),')
 		expectSourceNotToContain(loadScss(), '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
 	})
 
-	it('combines media metadata and history in the unified details renderer while retaining the Artifact history trigger', () => {
+	it('combines media metadata and history in the unified details renderer while using one footer for Artifacts', () => {
 		const renderDetails = extractFunctionBody(ts, 'renderGeneratedOutputDetailsContent')
 		const detailsProjection = extractFunctionBody(ts, 'mountGeneratedMediaDetailsProjection')
+		const chatProjection = extractFunctionBody(ts, 'mountGeneratedMediaChatProjection')
 		const artifactChrome = extractFunctionBody(ts, 'createGeneratedCapabilityArtifactChrome')
 		expectExcerptToContain(renderDetails, "appendGeneratedMediaMetadata(body, node, 'sidebar')", 'generated media details')
 		expectExcerptToContain(renderDetails, 'appendGeneratedOutputDetailsHistorySection(body)', 'generated media history')
 		expectExcerptToContain(renderDetails, 'mountGeneratedMediaDetailsProjection(history, mediaTarget)', 'generated media history')
 		expectExcerptToContain(detailsProjection, 'includeReasoningModelHeader: true', 'generated media history')
 		expectExcerptToContain(detailsProjection, 'includeGenerationProgressTimeline: true', 'generated media history')
-		expectExcerptToContain(artifactChrome, 'createGeneratedOutputHistoryButton(node)', 'generated Artifact chrome')
+		expectExcerptToContain(chatProjection, 'resolveMediaGenerationHistoryProgress({', 'generated media history')
+		expectExcerptToContain(artifactChrome, 'createGeneratedOutputNodeFooter(node, [', 'generated Artifact chrome')
+		expectSourceNotToContain(ts, 'createGeneratedOutputHistoryButton')
+		expectSourceNotToContain(loadScss(), '.media-history-button')
 	})
 
 	it('removes the ProseMirror ordered-list indent from every generated-media timeline level', () => {
@@ -1116,13 +1115,19 @@ describe('Workspace canvas — generated video canvas state', () => {
 		expectExcerptToContain(historyTimelineBlock, 'margin: 18px 0 0;', 'generated media history timeline')
 	})
 
-	it('uses the submitted Capability accent inside accepted-output history triggers', () => {
-		const scss = loadScss()
-		const historyTextRule = extractBlock(scss, '.media-history-button-text')
-		const historyChipRule = extractBlock(scss, '.media-history-button-text .prompt-reference-chip')
+	it('uses the same UI-kit footer entry point for media and Capability Artifact nodes', () => {
+		const footer = extractFunctionBody(ts, 'createGeneratedOutputNodeFooter')
+		const progress = extractFunctionBody(ts, 'isGeneratedOutputProgressActive')
+		const mediaChromeStart = ts.indexOf('function createGeneratedMediaChrome(node: ImageCanvasNode | VideoCanvasNode)')
+		const mediaChromeEnd = ts.indexOf('function getCapabilityArtifactProvenance', mediaChromeStart)
+		const mediaChrome = ts.slice(mediaChromeStart, mediaChromeEnd)
+		const artifactChrome = extractFunctionBody(ts, 'createGeneratedCapabilityArtifactChrome')
 
-		expectExcerptToContain(historyTextRule, '@include prompt-reference-chip-on-dark-surface;', 'history trigger badge')
-		expectExcerptToContain(historyChipRule, 'font-size: inherit;', 'history trigger badge')
+		expectExcerptToContain(footer, 'createCanvasNodeFooter({', 'generated output footer')
+		expectExcerptToContain(mediaChrome, 'createGeneratedOutputNodeFooter(node, [', 'generated media chrome')
+		expectExcerptToContain(artifactChrome, 'createGeneratedOutputNodeFooter(node, [', 'generated Artifact chrome')
+		expectExcerptToContain(progress, '.get(generatedBy.capabilityRunId)', 'Capability Artifact progress')
+		expectExcerptToContain(progress, "status === 'pending' || status === 'running'", 'Capability Artifact progress')
 	})
 
 	it('renders details in the screen-fixed right sidebar instead of a viewport-transformed canvas layer', () => {
@@ -1227,8 +1232,8 @@ describe('Workspace canvas — video node interaction', () => {
 
 		it('shows an unobtrusive animated analyzing indicator with an explanation', () => {
 			expectSourceToContain(ts, "getAssetDescriptor(node)?.status === 'analyzing'")
-			const buttonBlock = extractBlock(scss, '.media-info-button')
-			expectExcerptToContain(buttonBlock, '&.is-analyzing', '.media-info-button')
+			const buttonBlock = extractBlock(scss, '.canvas-node-footer-info-button.is-analyzing')
+			expectExcerptToContain(buttonBlock, 'animation: workspace-media-analyzing-pulse', '.canvas-node-footer-info-button.is-analyzing')
 			expectSourceToContain(scss, '@keyframes workspace-media-analyzing-pulse')
 			const descriptorBlock = extractBlock(scss, '.canvas-media-descriptor')
 			expectExcerptToContain(descriptorBlock, '&.is-analyzing', '.canvas-media-descriptor')
@@ -1447,7 +1452,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 	it('keeps exact submitted prompt atoms in the preflight marker and uses deterministic sizing', () => {
 		const submitBody = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
 		const promptPartsBody = extractFunctionBody(ts, 'getBranchMarkerPromptPartsForNode')
-		const screenProjectionBody = extractFunctionBody(ts, 'applyPendingBranchMarkerScreenProjection')
+		const persistedInsertBody = extractFunctionBody(ts, 'insertPendingBranchMarkerForPersistedCanvasThread')
 
 		expectExcerptToContain(submitBody, 'const promptParts = getBranchMarkerPromptParts({', 'preflight prompt snapshot')
 		expectExcerptToContain(submitBody, 'promptParts,', 'preflight prompt snapshot')
@@ -1455,8 +1460,14 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		expectExcerptToContain(promptPartsBody, 'resolveBranchMarkerPromptParts({', 'preflight prompt snapshot')
 		expectExcerptToContain(promptPartsBody, 'persistedUserMessage: preview?.userMessage', 'preflight prompt snapshot')
 		expectExcerptNotToContain(promptPartsBody, 'if (node.pendingState)', 'preflight prompt snapshot')
-		expectExcerptNotToContain(screenProjectionBody, 'scrollWidth', 'preflight marker sizing')
-		expectExcerptNotToContain(screenProjectionBody, "width: 'max-content'", 'preflight marker sizing')
+		expectExcerptToContain(persistedInsertBody, 'getBranchMarkerContentDimensions(promptText)', 'preflight marker sizing')
+		expectExcerptToContain(
+			persistedInsertBody,
+			'getRootBranchMarkerPositionBeforeGeneratedMedia(',
+			'preflight marker canvas placement',
+		)
+		expectExcerptNotToContain(persistedInsertBody, 'getBranchMarkerScreenFixedDimensions', 'preflight marker sizing')
+		expectSourceNotToContain(ts, 'applyPendingBranchMarkerScreenProjection')
 	})
 
 	it('restores preflight markers from persisted standalone canvas threads after early reload', () => {
@@ -1479,7 +1490,8 @@ describe('Workspace canvas — detached generation resume stability', () => {
 		)
 		expectExcerptToContain(insertBody, 'generationRequestId,', 'persisted marker restore')
 		expectExcerptToContain(insertBody, 'commitTransientCanvasStatePreservingEditors({', 'persisted marker restore')
-		expectExcerptToContain(insertBody, 'syncPendingBranchMarkerScreenPlacements()', 'persisted marker restore')
+		expectExcerptToContain(insertBody, 'appendBranchLineNodeToDOM(pendingNode)', 'persisted marker restore')
+		expectExcerptNotToContain(insertBody, 'syncPendingBranchMarkerScreenPlacements()', 'persisted marker restore')
 	})
 
 	it('recovers pending branch marker records from persisted canvas state when memory maps are empty', () => {
@@ -1713,11 +1725,9 @@ describe('Workspace right panel — single generated-output details renderer', (
 	const scss = loadScss()
 
 	it('routes media info, active generation, and branch lineage through one opener', () => {
-		const mediaInfo = extractFunctionBody(ts, 'createMediaInfoButton')
-		const trace = extractFunctionBody(ts, 'openMediaGenerationTrace')
+		const footer = extractFunctionBody(ts, 'createGeneratedOutputNodeFooter')
 		const branchInfo = extractFunctionBody(ts, 'handleBranchMarkerInfoClick')
-		expectExcerptToContain(mediaInfo, 'openGeneratedOutputDetails(target, { toggle: true })', 'media info')
-		expectExcerptToContain(trace, "openGeneratedOutputDetails({ kind: 'output', nodeId })", 'active generation')
+		expectExcerptToContain(footer, 'onOpenDetails: () => openGeneratedOutputDetails(target, { toggle: true })', 'generated output footer')
 		expectExcerptToContain(branchInfo, "openGeneratedOutputDetails({ kind: 'branch-marker', nodeId: node.nodeId }, { toggle: true })", 'branch lineage')
 	})
 
@@ -1976,6 +1986,7 @@ describe('Right side panel — TS infrastructure', () => {
 
 	it('renders a removable context chip tray and sends chip context for standalone canvas runs', () => {
 		const scss = loadScss()
+		const detachedEditor = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chips')
 		expectSourceToContain(ts, 'workspace-ai-chat-panel-context-chip-remove')
 		expectSourceToContain(ts, 'function refreshContextChipTray(): void')
@@ -1983,6 +1994,10 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(ts, 'function clearExplicitContextChips(): void')
 		expectSourceToContain(ts, '...(options.explicitContextNodeIds ?? aiChatPanelState.contextChips)')
 		expectSourceToContain(ts, 'contextChipNodeIds: submittedExplicitContextNodeIds,')
+		expect(detachedEditor.indexOf('clearExplicitContextChips()')).toBeGreaterThan(-1)
+		expect(detachedEditor.indexOf('clearExplicitContextChips()')).toBeLessThan(
+			detachedEditor.indexOf('await getAiService().sendChatMessage({'),
+		)
 		expectSourceToContain(scss, '--workspace-right-side-panel-content-inset')
 		expectSourceNotToContain(ts, 'aiChatPanelToggleHistoryIcon')
 		expectSourceNotToContain(ts, 'createSlidingTabsSwitch')
@@ -3364,6 +3379,37 @@ describe('Workspace canvas — selection deletion', () => {
 			source,
 			"return error instanceof Error && error.message === 'NOT_FOUND'",
 			'isMissingAssetDetachError',
+		)
+	})
+})
+
+// =============================================================================
+// BRANCH MARKER TRACE REFERENCES
+// =============================================================================
+
+describe('Workspace canvas — branch marker trace references', () => {
+	it('consumes the API-canonical Asset set instead of prompt mention occurrences', () => {
+		const source = loadTs()
+		const handles = extractFunctionBody(source, 'getBranchMarkerPromptTraceHandles')
+		const progress = extractFunctionBody(source, 'createBranchMarkerGlobalProgress')
+
+		expectExcerptToContain(
+			handles,
+			'const provenanceAssetIds = node.provenance?.referenceAssetIds',
+			'getBranchMarkerPromptTraceHandles',
+		)
+		expectExcerptToContain(
+			handles,
+			'const referenceAssetIds = provenanceAssetIds ??',
+			'getBranchMarkerPromptTraceHandles',
+		)
+		expect(
+			progress.match(/promptHandles\.length \? \{ handles: promptHandles \}/g),
+		).toHaveLength(2)
+		expectExcerptToContain(
+			progress,
+			'inputHandles: promptHandles',
+			'createBranchMarkerGlobalProgress',
 		)
 	})
 })

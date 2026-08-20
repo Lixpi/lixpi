@@ -17,6 +17,36 @@ export const hasExplicitVideoOutputRequest = (prompt: string): boolean => (
     || EXPLICIT_FILM_VERB_PATTERN.test(prompt)
 )
 
+// Matrix counterpart of the scalar rule below: a prompt that explicitly asks for
+// moving media gets moving media only. The model picker keeps an image model
+// selected across turns, so without this a "generate a video" turn fans out an
+// extra image run the user never asked for and pays for.
+export const restrictMediaRequestToExplicitVideoOutput = <T extends {
+    imageModelIds?: string[]
+    useMultipleImageModels?: boolean
+    videoModelIds?: string[]
+    outputMediaTypes?: Array<'image' | 'video'>
+}>({
+    request,
+    prompt,
+    hasVideoSource,
+}: {
+    request: T
+    prompt: string
+    hasVideoSource: boolean
+}): T => {
+    if (!(request.imageModelIds?.length && request.videoModelIds?.length)) return request
+    if (!hasVideoSource && !hasExplicitVideoOutputRequest(prompt)) return request
+    return {
+        ...request,
+        imageModelIds: [],
+        useMultipleImageModels: false,
+        ...(request.outputMediaTypes ? {
+            outputMediaTypes: request.outputMediaTypes.filter(mediaType => mediaType !== 'image'),
+        } : {}),
+    }
+}
+
 export type ScalarMediaModelSelection = {
     imageModelId?: string
     videoModelId?: string

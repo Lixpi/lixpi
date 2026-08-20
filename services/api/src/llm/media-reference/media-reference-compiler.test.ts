@@ -151,6 +151,46 @@ describe('media reference matching and compilation', () => {
         expect(compiled.intent.promptFingerprint).toMatch(/^[a-f0-9]{64}$/u)
     })
 
+    it('does not fuzzy-match a typed Capability Artifact label as a media reference', () => {
+        const bindings = createMediaReferenceBindings({
+            assets: [
+                makeAsset({ assetId: 'first-frame', title: 'Night encounter first frame' }),
+                makeAsset({ assetId: 'last-frame', title: 'Night encounter last frame' }),
+            ],
+        })
+        const prompt: ProseMirrorJsonNode = {
+            type: 'doc',
+            content: [{
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Generate a video for ' },
+                    {
+                        type: 'prompt_reference',
+                        attrs: {
+                            referenceType: 'capability-artifact',
+                            artifactTypeId: 'action-timeline',
+                            assetId: 'timeline-asset',
+                            nodeId: 'timeline-node',
+                            displayName: 'Night encounter action timeline',
+                        },
+                    },
+                ],
+            }],
+        }
+
+        const compiled = compileMediaReferenceIntent({ prompt, bindings })
+
+        expect(segmentMediaPrompt(prompt)).toContainEqual({
+            kind: 'non-media-reference',
+            referenceType: 'capability-artifact',
+            displayName: 'Night encounter action timeline',
+            from: 21,
+            to: 52,
+        })
+        expect(compiled.unresolvedBindings).toEqual([])
+        expect(compiled.intent.safePrompt).toBe('Generate a video for Night encounter action timeline')
+    })
+
     it('does not treat descriptive Asset metadata or unmatched public-figure text as an Asset identity', () => {
         const bindings = createMediaReferenceBindings({
             assets: [makeAsset({

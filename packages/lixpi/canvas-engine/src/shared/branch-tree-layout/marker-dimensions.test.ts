@@ -10,7 +10,6 @@ import {
     getBranchMarkerMinWidth,
     getBranchMarkerPromptPreview,
     getBranchMarkerResponsePreview,
-    getBranchMarkerScreenFixedMinWidth,
     resizeBranchMarkerToDimensions,
 } from './marker-dimensions.ts'
 
@@ -37,22 +36,6 @@ describe('estimateBranchMarkerDimensions', () => {
         const dimensions = estimateBranchMarkerDimensions(longPrompt)
         expect(dimensions.width).toBe(Math.round(getBranchMarkerMinWidth() * marker.maxWidthGrowth))
         expect(dimensions.height).toBe(marker.verticalPadding + 2 * messageLineHeight)
-    })
-
-    it('uses the shorter, wider screen-fixed pose when screenFixed is set', () => {
-        const onCanvas = estimateBranchMarkerDimensions('a'.repeat(60))
-        const screenFixed = estimateBranchMarkerDimensions('a'.repeat(60), { screenFixed: true })
-        expect(screenFixed.height).toBeLessThan(onCanvas.height)
-        expect(screenFixed.width).toBeGreaterThanOrEqual(getBranchMarkerScreenFixedMinWidth())
-        expect(screenFixed.height).toBe(marker.screenFixedVerticalPadding + messageLineHeight)
-    })
-
-    it('reserves fixed chrome so an inline Capability label fits beside pending controls', () => {
-        const prompt = 'create character Character Creator'
-        const screenFixed = estimateBranchMarkerDimensions(prompt, { screenFixed: true })
-        const estimatedTextWidth = prompt.length * marker.approxCharWidth
-
-        expect(screenFixed.width - estimatedTextWidth).toBeGreaterThanOrEqual(120)
     })
 
     it('is deterministic — identical inputs give identical dimensions on API and client', () => {

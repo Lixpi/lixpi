@@ -137,7 +137,7 @@ describe('asset provenance generation progress', () => {
 // =============================================================================
 
 describe('asset provenance lineage traces', () => {
-    it('seals the reasoning model call, its prompt, and its references onto Understand request', () => {
+    it('seals canonical references onto the reasoning step and model call', () => {
         const items = includeLineageProgressInAssetProvenance(
             makeProgress(),
             'I will create the requested character sheet.',
@@ -146,7 +146,7 @@ describe('asset provenance lineage traces', () => {
                     assetId: 'asset-out',
                     generationRequestId: 'request-1',
                     branchId: 'branch-1',
-                    referenceAssetIds: ['asset-ref-1', 'asset-ref-2'],
+                    referenceAssetIds: ['asset-ref-1', 'asset-ref-1', 'asset-ref-2'],
                     referenceNodeIds: [],
                     sourceContextNodeIds: [],
                     promptText: 'Create a character out of this reference',
@@ -157,17 +157,23 @@ describe('asset provenance lineage traces', () => {
 
         const understand = items.find(item => item.id === 'lineage:understand-request')
         expect(understand?.trace?.reasoning).toBe('I will create the requested character sheet.')
-        expect(understand?.trace?.handles?.map(handle => handle.id)).toEqual(['asset-ref-1', 'asset-ref-2'])
+        expect(understand?.trace?.handles?.map(handle => handle.id)).toEqual([
+            'asset-ref-1',
+            'asset-ref-2',
+        ])
         expect(understand?.trace?.modelCalls?.[0]).toMatchObject({
             role: 'reasoning',
             provider: 'openai',
             modelId: 'openai:gpt-5',
             prompt: 'Create a character out of this reference',
         })
-        expect(understand?.trace?.modelCalls?.[0]?.inputHandles).toHaveLength(2)
+        expect(understand?.trace?.modelCalls?.[0]?.inputHandles?.map(handle => handle.id)).toEqual([
+            'asset-ref-1',
+            'asset-ref-2',
+        ])
     })
 
-    it('seals reference handles onto the capability resolution step', () => {
+    it('seals each referenced Asset once onto the capability resolution step', () => {
         const items = includeLineageProgressInAssetProvenance(
             makeProgress(),
             '',
@@ -176,7 +182,7 @@ describe('asset provenance lineage traces', () => {
                     assetId: 'asset-out',
                     generationRequestId: 'request-1',
                     branchId: 'branch-1',
-                    referenceAssetIds: ['asset-ref-1'],
+                    referenceAssetIds: ['asset-ref-1', 'asset-ref-1', 'asset-ref-2'],
                     referenceNodeIds: [],
                     sourceContextNodeIds: [],
                     promptText: 'prompt',
@@ -186,13 +192,22 @@ describe('asset provenance lineage traces', () => {
         ).progress.items ?? []
 
         const resolve = items.find(item => item.id === 'lineage:resolve-capabilities-and-references')
-        expect(resolve?.trace?.handles).toEqual([{
-            kind: 'media',
-            id: 'asset-ref-1',
-            displayName: 'asset-ref-1',
-            mediaKind: 'image',
-            role: 'message-reference',
-        }])
+        expect(resolve?.trace?.handles).toEqual([
+            {
+                kind: 'media',
+                id: 'asset-ref-1',
+                displayName: 'asset-ref-1',
+                mediaKind: 'image',
+                role: 'message-reference',
+            },
+            {
+                kind: 'media',
+                id: 'asset-ref-2',
+                displayName: 'asset-ref-2',
+                mediaKind: 'image',
+                role: 'message-reference',
+            },
+        ])
     })
 
     it('seals run, media, model, and branch identifiers onto the lineage step', () => {
