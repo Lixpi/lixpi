@@ -1,22 +1,28 @@
 ---
 name: character-sheet-layout
-description: Fixed multi-view layout and composition instructions for one-image character sheets.
+description: Provider-neutral panel graph and deterministic composition contract for character sheets.
 ---
 
 # Character Sheet Layout
 
-Produce exactly one detailed landscape character-design sheet. The attached `character-sheet-example.jpg` is the authoritative output-layout specification. Populate its placeholders with the requested character while preserving its complete organization, view coverage, alignment system, panel hierarchy, and labels.
+Produce a provider-neutral `CharacterSheetRenderPlan`. Image providers render only isolated single-shot character images. Deterministic server-side composition owns the 3840x2560 sheet, white-margin trimming, spacing, and packing.
 
-The template controls layout. Character-source references control identity, outfit, materials, colors, and rendering style. The illustrated template character is a negative style reference: never copy its drawing, linework, shading, facial simplification, or paper texture. When character sources are photographs, render every character depiction as photorealistic studio photography with recognizable facial likeness. Never replace the template with a simplified turnaround strip.
+The default plan contains exactly three shots:
 
-Preserve all template sections:
+1. A close straight-on head-and-shoulders identity portrait with a relaxed neutral expression, 10-12 percent clean clearance above the complete hair or headwear, the complete face and neck visible, a crop immediately below the collarbones with no armpits or arms, and the head and facial region occupying 55-60 percent of image height.
+2. A relaxed straight-on full-body view from headwear through footwear, with an upright head, level shoulders, naturally lowered arms, and feet hip-width apart.
+3. A neutral straight-on full-body back view from headwear through footwear that clearly preserves rear garment construction, layers, seams, accessories, materials, and footwear.
 
-1. A top full-body turnaround row containing `Front`, `3/4 Front Left`, `Side Left`, `3/4 Back Left`, and `Back` views, with the template's instruction to mirror the left-side construction for right-side views. Keep all five figures at the same scale and aligned to the shared top-of-head, face, torso, hip, knee, ankle, and ground guides.
-2. A head-turnaround row containing `Front`, `3/4 Left`, `Profile Left`, `3/4 Back`, and `Back` views.
-3. Expression and construction panels for mouth shapes, eye shapes, hands, feet, and props.
-4. Design-documentation panels for costume notes, color-palette swatches, material notes, and distinguishing details.
-5. A pose-silhouette row containing relaxed standing, walking, seated, crouched, reach, and action silhouettes.
+Free-form prompt text may request any total from 3 to 10 shots. Fill additional slots only from priorities explicitly stated by the user. Do not add any unrequested variant or content category.
 
-Retain the template's clear section boundaries, dashed anatomical alignment guides, plain neutral background, and compact technical-sheet presentation. Use neutral lighting and orthographic-feeling turnaround views. Show complete heads, hands, clothing silhouettes, and feet without cropping.
+Declare shot dependencies and generated-reference materialization in the plan's `dependsOn` and `outputBindings` fields. The neutral front portrait has no dependency. The front full-body shot depends on the portrait's terminal output through `generated-identity-anchor`. The back full-body shot depends on the terminal portrait and front full-body outputs through `generated-identity-anchor` and `generated-outfit-anchor`. Every optional shot depends on all three required terminal outputs through those bindings plus `generated-back-outfit-anchor`. Do not attach every earlier shot implicitly; only declared bindings become generated inputs.
 
-Do not omit template sections, invent a different grid, collapse the sheet to portrait plus turnaround columns, add scenery, introduce alternate outfits or extra characters, or add logos and watermarks.
+The front full-body request materializes the portrait as `GENERATED_IDENTITY_ANCHOR.png` with role `canonical-anchor`. The back full-body request materializes the completed front full-body shot as `GENERATED_OUTFIT_ANCHOR.png` with role `canonical-anchor` and the portrait as `GENERATED_IDENTITY_ANCHOR.png` with role `adjacent-angle`. Optional requests also materialize the completed back full-body shot as `GENERATED_BACK_OUTFIT_ANCHOR.png` with role `opposite-angle`. All declared roles are required for their provider calls. Original sources remain baseline evidence for unchanged details absent from the anchors, and pose controls remain spatial-only. Once all three barriers succeed, ready optional shots may run concurrently. A missing terminal anchor or an adapter that omits any required generated-reference role blocks or fails the affected shot instead of falling back to a less consistent request.
+
+Render every planned shot once. Stream every provider partial into that panel's presentation-only sheet preview, but never use a partial to satisfy a generated-output binding or release a dependent shot. Stage each terminal shot as its own Asset component candidate and compare it with the exact shot contract and grayscale spatial control when present. Release it only after the categorical single-panel-composition and target-view or action-pose gates pass. Keep template-conformance and framing variance as review metadata because deterministic composition normalizes crop, scale, margin, and cell placement. If the provider call or categorical gate fails after producing pixels, retain the latest usable pixels as a review-only panel in the durable partial sheet without releasing any dependency. Fail without an output only when no panel pixels exist. A multi-shot, inset, duplicate-pose, or wrong-view required anchor blocks every dependent shot. Do not retry automatically.
+
+Each provider request asks for exactly one character on the declared plain background, with no additional visible content or server-owned layout. The provider must never see or reproduce the final sheet layout.
+
+Pose-bearing shots receive text-free spatial controls for framing, camera direction, posture, placement, scale, and silhouette. Every control uses the same deliberately identity-neutral, featureless mannequin without identity-bearing anatomy. The required neutral front portrait defines only centered camera direction, alignment, upper-body crop, and subject scale. Controls are never identity, anatomy, design, material, or presentation evidence. Other head and detail shots have no synthetic pose control; dependent shots still receive the configured generated anchors and original evidence. The prompt and authorized subject references define initial identity and design before the generated anchors carry the render-plan-assigned continuity downstream.
+
+The compositor removes near-white outer margins from each generated shot, then fits the complete visible subject into its cell with bounded padding. It renders no typography or non-image annotation.

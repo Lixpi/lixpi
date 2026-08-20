@@ -6,6 +6,7 @@ import type {
     ImageCanvasNode,
     WorkspaceEdge,
 } from '@lixpi/constants'
+import { getGeneratedMediaPreFrameSize } from '@lixpi/canvas-engine'
 
 import { getStartedLineageMarkerState } from '$src/infographics/workspace/branchLineageState.ts'
 import { rebalanceBranchTreesAndResolve } from '$src/infographics/workspace/branchTreeLayout.ts'
@@ -288,10 +289,10 @@ export class GeneratedMediaRebalancePipeline {
         }
     }
 
-    // Layout boxes must equal rendered boxes. Pending media use the compact
-    // pre-frame circle footprint, not the eventual full frame, so streaming
-    // spacing matches what the user sees. This stage only adds temporary
-    // future-media proxies for planned sibling markers.
+    // Pending media use the compact pre-frame circle for vertical spacing and
+    // connector geometry while callers reserve the stable final media width for
+    // horizontal layout. This stage only adds temporary future-media proxies for
+    // planned sibling markers.
     private prepareLayoutProxyPlan(nodes: CanvasNode[]): RebalanceLayoutProxyPlan {
         const plannedMarkerProxiesByMarkerId = new Map<string, PlannedMarkerMediaProxy>()
         const proxyNodes = nodes
@@ -333,11 +334,10 @@ export class GeneratedMediaRebalancePipeline {
         nodesById: Map<string, CanvasNode>,
         proxyNodeId: string,
     ): ImageCanvasNode {
-        const configuredScale = Number(this.config.pendingMediaPreFrameScale)
-        const scale = Number.isFinite(configuredScale) && configuredScale > 0
-            ? Math.min(1, configuredScale)
-            : 1 / 3
-        const proxySize = Math.max(1, this.config.mediaSize * scale)
+        const proxySize = getGeneratedMediaPreFrameSize(
+            { width: this.config.mediaSize, height: this.config.mediaSize },
+            this.config.pendingMediaPreFrameScale,
+        )
         const mediaDimensions = { width: proxySize, height: proxySize }
         const parentRect = this.config.getNodeWorldRect(parentNode, nodesById)
         const mediaGap = parentNode.type === 'branchOrigin'

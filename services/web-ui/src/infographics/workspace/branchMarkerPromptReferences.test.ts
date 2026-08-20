@@ -7,6 +7,7 @@ import {
     getBranchMarkerPromptDisplayText,
     getBranchMarkerPromptParts,
     renderBranchMarkerPromptParts,
+    resolveBranchMarkerPromptParts,
     truncateBranchMarkerPromptParts,
 } from './branchMarkerPromptReferences.ts'
 
@@ -38,6 +39,29 @@ const submittedMessage = {
 }
 
 describe('branch marker prompt content', () => {
+    it('keeps the exact submitted prompt while the persisted turn is still unavailable', () => {
+        const submittedParts = getBranchMarkerPromptParts(submittedMessage, '')
+
+        expect(resolveBranchMarkerPromptParts({
+            submittedParts,
+            fallbackText: 'REFERENCE_1 placeholder serialization',
+        })).toEqual(submittedParts)
+    })
+
+    it('switches from the submit snapshot only when the persisted user turn is available', () => {
+        expect(getBranchMarkerPromptDisplayText(resolveBranchMarkerPromptParts({
+            persistedUserMessage: {
+                type: 'aiUserMessage',
+                content: [{
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Persisted user request' }],
+                }],
+            },
+            submittedParts: [{ type: 'text', text: 'Submitted user request' }],
+            fallbackText: 'Serialized provider request',
+        }))).toBe('Persisted user request')
+    })
+
     it('reads submitted composer content before the persisted user message is available', () => {
         const parts = getBranchMarkerPromptParts({
             type: 'doc',
@@ -88,6 +112,48 @@ describe('branch marker prompt content', () => {
         expect((rendered[1] as HTMLSpanElement).classList.contains('prompt-reference-chip-capability-module')).toBe(true)
         expect((rendered[1] as HTMLSpanElement).querySelector('.prompt-reference-chip-name')?.textContent).toBe('Action Timeline')
         expect(rendered[2]).toBe(' 15s duration 2s gaps with imaginary plot')
+    })
+
+    it('renders capability metadata previews in submitted branch markers', async () => {
+        const parts = getBranchMarkerPromptParts(submittedMessage, '')
+        const rendered = renderBranchMarkerPromptParts(parts, {
+            inlinePopover: true,
+            previewRenderer: {
+                getNode: () => undefined,
+                getCapabilityModule: async () => ({
+                    moduleId: 'action-timeline',
+                    name: 'Action Timeline',
+                    normalizedName: 'action timeline',
+                    summary: 'Creates an action timeline.',
+                    tags: [],
+                    status: 'active',
+                    descriptionSheet: {
+                        purpose: 'Creates a timed action plan.',
+                        expectedInputs: [{
+                            name: 'Prompt',
+                            requirement: 'required',
+                            accepts: ['prompt'],
+                            description: 'Describe the action.',
+                        }],
+                        bestResults: ['Specify timing.'],
+                        limitations: ['Timing is inferred when omitted.'],
+                        executionCharacteristics: { cost: 'medium', latency: 'medium', summary: 'Builds a structured timeline.' },
+                    },
+                }),
+                environment: {
+                    getDocuments: () => [],
+                    getThreads: () => [],
+                    getApiBaseUrl: () => '',
+                    getAuthToken: async () => '',
+                },
+            },
+        })
+        const preview = rendered[1] as HTMLElement
+        document.body.append(preview)
+        preview.dispatchEvent(new PointerEvent('pointerenter'))
+        await new Promise(resolve => setTimeout(resolve, 0))
+
+        expect(document.body.querySelector('.capability-description-card h2')?.textContent).toBe('Action Timeline')
     })
 
     it('preserves normal marker text behavior when no Capability badge exists', () => {
@@ -216,18 +282,20 @@ describe('branch marker prompt content', () => {
         const ruleStart = scss.indexOf(selector)
         const ruleEnd = scss.indexOf('\n}', ruleStart)
         const rule = ruleStart >= 0 && ruleEnd >= 0 ? scss.slice(ruleStart, ruleEnd) : ''
-        const capabilitySelector = '.workspace-branch-marker-message-text .prompt-reference-chip-capability-module {'
-        const capabilityRuleStart = scss.indexOf(capabilitySelector)
-        const capabilityRuleEnd = scss.indexOf('\n}', capabilityRuleStart)
-        const capabilityRule = capabilityRuleStart >= 0 && capabilityRuleEnd >= 0
-            ? scss.slice(capabilityRuleStart, capabilityRuleEnd)
+        // The dark palette is declared once on the marker surface, so every chip
+        // inside it — prompt line, reference row, pipeline trace — inherits it.
+        // Anchored to the newline so this finds the top-level rule rather than the
+        // indented responsive override that shares the selector.
+        const markerSurfaceStart = scss.indexOf('\n.workspace-branch-marker-content {')
+        const markerSurfaceEnd = scss.indexOf('\n}', markerSurfaceStart)
+        const markerSurfaceRule = markerSurfaceStart >= 0 && markerSurfaceEnd >= 0
+            ? scss.slice(markerSurfaceStart, markerSurfaceEnd)
             : ''
 
         expectSourceToContain(rule, 'font-size: inherit;')
-        expectSourceToContain(scss, '--prompt-reference-color: #d7e6ff;')
-        expectSourceToContain(rule, 'color: var(--prompt-reference-color);')
-        expectSourceToContain(scss, '--prompt-reference-capability-module-color: #eca983;')
-        expectSourceToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color);')
+        expectSourceToContain(markerSurfaceRule, '@include prompt-reference-chip-on-dark-surface;')
+        expectSourceNotToContain(scss, '--prompt-reference-color: #d7e6ff;')
+        expectSourceNotToContain(scss, '--prompt-reference-capability-module-color: #eca983;')
         expectSourceNotToContain(scss, '.workspace-branch-marker-message > .prompt-reference-chip {')
         expectSourceNotToContain(scss, '.workspace-branch-marker-message-text:has(.context-preview-inline.is-open)')
     })

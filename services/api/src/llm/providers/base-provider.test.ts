@@ -20,6 +20,7 @@ import { ImagePublisher } from '../graph/image-publisher.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
 import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
+import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 
 type Published = { subject: string, payload: any }
 
@@ -354,26 +355,72 @@ describe('BaseProvider request validation', () => {
             organizationId: 'organization-1',
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
-            aiModelMetaInfo: { provider: 'OpenAI', model: 'gpt-image-1-mini', modelVersion: 'gpt-image-1-mini' },
+            aiModelMetaInfo: {
+                provider: 'OpenAI',
+                model: 'gpt-image-1-mini',
+                modelVersion: 'gpt-image-1-mini',
+                imageReferenceCapabilities: {
+                    maxReferenceImages: 16,
+                    maxIdentityReferenceImages: 5,
+                    conditioningModes: ['edit', 'identity', 'style'],
+                    inputFidelity: 'standard',
+                    supportsIterativeEdit: true,
+                    supportsMask: true,
+                    supportsStructureControl: false,
+                    supportsPoseControl: false,
+                    supportsDeterministicSeed: false,
+                    maxOutputPixels: 1572864,
+                    supportedAspectRatios: ['1:1', '3:2', '2:3'],
+                },
+            },
             messages: [{ role: 'user', content: 'Create a character sheet.' }],
             enableImageGeneration: true,
             imageGenerationReferences: [{
                 url: 'data:image/png;base64,c291cmNl',
-                role: 'character-source',
-                fileName: 'character-source-1',
+                role: 'edit-target-identity',
+                fileName: 'EDIT_TARGET_IDENTITY_FACE',
             }],
         })
 
         expect(invoke).toHaveBeenCalledOnce()
         expect(result.resolvedImageGenerationReferences).toEqual([
             expect.objectContaining({
-                role: 'character-source',
-                fileName: 'character-source-1.png',
+                role: 'edit-target-identity',
+                fileName: 'EDIT_TARGET_IDENTITY_FACE.png',
                 mediaType: 'image/png',
                 byteLength: 6,
                 bytes: Buffer.from('source'),
             }),
         ])
+    })
+
+    it('preserves the shared preflight Capability plan and image prompt for a reasoning child', async () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const invoke = vi.fn(async (initialState: ProviderState) => initialState)
+        ;(provider as any).app = { invoke }
+        const plan = { kind: 'character-sheet', capabilityRunId: 'character-run-1' } as any
+
+        await provider.process({
+            organizationId: 'organization-1',
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            imageModelMetaInfo: makeImageModel('gemini-2.5-flash-image'),
+            messages: [{ role: 'user', content: 'Create a character sheet.' }],
+            generatedImagePrompt: 'Create a character sheet.',
+            capabilityMediaExecutionPlan: plan,
+        })
+
+        expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
+            generatedImagePrompt: 'Create a character sheet.',
+            capabilityMediaExecutionPlan: plan,
+        }), expect.anything())
     })
 
     it('denies metrics admission before resolving or persisting media lineage', async () => {
@@ -484,6 +531,22 @@ describe('BaseProvider routing', () => {
             .toBe('generate_video')
         expect((provider as any).routeAfterStream({ generatedImagePrompt: 'paint' } as any)).toBe('generate_image')
         expect((provider as any).routeAfterStream({} as any)).toBe('skip')
+    })
+
+    it('routes a required Capability media plan to image generation without a model tool call', () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const state = {
+            capabilityMediaExecutionPlan: { kind: 'character-sheet' },
+            imageModelVersion: 'gpt-image-2',
+        } as ProviderState
+
+        expect((provider as any).routeAfterStream(state)).toBe('generate_image')
+        expect((provider as any).shouldGenerateImage(state)).toBe('generate_image')
     })
 
     it('suppresses duplicate provider generation after a required Capability produced an output Asset', async () => {
@@ -737,6 +800,68 @@ describe('BaseProvider routing', () => {
     })
 })
 
+describe('BaseProvider provider-safe media prompts', () => {
+    const providerSafeMediaIntent = {
+        bindings: [{
+            alias: 'REFERENCE_1',
+            displayNameSnapshot: 'Robert James',
+            forbiddenNameVariants: ['Robert James'],
+        }],
+        forbiddenNameVariants: ['Robert James'],
+    } as ProviderState['providerSafeMediaIntent']
+
+    it('sanitizes a reasoning-model image prompt before graph state advances to lineage planning', async () => {
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        vi.spyOn(provider as any, 'streamImpl').mockResolvedValue({
+            generatedImagePrompt: 'Create a cinematic shot where Robert James walks through the alley.',
+        })
+
+        const update = await (provider as any).streamTokens({
+            providerSafeMediaIntent,
+        } as ProviderState)
+
+        expect(update.generatedImagePrompt).toBe(
+            'Create a cinematic shot where REFERENCE_1 walks through the alley.',
+        )
+    })
+
+    it('sanitizes the final image prompt again at provider dispatch', async () => {
+        const runImageRouter = vi.fn(async () => ({ generatedImages: ['generated-image'] }))
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: {} as any,
+            runImageRouter,
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const state = createFanoutState({
+            mediaFanoutPlan: undefined,
+            imageModelMetaInfo: {
+                provider: 'OpenAI',
+                model: 'gpt-image-2',
+                modelVersion: 'gpt-image-2',
+            },
+            imageProviderName: 'OpenAI',
+            generatedImagePrompt: 'Create a cinematic shot where Robert James walks through the alley.',
+            providerSafeMediaIntent,
+        })
+
+        await expect(provider.runImageGeneration(state)).resolves.toEqual({
+            generatedImages: ['generated-image'],
+        })
+        expect(runImageRouter).toHaveBeenCalledWith(
+            expect.objectContaining({
+                generatedImagePrompt: 'Create a cinematic shot where REFERENCE_1 walks through the alley.',
+            }),
+            expect.any(Object),
+        )
+    })
+})
+
 describe('BaseProvider fanout', () => {
     it('returns successful image fanout results while emitting an image error event for failures', async () => {
         const nats = makeFakeNats()
@@ -837,6 +962,27 @@ describe('BaseProvider fanout', () => {
         expect(runVideoRouter).toHaveBeenCalledTimes(2)
         const videoErrorEvents = nats.published.filter((item) => item.payload.content.status === STREAM_STATUS.ERROR)
         expect(videoErrorEvents).toHaveLength(0)
+    })
+
+    it('fans out a typed Capability media plan when the reasoning model emitted no image prompt', async () => {
+        const runImageRouter = vi.fn(async () => ({ generatedImages: ['character-sheet'] }))
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter,
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+
+        const result = await provider.runImageGeneration(createFanoutState({
+            generatedImagePrompt: undefined,
+            generatedVideoPrompt: undefined,
+            capabilityMediaExecutionPlan: { kind: 'character-sheet' } as any,
+        }))
+
+        expect(runImageRouter).toHaveBeenCalledTimes(2)
+        expect(result.generatedImages).toEqual(['character-sheet', 'character-sheet'])
     })
 
     it('returns an aggregated error when every media fanout attempt fails', async () => {
@@ -1013,6 +1159,128 @@ describe('BaseProvider streamTokens failure path', () => {
 })
 
 describe('BaseProvider process failure path', () => {
+    it('settles a direct user stop as cancellation without publishing a provider failure', async () => {
+        const beginCancellation = vi.spyOn(StreamPublisher.prototype, 'beginMediaGenerationRequestCancellation')
+        const cancelTranscript = vi.spyOn(StreamPublisher.prototype, 'cancelProseMirrorGenerationRequest')
+            .mockResolvedValue(undefined)
+        const completeRequest = vi.spyOn(StreamPublisher.prototype, 'mediaGenerationRequestComplete')
+            .mockImplementation(() => undefined)
+        const publishError = vi.spyOn(StreamPublisher.prototype, 'error')
+
+        try {
+            const provider = new TestProvider('ws1:thread1', {
+                natsService: makeFakeNats().fake,
+                usageReporter: {} as any,
+                runImageRouter: vi.fn(),
+                runVideoRouter: vi.fn(),
+            } as BaseProviderDeps)
+            let markInvocationStarted!: () => void
+            const invocationStarted = new Promise<void>((resolve) => {
+                markInvocationStarted = resolve
+            })
+            ;(provider as any).app = {
+                invoke: vi.fn(async (_state: ProviderState, options: { signal: AbortSignal }) => {
+                    markInvocationStarted()
+                    return await new Promise<ProviderState>((_resolve, reject) => {
+                        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+                    })
+                }),
+            }
+
+            const resultPromise = provider.process({
+                organizationId: 'organization-1',
+                workspaceId: 'ws1',
+                aiChatThreadId: 'thread1',
+                aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+                messages: [],
+                durableGenerationRequestId: 'request-1',
+                generationRun: {
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'request-1:reasoning:0',
+                    reasoningModelId: 'Anthropic:claude',
+                    reasoningIndex: 0,
+                    requestKind: 'single-media',
+                },
+            })
+            await invocationStarted
+            await provider.stop()
+            const result = await resultPromise
+
+            expect(result.error).toBeUndefined()
+            expect(result.cancelledByUser).toBe(true)
+            expect(beginCancellation).toHaveBeenCalledWith('request-1')
+            expect(cancelTranscript).toHaveBeenCalledWith('request-1')
+            expect(completeRequest).toHaveBeenCalledWith('request-1', {
+                removeProjectedPendingNodes: true,
+            })
+            expect(publishError).not.toHaveBeenCalled()
+        } finally {
+            beginCancellation.mockRestore()
+            cancelTranscript.mockRestore()
+            completeRequest.mockRestore()
+            publishError.mockRestore()
+        }
+    })
+
+    it('inherits user-stop cancellation from an aborted parent request', async () => {
+        const beginCancellation = vi.spyOn(StreamPublisher.prototype, 'beginMediaGenerationRequestCancellation')
+        const completeRequest = vi.spyOn(StreamPublisher.prototype, 'mediaGenerationRequestComplete')
+            .mockImplementation(() => undefined)
+        const publishError = vi.spyOn(StreamPublisher.prototype, 'error')
+
+        try {
+            const provider = new TestProvider('ws1:thread1:request-1:reasoning:0', {
+                natsService: makeFakeNats().fake,
+                usageReporter: {} as any,
+                runImageRouter: vi.fn(),
+                runVideoRouter: vi.fn(),
+            } as BaseProviderDeps)
+            const parentAbortController = new AbortController()
+            let markInvocationStarted!: () => void
+            const invocationStarted = new Promise<void>((resolve) => {
+                markInvocationStarted = resolve
+            })
+            ;(provider as any).app = {
+                invoke: vi.fn(async (_state: ProviderState, options: { signal: AbortSignal }) => {
+                    markInvocationStarted()
+                    return await new Promise<ProviderState>((_resolve, reject) => {
+                        options.signal.addEventListener('abort', () => reject(new Error('Abort')), { once: true })
+                    })
+                }),
+            }
+
+            const resultPromise = provider.process({
+                organizationId: 'organization-1',
+                workspaceId: 'ws1',
+                aiChatThreadId: 'thread1',
+                aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+                messages: [],
+                abortSignal: parentAbortController.signal,
+                durableGenerationRequestId: 'request-1',
+                generationRun: {
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'request-1:reasoning:0',
+                    reasoningModelId: 'Anthropic:claude',
+                    reasoningIndex: 0,
+                    requestKind: 'media-generation-matrix',
+                },
+            })
+            await invocationStarted
+            parentAbortController.abort(new Error('Stopped by user'))
+            const result = await resultPromise
+
+            expect(result.error).toBeUndefined()
+            expect(result.cancelledByUser).toBe(true)
+            expect(beginCancellation).toHaveBeenCalledWith('request-1')
+            expect(completeRequest).not.toHaveBeenCalled()
+            expect(publishError).not.toHaveBeenCalled()
+        } finally {
+            beginCancellation.mockRestore()
+            completeRequest.mockRestore()
+            publishError.mockRestore()
+        }
+    })
+
     it('calls media-request completion and drainage hooks when process-level graph execution fails', async () => {
         const completeKnownMediaGenerationRequests = vi.spyOn(
             StreamPublisher.prototype as any,
@@ -1169,5 +1437,73 @@ describe('BaseProvider usage lifecycle', () => {
         expect((provider as any).streamPublisher.drainPendingWrites).toHaveBeenCalledOnce()
         expect(finishProseMirrorStream).toHaveBeenCalledOnce()
         expect(result).toEqual({})
+    })
+
+    it('leaves durable request settlement to the reasoning owner when a nested image provider cleans up', async () => {
+        const failUnfinishedRuns = vi.spyOn(MediaGenerationRequestService.prototype, 'failUnfinishedRuns')
+            .mockResolvedValue(undefined)
+        const completeKnownMediaGenerationRequests = vi.fn()
+        const provider = new TestProvider('ws1:thread1:image-run-1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        ;(provider as any).streamPublisher = {
+            completeKnownMediaGenerationRequests,
+            drainPendingWrites: vi.fn().mockResolvedValue(undefined),
+            finishProseMirrorStream: vi.fn().mockResolvedValue(undefined),
+        } as StreamPublisher
+
+        await (provider as any).cleanup({
+            workspaceId: 'ws1',
+            durableGenerationRequestId: 'request-1',
+            enableImageGeneration: true,
+            enableVideoGeneration: false,
+            generationRun: {
+                requestKind: 'single-media',
+                generationRequestId: 'request-1',
+                mediaRunId: 'image-run-1',
+            },
+        } as ProviderState)
+
+        expect(failUnfinishedRuns).not.toHaveBeenCalled()
+        expect(completeKnownMediaGenerationRequests).not.toHaveBeenCalled()
+        failUnfinishedRuns.mockRestore()
+    })
+
+    it('terminally settles unfinished durable runs from the owning reasoning workflow', async () => {
+        const failUnfinishedRuns = vi.spyOn(MediaGenerationRequestService.prototype, 'failUnfinishedRuns')
+            .mockResolvedValue(undefined)
+        const completeKnownMediaGenerationRequests = vi.fn()
+        const provider = new TestProvider('ws1:thread1', {
+            natsService: { publish: vi.fn() } as any,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        ;(provider as any).streamPublisher = {
+            completeKnownMediaGenerationRequests,
+            drainPendingWrites: vi.fn().mockResolvedValue(undefined),
+            finishProseMirrorStream: vi.fn().mockResolvedValue(undefined),
+        } as StreamPublisher
+
+        await (provider as any).cleanup({
+            workspaceId: 'ws1',
+            durableGenerationRequestId: 'request-1',
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+            generationRun: {
+                requestKind: 'single-media',
+                generationRequestId: 'request-1',
+            },
+        } as ProviderState)
+
+        expect(failUnfinishedRuns).toHaveBeenCalledWith({
+            generationRequestId: 'request-1',
+            workspaceId: 'ws1',
+        })
+        expect(completeKnownMediaGenerationRequests).toHaveBeenCalledOnce()
+        failUnfinishedRuns.mockRestore()
     })
 })

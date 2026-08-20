@@ -179,19 +179,26 @@ function persistedNodeContainsGenerationRequest(
     return Boolean(node.content?.some(child => persistedNodeContainsGenerationRequest(child, generationRequestId)))
 }
 
-function settlePersistedGenerationNode(
+export function settlePersistedGenerationNode(
     node: PersistedProseMirrorJsonNode,
     generationRequestId: string,
     inheritedRequestScope = false,
-): { node: PersistedProseMirrorJsonNode; changed: boolean } {
+): { node: PersistedProseMirrorJsonNode | null; changed: boolean } {
     const ownRequestMatch = node.attrs?.generationRequestId === generationRequestId
     const responseRequestMatch = node.type === aiResponseMessageNodeType
         && persistedNodeContainsGenerationRequest(node, generationRequestId)
     const requestScoped = inheritedRequestScope || ownRequestMatch
-    const nextChildren = node.content?.map(child =>
+    const discardCancelledMedia = requestScoped && (
+        (node.type === aiGeneratedImageNodeType && node.attrs?.isPartial === true)
+        || (node.type === aiGeneratedVideoNodeType && node.attrs?.isPending !== false)
+    )
+    if (discardCancelledMedia) return { node: null, changed: true }
+
+    const childSettlements = node.content?.map(child =>
         settlePersistedGenerationNode(child, generationRequestId, requestScoped)
     )
-    const childrenChanged = Boolean(nextChildren?.some(result => result.changed))
+    const childrenChanged = Boolean(childSettlements?.some(result => result.changed))
+    const nextChildren = childSettlements?.flatMap(result => result.node ? [result.node] : [])
     let nextAttrs = node.attrs
     let attrsChanged = false
 
@@ -215,13 +222,6 @@ function settlePersistedGenerationNode(
             isStreaming: false,
         }
         attrsChanged = true
-    } else if (node.type === aiGeneratedVideoNodeType && requestScoped && node.attrs?.isPending !== false) {
-        nextAttrs = {
-            ...node.attrs,
-            isPending: false,
-            errorMessage: node.attrs?.errorMessage || 'Generation cancelled',
-        }
-        attrsChanged = true
     }
 
     if (!childrenChanged && !attrsChanged) return { node, changed: false }
@@ -229,7 +229,7 @@ function settlePersistedGenerationNode(
         node: {
             ...node,
             ...(nextAttrs ? { attrs: nextAttrs } : {}),
-            ...(nextChildren ? { content: nextChildren.map(result => result.node) } : {}),
+            ...(nextChildren ? { content: nextChildren } : {}),
         },
         changed: true,
     }
@@ -261,7 +261,7 @@ export async function settlePersistedAiChatGenerationRequest(params: {
     const requestMatched = persistedNodeContainsGenerationRequest(doc, params.generationRequestId)
     if (!requestMatched) return { found: true, requestMatched: false, changed: false }
     const settled = settlePersistedGenerationNode(doc, params.generationRequestId)
-    if (!settled.changed) return { found: true, requestMatched: true, changed: false }
+    if (!settled.changed || !settled.node) return { found: true, requestMatched: true, changed: false }
     await AssetDocumentService.replaceSystemSnapshot({
         asset,
         role: 'conversation',
@@ -1092,12 +1092,22 @@ export class AiChatProseMirrorStreamAssembler {
         }
 
         const transaction = this.engine.state.tr
+        const cancelledMediaRanges: Array<{ from: number; to: number }> = []
         this.engine.state.doc.descendants((node: ProseMirrorNode, pos: number) => {
             const nodeType = node.type.name
             const matchesRequest = nodeType === aiResponseMessageNodeType
                 ? this.nodeContainsGenerationRequest(node, generationRequestId)
                 : node.attrs?.generationRequestId === generationRequestId
             if (!matchesRequest) return
+
+            const discardCancelledMedia = options.cancelled && (
+                (nodeType === aiGeneratedImageNodeType && node.attrs.isPartial === true)
+                || (nodeType === aiGeneratedVideoNodeType && node.attrs.isPending !== false)
+            )
+            if (discardCancelledMedia) {
+                cancelledMediaRanges.push({ from: pos, to: pos + node.nodeSize })
+                return false
+            }
 
             if (nodeType === aiResponseMessageNodeType || nodeType === aiReasoningSectionNodeType) {
                 if (node.attrs.isInitialRenderAnimation === false && node.attrs.isReceivingAnimation === false) return
@@ -1116,15 +1126,10 @@ export class AiChatProseMirrorStreamAssembler {
                 })
                 return
             }
-
-            if (options.cancelled && nodeType === aiGeneratedVideoNodeType && node.attrs.isPending !== false) {
-                transaction.setNodeMarkup(pos, undefined, {
-                    ...node.attrs,
-                    isPending: false,
-                    errorMessage: node.attrs.errorMessage || 'Generation cancelled',
-                })
-            }
         })
+        for (const range of cancelledMediaRanges.sort((left, right) => right.from - left.from)) {
+            transaction.delete(range.from, range.to)
+        }
         await this.applyFinalizationTransaction(transaction, options.publishSteps !== false)
     }
 

@@ -1,4 +1,10 @@
-import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
+import type {
+    ImageGenerationTrace,
+    MediaGenerationProgressState,
+    OperationProgressItem,
+    VideoGenerationTrace,
+} from '@lixpi/constants'
+import { aiMediaGenerationProgressNodeType } from './node-specs.ts'
 import {
     getAiLineageEventsForProjection,
     type AiLineageEventDescriptor,
@@ -59,6 +65,7 @@ type BuildGeneratedMediaTurnProjectionOptions = {
     forceGenerationDetailsOpen?: boolean
     limitToLocatorMedia?: boolean
     lineageProjectionScope?: AiLineageProjectionScope
+    includeGenerationProgressTimeline?: boolean
 }
 
 type BuildBranchMarkerTurnProjectionOptions = {
@@ -209,6 +216,36 @@ function createSingleGeneratedMediaFilter(locator: GeneratedMediaTurnLocator): P
     return (node) => projectionNodeMatchesLocator(node, locator)
 }
 
+function getGenerationTraceMediaRunId(node: ProseMirrorJsonNode): string {
+    if (node.type !== 'aiCollapsibleBlock') return ''
+    const attrs = node.attrs ?? {}
+    const traceGenerationRun = attrs.imageGenerationTrace?.generationRun
+        ?? attrs.videoGenerationTrace?.generationRun
+        ?? attrs.capabilityGenerationTrace?.generationRun
+    const mediaRunId = attrs.mediaRunId ?? traceGenerationRun?.mediaRunId
+    return typeof mediaRunId === 'string' ? mediaRunId : ''
+}
+
+function isMediaGenerationTraceProjectionNode(node: ProseMirrorJsonNode): boolean {
+    const attrs = node.attrs ?? {}
+    return node.type === 'aiCollapsibleBlock'
+        && Boolean(
+            attrs.imageGenerationTrace
+            || attrs.videoGenerationTrace
+            || attrs.capabilityGenerationTrace
+            || attrs.imageGenerationTraceId,
+        )
+}
+
+function containerHasMatchingGenerationTrace(
+    container: ProseMirrorJsonNode,
+    locator: GeneratedMediaTurnLocator,
+): boolean {
+    if (isMediaGenerationTraceProjectionNode(container)
+        && getGenerationTraceMediaRunId(container) === locator.mediaRunId) return true
+    return Boolean(container.content?.some((child) => containerHasMatchingGenerationTrace(child, locator)))
+}
+
 type LineageIds = {
     branchOriginNodeIds: Set<string>
     branchForkNodeIds: Set<string>
@@ -292,10 +329,18 @@ function createProjectionNodeFilter(
         ? collectMatchingGeneratedMediaLineageIds(container, locator)
         : null
     const shouldFilterLineageEvents = Boolean(lineageIds && hasAnyLineageIds(lineageIds))
+    const shouldFilterGenerationTraces = Boolean(
+        limitToLocatorMedia
+        && locator.mediaRunId
+        && containerHasMatchingGenerationTrace(container, locator),
+    )
     const seenLineageEventIds = new Set<string>()
 
     return (node) => {
         if (isGeneratedMediaProjectionNode(node)) return mediaFilter ? mediaFilter(node) : true
+        if (shouldFilterGenerationTraces && isMediaGenerationTraceProjectionNode(node)) {
+            return getGenerationTraceMediaRunId(node) === locator.mediaRunId
+        }
         if (node.type !== 'aiLineageEvent') return true
 
         if (shouldFilterLineageEvents && lineageIds && !lineageEventMatchesIds(node, lineageIds)) return false
@@ -346,6 +391,197 @@ function cloneProjectionNode(
     reasoningModelId?: string,
 ): ProseMirrorJsonNode {
     return cloneProjectionNodeTree(node, forceGenerationDetailsOpen, shouldKeepNode, reasoningModelId) ?? cloneProseMirrorJsonNode(node)
+}
+
+function getProjectedMediaGenerationProgress(
+    node: ProseMirrorJsonNode,
+    locator: GeneratedMediaTurnLocator,
+): MediaGenerationProgressState | null {
+    if (!generatedMediaNodeMatchesLocator(node, locator)) return null
+    const generationProgress = node.attrs?.generationProgress
+    if (!generationProgress || typeof generationProgress !== 'object' || Array.isArray(generationProgress)) return null
+    return generationProgress as MediaGenerationProgressState
+}
+
+export function getGeneratedMediaProgressFromThreadContent(
+    threadContent: unknown,
+    locator: GeneratedMediaTurnLocator,
+): MediaGenerationProgressState | null {
+    const root = parseProseMirrorJsonContent(threadContent)
+    if (!root) return null
+
+    let progress: MediaGenerationProgressState | null = null
+    const visit = (node: ProseMirrorJsonNode): void => {
+        if (progress) return
+        progress = getProjectedMediaGenerationProgress(node, locator)
+        if (progress) return
+        for (const child of node.content ?? []) visit(child)
+    }
+    visit(root)
+    return progress ? structuredClone(progress) : null
+}
+
+function isGenerationInvocationAnchor(
+    node: ProseMirrorJsonNode,
+    locator: GeneratedMediaTurnLocator,
+): boolean {
+    if (node.type !== 'aiCollapsibleBlock') return false
+    const attrs = node.attrs ?? {}
+    const traceMediaRunId = getGenerationTraceMediaRunId(node)
+    if (locator.mediaRunId && traceMediaRunId) return traceMediaRunId === locator.mediaRunId
+    if (locator.reasoningRunId && attrs.reasoningRunId === locator.reasoningRunId) return true
+    if (locator.reasoningModelId && attrs.reasoningModelId === locator.reasoningModelId) return true
+    return false
+}
+
+const MEDIA_GENERATION_PROMPT_PROGRESS_ITEM_ID = 'lineage:media-generation-prompt'
+
+function getGenerationInvocationPrompt(node: ProseMirrorJsonNode | undefined): string {
+    if (!node || !isMediaGenerationTraceProjectionNode(node)) return ''
+    const trace = node.attrs?.imageGenerationTrace ?? node.attrs?.videoGenerationTrace
+    const toolPrompt = trace && typeof trace === 'object'
+        ? (trace as Record<string, unknown>).toolPrompt
+        : undefined
+    if (typeof toolPrompt === 'string' && toolPrompt.trim()) return toolPrompt.trim()
+    return collectProseMirrorText(node).trim()
+}
+
+function removeTrailingMediaPrompt(preambleSummary: string, mediaPrompt: string): string {
+    const normalizedPreamble = preambleSummary.trim()
+    const normalizedMediaPrompt = mediaPrompt.trim()
+    if (!normalizedMediaPrompt) return normalizedPreamble
+
+    let preambleIndex = normalizedPreamble.length - 1
+    let promptIndex = normalizedMediaPrompt.length - 1
+    while (promptIndex >= 0) {
+        if (/\s/u.test(normalizedMediaPrompt[promptIndex]!)) {
+            promptIndex -= 1
+            continue
+        }
+        while (preambleIndex >= 0 && /\s/u.test(normalizedPreamble[preambleIndex]!)) preambleIndex -= 1
+        if (preambleIndex < 0 || normalizedPreamble[preambleIndex] !== normalizedMediaPrompt[promptIndex]) {
+            return normalizedPreamble
+        }
+        preambleIndex -= 1
+        promptIndex -= 1
+    }
+    while (preambleIndex >= 0 && /\s/u.test(normalizedPreamble[preambleIndex]!)) preambleIndex -= 1
+    return normalizedPreamble.slice(0, preambleIndex + 1).trim()
+}
+
+function replaceUnderstandRequestSummary(
+    item: OperationProgressItem,
+    preambleSummary: string,
+): OperationProgressItem {
+    return {
+        ...item,
+        ...(item.id === 'lineage:understand-request' && preambleSummary
+            ? { summary: preambleSummary }
+            : {}),
+        ...(item.children
+            ? { children: item.children.map(child => replaceUnderstandRequestSummary(child, preambleSummary)) }
+            : {}),
+    }
+}
+
+function createProjectedGenerationProgress(
+    generationProgress: MediaGenerationProgressState,
+    preambleSummary: string,
+    mediaPrompt: string,
+): MediaGenerationProgressState {
+    const items = (generationProgress.progress.items ?? [])
+        .filter(item => item.id !== MEDIA_GENERATION_PROMPT_PROGRESS_ITEM_ID)
+        .map(item => replaceUnderstandRequestSummary(item, preambleSummary))
+    if (mediaPrompt) {
+        const branchResolutionIndex = items.findIndex(item => item.id === 'lineage:resolve-branch-lineage')
+        const understandRequestIndex = items.findIndex(item => item.id === 'lineage:understand-request')
+        const promptIndex = branchResolutionIndex >= 0
+            ? branchResolutionIndex + 1
+            : understandRequestIndex >= 0
+                ? understandRequestIndex + 1
+                : 0
+        items.splice(promptIndex, 0, {
+            id: MEDIA_GENERATION_PROMPT_PROGRESS_ITEM_ID,
+            title: 'Prompt for media generation model written by reasoning model',
+            status: 'completed',
+            summary: mediaPrompt,
+        })
+    }
+
+    return {
+        ...structuredClone(generationProgress),
+        progress: {
+            ...structuredClone(generationProgress.progress),
+            items,
+        },
+    }
+}
+
+// The generated-media node owns the sealed progress state, while the matching
+// trace owns the invocation-time prompt. History projects both into one pipeline
+// immediately after the user message. Standalone assistant preamble is absorbed
+// by Understand request instead of being rendered a second time above it.
+function insertGenerationProgressTimelineForProjection(
+    node: ProseMirrorJsonNode,
+    locator: GeneratedMediaTurnLocator,
+): boolean {
+    const children = node.content ?? []
+    const generatedMediaIndex = children.findIndex(child => Boolean(
+        getProjectedMediaGenerationProgress(child, locator),
+    ))
+    if (generatedMediaIndex >= 0) {
+        const generationProgress = getProjectedMediaGenerationProgress(children[generatedMediaIndex]!, locator)
+        if (!generationProgress) return false
+        const invocationIndex = children.findIndex(child => isGenerationInvocationAnchor(child, locator))
+        const fallbackInvocationIndex = children.findIndex(isMediaGenerationTraceProjectionNode)
+        const insertAt = invocationIndex >= 0
+            ? invocationIndex
+            : fallbackInvocationIndex >= 0
+                ? fallbackInvocationIndex
+                : generatedMediaIndex
+        const preambleNodes = children
+            .slice(0, insertAt)
+            .filter(child => child.type !== 'aiLineageEvent')
+        const mediaPrompt = getGenerationInvocationPrompt(children[insertAt])
+        const preambleSummary = removeTrailingMediaPrompt(
+            preambleNodes
+                .map(collectProseMirrorText)
+                .filter(Boolean)
+                .join('\n')
+                .trim(),
+            mediaPrompt,
+        )
+        const preservedPrefix = children
+            .slice(0, insertAt)
+            .filter(child => child.type === 'aiLineageEvent')
+        const progressId = [
+            generationProgress.generationRequestId,
+            generationProgress.mediaRunId ?? locator.mediaRunId ?? '',
+            generationProgress.generationRun ?? '',
+        ].join(':')
+        node.content = [
+            ...preservedPrefix,
+            {
+                type: aiMediaGenerationProgressNodeType,
+                attrs: {
+                    id: progressId,
+                    state: createProjectedGenerationProgress(
+                        generationProgress,
+                        preambleSummary,
+                        mediaPrompt,
+                    ),
+                    showSummaryWhenCollapsedItemIds: ['lineage:understand-request'],
+                },
+            },
+            ...children.slice(insertAt),
+        ]
+        return true
+    }
+
+    for (const child of children) {
+        if (insertGenerationProgressTimelineForProjection(child, locator)) return true
+    }
+    return false
 }
 
 function createProjectionDocument(threadId: string, threadAttrs: Record<string, any> | undefined, messages: ProseMirrorJsonNode[]): ProseMirrorJsonNode {
@@ -399,9 +635,7 @@ function materializeReasoningSectionLineageEventsForProjection(
 }
 
 function isGenerationTraceProjectionNode(node: ProseMirrorJsonNode): boolean {
-    const attrs = node.attrs ?? {}
-    return node.type === 'aiCollapsibleBlock'
-        && Boolean(attrs.imageGenerationTrace || attrs.videoGenerationTrace || attrs.imageGenerationTraceId)
+    return isMediaGenerationTraceProjectionNode(node)
 }
 
 // In detail panels, lineage outcomes read best as conclusions of the resolver
@@ -434,11 +668,13 @@ function cloneResponseForProjection(
     forceGenerationDetailsOpen: boolean,
     limitToLocatorMedia: boolean,
     lineageProjectionScope: AiLineageProjectionScope,
+    includeGenerationProgressTimeline: boolean,
 ): ProseMirrorJsonNode | null {
     const sections = (responseNode.content ?? []).filter((child) => child.type === 'aiReasoningSection')
     if (sections.length === 0) {
         const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
         const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
+        if (includeGenerationProgressTimeline) insertGenerationProgressTimelineForProjection(cloned, locator)
         relocateLineageEventsToResolverAudit(cloned)
         return cloned
     }
@@ -448,6 +684,7 @@ function cloneResponseForProjection(
     if (selectedSection === responseNode) {
         const shouldKeepNode = createProjectionNodeFilter(responseNode, locator, limitToLocatorMedia)
         const cloned = cloneProjectionNode(responseNode, forceGenerationDetailsOpen, shouldKeepNode, locator.reasoningModelId)
+        if (includeGenerationProgressTimeline) insertGenerationProgressTimelineForProjection(cloned, locator)
         relocateLineageEventsToResolverAudit(cloned)
         return cloned
     }
@@ -459,6 +696,7 @@ function cloneResponseForProjection(
         lineageProjectionScope,
     }
     materializeReasoningSectionLineageEventsForProjection(clonedSection, lineageProjectionScope)
+    if (includeGenerationProgressTimeline) insertGenerationProgressTimelineForProjection(clonedSection, locator)
     relocateLineageEventsToResolverAudit(clonedSection)
     return {
         ...cloneProseMirrorJsonNode(responseNode),
@@ -604,6 +842,7 @@ export function buildGeneratedMediaTurnProjectionFromThreadContent(
         options.forceGenerationDetailsOpen ?? false,
         options.limitToLocatorMedia ?? false,
         options.lineageProjectionScope ?? 'media-run',
+        options.includeGenerationProgressTimeline ?? false,
     )
     if (!responseProjection) return null
 

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { channels, getVideoMaxReferenceImages, hasHighImageInputFidelity } from './state.ts'
+import { channels, getVideoMaxReferenceImages } from './state.ts'
 
 describe('state defaults and helpers', () => {
     it('defaults channel values for newly initialized fields', () => {
@@ -28,13 +28,6 @@ describe('state defaults and helpers', () => {
         expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: 1 } as any)).toBe(1)
         expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: -2 } as any)).toBe(3)
         expect(getVideoMaxReferenceImages({ videoMaxReferenceImages: Number.NaN } as any)).toBe(3)
-    })
-
-    it('reads high image-input fidelity only from routed model metadata', () => {
-        expect(hasHighImageInputFidelity(undefined)).toBe(false)
-        expect(hasHighImageInputFidelity({} as any)).toBe(false)
-        expect(hasHighImageInputFidelity({ imageInputFidelity: { level: 'standard' } } as any)).toBe(false)
-        expect(hasHighImageInputFidelity({ imageInputFidelity: { level: 'high' } } as any)).toBe(true)
     })
 
     it('keeps previous values when reducer input is undefined', () => {

@@ -15,6 +15,12 @@ The LLM orchestration workflow (validate → stream → image gen → usage → 
 
 Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in `infrastructure/pulumi/`.
 
+### Capability Module Ownership
+
+Every concrete Capability MUST be self-contained under `packages/lixpi/capability-system/src/capabilities/<module-id>/`. The module directory owns its shared contracts, backend and frontend behavior, Tool and Skill packages, runtime orchestration, prompts, schemas, resources, and tests.
+
+Consuming services MUST NOT implement capability-specific runtime logic or import a concrete capability strategy. A service may only supply infrastructure through package-owned typed ports, register the module definition in its composition root, and install module-published strategies through `CapabilityModuleCatalog`. Generic Capability infrastructure MUST NOT import a concrete module. See [Tools and Skills](documentation/library/TOOLS-AND-SKILLS.md) and the nearby [`@lixpi/capability-system` README](packages/lixpi/capability-system/README.md) before changing Capability code.
+
 ## Code Style
 
 At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.

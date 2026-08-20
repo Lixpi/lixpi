@@ -572,6 +572,23 @@ describe('AiInteractionService', () => {
         expect(payload.token).toBe('auth-token')
     })
 
+    it('reuses the browser-owned generation request id for submission and matrix routing', async () => {
+        await service.sendChatMessage({
+            generationRequestId: 'media-browser-request',
+            aiReasoningModels: ['reasoner-a'],
+            useMultipleReasoningModels: true,
+            aiImageModels: ['image-a', 'image-b'],
+            useMultipleImageModels: true,
+            aiVideoModels: [],
+            useMultipleVideoModels: false,
+        })
+
+        const payload = natsPublishMock.mock.calls.at(-1)?.[1] as Record<string, any>
+        expect(payload.generationRequestId).toBe('media-browser-request')
+        expect(payload.mediaGenerationRequest?.generationRequestId).toBe('media-browser-request')
+        expect(uuidMock).not.toHaveBeenCalled()
+    })
+
     it('excludes a disabled scalar video model from image matrix planning', async () => {
         await service.sendChatMessage({
             aiReasoningModels: ['reasoner-a'],

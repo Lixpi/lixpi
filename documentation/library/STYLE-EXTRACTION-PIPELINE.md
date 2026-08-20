@@ -45,7 +45,7 @@ Ready axis steps execute in parallel, bounded to four active specialists. Crop m
 
 The result captures reusable visual behavior while reducing accidental source reuse. Detail crops preserve material, edge, texture, and subject-rendering evidence without always retaining the entire source frame. The crop stage also creates a downscaled full-frame `composition-evidence` sample for each source. Generated neutral probes demonstrate the synthesized medium and parameter contract. Palette-dominant output includes deterministic swatches and roles.
 
-The synthesized Tool instructions include negative constraints for rejected training-prior tropes. A digital cel-shaded input, for example, can explicitly forbid paper tooth and wash artifacts even if a model associates the palette with watercolor.
+The synthesized Tool instructions include only source-derived negative constraints needed to prevent an evidence-conflicting interpretation. The static pipeline instructions contain no stock medium, subject, or artifact examples.
 
 See [Style Reference Isolation](./ANTI-LEAKAGE.md) for the crop behavior, provider path, and isolation limits.
 

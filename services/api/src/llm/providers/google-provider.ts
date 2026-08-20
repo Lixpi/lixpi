@@ -10,6 +10,7 @@ import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
+    assertMessageInputKindsSupported,
     convertAttachmentsForProvider,
     parseDataUrl,
     resolveImageUrls,
@@ -32,8 +33,9 @@ import {
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
-import { assertProviderMessageInputKinds } from './provider-capabilities.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
+import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
+import { hasExplicitVideoOutputRequest } from '../orchestration/scalar-media-output-routing.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -50,10 +52,6 @@ type GoogleToolStreamResult = {
     finishReasons: string[]
     functionCallNames: string[]
 }
-
-const EXPLICIT_VIDEO_CREATION_PATTERN =
-    /\b(?:generate|create|make|produce|render)\s+(?:an?\s+|the\s+)?(?:(?:short|cinematic|animated)\s+)*(?:video|clip|animation)\b/i
-const EXPLICIT_VIDEO_VERB_PATTERN = /\b(?:animate|film)\b/i
 
 const getGoogleMessageText = (content: unknown): string => {
     if (typeof content === 'string') return content
@@ -74,8 +72,7 @@ const hasExplicitVideoRequest = (messages: ChatMessage[]): boolean => {
         if (message?.role !== 'user') continue
         const text = getGoogleMessageText(message.content).trim()
         if (!text) continue
-        return EXPLICIT_VIDEO_CREATION_PATTERN.test(text)
-            || EXPLICIT_VIDEO_VERB_PATTERN.test(text)
+        return hasExplicitVideoOutputRequest(text)
     }
     return false
 }
@@ -197,21 +194,7 @@ export function buildVeoReferenceImages(refs: VeoImageInput[]): Array<{ image: V
 const buildGoogleImageReferenceLabel = (
     reference: ResolvedImageGenerationReference,
     index: number,
-): string => {
-    const prefix = `REFERENCE IMAGE ${index + 1}`
-    switch (reference.role) {
-        case 'character-sheet-draft':
-            return `${prefix} — GENERATED SHEET TO EDIT. Preserve its exact layout, panels, labels, guides, and composition.`
-        case 'character-source':
-            return `${prefix} — AUTHORITATIVE CHARACTER SOURCE. Preserve its identity, design, facial construction, and rendering style.`
-        case 'character-layout-example':
-            return `${prefix} — AUTHORITATIVE LAYOUT TEMPLATE. Use its organization only; never copy its depicted character.`
-        case 'capability-reference':
-            return `${prefix} — CAPABILITY REFERENCE.`
-        case 'source-reference':
-            return `${prefix} — SOURCE REFERENCE.`
-    }
-}
+): string => buildImageReferencePromptLabel(reference, index, 'REFERENCE IMAGE')
 
 export class GoogleProvider extends BaseProvider {
     readonly providerName: ProviderName = 'Google'
@@ -224,13 +207,25 @@ export class GoogleProvider extends BaseProvider {
         this.client = new GoogleGenAI({ apiKey })
     }
 
+    // No transportFaultNames override: @google/genai calls fetch directly and
+    // does not wrap socket failures in an SDK class — they arrive as
+    // `TypeError: fetch failed` carrying the real code on `cause`, which the
+    // shared socket layer covers. Its own ApiError is an HTTP-status error and
+    // is deliberately not retried.
+
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
-        assertProviderMessageInputKinds('Google', state.modelVersion, state.messages)
+        assertMessageInputKindsSupported(
+            'Google',
+            state.modelVersion,
+            state.aiModelMetaInfo.inferenceCapabilities,
+            state.messages,
+        )
         const messages = state.messages
         const modelVersion = state.modelVersion
         const maxTokens = state.maxCompletionSize
         const temperature = state.temperature ?? 0.7
-        const supportsSystemPrompt = state.aiModelMetaInfo?.supportsSystemPrompt ?? true
+        const capabilities = state.aiModelMetaInfo.inferenceCapabilities
+        const supportsSystemPrompt = capabilities.supportsSystemPrompt
         const enableImageGeneration = state.enableImageGeneration ?? false
         const imageSize = state.imageSize ?? 'auto'
 
@@ -239,15 +234,17 @@ export class GoogleProvider extends BaseProvider {
             const modality = typeof m === 'object' ? m?.modality : m
             return modality === 'image' || modality === 'image_generation'
         })
-        const modelNameImpliesImageOutput = /gemini-.*(?:-image|image-generation)/i.test(modelVersion)
-        const effectiveImageGen = enableImageGeneration && (modelSupportsImageOutput || modelNameImpliesImageOutput)
+        const effectiveImageGen = enableImageGeneration && modelSupportsImageOutput
 
         const hasImageModel = !!state.imageModelVersion
         const injectTool = hasImageModel && !enableImageGeneration
 
         const enableVideoGeneration = state.enableVideoGeneration ?? false
-        const modelNameImpliesVideoOutput = /veo/i.test(modelVersion)
-        const effectiveVideoGen = enableVideoGeneration && modelNameImpliesVideoOutput
+        const modelSupportsVideoOutput = Array.isArray(modalities) && modalities.some((m: any) => {
+            const modality = typeof m === 'object' ? m?.modality : m
+            return modality === 'video' || modality === 'video_generation'
+        })
+        const effectiveVideoGen = enableVideoGeneration && modelSupportsVideoOutput
 
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
@@ -298,7 +295,8 @@ export class GoogleProvider extends BaseProvider {
             ]
         }
 
-        const config: Record<string, any> = { temperature }
+        const config: Record<string, any> = {}
+        if (capabilities.supportsTemperature) config.temperature = temperature
         if (maxTokens) config.maxOutputTokens = maxTokens
 
         if (effectiveImageGen) {
@@ -326,6 +324,14 @@ export class GoogleProvider extends BaseProvider {
             if (initialFunctionDeclarations.length > 0) {
                 config.tools = [{ functionDeclarations: initialFunctionDeclarations }]
             }
+            if (state.capabilityUsageMode === 'character-creator' && mediaFanoutAllowedFunctionNames.includes(TOOL_NAME)) {
+                config.toolConfig = {
+                    functionCallingConfig: {
+                        mode: 'ANY',
+                        allowedFunctionNames: [TOOL_NAME],
+                    },
+                }
+            }
         }
 
         let systemInstruction: string | undefined
@@ -341,7 +347,7 @@ export class GoogleProvider extends BaseProvider {
         }
         if (systemInstruction) config.systemInstruction = systemInstruction
 
-        if (effectiveImageGen && !modelVersion.startsWith('gemini-2.5')) {
+        if (effectiveImageGen && capabilities.thinkingMode === 'google-level') {
             config.thinkingConfig = { includeThoughts: true }
         }
 
@@ -392,11 +398,16 @@ export class GoogleProvider extends BaseProvider {
                     state,
                     request: { model: modelVersion, contents, config },
                 })
-                const response = await this.client.models.generateContent({
-                    model: modelVersion,
-                    contents: contents as any,
-                    config: config as any,
-                })
+                // Non-streaming image call: nothing is published until it
+                // returns, so the whole request is safe to reattempt.
+                const response = await this.retryTransport(
+                'image',
+                    async () => await this.client.models.generateContent({
+                        model: modelVersion,
+                        contents: contents as any,
+                        config: config as any,
+                    }),
+                )
                 usageMetadata = response.usageMetadata
 
                 // Collect image parts in order. Gemini 3 image models may emit
@@ -471,11 +482,15 @@ export class GoogleProvider extends BaseProvider {
                         state,
                         request: { model: modelVersion, contents, config: effectiveStreamConfig },
                     })
-                    const stream = await this.client.models.generateContentStream({
-                        model: modelVersion,
-                        contents: contents as any,
-                        config: effectiveStreamConfig as any,
-                    })
+                    // Submit only — the drain below publishes as it goes.
+                    const stream = await this.retryTransport(
+                'stream',
+                        async () => await this.client.models.generateContentStream({
+                            model: modelVersion,
+                            contents: contents as any,
+                            config: effectiveStreamConfig as any,
+                        }),
+                    )
                     let detectedImage: string | undefined
                     let detectedVideo: string | undefined
                     const capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }> = []
@@ -568,6 +583,7 @@ export class GoogleProvider extends BaseProvider {
                     : !detectedImage && !detectedVideo
 
                 if (shouldForceMediaTool
+                    && state.capabilityUsageMode !== 'character-creator'
                     && !this.shouldStop
                     && forcedFunctionNames.length > 0) {
                     warn(`[Google:${this.instanceKey}] AUTO tool selection did not satisfy the media request; retrying with forced function call ${JSON.stringify({
@@ -622,6 +638,8 @@ export class GoogleProvider extends BaseProvider {
                         promptLen: detectedImage.length,
                         referenceImagesExtracted: refs.length,
                     }, null, 0)}`)
+                } else if (injectTool && state.capabilityMediaExecutionPlan) {
+                    info(`[Google:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${modelVersion})`)
                 } else if (injectTool && injectVideoTool) {
                     warn(`Google did not emit generate_image or generate_video tool call for ${this.instanceKey}`)
                 } else if (injectTool) {
@@ -635,11 +653,15 @@ export class GoogleProvider extends BaseProvider {
                     state,
                     request: { model: modelVersion, contents, config },
                 })
-                const stream = await this.client.models.generateContentStream({
-                    model: modelVersion,
-                    contents: contents as any,
-                    config: config as any,
-                })
+                // Submit only — the drain below publishes as it goes.
+                const stream = await this.retryTransport(
+                'text',
+                    async () => await this.client.models.generateContentStream({
+                        model: modelVersion,
+                        contents: contents as any,
+                        config: config as any,
+                    }),
+                )
                 for await (const chunk of stream) {
                     if (this.shouldStop) break
                     if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata
@@ -832,7 +854,12 @@ export class GoogleProvider extends BaseProvider {
             } else if (firstFrameImage) {
                 veoParams.image = firstFrameImage
             }
-            let operation: any = await this.client.models.generateVideos(veoParams as any)
+            // Nothing is published before the operation is accepted, so the
+            // submit is safe to reattempt.
+            let operation: any = await this.retryTransport(
+                'video',
+                async () => await this.client.models.generateVideos(veoParams as any),
+            )
             info(`[Google:${this.instanceKey}] VEO operation accepted ${JSON.stringify({
                 operationName: typeof operation?.name === 'string' ? operation.name : null,
                 done: operation?.done === true,
@@ -848,10 +875,15 @@ export class GoogleProvider extends BaseProvider {
                 if (this.shouldStop) throw new Error('Video generation aborted')
                 this.videoPub.generating()
                 pollCount += 1
-                operation = await this.client.operations.getVideosOperation({
-                    operation,
-                    config: { abortSignal: this.signal } as any,
-                } as any)
+                // A blip while polling must not discard a video the provider is
+                // already rendering — each poll is idempotent, so retry it.
+                operation = await this.retryTransport(
+                'video-poll',
+                    async () => await this.client.operations.getVideosOperation({
+                        operation,
+                        config: { abortSignal: this.signal } as any,
+                    } as any),
+                )
                 if (operation.done || pollCount === 1 || pollCount % 6 === 0) {
                     info(`[Google:${this.instanceKey}] VEO poll ${JSON.stringify({
                         operationName: typeof operation?.name === 'string' ? operation.name : null,
@@ -962,10 +994,15 @@ export class GoogleProvider extends BaseProvider {
         try {
             dir = await mkdtemp(join(tmpdir(), 'veo-dl-'))
             const outPath = join(dir, 'video.mp4')
-            await this.client.files.download({
-                file: video as any,
-                downloadPath: outPath,
-            } as any)
+            // The video is already rendered and billed at this point; losing it
+            // to a dropped download would be the worst possible moment to fail.
+            await this.retryTransport(
+                'video-download',
+                async () => await this.client.files.download({
+                    file: video as any,
+                    downloadPath: outPath,
+                } as any),
+            )
             return await readFile(outPath)
         } finally {
             if (dir) {

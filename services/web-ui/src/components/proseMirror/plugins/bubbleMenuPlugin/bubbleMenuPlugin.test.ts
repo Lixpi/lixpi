@@ -115,7 +115,7 @@ const {
     },
 )
 
-vi.mock('$src/components/bubbleMenu/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/bubble-menu', () => ({
     BubbleMenu: createBubbleMenuMock,
 }))
 

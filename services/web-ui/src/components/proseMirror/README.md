@@ -423,7 +423,7 @@ flowchart LR
   - `code_block` → "Code"
   - `blockquote` → "Quote"
 - Active marks and block types are highlighted with `.is-active` class.
-- Icons are inline SVG strings from `svgIcons/index.ts`.
+- Icons are inline SVG strings from `@lixpi/ui-kit/svg`.
 
 
 ## Styling hooks (non-exhaustive)

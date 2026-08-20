@@ -4,6 +4,7 @@ import sharp from 'sharp'
 
 import type NatsService from '@lixpi/nats-service'
 import { info, warn } from '@lixpi/debug-tools'
+import type { AiModelInferenceCapabilities, AiModelInputKind } from '@lixpi/constants'
 
 // Anthropic's 5MB limit applies to the base64-encoded string. Base64 inflates
 // raw bytes by ~4/3, so 5242880 * 3/4 = 3932160. Use 3.75MB for safety.
@@ -15,6 +16,30 @@ const SAFE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif'])
 // 'OPENAI' targets the Responses API content shape (input_text / input_image),
 // used by both the main provider and the structured VLM client.
 export type AttachmentFormat = 'OPENAI' | 'ANTHROPIC' | 'GOOGLE'
+
+export const assertMessageInputKindsSupported = (
+    provider: string,
+    modelVersion: string,
+    capabilities: AiModelInferenceCapabilities | undefined,
+    messages: Array<{ content?: unknown }>,
+): void => {
+    if (!capabilities) {
+        throw new Error(`MODEL_INFERENCE_CAPABILITIES_REQUIRED:${provider}:${modelVersion}`)
+    }
+    for (const message of messages) {
+        if (!Array.isArray(message.content)) continue
+        for (const block of message.content) {
+            if (!block || typeof block !== 'object' || Array.isArray(block)) continue
+            const type = (block as Record<string, unknown>).type
+            const inputKind: AiModelInputKind | undefined = type === 'input_audio'
+                ? 'audio'
+                : type === 'input_image' ? 'image' : undefined
+            if (inputKind && !capabilities.supportedInputKinds.includes(inputKind)) {
+                throw new Error(`MODEL_INPUT_KIND_UNSUPPORTED:${provider}:${modelVersion}:${inputKind}`)
+            }
+        }
+    }
+}
 
 const detectImageMime = (data: Buffer): string => {
     if (data.length > 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 &&

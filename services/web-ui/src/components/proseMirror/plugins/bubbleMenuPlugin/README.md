@@ -1,6 +1,6 @@
 # Bubble Menu Plugin (ProseMirror Adapter)
 
-ProseMirror-specific adapter over the framework-agnostic [BubbleMenu core]($src/components/bubbleMenu/README.md). This plugin detects text/image selection context from ProseMirror `EditorView` state and shows context-appropriate formatting options.
+ProseMirror-specific adapter over the framework-agnostic `@lixpi/ui-kit/components/bubble-menu` component. This plugin detects text/image selection context from ProseMirror `EditorView` state and shows context-appropriate formatting options.
 
 ## Features
 
@@ -30,11 +30,11 @@ const plugins = [
 ]
 ```
 
-Note: Styles are imported via `$src/components/bubbleMenu/bubbleMenu.scss` (the shared core SCSS). The `ProseMirror.scss` file already imports this.
+Styles are imported from `@lixpi/ui-kit/styles/bubble-menu` by `ProseMirror.scss`.
 
 ## Architecture
 
-This plugin is a **thin adapter** over the core `BubbleMenu` class from `$src/components/bubbleMenu/`. The adapter handles:
+This plugin is a **thin adapter** over the core `BubbleMenu` class from `@lixpi/ui-kit`. The adapter handles:
 
 1. **Selection detection** — ProseMirror-specific logic (`getSelectionContext()`, `NodeSelection`, mark checking)
 2. **Position computation** — Converts ProseMirror `coordsAtPos()` or image element rects into `BubbleMenuPositionRequest`
@@ -48,7 +48,6 @@ The core `BubbleMenu` handles DOM creation, context switching, transform-aware p
 
 - `bubbleMenuPlugin.ts` — ProseMirror `Plugin` + `BubbleMenuView` adapter class
 - `bubbleMenuItems.ts` — Menu item configuration (declarative `MENU_ITEMS` list), button creators, and ProseMirror commands
-- `bubbleMenu.scss` — Forward to `$src/components/bubbleMenu/bubbleMenu.scss`
 - `index.ts` — Public exports
 
 ### Selection Context

@@ -115,6 +115,10 @@ export class ProseMirrorEditor {
         this.aiChatThreadRenderContext = {
             ...(aiChatThreadRenderContext ?? {}),
             readOnly,
+            // Capability run traces render Asset and Capability handles with the
+            // same hover cards prompt references use, so the chat thread needs
+            // the same resolver the prompt-reference node views get.
+            promptReferencePreviewRenderer,
         }
         this.documentType = documentType
         this.threadId = threadId

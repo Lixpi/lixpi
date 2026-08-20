@@ -1,0 +1,152 @@
+@use '../../styles/transitions' as *;
+
+// SidePanel - reusable resizable side panel.
+//
+// Both the .side-panel-resize-handle hit target and the visible .side-panel-resize-handle-line
+// span the full height of the panel as a single unbroken line. Callers can
+// target an additional class passed via `className` to style a specific resize
+// handle separately.
+
+@function panelSlideTransition($property) {
+    @return #{$property} var(--side-panel-slide-duration, 1000ms) var(--side-panel-slide-easing, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.side-panel-resize-handle {
+    position: absolute;
+    z-index: var(--side-panel-resize-handle-z-index, 9990);
+    pointer-events: auto;
+    cursor: ew-resize;
+    touch-action: none;
+    height: 100%;
+}
+
+.side-panel-slide,
+.side-panel-toggle {
+    --side-panel-slide-transition: #{panelSlideTransition(transform)};
+}
+
+.side-panel-overlay {
+    --side-panel-overlay-transition: #{panelSlideTransition(opacity)};
+}
+
+.side-panel-slide {
+    transition: var(--side-panel-slide-transition);
+    will-change: transform;
+}
+
+.side-panel-overlay {
+    position: absolute;
+    z-index: var(--side-panel-overlay-z-index, 80);
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--side-panel-overlay-fill, rgb(15 23 42 / 18%));
+    backdrop-filter: blur(4px) saturate(108%);
+    -webkit-backdrop-filter: blur(4px) saturate(108%);
+    transition: var(--side-panel-overlay-transition);
+    will-change: opacity;
+}
+
+.side-panel-overlay-open {
+    pointer-events: none;
+}
+
+.side-panel-touch-drag {
+    touch-action: pan-y;
+}
+
+.side-panel-toggle {
+    position: absolute;
+    z-index: var(--side-panel-toggle-z-index, 10040);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--side-panel-toggle-color, #4b5563);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: var(--side-panel-slide-transition), #{hoverTransition(color, 150ms)};
+    will-change: transform;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+        transform: rotate(180deg);
+        transform-origin: center;
+    }
+
+    &:hover,
+    &:focus-visible {
+        color: var(--side-panel-toggle-hover-color, #1f2937);
+        outline: none;
+    }
+}
+
+.side-panel-toggle-open {
+    svg {
+        transform: none;
+    }
+}
+
+// Translucent glass backdrop that sits behind the panel and blurs the canvas
+// behind it. It is right/left-anchored and sized to the panel width, so its
+// inner edge sits flush with the panel edge.
+.side-panel-backdrop {
+    position: absolute;
+    z-index: var(--side-panel-backdrop-z-index, 90);
+    top: 0;
+    bottom: calc(0px - var(--workspace-canvas-padding-bottom, 0px));
+    width: var(--side-panel-backdrop-width, 0px);
+    pointer-events: none;
+    background: var(--side-panel-backdrop-fill, rgb(248 250 253 / 84%));
+    backdrop-filter: blur(24px) saturate(145%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.side-panel-backdrop-right {
+    right: calc(0px - var(--workspace-canvas-padding-inline, 0px));
+}
+
+.side-panel-backdrop-left {
+    left: calc(0px - var(--workspace-canvas-padding-inline, 0px));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .side-panel-overlay {
+        background: var(--side-panel-overlay-fill-opaque, rgb(15 23 42 / 22%));
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .side-panel-backdrop {
+        background: var(--side-panel-backdrop-fill-opaque, #f8fafd);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+.side-panel-resize-handle-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: var(--side-panel-resize-handle-width, 3px);
+        background-image: var(--side-panel-resize-handle-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+        border-radius: 2px;
+    }
+}

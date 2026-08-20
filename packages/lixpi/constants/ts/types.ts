@@ -177,9 +177,72 @@ export type ImageSizeOption = {
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
 
-export type ImageInputFidelityPolicy = {
-    level: 'standard' | 'high'
-    requestValue?: 'low' | 'high'
+export type ImageReferenceConditioningMode = 'edit' | 'identity' | 'style' | 'structure' | 'pose'
+
+export type ImageReferenceCapabilities = {
+    maxReferenceImages: number
+    maxIdentityReferenceImages: number
+    conditioningModes: ImageReferenceConditioningMode[]
+    inputFidelity: 'provider-managed' | 'standard' | 'high'
+    supportsIterativeEdit: boolean
+    supportsMask: boolean
+    supportsStructureControl: boolean
+    supportsPoseControl: boolean
+    supportsDeterministicSeed: boolean
+    maxOutputPixels: number
+    supportedAspectRatios: string[]
+}
+
+export type CharacterFidelityObjectCoordinate = {
+    organizationId: string
+    bucketName: string
+    objectKey: string
+    mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+    byteLength: number
+}
+
+export type CharacterFidelityAssessmentRequest = {
+    jobId: string
+    organizationId: string
+    panelId: string
+    attemptId: string
+    sources: CharacterFidelityObjectCoordinate[]
+    candidate: CharacterFidelityObjectCoordinate
+    expectedFaceVisibility: 'required' | 'optional' | 'hidden'
+    sourceMedium: 'photograph' | 'illustration' | 'render' | 'mixed' | 'unknown'
+}
+
+export type CharacterFaceDetection = {
+    x: number
+    y: number
+    width: number
+    height: number
+    confidence: number
+}
+
+export type CharacterFidelityUnavailableReason =
+    | 'non-photographic'
+    | 'face-not-required'
+    | 'source-face-not-found'
+    | 'candidate-face-not-found'
+    | 'ambiguous-source-face'
+    | 'ambiguous-candidate-face'
+    | 'assessor-unavailable'
+
+export type CharacterFidelityAssessmentResponse = {
+    jobId: string
+    panelId: string
+    attemptId: string
+    metric: {
+        available: boolean
+        unavailableReason?: CharacterFidelityUnavailableReason
+        cosineSimilarity?: number
+    }
+    sourceDetections: CharacterFaceDetection[]
+    candidateDetections: CharacterFaceDetection[]
+    detector: { artifactId: string; sha256: string }
+    recognizer: { artifactId: string; sha256: string }
+    error?: { code: string; message: string }
 }
 
 export type MediaGenerationConfigControlKey =
@@ -369,6 +432,10 @@ export type BranchOriginProvenance = {
     kind: 'branch-root-fork-decision'
     promptText: string
     reasoningResponseText?: string
+    // Canonical referenced Asset set. Prompt documents preserve every inline
+    // mention separately; execution traces must not treat those occurrences as
+    // separate inputs. Optional only for persisted pre-field marker records.
+    referenceAssetIds?: string[]
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -380,6 +447,7 @@ export type BranchForkProvenance = {
     kind: 'reasoning-run'
     promptText: string
     reasoningResponseText?: string
+    referenceAssetIds?: string[]
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -395,6 +463,7 @@ export type BranchLineProvenance = {
     kind: 'branch-continuation'
     promptText: string
     reasoningResponseText?: string
+    referenceAssetIds?: string[]
     providedReferenceNodeIds?: string[]
     referenceNodeIds: string[]
     sourceContextNodeIds: string[]
@@ -494,6 +563,8 @@ export type MediaBranchLineagePlan = {
         branchId: string
         lineageParentNodeId: string
         lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        sourceMediaNodeId?: string
+        sourceMediaAssetId?: string
     }
     branchOrigin?: BranchOriginLineagePlan
     branchForks: BranchForkLineagePlan[]
@@ -553,6 +624,13 @@ export type MediaGenerationRequestCompletePayload = {
 
 export type MediaPromptSegment =
     | { kind: 'text'; text: string; from: number; to: number }
+    | {
+        kind: 'non-media-reference'
+        referenceType: 'capability-artifact' | 'capability-module' | 'tool' | 'skill'
+        displayName: string
+        from: number
+        to: number
+    }
     | {
         kind: 'reference'
         referenceType: 'media'
@@ -616,6 +694,107 @@ export type MediaGenerationRunStatus =
     | 'failed'
     | 'cancelled'
 
+export type OperationProgressItemStatus =
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'attention'
+    | 'failed'
+    | 'cancelled'
+    | 'skipped'
+
+// A handle names one thing the pipeline passed around — an Asset, a Capability
+// module, a Tool, a Skill, or a generated Artifact. The UI renders handles with
+// the same chip and hover card the prompt editor uses, so a trace row and a user
+// message refer to the same entity in the same visual language.
+export type ExecutionTraceHandleKind =
+    | 'capability-module'
+    | 'tool'
+    | 'skill'
+    | 'media'
+    | 'capability-artifact'
+
+export type ExecutionTraceHandle = {
+    kind: ExecutionTraceHandleKind
+    // moduleId for capability/tool/skill handles, assetId for media and artifacts.
+    id: string
+    displayName: string
+    mediaKind?: 'image' | 'video' | 'audio' | 'document'
+    nodeId?: string
+    artifactTypeId?: string
+    // Why this handle was part of the step: 'target', 'message-reference',
+    // 'pose-reference', 'output', and so on.
+    role?: string
+    note?: string
+}
+
+export type ExecutionTraceParam = {
+    name: string
+    value: string
+}
+
+// One model invocation made while a step ran, with everything the model was
+// given: the params it was called with and the handles that went into its input.
+export type ExecutionTraceModelCall = {
+    id: string
+    role: 'reasoning' | 'media' | 'resolver' | 'assessor' | 'compositor'
+    provider: string
+    modelId: string
+    purpose?: string
+    params?: ExecutionTraceParam[]
+    prompt?: string
+    systemPrompt?: string
+    inputHandles?: ExecutionTraceHandle[]
+    outputHandles?: ExecutionTraceHandle[]
+    responseExcerpt?: string
+    providerOperationId?: string
+    startedAt?: number
+    completedAt?: number
+    tokenUsage?: {
+        input?: number
+        output?: number
+        reasoning?: number
+    }
+    errorMessage?: string
+}
+
+export type ExecutionTraceFact = {
+    label: string
+    value: string
+}
+
+// The durable, per-step record of what actually happened. Carried by progress
+// items and Capability run events alike, so live progress, sealed provenance,
+// and replayed history all render from one shape.
+export type ExecutionTrace = {
+    traceVersion: 'execution-trace-v1'
+    reasoning?: string
+    handles?: ExecutionTraceHandle[]
+    modelCalls?: ExecutionTraceModelCall[]
+    facts?: ExecutionTraceFact[]
+    inputSummary?: string
+    outputSummary?: string
+    errorMessage?: string
+}
+
+export type OperationProgressItem = {
+    id: string
+    title: string
+    status: OperationProgressItemStatus
+    summary?: string
+    meta?: string
+    trace?: ExecutionTrace
+    children?: OperationProgressItem[]
+}
+
+export type MediaGenerationRunProgress = {
+    phase: 'preparing' | 'rendering' | 'assessing' | 'composing'
+    completedSteps: number
+    totalSteps: number
+    message: string
+    items?: OperationProgressItem[]
+}
+
 export type MediaGenerationProblem = {
     problemVersion: '1'
     type: `urn:lixpi:media-problem:${string}`
@@ -637,6 +816,8 @@ export type MediaGenerationProblem = {
     modelId?: AiModelId
     providerCode?: string
     providerReason?: string
+    moderationStage?: 'input' | 'output' | 'unknown'
+    moderationCategories?: string[]
     supportCode: string
     action: 'resolve-reference' | 'verify-with-provider' | 'edit-request' | 'none'
 }
@@ -645,13 +826,20 @@ export type MediaGenerationRun = {
     generationRun: number
     reasoningModelId: AiModelId
     reasoningIndex: number
+    reasoningRunId?: string
     provider: ProviderName
     modelId: AiModelId
+    mediaRunId?: string
+    mediaType?: 'image' | 'video'
+    mediaIndex?: number
+    outputAssetId?: string
+    outputNodeId?: string
     status: MediaGenerationRunStatus
     operationNodeId: string
     providerOperationId?: string
     requiredVerificationAssetIds?: string[]
     problem?: MediaGenerationProblem
+    progress?: MediaGenerationRunProgress
     startedAt?: number
     completedAt?: number
 }
@@ -722,7 +910,7 @@ export type MediaGenerationRequestEvent = {
     eventId: string
     generationRequestId: string
     sequence: number
-    status: 'MEDIA_GENERATION_REQUEST_STATUS' | 'MEDIA_GENERATION_ACTION_REQUIRED' | 'MEDIA_GENERATION_PROBLEM'
+    status: 'MEDIA_GENERATION_REQUEST_STATUS' | 'MEDIA_GENERATION_PROGRESS' | 'MEDIA_GENERATION_ACTION_REQUIRED' | 'MEDIA_GENERATION_PROBLEM'
     requestRevision: number
     payload: Record<string, unknown>
     createdAt: number
@@ -805,6 +993,23 @@ export type ImageGenerationTraceExcludedReference = {
     branchId?: string
 }
 
+export type CapabilityMediaReviewStep = {
+    stepId: string
+    title: string
+    status: 'completed' | 'needs-review' | 'unavailable'
+    score?: number
+    issues: string[]
+}
+
+export type CapabilityMediaReviewTrace = {
+    traceVersion: 'capability-media-review-v1'
+    capabilityId: string
+    summary: string
+    automaticRetries: 0
+    recommendation?: string
+    steps: CapabilityMediaReviewStep[]
+}
+
 export type ImageGenerationTrace = {
     traceVersion: 'image-generation-trace-v1'
     generationRun?: MediaGenerationRunMeta
@@ -818,6 +1023,7 @@ export type ImageGenerationTrace = {
     promptWasChanged: boolean
     referenceImages: ImageGenerationTraceReference[]
     excludedReferences: ImageGenerationTraceExcludedReference[]
+    capabilityReview?: CapabilityMediaReviewTrace
     resolver?: {
         resolverKind: 'structured-vlm'
         resolverVersion: string
@@ -894,6 +1100,7 @@ export type CapabilityGenerationTraceStep = {
     inputSummary?: string
     outputSummary?: string
     errorMessage?: string
+    trace?: ExecutionTrace
 }
 
 export type CapabilityGenerationTrace = {
@@ -963,12 +1170,17 @@ export type MediaGenerationCanvasPhase = 'pending-before-first-frame' | 'ready'
 
 export type GeneratedOutputReviewScope = 'output-node' | 'branch-lineage'
 
-export type GeneratedOutputReviewAction = 'accept' | 'supersede'
+export type GeneratedOutputReviewAction = 'accept' | 'supersede' | 'reject'
 
 export type GeneratedOutputReviewRequest = {
     workspaceId: string
     scope: GeneratedOutputReviewScope
     action: 'accept'
+    nodeId: string
+} | {
+    workspaceId: string
+    scope: GeneratedOutputReviewScope
+    action: 'reject'
     nodeId: string
 } | {
     workspaceId: string
@@ -990,6 +1202,7 @@ export type GeneratedOutputReviewResponse = {
     affectedAssetIds: string[]
     acceptedAssetIds: string[]
     supersededAssetIds: string[]
+    rejectedAssetIds: string[]
     canvasGeometry: CanvasGeometryUpdate
 }
 
@@ -1053,6 +1266,7 @@ export type ImageCanvasNode = CanvasNodeParentingFields & {
     assetId: string
     // API-persisted layout footprint. Asset remains authoritative for media lifecycle and renditions.
     mediaGenerationPhase?: MediaGenerationCanvasPhase
+    generationProgress?: MediaGenerationProgressState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: ImageGeneratedByMetadata
@@ -1104,6 +1318,7 @@ export type VideoCanvasNode = CanvasNodeParentingFields & {
     assetId: string
     // API-persisted layout footprint. Asset remains authoritative for media lifecycle and renditions.
     mediaGenerationPhase?: MediaGenerationCanvasPhase
+    generationProgress?: MediaGenerationProgressState
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     generatedBy?: VideoGeneratedByMetadata
@@ -1156,15 +1371,36 @@ export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     kind?: MediaKind
     generationRequestId?: string
     generationRun?: number
+    mediaRunId?: string
+    outputNodeId?: string
     plannedMediaType?: 'image' | 'video'
+    /**
+     * Preserves the failed output's branch identity after its provisional media
+     * reservation is replaced by this visible error leaf.
+     */
+    lineageAssignment?: MediaRunLineageAssignment
     problem?: MediaGenerationProblem
     candidateAssetIds?: string[]
     unresolvedBindingId?: string
     requestRevision?: number
     verificationAssetId?: string
+    progress?: MediaGenerationRunProgress
     position: CanvasNodePosition
     dimensions: CanvasNodeDimensions
     createdAt: number
+    updatedAt: number
+}
+
+export type MediaGenerationProgressState = {
+    generationRequestId: string
+    status: MediaGenerationRunStatus
+    message: string
+    progress: MediaGenerationRunProgress
+    mediaModelId?: AiModelId
+    mediaModelProvider?: ProviderName
+    lineageAssignment?: MediaRunLineageAssignment
+    generationRun?: number
+    mediaRunId?: string
     updatedAt: number
 }
 
@@ -1358,6 +1594,35 @@ export type CapabilityModuleMeta = {
     summary: string
     tags: string[]
     status: Extract<CapabilityStatus, 'active' | 'disabled'>
+    descriptionSheet: CapabilityModuleDescriptionSheet
+}
+
+export type CapabilityExpectedInputKind =
+    | 'prompt'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'document'
+    | 'artifact'
+    | 'parameters'
+
+export type CapabilityExpectedInput = {
+    name: string
+    requirement: 'required' | 'optional' | 'conditional'
+    accepts: CapabilityExpectedInputKind[]
+    description: string
+}
+
+export type CapabilityModuleDescriptionSheet = {
+    purpose: string
+    expectedInputs: CapabilityExpectedInput[]
+    bestResults: string[]
+    limitations: string[]
+    executionCharacteristics: {
+        cost: 'low' | 'medium' | 'high'
+        latency: 'low' | 'medium' | 'high'
+        summary: string
+    }
 }
 
 export type CapabilityCatalogRecord = {
@@ -1504,6 +1769,7 @@ export type CapabilityReasoningModelVariant = {
     modelVersion: string
     contextWindow: number
     maxCompletionSize: number
+    inferenceCapabilities: AiModelInferenceCapabilities
 }
 
 export type CapabilityManifest = {
@@ -1579,6 +1845,7 @@ export type CapabilityRunEvent = {
     stepStatus?: CapabilityRunStepStatus
     safeInputSummary?: string
     safeOutputSummary?: string
+    trace?: ExecutionTrace
     outputAssetIds?: string[]
     canvasGeometry?: CanvasGeometryUpdate
     errorCode?: string
@@ -1619,24 +1886,20 @@ export type MarkdownStreamToken = {
     segment?: MarkdownParsedSegment
 }
 
-export type CanvasAiChatSidebarTab = {
-    tabId: string
-    type: 'thread'
-    refId: string
-    title: string
-}
-
 // Right side panel top-level surface: the Capability library, the unified Asset
 // library, or conversation Assets.
 export type CanvasRightSidePanelMode = 'capabilities' | 'artifacts' | 'media' | 'aiThreads'
 
+export type CanvasGeneratedOutputDetailsTarget = {
+    kind: 'output' | 'branch-marker'
+    nodeId: string
+}
+
 export type CanvasAiChatPanelState = {
     isOpen: boolean
-    isSessionHistoryOpen: boolean
     // Which top-level surface the right side panel shows. Defaults to 'aiThreads'.
     topLevelMode: CanvasRightSidePanelMode
-    tabs: CanvasAiChatSidebarTab[]
-    activeTabId?: string
+    generatedOutputDetailsTarget?: CanvasGeneratedOutputDetailsTarget
     // Explicit canvas node ids fed to the bottom-center composer as context
     // chips. When any chip is present, the API uses exactly that chip set and
     // skips automatic relevance expansion.
@@ -1703,6 +1966,9 @@ export type AiInteractionChatSendMessagePayload = {
     // via `mediaGenerationRequest.reasoningModelIds`.
     aiReasoningModels: string[]
     conversationAssetId: string
+    // Allocated by the browser before a media turn is submitted so provisional
+    // canvas ownership, cancellation, and the durable request all share one ID.
+    generationRequestId?: string
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
     // Explicit composer context attached to this submitted turn.
@@ -1747,6 +2013,7 @@ export type AiInteractionMediaGenerationRequest = {
         branchId: string
         lineageParentNodeId: string
         lineageParentType: 'branchOrigin' | 'branchFork' | 'branchLine'
+        sourceNodeId?: string
         replayPrompts: Array<{
             sourceAssetId: string
             reasoningModelId: AiModelId
@@ -1775,6 +2042,24 @@ export type AiInteractionChatStopMessagePayload = {
     generationRequestId?: string
 }
 
+export type AiModelInputKind = 'image' | 'video-frame' | 'audio' | 'document-text'
+
+export type AiModelThinkingMode =
+    | 'none'
+    | 'anthropic-manual'
+    | 'anthropic-adaptive'
+    | 'google-budget'
+    | 'google-level'
+
+export type AiModelInferenceCapabilities = {
+    thinkingMode: AiModelThinkingMode
+    requiresAutoToolChoiceWithThinking: boolean
+    supportsTemperature: boolean
+    supportsSystemPrompt: boolean
+    requiresClosedJsonSchema: boolean
+    supportedInputKinds: AiModelInputKind[]
+}
+
 export type AiModel = {
     provider: string
     model: string
@@ -1790,7 +2075,7 @@ export type AiModel = {
     contextWindow: number
     maxCompletionSize: number
     defaultTemperature: number
-    supportsSystemPrompt: boolean
+    inferenceCapabilities: AiModelInferenceCapabilities
     color: string
     iconName: string
     // Colored brand-icon variant key (e.g. geminiColorIcon). Synced per model by
@@ -1802,9 +2087,9 @@ export type AiModel = {
     // Describes what imageSizes values mean for this image-generation model.
     imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
-    // Effective fidelity for reference-conditioned image generation. A provider
-    // request value is included only when the model API requires one.
-    imageInputFidelity?: ImageInputFidelityPolicy
+    // Required for image-generation models. Describes reference budgets and
+    // conditioning controls without leaking provider request syntax upstream.
+    imageReferenceCapabilities?: ImageReferenceCapabilities
     // Video generation option lists (VEO and future video providers). Reuse the
     // ImageSizeOption { value, label } shape the size dropdown already consumes.
     videoAspectRatios?: ImageSizeOption[]

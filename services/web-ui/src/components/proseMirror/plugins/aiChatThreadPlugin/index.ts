@@ -48,6 +48,13 @@ export {
     aiLineageEventNodeView
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
 
+export {
+    aiMediaGenerationProgressNodeType,
+    aiMediaGenerationProgressNodeSpec,
+    aiMediaGenerationProgressNodeView,
+    type AiMediaGenerationProgressRenderer,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiMediaGenerationProgressNode.ts'
+
 export * from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 
 // Export all from plugin

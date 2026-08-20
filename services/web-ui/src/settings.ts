@@ -95,6 +95,11 @@ export type RightSidePanelSettings = {
     layout: {
         contentInset: number
     }
+    typography: {
+        contentFontSize: number
+        tagPillFontSize: number
+        tagPillFontWeight: number
+    }
     resizeHandle: {
         offset: number
         grabWidth: number
@@ -142,8 +147,7 @@ export type RightSidePanelSettings = {
 
 export type NavigationSidePanelSettings = Omit<RightSidePanelSettings, 'layout'>
 
-export type AiChatThreadPanelTabsSettings = {
-    minTabWidth: number
+export type RightPanelModeSwitchSettings = {
     height: number
     transitionDurationMs: number
     transitionMinDurationMs: number
@@ -154,20 +158,6 @@ export type AiChatThreadPanelTabsSettings = {
             topColor: string
             bottomColor: string
         }
-    }
-}
-
-export type AiChatThreadSessionHistorySettings = {
-    styles: {
-        controlColor: string
-        controlHoverColor: string
-        historyToggleHoverBackground: string
-        actionHoverBackground: string
-        actionHoverColor: string
-        deleteColor: string
-        hoverBackgroundImage: string
-        threadMarkerBackground: string
-        threadMarkerBoxShadow: string
     }
 }
 
@@ -199,9 +189,7 @@ export type AiChatThreadContextPreviewSettings = {
 }
 
 export type AiChatThreadSettings = {
-    showHeader: boolean
-    panelTabs: AiChatThreadPanelTabsSettings
-    sessionHistory: AiChatThreadSessionHistorySettings
+    panelSwitch: RightPanelModeSwitchSettings
     contextPreview: AiChatThreadContextPreviewSettings
     styles: {
         nodeBoxShadow: string
@@ -364,23 +352,6 @@ export type MediaNodeSettings = {
             modelBadgeNameLineHeight: number
             infoButtonColor: string
             infoButtonHoverColor: string
-        }
-    }
-    generatedMediaInfoPanel: {
-        widthMultiplier: number
-        minWidth: number
-        maxWidth: number | null
-        horizontalOffset: number
-        branchMarkerTopOffset: number
-        layerZIndex: number
-        styles: {
-            background: string
-            border: string
-            borderRadius: string
-            boxShadow: string
-            color: string
-            overflow: string
-            padding: string
         }
     }
     useZoomCompensatedResizeHandleScaling: boolean
@@ -561,8 +532,6 @@ export type MediaBranchLineageSettings = {
     mediaToMediaGap: number
     branchOriginToFirstMediaGap: number
     branchFanoutExtraGap: number
-    pendingMarkerInputGap: number
-    pendingMarkerMoveDurationMs: number
     branchOrigin: {
         size: number
         iconSize: number
@@ -578,8 +547,6 @@ export type MediaBranchLineageSettings = {
     marker: {
         minWidthMultiplier: number
         maxWidthGrowth: number
-        screenFixedMaxWidthGrowth: number
-        screenFixedMaxWidthFraction: number
         // Text sizing for the marker's user-message and AI-response preview lines.
         // Kept in sync with the floating detail panel so a marker reads at the same
         // size as the expanded thread it represents.
@@ -810,7 +777,7 @@ export const settings: Settings = {
     rightSidePanel: {
         defaultDimensions: {
             // Screen-pixel width before the user has resized the panel.
-            width: 380,
+            width: 494,
         },
         dimensions: {
             // Minimum screen-pixel width while resizing.
@@ -821,6 +788,13 @@ export const settings: Settings = {
         layout: {
             // Inner horizontal inset for the panel content column.
             contentInset: 10,
+        },
+        typography: {
+            // Screen-pixel size shared by regular messages and generation-trace content.
+            contentFontSize: 14,
+            // Screen-pixel typography for execution-trace tag pills in the sidebar timeline.
+            tagPillFontSize: 12,
+            tagPillFontWeight: 400,
         },
         resizeHandle: {
             // Horizontal offset in pixels from the panel's left edge to the resize handle center.
@@ -853,7 +827,7 @@ export const settings: Settings = {
         },
         overlay: {
             // Full-canvas dark glass tint layer behind the side panel.
-            enabled: true,
+            enabled: false,
             closeOnPointerDown: true,
             fill: 'rgba(15, 23, 42, 0.18)',
             fillOpaque: 'rgba(15, 23, 42, 0.22)',
@@ -942,29 +916,21 @@ export const settings: Settings = {
         },
     },
 
-    // AI chat thread panel presentation and interaction settings. The thread is a
-    // read-only transcript hosted in the right side panel; there is no on-canvas
-    // thread node.
+    // Right side panel mode switch and generated-output detail context previews.
     aiChatThread: {
-        // Hide or show the thread title inside the AI chat panel.
-        showHeader: false,
-
-        // AI Chat panel tab switch geometry.
-        panelTabs: {
-            // Minimum screen-pixel width for each tab before the tab strip scrolls horizontally.
-            minTabWidth: 96,
-            // Screen-pixel height for the AI Chat panel tab switch.
+        panelSwitch: {
+            // Screen-pixel height for the right panel mode switch.
             height: 28,
             // Base active-tab slide duration.
             transitionDurationMs: 160,
-            // Lower bound when jumping across distant tabs.
+            // Lower bound when jumping across distant modes.
             transitionMinDurationMs: 100,
-            // Per-tab distance speedup. Higher values compress long jumps more.
+            // Per-mode distance speedup. Higher values compress long jumps more.
             transitionDistanceSpeedupFactor: 0.28,
             styles: {
-                // Active tab outer shadow. Keep this setting isolated from dropdown shadows.
+                // Active mode outer shadow. Keep this setting isolated from dropdown shadows.
                 activeTabBoxShadow: 'none',
-                // Active tab inset shadow overlay. Keep this setting isolated from dropdown shadows.
+                // Active mode inset shadow overlay. Keep this setting isolated from dropdown shadows.
                 activeTabInsetShadow: {
                     topColor: 'rgba(255, 255, 255, 0.86)',
                     bottomColor: 'rgba(0, 0, 0, 0)',
@@ -972,31 +938,7 @@ export const settings: Settings = {
             },
         },
 
-        // AI Chat panel session history presentation.
-        sessionHistory: {
-            styles: {
-                // Default color for panel session controls.
-                controlColor: '#697388',
-                // Hover/focus color for panel session controls.
-                controlHoverColor: '#39455d',
-                // Hover/focus background for the session-history toggle.
-                historyToggleHoverBackground: 'rgba(105, 115, 136, 0.1)',
-                // Shared prominent hover background for destructive session actions.
-                actionHoverBackground: colorPalette.steelBlue,
-                // Shared prominent hover fill/color for destructive session action icons.
-                actionHoverColor: colorPalette.offWhite,
-                // Default color for session delete controls.
-                deleteColor: '#7a8497',
-                // Hover/focus gradient for session rows. Uses the dropdown hover structure with light blue stops.
-                hoverBackgroundImage: 'linear-gradient(135deg, #e8f2ff 0%, #eaf1ff 100%)',
-                // Dot color for submitted chat sessions in the history list.
-                threadMarkerBackground: '#5f8fcf',
-                // Ring around the submitted chat session dot.
-                threadMarkerBoxShadow: '0 0 0 3px rgba(95, 143, 207, 0.14)',
-            },
-        },
-
-        // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused elsewhere (e.g. generated-media info panels) but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
+        // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused by generated-output details but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
         contextPreview: {
             styles: {
                 // Color for the top context controls row.
@@ -1159,11 +1101,11 @@ export const settings: Settings = {
             borderRadius: 30,
         },
 
-        // Provenance/descriptor icon strip below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; the expandable info panel is rendered separately and does not inherit this transform.
+        // Provenance/descriptor controls below a media node. The strip is screen-space chrome projected from media node bounds and uses bounded zoom compensation; details render in the right sidebar.
         generatedMediaChrome: {
             // Base screen-pixel icon/button size at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
             iconSize: mediaGenerationLayoutSettings.generatedMediaChrome.iconSize,
-            // Base screen-pixel gap at 100% and higher zoom on both sides of the icon strip: media-to-icons and icons-to-info-panel. Shared with the API collision boxes via @lixpi/constants.
+            // Base screen-pixel gap between media and the control strip at 100% and higher zoom. Shared with the API collision boxes via @lixpi/constants.
             gap: mediaGenerationLayoutSettings.generatedMediaChrome.topGap,
             // Scale applied to generated-media badges rendered inside AI chat history cards.
             chatScale: 0.72,
@@ -1172,7 +1114,7 @@ export const settings: Settings = {
             // Lower zoom breakpoint for generated-media icon chrome. Runtime call
             // sites opt this config into the shared adaptive low-zoom curve,
             // which defaults to 0.45 unless this object provides `lowZoomPower`.
-            zoomScaling: { minZoom: 0.4 },
+            zoomScaling: mediaGenerationLayoutSettings.generatedMediaChrome.zoomScaling,
             // Theme tokens for the model badge + info button, surfaced as CSS custom properties.
             styles: {
                 // Gap between the provider icon and the provider/model name.
@@ -1187,32 +1129,6 @@ export const settings: Settings = {
                 // Interactive chrome icons match the provider icon at rest and darken on hover.
                 infoButtonColor: '#4d5963',
                 infoButtonHoverColor: '#181e23',
-            },
-        },
-
-        // Expanded provenance/descriptor panel opened from generated-media chrome and branch-lineage markers.
-        generatedMediaInfoPanel: {
-            // Panel width as a proportion of the media/lineage width that anchors it.
-            widthMultiplier: 1,
-            // Minimum canvas-unit panel width after widthMultiplier is applied. Use 0 to keep the anchor width as the floor.
-            minWidth: 0,
-            // Optional maximum canvas-unit panel width after widthMultiplier is applied. Use null for no cap.
-            maxWidth: null,
-            // Canvas-unit horizontal offset from the anchor's left edge.
-            horizontalOffset: 0,
-            // Canvas-unit vertical offset below a branch-lineage marker.
-            branchMarkerTopOffset: 10,
-            // Stacking level for the viewport-transformed info panel layer.
-            layerZIndex: 5,
-            styles: {
-                background: '#fff',
-                border: '1px solid rgba(34, 40, 49, 0.08)',
-                borderRadius: '20px',
-                // Twice the prior intensity (alpha doubled 0.14 → 0.28, with a deeper spread) so the floating detail modal reads as clearly lifted above the canvas.
-                boxShadow: '0 16px 44px rgba(20, 24, 30, 0.28)',
-                color: '#252b33',
-                overflow: 'visible',
-                padding: '0.55rem 0.75rem',
             },
         },
 
@@ -1480,10 +1396,6 @@ export const settings: Settings = {
         branchOriginToFirstMediaGap: mediaGenerationLayoutSettings.branchOriginToFirstMediaGap,
         // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
         branchFanoutExtraGap: mediaGenerationLayoutSettings.branchFanoutExtraGap,
-        // Vertical gap between stacked screen-fixed pending branch markers.
-        pendingMarkerInputGap: mediaGenerationLayoutSettings.pendingMarkerInputGap,
-        // Milliseconds for moving and scaling a pending branch marker from its screen-fixed preflight position to its API-planned canvas position.
-        pendingMarkerMoveDurationMs: mediaGenerationLayoutSettings.pendingMarkerMoveDurationMs,
         // Temporary root marker used when a fresh multi-model branch has no real source node.
         branchOrigin: {
             // Canvas-unit base size for branch lineage markers; final width and height derive from the shared marker sizing in @lixpi/constants.
@@ -1846,10 +1758,6 @@ export const settings: Settings = {
             minWidthMultiplier: mediaGenerationLayoutSettings.marker.minWidthMultiplier,
             // Multiplier on the minimum width capping how wide an on-canvas (already-placed) marker may grow before its preview wraps to a second line and truncates. Lower it to keep long placed messages more compact.
             maxWidthGrowth: mediaGenerationLayoutSettings.marker.maxWidthGrowth,
-            // Multiplier on the minimum width capping the screen-fixed preflight pose. Kept wider than maxWidthGrowth so long prompts stay on one line while still being assessed; once the marker lands on the canvas it tightens to maxWidthGrowth.
-            screenFixedMaxWidthGrowth: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthGrowth,
-            // Hard cap on the screen-fixed preflight pose's on-screen width as a fraction of the prompt input field width. The pill hugs its content but never grows past this share of the input; longer messages truncate with an ellipsis.
-            screenFixedMaxWidthFraction: mediaGenerationLayoutSettings.marker.screenFixedMaxWidthFraction,
             // Text sizing for the marker's preview lines. Matches the floating detail panel's body text (1rem / 16px) so a marker reads at the same size as the thread it represents.
             text: mediaGenerationLayoutSettings.marker.text,
         },

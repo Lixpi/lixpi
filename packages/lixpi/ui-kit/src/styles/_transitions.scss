@@ -1,0 +1,41 @@
+@use 'sass:map';
+@use 'sass:string';
+
+$defaultHoverTransitionDuration: var(--default-hover-transition-duration, 150ms) !default;
+
+@function pupOutTransition($property, $duration) {
+    @return #{$property} #{$duration} cubic-bezier(0.319, 1, 0.01, 1);
+}
+
+@function hoverTransition($property, $duration: $defaultHoverTransitionDuration) {
+    @return #{$property} #{$duration} cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+@mixin clickToggleFeedbackAnimation($config: ()) {
+    $settings: map.merge((
+        startColor: inherit,
+        flashColor: inherit,
+        endColor: inherit,
+        duration: 150ms,
+        easing: cubic-bezier(0.85, 0, 0.15, 1),
+        squeezeScale: 0.88
+    ), $config);
+    $animationName: string.unique-id();
+
+    @keyframes #{$animationName} {
+        0% {
+            transform: scale(1);
+            fill: map.get($settings, startColor);
+        }
+        50% {
+            transform: scale(map.get($settings, squeezeScale));
+            fill: map.get($settings, flashColor);
+        }
+        100% {
+            transform: scale(1);
+            fill: map.get($settings, endColor);
+        }
+    }
+
+    animation: $animationName map.get($settings, duration) map.get($settings, easing);
+}

@@ -40,6 +40,21 @@ const getNatsService = (): NATS_Service => {
     return natsService
 }
 
+// The rendition responder lives in the `file-conversion` NEX workload, which the
+// NEX node deploys only after installing its dependencies — minutes after the API
+// itself is serving. A request landing in that window (or while the node restarts)
+// fails with NATS "no responders", which is transient unavailability rather than a
+// failed conversion job: callers must re-queue instead of marking the asset failed.
+export const RENDITION_WORKER_UNAVAILABLE = 'RENDITION_WORKER_UNAVAILABLE'
+
+const isWorkerUnavailableError = (error: unknown): boolean => {
+    const candidates = [error, (error as { cause?: unknown })?.cause]
+    return candidates.some((candidate) => {
+        const record = candidate as { code?: string; message?: string } | undefined
+        return record?.code === '503' || /no responders/i.test(record?.message ?? '')
+    })
+}
+
 const hashBytes = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
 
 const getRequestedRenditions = (asset: Asset): AssetRenditionName[] => {
@@ -346,11 +361,17 @@ const AssetRenditionService = {
             derivationVersion,
             requestedRenditions,
         }
-        const response = await getNatsService().request<GenerateRenditionsRequest, GenerateRenditionsResponse>(
-            NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS,
-            request,
-            10 * 60 * 1000,
-        )
+        let response: GenerateRenditionsResponse
+        try {
+            response = await getNatsService().request<GenerateRenditionsRequest, GenerateRenditionsResponse>(
+                NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS,
+                request,
+                10 * 60 * 1000,
+            )
+        } catch (error) {
+            if (isWorkerUnavailableError(error)) throw new Error(RENDITION_WORKER_UNAVAILABLE)
+            throw error
+        }
         const committed = await AssetRenditionService.commitResponse({ response, derivationVersion })
         if ((committed.states.media === 'degraded' || committed.states.media === 'failed') && retryAttempt < 5) {
             await enqueueRenditionRetry({

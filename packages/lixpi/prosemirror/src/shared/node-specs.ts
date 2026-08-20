@@ -379,6 +379,7 @@ export const aiGeneratedImageNodeSpec = {
         reasoningModelId: { default: '' },
         mediaModelId: { default: '' },
         mediaType: { default: '' },
+        generationProgress: { default: null },
         variantIndex: { default: null },
         branchId: { default: '' },
         parentMediaNodeId: { default: '' },
@@ -476,6 +477,7 @@ export const aiGeneratedVideoNodeSpec = {
         reasoningModelId: { default: '' },
         mediaModelId: { default: '' },
         mediaType: { default: '' },
+        generationProgress: { default: null },
         variantIndex: { default: null },
         branchId: { default: '' },
         parentMediaNodeId: { default: '' },
@@ -712,6 +714,30 @@ export const aiLineageEventNodeSpec = {
     },
 } as NodeSpec
 
+export const aiMediaGenerationProgressNodeType = 'aiMediaGenerationProgress'
+
+export const aiMediaGenerationProgressNodeSpec = {
+    attrs: {
+        id: { default: '' },
+        state: { default: null },
+        showSummaryWhenCollapsedItemIds: { default: [] },
+    },
+    group: 'block',
+    atom: true,
+    selectable: false,
+    draggable: false,
+    parseDOM: [{ tag: 'div.ai-media-generation-progress' }],
+    toDOM(node) {
+        return [
+            'div',
+            {
+                class: 'ai-media-generation-progress',
+                'data-media-generation-progress-id': node.attrs.id,
+            },
+        ]
+    },
+} as NodeSpec
+
 export const aiChatNodeSpecs = {
     [aiChatThreadNodeType]: aiChatThreadNodeSpec,
     [aiResponseMessageNodeType]: aiResponseMessageNodeSpec,
@@ -721,6 +747,7 @@ export const aiChatNodeSpecs = {
     [aiCollapsibleBlockNodeType]: aiCollapsibleBlockNodeSpec,
     [aiReasoningSectionNodeType]: aiReasoningSectionNodeSpec,
     [aiLineageEventNodeType]: aiLineageEventNodeSpec,
+    [aiMediaGenerationProgressNodeType]: aiMediaGenerationProgressNodeSpec,
 }
 
 function parseVariantIndex(value: string | null): number | null {

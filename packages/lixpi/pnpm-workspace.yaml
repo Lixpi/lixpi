@@ -8,3 +8,4 @@ packages:
   - "nats-auth-callout-service"
   - "nats-service/ts"
   - "prosemirror"
+  - "ui-kit"

@@ -51,10 +51,10 @@ type BedrockModelCandidate = {
     supportsOnDemand: boolean
 }
 
-// Matches `anthropic.claude-haiku-4-5-20251001-v1:0`, `stability.sd3-5-large-v1:0`,
-// `stability.stable-image-ultra-v1:1`, capturing the release date and version parts.
-const buildBedrockModelIdPattern = (vendor: BedrockVendor, modelNameStem: string): RegExp =>
-    new RegExp(`^${vendor}\\.${modelNameStem}(?:-(\\d{8}))?-v(\\d+)(?::(\\d+))?$`, 'i')
+// Matches both current pinned, dateless ids such as `anthropic.claude-sonnet-5`
+// and legacy version-suffixed ids such as `anthropic.claude-haiku-4-5-20251001-v1:0`.
+export const buildBedrockModelIdPattern = (vendor: BedrockVendor, modelNameStem: string): RegExp =>
+    new RegExp(`^${vendor}\\.${modelNameStem}(?:-(\\d{8}))?(?:-v(\\d+)(?::(\\d+))?)?$`, 'i')
 
 const normalizeModelNameStem = (vendor: BedrockVendor, modelVersion: string): string => {
     const alias = BEDROCK_MODEL_NAME_ALIASES[vendor][modelVersion]
@@ -180,7 +180,7 @@ class BedrockInference {
         if (candidates.length === 0) {
             throw new Error(
                 `No AWS Bedrock foundation model matches ${vendor} model "${modelVersion}" ` +
-                `(looked for ${vendor}.${stem}-vN in region ${this.region}). ` +
+                `(looked for ${vendor}.${stem} with an optional date and -vN suffix in region ${this.region}). ` +
                 `Either the model is not offered on Bedrock, is not enabled for this account, ` +
                 `or the model catalog id needs an alias in bedrock-inference.ts.`,
             )

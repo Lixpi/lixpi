@@ -5,6 +5,7 @@ packages:
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/nats-service/ts"
   - "packages/lixpi/prosemirror"
+  - "packages/lixpi/ui-kit"
 
 allowBuilds:
   "@parcel/watcher": true

@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
     cacheImageGenerationTrace,
     createImageGenerationTraceDetails,
+    deduplicateImageGenerationTraceReferences,
     formatImageGenerationTraceReferenceSource,
     formatImageGenerationTraceRole,
     getImageGenerationTrace,
@@ -139,7 +140,13 @@ describe('createImageGenerationTraceDetails — reference grid', () => {
     it('renders one tile per reference with the formatted role', () => {
         const { tiles } = renderTiles([
             makeReference({ id: 'a', role: 'target' }),
-            makeReference({ id: 'b', role: 'style-reference' }),
+            makeReference({
+                id: 'b',
+                role: 'style-reference',
+                assetId: 'style-asset',
+                nodeId: 'style-node',
+                imageUrl: 'nats-obj://workspace-workspace-1-files/style-file',
+            }),
         ])
         expect(tiles).toHaveLength(2)
         expect(tiles[0].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Target')
@@ -150,6 +157,29 @@ describe('createImageGenerationTraceDetails — reference grid', () => {
         const { details, tiles } = renderTiles([])
         expect(tiles).toHaveLength(0)
         expect(details.dom.querySelector('.ai-image-generation-empty-references')?.textContent).toContain('No reference images were sent')
+    })
+
+    it('renders one target tile when one Asset was persisted under duplicate candidate IDs', () => {
+        const duplicateBaseContext = makeReference({
+            id: 'node-without-prefix',
+            role: 'base-context',
+            candidateId: 'reference-node',
+        })
+        const activeTarget = makeReference({
+            id: 'node-with-prefix',
+            role: 'target',
+            candidateId: 'node:reference-node',
+        })
+
+        const distinctReferences = deduplicateImageGenerationTraceReferences([
+            duplicateBaseContext,
+            activeTarget,
+        ])
+        const { tiles } = renderTiles([duplicateBaseContext, activeTarget])
+
+        expect(distinctReferences).toEqual([activeTarget])
+        expect(tiles).toHaveLength(1)
+        expect(tiles[0].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Target')
     })
 })
 

@@ -36,33 +36,6 @@ import { estimateVideoTokens } from './video-token-accounting.ts'
 // completion ceiling dominates the total and the confirm charges actuals.
 const POST_GATE_PROMPT_GROWTH_FACTOR = 2
 
-export type TokenUnitsEstimate = {
-    // Anything JSON-serializable that stands in for what will be sent to the
-    // model: the assembled messages, or a prompt/schema/attachment bundle.
-    payload: unknown
-    // Completion ceiling for the call. When absent, the model still cannot emit
-    // past its own context window, so the window is used as the last bound.
-    maxCompletionTokens?: number | undefined
-    contextWindow?: number | undefined
-}
-
-// estimateTokenUnits bounds a token-metered call whose payload is fully known at
-// call time: everything being sent, plus the whole completion the model is
-// permitted to emit. The completion side is a reservation rather than a
-// prediction, and most runs stop far short of it, which is what makes it a
-// ceiling. Graph runs do not use this directly, because their payload keeps
-// growing after the gate; see estimateReasoningMetering.
-export function estimateTokenUnits({
-    payload,
-    maxCompletionTokens,
-    contextWindow,
-}: TokenUnitsEstimate): number {
-    const promptTokens = estimateInputTokens(payload).inputTokens
-    const reserved = positiveInteger(maxCompletionTokens)
-        ?? remainingContextWindow(contextWindow, promptTokens)
-    return promptTokens + reserved
-}
-
 // How an estimate was arrived at, for the usage log. Only the fields relevant to
 // the modality are set. `provisionalVideoFrame` and `promptGrowthFactor` are the
 // two places a number is not a straight measurement, so both are surfaced rather

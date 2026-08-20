@@ -399,3 +399,169 @@ describe('CapabilityWorkflowRunner', () => {
         expect(persistence.events.at(-1)?.eventType).toBe('RUN_FAILED')
     })
 })
+
+// =============================================================================
+// EXECUTION TRACES ON RUN EVENTS
+// =============================================================================
+
+function runRequest(manifest: CapabilityManifest, resources: LoadedCapabilityResource[]) {
+    return {
+        plan: makePlan(manifest, resources),
+        rootCapabilityId: 'tool',
+        input: { prompt: 'hello' },
+        userId: 'user-1',
+        workspaceId: 'workspace-1',
+        origin: 'prompt' as const,
+    }
+}
+
+function stepEvents(
+    events: readonly CapabilityRunEvent[],
+    stepId: string,
+    eventType: CapabilityRunEvent['eventType'],
+): CapabilityRunEvent[] {
+    return events.filter(event => event.stepId === stepId && event.eventType === eventType)
+}
+
+describe('CapabilityWorkflowRunner — execution traces', () => {
+    it('emits declared input handles on STEP_STARTED before the step produces anything', async () => {
+        const { manifest, resources } = makeToolManifest()
+        const registry = new CapabilityActionRegistry()
+        registry.register(action('test.first', async () => ({ value: 'done' }), {
+            collectInputHandles: () => [{
+                kind: 'media',
+                id: 'asset-1',
+                displayName: 'asset-1',
+                mediaKind: 'image',
+                role: 'character-reference',
+            }],
+        }))
+        registry.register(action('test.second', async () => ({ ok: true })))
+        registry.register(action('test.conditional', async () => ({ result: 'done' })))
+        const persistence = makePersistence()
+
+        await new CapabilityWorkflowRunner({ registry, persistence }).run(runRequest(manifest, resources))
+
+        const started = stepEvents(persistence.events, 'first', 'STEP_STARTED')[0]
+        expect(started?.trace?.handles).toEqual([{
+            kind: 'media',
+            id: 'asset-1',
+            displayName: 'asset-1',
+            mediaKind: 'image',
+            role: 'character-reference',
+        }])
+        expect(started?.trace?.inputSummary).toBe(started?.safeInputSummary)
+    })
+
+    it('emits model calls an action recorded while running on its STEP_COMPLETED event', async () => {
+        const { manifest, resources } = makeToolManifest()
+        const registry = new CapabilityActionRegistry()
+        registry.register(action('test.first', async (_input, context) => {
+            context.trace.setReasoning('Selected the identity anchor first')
+            context.trace.addModelCall({
+                id: 'render',
+                role: 'media',
+                provider: 'openai',
+                modelId: 'openai:gpt-image-1',
+                params: [{ name: 'size', value: '1024x1536' }],
+            })
+            context.trace.addFact('Planned shots', '3')
+            return { value: 'done' }
+        }))
+        registry.register(action('test.second', async () => ({ ok: true })))
+        registry.register(action('test.conditional', async () => ({ result: 'done' })))
+        const persistence = makePersistence()
+
+        await new CapabilityWorkflowRunner({ registry, persistence }).run(runRequest(manifest, resources))
+
+        const completed = stepEvents(persistence.events, 'first', 'STEP_COMPLETED')[0]
+        expect(completed?.trace?.reasoning).toBe('Selected the identity anchor first')
+        expect(completed?.trace?.modelCalls?.[0]?.params).toEqual([{ name: 'size', value: '1024x1536' }])
+        expect(completed?.trace?.facts).toEqual([{ label: 'Planned shots', value: '3' }])
+        expect(completed?.trace?.outputSummary).toBe(completed?.safeOutputSummary)
+    })
+
+    it('appends declared output handles to the completed step trace', async () => {
+        const { manifest, resources } = makeToolManifest()
+        const registry = new CapabilityActionRegistry()
+        registry.register(action('test.first', async (_input, context) => {
+            context.trace.addHandles({ kind: 'media', id: 'input-asset', displayName: 'input-asset' })
+            return { value: 'done' }
+        }, {
+            collectOutputHandles: () => [{ kind: 'media', id: 'output-asset', displayName: 'output-asset', role: 'output' }],
+        }))
+        registry.register(action('test.second', async () => ({ ok: true })))
+        registry.register(action('test.conditional', async () => ({ result: 'done' })))
+        const persistence = makePersistence()
+
+        await new CapabilityWorkflowRunner({ registry, persistence }).run(runRequest(manifest, resources))
+
+        const completed = stepEvents(persistence.events, 'first', 'STEP_COMPLETED')[0]
+        expect(completed?.trace?.handles?.map(handle => handle.id)).toEqual(['input-asset', 'output-asset'])
+    })
+
+    it('keeps what a failing step already recorded and settles it with the error', async () => {
+        const { manifest, resources } = makeToolManifest()
+        const registry = new CapabilityActionRegistry()
+        registry.register(action('test.first', async (_input, context) => {
+            context.trace.addModelCall({
+                id: 'render',
+                role: 'media',
+                provider: 'openai',
+                modelId: 'openai:gpt-image-1',
+            })
+            throw new Error('Provider refused the request')
+        }))
+        registry.register(action('test.second', async () => ({ ok: true })))
+        registry.register(action('test.conditional', async () => ({ result: 'done' })))
+        const persistence = makePersistence()
+
+        await expect(new CapabilityWorkflowRunner({ registry, persistence })
+            .run(runRequest(manifest, resources))).rejects.toBeInstanceOf(CapabilityError)
+
+        const failed = stepEvents(persistence.events, 'first', 'STEP_FAILED')[0]
+        expect(failed?.trace?.modelCalls?.[0]?.id).toBe('render')
+        expect(failed?.trace?.errorMessage).toBe('Provider refused the request')
+    })
+
+    it('omits the trace entirely when a step recorded nothing and has no declared handles', async () => {
+        const { manifest, resources } = makeToolManifest()
+        const registry = new CapabilityActionRegistry()
+        registry.register(action('test.first', async () => ({ value: 'done' })))
+        registry.register(action('test.second', async () => ({ ok: true })))
+        registry.register(action('test.conditional', async () => ({ result: 'done' })))
+        const persistence = makePersistence()
+
+        await new CapabilityWorkflowRunner({ registry, persistence }).run(runRequest(manifest, resources))
+
+        const skipped = persistence.events.filter(event => event.eventType === 'STEP_SKIPPED')
+        expect(skipped.every(event => event.trace === undefined)).toBe(true)
+        // A step that records nothing still settles with its own summaries, so
+        // the trace is present but carries only those.
+        const completed = stepEvents(persistence.events, 'first', 'STEP_COMPLETED')[0]
+        expect(completed?.trace?.modelCalls).toBeUndefined()
+        expect(completed?.trace?.handles).toBeUndefined()
+    })
+
+    it('gives each step its own recorder so traces never leak between steps', async () => {
+        const { manifest, resources } = makeToolManifest()
+        const registry = new CapabilityActionRegistry()
+        registry.register(action('test.first', async (_input, context) => {
+            context.trace.addFact('owner', 'first')
+            return { value: 'done' }
+        }))
+        registry.register(action('test.second', async (_input, context) => {
+            context.trace.addFact('owner', 'second')
+            return { ok: true }
+        }))
+        registry.register(action('test.conditional', async () => ({ result: 'done' })))
+        const persistence = makePersistence()
+
+        await new CapabilityWorkflowRunner({ registry, persistence }).run(runRequest(manifest, resources))
+
+        expect(stepEvents(persistence.events, 'first', 'STEP_COMPLETED')[0]?.trace?.facts)
+            .toEqual([{ label: 'owner', value: 'first' }])
+        expect(stepEvents(persistence.events, 'second', 'STEP_COMPLETED')[0]?.trace?.facts)
+            .toEqual([{ label: 'owner', value: 'second' }])
+    })
+})

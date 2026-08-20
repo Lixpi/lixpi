@@ -4,10 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
-import { ImageRouter } from './image-router.ts'
-import type { ProviderState } from '../graph/state.ts'
+const generatedAssetStorageMocks = vi.hoisted(() => ({
+    settleGeneratedAssetComposition: vi.fn(async () => undefined),
+}))
 
-const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
+vi.mock('../../services/generated-asset-storage.ts', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../../services/generated-asset-storage.ts')>(),
+    settleGeneratedAssetComposition: generatedAssetStorageMocks.settleGeneratedAssetComposition,
+}))
+
+import { ImageRouter } from './image-router.ts'
+import { ImagePublisher } from '../graph/image-publisher.ts'
+import type { ProviderState } from '../graph/state.ts'
 
 function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     return {
@@ -18,7 +26,7 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             modelVersion: 'claude-sonnet-4-6',
             maxCompletionSize: 4096,
         },
-        eventMeta: {},
+        eventMeta: { organizationId: 'org-1', userId: 'user-1' },
         workspaceId: 'workspace-1',
         aiChatThreadId: 'thread-1',
         instanceKey: 'workspace-1:thread-1',
@@ -33,7 +41,19 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
             provider: 'Google',
             model: 'Gemini Image',
             modelVersion: 'gemini-2.5-flash-image',
-            imageInputFidelity: { level: 'high' },
+            imageReferenceCapabilities: {
+                maxReferenceImages: 14,
+                maxIdentityReferenceImages: 5,
+                conditioningModes: ['edit', 'identity', 'style', 'structure', 'pose'],
+                inputFidelity: 'provider-managed',
+                supportsIterativeEdit: true,
+                supportsMask: false,
+                supportsStructureControl: true,
+                supportsPoseControl: true,
+                supportsDeterministicSeed: false,
+                maxOutputPixels: 4194304,
+                supportedAspectRatios: ['1:1', '3:2', '2:3'],
+            },
         },
         imageModelVersion: 'gemini-2.5-flash-image',
         imageProviderName: 'Google',
@@ -44,7 +64,12 @@ function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     }
 }
 
-type ProcessResult = { generatedImages?: string[]; error?: string; imageUsage?: ProviderState['imageUsage'] }
+type ProcessResult = {
+    generatedImages?: string[]
+    error?: string
+    imageUsage?: ProviderState['imageUsage']
+    cancelledByUser?: boolean
+}
 
 const createRouter = (
     processResult: ProcessResult | ProcessResult[] = { generatedImages: ['nats-obj://workspace-workspace-1-files/cat.png'] },
@@ -61,6 +86,7 @@ let debugWarnSpy: ReturnType<typeof vi.spyOn> | null = null
 let debugErrSpy: ReturnType<typeof vi.spyOn> | null = null
 
 beforeEach(() => {
+    generatedAssetStorageMocks.settleGeneratedAssetComposition.mockClear()
     debugInfoSpy = vi.spyOn(debugTools, 'info').mockImplementation(() => undefined)
     debugWarnSpy = vi.spyOn(debugTools, 'warn').mockImplementation(() => undefined)
     debugErrSpy = vi.spyOn(debugTools, 'err').mockImplementation(() => undefined)
@@ -251,273 +277,204 @@ describe('ImageRouter', () => {
             generatedImages: ['nats-obj://workspace-workspace-1-files/cat.png'],
         }))
 
-        await execution
+        await expect(execution).rejects.toMatchObject({ name: 'AbortError' })
     })
 
-    it('runs Character Creator as layout synthesis followed by a source-conditioned fidelity edit', async () => {
-        const { router, process, createTransient } = createRouter([
-            {
-                generatedImages: [TINY_PNG_BASE64],
-                imageUsage: { generatedCount: 1, size: '3:2', quality: 'high' },
+    it('propagates provider cancellation instead of recording missing output as a failure', async () => {
+        const { router } = createRouter({ cancelledByUser: true })
+
+        await expect(router.execute(createState())).rejects.toMatchObject({ name: 'AbortError' })
+    })
+
+    it('delegates a Character Creator media plan to its registered strategy and returns the final PNG for normal settlement', async () => {
+        const complete = vi.spyOn(ImagePublisher.prototype, 'complete').mockResolvedValue(undefined)
+        const execute = vi.fn(async () => ({
+            generatedImages: ['final-character-sheet-base64'],
+            mediaComposition: {
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['asset-1'],
+                components: [{
+                    componentId: 'body-back',
+                    role: 'character-sheet-panel',
+                    title: 'Back body',
+                    imageBase64: 'cGFuZWw=',
+                    mimeType: 'image/png' as const,
+                }],
             },
-            {
-                generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'],
-                imageUsage: { generatedCount: 1, size: '3:2', quality: 'high' },
-            },
-        ])
+            imageUsage: { generatedCount: 27, size: '3840x2560', quality: 'high' },
+            capabilityMediaTrace: { schemaVersion: 'character-sheet-trace-v1' },
+        }))
+        const get = vi.fn(() => ({ execute }))
+        const createTransient = vi.fn()
+        const plan = {
+            kind: 'character-sheet',
+            capabilityRunId: 'run-1',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Create a combie character out of this photo.',
+            panels: [],
+            layoutId: 'character-sheet-3840x2560',
+            semanticRetryLimit: 1,
+        } as any
         const state = createState({
             capabilityUsageMode: 'character-creator',
-            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
-            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
-            referenceImages: ['data:image/jpeg;base64,user-character-reference'],
+            capabilityMediaExecutionPlan: plan,
+            generatedImagePrompt: 'Create an adorable chibi cartoon with a large head and small body.',
+            providerSafeMediaIntent: { safePrompt: 'Create a combie character out of this photo.' } as any,
+            mediaReferenceBindings: [{
+                assetId: 'asset-1',
+                alias: 'REFERENCE_1',
+                subjectIdentity: { classification: 'self' },
+            }] as any,
+            capabilityUsagePrompt: 'Apply the sibling visual-style Capability.',
+            capabilityReferenceImages: ['data:image/png;base64,U1RZTEU='],
+            capabilityReferenceImageTraceUrls: ['/api/capabilities/style/resources/sample-1'],
+            capabilityToolResults: [
+                { capabilityId: 'character-creator', runId: 'character-run', output: {} },
+                { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
+            ],
+            mediaBranchCandidateSnapshot: {
+                activeTargetCandidateId: 'node:sheet-target',
+                candidates: [{ candidateId: 'node:sheet-target', assetId: 'asset-1' }],
+            } as any,
+            mediaBranchResolution: {
+                operationKind: 'edit_existing',
+                targetCandidateId: null,
+            } as any,
+            generationRun: {
+                generationRequestId: 'request-1',
+                reasoningRunId: 'reasoning-1',
+                reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+                reasoningIndex: 0,
+                mediaRunId: 'reasoning-1:image:0',
+                mediaModelId: 'Google:gemini-2.5-flash-image',
+                mediaType: 'image',
+                mediaIndex: 0,
+                variantIndex: 0,
+                lineageAssignment: {
+                    assetId: 'output-asset-1',
+                    generationRequestId: 'request-1',
+                    reasoningRunId: 'reasoning-1',
+                    mediaRunId: 'reasoning-1:image:0',
+                    mediaType: 'image',
+                    mediaIndex: 0,
+                    branchId: 'branch-1',
+                    lineageParentNodeId: 'branch-line-1',
+                    referenceAssetIds: ['asset-1'],
+                    referenceNodeIds: ['source-node-1'],
+                    sourceContextNodeIds: ['source-node-1'],
+                    promptText: 'Create a combie character out of this photo.',
+                    createdAt: 1,
+                },
+            },
+            imageSize: '1024x1024',
         })
+        const router = new ImageRouter({ createTransient } as any, { get } as any, {} as any)
 
-        const result = await router.execute(state)
+        try {
+            const result = await router.execute(state)
 
-        expect(process).toHaveBeenCalledTimes(2)
-        expect(createTransient).toHaveBeenNthCalledWith(
-            1,
-            'workspace-1:thread-1:image:layout-synthesis',
-            'Google',
-        )
-        expect(createTransient).toHaveBeenNthCalledWith(2, 'workspace-1:thread-1:image', 'Google')
-        const layoutRequest = process.mock.calls[0]?.[0] as {
-            messages: ProviderState['messages']
-            imageGenerationReferences: ProviderState['imageGenerationReferences']
-            captureOnlyImageGeneration: boolean
+            expect(get).toHaveBeenCalledWith(plan)
+            expect(execute).toHaveBeenCalledWith(expect.objectContaining({
+                organizationId: 'org-1',
+                userId: 'user-1',
+                workspaceId: 'workspace-1',
+                conversationAssetId: 'thread-1',
+                reasoningModel: expect.objectContaining({ provider: 'Anthropic' }),
+                imageModel: expect.objectContaining({ provider: 'Google' }),
+                sharedState: {
+                    authoritativePrompt: 'Create a combie character out of this photo.',
+                    editTargetAssetId: 'asset-1',
+                    mediaReferenceAliases: [{ assetId: 'asset-1', alias: 'REFERENCE_1' }],
+                    sourceSubjectIdentityClassifications: ['self'],
+                    capabilityInstructions: ['Apply the sibling visual-style Capability.'],
+                    capabilityReferences: [{
+                        imageUrl: 'data:image/png;base64,U1RZTEU=',
+                        traceUrl: '/api/capabilities/style/resources/sample-1',
+                    }],
+                    capabilityOutputs: [
+                        { capabilityId: 'character-creator', runId: 'character-run', output: {} },
+                        { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
+                    ],
+                },
+            }), plan, expect.objectContaining({}))
+            expect(complete).toHaveBeenCalledWith(expect.objectContaining({
+                revisedPrompt: 'Create a combie character out of this photo.',
+            }))
+            expect(generatedAssetStorageMocks.settleGeneratedAssetComposition).toHaveBeenCalledWith({
+                generationRun: expect.objectContaining({
+                    lineageAssignment: expect.objectContaining({ assetId: 'output-asset-1' }),
+                }),
+                composition: expect.objectContaining({
+                    kind: 'character-sheet',
+                    components: [expect.objectContaining({ componentId: 'body-back' })],
+                }),
+            })
+            expect(generatedAssetStorageMocks.settleGeneratedAssetComposition.mock.invocationCallOrder[0])
+                .toBeLessThan(complete.mock.invocationCallOrder[0]!)
+            expect(createTransient).not.toHaveBeenCalled()
+            expect(result).toMatchObject({
+                generatedImages: ['final-character-sheet-base64'],
+                imageUsage: { generatedCount: 27, size: '3840x2560', quality: 'high' },
+            })
+        } finally {
+            complete.mockRestore()
         }
-        expect(layoutRequest.captureOnlyImageGeneration).toBe(true)
-        expect(layoutRequest.messages).toHaveLength(1)
-        expect(layoutRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('Image 1 is the authoritative character identity'),
-        )
-        expect(layoutRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('Image 2 is the authoritative output-layout template'),
-        )
-        expect(layoutRequest.imageGenerationReferences).toEqual([
-            {
-                url: 'data:image/jpeg;base64,user-character-reference',
-                role: 'character-source',
-                fileName: 'character-source-1',
-            },
-            {
-                url: 'data:image/jpeg;base64,character-sheet-layout',
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1',
-            },
-        ])
-        const fidelityRequest = process.mock.calls[1]?.[0] as {
-            messages: ProviderState['messages']
-            imageGenerationReferences: ProviderState['imageGenerationReferences']
-            captureOnlyImageGeneration: boolean
-        }
-        expect(fidelityRequest.captureOnlyImageGeneration).toBe(false)
-        expect(fidelityRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('CHARACTER FIDELITY RESTORATION EDIT'),
-        )
-        expect(fidelityRequest.messages[0]?.content).toEqual(
-            expect.stringContaining('fully re-render every character depiction as photorealistic photography'),
-        )
-        expect(fidelityRequest.imageGenerationReferences).toEqual([
-            {
-                url: `data:image/png;base64,${TINY_PNG_BASE64}`,
-                role: 'character-sheet-draft',
-                fileName: 'character-sheet-draft',
-            },
-            {
-                url: 'data:image/jpeg;base64,user-character-reference',
-                role: 'character-source',
-                fileName: 'character-source-1',
-            },
-        ])
-        expect(result.imageUsage).toEqual({ generatedCount: 2, size: '3:2', quality: 'high' })
     })
 
-    it('rejects reference-conditioned Character Creator when routed metadata declares standard fidelity', async () => {
-        const { router, process, createTransient } = createRouter()
-        const state = createState({
-            capabilityUsageMode: 'character-creator',
-            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
-            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
-            referenceImages: ['data:image/jpeg;base64,user-character-reference'],
-            imageProviderName: 'Google',
-            imageModelVersion: 'reference-lite-image',
-            imageModelMetaInfo: {
-                provider: 'Google',
-                model: 'Reference Lite Image',
-                modelVersion: 'reference-lite-image',
-                imageInputFidelity: { level: 'standard' },
+    it('fails a composed Capability result when no output Asset was assigned', async () => {
+        const execute = vi.fn(async () => ({
+            generatedImages: ['final-character-sheet-base64'],
+            mediaComposition: {
+                kind: 'character-sheet',
+                capabilityId: 'global.character-creator',
+                sourceAssetIds: ['asset-1'],
+                components: [{
+                    componentId: 'body-back',
+                    role: 'character-sheet-panel',
+                    title: 'Back body',
+                    imageBase64: 'cGFuZWw=',
+                    mimeType: 'image/png' as const,
+                }],
             },
-        })
-
-        const result = await router.execute(state)
-
-        expect(result.error).toContain('CHARACTER_CREATOR_REFERENCE_FIDELITY_UNSUPPORTED')
-        expect(result.error).toContain('Reference Lite Image')
-        expect(result.error).toContain('synchronized metadata declares high fidelity')
-        expect(createTransient).not.toHaveBeenCalled()
-        expect(process).not.toHaveBeenCalled()
-    })
-
-    it('routes by fidelity metadata without inspecting provider or model names', async () => {
-        const { router, process } = createRouter([
-            { generatedImages: [TINY_PNG_BASE64] },
-            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
-        ])
+        }))
+        const plan = {
+            kind: 'character-sheet',
+            capabilityRunId: 'run-without-asset',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Fix this character sheet.',
+            panels: [],
+            layoutId: 'character-sheet-3840x2560',
+            semanticRetryLimit: 1,
+        } as any
+        const router = new ImageRouter({ createTransient: vi.fn() } as any, {
+            get: vi.fn(() => ({ execute })),
+        } as any, {} as any)
 
         const result = await router.execute(createState({
             capabilityUsageMode: 'character-creator',
-            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
-            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
-            referenceImages: ['data:image/jpeg;base64,user-character-reference'],
-            imageProviderName: 'OpenAI',
-            imageModelVersion: 'gpt-image-1-mini',
-            imageModelMetaInfo: {
-                provider: 'OpenAI',
-                model: 'GPT Image 1 Mini',
-                modelVersion: 'gpt-image-1-mini',
-                imageInputFidelity: { level: 'high' },
-            },
+            capabilityMediaExecutionPlan: plan,
+            providerSafeMediaIntent: { safePrompt: 'Fix this character sheet.' } as any,
         }))
 
-        expect(result.error).toBeUndefined()
-        expect(process).toHaveBeenCalledTimes(2)
+        expect(result.error).toBe('CAPABILITY_MEDIA_COMPOSITION_ASSET_REQUIRED')
+        expect(generatedAssetStorageMocks.settleGeneratedAssetComposition).not.toHaveBeenCalled()
     })
 
-    it('takes Character Creator source images from the authoritative branch resolution when reasoning extraction fails', async () => {
-        const { router, process } = createRouter([
-            { generatedImages: [TINY_PNG_BASE64] },
-            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
-        ])
-        const state = createState({
-            capabilityUsageMode: 'character-creator',
-            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
-            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
-            referenceImages: [],
-            imageProviderName: 'OpenAI',
-            imageModelVersion: 'gpt-image-2',
-            imageModelMetaInfo: {
-                provider: 'OpenAI',
-                model: 'GPT Image 2',
-                modelVersion: 'gpt-image-2',
-                imageInputFidelity: { level: 'high' },
-            },
-            mediaBranchCandidateSnapshot: {
-                promptText: 'Create character',
-                candidates: [{
-                    nodeId: 'selected-character-node',
-                    imageUrl: 'nats-obj://workspace-images/selected-character.png',
-                }],
-            } as any,
-            mediaBranchResolution: {
-                referenceCandidateIds: ['selected-character-node'],
-            } as any,
+    it('returns a strategy preflight failure without calling an image provider', async () => {
+        const execute = vi.fn(async () => {
+            throw new Error('CHARACTER_CREATOR_IDENTITY_CONDITIONING_UNSUPPORTED')
         })
+        const createTransient = vi.fn()
+        const router = new ImageRouter({ createTransient } as any, {
+            get: vi.fn(() => ({ execute })),
+        } as any)
 
-        await router.execute(state)
+        const result = await router.execute(createState({
+            capabilityMediaExecutionPlan: { kind: 'character-sheet' } as any,
+        }))
 
-        expect(process).toHaveBeenCalledTimes(2)
-        const request = process.mock.calls[0]?.[0] as {
-            messages: ProviderState['messages']
-            imageGenerationReferences: ProviderState['imageGenerationReferences']
-            imageSize: string
-        }
-        expect(request.imageSize).toBe('1536x1024')
-        expect(request.messages[0]?.content).toEqual(
-            expect.stringContaining('Image 1 is the authoritative character identity'),
-        )
-        expect(request.imageGenerationReferences).toEqual([
-            {
-                url: 'nats-obj://workspace-images/selected-character.png',
-                role: 'character-source',
-                fileName: 'character-source-1',
-            },
-            {
-                url: 'data:image/jpeg;base64,character-sheet-layout',
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1',
-            },
-        ])
-        const fidelityRequest = process.mock.calls[1]?.[0] as {
-            imageGenerationReferences: ProviderState['imageGenerationReferences']
-        }
-        expect(fidelityRequest.imageGenerationReferences).toEqual([
-            {
-                url: `data:image/png;base64,${TINY_PNG_BASE64}`,
-                role: 'character-sheet-draft',
-                fileName: 'character-sheet-draft',
-            },
-            {
-                url: 'nats-obj://workspace-images/selected-character.png',
-                role: 'character-source',
-                fileName: 'character-source-1',
-            },
-        ])
-    })
-
-    it('deduplicates one Character Creator source selected through multiple candidate records', async () => {
-        const { router, process } = createRouter([
-            { generatedImages: [TINY_PNG_BASE64] },
-            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
-        ])
-        const sharedSource = 'nats-obj://workspace-images/shared-character.png'
-        const state = createState({
-            capabilityUsageMode: 'character-creator',
-            capabilityUsagePrompt: 'Use the fixed multi-view layout.',
-            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
-            mediaBranchCandidateSnapshot: {
-                promptText: 'Create character',
-                candidates: [
-                    { candidateId: 'candidate-node', nodeId: 'node-1', imageUrl: sharedSource },
-                    { candidateId: 'candidate-asset', assetId: 'asset-1', imageUrl: sharedSource },
-                ],
-            } as any,
-            mediaBranchResolution: {
-                referenceCandidateIds: ['candidate-node', 'candidate-asset'],
-            } as any,
-        })
-
-        await router.execute(state)
-
-        expect(process.mock.calls[0]?.[0].imageGenerationReferences).toEqual([
-            {
-                url: sharedSource,
-                role: 'character-source',
-                fileName: 'character-source-1',
-            },
-            {
-                url: 'data:image/jpeg;base64,character-sheet-layout',
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1',
-            },
-        ])
-    })
-
-    it('keeps the routed Stability Character Creator prompt below the provider limit', async () => {
-        const { router, process } = createRouter([
-            { generatedImages: [TINY_PNG_BASE64] },
-            { generatedImages: ['nats-obj://workspace-workspace-1-files/character-sheet.png'] },
-        ])
-        const state = createState({
-            capabilityUsageMode: 'character-creator',
-            capabilityUsagePrompt: 'x'.repeat(8500),
-            capabilityReferenceImages: ['data:image/jpeg;base64,character-sheet-layout'],
-            imageProviderName: 'Stability',
-            imageModelVersion: 'sd3.5-large',
-            imageModelMetaInfo: {
-                provider: 'Stability',
-                model: 'Stable Diffusion 3.5 Large',
-                modelVersion: 'sd3.5-large',
-                imagePromptMaxChars: 10000,
-                imageInputFidelity: { level: 'high' },
-            },
-        })
-
-        await router.execute(state)
-
-        const routedPrompt = process.mock.calls[0]?.[0].messages[0]?.content
-        expect(typeof routedPrompt).toBe('string')
-        expect((routedPrompt as string).length).toBeLessThanOrEqual(10000)
-        expect(routedPrompt).toEqual(expect.stringContaining('CHARACTER CREATOR BRIEF'))
+        expect(result.error).toBe('CHARACTER_CREATOR_IDENTITY_CONDITIONING_UNSUPPORTED')
+        expect(createTransient).not.toHaveBeenCalled()
     })
 })

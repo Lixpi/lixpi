@@ -17,6 +17,10 @@ function expectRuleNotToContain(rule: string, declaration: string): void {
     expect(rule.includes(declaration), `rule should not contain: ${declaration}`).toBe(false)
 }
 
+function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
+    expect(source.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+}
+
 describe('prompt-reference-picker.scss', () => {
     const scss = readFileSync(resolve(__dirname, 'prompt-reference-picker.scss'), 'utf-8')
 
@@ -72,7 +76,7 @@ describe('prompt-reference-picker.scss', () => {
         const toolRule = extractFlatRule(scss, '.prompt-reference-chip-tool')
         const skillRule = extractFlatRule(scss, '.prompt-reference-chip-skill')
 
-        expectRuleToContain(chipRule, 'color: var(--prompt-reference-color, #3d649c);')
+        expectRuleToContain(chipRule, 'color: var(--prompt-reference-color);')
         expectRuleToContain(iconRule, 'align-self: center;')
         expectRuleToContain(iconRule, 'flex: 0 0 14px;')
         expectRuleToContain(iconRule, 'width: 14px;')
@@ -80,8 +84,30 @@ describe('prompt-reference-picker.scss', () => {
         expectRuleToContain(iconSvgRule, 'fill: currentColor;')
         expectRuleToContain(nameRule, 'font-weight: 500;')
         expectRuleToContain(nameRule, 'line-height: inherit;')
-        expectRuleToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color, #a55324);')
-        expectRuleToContain(toolRule, 'color: #39766f;')
-        expectRuleToContain(skillRule, 'color: #6d4fb2;')
+        expectRuleToContain(capabilityRule, 'color: var(--prompt-reference-capability-module-color);')
+        expectRuleToContain(toolRule, 'color: var(--prompt-reference-tool-color);')
+        expectRuleToContain(skillRule, 'color: var(--prompt-reference-skill-color);')
+    })
+
+    // Chip color has exactly one owner. Every surface reads these custom
+    // properties; no stylesheet may restate a chip color literal of its own.
+    it('reads its palette from the shared partial and emits the light defaults once', () => {
+        expectSourceToContain(scss, "@import '$src/sass/_prompt-reference-chip.scss';")
+        expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
+
+        const partial = readFileSync(
+            resolve(__dirname, '../../../../sass/_prompt-reference-chip.scss'),
+            'utf-8',
+        )
+        for (const declaration of [
+            '--prompt-reference-color: #3d649c;',
+            '--prompt-reference-capability-module-color: #a55324;',
+            '--prompt-reference-tool-color: #39766f;',
+            '--prompt-reference-skill-color: #6d4fb2;',
+            '--prompt-reference-color: #d7e6ff;',
+            '--prompt-reference-capability-module-color: #eca983;',
+        ]) {
+            expectSourceToContain(partial, declaration, 'prompt-reference chip palette')
+        }
     })
 })

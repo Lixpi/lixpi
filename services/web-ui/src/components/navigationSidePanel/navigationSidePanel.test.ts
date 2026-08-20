@@ -43,7 +43,7 @@ vi.mock('$src/services/auth-service.ts', () => ({
 // The dropdown is a fully separate, already-tested component. NavigationSidePanel's
 // own responsibility is *what it configures the dropdown with* (options, onSelect
 // routing) — that's what these tests exercise, via the captured config.
-vi.mock('$src/components/dropdown/index.ts', () => ({
+vi.mock('@lixpi/ui-kit/components/dropdown', () => ({
     createPureDropdown: vi.fn((config: any) => {
         const dom = document.createElement('div')
         dom.className = 'mock-dropdown'

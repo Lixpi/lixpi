@@ -6,7 +6,7 @@ import {
     geminiColorIcon,
     stabilityIcon,
     bytedanceIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 import {
     getAiModelIcon,
     getAiProviderClassSuffix,

@@ -1,5 +1,5 @@
-import { chevronDownIcon, checkMarkIcon } from '$src/svgIcons/index.ts'
-import { createInfoBubble, type InfoBubbleInstance } from '$src/components/infoBubble/index.ts'
+import { chevronDownIcon, checkMarkIcon } from '@lixpi/ui-kit/svg'
+import { createInfoBubble, type InfoBubbleInstance } from '@lixpi/ui-kit/components/info-bubble'
 import { html } from '$src/utils/domTemplates.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { settings } from '$src/settings.ts'

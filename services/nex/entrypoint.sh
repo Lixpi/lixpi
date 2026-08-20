@@ -160,16 +160,20 @@ deploy_workload() {
         if DEPLOY_OUTPUT="$(run_nex --namespace "${LIXPI_WORKLOAD_NAMESPACE}" workload start \
             --type native --lifecycle service --name "${wl_name}" \
             --start-request "${wl_start_request}" 2>&1)"; then
-            printf '%s\n' "${DEPLOY_OUTPUT}"
             case "${DEPLOY_OUTPUT}" in
                 *"error:"*|*"no NATS connection available"*)
                     ;;
                 *)
+                    printf '%s\n' "${DEPLOY_OUTPUT}"
                     echo "✅ Workload '${wl_name}' deployed"
                     return 0
                     ;;
             esac
-        else
+        fi
+        # The agent registers with the node a moment after the node itself comes
+        # up, so early attempts legitimately report "no agents available". Only
+        # the last attempt's output is worth showing as a real failure.
+        if [ "$i" -ge 30 ]; then
             printf '%s\n' "${DEPLOY_OUTPUT}"
         fi
         echo "... node not ready yet (attempt ${i}); retrying in 2s"
@@ -191,12 +195,16 @@ STABLE_DIFFUSION_API_KEY ARK_API_KEY LIXPI_SYNC_INTERVAL_MS"
 # NEX-account creds) so it can read/write organization Blob Object Store buckets.
 FILE_CONVERSION_ENTRY="${SERVICE_DIR}/workloads/file-conversion/index.ts"
 FILE_CONVERSION_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
+CHARACTER_FIDELITY_ENTRY="${SERVICE_DIR}/workloads/character-fidelity/index.ts"
+CHARACTER_FIDELITY_KEYS="NATS_SERVERS NATS_REGULAR_USER_PASSWORD"
 
 # shellcheck disable=SC2086  # intentional word-splitting of the key lists
 deploy_workload "${WORKLOAD_NAME}" "${WORKLOAD_ENTRY}" \
     "$(build_start_request "${WORKLOAD_ENTRY}" ${AI_MODELS_KEYS})"
 deploy_workload "file-conversion" "${FILE_CONVERSION_ENTRY}" \
     "$(build_start_request "${FILE_CONVERSION_ENTRY}" ${FILE_CONVERSION_KEYS})"
+deploy_workload "character-fidelity" "${CHARACTER_FIDELITY_ENTRY}" \
+    "$(build_start_request "${CHARACTER_FIDELITY_ENTRY}" ${CHARACTER_FIDELITY_KEYS})"
 
 # Supervise the node in the foreground; exits when the node exits or on signal.
 wait "$NODE_PID"

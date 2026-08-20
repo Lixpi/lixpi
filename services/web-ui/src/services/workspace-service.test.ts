@@ -109,7 +109,6 @@ describe('WorkspaceService canvas save queue', () => {
         const secondState = makeCanvasState('second-node')
 
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: firstState })
-        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: secondState })
 
         await vi.waitFor(() => {
             expect(mocks.request).toHaveBeenCalledTimes(1)
@@ -118,6 +117,8 @@ describe('WorkspaceService canvas save queue', () => {
             canvasState: firstState,
             expectedCanvasStateUpdatedAt: 5,
         }))
+
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: secondState })
 
         resolveFirstSave?.({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
 
@@ -150,7 +151,6 @@ describe('WorkspaceService canvas save queue', () => {
         const secondState = makeCanvasState('queued-node')
 
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: firstState, persistViewport: true })
-        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: secondState })
 
         await vi.waitFor(() => {
             expect(mocks.request).toHaveBeenCalledTimes(1)
@@ -160,6 +160,8 @@ describe('WorkspaceService canvas save queue', () => {
             persistViewport: true,
             expectedCanvasStateUpdatedAt: 5,
         }))
+
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: secondState })
 
         resolveFirstSave?.({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
 
@@ -294,8 +296,9 @@ describe('WorkspaceService canvas save queue', () => {
     })
 
     it('retries queued canvas updates after a non-stale error, then marks save complete on success', async () => {
+        let resolveFirstSave: ((value: unknown) => void) | null = null
         mocks.request
-            .mockResolvedValueOnce({ error: 'UNAVAILABLE' })
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstSave = resolve }))
             .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 20, canvasStateUpdatedAt: 19 })
 
         const service = new WorkspaceService()
@@ -303,7 +306,11 @@ describe('WorkspaceService canvas save queue', () => {
         const stateB = makeCanvasState('state-b')
 
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: stateA })
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(1)
+        })
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: stateB })
+        resolveFirstSave?.({ error: 'UNAVAILABLE' })
 
         await vi.waitFor(() => {
             expect(mocks.request).toHaveBeenCalledTimes(2)
@@ -438,6 +445,141 @@ describe('WorkspaceService canvas save queue', () => {
         expect(mocks.request.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
             expectedCanvasStateUpdatedAt: 20,
         }))
+    })
+
+    // =========================================================================
+    // CANVAS MEMBERSHIP WRITE COORDINATION
+    // =========================================================================
+
+    it('serializes three overlapping membership mutations and exposes the latest revision to each next mutation', async () => {
+        let releaseFirstMutation: (() => void) | null = null
+        const firstMutationStarted = new Promise<void>((resolve) => {
+            releaseFirstMutation = resolve
+        })
+        let startFirstMutation: (() => void) | null = null
+        const firstMutationEntered = new Promise<void>((resolve) => {
+            startFirstMutation = resolve
+        })
+        const observedRevisions: number[] = []
+        let secondMutationStarted = false
+        let thirdMutationStarted = false
+        const service = new WorkspaceService()
+
+        const firstMutation = service.runCanvasMembershipMutation({
+            workspaceId: 'workspace-1',
+            mutation: async () => {
+                observedRevisions.push(mocks.workspaceData.canvasStateUpdatedAt ?? 0)
+                startFirstMutation?.()
+                await firstMutationStarted
+                mocks.workspaceData.canvasStateUpdatedAt = 6
+                return 'first'
+            },
+        })
+
+        await firstMutationEntered
+        const secondMutation = service.runCanvasMembershipMutation({
+            workspaceId: 'workspace-1',
+            mutation: async () => {
+                secondMutationStarted = true
+                observedRevisions.push(mocks.workspaceData.canvasStateUpdatedAt ?? 0)
+                mocks.workspaceData.canvasStateUpdatedAt = 7
+                return 'second'
+            },
+        })
+        const thirdMutation = service.runCanvasMembershipMutation({
+            workspaceId: 'workspace-1',
+            mutation: async () => {
+                thirdMutationStarted = true
+                observedRevisions.push(mocks.workspaceData.canvasStateUpdatedAt ?? 0)
+                return 'third'
+            },
+        })
+
+        await Promise.resolve()
+        expect(secondMutationStarted).toBe(false)
+        expect(thirdMutationStarted).toBe(false)
+
+        releaseFirstMutation?.()
+        await expect(firstMutation).resolves.toBe('first')
+        await expect(secondMutation).resolves.toBe('second')
+        await expect(thirdMutation).resolves.toBe('third')
+        expect(observedRevisions).toEqual([5, 6, 7])
+    })
+
+    it('holds normal saves until an in-flight membership mutation has committed', async () => {
+        let releaseMutation: (() => void) | null = null
+        const mutationReleased = new Promise<void>((resolve) => {
+            releaseMutation = resolve
+        })
+        let markMutationStarted: (() => void) | null = null
+        const mutationStarted = new Promise<void>((resolve) => {
+            markMutationStarted = resolve
+        })
+        mocks.request.mockResolvedValueOnce({
+            success: true,
+            workspaceId: 'workspace-1',
+            updatedAt: 12,
+            canvasStateUpdatedAt: 7,
+        })
+
+        const service = new WorkspaceService()
+        const membershipMutation = service.runCanvasMembershipMutation({
+            workspaceId: 'workspace-1',
+            mutation: async () => {
+                markMutationStarted?.()
+                await mutationReleased
+                mocks.workspaceData.canvasStateUpdatedAt = 6
+            },
+        })
+
+        await mutationStarted
+        const queuedState = makeCanvasState('queued-during-attach')
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: queuedState })
+        await Promise.resolve()
+        expect(mocks.request).not.toHaveBeenCalled()
+
+        releaseMutation?.()
+        await membershipMutation
+        await vi.waitFor(() => {
+            expect(mocks.request).toHaveBeenCalledTimes(1)
+        })
+        expect(mocks.request.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+            canvasState: queuedState,
+            expectedCanvasStateUpdatedAt: 6,
+        }))
+    })
+
+    it('drops pending saves already represented by a successful membership mutation', async () => {
+        type CanvasSaveQueueInternals = {
+            pendingRequest: {
+                canvasState: unknown
+                persistViewport: boolean
+                sequence: number
+            } | null
+        }
+        type WorkspaceServiceInternals = {
+            canvasSaveRequestSequence: number
+            getCanvasSaveQueue: (workspaceId: string) => CanvasSaveQueueInternals
+        }
+
+        const service = new WorkspaceService()
+        const internals = service as unknown as WorkspaceServiceInternals
+        const queue = internals.getCanvasSaveQueue('workspace-1')
+        internals.canvasSaveRequestSequence = 4
+        queue.pendingRequest = {
+            canvasState: makeCanvasState('already-in-membership-mutation'),
+            persistViewport: false,
+            sequence: 4,
+        }
+
+        const result = await service.runCanvasMembershipMutation({
+            workspaceId: 'workspace-1',
+            mutation: async () => 'attached',
+        })
+
+        expect(result).toBe('attached')
+        expect(queue.pendingRequest).toBeNull()
+        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
     })
 })
 

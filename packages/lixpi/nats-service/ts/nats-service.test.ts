@@ -343,6 +343,45 @@ describe('NatsService', () => {
             expect(msg.respond).toHaveBeenCalledWith(JSON.stringify({ pong: 'ok' }))
         })
 
+        it('replies with a JSON error payload when a reply handler throws', async () => {
+            const msg = {
+                string: vi.fn().mockReturnValue('{"ping":"ok"}'),
+                respond: vi.fn(),
+            }
+            connectionMock.subscribe = vi.fn().mockReturnValue(createAsyncIterable([msg]))
+            const service = new (NatsService as any)({})
+            service['nc'] = connectionMock
+
+            service.reply('inbox', async () => {
+                throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
+            })
+            await flushPending()
+
+            expect(msg.respond).toHaveBeenCalledWith(JSON.stringify({
+                error: 'CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED',
+            }))
+            expect(msg.respond).not.toHaveBeenCalledWith('{}')
+        })
+
+        it('replies with a buffer error message when a buffer reply handler throws', async () => {
+            const msg = {
+                string: vi.fn().mockReturnValue('ping'),
+                respond: vi.fn(),
+            }
+            connectionMock.subscribe = vi.fn().mockReturnValue(createAsyncIterable([msg]))
+            const service = new (NatsService as any)({})
+            service['nc'] = connectionMock
+
+            service.reply('inbox', async () => {
+                throw new Error('BUFFER_REPLY_FAILED')
+            }, {}, 'buffer')
+            await flushPending()
+
+            const response = msg.respond.mock.calls[0]?.[0]
+            expect(Buffer.isBuffer(response)).toBe(true)
+            expect(response.toString()).toBe('BUFFER_REPLY_FAILED')
+        })
+
         it('returns parsed response from request and respects request timeout', async () => {
             connectionMock.request = vi.fn().mockResolvedValue({
                 string: vi.fn().mockReturnValue(JSON.stringify({ ok: true })),

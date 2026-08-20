@@ -303,7 +303,7 @@ export const assetSubjects = [
         },
         handler: async (data: any) => {
             if (!['output-node', 'branch-lineage'].includes(data.scope)) return { error: 'INVALID_REVIEW_SCOPE' }
-            if (!['accept', 'supersede'].includes(data.action)) return { error: 'INVALID_REVIEW_ACTION' }
+            if (!['accept', 'supersede', 'reject'].includes(data.action)) return { error: 'INVALID_REVIEW_ACTION' }
             if (data.action === 'supersede' && data.scope === 'output-node' && data.preserveLineage !== true) {
                 return { error: 'MEDIA_NODE_PROMPT_REGENERATION_NOT_SUPPORTED' }
             }

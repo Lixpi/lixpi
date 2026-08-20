@@ -136,7 +136,7 @@ Subjects are **not** ad-hoc strings scattered across the codebase. They are defi
 
 ## Key Design Decisions
 
-Four decisions define the shape of the system. Each is intentional and each is what makes a given subsystem replaceable without rippling through the rest.
+These decisions define the shape of the system and keep subsystem changes from spreading across service boundaries.
 
 ### NATS-First
 
@@ -147,6 +147,12 @@ The exception is byte transport: media upload/download, video range reads, authe
 ### Framework-Agnostic Canvas
 
 The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks; Svelte is only a thin binding layer. This insulates the canvas logic from framework changes and is why the rendering engine can stand on its own. See [Rendering Engine](../canvas/RENDERING-ENGINE.md).
+
+### Self-Contained Capability Modules
+
+Each concrete Capability lives under `packages/lixpi/capability-system/src/capabilities/<module-id>/`. Its directory contains the capability-specific contracts, orchestration, prompts, policies, Tool and Skill packages, schemas, resources, and tests. Generic Capability infrastructure can execute and install a module, but it does not import concrete module behavior.
+
+Application services provide infrastructure through typed ports defined by the module. Those adapters can authorize and load Assets, access storage, call selected providers, publish events, or send NATS requests. They do not own capability-specific prompts, scheduling, retry rules, assessment, composition, tracing, or cleanup. A module that needs deep media integration publishes its strategy through `CapabilityModuleDefinition.mediaStrategies`, and `CapabilityModuleCatalog` installs it without the API importing the strategy. See [Tools and Skills](../library/TOOLS-AND-SKILLS.md).
 
 ### Provider-Agnostic AI
 
@@ -198,7 +204,7 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 | Package | Purpose |
 |---------|---------|
 | `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
-| `@lixpi/capability-system` | Cross-runtime Capability validation plus backend resolution, action registration, workflow execution, dispatch, module composition, and provider-neutral model Tool definitions |
+| `@lixpi/capability-system` | Self-contained concrete Capability modules plus cross-runtime validation, backend resolution, action registration, workflow execution, dispatch, module composition, and provider-neutral model Tool definitions |
 | `@lixpi/canvas-engine` | Shared canvas geometry, collision, lineage layout, connector, animation, and rendering modules split by runtime boundary |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream stream/direct-message helpers, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |

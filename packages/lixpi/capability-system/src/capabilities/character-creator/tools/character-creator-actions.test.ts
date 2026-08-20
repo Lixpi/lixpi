@@ -1,230 +1,103 @@
-import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { describe, expect, it, vi } from 'vitest'
 
-import {
-    CapabilityActionRegistry,
-    type CapabilityActionExecutionContext,
-} from '@lixpi/capability-system/backend'
-import { CHARACTER_CREATOR_CAPABILITY_IDS } from './character-creator-definition.ts'
-import { normalizeCharacterSheetAssessment, type CharacterSheetAssessment } from './character-creator-prompt.ts'
-import {
-    registerCharacterCreatorActions,
-    selectFinalCharacterSheet,
-    type CharacterCreatorActionDependencies,
-} from './character-creator-actions.ts'
+import { describe, expect, it } from 'vitest'
 
-function makeAssessment(overrides: Partial<CharacterSheetAssessment> = {}) {
-    return normalizeCharacterSheetAssessment({
-        isSingleImage: true,
-        isLandscape: true,
-        hasFiveFullBodyViews: true,
-        hasFiveHeadViews: true,
-        hasExpressionShapePanels: true,
-        hasHandsFeetAndPropsPanels: true,
-        hasCostumePaletteMaterialAndDetailPanels: true,
-        hasSixPosePanels: true,
-        hasAlignmentGuides: true,
-        fullHeightViewsUncropped: true,
-        identityConsistent: true,
-        outfitConsistent: true,
-        labelsCorrect: true,
-        issues: [],
-        ...overrides,
-    })
-}
+import { CapabilityActionRegistry } from '../../../backend/capability-action-registry.ts'
+import { createCapabilityTraceRecorder } from '../../../backend/capability-trace-recorder.ts'
+import { validateJsonSchemaValue } from '../../../shared/capability-json-schema.ts'
+import { registerCharacterCreatorActions } from './character-creator-actions.ts'
 
-function makeDependencies(): CharacterCreatorActionDependencies {
-    return {
-        resolveReferences: vi.fn(async ({ assetIds }) => assetIds.map(assetId => ({
-            assetId,
-            modelUrl: `nats://authorized/${assetId}`,
-        }))),
-        generateImage: vi.fn(async () => ({ image: { assetCandidateId: 'candidate-1' } })),
-        assessSheet: vi.fn(async () => makeAssessment()),
-        persistSheet: vi.fn(async () => ({ assetId: 'asset-final' })),
-    }
-}
-
-function makeContext(): CapabilityActionExecutionContext {
+// The workflow runner gives every step a live recorder, so a directly invoked
+// action gets a real one here rather than a stub that hides trace mistakes.
+function executionContext(trace = createCapabilityTraceRecorder()) {
     return {
         userId: 'user-1',
         workspaceId: 'workspace-1',
-        organizationId: 'organization-1',
-        rootCapabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.tool,
+        organizationId: 'org-1',
+        rootCapabilityId: 'global.character-creator',
         runId: 'run-1',
-        origin: 'prompt',
-        stepId: 'step-1',
+        origin: 'prompt' as const,
+        stepId: 'build-render-plan',
         attempt: 1,
         signal: new AbortController().signal,
-        plan: {
-            serializable: {
-                resolvedManifests: [{
-                    capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.tool,
-                    manifestBlobHash: 'manifest-hash',
-                }],
-            },
-        } as CapabilityActionExecutionContext['plan'],
+        plan: {} as never,
+        variant: { axis: 'request' as const, variantKey: 'request' as const },
         getResource: () => undefined,
         getRunEvents: () => [],
+        trace,
     }
 }
 
-describe('Character Creator registered actions', () => {
-    it('registers only explicit server action keys and rejects another root Tool', async () => {
+describe('Character Creator actions', () => {
+    it('registers only preflight validation and plan construction actions', () => {
         const registry = new CapabilityActionRegistry()
-        registerCharacterCreatorActions(registry, makeDependencies())
+        registerCharacterCreatorActions(registry)
 
-        expect(registry.allowedActionKeys()).toEqual(new Set([
+        expect([...registry.allowedActionKeys()]).toEqual([
             'character.validate-request',
-            'asset.resolve-references',
-            'character.build-prompt',
-            'image.generate',
-            'character-sheet.validate',
-            'character.build-correction-prompt',
-            'character-sheet.persist',
-        ]))
-        expect(registry.get('image.generate').classifyRetry(new TypeError('fetch failed'))).toBe('retryable')
-        expect(registry.get('image.generate').classifyRetry(new Error('Stability API error (bad_request)'))).toBe('terminal')
-        expect(registry.get('character-sheet.persist').validateOutput({
-            assetId: 'asset-candidate',
-            validation: { passed: false, correctionAttempts: 1 },
-        })).toEqual({ valid: true })
-        expect(registry.get('character-sheet.persist').collectCanvasGeometry).toBeUndefined()
-        expect(await registry.get('image.generate').authorize({
-            ...makeContext(),
-            rootCapabilityId: 'global.unrelated-tool',
-        }, {})).toBe(false)
+            'character.build-render-plan',
+        ])
+        expect(registry.has('image.generate')).toBe(false)
+        expect(registry.has('character-sheet.persist')).toBe(false)
     })
 
-    it('normalizes and deduplicates validated request references', async () => {
+    it('validates and deduplicates optional reference Asset IDs', () => {
         const registry = new CapabilityActionRegistry()
-        registerCharacterCreatorActions(registry, makeDependencies())
-        const output = await registry.get('character.validate-request').execute({
-            prompt: '  A desert courier.  ',
-            referenceAssetIds: ['asset-a', 'asset-a', 'asset-b'],
-        }, makeContext())
+        registerCharacterCreatorActions(registry)
 
-        expect(output).toEqual({
-            prompt: 'A desert courier.',
-            referenceAssetIds: ['asset-a', 'asset-b'],
+        expect(registry.get('character.validate-request').execute({
+            prompt: '  Desert courier  ',
+            referenceAssetIds: ['asset-1', 'asset-1', 'asset-2'],
+        }, executionContext())).toEqual({
+            prompt: 'Desert courier',
+            referenceAssetIds: ['asset-1', 'asset-2'],
         })
     })
 
-    it('passes only authorized reference results through the action boundary', async () => {
-        const dependencies = makeDependencies()
+    it('builds a provider-neutral plan tied to the capability run', async () => {
         const registry = new CapabilityActionRegistry()
-        registerCharacterCreatorActions(registry, dependencies)
-        const context = makeContext()
-        const output = await registry.get('asset.resolve-references').execute({
-            referenceAssetIds: ['asset-a'],
-        }, context)
+        registerCharacterCreatorActions(registry)
 
-        expect(output).toEqual({
-            references: [{ assetId: 'asset-a', modelUrl: 'nats://authorized/asset-a' }],
-        })
-        expect(dependencies.resolveReferences).toHaveBeenCalledWith({
-            assetIds: ['asset-a'],
-            context,
-        })
-    })
-
-    it('sends the packaged character-sheet example as an explicit layout reference', async () => {
-        const registry = new CapabilityActionRegistry()
-        registerCharacterCreatorActions(registry, makeDependencies())
-
-        const output = await registry.get('character.build-prompt').execute({
-            prompt: 'Create a character sheet from the attached portrait.',
-            referenceAssetIds: ['asset-a'],
-            layout: { bytes: new TextEncoder().encode('Use every section from the attached detailed landscape template.') },
-            referenceFidelity: { bytes: new TextEncoder().encode('Preserve the referenced identity and design.') },
-            promptInstructions: { bytes: new TextEncoder().encode('Use one coherent sheet.') },
-            oneShotExample: { bytes: new Uint8Array([1, 2, 3]) },
-        }, makeContext())
+        const output = await registry.get('character.build-render-plan').execute({
+            prompt: 'Desert courier',
+            referenceAssetIds: ['asset-1'],
+        }, executionContext()) as Record<string, any>
 
         expect(output.mediaGenerationMode).toBe('character-creator')
-        expect(output.preserveUserPrompt).toBe(true)
-        expect(output.referenceImages).toEqual(['data:image/jpeg;base64,AQID'])
-        expect(output.referenceImageTraceUrls).toEqual([
-            `/api/capabilities/${encodeURIComponent(CHARACTER_CREATOR_CAPABILITY_IDS.tool)}/resources/character-sheet-example?manifestBlobHash=manifest-hash`,
-        ])
-        expect(output.visualInstructions).toContain('The attached character-sheet template image is the output-layout specification')
-        expect(output.visualInstructions).toContain('Preserve the referenced identity and design.')
+        expect(output.capabilityMediaExecutionPlan).toMatchObject({
+            kind: 'character-sheet',
+            capabilityRunId: 'run-1',
+            sourceAssetIds: ['asset-1'],
+            userPrompt: 'Desert courier',
+            layoutId: 'character-sheet-3840x2560',
+            semanticRetryLimit: 0,
+        })
+        expect(output.capabilityMediaExecutionPlan.panels).toHaveLength(3)
     })
 
-    it('loads the checked-in character-sheet example bytes without substituting another image', async () => {
+    it('builds a plan accepted by the public Tool output schema', async () => {
         const registry = new CapabilityActionRegistry()
-        registerCharacterCreatorActions(registry, makeDependencies())
-        const exampleBytes = await readFile(new URL('./resources/character-sheet-example.jpg', import.meta.url))
+        registerCharacterCreatorActions(registry)
+        const schema = JSON.parse(await readFile(
+            new URL('./resources/character-creator-output.schema.json', import.meta.url),
+            'utf8',
+        )) as unknown
 
-        const output = await registry.get('character.build-prompt').execute({
-            prompt: 'Create a character sheet.',
-            referenceAssetIds: ['asset-a'],
-            layout: { bytes: new TextEncoder().encode('layout') },
-            referenceFidelity: { bytes: new TextEncoder().encode('fidelity') },
-            promptInstructions: { bytes: new TextEncoder().encode('prompt') },
-            oneShotExample: { bytes: exampleBytes },
-        }, makeContext())
-        const encoded = String(output.referenceImages[0]).split(',')[1] ?? ''
-        const hash = createHash('sha256').update(Buffer.from(encoded, 'base64')).digest('hex')
+        const output = await registry.get('character.build-render-plan').execute({
+            prompt: 'Desert courier in four shots',
+            referenceAssetIds: ['asset-1'],
+        }, executionContext())
 
-        expect(hash).toBe('388e3c7a398f43b3e2ad9cebf6019d16c95e4a17289fb5b77a94bf62e11acadd')
-    })
-})
-
-describe('Character Creator final candidate selection', () => {
-    it('uses the original passing sheet without a correction attempt', () => {
-        const original = { image: { candidate: 'original' } }
-        expect(selectFinalCharacterSheet({
-            original,
-            originalValidation: makeAssessment(),
-        })).toEqual({
-            candidate: original,
-            validation: makeAssessment(),
-            correctionAttempts: 0,
-        })
+        expect(validateJsonSchemaValue(schema, output)).toEqual({ valid: true })
     })
 
-    it('uses one passing correction', () => {
-        const original = { image: { candidate: 'original' } }
-        const correction = { image: { candidate: 'correction' } }
-        const failed = makeAssessment({ hasFiveFullBodyViews: false, issues: ['Missing full-body turnaround row'] })
-        const passed = makeAssessment()
+    it('rejects more than eight source Assets', () => {
+        const registry = new CapabilityActionRegistry()
+        registerCharacterCreatorActions(registry)
 
-        expect(selectFinalCharacterSheet({
-            original,
-            originalValidation: failed,
-            correction,
-            correctionValidation: passed,
-        })).toEqual({
-            candidate: correction,
-            validation: passed,
-            correctionAttempts: 1,
-        })
-    })
-
-    it('persists the higher-scoring candidate when the bounded correction still fails validation', () => {
-        const original = { image: { candidate: 'original' } }
-        const correction = { image: { candidate: 'correction' } }
-        const originalValidation = makeAssessment({
-            hasFiveFullBodyViews: false,
-            issues: ['Missing full-body turnaround row'],
-        })
-        const correctionValidation = makeAssessment({
-            hasFiveFullBodyViews: false,
-            hasSixPosePanels: false,
-            issues: ['Missing full-body turnaround row', 'Missing pose panels'],
-        })
-
-        expect(selectFinalCharacterSheet({
-            original,
-            originalValidation,
-            correction,
-            correctionValidation,
-        })).toEqual({
-            candidate: original,
-            validation: originalValidation,
-            correctionAttempts: 1,
-        })
+        expect(() => registry.get('character.validate-request').execute({
+            prompt: 'Character',
+            referenceAssetIds: Array.from({ length: 9 }, (_, index) => `asset-${index}`),
+        }, executionContext())).toThrow('Character Creator accepts at most 8 reference Assets')
     })
 })

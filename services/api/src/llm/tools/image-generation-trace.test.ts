@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-    buildCharacterFidelityRestorationPrompt,
     buildImageGenerationTrace,
     buildImageModelPrompt,
     normalizeImageSize,
@@ -130,52 +129,15 @@ describe('buildImageModelPrompt', () => {
         expect(prompt).toContain('Paint the same man in a restrained orange monochrome palette.')
     })
 
-    it('maps Character Creator attachments to source and template roles without re-expanding the capability brief', () => {
+    it('leaves Character Creator panel prompts unchanged for the capability strategy', () => {
         const prompt = buildImageModelPrompt(createState({
             capabilityUsageMode: 'character-creator',
-            capabilityReferenceImages: ['data:image/jpeg;base64,layout-example'],
-            referenceImages: ['data:image/png;base64,user-character'],
+            capabilityReferenceImages: [],
+            referenceImages: [],
             generatedImagePrompt: 'Invent a blonde character in green clothing.',
-            mediaBranchCandidateSnapshot: {
-                ...createState().mediaBranchCandidateSnapshot!,
-                promptText: 'Create a character sheet from the selected character.',
-            },
         }))
 
-        expect(prompt).toContain('IMAGE ROLES — HIGHEST PRIORITY')
-        expect(prompt).toContain('Image 1 is the authoritative character identity')
-        expect(prompt).toContain('Image 2 is the authoritative output-layout template')
-        expect(prompt).toContain('Preserve source identity and medium in every depiction')
-        expect(prompt).toContain('A photographic source requires photorealistic character depictions')
-        expect(prompt).toContain('Never copy the template\'s illustrated rendering style')
-        expect(prompt).toContain('Use rough watercolor paper and visible brush texture.')
-        expect(prompt.length).toBeLessThan(1_000)
-        expect(prompt).not.toContain('Invent a blonde character in green clothing.')
-        expect(prompt).not.toContain('capability reference image')
-        expect(prompt).not.toContain('example character')
-    })
-})
-
-describe('buildCharacterFidelityRestorationPrompt', () => {
-    it('locks the generated layout while restoring concrete identity and rendering-style invariants', () => {
-        const prompt = buildCharacterFidelityRestorationPrompt(2)
-
-        expect(prompt).toContain('Image 1 is the generated character-design sheet to edit')
-        expect(prompt).toContain('Images 2-3 are the authoritative source images')
-        expect(prompt).toContain('preserve every panel, divider, guide, label')
-        expect(prompt).toContain('exact facial construction and proportions')
-        expect(prompt).toContain('line presence and line-weight variation')
-        expect(prompt).toContain('visible grain, surface texture')
-        expect(prompt).toContain('If the authoritative source medium is photography')
-        expect(prompt).toContain('fully re-render every character depiction as photorealistic photography')
-        expect(prompt).toContain('Replace every character depiction completely wherever necessary')
-        expect(prompt).toContain('generic polished concept art or generic AI illustration')
-        expect(prompt).not.toContain('Do not clean up, beautify, photorealize')
-    })
-
-    it('requires at least one authoritative source image', () => {
-        expect(() => buildCharacterFidelityRestorationPrompt(0))
-            .toThrow('CHARACTER_FIDELITY_SOURCE_REFERENCE_REQUIRED')
+        expect(prompt).toBe('Invent a blonde character in green clothing.')
     })
 })
 

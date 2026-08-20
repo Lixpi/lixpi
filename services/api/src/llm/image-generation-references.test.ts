@@ -15,23 +15,15 @@ const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 const TINY_PNG_DATA_URL = `data:image/png;base64,${TINY_PNG_BASE64}`
 
 describe('buildImageGenerationReferences', () => {
-    it('orders Character Creator identity before the packaged layout example with typed roles', () => {
+    it('uses provider-neutral roles even when Character Creator owns execution', () => {
         expect(buildImageGenerationReferences({
             sourceReferenceImages: ['source-image'],
             capabilityReferenceImages: ['layout-image'],
             capabilityUsageMode: 'character-creator',
         })).toEqual([
-            { url: 'source-image', role: 'character-source', fileName: 'character-source-1' },
-            { url: 'layout-image', role: 'character-layout-example', fileName: 'character-layout-example-1' },
+            { url: 'layout-image', role: 'capability-reference', fileName: 'capability-reference-1' },
+            { url: 'source-image', role: 'source-reference', fileName: 'source-reference-1' },
         ])
-    })
-
-    it('fails Character Creator generation before provider routing when its layout resource is missing', () => {
-        expect(() => buildImageGenerationReferences({
-            sourceReferenceImages: ['source-image'],
-            capabilityReferenceImages: [],
-            capabilityUsageMode: 'character-creator',
-        })).toThrow('CHARACTER_CREATOR_LAYOUT_REFERENCE_REQUIRED')
     })
 
     it('uses the provider-neutral capability/source roles for ordinary image generation', () => {
@@ -69,15 +61,15 @@ describe('resolveImageGenerationReferences', () => {
             sha256: reference.sha256,
         }))).toEqual([
             {
-                role: 'character-source',
-                fileName: 'character-source-1.png',
+                role: 'capability-reference',
+                fileName: 'capability-reference-1.png',
                 mediaType: 'image/png',
                 byteLength: bytes.byteLength,
                 sha256: createHash('sha256').update(bytes).digest('hex'),
             },
             {
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1.png',
+                role: 'source-reference',
+                fileName: 'source-reference-1.png',
                 mediaType: 'image/png',
                 byteLength: bytes.byteLength,
                 sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -98,17 +90,17 @@ describe('resolveImageGenerationReferences', () => {
 })
 
 describe('provider-neutral image reference contract', () => {
-    it('preserves both Character Creator references in OpenAI multipart order and filenames', async () => {
+    it('preserves provider-neutral references in OpenAI multipart order and filenames', async () => {
         const resolvedReferences = await resolveImageGenerationReferences([
             {
                 url: TINY_PNG_DATA_URL,
-                role: 'character-source',
-                fileName: 'character-source-1',
+                role: 'original-source',
+                fileName: 'original-source-1',
             },
             {
                 url: TINY_PNG_DATA_URL,
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1',
+                role: 'canonical-anchor',
+                fileName: 'canonical-anchor-1',
             },
         ])
 
@@ -122,16 +114,16 @@ describe('provider-neutral image reference contract', () => {
             byteLength: reference.file.size,
         }))).toEqual([
             {
-                name: 'character-source-1.png',
-                role: 'character-source',
-                fileName: 'character-source-1.png',
+                name: 'original-source-1.png',
+                role: 'original-source',
+                fileName: 'original-source-1.png',
                 mediaType: 'image/png',
                 byteLength: Buffer.from(TINY_PNG_BASE64, 'base64').byteLength,
             },
             {
-                name: 'character-layout-example-1.png',
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1.png',
+                name: 'canonical-anchor-1.png',
+                role: 'canonical-anchor',
+                fileName: 'canonical-anchor-1.png',
                 mediaType: 'image/png',
                 byteLength: Buffer.from(TINY_PNG_BASE64, 'base64').byteLength,
             },

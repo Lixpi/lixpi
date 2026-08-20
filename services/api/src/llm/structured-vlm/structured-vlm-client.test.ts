@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
+import type { AiModelInferenceCapabilities } from '@lixpi/constants'
 
 import { callStructuredVlm, type VlmCallArgs } from './structured-vlm-client.ts'
 
@@ -43,10 +44,38 @@ const schema = {
     },
 }
 
+const OPENAI_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: true,
+    supportedInputKinds: ['image', 'video-frame', 'document-text'],
+}
+
+const ANTHROPIC_ADAPTIVE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'anthropic-adaptive',
+    requiresAutoToolChoiceWithThinking: true,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: false,
+    supportedInputKinds: ['image', 'video-frame', 'document-text'],
+}
+
+const GOOGLE_LEVEL_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'google-level',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: false,
+    supportedInputKinds: ['image', 'video-frame', 'audio', 'document-text'],
+}
+
 const baseArgs: Omit<VlmCallArgs, 'provider' | 'modelVersion' | 'natsService'> = {
     systemPrompt: 'You are helping.',
     userMessages: [{ role: 'user', content: 'analyze this' }],
     schema,
+    inferenceCapabilities: OPENAI_CAPABILITIES,
     temperature: 0.6,
     maxTokens: 4096,
 }
@@ -180,7 +209,7 @@ describe('callStructuredVlm', () => {
         expect(createRequest?.instructions).toContain('"optionalNote"')
     })
 
-    it('omits temperature for GPT-5 OpenAI structured calls', async () => {
+    it('omits temperature when synchronized OpenAI capabilities disable it', async () => {
         openAiCreate.mockResolvedValueOnce(makeAsyncStream([
             makeOpenAiCompleted('{"status":"ok"}', 'gpt-5'),
         ]))
@@ -190,11 +219,37 @@ describe('callStructuredVlm', () => {
             modelVersion: 'gpt-5',
             natsService: {} as any,
             ...baseArgs,
+            inferenceCapabilities: {
+                ...OPENAI_CAPABILITIES,
+                supportsTemperature: false,
+            },
         })
 
         const createRequest = openAiCreate.mock.calls[0]?.[0]
         expect(createRequest).not.toHaveProperty('temperature')
         expect(createRequest?.max_output_tokens).toBe(4096)
+    })
+
+    it('omits temperature from forced Anthropic tool calls when synchronized capabilities disable it', async () => {
+        anthropicStream.mockReturnValueOnce(makeAnthropicStream([], {
+            model: 'claude-sonnet-5',
+            content: [{ type: 'tool_use', name: 'extract', input: { status: 'ok' } }],
+            usage: { input_tokens: 5, output_tokens: 7 },
+        }))
+
+        await callStructuredVlm({
+            provider: 'Anthropic',
+            modelVersion: 'claude-sonnet-5',
+            natsService: {} as any,
+            ...baseArgs,
+            inferenceCapabilities: {
+                ...ANTHROPIC_ADAPTIVE_CAPABILITIES,
+                supportsTemperature: false,
+            },
+            enableThinking: false,
+        })
+
+        expect(anthropicStream.mock.calls[0]?.[0]).not.toHaveProperty('temperature')
     })
 
     it('retries and succeeds when OpenAI throws a transient error once', async () => {
@@ -307,6 +362,7 @@ describe('callStructuredVlm', () => {
             modelVersion: 'claude-sonnet-4-6',
             natsService: {} as any,
             ...baseArgs,
+            inferenceCapabilities: ANTHROPIC_ADAPTIVE_CAPABILITIES,
             enableThinking: true,
         })
 
@@ -332,6 +388,7 @@ describe('callStructuredVlm', () => {
             modelVersion: 'claude-sonnet-4-6',
             natsService: {} as any,
             ...baseArgs,
+            inferenceCapabilities: ANTHROPIC_ADAPTIVE_CAPABILITIES,
             enableThinking: false,
         })).rejects.toThrow('did not call tool')
         expect(anthropicStream).toHaveBeenCalledTimes(1)
@@ -348,6 +405,10 @@ describe('callStructuredVlm', () => {
             modelVersion: 'gemini-2.5-flash-image',
             natsService: {} as any,
             ...baseArgs,
+            inferenceCapabilities: {
+                ...GOOGLE_LEVEL_CAPABILITIES,
+                thinkingMode: 'google-budget',
+            },
         })
 
         expect(googleGenerateContent).toHaveBeenCalledOnce()
@@ -384,6 +445,8 @@ describe('callStructuredVlm', () => {
             modelVersion: 'gemini-3.0-flash',
             natsService: {} as any,
             ...baseArgs,
+            inferenceCapabilities: GOOGLE_LEVEL_CAPABILITIES,
+            enableThinking: true,
             onTextChunk: (text) => chunks.push(text),
         })
 
@@ -393,6 +456,10 @@ describe('callStructuredVlm', () => {
         expect(result.rawText).toBe('{"status":"ok"}')
         expect(result.rawText).not.toContain('"ignore":true')
         expect(result.parsed).toEqual({ status: 'ok' })
+        expect(googleGenerateContentStream.mock.calls[0]?.[0]?.config?.thinkingConfig).toEqual({
+            thinkingLevel: 'medium',
+            includeThoughts: true,
+        })
     })
 
     it('throws for malformed Google JSON after streaming', async () => {
@@ -411,6 +478,10 @@ describe('callStructuredVlm', () => {
             modelVersion: 'gemini-2.5-flash-image',
             natsService: {} as any,
             ...baseArgs,
+            inferenceCapabilities: {
+                ...GOOGLE_LEVEL_CAPABILITIES,
+                thinkingMode: 'google-budget',
+            },
         })).rejects.toThrow('Google returned non-JSON output')
     })
 

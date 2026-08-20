@@ -555,6 +555,7 @@ function clearMocks(): void {
     window.localStorage.removeItem('lixpi.debug.pixiMedia')
     const debugWindow = window as typeof window & {
         __lixpiPixiMediaDebug?: boolean
+        __lixpiPixiMediaDebugCollect?: boolean
         __lixpiPixiMediaDebugEvents?: unknown[]
         __lixpiPixiMediaDebugDump?: unknown
         __lixpiGpuBufferDestroyEvents?: unknown[]
@@ -575,6 +576,9 @@ function clearMocks(): void {
     debugWindow.__lixpiGpuBufferDestroyQueue = []
     debugWindow.__lixpiGpuBufferDestroyQueued = new WeakSet<object>()
     debugWindow.__lixpiGpuBufferDestroyRaf = null
+    // Debug event collection is off in normal runs because it costs a forced
+    // layout per event; the assertions below read that log, so turn it on.
+    debugWindow.__lixpiPixiMediaDebugCollect = true
 }
 
 describe('createPixiMediaLayer runtime behavior', () => {

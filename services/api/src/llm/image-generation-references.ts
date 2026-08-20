@@ -7,11 +7,19 @@ import type NatsService from '@lixpi/nats-service'
 import { parseDataUrl, resolveImageUrls } from './utils/attachments.ts'
 
 export type ImageGenerationReferenceRole =
-    | 'character-source'
-    | 'character-layout-example'
-    | 'character-sheet-draft'
     | 'capability-reference'
+    | 'edit-target'
+    | 'edit-target-identity'
     | 'source-reference'
+    | 'original-source'
+    | 'face-crop'
+    | 'body-outfit-crop'
+    | 'canonical-anchor'
+    | 'adjacent-angle'
+    | 'opposite-angle'
+    | 'prop-crop'
+    | 'pose-reference'
+    | 'structure-reference'
 
 export type ImageGenerationReference = {
     url: string
@@ -53,26 +61,8 @@ const sanitizeFileName = (fileName: string, mediaType: string): string => {
 export const buildImageGenerationReferences = ({
     sourceReferenceImages,
     capabilityReferenceImages,
-    capabilityUsageMode,
+    capabilityUsageMode: _capabilityUsageMode,
 }: BuildImageGenerationReferencesInput): ImageGenerationReference[] => {
-    if (capabilityUsageMode === 'character-creator') {
-        if (capabilityReferenceImages.length === 0) {
-            throw new Error('CHARACTER_CREATOR_LAYOUT_REFERENCE_REQUIRED')
-        }
-        return [
-            ...sourceReferenceImages.map((url, index) => ({
-                url,
-                role: 'character-source' as const,
-                fileName: `character-source-${index + 1}`,
-            })),
-            ...capabilityReferenceImages.map((url, index) => ({
-                url,
-                role: 'character-layout-example' as const,
-                fileName: `character-layout-example-${index + 1}`,
-            })),
-        ]
-    }
-
     return [
         ...capabilityReferenceImages.map((url, index) => ({
             url,

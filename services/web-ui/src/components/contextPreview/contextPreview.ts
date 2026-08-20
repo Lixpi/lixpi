@@ -6,9 +6,9 @@ import type {
     ImageCanvasNode,
     VideoCanvasNode,
 } from '@lixpi/constants'
-import { createHelpTooltip, type HelpTooltipInstance } from '$src/components/helpTooltip/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
 import { extractContentFromProseMirror } from '$src/utils/prosemirrorText.ts'
-import { documentIcon, videoPlayGlyphIcon } from '$src/svgIcons/index.ts'
+import { documentIcon, videoPlayGlyphIcon } from '@lixpi/ui-kit/svg'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import { applyStyle, html } from '$src/utils/domTemplates.ts'
 import {
@@ -16,6 +16,7 @@ import {
     resolveAuthenticatedMediaUrl,
     resolveMediaUrl,
 } from '$src/utils/mediaUrls.ts'
+import { InteractivePreviewPopover } from './interactivePreviewPopover.ts'
 
 export type ContextPreviewDocumentSource = {
     documentId: string
@@ -42,11 +43,31 @@ export type ContextPreviewTileInstance = {
     destroy: () => void
 }
 
+export type ContextPreviewPopoverPlacement = 'top' | 'bottom' | 'left' | 'right'
+
+export type ContextPreviewPopoverContent = {
+    accessibleLabel: string
+    content: HTMLElement
+    contentClassName: string
+}
+
+export type ContextPreviewPopoverInstance = ContextPreviewTileInstance & {
+    updateContent: (content: ContextPreviewPopoverContent) => void
+}
+
+export type CreateContextPreviewPopoverOptions = ContextPreviewPopoverContent & {
+    triggerContent: HTMLElement
+    preferredPlacement?: ContextPreviewPopoverPlacement
+    inlinePopover?: boolean
+    inlineLabelTrigger?: boolean
+    beforeOpen?: () => void
+}
+
 export type CreateContextPreviewTileOptions = {
     node: CanvasNode
     getNode?: () => CanvasNode | undefined
     environment: ContextPreviewEnvironment
-    preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
+    preferredPlacement?: ContextPreviewPopoverPlacement
     triggerContent?: HTMLElement
     titleOverride?: string
     // When true, canvas hover cards are projected to the owning pane while open and
@@ -56,7 +77,7 @@ export type CreateContextPreviewTileOptions = {
 }
 
 type ContextPreviewPopoverOrientation = 'landscape' | 'portrait'
-type ContextPreviewPlacement = NonNullable<CreateContextPreviewTileOptions['preferredPlacement']>
+type ContextPreviewPlacement = ContextPreviewPopoverPlacement
 
 type ContextPreviewCanvasPortal = {
     pane: HTMLElement
@@ -65,7 +86,6 @@ type ContextPreviewCanvasPortal = {
 
 const TRANSPARENT_PIXEL_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const CONTEXT_PREVIEW_POPOVER_GAP = 10
-const CONTEXT_PREVIEW_POPOVER_CLOSE_DELAY_MS = 80
 
 export const CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--workspace-ai-chat-panel-context-preview-tooltip-background',
@@ -431,151 +451,177 @@ function positionContextPreviewCanvasPopover(
     })
 }
 
-// The compact trigger stays inline. On canvas surfaces its hover card moves to the
-// pane-level overlay and receives the viewport scale, escaping node text clipping
-// and sibling chrome stacking without changing its visual canvas size.
-function createInlineContextPreviewTile({
-    node,
-    getNode,
-    environment,
-    preferredPlacement = 'top',
-    triggerContent,
-    titleOverride,
-}: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
-    const resolveNode = (): CanvasNode => getNode?.() ?? node
-    const renderState = () => {
-        const latestNode = resolveNode()
-        const title = resolveContextPreviewTitle(latestNode, environment, titleOverride)
-        const text = getContextPreviewText(latestNode, environment)
-        const accessibleLabel = title || getContextPreviewTypeLabel(latestNode)
-        return { latestNode, title, text, accessibleLabel }
-    }
+// Media and Capability references both use this shell. App surfaces use the
+// viewport-clamped HelpTooltip portal. Canvas surfaces keep the trigger inline,
+// then move the open card to the pane and preserve the viewport scale.
+class ContextPreviewPopover implements ContextPreviewPopoverInstance {
+    readonly dom: HTMLElement
 
-    const { latestNode, title, text, accessibleLabel } = renderState()
-    const getInlinePopoverClassName = (popoverNode: CanvasNode, hasPopoverMeta: boolean, isOpen: boolean): string => [
-        getContextPreviewPopoverClassName(popoverNode, hasPopoverMeta),
-        'context-preview-inline-popover',
-        `context-preview-inline-popover-${preferredPlacement}`,
-        isOpen ? 'is-open' : '',
-    ].filter(Boolean).join(' ')
-    const trigger = html`<div
-        className="workspace-ai-chat-panel-context-preview-trigger context-preview-inline-trigger"
-        tabindex="0"
-        aria-label=${accessibleLabel}
-    >${triggerContent ?? renderContextPreviewVisual(latestNode, accessibleLabel, text, environment, 'mini')}</div>` as HTMLElement
-    const popover = html`<div className=${getInlinePopoverClassName(latestNode, Boolean(title || text), false)} role="tooltip">
-        ${renderContextPreviewPopoverContent(latestNode, title, text, accessibleLabel, environment)}
-    </div>` as HTMLElement
-    const dom = html`<div className="workspace-ai-chat-panel-context-preview-main context-preview-inline">
-        ${trigger}
-        ${popover}
-    </div>` as HTMLElement
-    let portal: ContextPreviewCanvasPortal | null = null
-    let portalPositionFrame: number | null = null
-    let closeTimer: ReturnType<typeof setTimeout> | null = null
+    private readonly trigger: HTMLElement
+    private readonly popover: HTMLElement
+    private readonly helpTooltip: HelpTooltipInstance | null
+    private readonly inlineController: InteractivePreviewPopover | null
+    private readonly preferredPlacement: ContextPreviewPopoverPlacement
+    private portal: ContextPreviewCanvasPortal | null = null
+    private portalPositionFrame: number | null = null
 
-    const syncLatestContent = (): void => {
-        const next = renderState()
-        const isPortaled = popover.classList.contains('context-preview-inline-popover-portaled')
-        popover.className = getInlinePopoverClassName(next.latestNode, Boolean(next.title || next.text), dom.classList.contains('is-open'))
-        popover.classList.toggle('context-preview-inline-popover-portaled', isPortaled)
-        popover.replaceChildren(renderContextPreviewPopoverContent(next.latestNode, next.title, next.text, next.accessibleLabel, environment))
-        trigger.setAttribute('aria-label', next.accessibleLabel)
-    }
-    const stopPortalPositionSync = (): void => {
-        if (portalPositionFrame === null) return
-        cancelAnimationFrame(portalPositionFrame)
-        portalPositionFrame = null
-    }
-    const cancelScheduledClose = (): void => {
-        if (closeTimer === null) return
-        clearTimeout(closeTimer)
-        closeTimer = null
-    }
-    const restorePopoverToTile = (): void => {
-        stopPortalPositionSync()
-        portal = null
-        popover.classList.remove('context-preview-inline-popover-portaled')
-        popover.removeAttribute('style')
-        if (dom.isConnected) {
-            dom.appendChild(popover)
+    constructor(private readonly options: CreateContextPreviewPopoverOptions) {
+        this.preferredPlacement = options.preferredPlacement ?? 'top'
+        if (options.inlinePopover) {
+            const rootClassName = [
+                'workspace-ai-chat-panel-context-preview-main',
+                'context-preview-inline',
+                options.inlineLabelTrigger ? 'context-preview-inline-label' : '',
+            ].filter(Boolean).join(' ')
+            this.trigger = html`<div
+                className="workspace-ai-chat-panel-context-preview-trigger context-preview-inline-trigger"
+                tabindex="0"
+                aria-label=${options.accessibleLabel}
+                aria-expanded="false"
+            >${options.triggerContent}</div>` as HTMLElement
+            this.popover = html`<div className=${this.getInlinePopoverClassName(options.contentClassName, false)} role="tooltip">
+                ${options.content}
+            </div>` as HTMLElement
+            this.dom = html`<div className=${rootClassName}>${this.trigger}${this.popover}</div>` as HTMLElement
+            this.helpTooltip = null
+            this.inlineController = new InteractivePreviewPopover({
+                root: this.dom,
+                trigger: this.trigger,
+                popover: this.popover,
+                beforeOpen: options.beforeOpen,
+                afterOpen: this.portalPopoverToCanvasPane,
+                afterClose: () => {
+                    if (this.popover.parentElement !== this.dom) this.restorePopoverToTile()
+                },
+            })
             return
         }
-        popover.remove()
+
+        const usesInlineLabelTrigger = options.inlineLabelTrigger ?? false
+        this.helpTooltip = createHelpTooltip({
+            label: options.accessibleLabel,
+            triggerContent: options.triggerContent,
+            content: options.content,
+            preferredPlacement: this.preferredPlacement,
+            className: [
+                'workspace-ai-chat-panel-context-preview-tooltip',
+                usesInlineLabelTrigger ? 'workspace-ai-chat-panel-context-preview-tooltip-inline-label' : '',
+            ].filter(Boolean).join(' '),
+            triggerClassName: [
+                'workspace-ai-chat-panel-context-preview-trigger',
+                usesInlineLabelTrigger ? 'workspace-ai-chat-panel-context-preview-trigger-inline-label' : '',
+            ].filter(Boolean).join(' '),
+            contentClassName: options.contentClassName,
+            contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
+            interactive: true,
+        })
+        this.trigger = this.helpTooltip.dom.querySelector<HTMLElement>('.help-tooltip-trigger') as HTMLElement
+        this.popover = this.helpTooltip.dom.querySelector<HTMLElement>('.help-tooltip-content') as HTMLElement
+        this.dom = usesInlineLabelTrigger
+            ? this.helpTooltip.dom
+            : html`<div className="workspace-ai-chat-panel-context-preview-main">${this.helpTooltip.dom}</div>` as HTMLElement
+        this.inlineController = null
+        this.trigger.addEventListener('pointerenter', this.handleBeforeOpen, true)
+        this.trigger.addEventListener('focusin', this.handleBeforeOpen, true)
     }
-    const syncPortalPosition = (): void => {
-        if (!portal || !dom.isConnected) return
-        portal = getContextPreviewCanvasPortal(dom) ?? portal
-        positionContextPreviewCanvasPopover(trigger, popover, portal, preferredPlacement)
+
+    updateContent = ({ accessibleLabel, content, contentClassName }: ContextPreviewPopoverContent): void => {
+        this.popover.replaceChildren(content)
+        this.trigger.setAttribute('aria-label', accessibleLabel)
+        if (this.options.inlinePopover) {
+            const isPortaled = this.popover.classList.contains('context-preview-inline-popover-portaled')
+            this.popover.className = this.getInlinePopoverClassName(contentClassName, this.dom.classList.contains('is-open'))
+            this.popover.classList.toggle('context-preview-inline-popover-portaled', isPortaled)
+            return
+        }
+
+        const isVisible = this.popover.classList.contains('is-visible')
+        this.popover.className = [
+            'help-tooltip-content',
+            contentClassName,
+            'help-tooltip-content-interactive',
+            isVisible ? 'is-visible' : '',
+        ].filter(Boolean).join(' ')
     }
-    const startPortalPositionSync = (): void => {
-        stopPortalPositionSync()
+
+    destroy = (): void => {
+        this.stopPortalPositionSync()
+        if (this.helpTooltip) {
+            this.trigger.removeEventListener('pointerenter', this.handleBeforeOpen, true)
+            this.trigger.removeEventListener('focusin', this.handleBeforeOpen, true)
+            this.helpTooltip.destroy()
+            this.dom.remove()
+            return
+        }
+        this.inlineController?.destroy()
+    }
+
+    private getInlinePopoverClassName(contentClassName: string, isOpen: boolean): string {
+        return [
+            contentClassName,
+            'context-preview-inline-popover',
+            `context-preview-inline-popover-${this.preferredPlacement}`,
+            isOpen ? 'is-open' : '',
+        ].filter(Boolean).join(' ')
+    }
+
+    private handleBeforeOpen = (): void => {
+        this.options.beforeOpen?.()
+    }
+
+    private stopPortalPositionSync(): void {
+        if (this.portalPositionFrame === null) return
+        cancelAnimationFrame(this.portalPositionFrame)
+        this.portalPositionFrame = null
+    }
+
+    private restorePopoverToTile(): void {
+        this.stopPortalPositionSync()
+        this.portal = null
+        this.popover.classList.remove('context-preview-inline-popover-portaled')
+        this.popover.removeAttribute('style')
+        if (this.dom.isConnected) {
+            this.dom.appendChild(this.popover)
+            return
+        }
+        this.popover.remove()
+    }
+
+    private syncPortalPosition(): void {
+        if (!this.portal || !this.dom.isConnected) return
+        this.portal = getContextPreviewCanvasPortal(this.dom) ?? this.portal
+        positionContextPreviewCanvasPopover(this.trigger, this.popover, this.portal, this.preferredPlacement)
+    }
+
+    private startPortalPositionSync(): void {
+        this.stopPortalPositionSync()
         const update = (): void => {
-            if (!dom.isConnected) {
-                restorePopoverToTile()
+            if (!this.dom.isConnected) {
+                this.restorePopoverToTile()
                 return
             }
-            syncPortalPosition()
-            portalPositionFrame = requestAnimationFrame(update)
+            this.syncPortalPosition()
+            this.portalPositionFrame = requestAnimationFrame(update)
         }
-        portalPositionFrame = requestAnimationFrame(update)
+        this.portalPositionFrame = requestAnimationFrame(update)
     }
-    const portalPopoverToCanvasPane = (): void => {
-        const nextPortal = getContextPreviewCanvasPortal(dom)
+
+    private portalPopoverToCanvasPane = (): void => {
+        const nextPortal = getContextPreviewCanvasPortal(this.dom)
         if (!nextPortal) return
-        portal = nextPortal
-        copyContextPreviewPortalCssVariables(dom, popover)
-        popover.classList.add('context-preview-inline-popover-portaled')
-        nextPortal.pane.appendChild(popover)
-        syncPortalPosition()
-        startPortalPositionSync()
+        this.portal = nextPortal
+        copyContextPreviewPortalCssVariables(this.dom, this.popover)
+        this.popover.classList.add('context-preview-inline-popover-portaled')
+        nextPortal.pane.appendChild(this.popover)
+        this.syncPortalPosition()
+        this.startPortalPositionSync()
     }
-    const open = (): void => {
-        cancelScheduledClose()
-        syncLatestContent()
-        dom.classList.add('is-open')
-        popover.classList.add('is-open')
-        portalPopoverToCanvasPane()
-    }
-    const close = (): void => {
-        cancelScheduledClose()
-        dom.classList.remove('is-open')
-        popover.classList.remove('is-open')
-        if (popover.parentElement !== dom) restorePopoverToTile()
-    }
-    const scheduleCloseUnlessMovingBetweenTileAndPopover = (event: PointerEvent | FocusEvent): void => {
-        const nextTarget = event.relatedTarget
-        if (nextTarget instanceof Node && (dom.contains(nextTarget) || popover.contains(nextTarget))) return
-        cancelScheduledClose()
-        closeTimer = setTimeout(close, CONTEXT_PREVIEW_POPOVER_CLOSE_DELAY_MS)
-    }
+}
 
-    dom.addEventListener('pointerenter', open)
-    dom.addEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
-    dom.addEventListener('focusin', open)
-    dom.addEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
-    popover.addEventListener('pointerenter', cancelScheduledClose)
-    popover.addEventListener('focusin', cancelScheduledClose)
-    popover.addEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
-    popover.addEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
-
-    return {
-        dom,
-        destroy: () => {
-            cancelScheduledClose()
-            stopPortalPositionSync()
-            dom.removeEventListener('pointerenter', open)
-            dom.removeEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
-            dom.removeEventListener('focusin', open)
-            dom.removeEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
-            popover.removeEventListener('pointerenter', cancelScheduledClose)
-            popover.removeEventListener('focusin', cancelScheduledClose)
-            popover.removeEventListener('pointerleave', scheduleCloseUnlessMovingBetweenTileAndPopover)
-            popover.removeEventListener('focusout', scheduleCloseUnlessMovingBetweenTileAndPopover)
-            popover.remove()
-            dom.remove()
-        },
-    }
+export function createContextPreviewPopover(
+    options: CreateContextPreviewPopoverOptions,
+): ContextPreviewPopoverInstance {
+    return new ContextPreviewPopover(options)
 }
 
 export function createContextPreviewTile({
@@ -587,72 +633,36 @@ export function createContextPreviewTile({
     triggerContent,
     titleOverride,
 }: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
-    if (inlinePopover) {
-        return createInlineContextPreviewTile({
-            node,
-            getNode,
-            environment,
-            preferredPlacement,
-            triggerContent,
-            titleOverride,
-        })
-    }
-
     const resolveNode = (): CanvasNode => getNode?.() ?? node
-    const currentNode = resolveNode()
-    const title = resolveContextPreviewTitle(currentNode, environment, titleOverride)
-    const text = getContextPreviewText(currentNode, environment)
-    const accessibleLabel = title || getContextPreviewTypeLabel(currentNode)
-    const popoverContent = renderContextPreviewPopoverContent(currentNode, title, text, accessibleLabel, environment)
-    const usesInlineLabelTrigger = Boolean(triggerContent)
-    const previewTooltip: HelpTooltipInstance = createHelpTooltip({
-        label: accessibleLabel,
-        triggerContent: triggerContent ?? renderContextPreviewVisual(currentNode, accessibleLabel, text, environment, 'mini'),
-        content: popoverContent,
-        preferredPlacement,
-        className: [
-            'workspace-ai-chat-panel-context-preview-tooltip',
-            usesInlineLabelTrigger ? 'workspace-ai-chat-panel-context-preview-tooltip-inline-label' : '',
-        ].filter(Boolean).join(' '),
-        triggerClassName: [
-            'workspace-ai-chat-panel-context-preview-trigger',
-            usesInlineLabelTrigger ? 'workspace-ai-chat-panel-context-preview-trigger-inline-label' : '',
-        ].filter(Boolean).join(' '),
-        contentClassName: getContextPreviewPopoverClassName(currentNode, Boolean(title || text)),
-        contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
-        interactive: true,
-    })
-    const tooltipContent = previewTooltip.dom.querySelector<HTMLElement>('.help-tooltip-content')
-    const trigger = previewTooltip.dom.querySelector<HTMLElement>('.help-tooltip-trigger')
-    const syncLatestContent = (): void => {
+    const renderState = (): ContextPreviewPopoverContent & {
+        latestNode: CanvasNode
+        text: string
+    } => {
         const latestNode = resolveNode()
-        const latestTitle = resolveContextPreviewTitle(latestNode, environment, titleOverride)
-        const latestText = getContextPreviewText(latestNode, environment)
-        const latestAccessibleLabel = latestTitle || getContextPreviewTypeLabel(latestNode)
-        const latestContent = renderContextPreviewPopoverContent(latestNode, latestTitle, latestText, latestAccessibleLabel, environment)
-        tooltipContent?.replaceChildren(latestContent)
-        if (tooltipContent) {
-            const isVisible = tooltipContent.classList.contains('is-visible')
-            tooltipContent.className = [
-                'help-tooltip-content',
-                getContextPreviewPopoverClassName(latestNode, Boolean(latestTitle || latestText)),
-                'help-tooltip-content-interactive',
-                isVisible ? 'is-visible' : '',
-            ].filter(Boolean).join(' ')
+        const title = resolveContextPreviewTitle(latestNode, environment, titleOverride)
+        const text = getContextPreviewText(latestNode, environment)
+        const accessibleLabel = title || getContextPreviewTypeLabel(latestNode)
+        return {
+            accessibleLabel,
+            content: renderContextPreviewPopoverContent(latestNode, title, text, accessibleLabel, environment),
+            contentClassName: getContextPreviewPopoverClassName(latestNode, Boolean(title || text)),
+            latestNode,
+            text,
         }
-        trigger?.setAttribute('aria-label', latestAccessibleLabel)
     }
-    trigger?.addEventListener('pointerenter', syncLatestContent, true)
-    trigger?.addEventListener('focusin', syncLatestContent, true)
-    const dom = usesInlineLabelTrigger
-        ? previewTooltip.dom
-        : html`<div className="workspace-ai-chat-panel-context-preview-main">${previewTooltip.dom}</div>` as HTMLElement
-    return {
-        dom,
-        destroy: () => {
-            trigger?.removeEventListener('pointerenter', syncLatestContent, true)
-            trigger?.removeEventListener('focusin', syncLatestContent, true)
-            previewTooltip.destroy()
-        },
+    const initialState = renderState()
+    let previewPopover: ContextPreviewPopoverInstance
+    const syncLatestContent = (): void => {
+        previewPopover.updateContent(renderState())
     }
+    previewPopover = createContextPreviewPopover({
+        ...initialState,
+        triggerContent: triggerContent
+            ?? renderContextPreviewVisual(initialState.latestNode, initialState.accessibleLabel, initialState.text, environment, 'mini'),
+        preferredPlacement,
+        inlinePopover,
+        inlineLabelTrigger: !inlinePopover && Boolean(triggerContent),
+        beforeOpen: syncLatestContent,
+    })
+    return previewPopover
 }

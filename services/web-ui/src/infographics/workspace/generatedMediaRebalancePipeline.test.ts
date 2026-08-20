@@ -6,6 +6,7 @@ import type {
     CanvasNode,
     ImageCanvasNode,
 } from '@lixpi/constants'
+import { getGeneratedMediaPreFrameLayoutRect } from '@lixpi/canvas-engine'
 
 import {
     GeneratedMediaRebalancePipeline,
@@ -137,7 +138,7 @@ function isPendingGeneratedMediaBeforeFrame(node: CanvasNode): boolean {
     return Boolean(node.generatedBy) && !node.fileId?.trim() && !node.src?.trim()
 }
 
-function collisionRect(node: CanvasNode, position: Point, preFrameScale: number): Rect {
+function connectorAnchorRect(node: CanvasNode, position: Point, preFrameScale: number): Rect {
     if (!isPendingGeneratedMediaBeforeFrame(node)) {
         return {
             x: position.x,
@@ -153,6 +154,13 @@ function collisionRect(node: CanvasNode, position: Point, preFrameScale: number)
         width: size,
         height: size,
     }
+}
+
+function collisionRect(node: CanvasNode, position: Point, preFrameScale: number): Rect {
+    const visualRect = connectorAnchorRect(node, position, preFrameScale)
+    return isPendingGeneratedMediaBeforeFrame(node)
+        ? getGeneratedMediaPreFrameLayoutRect(position, node.dimensions, preFrameScale)
+        : visualRect
 }
 
 function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}): GeneratedMediaRebalancePipelineConfig {
@@ -172,7 +180,7 @@ function config(overrides: Partial<GeneratedMediaRebalancePipelineConfig> = {}):
         getNodeWorldPosition: (node: CanvasNode) => worldPosition(node),
         getNodeWorldRect: (node: CanvasNode) => worldRect(node),
         getNodeCollisionRect: (node: CanvasNode, position: Point) => collisionRect(node, position, pendingMediaPreFrameScale),
-        getNodeConnectorAnchorRect: (node: CanvasNode, position: Point) => collisionRect(node, position, pendingMediaPreFrameScale),
+        getNodeConnectorAnchorRect: (node: CanvasNode, position: Point) => connectorAnchorRect(node, position, pendingMediaPreFrameScale),
         getNodeCollisionMargin: () => 0,
         getNodeCollisionOverlapThreshold: () => 0.5,
         isPendingGeneratedMediaBeforeFrame,
@@ -251,7 +259,7 @@ describe('GeneratedMediaRebalancePipeline', () => {
         const resolvedPending = out.get('pending')!
         const parentCenterY = resolvedParent.position.y + resolvedParent.dimensions.height / 2
         const markerCenterY = resolvedMarker.position.y + resolvedMarker.dimensions.height / 2
-        const pendingRect = collisionRect(resolvedPending, resolvedPending.position, 1 / 3)
+        const pendingRect = connectorAnchorRect(resolvedPending, resolvedPending.position, 1 / 3)
         const pendingCenterY = pendingRect.y + pendingRect.height / 2
 
         expect(markerCenterY).toBe(parentCenterY)
@@ -289,12 +297,51 @@ describe('GeneratedMediaRebalancePipeline', () => {
 
         const result = pipeline.rebalance([parent, marker, ...pending], [])
         const out = nodesById(result.nodes)
-        const expectedCircleLeft = parent.position.x + parent.dimensions.width + 50 + 40
+        const expectedNodeLeft = parent.position.x + parent.dimensions.width + 50 + 40
 
         for (const node of pending) {
             const resolved = out.get(node.nodeId)!
-            expect(collisionRect(resolved, resolved.position, 1 / 3).x).toBeCloseTo(expectedCircleLeft, 6)
+            expect(resolved.position.x).toBeCloseTo(expectedNodeLeft, 6)
         }
+    })
+
+    it('keeps pending and resolved siblings in the same stable media column', () => {
+        const parent = image({
+            nodeId: 'parent',
+            position: { x: 0, y: 0 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: { createdAt: 1 },
+        })
+        const pending = image({
+            nodeId: 'pending',
+            fileId: '',
+            src: '',
+            position: { x: 1000, y: 1000 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: {
+                parentMediaNodeId: 'parent',
+                mediaIndex: 0,
+                createdAt: 2,
+            },
+        })
+        const resolved = image({
+            nodeId: 'resolved',
+            fileId: 'resolved-file',
+            src: '/resolved.png',
+            position: { x: 2000, y: 2000 },
+            dimensions: { width: 100, height: 100 },
+            generatedBy: {
+                parentMediaNodeId: 'parent',
+                mediaIndex: 1,
+                createdAt: 3,
+            },
+        })
+        const pipeline = new GeneratedMediaRebalancePipeline(config())
+
+        const result = nodesById(pipeline.rebalance([parent, pending, resolved], []).nodes)
+
+        expect(result.get('pending')!.position.x).toBe(result.get('resolved')!.position.x)
+        expect(result.get('pending')!.position.x).toBe(parent.position.x + parent.dimensions.width + 50)
     })
 
     it('uses planned media proxies to place not-yet-started sibling markers and removes proxy nodes afterward', () => {

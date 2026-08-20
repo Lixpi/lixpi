@@ -21,8 +21,13 @@ import {
     createAssetRequesterForWorkspaceUser,
     isAssetAvailableInWorkspaceScope,
 } from '../../services/workspace-reference-scope.ts'
+import { sanitizeMediaReferenceText } from '../media-reference/media-reference-compiler.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
-import { buildCandidateTranscriptContext, restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
+import {
+    buildCandidateTranscriptContext,
+    deduplicateMediaBranchSnapshotCandidatesByAsset,
+    restrictSnapshotToExplicitRefs,
+} from './media-branch-snapshot.ts'
 import type { ChatMessage, ProviderState } from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
@@ -333,11 +338,26 @@ const buildSelectedContextMessage = async (
     }
 
     if (blocks.length <= 1) return undefined
+    // Titles and document text come straight from the Asset records, so on a run
+    // with provider-safe media bindings they still carry the real display names.
+    // They must be aliased here or the provider payload fails the leak assertion.
+    const safeBlocks = sanitizeContextBlocks(blocks, state)
     if (expandedCapabilityArtifact || (!state.imageModelVersion && !state.videoModelVersion)) {
-        const resolvedBlocks = await resolveImageUrls(blocks, deps.natsService)
-        return { role: 'user', content: Array.isArray(resolvedBlocks) ? resolvedBlocks : blocks }
+        const resolvedBlocks = await resolveImageUrls(safeBlocks, deps.natsService)
+        return { role: 'user', content: Array.isArray(resolvedBlocks) ? resolvedBlocks : safeBlocks }
     }
-    return { role: 'user', content: blocks }
+    return { role: 'user', content: safeBlocks }
+}
+
+const sanitizeContextBlocks = (
+    blocks: Array<Record<string, any>>,
+    state: ProviderState,
+): Array<Record<string, any>> => {
+    const bindings = state.providerSafeMediaIntent?.bindings ?? state.mediaReferenceBindings
+    if (!bindings?.length) return blocks
+    return blocks.map(block => (typeof block.text === 'string'
+        ? { ...block, text: sanitizeMediaReferenceText(block.text, bindings) }
+        : block))
 }
 
 const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode =>
@@ -417,7 +437,7 @@ const buildExplicitMediaBranchSnapshot = async (
         : undefined
     const promptText = existingSnapshot?.promptText ?? contextSnapshot.promptText
 
-    return {
+    return deduplicateMediaBranchSnapshotCandidatesByAsset({
         resolverVersion: existingSnapshot?.resolverVersion ?? contextSnapshot.resolverVersion,
         conversationAssetId: existingSnapshot?.conversationAssetId ?? contextSnapshot.conversationAssetId,
         regionNodeId: existingSnapshot?.regionNodeId ?? contextSnapshot.conversationAssetId,
@@ -428,7 +448,7 @@ const buildExplicitMediaBranchSnapshot = async (
             ?? `explicit-context:${contextSnapshot.conversationAssetId}:${contextSnapshot.promptText}:${explicitReferenceCandidateIds.join(',')}`,
         candidates,
         transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
-    }
+    })
 }
 
 export const resolveWorkspaceContext = async (

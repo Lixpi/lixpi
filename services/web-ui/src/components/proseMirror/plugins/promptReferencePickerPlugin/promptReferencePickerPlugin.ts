@@ -7,7 +7,7 @@ import { PROMPT_REFERENCE_NODE_TYPE } from '@lixpi/prosemirror'
 import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 
-import { createSlidingSwitch, type SlidingSwitchInstance } from '$src/components/slidingSwitch/index.ts'
+import { createSlidingSwitch, type SlidingSwitchInstance } from '@lixpi/ui-kit/components/sliding-switch'
 import AuthService from '$src/services/auth-service.ts'
 import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
 import {

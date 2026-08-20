@@ -5,9 +5,11 @@ import type {
     CapabilityJsonValue,
     CapabilityReasoningModelVariant,
     CapabilityRunEvent,
+    ExecutionTraceHandle,
 } from '@lixpi/constants'
 
 import { CapabilityError } from '../shared/capability-errors.ts'
+import type { CapabilityTraceRecorder } from './capability-trace-recorder.ts'
 import type { LoadedCapabilityResource, SealedResolvedCapabilityPlan } from './capability-resolver.ts'
 
 export type CapabilityActionAuthorizationContext = {
@@ -29,6 +31,10 @@ export type CapabilityActionExecutionContext = CapabilityActionAuthorizationCont
     plan: SealedResolvedCapabilityPlan
     getResource: (capabilityId: string, resourceId: string) => LoadedCapabilityResource | undefined
     getRunEvents: () => readonly Readonly<CapabilityRunEvent>[]
+    // Records the step's own account of what it ran: model calls with their
+    // params, the Assets and Capabilities it passed to each of them, and its
+    // reasoning. Emitted with the step's run events.
+    trace: CapabilityTraceRecorder
 }
 
 export type CapabilityActionValidationResult =
@@ -53,6 +59,11 @@ export type CapabilityActionDefinition = {
     classifyRetry: (error: unknown) => CapabilityActionRetryClassification
     summarizeInput?: (input: Readonly<Record<string, unknown>>) => string
     summarizeOutput?: (output: unknown) => string
+    // Names the Assets, Capabilities, Tools, and Skills a step was handed, so a
+    // running step already shows what it is working with before it produces
+    // anything.
+    collectInputHandles?: (input: Readonly<Record<string, unknown>>) => ExecutionTraceHandle[]
+    collectOutputHandles?: (output: unknown) => ExecutionTraceHandle[]
     collectOutputAssetIds?: (output: unknown) => string[]
     collectCanvasGeometry?: (output: unknown) => CanvasGeometryUpdate | undefined
 }
