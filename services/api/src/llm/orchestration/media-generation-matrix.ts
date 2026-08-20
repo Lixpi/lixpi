@@ -51,6 +51,9 @@ export type MatrixRequestData = Record<string, any> & {
     videoResolution?: string
     videoDuration?: string | number
     videoSourceForExtension?: string
+    // Forwarded to children by the `...requestData` spread; the video usage
+    // confirm needs it to report input duration.
+    videoSourceDurationSeconds?: number
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
 }
 

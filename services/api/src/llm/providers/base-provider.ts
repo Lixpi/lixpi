@@ -8,8 +8,8 @@ import { info, warn, err } from '@lixpi/debug-tools'
 import {
     STREAM_STATUS,
     type CapabilityJsonValue,
+    type ConfirmRequest,
     type MediaGenerationRunMeta,
-    type Modality,
     type ProviderName,
     type StreamStatus,
 } from '@lixpi/constants'
@@ -31,6 +31,8 @@ import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
 import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
+import { resolveCheckMetering } from '../usage/usage-estimator.ts'
+import { logUsageCheck, logUsageConfirm } from '../usage/usage-log.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
@@ -102,10 +104,6 @@ const LIVE_MIRRORED_MEDIA_STATUSES: ReadonlySet<StreamStatus> = new Set([
 
 const catalogModelIdFor = (model: AiModelMetaInfo): string =>
     `${model.provider}:${model.model}`
-
-// modalityForKind maps a workflow kind to the metering modality the check sends.
-const modalityForKind = (kind: string): Modality =>
-    kind === 'chat_video' ? 'video' : kind === 'chat_image' ? 'image' : 'tokens'
 
 const isUserStopReason = (reason: unknown): boolean => {
     const candidate = reason as { message?: unknown }
@@ -432,6 +430,7 @@ export abstract class BaseProvider {
             videoFirstFrameImage: characterCreatorSelected ? undefined : requestData.videoFirstFrameImage,
             videoReferenceImages: characterCreatorSelected ? undefined : requestData.videoReferenceImages,
             videoSourceForExtension: characterCreatorSelected ? undefined : requestData.videoSourceForExtension,
+            videoSourceDurationSeconds: characterCreatorSelected ? undefined : requestData.videoSourceDurationSeconds,
             workflowId: requestData.workflowId,
             workflowSeq: requestData.workflowSeq,
             metricsOperationId: requestData.metricsOperationId,
@@ -678,19 +677,22 @@ export abstract class BaseProvider {
         const orgId = (state.eventMeta?.organizationId as string) ?? ''
         const workflowKind = this.deriveWorkflowKind(state)
         const workflowId = uuid()
+        // Modality and unit count are derived together so they always describe the
+        // same model, the one named below. See llm/usage/usage-estimator.ts.
+        const model = state.modelVersion ?? ''
+        const { modality, estimatedUnits, basis } = resolveCheckMetering(state)
 
         const res = await metrics.check({
             orgId,
             userId,
             workspaceId: state.workspaceId,
             workflowId,
-            model: state.modelVersion ?? '',
-            modality: modalityForKind(workflowKind),
-            // Best-effort upper bound; a real per-model estimate is a growth point
-            // (the metering backend prices conservatively from the model).
-            estimatedUnits: 0,
+            model,
+            modality,
+            estimatedUnits,
             currency: 'USD',
         })
+        logUsageCheck({ model, modality, estimatedUnits, basis, workflowId, response: res })
         if (!res.approved) {
             const reason = res.reason ? `: ${res.reason}` : ''
             throw new Error(`Metrics: balance does not cover this workflow (${workflowKind}${reason})`)
@@ -700,8 +702,12 @@ export abstract class BaseProvider {
         return { workflowId, workflowSeq: 0, metricsOperationId: res.operationId }
     }
 
-    // The run's gate kind is its broadest enabled modality — gating conservatively
-    // so a run that may escalate to image/video is checked against that ceiling.
+    // Labels the run by its broadest enabled modality, for the denial message only.
+    // It deliberately does NOT drive the check's modality: the check names
+    // state.modelVersion, and a reasoning model has no image or video tariff, so
+    // escalating here would get every image-enabled chat run denied as unpriceable.
+    // The image and video calls this run may go on to make are separate paid calls
+    // through transient media providers, each admitted against its own media model.
     private deriveWorkflowKind(state: ProviderState): string {
         if (state.enableVideoGeneration) return 'chat_video'
         if (state.enableImageGeneration) return 'chat_image'
@@ -1181,6 +1187,7 @@ export abstract class BaseProvider {
                 videoResolution: normalizedVideoResolution,
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
+                videoSourceDurationSeconds: state.videoSourceDurationSeconds,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 ...(replayPrompt ? { generatedVideoPrompt: replayPrompt.finalPrompt } : {}),
             }
@@ -1248,7 +1255,10 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                await this.deps.metrics!.confirm({ ...tokenUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
+                await this.confirmUsage(
+                    { ...tokenUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId },
+                    report.total,
+                )
             }
         }
         if (state.imageUsage) {
@@ -1262,7 +1272,10 @@ export abstract class BaseProvider {
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                await this.deps.metrics!.confirm({ ...imageUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
+                await this.confirmUsage(
+                    { ...imageUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId },
+                    report.image,
+                )
             }
         }
         if (state.videoUsage) {
@@ -1275,14 +1288,35 @@ export abstract class BaseProvider {
                 aspectRatio: state.videoUsage.aspectRatio,
                 totalTokens: state.videoUsage.totalTokens,
                 completionTokens: state.videoUsage.completionTokens,
+                inputVideoSeconds: state.videoSourceForExtension ? state.videoSourceDurationSeconds : undefined,
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
             })
             if (metricsOn && report) {
-                await this.deps.metrics!.confirm({ ...videoUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId })
+                await this.confirmUsage(
+                    { ...videoUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId },
+                    report.video,
+                )
             }
         }
         return { workflowSeq: seq }
+    }
+
+    // Posts one measured provider call and logs it in the same shape as its
+    // matching check, so the pair reads together in the log. The reporter has
+    // already priced the call locally; that cost travels to the log only, never
+    // over the wire, because the metering backend owns pricing.
+    private async confirmUsage(
+        request: ConfirmRequest,
+        cost: { purchasedFor: string; soldToClientFor: string },
+    ): Promise<void> {
+        const response = await this.deps.metrics!.confirm(request)
+        logUsageConfirm({
+            request,
+            response,
+            purchasedFor: cost.purchasedFor,
+            soldToClientFor: cost.soldToClientFor,
+        })
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {

@@ -220,6 +220,7 @@ export class VideoRouter {
                 videoFirstFrameImage: state.videoFirstFrameImage,
                 videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,
+                videoSourceDurationSeconds: state.videoSourceDurationSeconds,
                 generationRun,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 proseMirrorContentHandler: options.onProseMirrorContent,

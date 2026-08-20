@@ -69,6 +69,11 @@ export type UsageBreakdown = {
     durationSeconds?: number
     resolution?: string
     videoTokens?: number
+    // Seconds of source video supplied as input to the generation. Absent or 0
+    // means text-to-video. Whole seconds, rounded UP when the true value is
+    // fractional. Providers can price a run with video input differently from one
+    // without, so the rate depends on it.
+    inputVideoSeconds?: number
 }
 
 // ConfirmRequest reports one provider call's measured usage after it returns.
