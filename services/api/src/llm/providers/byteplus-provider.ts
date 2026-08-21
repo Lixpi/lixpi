@@ -14,6 +14,7 @@ import {
     createVideoGenerationTask,
     downloadVideo,
     pollVideoGenerationTask,
+    retrieveVideoGenerationTask,
     type BytePlusClientConfig,
     type CreateVideoGenerationTaskPayload,
 } from './byteplus-video-types.ts'
@@ -36,6 +37,10 @@ export class BytePlusProvider extends BaseProvider {
         }
         this.clientConfig = { baseUrl: BYTEPLUS_ARK_BASE_URL, apiKey }
     }
+
+    // No transportFaultNames override: ModelArk is reached with bare fetch, so
+    // socket failures arrive as `TypeError: fetch failed` with the real code on
+    // `cause`, which the shared layer covers.
 
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
         const modelVersion = state.modelVersion
@@ -125,7 +130,10 @@ export class BytePlusProvider extends BaseProvider {
         }, null, 0)}`)
 
         try {
-            const created = await createVideoGenerationTask(this.clientConfig, payload, this.signal)
+            const created = await this.retryTransport(
+                'video-create',
+                async () => await createVideoGenerationTask(this.clientConfig, payload, this.signal),
+            )
             const taskId = created.id
             if (!taskId) throw new BytePlusModelArkError('ModelArk did not return a task id')
 
@@ -136,6 +144,12 @@ export class BytePlusProvider extends BaseProvider {
                 signal: this.signal,
                 shouldStop: () => this.shouldStop,
                 onKeepalive: () => this.videoPub.generating(),
+                // A blip while polling must not discard a video ModelArk is
+                // already rendering — each retrieve is idempotent.
+                retrieve: async (config, id, signal) => await this.retryTransport(
+                'video-poll',
+                    async () => await retrieveVideoGenerationTask(config, id, signal),
+                ),
             })
 
             if (task.status !== 'succeeded') {
@@ -150,7 +164,10 @@ export class BytePlusProvider extends BaseProvider {
             if (!videoUrl) throw new BytePlusModelArkError('Seedance task succeeded but returned no video_url')
 
             // Output URLs are cleaned after 24h — download immediately.
-            const videoBuffer = await downloadVideo(videoUrl, this.signal)
+            const videoBuffer = await this.retryTransport(
+                'video-download',
+                async () => await downloadVideo(videoUrl, this.signal),
+            )
             if (!videoBuffer || videoBuffer.length === 0) {
                 throw new Error('Seedance: empty video bytes after download')
             }

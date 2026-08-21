@@ -284,6 +284,7 @@ export class StreamPublisher {
     private readonly mediaLineagePlans = new Map<string, MediaBranchLineagePlan>()
     private readonly completedMediaGenerationRequestIds = new Set<string>()
     private readonly cancelledMediaGenerationRequestIds = new Set<string>()
+    private readonly cancellingMediaGenerationRequestIds = new Set<string>()
 
     constructor(
         private readonly nats: NatsService,
@@ -325,6 +326,10 @@ export class StreamPublisher {
         this.tagBuffer.setGenerationRun(generationRun)
     }
 
+    beginMediaGenerationRequestCancellation(generationRequestId: string): void {
+        if (generationRequestId) this.cancellingMediaGenerationRequestIds.add(generationRequestId)
+    }
+
     async getProseMirrorSnapshot(): Promise<object | null> {
         if (!this.proseMirrorAssembler) return null
         await this.proseMirrorAssembler.flushPendingWork()
@@ -332,6 +337,8 @@ export class StreamPublisher {
     }
 
     publishChatContent(content: ChunkPayload['content'], options: PublishChatContentOptions = {}): void {
+        if (this.isCancelledMediaFailure(content)) return
+
         if (options.mirrorProseMirror !== false) {
             this.proseMirrorAssembler?.handleContent(content)
             if (this.options.proseMirrorContentMirror && content.status !== STREAM_STATUS.END_STREAM) {
@@ -343,14 +350,20 @@ export class StreamPublisher {
             content,
             conversationAssetId: this.aiChatThreadId,
         })
-        if (content.status === STREAM_STATUS.IMAGE_ERROR || content.status === STREAM_STATUS.VIDEO_ERROR) {
+        if (
+            content.status === STREAM_STATUS.IMAGE_ERROR
+            || content.status === STREAM_STATUS.VIDEO_ERROR
+            || content.status === STREAM_STATUS.ERROR
+        ) {
             const generationRun = content.generationRun
             if (generationRun?.lineageAssignment) {
+                const errorMessage = content.error || content.text
                 this.enqueueCanvasProjection(
                     async () => {
                         const canvasGeometry = await settleFailedGeneratedMediaRunOnCanvas({
                             workspaceId: this.workspaceId,
                             generationRun,
+                            ...(errorMessage ? { errorMessage } : {}),
                         })
                         this.canvasGeometryResolved(canvasGeometry, generationRun)
                     },
@@ -374,6 +387,19 @@ export class StreamPublisher {
                 })
             }
         }
+    }
+
+    private isCancelledMediaFailure(content: ChunkPayload['content']): boolean {
+        if (content.status !== STREAM_STATUS.IMAGE_ERROR
+            && content.status !== STREAM_STATUS.VIDEO_ERROR
+            && content.status !== STREAM_STATUS.ERROR) return false
+        const generationRequestId = content.generationRun?.generationRequestId
+            ?? this.currentGenerationRun?.generationRequestId
+        return Boolean(
+            generationRequestId
+            && (this.cancellingMediaGenerationRequestIds.has(generationRequestId)
+                || this.cancelledMediaGenerationRequestIds.has(generationRequestId)),
+        )
     }
 
     private enqueueResponsePublish(payload: ChunkPayload): void {
@@ -679,36 +705,41 @@ export class StreamPublisher {
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.completedMediaGenerationRequestIds.add(generationRequestId)
         if (requiresCancellationCleanup) this.cancelledMediaGenerationRequestIds.add(generationRequestId)
+        const shouldPublishCompletion = !alreadyCompleted
         this.enqueueCanvasProjection(
             async () => {
-                const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
-                const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
-                    workspaceId: this.workspaceId,
-                    generationRequestId,
-                    ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
-                    ...(requiresCancellationCleanup ? { removeProjectedPendingNodes: true } : {}),
-                    ...(this.mediaLineagePlans.get(generationRequestId)
-                        ? { lineagePlan: this.mediaLineagePlans.get(generationRequestId) }
-                        : {}),
-                })
-                this.canvasGeometryResolved(canvasGeometry)
+                try {
+                    const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
+                    const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
+                        workspaceId: this.workspaceId,
+                        generationRequestId,
+                        ...(proseMirrorThreadContent ? { proseMirrorThreadContent } : {}),
+                        ...(requiresCancellationCleanup ? { removeProjectedPendingNodes: true } : {}),
+                        ...(this.mediaLineagePlans.get(generationRequestId)
+                            ? { lineagePlan: this.mediaLineagePlans.get(generationRequestId) }
+                            : {}),
+                    })
+                    this.canvasGeometryResolved(canvasGeometry)
+                } finally {
+                    if (shouldPublishCompletion) {
+                        info(`[StreamPublisher] media generation request complete ${JSON.stringify({
+                            workspaceId: this.workspaceId,
+                            aiChatThreadId: this.aiChatThreadId,
+                            generationRequestId,
+                            generationRun: this.currentGenerationRun,
+                        })}`)
+                        this.publishChatContent({
+                            status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
+                            aiProvider: this.provider,
+                            generationRequestId,
+                            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
+                        })
+                    }
+                }
             },
             'failed to settle media generation request on canvas',
         )
         if (alreadyCompleted) return
-
-        info(`[StreamPublisher] media generation request complete ${JSON.stringify({
-            workspaceId: this.workspaceId,
-            aiChatThreadId: this.aiChatThreadId,
-            generationRequestId,
-            generationRun: this.currentGenerationRun,
-        })}`)
-        this.publishChatContent({
-            status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
-            aiProvider: this.provider,
-            generationRequestId,
-            ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
-        })
         const plan = this.mediaLineagePlans.get(generationRequestId)
         const organizationId = this.options.organizationId
         if (plan && organizationId) {

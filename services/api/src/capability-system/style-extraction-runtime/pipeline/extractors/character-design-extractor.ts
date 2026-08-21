@@ -4,29 +4,26 @@ import type { StyleExtractor } from '../types.ts'
 import { runAxisVlm } from './_helpers.ts'
 import { registerExtractor } from './registry.ts'
 
-// The CharacterDesignExtractor captures the rendering-of-the-subject as a first-class
-// signature. This is the axis that fixes the cat-bug: oversized cel-shaded green eyes,
-// chibi proportions, soft cel-shaded fur, tabby markings — these are the actually
-// distinctive traits of the reference and must be foregrounded in the final style.
-// Only runs when subjects are present in the scene assessment.
+// Captures rendering-of-the-subject as a first-class signature. Only runs when
+// the scene assessment contains visible subjects.
 const SYSTEM_PROMPT = `You are a senior character-design analyst. Your sole job is to extract the rendering of subject(s) in the attached reference — anatomy, proportions, expression, feature emphasis, shading approach, line treatment, and silhouette style.
 
 Rules:
-- archetype: a short type label (e.g. "chibi-kitten", "stylized-figure", "realistic-portrait", "anthropomorphic-mascot", "cartoon-mecha", "creature-design"). Be specific.
+- archetype: a short rendering-category label that excludes species, identity, occupation, and narrative content.
 - proportions:
-  - headToBody: ratio expressed as "X:Y" (e.g. "1.2:1" for chibi, "1:6" for realistic adult). Use approximate measurement from the visible subject.
-  - eyeToFace: a 0..1 number — how large the eye occupies the face vertically. Chibi/anime often 0.25–0.40, realistic 0.10–0.15.
-  - limbProportions: a short description (e.g. "short stubby limbs, oversized paws", "elongated graceful").
-- featureEmphasis[]: 1–5 named features that are oversized or specially rendered (e.g. ["eyes", "paws", "ear-tufts", "tail"]). These are the SIGNATURE traits.
-- expression: 1 short phrase (e.g. "soft warm friendly", "neutral observant", "intense focused").
-- pose: 1 short phrase (e.g. "front-facing sitting", "three-quarter standing", "dynamic action").
-- shadingApproach: one of cel-shaded | soft-cel-shaded-with-painterly-falloff | painterly-rendered | flat-vector | rim-light-only | lineless-painterly | photoreal. Be specific.
-- lineTreatment: lineless | thin-contour | thick-ink | sketchy | mixed.
-- silhouetteStyle: 1 short phrase (e.g. "rounded-compact", "elongated-graceful", "angular-mecha").
-- distinctiveDetails[]: 2–6 specific visual details that define this character's rendering (e.g. "perfectly circular highlights in the eyes", "white whiskers rendered as fine bright strokes", "tabby stripe pattern with broken edges", "pink triangular nose with subtle highlight").
-- transferGuidance: 1–3 sentences on how to apply this character-design language to UNRELATED subjects (e.g. a dog, a fox) so they share the same design DNA while remaining their own species.
+  - headToBody: an approximate visible ratio expressed as two numeric terms.
+  - eyeToFace: a 0..1 estimate of visible eye height relative to visible face height; use zero when inapplicable.
+  - limbProportions: a short relational description grounded in visible measurements.
+- featureEmphasis[]: one to five visible features receiving unusual scale, contrast, detail, or rendering emphasis.
+- expression: one short phrase grounded in visible expression; use a neutral inapplicable marker when no face is visible.
+- pose: one short phrase describing only visible orientation and posture.
+- shadingApproach: a precise evidence-derived description of value grouping and transition behavior.
+- lineTreatment: a precise evidence-derived description of contour and interior line behavior.
+- silhouetteStyle: one short relational description of the visible silhouette.
+- distinctiveDetails[]: two to six transferable rendering details; exclude content identity and unobserved anatomy.
+- transferGuidance: one to three sentences explaining how to apply the rendering language to unrelated requested content without copying source content.
 
-Do NOT describe the species or breed of the subject as part of the design (cat / kitten is content, not design). Describe HOW the subject is drawn, not WHAT the subject is.`
+Describe how the subject is rendered, not what the subject is. Do not place any source content label in transferable design fields.`
 
 const FIELDS_SCHEMA = {
     type: 'object',
@@ -58,7 +55,7 @@ const FIELDS_SCHEMA = {
 const extractor: StyleExtractor = {
     axis: 'character-design',
     displayName: 'Character design',
-    description: 'Captures the rendering-of-the-subject as a first-class signature: archetype, proportions, feature emphasis (oversized eyes etc.), shading approach, line treatment, and transfer guidance to unrelated subjects.',
+    description: 'Captures rendering-of-the-subject as a first-class signature: archetype, proportions, feature emphasis, shading approach, line treatment, and transfer guidance to unrelated subjects.',
     minDominance: 0.3,
     applicableTo: (scene) => {
         return scene.references.some((r) => r.subjects.length > 0)

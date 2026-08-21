@@ -1,11 +1,11 @@
 ---
-title: Chat Panel and Sessions
-description: Conversation Assets, the workspace chat panel, tabs, sessions, leases, streaming, resume, and deletion.
+title: Workspace Composer and Generated Output Details
+description: Conversation Assets, detached document authority, streaming resume, and the persisted unified generated-output details panel.
 ---
 
-# Chat Panel and Sessions
+# Workspace Composer and Generated Output Details
 
-Every standalone conversation is an Asset with a `conversation` document role. There is no separate chat-thread persistence table. The workspace right-side panel presents conversation Assets, the Media library, and the Tools and Skills catalog; its tabs and layout remain workspace-local state.
+Every canvas AI run uses a conversation Asset with a `conversation` document role. There is no separate chat-thread persistence table. The screen-fixed canvas composer creates those conversations, while the right-side panel presents generated-output details, the Media library, and the Tools and Skills catalog. The panel never mounts a session browser, chat tabs, or a full-conversation transcript.
 
 ## Conversation Asset
 
@@ -30,7 +30,7 @@ The browser pre-generates an Asset UUID, builds the initial conversation documen
 - the owner ACL;
 - the snapshot `Blob-Reference`.
 
-The panel then opens `thread:<assetId>` as a workspace-local tab. The tab does not own the conversation and closing it does not delete the Asset.
+The browser keeps a detached editor for the conversation so document authority, streaming steps, reconnect, and branch projection continue without mounting the full transcript in the right panel.
 
 ## Panel state
 
@@ -39,36 +39,29 @@ The panel then opens `thread:<assetId>` as a workspace-local tab. The tab does n
 ```ts
 type CanvasAiChatPanelState = {
   isOpen: boolean
-  isSessionHistoryOpen: boolean
   topLevelMode: 'capabilities' | 'media' | 'aiThreads'
-  tabs: Array<{
-    tabId: string
-    type: 'thread'
-    refId: string
-    title: string
-  }>
-  activeTabId?: string
+  generatedOutputDetailsTarget?: {
+    kind: 'output' | 'branch-marker'
+    nodeId: string
+  }
   contextChips: string[]
   width?: number
 }
 ```
 
-For `type: 'thread'`, `refId` is a conversation Asset ID. `lastActiveConversationAssetId` is the only top-level active-conversation pointer. Pre-cutover duplicated tab fields are not written or read.
+The generated-output target is the single persisted disclosure state for media info, active progress, accepted history, Capability Artifact history, and branch-lineage clicks. Hydration keeps it only when `nodeId` still resolves to a node matching `kind`; otherwise it is omitted. Legacy session, tab, and active-tab fields are neither written nor read.
 
-Panel state is saved through normal Workspace metadata persistence. Adding or removing a tab does not change Asset membership because the conversation’s durable surface reference is created/deleted explicitly.
+Panel state is saved through normal Workspace metadata persistence. Refreshing the page therefore restores the same generated-output details component and selected item.
 
-## Sessions
+## Unified generated-output details
 
-The Sessions surface loads workspace-scoped conversation Assets from `Assets-Meta`, point-loads authorized Assets, and resumes their conversation documents. Each row shows the global Asset title, last update time, status, and transcript-derived information.
+`generatedOutputDetailsSidebar.ts` is the only right-panel entry point for an output or branch marker. It renders current Asset metadata first: the full-size editable title and description, descriptor tags, scope, subject identity, storage/rendition status, lineage, and Capability Artifact fields where applicable. A separator then starts `Generation details`, which contains the original user turn, assistant reasoning, purple reasoning-authored model-prompt blocks, references, resolver audit, and recursive pipeline timeline.
 
-Capability runs use `Capability-Runs` index rows plus durable JetStream events. They are not conversation sessions. A chat-originated Tool run mirrors safe events into the conversation transcript, while a side-panel run rebuilds the same progress card from replay and the tokenized live relay. Style Extraction uses this generic path and saves a `visual-style` Tool.
+The component body owns the only vertical scrollbar. Nested ProseMirror, prompt, reasoning, and trace content expands inside that flow. During generation, detached conversation authority and durable JetStream pipeline events rebuild all prior steps, then continue applying live events to the selected sidebar instance. Terminal outputs rebuild the same history from sealed provenance.
 
-Closing a conversation tab keeps it reopenable. Deleting a conversation session performs two explicit operations:
+The deprecated Sessions browser, AI Chat tabs, and full transcript renderer are removed from the workspace right panel. Their former list appearance is retained only as the unused, abstract `BlockCardTile` and `BlockCardTilesList` UI-kit primitives. They preserve marker, title, metadata, selection, hover, and action styling without conversation behavior.
 
-1. detach workspace surface `conversation#<assetId>`;
-2. detach its catalog reference.
-
-If those were the last references, the Asset becomes deleting and maintenance removes its snapshots and rows.
+Capability runs use `Capability-Runs` index rows plus durable JetStream events. They are not conversation sessions. A chat-originated Tool run mirrors safe events into the conversation document, while generated-output details rebuild the same progress from replay and the tokenized live relay.
 
 ## Live document authority
 
@@ -122,7 +115,7 @@ Each planned media run creates its own pending output Asset. The output’s line
 
 On terminal state, the provenance materializer reads the persisted conversation snapshot and writes one sealed provenance document per output. Shared reasoning events are included for siblings, while media-run events are filtered to the output’s own `mediaRunId`. Once the final response snapshot and terminal canvas writes are persisted, the API purges the response's pipeline-event and conversation-step JetStream subjects.
 
-Opening a generated Asset can therefore show its source conversation relationship and immutable provenance without copying the live conversation document.
+Opening a generated Asset can therefore show its source conversation relationship and immutable provenance without copying the live conversation document. The persisted output target selects that same unified renderer after a page reload.
 
 ## Cancellation and reconnect
 
@@ -138,9 +131,9 @@ On reconnect during an active response, the browser resumes the conversation sna
 
 ## Global title and local UI
 
-Conversation title edits update `Asset.title` under `revision`. They do not edit the ProseMirror snapshot. Every Session row, tab, canvas projection, and Asset panel resolves the same title.
+Conversation title edits update `Asset.title` under `revision`. They do not edit the ProseMirror snapshot. Canvas projections and Asset panels resolve the same title.
 
-Tab order, active tab, panel width, open state, and context chips are local to a Workspace. The same conversation Asset may be opened in another workspace under a different tab arrangement, subject to scope and ACL access.
+Panel width, open state, top-level mode, context chips, and the selected generated-output details target are local to a Workspace. Conversation Asset access remains subject to scope and ACL rules.
 
 ## Relevant code
 
@@ -150,3 +143,5 @@ Tab order, active tab, panel width, open state, and context chips are local to a
 - [`services/web-ui/src/services/prosemirror-authority-service.ts`](../../services/web-ui/src/services/prosemirror-authority-service.ts)
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
 - [`services/web-ui/src/infographics/workspace/aiChatPanelState.ts`](../../services/web-ui/src/infographics/workspace/aiChatPanelState.ts)
+- [`services/web-ui/src/infographics/workspace/generatedOutputDetailsSidebar.ts`](../../services/web-ui/src/infographics/workspace/generatedOutputDetailsSidebar.ts)
+- [`packages/lixpi/ui-kit/src/components/blockCardTilesList/`](../../packages/lixpi/ui-kit/src/components/blockCardTilesList/)

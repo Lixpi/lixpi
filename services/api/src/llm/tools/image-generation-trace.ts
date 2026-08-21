@@ -3,6 +3,7 @@
 import type {
     MediaBranchCandidateImage,
     MediaBranchVlmReferenceDecision,
+    CapabilityMediaReviewTrace,
     ImageGenerationTrace,
     ImageGenerationTraceExcludedReference,
     ImageGenerationTraceReference,
@@ -45,41 +46,6 @@ export const getImageSourceReferenceImages = (state: ProviderState): string[] =>
     return [...new Set(selectedReferences)]
 }
 
-export const buildCharacterFidelityRestorationPrompt = (sourceReferenceCount: number): string => {
-    if (!Number.isInteger(sourceReferenceCount) || sourceReferenceCount < 1) {
-        throw new Error('CHARACTER_FIDELITY_SOURCE_REFERENCE_REQUIRED')
-    }
-    const sourceRange = sourceReferenceCount === 1 ? 'Image 2' : `Images 2-${sourceReferenceCount + 1}`
-
-    return [
-        'CHARACTER FIDELITY RESTORATION EDIT — CHANGE ONLY THE RENDERED CHARACTER APPEARANCE.',
-        '',
-        'IMAGE ROLES',
-        'Image 1 is the generated character-design sheet to edit. It is authoritative for the complete canvas, layout, panel geometry, alignment guides, labels, typography, notes, swatches, spacing, framing, poses, and view placement.',
-        'Image 1 is not authoritative for character identity, anatomy, facial likeness, clothing details, materials, or rendering medium. Its rendered characters are disposable placeholders.',
-        `${sourceRange} ${sourceReferenceCount === 1 ? 'is' : 'are'} the authoritative source ${sourceReferenceCount === 1 ? 'image' : 'images'} for the character identity, design, and original rendering style.`,
-        '',
-        'LOCKED SHEET INVARIANTS',
-        'Preserve Image 1 at the same landscape dimensions and preserve every panel, divider, guide, label, note block, swatch, pose, view angle, figure scale, and full-body crop exactly. Do not simplify, rearrange, relabel, omit, add, or redesign any sheet element.',
-        'Keep the existing number and placement of character depictions. This is a bounded edit of those depictions, not a new sheet composition.',
-        '',
-        'AUTHORITATIVE CHARACTER INVARIANTS',
-        `Reconstruct every depiction in Image 1 from ${sourceRange}. Preserve the exact facial construction and proportions; eye, eyebrow, nose, mouth, jaw, cheek, and ear shapes; hair silhouette, curl or strand behavior, hairline, and color; skin tone; body proportions; clothing construction, seams, closures, folds, wear, and colors; accessories; materials; and distinguishing marks.`,
-        'Use one identical character design in every full-body view, head view, expression, feature panel, and pose. Change view angle or expression only where the locked sheet calls for it.',
-        '',
-        'AUTHORITATIVE RENDERING-STYLE INVARIANTS',
-        `Render every character depiction in the same visual medium as ${sourceRange}, matching its concrete medium signature, line presence and line-weight variation, contour color, interior linework, edge softness or hardness, brush or pencil mark morphology, wash behavior, pigment density, shading method, palette relationships, contrast, paper or canvas substrate, visible grain, surface texture, and detail density.`,
-        'If the authoritative source medium is photography, fully re-render every character depiction as photorealistic photography. Preserve recognizable facial likeness, real human anatomy, natural skin pores and tonal variation, individual hair detail, photographic fabric and material response, and physically coherent neutral studio lighting.',
-        'For a photographic source, remove every cartoon, drawing, painting, concept-art, cel-shaded, outlined, paper-textured, or otherwise illustrated trait inherited from Image 1. Do not preserve the draft character rendering merely because Image 1 controls composition.',
-        'If the authoritative source medium is illustration, preserve that exact illustrated medium and do not convert it to photography.',
-        'The source medium must construct the character itself at every scale. Preserve source-specific marks on faces, hair, skin, garments, and props—not merely on the page background.',
-        'Do not clean up, beautify, vectorize, smooth, sharpen, airbrush, homogenize, modernize, or reinterpret the source rendering. Do not replace distinctive facial construction or handmade texture with generic polished concept art or generic AI illustration.',
-        '',
-        'OUTPUT',
-        'Return the complete edited landscape sheet as one image. Replace every character depiction completely wherever necessary to restore the exact identity, design, and rendering style from the authoritative source images. Keep the sheet background, panels, labels, guides, notes, swatches, spacing, framing, poses, and view placement unchanged.',
-    ].join('\n')
-}
-
 export const buildImageModelPrompt = (state: ProviderState): string => {
     const prompt = state.generatedImagePrompt ?? ''
     const capabilityReferenceImages = state.capabilityReferenceImages ?? []
@@ -88,37 +54,7 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
 
     if (!hasCapabilityReferences && !capabilityUsagePrompt) return prompt
 
-    if (state.capabilityUsageMode === 'character-creator') {
-        const sourceReferenceCount = getImageSourceReferenceImages(state).length
-        const capabilityReferenceCount = capabilityReferenceImages.length
-        const hasSourceReferences = sourceReferenceCount > 0
-        const originalCharacterRequest = state.mediaBranchCandidateSnapshot?.promptText?.trim()
-            || state.mediaBranchLineagePlan?.promptText?.trim()
-            || prompt
-        const sourceImageRange = sourceReferenceCount === 1
-            ? 'Image 1'
-            : `Images 1-${sourceReferenceCount}`
-        const templateImageStart = sourceReferenceCount + 1
-        const templateImageRange = capabilityReferenceCount === 1
-            ? `Image ${templateImageStart}`
-            : `Images ${templateImageStart}-${templateImageStart + capabilityReferenceCount - 1}`
-        return [
-            'MANDATORY CHARACTER CREATOR GENERATION:',
-            hasSourceReferences
-                ? [
-                    'IMAGE ROLES — HIGHEST PRIORITY:',
-                    `${sourceImageRange} ${sourceReferenceCount === 1 ? 'is' : 'are'} the authoritative character identity, construction, colors, materials, and rendering-style source.`,
-                    `${templateImageRange} ${capabilityReferenceCount === 1 ? 'is' : 'are'} the authoritative output-layout template, never character-appearance inspiration.`,
-                    'Populate the complete template with the source character. Preserve source identity and medium in every depiction while preserving the template geometry, labels, guides, panels, and view coverage.',
-                    'A photographic source requires photorealistic character depictions with recognizable facial likeness, real human anatomy, natural skin and hair detail, photographic materials, and physically coherent studio lighting.',
-                    'Never copy the template\'s illustrated rendering style. Its depicted figure, linework, shading, facial simplification, and paper texture are negative style references.',
-                ].join('\n')
-                : undefined,
-            capabilityUsagePrompt
-                ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}`
-                : `USER CHARACTER REQUEST:\n${originalCharacterRequest}`,
-        ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
-    }
+    if (state.capabilityUsageMode === 'character-creator') return prompt
 
     return [
         'MANDATORY VISUAL CAPABILITY TRANSFER: the attached capability reference image(s) and capability brief are not optional inspiration. They define the medium the generated image must be made of.',
@@ -297,6 +233,28 @@ const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedR
     })
 }
 
+const readCapabilityReviewTrace = (value: unknown): CapabilityMediaReviewTrace | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const candidate = value as Partial<CapabilityMediaReviewTrace>
+    if (candidate.traceVersion !== 'capability-media-review-v1'
+        || typeof candidate.capabilityId !== 'string'
+        || typeof candidate.summary !== 'string'
+        || candidate.automaticRetries !== 0
+        || (candidate.recommendation !== undefined && typeof candidate.recommendation !== 'string')
+        || !Array.isArray(candidate.steps)
+        || candidate.steps.some(step => !step
+            || typeof step.stepId !== 'string'
+            || typeof step.title !== 'string'
+            || !['completed', 'needs-review', 'unavailable'].includes(step.status)
+            || (step.score !== undefined && (typeof step.score !== 'number'
+                || !Number.isFinite(step.score)
+                || step.score < 0
+                || step.score > 1))
+            || !Array.isArray(step.issues)
+            || step.issues.some(issue => typeof issue !== 'string'))) return undefined
+    return candidate as CapabilityMediaReviewTrace
+}
+
 export const buildImageGenerationTrace = (state: ProviderState): ImageGenerationTrace | undefined => {
     const imageProvider = state.imageProviderName
     const imageModel = state.imageModelVersion
@@ -320,6 +278,7 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
         promptWasChanged: toolPrompt.trim() !== finalPrompt.trim(),
         referenceImages: buildReferenceTrace(state),
         excludedReferences: buildExcludedTrace(state),
+        capabilityReview: readCapabilityReviewTrace(state.capabilityMediaTrace),
         resolver: resolution ? {
             resolverKind: resolution.resolverKind,
             resolverVersion: resolution.resolverVersion,

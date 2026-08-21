@@ -2,7 +2,7 @@
 
 import { v4 as uuid } from 'uuid'
 import type NatsService from '@lixpi/nats-service'
-import { info } from '@lixpi/debug-tools'
+import { info, warn } from '@lixpi/debug-tools'
 import type {
     AiInteractionMediaGenerationRequest,
     AiModel,
@@ -24,7 +24,10 @@ import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapsh
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
-import { resolveCapabilityOutputMediaRuns } from '../lineage/capability-output-media-runs.ts'
+import {
+    resolveCapabilityOutputMediaRuns,
+    resolveDurableMediaRuns,
+} from '../lineage/capability-output-media-runs.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
@@ -48,6 +51,9 @@ export type MatrixRequestData = Record<string, any> & {
     videoResolution?: string
     videoDuration?: string | number
     videoSourceForExtension?: string
+    // Forwarded to children by the `...requestData` spread; the video usage
+    // confirm needs it to report input duration.
+    videoSourceDurationSeconds?: number
     mediaGenerationRequest?: AiInteractionMediaGenerationRequest
 }
 
@@ -278,14 +284,24 @@ export class MediaGenerationMatrixOrchestrator {
             imageModelOptions: normalized.imageModelOptions,
             videoModelOptions: normalized.videoModelOptions,
         })
-        const sharedPreflight = await this.runSharedPreflight({
-            requestData,
-            normalized,
-            primaryImageModel,
-            primaryVideoModel,
-            primaryImageOptions,
-            primaryVideoOptions,
-        })
+        let sharedPreflight: SharedPreflightResult
+        try {
+            sharedPreflight = await this.runSharedPreflight({
+                requestData,
+                normalized,
+                primaryImageModel,
+                primaryVideoModel,
+                primaryImageOptions,
+                primaryVideoOptions,
+            })
+        } catch (error) {
+            try {
+                await this.failUnfinishedDurableRuns(requestData)
+            } catch (settlementError) {
+                warn(`[MEDIA_MATRIX] Failed to settle durable runs after preflight failure: ${String(settlementError)}`)
+            }
+            throw error
+        }
         this.rememberRequestPublisher(normalized.requestGroupKey, sharedPreflight.publisher)
         const sharedPreflightState = sharedPreflight.state
 
@@ -405,29 +421,51 @@ export class MediaGenerationMatrixOrchestrator {
             if (rejectedResult?.status === 'rejected') throw rejectedResult.reason
         } finally {
             const removeProjectedPendingNodes = this.cancelledRequestGroupKeys.delete(normalized.requestGroupKey)
+            let terminalSweepError: unknown
+            if (!removeProjectedPendingNodes) {
+                try {
+                    await this.failUnfinishedDurableRuns(requestData)
+                } catch (error) {
+                    terminalSweepError = error
+                    warn(`[MEDIA_MATRIX] Failed to settle unfinished durable runs: ${String(error)}`)
+                }
+            }
             sharedPreflight.publisher.mediaGenerationRequestComplete(normalized.generationRequestId, {
                 removeProjectedPendingNodes,
             })
             await sharedPreflight.publisher.drainPendingWrites()
             await sharedPreflight.publisher.finishProseMirrorStream()
             this.scheduleRequestPublisherCleanup(normalized.requestGroupKey)
+            if (terminalSweepError) throw terminalSweepError
         }
+    }
+
+    private async failUnfinishedDurableRuns(requestData: MatrixRequestData): Promise<void> {
+        if (!requestData.durableGenerationRequestId) return
+        await new MediaGenerationRequestService().failUnfinishedRuns({
+            generationRequestId: requestData.durableGenerationRequestId,
+            workspaceId: requestData.workspaceId,
+        })
     }
 
     async stop({ workspaceId, aiChatThreadId, generationRequestId }: StopMatrixRequestParams): Promise<void> {
         if (generationRequestId) {
             const requestGroupKey = buildMediaGenerationRequestGroupKey(workspaceId, aiChatThreadId, generationRequestId)
             this.cancelledRequestGroupKeys.add(requestGroupKey)
-            await this.registry.stopGroup(requestGroupKey)
             const publisher = this.requestPublishers.get(requestGroupKey)
+            publisher?.beginMediaGenerationRequestCancellation(generationRequestId)
+            await this.registry.stopGroup(requestGroupKey)
             if (publisher) {
-                await publisher.cancelProseMirrorGenerationRequest(generationRequestId)
+                try {
+                    await publisher.cancelProseMirrorGenerationRequest(generationRequestId)
+                } catch (error) {
+                    warn(`[MEDIA_MATRIX] Failed to settle live cancelled transcript state: ${String(error)}`)
+                }
                 publisher.mediaGenerationRequestComplete(generationRequestId, {
                     removeProjectedPendingNodes: true,
                 })
                 await publisher.drainPendingWrites()
                 await publisher.finishProseMirrorStream()
-                this.cancelledRequestGroupKeys.delete(requestGroupKey)
                 this.scheduleRequestPublisherCleanup(requestGroupKey)
             } else {
                 const canvasGeometry = await settleMediaGenerationRequestOnCanvas({
@@ -442,16 +480,20 @@ export class MediaGenerationMatrixOrchestrator {
                 })
                 this.scheduleRequestPublisherCleanup(requestGroupKey)
             }
-            const persistedThreadCancellation = await settlePersistedAiChatGenerationRequest({
-                workspaceId,
-                aiChatThreadId,
-                generationRequestId,
-            })
-            info('[MEDIA_MATRIX] Persisted cancelled transcript state', {
-                requestGroupKey,
-                generationRequestId,
-                ...persistedThreadCancellation,
-            })
+            try {
+                const persistedThreadCancellation = await settlePersistedAiChatGenerationRequest({
+                    workspaceId,
+                    aiChatThreadId,
+                    generationRequestId,
+                })
+                info('[MEDIA_MATRIX] Persisted cancelled transcript state', {
+                    requestGroupKey,
+                    generationRequestId,
+                    ...persistedThreadCancellation,
+                })
+            } catch (error) {
+                warn(`[MEDIA_MATRIX] Failed to settle persisted cancelled transcript state: ${String(error)}`)
+            }
             return
         }
 
@@ -778,6 +820,7 @@ export class MediaGenerationMatrixOrchestrator {
                 modelVersion: model.meta.modelVersion,
                 contextWindow: model.meta.contextWindow,
                 maxCompletionSize: model.meta.maxCompletionSize,
+                inferenceCapabilities: model.meta.inferenceCapabilities,
             })),
         ))
         const capabilityOnlyOutput = requiredCapabilityProducedCapabilityOnlyOutput(state)
@@ -800,7 +843,7 @@ export class MediaGenerationMatrixOrchestrator {
             ?? []
         const preassignedMediaRuns = capabilityOutputMediaAssetIds.length > 0
             ? await resolveCapabilityOutputMediaRuns(capabilityOutputMediaAssetIds)
-            : undefined
+            : resolveDurableMediaRuns(state.durableMediaRuns)
         const mediaBranchLineagePlan = this.lineagePlanner.buildPlan({
             generationRequestId: normalized.generationRequestId,
             reasoningModelIds: preassignedMediaRuns
@@ -823,6 +866,14 @@ export class MediaGenerationMatrixOrchestrator {
                     branchId: normalized.regeneration.branchId,
                     lineageParentNodeId: normalized.regeneration.lineageParentNodeId,
                     lineageParentType: normalized.regeneration.lineageParentType,
+                    ...(normalized.regeneration.sourceNodeId
+                        ? {
+                            sourceMediaNodeId: normalized.regeneration.sourceNodeId,
+                            ...(normalized.regeneration.replayPrompts[0]?.sourceAssetId
+                                ? { sourceMediaAssetId: normalized.regeneration.replayPrompts[0]!.sourceAssetId }
+                                : {}),
+                        }
+                        : {}),
                 },
             } : {}),
             forceFreshLineage: normalized.regeneration?.mode === 'regenerate-prompt'

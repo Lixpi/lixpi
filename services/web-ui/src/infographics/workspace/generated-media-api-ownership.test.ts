@@ -31,9 +31,11 @@ function expectSourceNotToContain(value: string, snippet: string, label: string)
 }
 
 describe('generated-media API ownership', () => {
-    it('does not promote a preserved regeneration marker through browser-side pending-marker geometry', () => {
+    it('does not promote a source-less preserved regeneration marker through browser-side pending-marker geometry', () => {
         const handler = getFunctionBody('applyMediaBranchLineagePlan', 'function resolvePendingBranchMarkersForLineagePlan')
-        const regenerationTargetIndex = handler.indexOf('if (lineagePlan.regenerationTarget)')
+        const regenerationTargetIndex = handler.indexOf(
+            'if (lineagePlan.regenerationTarget && !lineagePlan.regenerationTarget.sourceMediaNodeId)',
+        )
         const insertIndex = handler.indexOf('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)')
 
         expect(regenerationTargetIndex).toBeGreaterThan(-1)

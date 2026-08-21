@@ -53,6 +53,14 @@ type PutTransientMediaInput = {
     revision: number
 }
 
+export type TransientMediaObjectCoordinate = {
+    organizationId: string
+    bucketName: string
+    objectKey: string
+    mimeType: TransientMediaMimeType
+    byteLength: number
+}
+
 export class TransientMediaStore {
     private readonly objectKeys = new Set<string>()
     private readonly activeObjectKeys = new Map<string, string>()
@@ -87,6 +95,14 @@ export class TransientMediaStore {
     }
 
     async put(input: PutTransientMediaInput): Promise<string> {
+        const { url } = await this.putWithCoordinate(input)
+        return url
+    }
+
+    async putWithCoordinate(input: PutTransientMediaInput): Promise<{
+        url: string
+        coordinate: TransientMediaObjectCoordinate
+    }> {
         await this.ensureStorage()
         const extension = MIME_TYPE_EXTENSIONS[input.mimeType]
         const objectHash = createHash('sha256').update(JSON.stringify({
@@ -115,7 +131,16 @@ export class TransientMediaStore {
         }
         const path = `/api/transient-media/workspaces/${encodeURIComponent(this.scope.workspaceId)}/objects/${encodeURIComponent(objectKey)}`
         const url = `${path}?revision=${encodeURIComponent(String(input.revision))}`
-        return url
+        return {
+            url,
+            coordinate: {
+                organizationId: this.scope.organizationId,
+                bucketName,
+                objectKey,
+                mimeType: input.mimeType,
+                byteLength: input.bytes.byteLength,
+            },
+        }
     }
 
     async clear(): Promise<void> {

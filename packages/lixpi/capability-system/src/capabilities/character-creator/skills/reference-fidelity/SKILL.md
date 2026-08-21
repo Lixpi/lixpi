@@ -5,24 +5,22 @@ description: Identity and design consistency instructions for authorized visual 
 
 # Reference Fidelity
 
-Treat authorized reference images as evidence for identity and construction, not as permission to copy their background or composition.
+Treat authorized character reference images as identity and construction evidence, not as permission to copy attributes outside their assigned role. Treat dedicated spatial controls as spatial evidence only. The required neutral front portrait uses a featureless control only for camera direction, alignment, crop, and scale. Ignore every control attribute outside that role. Other head and detail shots have no synthetic pose control; dependent shots still receive their configured generated anchors and original evidence. Never attach an undeclared identity-bearing reference to a shot.
 
-Preserve across every sheet cell:
+During an edit, treat the matching stored panel as the existing edit target rather than an original source. Preserve its request-approved or unchanged identity and design traits, but replace every visible trait that conflicts with the authoritative request or the original evidence role assigned by that request. Returning the edit target unchanged is a request-compliance failure whenever the requested edit affects that shot.
 
-- facial structure, skin tone, hair shape, and distinguishing marks;
-- body proportions, apparent age, and presentation;
-- garment layers, closures, seams, wear patterns, and color relationships;
-- accessories and mechanical or prosthetic construction;
-- material response and the source rendering medium;
-- facial construction: eye, eyebrow, nose, mouth, jaw, cheek, and ear shapes;
-- medium signature, line presence, line-weight variation, contour color, and interior linework;
-- edge behavior, mark morphology, wash or pigment behavior, shading method, and detail density;
-- substrate grain, paper or canvas texture, palette relationships, and contrast.
+Across every generated panel, preserve all observed identity, proportion, construction, material, color, depiction-medium, and rendering evidence unless the authoritative request or sibling Capability instructions explicitly change that trait.
 
-The source rendering class is locked. When the source is photographic, every repeated depiction must be photorealistic photography with recognizable facial likeness, real human anatomy, natural skin and hair detail, photographic materials, and physically coherent studio lighting. Never convert a photographic source into a cartoon, drawing, painting, concept-art rendering, cel-shaded figure, or other illustration. When the source is illustrated, preserve its specific illustration medium instead of converting it to photography.
+Preserve the source depiction medium and its observed rendering language unless the authoritative request or a sibling Capability explicitly changes them. Maintain recognizable likeness, observed construction, materials, and coherent studio presentation within that medium.
 
-The source medium must construct every repeated depiction, including faces, hair, garments, bodies, and props. Texture copied only onto the sheet background is a failure. Do not clean up, beautify, vectorize, smooth, airbrush, homogenize, modernize, genericize, or otherwise change the source rendering class.
+A requested subject, state, design, material, or appearance change alters only what the shared request state specifies; it does not implicitly alter the depiction medium or visual style. Never treat an unknown or misspelled character term as permission to invent either change.
 
-When references conflict, prioritize the clearest view of the relevant detail. When a requested detail is absent from every reference, add the smallest plausible design choice consistent with the text request and repeat it identically in every view.
+Do not copy any control-reference attribute outside its assigned spatial role. Do not normalize or genericize the source identity.
 
-Never reproduce a reference background, pose, camera angle, unrelated person, signature, logo, or watermark. Never merge identities from separate people. If multiple images show the same character, reconcile them into one consistent design before generating the sheet.
+Resolve canonical or original Asset renditions, never previews. Analyze references as an observation set. Extract explicit requested transformations and changed features before selecting source facts. Explicit prompt and sibling Capability changes override source facts and an earlier generated anchor. Otherwise observed evidence overrides descriptive prompt text, and angle-specific evidence from the closest view wins. Keep unresolved conflicts explicit instead of averaging them.
+
+Resolve every Character Creator sheet reference into isolated panel components before provider routing, regardless of whether it is the active edit target or a supporting source. Send at most the component matching the current panel from each resolved sheet. Never send a flattened multi-panel sheet, unrelated sheet component, body/outfit crop, or carried-element crop to a portrait shot.
+
+When a requested detail is absent from every reference, mark it inferred and add only the smallest plausible design choice consistent with the prompt. The generated neutral-front portrait, front full-body shot, and back full-body shot are the configured generated conditioning inputs. Use the portrait for request-compliant face, hair, headwear, and close-detail continuity. Use the front full-body shot for request-compliant body proportions and frontal outfit construction. Use the back full-body shot for request-compliant rear garment construction, rear layers, back-facing accessories, rear materials, and back-of-footwear continuity. Correct any anchor trait that ignored the authoritative request, and use original evidence only to extend unchanged details absent from the supplied anchors. Do not feed any other generated shot into later generation unless a future graph configuration declares an explicit binding for it.
+
+Never reproduce a reference attribute outside its assigned role or merge distinct identities. Reconcile multiple views of the same identity into one consistent design before generating the sheet.

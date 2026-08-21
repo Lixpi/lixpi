@@ -10,15 +10,15 @@ Rules:
 - Identify 5–12 distinct colors that meaningfully compose the image. Prefer 7–9 for typical illustrations.
 - For each color, sample a hex value as closely as you can from the actual pixels you see. Do not invent canonical names — describe what is actually present.
 - Estimate the usage proportion (0..100) as a rough percentage of the canvas this color occupies. The proportions across all entries should sum to roughly 100.
-- Classify each color's role: subject-primary, subject-secondary, subject-shadow, subject-highlight, background-primary, background-secondary, accent, ambient-light, etc.
-- Classify each color's temperature: warm | cool | neutral.
-- For "harmony", name the actual harmony (analogous, complementary, split-complementary, triadic, monochromatic, neutral, etc.). Do not invent jargon.
-- For "contrast", classify low | medium | high.
-- usageGuidance: 1–3 sentences describing how to apply this palette to an UNRELATED subject. Be concrete (e.g. "lead with warm cream and orange tones for the subject body, recede to cool sage and dust-grey in the background, never invert").
-- backgroundTreatment / shadowStrategy / highlightStrategy: brief concrete observations (e.g. shadow uses cool dust-grey not pure black; highlights use warm cream, not white).
-- avoid[]: 2–6 short strings listing colors / hues that would falsify the look (e.g. "pure black", "saturated primary red", "neon").
+- Classify each color's role from its visible spatial and value function without assuming a subject category.
+- Classify each color's temperature from its sampled value.
+- For harmony, name the observed color relationship without forcing a stock label.
+- For contrast, describe the observed luminance and chroma separation.
+- usageGuidance: one to three sentences explaining how to preserve color roles and proportions on unrelated requested content.
+- backgroundTreatment, shadowStrategy, and highlightStrategy: brief concrete observations derived from sampled regions.
+- avoid[]: two to six source-derived color conditions that would falsify the observed relationship; never use a fixed list.
 
-Do NOT include color terminology associated with traditional media (watercolor washes, oil paint glazing, gouache density) UNLESS those traits are visibly present in the reference. Stay grounded in what you actually see.`
+Do not infer medium from palette. Stay grounded in sampled color and visible relationships.`
 
 const FIELDS_SCHEMA = {
     type: 'object',
@@ -29,7 +29,7 @@ const FIELDS_SCHEMA = {
             items: {
                 type: 'object',
                 properties: {
-                    name: { type: 'string', description: 'short human-readable name, e.g. "warm cream", "muted sage"' },
+                    name: { type: 'string', description: 'Short human-readable name derived from the sampled color.' },
                     hex: { type: 'string', description: '#rrggbb' },
                     role: { type: 'string' },
                     usage: { type: 'integer', description: 'rough 0..100 percent of canvas occupied by this color' },

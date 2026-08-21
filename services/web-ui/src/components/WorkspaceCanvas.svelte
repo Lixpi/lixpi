@@ -17,6 +17,13 @@
     } from '@lixpi/constants'
 
     import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
+    import {
+        getStashedViewportStorageKey,
+        encodeStashedViewport,
+        parseStashedViewport,
+        shouldApplyStashedViewport,
+    } from '$src/components/workspaceViewportStash.ts'
+    import { rebaseCanvasMembershipState } from '$src/infographics/workspace/canvasMembershipStateRebase.ts'
     import AssetService from '$src/services/asset-service.ts'
     import { workspaceStore } from '$src/stores/workspaceStore.ts'
     import { assetsStore } from '$src/stores/assetsStore.ts'
@@ -26,14 +33,25 @@
     import { servicesStore } from '$src/stores/servicesStore.ts'
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '$src/svgIcons/index.ts'
-    import '$src/components/sidePanel/side-panel.scss'
+    import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '@lixpi/ui-kit/svg'
+    import '@lixpi/ui-kit/styles/side-panel'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
     type PersistCanvasStateOptions = {
         persistViewport?: boolean
         viewportOverride?: Viewport
+    }
+
+    type AssetAttachResponse = {
+        error?: unknown
+        assetId?: unknown
+        nodeIds?: unknown
+    }
+
+    type AssetDetachResponse = {
+        error?: unknown
+        success?: unknown
     }
 
     let paneEl: HTMLDivElement
@@ -94,6 +112,9 @@
         `--workspace-right-side-panel-width: min(${rightSidePanelSettings.defaultDimensions.width}px, calc(100vw - ${rightSidePanelSettings.dimensions.maxPaneMargin}px))`,
         '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)',
         `--workspace-right-side-panel-content-inset: ${rightSidePanelSettings.layout.contentInset}px`,
+        `--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px`,
+        `--workspace-right-sidebar-tag-pill-font-size: ${rightSidePanelSettings.typography.tagPillFontSize}px`,
+        `--workspace-right-sidebar-tag-pill-font-weight: ${rightSidePanelSettings.typography.tagPillFontWeight}`,
         `--side-panel-backdrop-fill: ${rightSidePanelSettings.styles.backdropFill}`,
         `--side-panel-backdrop-fill-opaque: ${rightSidePanelSettings.styles.backdropFillOpaque}`,
         `--side-panel-toggle-color: ${rightSidePanelSettings.styles.toggleColor}`,
@@ -104,6 +125,69 @@
         const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
         const width = settings.mediaNode.image.defaultInsertionWidth
         return { width, height: width / safeAspectRatio }
+    }
+
+    function getCanvasMembershipResponseError(response: unknown): string | null {
+        if (!response || typeof response !== 'object') return 'INVALID_CANVAS_MEMBERSHIP_RESPONSE'
+        const error = (response as { error?: unknown }).error
+        if (error === undefined) return null
+        return typeof error === 'string' && error ? error : 'INVALID_CANVAS_MEMBERSHIP_RESPONSE'
+    }
+
+    function assertAssetAttached(response: unknown, assetId: string, nodeId: string): void {
+        const responseError = getCanvasMembershipResponseError(response)
+        if (responseError) throw new Error(responseError)
+
+        const attached = response as AssetAttachResponse
+        if (attached.assetId !== assetId
+            || !Array.isArray(attached.nodeIds)
+            || !attached.nodeIds.includes(nodeId)) {
+            throw new Error('INVALID_ASSET_ATTACH_RESPONSE')
+        }
+    }
+
+    function assertAssetDetached(response: unknown): void {
+        const responseError = getCanvasMembershipResponseError(response)
+        if (responseError) throw new Error(responseError)
+        if ((response as AssetDetachResponse).success !== true) {
+            throw new Error('INVALID_ASSET_DETACH_RESPONSE')
+        }
+    }
+
+    function getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt: number): number {
+        return Math.max(Date.now(), expectedCanvasStateUpdatedAt + 1)
+    }
+
+    async function runCanvasMembershipMutation<Result>(
+        targetWorkspaceId: string,
+        mutation: () => Promise<Result>,
+    ): Promise<Result> {
+        const workspaceService = servicesStore.getData('workspaceService')
+        if (!workspaceService || typeof workspaceService.runCanvasMembershipMutation !== 'function') {
+            throw new Error('CANVAS_WRITE_COORDINATOR_UNAVAILABLE')
+        }
+        return await workspaceService.runCanvasMembershipMutation({
+            workspaceId: targetWorkspaceId,
+            mutation,
+        })
+    }
+
+    function commitCanvasMembershipState(nextCanvasState: CanvasState, canvasStateUpdatedAt: number): void {
+        workspaceStore.updateCanvasState(nextCanvasState)
+        workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+    }
+
+    function rebaseRequestedCanvasMembershipState(
+        requestedState: CanvasState,
+        operation: 'attach' | 'detach',
+        removedNodeIds: readonly string[] = [],
+    ): CanvasState {
+        return rebaseCanvasMembershipState({
+            requestedState,
+            currentState: renderer?.getCanvasState(),
+            operation,
+            removedNodeIds,
+        })
     }
 
     function cloneViewport(viewportValue: Viewport | null | undefined): Viewport | null {
@@ -125,8 +209,8 @@
 
     function getCanvasStateViewport(newCanvasState: CanvasState, options: PersistCanvasStateOptions): Viewport {
         return cloneViewport(options.viewportOverride)
-            ?? cloneViewport(renderer?.getViewport?.())
             ?? cloneViewport(newCanvasState.viewport)
+            ?? cloneViewport(renderer?.getViewport?.())
             ?? cloneViewport(viewport)
             ?? { x: 0, y: 0, zoom: 1 }
     }
@@ -175,6 +259,41 @@
         })
         lastPersistedViewport = viewportToPersist
         return true
+    }
+
+    function stashPendingViewportForUnload(): void {
+        if (!workspaceId || !pendingViewportSave) return
+        if (viewportsMatch(pendingViewportSave, lastPersistedViewport)) return
+        // A hard reload can kill the page before the debounced network save
+        // lands, so stash the viewport locally as well as flushing it.
+        try {
+            localStorage.setItem(
+                getStashedViewportStorageKey(workspaceId),
+                encodeStashedViewport(pendingViewportSave),
+            )
+        } catch {
+            // Storage unavailable; the network flush below is still attempted.
+        }
+        persistViewportState(pendingViewportSave)
+    }
+
+    function restoreStashedViewport(targetWorkspaceId: string): void {
+        const storageKey = getStashedViewportStorageKey(targetWorkspaceId)
+        let raw: string | null = null
+        try {
+            raw = localStorage.getItem(storageKey)
+            if (raw) localStorage.removeItem(storageKey)
+        } catch {
+            return
+        }
+
+        const stashedViewport = parseStashedViewport(raw)
+        if (!stashedViewport) return
+        if (!shouldApplyStashedViewport(stashedViewport, canvasState?.viewport)) return
+
+        viewport = stashedViewport
+        renderer?.setViewport(stashedViewport)
+        persistViewportState(stashedViewport)
     }
 
     function handleViewportChange(newViewport: Viewport) {
@@ -230,10 +349,16 @@
                     assetId: doc.assetId,
                     dimensions,
                 }
-                const nextCanvasState = renderer?.insertNodeAtViewportCenter(documentNode, {}, false)
-                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                if (nextCanvasState && typeof expectedCanvasStateUpdatedAt === 'number') {
-                    const canvasStateUpdatedAt = Date.now()
+                await runCanvasMembershipMutation(targetWorkspaceId, async () => {
+                    if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) {
+                        throw new Error('WORKSPACE_CHANGED_DURING_CANVAS_MUTATION')
+                    }
+                    const nextCanvasState = renderer?.insertNodeAtViewportCenter(documentNode, {}, false)
+                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                    if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') {
+                        throw new Error('CANVAS_REVISION_REQUIRED')
+                    }
+                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
                     const response = await assetService.attach({
                         assetId: doc.assetId,
                         workspaceId: targetWorkspaceId,
@@ -243,12 +368,11 @@
                             canvasStateUpdatedAt,
                             canvasState: nextCanvasState,
                         },
-                    }) as { error?: string }
-                    if (response?.error) throw new Error(response.error)
+                    })
+                    assertAssetAttached(response, doc.assetId, documentNode.nodeId)
                     renderer?.commitTransientCanvasState(nextCanvasState)
-                    workspaceStore.updateCanvasState(nextCanvasState)
-                    workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
-                }
+                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                })
             }
         } catch (error) {
             console.error('Error creating document:', error)
@@ -420,29 +544,38 @@
             ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | DocumentMediaCanvasNode,
             'position'
         >
-        const replacedState = placeholderNodeId ? renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false) : null
-        const nextCanvasState = replacedState ?? renderer?.insertNodeAtViewportCenter(node, {}, false)
-        const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-        if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') return
-        const canvasStateUpdatedAt = Date.now()
-        const response = await assetService.attach({
-            assetId: result.assetId,
-            workspaceId: targetWorkspaceId,
-            nodeId,
-            workspaceMutation: {
-                expectedCanvasStateUpdatedAt,
-                canvasStateUpdatedAt,
-                canvasState: nextCanvasState,
-            },
-        }) as { error?: string }
-        if (response?.error) throw new Error(response.error)
-        renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)
-        workspaceStore.updateCanvasState(nextCanvasState)
-        workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+        await runCanvasMembershipMutation(targetWorkspaceId, async () => {
+            if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) {
+                throw new Error('WORKSPACE_CHANGED_DURING_CANVAS_MUTATION')
+            }
+            const replacedState = placeholderNodeId ? renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false) : null
+            const nextCanvasState = replacedState ?? renderer?.insertNodeAtViewportCenter(node, {}, false)
+            const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+            if (!nextCanvasState || typeof expectedCanvasStateUpdatedAt !== 'number') {
+                throw new Error('CANVAS_REVISION_REQUIRED')
+            }
+            const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+            const response = await assetService.attach({
+                assetId: result.assetId,
+                workspaceId: targetWorkspaceId,
+                nodeId,
+                workspaceMutation: {
+                    expectedCanvasStateUpdatedAt,
+                    canvasStateUpdatedAt,
+                    canvasState: nextCanvasState,
+                },
+            })
+            assertAssetAttached(response, result.assetId, nodeId)
+            renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)
+            commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+        })
     }
 
     onMount(() => {
         if (!paneEl || !viewportEl) return
+
+        window.addEventListener('pagehide', stashPendingViewportForUnload)
+
 
         const loadedViewport = cloneViewport(canvasState?.viewport)
         if (loadedViewport) {
@@ -468,41 +601,51 @@
             },
             onDocumentContentChange: () => {},
             onAiChatThreadContentChange: () => {},
-            onAssetDetach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {
-                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
-                const canvasStateUpdatedAt = Date.now()
-                const response = await assetService.detach({
-                    assetId,
-                    workspaceId,
-                    nodeId,
-                    workspaceMutation: {
-                        expectedCanvasStateUpdatedAt,
-                        canvasStateUpdatedAt,
-                        canvasState: nextCanvasState,
-                    },
-                }) as { error?: string }
-                if (response?.error) throw new Error(response.error)
-                workspaceStore.updateCanvasState(nextCanvasState)
-                workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+            onAssetDetach: async ({ assetId, nodeId, removedNodeIds, canvasState: requestedCanvasState }) => {
+                return await runCanvasMembershipMutation(workspaceId, async () => {
+                    const nextCanvasState = rebaseRequestedCanvasMembershipState(
+                        requestedCanvasState,
+                        'detach',
+                        removedNodeIds,
+                    )
+                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                    if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+                    const response = await assetService.detach({
+                        assetId,
+                        workspaceId,
+                        nodeId,
+                        workspaceMutation: {
+                            expectedCanvasStateUpdatedAt,
+                            canvasStateUpdatedAt,
+                            canvasState: nextCanvasState,
+                        },
+                    })
+                    assertAssetDetached(response)
+                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                    return nextCanvasState
+                })
             },
-            onAssetAttach: async ({ assetId, nodeId, canvasState: nextCanvasState }) => {
-                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
-                const canvasStateUpdatedAt = Date.now()
-                const response = await assetService.attach({
-                    assetId,
-                    workspaceId,
-                    nodeId,
-                    workspaceMutation: {
-                        expectedCanvasStateUpdatedAt,
-                        canvasStateUpdatedAt,
-                        canvasState: nextCanvasState,
-                    },
-                }) as { error?: string }
-                if (response?.error) throw new Error(response.error)
-                workspaceStore.updateCanvasState(nextCanvasState)
-                workspaceStore.setDataValues({ canvasStateUpdatedAt, updatedAt: canvasStateUpdatedAt })
+            onAssetAttach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
+                return await runCanvasMembershipMutation(workspaceId, async () => {
+                    const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, 'attach')
+                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                    if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+                    const response = await assetService.attach({
+                        assetId,
+                        workspaceId,
+                        nodeId,
+                        workspaceMutation: {
+                            expectedCanvasStateUpdatedAt,
+                            canvasStateUpdatedAt,
+                            canvasState: nextCanvasState,
+                        },
+                    })
+                    assertAssetAttached(response, assetId, nodeId)
+                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                    return nextCanvasState
+                })
             },
         })
 
@@ -545,7 +688,16 @@
         }
     })
 
+    let stashRestoredWorkspaceId: string | null = null
+    $effect(() => {
+        if (!workspaceId || loadedWorkspaceId !== workspaceId || !canvasState) return
+        if (stashRestoredWorkspaceId === workspaceId) return
+        stashRestoredWorkspaceId = workspaceId
+        restoreStashedViewport(workspaceId)
+    })
+
     onDestroy(() => {
+        window.removeEventListener('pagehide', stashPendingViewportForUnload)
         if (saveDebounceTimer) {
             clearTimeout(saveDebounceTimer)
             saveDebounceTimer = null

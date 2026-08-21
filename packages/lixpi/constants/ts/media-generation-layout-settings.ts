@@ -25,26 +25,22 @@ export type MediaGenerationMarkerSettings = {
     minWidthMultiplier: number
     // Multiplier on the minimum width capping how wide an on-canvas marker may grow.
     maxWidthGrowth: number
-    // Multiplier on the minimum width capping the screen-fixed preflight pose.
-    screenFixedMaxWidthGrowth: number
-    // Hard cap on the screen-fixed preflight pose as a fraction of the prompt input width.
-    screenFixedMaxWidthFraction: number
     // Naive per-character width used for width sizing.
     approxCharWidth: number
     // Wider per-character width used when predicting line wrapping.
     lineWrapCharWidth: number
     horizontalPadding: number
-    screenFixedHorizontalPadding: number
     promptPreviewMaxChars: number
     responsePreviewMaxChars: number
     verticalPadding: number
-    screenFixedVerticalPadding: number
     separatorHeight: number
-    screenFixedSeparatorHeight: number
     text: MediaGenerationMarkerTextSettings
 }
 
 export type GeneratedMediaChromeLayoutSettings = {
+    // Base screen-pixel height reserved for the single-line title above a
+    // resolved media node, including the title's bottom padding.
+    titleCollisionHeight: number
     // Screen-pixel gap between a media node's bottom edge and its chrome strip.
     topGap: number
     // Screen-pixel icon/button size of the chrome strip.
@@ -53,6 +49,17 @@ export type GeneratedMediaChromeLayoutSettings = {
     videoControlsHeight: number
     // Screen-pixel gap between a video node edge and the external controls strip.
     videoControlsBottomInset: number
+    // Bounded zoom curve used to project screen-fixed chrome. Collision layout
+    // reserves the curve's maximum world-space footprint.
+    zoomScaling: {
+        minZoom: number
+        lowZoomPower?: number
+    }
+}
+
+export type GeneratedMediaProgressLayoutSettings = {
+    width: number
+    gap: number
 }
 
 export type MediaGenerationLayoutSettings = {
@@ -65,12 +72,11 @@ export type MediaGenerationLayoutSettings = {
     mediaToMediaGap: number
     branchOriginToFirstMediaGap: number
     branchFanoutExtraGap: number
-    pendingMarkerInputGap: number
-    pendingMarkerMoveDurationMs: number
     preFrameCircleScale: number
     serverFallbackPaneHeight: number
     marker: MediaGenerationMarkerSettings
     generatedMediaChrome: GeneratedMediaChromeLayoutSettings
+    generatedMediaProgress: GeneratedMediaProgressLayoutSettings
 }
 
 export type WorkspaceCollisionNodeTypeSettings = {
@@ -115,10 +121,6 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
     branchOriginToFirstMediaGap: 312,
     // Canvas-unit extra horizontal gap added for each extra generated media node when a lineage forks. Increasing it gives large branch fans more curve room.
     branchFanoutExtraGap: 200,
-    // Screen-pixel vertical gap between stacked screen-fixed pending branch markers.
-    pendingMarkerInputGap: 8,
-    // Milliseconds for moving a pending branch marker from screen-fixed preflight into API-planned canvas position.
-    pendingMarkerMoveDurationMs: 420,
     // Diameter of the pre-first-frame generation circle as a fraction of the pending media node's shortest side.
     preFrameCircleScale: 1 / 3,
     // Canvas-unit pane height the API assumes when the client did not report its visible area.
@@ -130,20 +132,13 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
         baseSize: 96,
         minWidthMultiplier: 2.6,
         maxWidthGrowth: 1.5,
-        screenFixedMaxWidthGrowth: 6,
-        screenFixedMaxWidthFraction: 0.8,
         approxCharWidth: 8,
         lineWrapCharWidth: 10,
         horizontalPadding: 60,
-        // Includes the compact pose's asymmetric stop-control padding plus its
-        // reasoning icon, progress spinner, flex gaps, and inline-reference icon.
-        screenFixedHorizontalPadding: 124,
         promptPreviewMaxChars: 120,
         responsePreviewMaxChars: 50,
         verticalPadding: 30,
-        screenFixedVerticalPadding: 18,
         separatorHeight: 16,
-        screenFixedSeparatorHeight: 10,
         text: {
             messageFontSize: 16,
             messageLineHeight: 1.14,
@@ -151,13 +146,19 @@ export const mediaGenerationLayoutSettings: MediaGenerationLayoutSettings = {
             responseLineHeight: 1.15,
         },
     },
-    // Chrome (model badge strip / video controls) reserved below generated media
-    // in collision boxes, on both the API and the WebUI.
+    // Screen-fixed title/model chrome reserved around resolved media in collision
+    // boxes, on both the API and the WebUI.
     generatedMediaChrome: {
+        titleCollisionHeight: 46,
         topGap: 8,
         iconSize: 34,
         videoControlsHeight: 40,
         videoControlsBottomInset: 8,
+        zoomScaling: { minZoom: 0.4 },
+    },
+    generatedMediaProgress: {
+        width: 360,
+        gap: 36,
     },
 }
 

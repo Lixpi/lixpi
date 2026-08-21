@@ -82,6 +82,9 @@ export type VideoUsageReport = {
         completionTokens?: number
         pricePer?: string
         price?: string
+        // Whole seconds of source video fed into the generation, rounded up.
+        // Absent means text-to-video. Vendors price the two differently.
+        inputVideoSeconds?: number
         purchasedFor: string
         soldToClientFor: string
     }
@@ -224,11 +227,12 @@ export class UsageReporter {
         aspectRatio: string
         totalTokens?: number
         completionTokens?: number
+        inputVideoSeconds?: number
         aiRequestReceivedAt: number
         aiRequestFinishedAt: number
     }): VideoUsageReport | undefined {
         try {
-            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, totalTokens, completionTokens, aiRequestReceivedAt, aiRequestFinishedAt } = args
+            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, totalTokens, completionTokens, inputVideoSeconds, aiRequestReceivedAt, aiRequestFinishedAt } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
             const resaleMargin = dec(pricing.resaleMargin, '1.0')
             const videoPricing = (pricing as any).video ?? {}
@@ -241,6 +245,10 @@ export class UsageReporter {
                 durationSeconds: Number(durationSeconds) || 0,
                 resolution,
                 aspectRatio,
+                // Whole seconds, rounded up, per the metrics contract.
+                ...(typeof inputVideoSeconds === 'number' && inputVideoSeconds > 0
+                    ? { inputVideoSeconds: Math.ceil(inputVideoSeconds) }
+                    : {}),
                 purchasedFor: '0',
                 soldToClientFor: '0',
             }

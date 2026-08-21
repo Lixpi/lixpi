@@ -11,6 +11,8 @@ import {
 import {
     getMediaGenerationRequestEventStreamName,
     getMediaGenerationRequestEventSubject,
+    getMediaGenerationRequestProgressSubject,
+    getMediaGenerationRequestReplaySubject,
     MediaGenerationRequestEventLog,
 } from './media-generation-request-event-log.ts'
 
@@ -47,7 +49,7 @@ describe('MediaGenerationRequestEventLog', () => {
         expect(nats.publishJetStream).toHaveBeenCalledWith(
             getMediaGenerationRequestEventSubject('workspace/1', 'request-1'),
             expect.any(Object),
-            expect.objectContaining({ msgID: 'request-1:3' }),
+            expect.objectContaining({ msgID: 'event-3' }),
         )
         expect(nats.publish).toHaveBeenCalledWith(
             `${getMediaGenerationUserEventSubject(
@@ -60,6 +62,35 @@ describe('MediaGenerationRequestEventLog', () => {
             }),
         )
         expect(appended.streamSequence).toBe(7)
+    })
+
+    it('stores each run progress stream on its own optimistic-concurrency subject', async () => {
+        const nats = {
+            ensureJetStreamStream: vi.fn(async () => undefined),
+            publishJetStream: vi.fn(async () => ({ seq: 19 })),
+            publish: vi.fn(),
+        }
+        const log = new MediaGenerationRequestEventLog(nats as any)
+
+        await log.append({
+            userId: 'user-1',
+            workspaceId: 'workspace-1',
+            expectedLastSubjectSequence: 12,
+            event: {
+                ...event(3),
+                status: 'MEDIA_GENERATION_PROGRESS',
+                payload: { generationRun: 2, progress: { phase: 'rendering' } },
+            },
+        })
+
+        expect(nats.publishJetStream).toHaveBeenCalledWith(
+            getMediaGenerationRequestProgressSubject('workspace-1', 'request-1', 2),
+            expect.any(Object),
+            expect.objectContaining({
+                msgID: 'event-3',
+                expect: expect.objectContaining({ lastSubjectSequence: 12 }),
+            }),
+        )
     })
 
     it('replays only the request subject in stream order and reports pagination', async () => {
@@ -84,6 +115,35 @@ describe('MediaGenerationRequestEventLog', () => {
         expect(replay.events.map(item => item.streamSequence)).toEqual([4, 9])
         expect(replay.hasMore).toBe(true)
         expect(replay.streamName).toBe(getMediaGenerationRequestEventStreamName('workspace-1'))
+        expect(getJetStreamMessage).toHaveBeenCalledWith(
+            getMediaGenerationRequestEventStreamName('workspace-1'),
+            { last_by_subj: getMediaGenerationRequestReplaySubject('workspace-1', 'request-1') },
+        )
+    })
+
+    it('reads the latest accumulated progress for one run without replaying the request', async () => {
+        const progressEvent = {
+            ...event(4),
+            status: 'MEDIA_GENERATION_PROGRESS' as const,
+            payload: { generationRun: 3, progress: { phase: 'assessing' } },
+        }
+        const getJetStreamMessage = vi.fn(async () => ({
+            data: { userId: 'user-1', workspaceId: 'workspace-1', event: progressEvent, streamSequence: 0 },
+            seq: 44,
+        }))
+        const log = new MediaGenerationRequestEventLog({ getJetStreamMessage } as any)
+
+        const latest = await log.getLatestRunProgress({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'request-1',
+            generationRun: 3,
+        })
+
+        expect(getJetStreamMessage).toHaveBeenCalledWith(
+            getMediaGenerationRequestEventStreamName('workspace-1'),
+            { last_by_subj: getMediaGenerationRequestProgressSubject('workspace-1', 'request-1', 3) },
+        )
+        expect(latest?.streamSequence).toBe(44)
     })
 
     it('rejects event payloads above the bounded durable envelope size', async () => {
@@ -114,5 +174,9 @@ describe('MediaGenerationRequestEventLog', () => {
             workspaceId: 'workspace-1',
             generationRequestId: 'request-1',
         })).resolves.toBeUndefined()
+        expect(purgeJetStreamSubject).toHaveBeenCalledWith(
+            getMediaGenerationRequestEventStreamName('workspace-1'),
+            getMediaGenerationRequestReplaySubject('workspace-1', 'request-1'),
+        )
     })
 })

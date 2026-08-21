@@ -20,11 +20,11 @@ The compiler assigns aliases in canonical reference order, collapses multiple ca
 
 ## Local reference matching
 
-`media-reference-matcher.ts` compares free-form prompt windows only with Assets attached to the current request. It normalizes Unicode, case, punctuation, possessives, common plurals, generic media suffixes, bounded edit distance, token overlap, and character trigrams. Descriptor summary segments and existing entity/style tags are bounded semantic aliases; there is no global thesaurus or model call.
+`media-reference-matcher.ts` compares free-form prompt windows only with the user-visible title and filename identities of Assets attached to the current request. It normalizes Unicode, case, punctuation, possessives, common plurals, generic media suffixes, bounded edit distance, token overlap, and character trigrams. A phrase containing only non-identifying function words cannot match an Asset. Descriptor summaries and entity/style tags remain provider-safe generation context; they are never Asset identity aliases and cannot trigger reference resolution.
 
 A score must meet the unique threshold and beat the runner-up by the versioned winning margin. Close candidates become `awaiting-reference-resolution`; zero matches preserve the original text. Requests are capped at 32 unique bindings and ambiguity records expose at most five candidates.
 
-Explicit ProseMirror media-reference atoms never require text matching. Their authorized `assetId` maps directly to the assigned alias.
+Explicit ProseMirror media-reference atoms never require text matching. Their authorized `assetId` maps directly to the assigned alias. Persisted user resolutions are honored only when the phrase still matches a current identity variant, preventing obsolete matcher decisions from rewriting ordinary instructions after a matcher upgrade.
 
 ## Durable media request
 
@@ -34,7 +34,7 @@ Explicit ProseMirror media-reference atoms never require text matching. Their au
 - the organization Blob hash for an immutable structured checkpoint;
 - safe reference bindings and unresolved candidate records;
 - user-selected resolutions;
-- per-reasoning/per-media-model run state and operation node IDs;
+- per-reasoning/per-media-model run state with stable media-run, Asset, operation-node, and output-node IDs;
 - provider verification sessions containing hashes and provider/account scope, never provider tokens;
 - a compare-and-swap revision and status timestamps.
 
@@ -46,11 +46,13 @@ Paused requests are never TTL-cancelled. Completed requests release their checkp
 
 Reference selection and native verification use the same request ID and CAS revision. The API reauthorizes every bound Asset on reference resume, refreshes revisions/descriptors/identity, and retains both checkpoint and current forbidden display variants. A user-selected visual branch target is persisted and bypasses another ambiguous VLM decision.
 
-Each run owns an `operationStatus` node. Initial nodes are anchored to selected media, then rebound to the exact API lineage assignment after branch planning is durable. The node remains in that slot as it moves through:
+Each run owns an `operationStatus` state node and a stable pending image/video output node created when the request is accepted. The operation points to `outputNodeId`, and branch planning enriches that same output with its exact API lineage assignment. The state moves through:
 
-- `in-progress`;
+- `in-progress`, with its operation node kept state-only while the output media node renders its own progress timeline;
 - `action-required` with an anchored candidate picker or native-verification action;
 - `failed` with sanitized provider details, Edit request, and Dismiss.
+
+Only `action-required` and `failed` render a separate recovery card because those states need an interactive surface.
 
 Successful output projection replaces the planned node identity in place and preserves branch edges. Successful siblings remain when another run fails. Edit request restores the checkpointed ProseMirror document and model/config selection but performs no provider call; only a new explicit Submit creates a new paid request ID.
 

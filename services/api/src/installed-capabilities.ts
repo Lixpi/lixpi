@@ -6,6 +6,7 @@ import {
     createActionTimelineModule,
     createCharacterCreatorModule,
     createStyleExtractionModule,
+    type CharacterCreatorRuntimePorts,
 } from '@lixpi/capability-system/backend'
 
 import type { MetricsClient } from './metrics/metrics-client.ts'
@@ -19,12 +20,12 @@ import {
     resolveCapabilityModelInputs,
 } from './capability-system/capability-model-input-adapter.ts'
 import { persistActionTimelineArtifact } from './capability-system/action-timeline-persistence-adapter.ts'
-import { createCharacterCreatorActionDependencies } from './capability-system/character-creator-runtime-adapter.ts'
 import { createStyleExtractionRuntimePort } from './capability-system/style-extraction-runtime/style-extraction-actions.ts'
 
 export type InstalledCapabilityDependencies = {
     natsService: NatsService
     imageRouter: ImageRouter
+    characterCreatorRuntime: CharacterCreatorRuntimePorts
     metrics?: MetricsClient
 }
 
@@ -37,12 +38,8 @@ export function createDefaultCapabilityModuleCatalog(
         seedBuiltInCapability,
     }
     catalog.registerModule(createCharacterCreatorModule({
-        ...createCharacterCreatorActionDependencies({
-            natsService: dependencies.natsService,
-            imageRouter: dependencies.imageRouter,
-            metrics: dependencies.metrics,
-        }),
         capabilityStorage,
+        runtime: dependencies.characterCreatorRuntime,
     }))
     catalog.registerModule(createStyleExtractionModule({
         runtime: createStyleExtractionRuntimePort({

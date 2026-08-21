@@ -64,6 +64,18 @@ describe('resolveActionTimelineInput', () => {
         })).toEqual({
             valid: false,
             error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED',
+            missingInputFields: ['precisionMs'],
+        })
+    })
+
+    it('reports both missing timing fields so the assistant can ask a precise follow-up', () => {
+        expect(resolveActionTimelineInput({
+            prompt: 'Make an action timeline for this.',
+            referenceAssetIds: [],
+        })).toEqual({
+            valid: false,
+            error: 'ACTION_TIMELINE_DURATION_AND_PRECISION_REQUIRED',
+            missingInputFields: ['durationMs', 'precisionMs'],
         })
     })
 })

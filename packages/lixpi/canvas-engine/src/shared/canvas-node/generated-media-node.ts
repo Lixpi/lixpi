@@ -2,8 +2,48 @@
 
 import type { CanvasNode } from '@lixpi/constants'
 
+import type { CanvasEnginePoint, CanvasEngineRect } from '../geometry/index.ts'
+
 export type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>
 export type GeneratedOutputCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' | 'capabilityArtifact' }>
+
+export function getGeneratedMediaPreFrameSize(
+    dimensions: { width: number; height: number },
+    configuredScale: number,
+): number {
+    const scale = Number.isFinite(configuredScale) && configuredScale > 0
+        ? Math.min(1, configuredScale)
+        : 1 / 3
+    return Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
+}
+
+export function getGeneratedMediaPreFrameRect(
+    position: CanvasEnginePoint,
+    dimensions: { width: number; height: number },
+    configuredScale: number,
+): CanvasEngineRect {
+    const size = getGeneratedMediaPreFrameSize(dimensions, configuredScale)
+    return {
+        x: position.x + (dimensions.width - size) / 2,
+        y: position.y + (dimensions.height - size) / 2,
+        width: size,
+        height: size,
+    }
+}
+
+export function getGeneratedMediaPreFrameLayoutRect(
+    position: CanvasEnginePoint,
+    dimensions: { width: number; height: number },
+    configuredScale: number,
+): CanvasEngineRect {
+    const visualRect = getGeneratedMediaPreFrameRect(position, dimensions, configuredScale)
+    return {
+        x: position.x,
+        y: visualRect.y,
+        width: dimensions.width,
+        height: visualRect.height,
+    }
+}
 
 export function isGeneratedOutputCanvasNode(node: CanvasNode): node is GeneratedOutputCanvasNode {
     return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
@@ -16,6 +56,8 @@ export function isGeneratedMediaCanvasNode(node: CanvasNode): node is GeneratedM
 
 export function isPendingGeneratedMediaCanvasNode(node: CanvasNode): boolean {
     if (!isGeneratedMediaCanvasNode(node)) return false
+    if (node.generationProgress
+        && ['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)) return false
     if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
 
     // Compatibility for transient pre-Asset client snapshots. Revision-2 API

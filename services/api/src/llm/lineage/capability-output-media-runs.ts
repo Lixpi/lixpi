@@ -1,6 +1,6 @@
 'use strict'
 
-import type { AiModelId } from '@lixpi/constants'
+import type { AiModelId, MediaGenerationRun } from '@lixpi/constants'
 
 import { getAssetRecord } from '../../models/asset.ts'
 
@@ -13,6 +13,30 @@ export type PreassignedCapabilityMediaRun = {
     mediaType: 'image' | 'video'
     mediaIndex: number
     mediaRunId: string
+}
+
+export function resolveDurableMediaRuns(
+    runs: readonly MediaGenerationRun[] | undefined,
+): PreassignedCapabilityMediaRun[] | undefined {
+    if (!runs?.length) return undefined
+    const resolved = runs.flatMap((run): PreassignedCapabilityMediaRun[] => {
+        if (!run.outputAssetId
+            || !run.reasoningRunId
+            || !run.mediaRunId
+            || !run.mediaType
+            || run.mediaIndex === undefined) return []
+        return [{
+            assetId: run.outputAssetId,
+            reasoningModelId: run.reasoningModelId,
+            reasoningRunId: run.reasoningRunId,
+            reasoningIndex: run.reasoningIndex,
+            mediaModelId: run.modelId,
+            mediaType: run.mediaType,
+            mediaIndex: run.mediaIndex,
+            mediaRunId: run.mediaRunId,
+        }]
+    })
+    return resolved.length === runs.length ? resolved : undefined
 }
 
 export async function resolveCapabilityOutputMediaRuns(

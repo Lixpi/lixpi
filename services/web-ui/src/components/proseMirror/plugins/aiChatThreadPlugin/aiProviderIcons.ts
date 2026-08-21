@@ -5,7 +5,7 @@ import {
     gptAvatarIcon,
     stabilityIcon,
     bytedanceIcon,
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 
 // Resolves a model's iconName/colorIconName (synced from ai-models-synchronization)
 // to its SVG markup. Keyed by the icon-name string, not by provider, so colored

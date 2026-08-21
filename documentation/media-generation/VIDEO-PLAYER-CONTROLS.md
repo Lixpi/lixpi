@@ -5,7 +5,7 @@ description: The one shared SVG video control bar used for generated and saved v
 
 # Video Player Controls
 
-Lixpi uses **one shared SVG video control bar** for generated and saved videos. The control bar is a framework-agnostic D3 primitive in [`services/web-ui/src/components/videoControls/`](../../services/web-ui/src/components/videoControls/videoControls.ts), mounted in two places:
+Lixpi uses **one shared SVG video control bar** for generated and saved videos. The control bar is a framework-agnostic D3 primitive in [`packages/lixpi/ui-kit/src/components/videoControls/`](../../packages/lixpi/ui-kit/src/components/videoControls/videoControls.ts), mounted in two places:
 
 - below canvas `VideoCanvasNode`s in the transformed workspace chrome layer
 - below in-chat generated video nodes in the ProseMirror AI chat history
@@ -169,13 +169,13 @@ Video controls add **no** persisted data model, NATS subject, API route, Object 
 
 | Area | File |
 |------|------|
-| Shared control component | [videoControls.ts](../../services/web-ui/src/components/videoControls/videoControls.ts) |
-| Component barrel | [index.ts](../../services/web-ui/src/components/videoControls/index.ts) |
-| SVG glyphs | [svgIcons/index.ts](../../services/web-ui/src/svgIcons/index.ts) |
+| Shared control component | [videoControls.ts](../../packages/lixpi/ui-kit/src/components/videoControls/videoControls.ts) |
+| Component barrel | [index.ts](../../packages/lixpi/ui-kit/src/components/videoControls/index.ts) |
+| SVG glyphs | [svg/svgIcons.ts](../../packages/lixpi/ui-kit/src/svg/svgIcons.ts) |
 | Canvas video element + poster handler | [videoNodeHandler.ts](../../services/web-ui/src/infographics/workspace/rendering/videoNodeHandler.ts) |
 | Canvas chrome mount | [WorkspaceCanvas.ts](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) |
 | In-chat video mount | [aiGeneratedVideoNode.ts](../../services/web-ui/src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts) |
-| Control tests | [videoControls.test.ts](../../services/web-ui/src/components/videoControls/videoControls.test.ts) |
+| Control tests | [videoControls.test.ts](../../packages/lixpi/ui-kit/src/components/videoControls/videoControls.test.ts) |
 | Canvas source-shape coverage | [workspace-canvas.test.ts](../../services/web-ui/src/infographics/workspace/workspace-canvas.test.ts) |
 | Local canvas README | [README.md](../../services/web-ui/src/infographics/workspace/README.md) |
 

@@ -1,0 +1,54 @@
+.media-model-badge {
+    min-width: 0;
+    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--workspace-media-model-badge-icon-gap, 3px);
+    color: var(--workspace-media-model-badge-provider-color, #4d5963);
+    line-height: 1;
+    pointer-events: none;
+}
+
+.media-model-badge-icon,
+.media-model-badge svg {
+    width: var(--workspace-generated-media-chrome-icon-size, 34px);
+    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
+    fill: currentColor;
+}
+
+.media-model-badge-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.media-model-badge-icon svg {
+    display: block;
+    transform: scale(var(--media-model-badge-icon-optical-scale, 1));
+    transform-origin: center;
+}
+
+.media-model-badge-icon svg.regular-claude {
+    --media-model-badge-icon-optical-scale: 0.9;
+}
+
+.media-model-badge-icon svg.stability-icon {
+    --media-model-badge-icon-optical-scale: 1.0833;
+}
+
+.media-model-badge-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--workspace-media-model-badge-provider-color, #4d5963);
+    font-size: var(--workspace-media-model-badge-name-font-size, 15px);
+    font-weight: var(--workspace-media-model-badge-name-font-weight, 400);
+    line-height: var(--workspace-media-model-badge-name-line-height, 1.5);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.media-model-badge-model {
+    color: var(--workspace-media-model-badge-model-color, #181e23);
+}

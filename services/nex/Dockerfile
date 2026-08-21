@@ -34,6 +34,9 @@ ARG TARGETARCH
 #                    branded iPhone files) with "bad seek … Decoder plugin error",
 #                    so HEIC/HEIF decoding is delegated to heif-convert.
 # (sharp, used for non-HEIC images, is an npm dependency installed below.)
+# Character fidelity uses onnxruntime-web's WASM backend rather than a native
+# musl binding. Its pinned YuNet/SFace artifacts are copied with workloads and
+# verified by SHA-256 before a session is created.
 RUN apk add --update --no-cache curl ca-certificates libc6-compat ffmpeg libreoffice poppler-utils libheif-tools
 
 # pnpm installs the workload's node_modules (mirrors services/api).

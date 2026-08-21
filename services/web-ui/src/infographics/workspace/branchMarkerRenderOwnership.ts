@@ -4,6 +4,8 @@ import type {
     BranchForkCanvasNode,
     BranchLineCanvasNode,
     BranchOriginCanvasNode,
+    CanvasNode,
+    MediaBranchLineagePlan,
 } from '@lixpi/constants'
 
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
@@ -13,9 +15,54 @@ export type BranchMarkerRenderOwnership = {
     visibleOwnerBySuppressedNodeId: Map<string, string>
 }
 
-export type PreflightBranchMarkerScreenOwnership = {
-    visiblePreflightNodes: BranchMarkerNode[]
-    supersededPreflightNodeIds: Set<string>
+type PlannedBranchMarkerIdentity = {
+    nodeId: string
+    type: BranchMarkerNode['type']
+    generationRequestId: string
+}
+
+function isBranchMarkerNode(node: CanvasNode): node is BranchMarkerNode {
+    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
+}
+
+function getPlannedBranchMarkerIdentities(
+    lineagePlan: MediaBranchLineagePlan,
+): PlannedBranchMarkerIdentity[] {
+    return [
+        ...(lineagePlan.branchOrigin
+            ? [{
+                nodeId: lineagePlan.branchOrigin.nodeId,
+                type: 'branchOrigin' as const,
+                generationRequestId: lineagePlan.branchOrigin.generationRequestId,
+            }]
+            : []),
+        ...lineagePlan.branchForks.map(marker => ({
+            nodeId: marker.nodeId,
+            type: 'branchFork' as const,
+            generationRequestId: marker.generationRequestId,
+        })),
+        ...lineagePlan.branchLines.map(marker => ({
+            nodeId: marker.nodeId,
+            type: 'branchLine' as const,
+            generationRequestId: marker.generationRequestId,
+        })),
+    ]
+}
+
+export function hasCompletePlannedBranchMarkerGeometry(
+    nodes: CanvasNode[],
+    lineagePlan: MediaBranchLineagePlan,
+): boolean {
+    const plannedMarkers = getPlannedBranchMarkerIdentities(lineagePlan)
+    if (plannedMarkers.length === 0) return false
+
+    return plannedMarkers.every(plannedMarker => nodes.some(node =>
+        isBranchMarkerNode(node)
+        && node.nodeId === plannedMarker.nodeId
+        && node.type === plannedMarker.type
+        && node.generationRequestId === plannedMarker.generationRequestId
+        && node.pendingState?.phase !== 'preflight'
+    ))
 }
 
 function getReasoningIndex(node: BranchMarkerNode): number | undefined {
@@ -32,10 +79,17 @@ function getReasoningModelId(node: BranchMarkerNode): string {
     return ''
 }
 
+function getPreflightSlotKey(node: BranchMarkerNode): string {
+    const reasoningIndex = getReasoningIndex(node)
+    if (reasoningIndex != null) return `reasoning-index:${reasoningIndex}`
+    const reasoningModelId = getReasoningModelId(node)
+    if (reasoningModelId) return `reasoning-model:${reasoningModelId}`
+    return `generation-request:${node.generationRequestId}`
+}
+
 function selectPlannedOwner(
     preflightNode: BranchMarkerNode,
     plannedNodes: BranchMarkerNode[],
-    preflightCount: number,
 ): BranchMarkerNode | undefined {
     const reasoningIndex = getReasoningIndex(preflightNode)
     if (reasoningIndex != null) {
@@ -49,7 +103,25 @@ function selectPlannedOwner(
         if (modelMatches.length === 1) return modelMatches[0]
     }
 
-    return preflightCount === 1 && plannedNodes.length === 1 ? plannedNodes[0] : undefined
+    return plannedNodes.length === 1 ? plannedNodes[0] : undefined
+}
+
+export function getSupersededPreflightNodeIdsForPlannedOwner(
+    nodes: BranchMarkerNode[],
+    plannedOwner: BranchMarkerNode,
+): string[] {
+    if (plannedOwner.pendingState?.phase === 'preflight' || !plannedOwner.conversationAssetId) return []
+
+    const threadNodes = nodes.filter(node => node.conversationAssetId === plannedOwner.conversationAssetId)
+    const preflightNodes = threadNodes.filter(node => node.pendingState?.phase === 'preflight')
+    const plannedNodes = [
+        ...threadNodes.filter(node =>
+            node.pendingState?.phase !== 'preflight' && node.nodeId !== plannedOwner.nodeId),
+        plannedOwner,
+    ]
+    return preflightNodes
+        .filter(preflightNode => selectPlannedOwner(preflightNode, plannedNodes)?.nodeId === plannedOwner.nodeId)
+        .map(node => node.nodeId)
 }
 
 export function resolveBranchMarkerRenderOwnership(
@@ -68,37 +140,44 @@ export function resolveBranchMarkerRenderOwnership(
         const threadNodes = nodes.filter(node => node.conversationAssetId === threadId)
         const preflightNodes = threadNodes.filter(node => node.pendingState?.phase === 'preflight')
         const plannedNodes = threadNodes.filter(node => node.pendingState?.phase !== 'preflight')
-        for (const preflightNode of preflightNodes) {
-            const plannedOwner = selectPlannedOwner(preflightNode, plannedNodes, preflightNodes.length)
-            if (!plannedOwner) continue
+        const preflightOwnerByNodeId = new Map(
+            preflightNodes.map(preflightNode => [
+                preflightNode.nodeId,
+                selectPlannedOwner(preflightNode, plannedNodes),
+            ]),
+        )
+        for (const plannedOwner of plannedNodes) {
+            const matchingPreflightNodes = preflightNodes.filter(preflightNode =>
+                preflightOwnerByNodeId.get(preflightNode.nodeId)?.nodeId === plannedOwner.nodeId)
+            if (matchingPreflightNodes.length === 0) continue
 
             const visibleOwner = startedPlannedNodeIds.has(plannedOwner.nodeId)
                 ? plannedOwner
-                : preflightNode
-            const suppressedNode = visibleOwner === plannedOwner
-                ? preflightNode
-                : plannedOwner
-            suppressedNodeIds.add(suppressedNode.nodeId)
-            visibleOwnerBySuppressedNodeId.set(suppressedNode.nodeId, visibleOwner.nodeId)
+                : matchingPreflightNodes[0]!
+            for (const candidate of [plannedOwner, ...matchingPreflightNodes]) {
+                if (candidate.nodeId === visibleOwner.nodeId) continue
+                suppressedNodeIds.add(candidate.nodeId)
+                visibleOwnerBySuppressedNodeId.set(candidate.nodeId, visibleOwner.nodeId)
+            }
+        }
+
+        const unmatchedPreflightGroups = new Map<string, BranchMarkerNode[]>()
+        for (const preflightNode of preflightNodes) {
+            if (preflightOwnerByNodeId.get(preflightNode.nodeId)) continue
+            const slotKey = getPreflightSlotKey(preflightNode)
+            const slotNodes = unmatchedPreflightGroups.get(slotKey) ?? []
+            slotNodes.push(preflightNode)
+            unmatchedPreflightGroups.set(slotKey, slotNodes)
+        }
+        for (const slotNodes of unmatchedPreflightGroups.values()) {
+            const visibleOwner = slotNodes[0]
+            if (!visibleOwner) continue
+            for (const duplicateNode of slotNodes.slice(1)) {
+                suppressedNodeIds.add(duplicateNode.nodeId)
+                visibleOwnerBySuppressedNodeId.set(duplicateNode.nodeId, visibleOwner.nodeId)
+            }
         }
     }
 
     return { suppressedNodeIds, visibleOwnerBySuppressedNodeId }
-}
-
-export function resolvePreflightBranchMarkerScreenOwnership(
-    nodes: BranchMarkerNode[],
-    startedPlannedNodeIds: ReadonlySet<string>,
-): PreflightBranchMarkerScreenOwnership {
-    const ownership = resolveBranchMarkerRenderOwnership(nodes, startedPlannedNodeIds)
-    const preflightNodes = nodes.filter(node => node.pendingState?.phase === 'preflight')
-    const supersededPreflightNodeIds = new Set(
-        preflightNodes
-            .filter(node => ownership.suppressedNodeIds.has(node.nodeId))
-            .map(node => node.nodeId),
-    )
-    return {
-        visiblePreflightNodes: preflightNodes.filter(node => !supersededPreflightNodeIds.has(node.nodeId)),
-        supersededPreflightNodeIds,
-    }
 }

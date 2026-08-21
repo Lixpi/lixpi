@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
     buildBranchMarkerTurnProjectionFromThreadContent,
+    buildGeneratedMediaTurnProjectionFromThreadContent,
+    getGeneratedMediaProgressFromThreadContent,
 } from './generated-media-turn-projection.ts'
 import {
     collectProseMirrorText,
@@ -208,5 +210,215 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
 
         expect(projectedThread?.content).toEqual([submittedUserMessage])
         expect(collectProseMirrorText(projection?.content)).not.toContain('Previous response that must not appear.')
+    })
+})
+
+describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
+    it('resolves a completed media timeline from sealed thread content', () => {
+        const generationProgress = {
+            generationRequestId: 'request-1',
+            mediaRunId: 'media-run-1',
+            status: 'completed' as const,
+            message: 'Done.',
+            progress: {
+                phase: 'composing' as const,
+                completedSteps: 1,
+                totalSteps: 1,
+                message: 'Done.',
+                items: [{ id: 'generate', title: 'Generate media', status: 'completed' as const }],
+            },
+            updatedAt: 10,
+        }
+        const content: ProseMirrorJsonNode = {
+            type: 'doc',
+            content: [{
+                type: 'aiChatThread',
+                attrs: { threadId: 'thread-1' },
+                content: [responseMessage(
+                    { id: 'response-1' },
+                    [{
+                        type: 'aiGeneratedImage',
+                        attrs: {
+                            assetId: 'asset-1',
+                            mediaRunId: 'media-run-1',
+                            generationProgress,
+                        },
+                    }],
+                )],
+            }],
+        }
+
+        const resolved = getGeneratedMediaProgressFromThreadContent(content, {
+            responseMessageId: 'response-1',
+            mediaRunId: 'media-run-1',
+            assetId: 'asset-1',
+        })
+
+        expect(resolved).toEqual(generationProgress)
+        expect(resolved).not.toBe(generationProgress)
+    })
+
+    it('starts history with one pipeline that absorbs the preamble and media prompt', () => {
+        const mediaPrompt = [
+            'Use the reference image to create one consistent character sheet.',
+            'Keep the identity stable across every rendered view.',
+        ].join('\n\n')
+        const streamedMediaPrompt = mediaPrompt.replace(/\s+/gu, '')
+        const generationProgress = {
+            generationRequestId: 'request-1',
+            mediaRunId: 'media-run-1',
+            status: 'completed',
+            message: 'Done.',
+            progress: {
+                phase: 'composing',
+                completedSteps: 2,
+                totalSteps: 2,
+                message: 'Done.',
+                items: [
+                    {
+                        id: 'lineage:understand-request',
+                        title: 'Understand request',
+                        status: 'completed',
+                        summary: 'Stale aggregate that incorrectly includes the media prompt.',
+                    },
+                    {
+                        id: 'lineage:resolve-capabilities-and-references',
+                        title: 'Resolve capabilities, tools, and references',
+                        status: 'completed',
+                    },
+                    {
+                        id: 'lineage:resolve-branch-lineage',
+                        title: 'Resolve branch lineage and media runs',
+                        status: 'completed',
+                    },
+                    { id: 'generate', title: 'Generate media', status: 'completed' },
+                ],
+            },
+            updatedAt: 10,
+        }
+        const content: ProseMirrorJsonNode = {
+            type: 'doc',
+            content: [{
+                type: 'aiChatThread',
+                attrs: { threadId: 'thread-1' },
+                content: [
+                    userMessage('Create a character.'),
+                    responseMessage(
+                        { id: 'response-1', generationRequestId: 'request-1' },
+                        [{
+                            type: 'aiReasoningSection',
+                            attrs: {
+                                generationRequestId: 'request-1',
+                                reasoningRunId: 'reasoning-run-1',
+                                reasoningModelId: 'Model:reasoning',
+                            },
+                            content: [
+                                paragraph([
+                                    'I will build a consistent character sheet.',
+                                    "Here's the detailed prompt I'll use for generation:",
+                                    streamedMediaPrompt,
+                                ].join('\n\n')),
+                                {
+                                    type: 'aiCollapsibleBlock',
+                                    attrs: {
+                                        generationRequestId: 'request-1',
+                                        reasoningRunId: 'reasoning-run-1',
+                                        mediaRunId: 'media-run-2',
+                                        imageGenerationTrace: {
+                                            toolPrompt: 'Sibling prompt that must be excluded.',
+                                            generationRun: {
+                                                generationRequestId: 'request-1',
+                                                reasoningRunId: 'reasoning-run-1',
+                                                mediaRunId: 'media-run-2',
+                                            },
+                                        },
+                                    },
+                                    content: [paragraph('Sibling generation trace that must be excluded')],
+                                },
+                                {
+                                    type: 'aiCollapsibleBlock',
+                                    attrs: {
+                                        generationRequestId: 'request-1',
+                                        reasoningRunId: 'reasoning-run-1',
+                                        mediaRunId: 'media-run-1',
+                                        imageGenerationTrace: {
+                                            toolPrompt: mediaPrompt,
+                                            generationRun: {
+                                                generationRequestId: 'request-1',
+                                                reasoningRunId: 'reasoning-run-1',
+                                                mediaRunId: 'media-run-1',
+                                            },
+                                        },
+                                    },
+                                    content: [paragraph('Generation trace')],
+                                },
+                                {
+                                    type: 'aiGeneratedImage',
+                                    attrs: {
+                                        assetId: 'asset-2',
+                                        reasoningRunId: 'reasoning-run-1',
+                                        mediaRunId: 'media-run-2',
+                                    },
+                                },
+                                {
+                                    type: 'aiGeneratedImage',
+                                    attrs: {
+                                        assetId: 'asset-1',
+                                        reasoningRunId: 'reasoning-run-1',
+                                        mediaRunId: 'media-run-1',
+                                        generationProgress,
+                                    },
+                                },
+                            ],
+                        }],
+                    ),
+                ],
+            }],
+        }
+
+        const projection = buildGeneratedMediaTurnProjectionFromThreadContent(content, {
+            responseMessageId: 'response-1',
+            reasoningRunId: 'reasoning-run-1',
+            mediaRunId: 'media-run-1',
+            assetId: 'asset-1',
+        }, {
+            threadId: 'thread-1',
+            limitToLocatorMedia: true,
+            includeGenerationProgressTimeline: true,
+        })
+        const projectedMessages = projection?.content.content?.[0]?.content ?? []
+        const projectedSection = projectedMessages[1]?.content?.[0]
+
+        expect(projectedMessages.map(node => node.type)).toEqual(['aiUserMessage', 'aiResponseMessage'])
+        expect(projectedSection?.content?.map(node => node.type)).toEqual([
+            'aiMediaGenerationProgress',
+            'aiCollapsibleBlock',
+            'aiGeneratedImage',
+        ])
+        expect(projectedSection?.content?.[0]?.attrs).toMatchObject({
+            showSummaryWhenCollapsedItemIds: ['lineage:understand-request'],
+        })
+        expect(projectedSection?.content?.[0]?.attrs?.state.progress.items).toEqual([
+            expect.objectContaining({
+                id: 'lineage:understand-request',
+                summary: [
+                    'I will build a consistent character sheet.',
+                    "Here's the detailed prompt I'll use for generation:",
+                ].join('\n\n'),
+            }),
+            expect.objectContaining({ id: 'lineage:resolve-capabilities-and-references' }),
+            expect.objectContaining({ id: 'lineage:resolve-branch-lineage' }),
+            {
+                id: 'lineage:media-generation-prompt',
+                title: 'Prompt for media generation model written by reasoning model',
+                status: 'completed',
+                summary: mediaPrompt,
+            },
+            expect.objectContaining({ id: 'generate' }),
+        ])
+        expect(collectProseMirrorText(projection?.content)).not.toContain('Sibling generation trace')
+        expect(collectProseMirrorText(projection?.content)).not.toContain('I will build a consistent character sheet.')
+        expect(projectedSection?.content?.filter(node => node.type === 'aiCollapsibleBlock')).toHaveLength(1)
+        expect(projectedSection?.content?.filter(node => node.type === 'aiGeneratedImage')).toHaveLength(1)
     })
 })

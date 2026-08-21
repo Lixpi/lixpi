@@ -1,0 +1,11 @@
+name: character-fidelity
+description: In-memory YuNet and SFace character panel fidelity scoring
+type: native
+lifecycle: service
+start_request:
+  uri: "file:///usr/local/bin/node"
+  argv:
+    - "--experimental-transform-types"
+    - "--disable-warning=ExperimentalWarning"
+    - "/usr/src/service/workloads/character-fidelity/index.ts"
+  environment: {}

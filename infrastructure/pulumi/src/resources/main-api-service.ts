@@ -81,6 +81,7 @@ export type MainApiServiceArgs = {
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
         GOOGLE_API_KEY: string
+        GOOGLE_VEO_PERSON_GENERATION_PROFILE: string
         STABLE_DIFFUSION_API_KEY: string
         ARK_API_KEY: string
         LLM_TIMEOUT_SECONDS: string

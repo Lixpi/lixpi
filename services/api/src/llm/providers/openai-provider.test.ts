@@ -1,12 +1,12 @@
 'use strict'
 
-import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ImageInputFidelityPolicy } from '@lixpi/constants'
+import type { AiModelInferenceCapabilities, ImageReferenceCapabilities } from '@lixpi/constants'
 
-import { OpenAIProvider } from './openai-provider.ts'
+import {
+    appendOpenAIImageGenerationReferences,
+    OpenAIProvider,
+} from './openai-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
@@ -38,13 +38,32 @@ vi.mock('../../services/asset-maintenance-queue.ts', () => ({
     enqueueProvenanceRebuild: vi.fn(async () => undefined),
 }))
 
-const CHARACTER_SOURCE_BYTES = Buffer.from('authoritative-character-source')
+const ORIGINAL_SOURCE_BYTES = Buffer.from('authoritative-original-source')
+const FACE_CROP_BYTES = Buffer.from('authoritative-face-crop')
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
 
-const loadCharacterSheetExample = async (): Promise<Buffer> => await readFile(new URL(
-    '../../../../shared/capability-system/src/capabilities/character-creator/tools/resources/character-sheet-example.jpg',
-    import.meta.url,
-))
+const OPENAI_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    thinkingMode: 'none',
+    requiresAutoToolChoiceWithThinking: false,
+    supportsTemperature: true,
+    supportsSystemPrompt: true,
+    requiresClosedJsonSchema: true,
+    supportedInputKinds: ['image', 'video-frame', 'document-text'],
+}
+
+const capabilities = (inputFidelity: ImageReferenceCapabilities['inputFidelity']): ImageReferenceCapabilities => ({
+    maxReferenceImages: 16,
+    maxIdentityReferenceImages: 5,
+    conditioningModes: ['edit', 'identity', 'style'],
+    inputFidelity,
+    supportsIterativeEdit: true,
+    supportsMask: true,
+    supportsStructureControl: false,
+    supportsPoseControl: false,
+    supportsDeterministicSeed: false,
+    maxOutputPixels: 1572864,
+    supportedAspectRatios: ['1:1', '3:2', '2:3'],
+})
 
 type CapturedOpenAIRequest = {
     request: Request
@@ -75,9 +94,8 @@ const getUploadedFiles = (formData: FormData): File[] => {
 
 const processWithCharacterReferences = async (
     modelVersion: string,
-    imageInputFidelity: ImageInputFidelityPolicy,
+    inputFidelity: ImageReferenceCapabilities['inputFidelity'],
 ): Promise<CapturedOpenAIRequest> => {
-    const layoutExampleBytes = await loadCharacterSheetExample()
     const capturedRequests: CapturedOpenAIRequest[] = []
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const request = input instanceof Request
@@ -115,22 +133,23 @@ const processWithCharacterReferences = async (
             provider: 'OpenAI',
             model: modelVersion,
             modelVersion,
-            imageInputFidelity,
+            inferenceCapabilities: OPENAI_INFERENCE_CAPABILITIES,
+            imageReferenceCapabilities: capabilities(inputFidelity),
         },
         messages: [{
             role: 'user',
-            content: 'Reproduce reference image 1 as the character. Use reference image 2 only as the sheet layout.',
+            content: 'Render a front portrait using the authoritative source and face crop.',
         }],
         imageGenerationReferences: [
             {
-                url: `data:image/png;base64,${CHARACTER_SOURCE_BYTES.toString('base64')}`,
-                role: 'character-source',
-                fileName: 'character-source-1',
+                url: `data:image/png;base64,${ORIGINAL_SOURCE_BYTES.toString('base64')}`,
+                role: 'original-source',
+                fileName: 'original-source-1',
             },
             {
-                url: `data:image/jpeg;base64,${layoutExampleBytes.toString('base64')}`,
-                role: 'character-layout-example',
-                fileName: 'character-layout-example-1',
+                url: `data:image/png;base64,${FACE_CROP_BYTES.toString('base64')}`,
+                role: 'face-crop',
+                fileName: 'face-crop-1',
             },
         ],
         generationRun: {
@@ -156,7 +175,7 @@ const processWithCharacterReferences = async (
     return editRequests[0]!
 }
 
-describe('OpenAIProvider character-reference ingestion', () => {
+describe('OpenAIProvider panel-reference ingestion', () => {
     const previousApiKey = process.env.OPENAI_API_KEY
     let consoleLogSpy: ReturnType<typeof vi.spyOn> | null = null
 
@@ -174,56 +193,83 @@ describe('OpenAIProvider character-reference ingestion', () => {
         else process.env.OPENAI_API_KEY = previousApiKey
     })
 
-    it('uploads the authoritative character first and layout example second to the image-edit endpoint', async () => {
-        const captured = await processWithCharacterReferences('gpt-image-2', { level: 'high' })
+    it('uploads prioritized panel references to the image-edit endpoint', async () => {
+        const captured = await processWithCharacterReferences('gpt-image-2', 'provider-managed')
         const files = getUploadedFiles(captured.formData)
-        const layoutExampleBytes = await loadCharacterSheetExample()
+        const prompt = String(captured.formData.get('prompt'))
 
         expect(captured.request.url).toBe('https://api.openai.com/v1/images/edits')
         expect(captured.formData.get('model')).toBe('gpt-image-2')
-        expect(captured.formData.get('prompt')).toBe(
-            'Reproduce reference image 1 as the character. Use reference image 2 only as the sheet layout.',
-        )
+        expect(prompt).toContain('INPUT IMAGE ORDER')
+        expect(prompt).toContain('INPUT IMAGE 1 — AUTHORITATIVE ORIGINAL SOURCE')
+        expect(prompt).toContain('INPUT IMAGE 2 — FACE IDENTITY CROP')
+        expect(prompt).toContain('Render a front portrait using the authoritative source and face crop.')
         expect(files.map(file => ({
             name: file.name,
             type: file.type,
         }))).toEqual([
-            { name: 'character-source-1.png', type: 'image/png' },
-            { name: 'character-layout-example-1.jpg', type: 'image/jpeg' },
+            { name: 'original-source-1.png', type: 'image/png' },
+            { name: 'face-crop-1.png', type: 'image/png' },
         ])
         await expect(files[0]?.arrayBuffer()).resolves.toEqual(
-            CHARACTER_SOURCE_BYTES.buffer.slice(
-                CHARACTER_SOURCE_BYTES.byteOffset,
-                CHARACTER_SOURCE_BYTES.byteOffset + CHARACTER_SOURCE_BYTES.byteLength,
+            ORIGINAL_SOURCE_BYTES.buffer.slice(
+                ORIGINAL_SOURCE_BYTES.byteOffset,
+                ORIGINAL_SOURCE_BYTES.byteOffset + ORIGINAL_SOURCE_BYTES.byteLength,
             ),
         )
         await expect(files[1]?.arrayBuffer()).resolves.toEqual(
-            layoutExampleBytes.buffer.slice(
-                layoutExampleBytes.byteOffset,
-                layoutExampleBytes.byteOffset + layoutExampleBytes.byteLength,
+            FACE_CROP_BYTES.buffer.slice(
+                FACE_CROP_BYTES.byteOffset,
+                FACE_CROP_BYTES.byteOffset + FACE_CROP_BYTES.byteLength,
             ),
         )
-        expect(layoutExampleBytes.byteLength).toBe(460138)
-        expect(createHash('sha256').update(layoutExampleBytes).digest('hex')).toBe(
-            '388e3c7a398f43b3e2ad9cebf6019d16c95e4a17289fb5b77a94bf62e11acadd',
-        )
         expect(captured.formData.get('input_fidelity')).toBeNull()
+    })
+
+    it('serializes the same scoped role state for the Responses image path', () => {
+        const referenceBytes = Buffer.from('approved-face-construction')
+        const messages: Array<{ role: string; content: any }> = [{
+            role: 'user',
+            content: 'Rebuild the clothing from the original drawing.',
+        }]
+
+        appendOpenAIImageGenerationReferences(messages, [{
+            url: 'identity-crop-url',
+            role: 'edit-target-identity',
+            fileName: 'EDIT_TARGET_IDENTITY_FACE.png',
+            bytes: referenceBytes,
+            dataUrl: `data:image/png;base64,${referenceBytes.toString('base64')}`,
+            mediaType: 'image/png',
+            byteLength: referenceBytes.byteLength,
+            sha256: 'a'.repeat(64),
+        }])
+
+        expect(messages[0]?.content).toEqual([
+            expect.objectContaining({
+                type: 'input_text',
+                text: expect.stringContaining('INPUT IMAGE 1 — EDIT-TARGET IDENTITY CROP ONLY'),
+            }),
+            {
+                type: 'input_image',
+                image_url: `data:image/png;base64,${referenceBytes.toString('base64')}`,
+                detail: 'high',
+            },
+        ])
+        expect(messages[0]?.content[0]?.text).toContain(
+            'Rebuild the clothing from the original drawing.',
+        )
     })
 
     it.each(['gpt-image-1', 'gpt-image-1.5'])(
         'applies synchronized high-fidelity request metadata for %s',
         async modelVersion => {
-            const captured = await processWithCharacterReferences(modelVersion, {
-                level: 'high',
-                requestValue: 'high',
-            })
-
+            const captured = await processWithCharacterReferences(modelVersion, 'high')
             expect(captured.formData.get('input_fidelity')).toBe('high')
         },
     )
 
     it('does not infer an input-fidelity request from the model name', async () => {
-        const captured = await processWithCharacterReferences('gpt-image-1', { level: 'standard' })
+        const captured = await processWithCharacterReferences('gpt-image-1', 'standard')
 
         expect(captured.formData.get('input_fidelity')).toBeNull()
     })

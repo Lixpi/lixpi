@@ -313,6 +313,13 @@ const buildAssetBlobReferences = async (asset: Asset): Promise<TransactOperation
         })
     }
 
+    for (const component of asset.composition?.components ?? []) {
+        pointers.push({
+            blobHash: component.blobHash,
+            referenceKey: `asset#${asset.assetId}#composition#${component.componentId}`,
+        })
+    }
+
     if (pointers.length > 40) throw new Error('ASSET_BLOB_REFERENCE_LIMIT_EXCEEDED')
 
     const additions: Array<{ blob: BlobRecord; reference: BlobReference }> = []
@@ -404,11 +411,25 @@ const decodeSearchCursor = (
 type AssetCanvasNode = {
     nodeId: string
     assetId?: string
+    type?: string
+    mediaGenerationPhase?: string
+    generationProgress?: {
+        generationRequestId?: string
+        mediaRunId?: string
+    }
+    generatedBy?: {
+        generationRequestId?: string
+        mediaRunId?: string
+    }
 }
 
 type AssetWorkspaceMutation = {
     expectedCanvasStateUpdatedAt: number
     canvasStateUpdatedAt: number
+    adoptUnboundGeneratedMediaReservation?: {
+        generationRequestId: string
+        mediaRunId?: string
+    }
     canvasState: {
         viewport: unknown
         nodes: AssetCanvasNode[]
@@ -434,16 +455,24 @@ const assertSingleAssetMembershipMutation = ({
     assetId,
     nodeId,
     operation,
+    allowExistingTargetMembership,
+    adoptUnboundGeneratedMediaReservation,
 }: {
     beforeNodes: AssetCanvasNode[]
     afterNodes: AssetCanvasNode[]
     assetId: string
     nodeId: string
     operation: 'attach' | 'detach'
+    allowExistingTargetMembership: boolean
+    adoptUnboundGeneratedMediaReservation?: {
+        generationRequestId: string
+        mediaRunId?: string
+    }
 }): void => {
     const before = getAssetMembership(beforeNodes)
     const after = getAssetMembership(afterNodes)
     const assetIds = new Set([...before.keys(), ...after.keys()])
+    let foundExpectedMutation = false
     for (const currentAssetId of assetIds) {
         const beforeNodeIds = before.get(currentAssetId) ?? new Set<string>()
         const afterNodeIds = after.get(currentAssetId) ?? new Set<string>()
@@ -453,10 +482,44 @@ const assertSingleAssetMembershipMutation = ({
             && (operation === 'attach'
                 ? added.length === 1 && added[0] === nodeId && removed.length === 0
                 : removed.length === 1 && removed[0] === nodeId && added.length === 0)
+        if (isExpected) foundExpectedMutation = true
         if ((added.length > 0 || removed.length > 0) && !isExpected) {
             throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
         }
     }
+    if (foundExpectedMutation) return
+
+    const beforeTargetMembership = before.get(assetId)?.has(nodeId) ?? false
+    const afterTargetMembership = after.get(assetId)?.has(nodeId) ?? false
+    if (operation === 'attach'
+        && allowExistingTargetMembership
+        && beforeTargetMembership
+        && afterTargetMembership) return
+
+    const beforeNode = beforeNodes.find((node) => node.nodeId === nodeId)
+    const afterNode = afterNodes.find((node) => node.nodeId === nodeId)
+    const expectedGenerationRequestId = adoptUnboundGeneratedMediaReservation?.generationRequestId
+    const expectedMediaRunId = adoptUnboundGeneratedMediaReservation?.mediaRunId
+    const isReservationAdoption = operation === 'attach'
+        && Boolean(expectedGenerationRequestId)
+        && beforeTargetMembership
+        && afterTargetMembership
+        && (beforeNode?.type === 'image' || beforeNode?.type === 'video')
+        && afterNode?.type === beforeNode.type
+        && beforeNode.assetId === assetId
+        && afterNode.assetId === assetId
+        && beforeNode.mediaGenerationPhase === 'pending-before-first-frame'
+        && beforeNode.generationProgress?.generationRequestId === expectedGenerationRequestId
+        && afterNode.generationProgress?.generationRequestId === expectedGenerationRequestId
+        && !beforeNode.generatedBy
+        && afterNode.generatedBy?.generationRequestId === expectedGenerationRequestId
+        && (!expectedMediaRunId
+            || (beforeNode.generationProgress?.mediaRunId === expectedMediaRunId
+                && afterNode.generationProgress?.mediaRunId === expectedMediaRunId
+                && afterNode.generatedBy?.mediaRunId === expectedMediaRunId))
+    if (isReservationAdoption) return
+
+    throw new Error('CANVAS_ASSET_MEMBERSHIP_MUTATION_REJECTED')
 }
 
 const getAssetProjectionScopeKeys = async (
@@ -525,12 +588,14 @@ const getWorkspaceMutationOperations = async ({
     assetId,
     nodeId,
     operation,
+    allowExistingTargetMembership = false,
 }: {
     workspaceId: string
     mutation: AssetWorkspaceMutation
     assetId: string
     nodeId: string
     operation: 'attach' | 'detach'
+    allowExistingTargetMembership?: boolean
 }): Promise<TransactOperation[]> => {
     const workspace = await dynamoDBService.getItem({
         tableName: getDynamoDbTableStageName('WORKSPACES', ORG_NAME, STAGE),
@@ -554,6 +619,8 @@ const getWorkspaceMutationOperations = async ({
         assetId,
         nodeId,
         operation,
+        allowExistingTargetMembership,
+        adoptUnboundGeneratedMediaReservation: mutation.adoptUnboundGeneratedMediaReservation,
     })
     for (const node of mutation.canvasState.nodes as Array<AssetCanvasNode & Record<string, unknown>>) {
         for (const field of ['fileId', 'posterFileId', 'frameFileId', 'src', 'posterSrc', 'referenceId', 'aiChatThreadId']) {
@@ -600,6 +667,7 @@ type CreateAssetInput = Pick<
     | 'assetId'
     | 'documents'
     | 'media'
+    | 'composition'
     | 'artifact'
     | 'lineage'
     | 'generatedOutputReview'
@@ -631,7 +699,7 @@ export const assertAssetComponents = (asset: Asset): void => {
             throw new Error('INVALID_ASSET_PROVIDER_IDENTITY_VERIFICATION')
         }
     }
-    if (!asset.media && !asset.artifact && !asset.lineage && Object.keys(asset.documents).length === 0) {
+    if (!asset.media && !asset.composition && !asset.artifact && !asset.lineage && Object.keys(asset.documents).length === 0) {
         throw new Error('ASSET_COMPONENT_REQUIRED')
     }
     for (const [role, pointer] of Object.entries(asset.documents)) {
@@ -697,6 +765,32 @@ export const assertAssetComponents = (asset: Asset): void => {
         ]
         if (lineageIds.some((lineageId) => lineageId === asset.assetId)) throw new Error('SELF_REFERENTIAL_ASSET_LINEAGE')
     }
+    if (asset.composition) {
+        if (asset.composition.schemaVersion !== 'asset-media-composition-v1'
+            || !asset.composition.kind.trim()
+            || !asset.composition.capabilityId.trim()
+            || !Array.isArray(asset.composition.sourceAssetIds)
+            || !Array.isArray(asset.composition.components)
+            || asset.composition.components.length === 0
+            || asset.composition.components.length > 32) {
+            throw new Error('INVALID_ASSET_MEDIA_COMPOSITION')
+        }
+        const componentIds = new Set<string>()
+        for (const component of asset.composition.components) {
+            if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
+                || componentIds.has(component.componentId)
+                || !component.role.trim()
+                || !component.title.trim()
+                || !/^[a-f0-9]{64}$/u.test(component.blobHash)
+                || component.mimeType !== 'image/png'
+                || !Number.isSafeInteger(component.byteSize)
+                || component.byteSize <= 0) {
+                throw new Error('INVALID_ASSET_MEDIA_COMPOSITION_COMPONENT')
+            }
+            componentIds.add(component.componentId)
+        }
+        if (!asset.lineage) throw new Error('ASSET_MEDIA_COMPOSITION_REQUIRES_LINEAGE')
+    }
     if (asset.generatedOutputReview && !asset.lineage) throw new Error('GENERATED_OUTPUT_REVIEW_REQUIRES_LINEAGE')
     if (asset.descriptor && !isValidDescriptor(asset.descriptor)) throw new Error('INVALID_ASSET_DESCRIPTOR')
 }
@@ -712,6 +806,7 @@ const AssetModel = {
         ownerUserId,
         documents = {},
         media,
+        composition,
         artifact,
         lineage,
         generatedOutputReview,
@@ -799,6 +894,7 @@ const AssetModel = {
             ownerUserId,
             documents: resolvedDocuments,
             ...(media ? { media } : {}),
+            ...(composition ? { composition } : {}),
             ...(artifact ? { artifact } : {}),
             ...(lineage ? { lineage } : {}),
             ...(generatedOutputReview ? { generatedOutputReview } : {}),
@@ -1755,6 +1851,7 @@ const AssetModel = {
                 assetId,
                 nodeId,
                 operation: 'attach',
+                allowExistingTargetMembership: true,
             })
             await dynamoDBService.transactWrite({
                 operations: workspaceOperations,
@@ -1790,6 +1887,7 @@ const AssetModel = {
                 assetId,
                 nodeId,
                 operation: 'attach',
+                allowExistingTargetMembership: Boolean(existing?.nodeIds?.includes(nodeId)),
             })
             : []
         const workspaceGuardOperations: TransactOperation[] = workspaceOperations.length === 0

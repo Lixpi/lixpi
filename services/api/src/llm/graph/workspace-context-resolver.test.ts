@@ -532,6 +532,41 @@ describe('resolveWorkspaceContext', () => {
         expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBeUndefined()
     })
 
+    it('does not duplicate an explicit asset already present under the browser candidate ID', async () => {
+        const { deps, callLlm } = createDeps({ selections: [] })
+        const browserCandidate: MediaBranchCandidateImage = {
+            ...baseCandidates[0]!,
+            candidateId: 'node:goat-image',
+            roleHints: ['base-context', 'active-target'],
+        }
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'goat-image'
+                    ? { ...node, isExplicitChip: true }
+                    : node),
+            },
+            mediaBranchCandidateSnapshot: {
+                ...createState().mediaBranchCandidateSnapshot!,
+                activeTargetCandidateId: browserCandidate.candidateId,
+                explicitReferenceCandidateIds: [browserCandidate.candidateId],
+                candidates: [browserCandidate],
+            },
+        }), deps)
+
+        expect(callLlm).not.toHaveBeenCalled()
+        expect(update.mediaBranchCandidateSnapshot?.candidates).toHaveLength(1)
+        expect(update.mediaBranchCandidateSnapshot?.candidates[0]).toMatchObject({
+            candidateId: 'node:goat-image',
+            nodeId: 'goat-image',
+            assetId: 'asset-goat-image',
+        })
+        expect(update.mediaBranchCandidateSnapshot?.explicitReferenceCandidateIds).toEqual(['node:goat-image'])
+        expect(update.mediaBranchCandidateSnapshot?.activeTargetCandidateId).toBe('node:goat-image')
+        expect(update.mediaBranchCandidateSnapshot?.transcriptContext.match(/assetId=asset-goat-image/g)).toHaveLength(1)
+    })
+
     it('keeps non-media explicit chips exclusive too and yields no media candidates', async () => {
         const { deps, callLlm } = createDeps({ selections: [] })
 
@@ -592,6 +627,48 @@ describe('resolveWorkspaceContext', () => {
         expect(natsService.getObject).toHaveBeenCalled()
         expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-timeline'], 'capabilityArtifact')
         expect(loadAssetDocumentSnapshot).toHaveBeenCalledWith(assetById['asset-travel-notes'], 'content')
+    })
+
+    it('aliases Asset display names in expanded Artifact context when media bindings are active', async () => {
+        const { deps } = createDeps({ selections: [] })
+        const bindings = [{
+            assetId: 'asset-shelby',
+            assetRevision: 1,
+            mediaKind: 'image' as const,
+            alias: 'REFERENCE_1' as const,
+            displayNameSnapshot: 'Shelby',
+            forbiddenNameVariants: ['Shelby'],
+            semanticDescriptor: 'a portrait',
+            depictionMedium: 'photograph' as const,
+            subjectIdentity: {
+                classification: 'no-person' as const,
+                source: 'automatic-lineage' as const,
+                providerVerifications: [],
+            },
+        }]
+
+        const update = await resolveWorkspaceContext(createState({
+            workspaceContextSnapshot: {
+                ...baseWorkspaceSnapshot,
+                nodes: [{
+                    nodeId: 'timeline-node',
+                    type: 'capabilityArtifact',
+                    artifactTypeId: 'action-timeline',
+                    assetId: 'asset-timeline',
+                    title: 'Travel Timeline',
+                    isExplicitChip: true,
+                    isEdgeForced: false,
+                }],
+            },
+            mediaBranchCandidateSnapshot: undefined,
+            imageModelVersion: undefined,
+            videoModelVersion: undefined,
+            mediaReferenceBindings: bindings,
+        }), deps)
+        const textBlocks = getInputTextBlocks(update)
+
+        expect(textBlocks.some(text => text.includes('REFERENCE_1'))).toBe(true)
+        expect(textBlocks.some(text => text.includes('Shelby'))).toBe(false)
     })
 
     it('fails closed when an explicitly selected Action Timeline is unavailable', async () => {

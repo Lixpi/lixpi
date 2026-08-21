@@ -7,6 +7,7 @@ import type {
 import {
     type CapabilityDispatcher,
     type CapabilityRequesterContext,
+    isCapabilityMediaExecutionPlan,
     resolveCapabilities,
 } from '@lixpi/capability-system/backend'
 
@@ -113,6 +114,10 @@ export async function executeRequiredCapabilitiesForState(
     })
     const mediaGenerationMode = mediaGenerationOutputs.at(-1)?.mediaGenerationMode
     const preserveUserPrompt = mediaGenerationOutputs.some(output => output.preserveUserPrompt)
+    const mediaExecutionPlans = outputs.flatMap(output => {
+        const candidate = output.output.capabilityMediaExecutionPlan
+        return isCapabilityMediaExecutionPlan(candidate) ? [candidate] : []
+    })
     const requestPrompt = extractUserPrompt([...state.messages].reverse().find(message => message.role === 'user')?.content)
     return {
         capabilityToolResults: [...(state.capabilityToolResults ?? []), ...outputs],
@@ -128,6 +133,11 @@ export async function executeRequiredCapabilitiesForState(
             capabilityReferenceImageTraceUrls: mediaGenerationOutputs.flatMap(output => output.referenceImageTraceUrls),
             ...(mediaGenerationMode ? { capabilityUsageMode: mediaGenerationMode } : {}),
             ...(preserveUserPrompt && requestPrompt ? { generatedImagePrompt: requestPrompt } : {}),
+        } : {}),
+        ...(mediaExecutionPlans.length > 0 ? {
+            capabilityMediaExecutionPlan: mediaExecutionPlans.at(-1),
+            capabilityUsageMode: 'character-creator',
+            ...(requestPrompt ? { generatedImagePrompt: requestPrompt } : {}),
         } : {}),
         messages: [
             ...outputs.map(output => ({
@@ -164,6 +174,7 @@ function reasoningVariantFromState(state: ProviderState): CapabilityReasoningMod
         modelVersion: state.modelVersion,
         contextWindow: state.aiModelMetaInfo?.contextWindow ?? 0,
         maxCompletionSize: state.maxCompletionSize ?? state.aiModelMetaInfo?.maxCompletionSize ?? 0,
+        inferenceCapabilities: state.aiModelMetaInfo.inferenceCapabilities,
     }
 }
 
@@ -197,6 +208,11 @@ export function applyModelCapabilityExecutionToState(args: {
     const referenceImages = output.referenceImages
     const referenceImageTraceUrls = output.referenceImageTraceUrls
     const mediaGenerationMode = output.mediaGenerationMode
+    const mediaExecutionPlan = output.capabilityMediaExecutionPlan
+    if (isCapabilityMediaExecutionPlan(mediaExecutionPlan)) {
+        state.capabilityMediaExecutionPlan = mediaExecutionPlan
+        state.capabilityUsageMode = 'character-creator'
+    }
     if (typeof visualInstructions !== 'string'
         || !Array.isArray(referenceImages)
         || !referenceImages.every(value => typeof value === 'string')
@@ -239,6 +255,16 @@ function summarizeToolOutputForModel(
     const referenceImages = summary.referenceImages
     if (Array.isArray(referenceImages)) {
         summary.referenceImages = [`${referenceImages.length} reference image(s) applied directly to media generation`]
+    }
+    const mediaPlan = summary.capabilityMediaExecutionPlan
+    if (isCapabilityMediaExecutionPlan(mediaPlan)) {
+        summary.capabilityMediaExecutionPlan = {
+            kind: mediaPlan.kind,
+            capabilityRunId: mediaPlan.capabilityRunId,
+            panelCount: mediaPlan.panels.length,
+            sourceAssetCount: mediaPlan.sourceAssetIds.length,
+            layoutId: mediaPlan.layoutId,
+        }
     }
     return summary
 }

@@ -1,7 +1,7 @@
 import {
     trashBinIcon,
     checkMarkIcon
-} from '$src/svgIcons/index.ts'
+} from '@lixpi/ui-kit/svg'
 
 export const aiUserMessageNodeType = 'aiUserMessage'
 

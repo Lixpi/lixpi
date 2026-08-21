@@ -7,6 +7,7 @@ import {
 import {
     aiCollapsibleBlockNodeView,
     cacheImageGenerationTrace,
+    type AiCollapsibleBlockNodeViewOptions,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
 
@@ -79,7 +80,10 @@ function createTrace(overrides: Partial<ImageGenerationTrace> = {}): ImageGenera
     }
 }
 
-function createCollapsibleNodeView(attrs: Record<string, unknown> = {}) {
+function createCollapsibleNodeView(
+    attrs: Record<string, unknown> = {},
+    options: AiCollapsibleBlockNodeViewOptions = {},
+) {
     const node = schema.nodes.aiCollapsibleBlock.create(
         { title: 'Image generation prompt', isOpen: false, isStreaming: false, ...attrs },
         schema.nodes.paragraph.create(null, schema.text('Prompt body')),
@@ -101,7 +105,7 @@ function createCollapsibleNodeView(attrs: Record<string, unknown> = {}) {
     }
 
     const getPos = vi.fn(() => 3)
-    const nodeView = aiCollapsibleBlockNodeView(node, mockView, getPos)
+    const nodeView = aiCollapsibleBlockNodeView(node, mockView, getPos, options)
 
     return { nodeView, mockView, transaction, getPos }
 }
@@ -172,6 +176,17 @@ describe('aiCollapsibleBlockNodeView', () => {
         const referenceGrid = nodeView.dom.querySelector('.ai-image-generation-reference-grid')
         expect(referenceGrid?.childElementCount).toBe(2)
         expect(referenceGrid?.querySelector('.ai-image-generation-reference')?.getAttribute('data-role')).toBe('target')
+    })
+
+    it('hides the standalone tool prompt when history projects it inside the pipeline', () => {
+        const { nodeView } = createCollapsibleNodeView(
+            { imageGenerationTrace: createTrace() },
+            { traceDetailsOptions: { hideToolPrompt: true } },
+        )
+
+        expect(nodeView.dom.querySelector('.ai-image-generation-tool-prompt-section')?.hasAttribute('hidden')).toBe(true)
+        expect(nodeView.dom.querySelector('.ai-image-generation-reference-section')?.hasAttribute('hidden')).toBe(false)
+        expect(nodeView.dom.querySelector('.ai-image-generation-resolver-section')?.hasAttribute('hidden')).toBe(false)
     })
 
     it('keeps the final prompt section hidden when the image prompt was not changed', () => {

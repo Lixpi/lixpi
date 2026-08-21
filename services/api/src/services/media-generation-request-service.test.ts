@@ -2,15 +2,38 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    type Asset,
     type MediaBranchLineagePlan,
     type MediaGenerationRequest,
+    type MediaGenerationRun,
+    type MediaReferenceBinding,
+    type UnresolvedReferenceBinding,
 } from '@lixpi/constants'
-import { getPendingGeneratedMediaNodeId } from '@lixpi/canvas-engine'
+import {
+    getMediaGenerationOperationNodeId,
+    getPendingGeneratedMediaNodeId,
+} from '@lixpi/canvas-engine'
 
 const mocks = vi.hoisted(() => ({
     mediaRequestModel: {
+        create: vi.fn(),
+        delete: vi.fn(),
         get: vi.fn(),
+        getAuthorized: vi.fn(),
         transition: vi.fn(),
+    },
+    blobModel: {
+        store: vi.fn(),
+        addReference: vi.fn(),
+        removeReference: vi.fn(),
+    },
+    assetModel: {
+        get: vi.fn(),
+        removeAssetSurfaceReferenceSystem: vi.fn(),
+    },
+    canvasProjection: {
+        settleFailed: vi.fn(),
+        upsertLineage: vi.fn(),
     },
     operationProjection: {
         project: vi.fn(),
@@ -23,6 +46,19 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../models/media-generation-request.ts', () => ({
     default: mocks.mediaRequestModel,
+}))
+
+vi.mock('../models/blob.ts', () => ({
+    default: mocks.blobModel,
+}))
+
+vi.mock('../models/asset.ts', () => ({
+    default: mocks.assetModel,
+}))
+
+vi.mock('./asset-canvas-projection.ts', () => ({
+    settleFailedGeneratedMediaRunOnCanvas: mocks.canvasProjection.settleFailed,
+    upsertMediaLineagePlanToCanvas: mocks.canvasProjection.upsertLineage,
 }))
 
 vi.mock('./media-generation-operation-projection.ts', () => ({
@@ -58,6 +94,95 @@ const deferredRequest = (): MediaGenerationRequest => ({
     statusUpdatedAt: 1,
 })
 
+const pendingRun = (): MediaGenerationRun => ({
+    generationRun: 0,
+    reasoningModelId: 'Anthropic:claude-sonnet-4-6',
+    reasoningIndex: 0,
+    reasoningRunId: 'media-request-1:reasoning:0',
+    provider: 'OpenAI',
+    modelId: 'OpenAI:gpt-image-2',
+    mediaRunId: 'media-request-1:reasoning:0:image:0',
+    mediaType: 'image',
+    mediaIndex: 0,
+    outputAssetId: 'asset-image-1',
+    outputNodeId: 'pending-image-1',
+    operationNodeId: 'operation-image-1',
+    status: 'pending',
+})
+
+const referenceAsset = (assetId: string, title: string): Asset => ({
+    assetId,
+    organizationId: 'organization-1',
+    title,
+    scope: 'workspace',
+    scopeOwnerId: 'workspace-1',
+    originWorkspaceId: 'workspace-1',
+    ownerUserId: 'user-1',
+    media: {
+        kind: 'image',
+        originalName: `${title}.png`,
+        sourceMimeType: 'image/png',
+        modelSafe: true,
+        renditions: {},
+    },
+    descriptor: {
+        status: 'ready',
+        summary: `${title} character reference`,
+        entityTags: ['character'],
+        styleTags: ['illustration'],
+        source: 'analysis',
+        version: '1',
+        updatedAt: 1,
+    },
+    depictionMedium: 'painting',
+    subjectIdentity: {
+        classification: 'fictional',
+        source: 'user-attestation',
+        currentAttestationId: `attestation-${assetId}`,
+        identityGroupId: `identity-${assetId}`,
+        providerVerifications: [],
+    },
+    documents: {},
+    states: {
+        lifecycle: 'active',
+        media: 'ready',
+        conversation: 'none',
+        provenance: 'none',
+    },
+    referenceCount: 1,
+    revision: 3,
+    createdAt: 1,
+    updatedAt: 1,
+})
+
+const referenceBinding = (asset: Asset, index: number): MediaReferenceBinding => ({
+    assetId: asset.assetId,
+    assetRevision: asset.revision,
+    mediaKind: 'image',
+    alias: `REFERENCE_${index}`,
+    displayNameSnapshot: asset.title,
+    forbiddenNameVariants: [asset.title.toLocaleLowerCase('en-US')],
+    semanticDescriptor: asset.descriptor?.summary ?? 'character reference',
+    depictionMedium: asset.depictionMedium,
+    subjectIdentity: asset.subjectIdentity,
+})
+
+const unresolvedBinding = (
+    bindingId: string,
+    originalText: string,
+    candidateAssetIds: string[],
+): UnresolvedReferenceBinding => ({
+    bindingId,
+    promptRange: { from: 0, to: originalText.length },
+    originalText,
+    matcherVersion: 'bounded-local-v1',
+    candidates: candidateAssetIds.map((assetId, index) => ({
+        assetId,
+        score: 0.9 - index * 0.1,
+        previewRenditionName: 'thumbnail',
+    })),
+})
+
 const imageLineagePlan = (): MediaBranchLineagePlan => ({
     planVersion: 'media-branch-lineage-v1',
     generationRequestId: 'media-request-1',
@@ -66,6 +191,19 @@ const imageLineagePlan = (): MediaBranchLineagePlan => ({
     referenceAssetIds: [],
     referenceNodeIds: [],
     sourceContextNodeIds: [],
+    branchOrigin: {
+        nodeId: 'branch-origin-1',
+        generationRequestId: 'media-request-1',
+        branchId: 'branch-1',
+        provenance: {
+            kind: 'branch-root-fork-decision',
+            promptText: 'Draw a cat',
+            referenceNodeIds: [],
+            sourceContextNodeIds: [],
+            forked: false,
+            forkCount: 0,
+        },
+    },
     branchForks: [],
     branchLines: [],
     runAssignments: [{
@@ -92,6 +230,11 @@ const imageLineagePlan = (): MediaBranchLineagePlan => ({
 
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.blobModel.store.mockResolvedValue({ blobHash: 'checkpoint-hash' })
+    mocks.blobModel.addReference.mockResolvedValue(undefined)
+    mocks.blobModel.removeReference.mockResolvedValue(undefined)
+    mocks.mediaRequestModel.create.mockResolvedValue(undefined)
+    mocks.assetModel.removeAssetSurfaceReferenceSystem.mockResolvedValue({ success: true })
 })
 
 describe('media generation checkpoint safety', () => {
@@ -114,11 +257,119 @@ describe('media generation checkpoint safety', () => {
     })
 })
 
+describe('media generation reference resolution actions', () => {
+    it('projects only the candidates authorized for the first unresolved binding', async () => {
+        const assets = [
+            referenceAsset('asset-1', 'Source Drawing'),
+            referenceAsset('asset-2', 'Character Sheet'),
+            referenceAsset('asset-3', 'Alternate Sheet'),
+        ]
+        const unresolvedBindings = [
+            unresolvedBinding('binding-reference-drawing', 'reference drawing', ['asset-1', 'asset-2']),
+            unresolvedBinding('binding-character-sheet', 'character sheet', ['asset-2', 'asset-3']),
+        ]
+        const run = pendingRun()
+        mocks.operationProjection.project.mockResolvedValue({
+            generationRequestId: 'media-request-1',
+            layoutRevision: 1,
+            nodes: [],
+        })
+        const eventLog = { append: vi.fn(async () => undefined) }
+
+        await new MediaGenerationRequestService(eventLog as never).create({
+            generationRequestId: 'media-request-1',
+            workspaceId: 'workspace-1',
+            organizationId: 'organization-1',
+            userId: 'user-1',
+            conversationAssetId: 'conversation-1',
+            checkpoint: {
+                promptDocument: { type: 'doc' },
+                selectedReferences: assets.map(asset => ({ assetId: asset.assetId })),
+                modelSelection: {},
+                configuration: {},
+            },
+            bindings: assets.map((asset, index) => referenceBinding(asset, index + 1)),
+            unresolvedBindings,
+            runs: [run],
+        })
+
+        expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
+            candidateAssetIds: ['asset-1', 'asset-2'],
+            unresolvedBindingId: 'binding-reference-drawing',
+        }))
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_ACTION_REQUIRED',
+                payload: expect.objectContaining({
+                    bindingId: 'binding-reference-drawing',
+                    candidateAssetIds: ['asset-1', 'asset-2'],
+                }),
+            }),
+        }))
+    })
+
+    it('publishes the next binding and its candidates after resolving one phrase', async () => {
+        const assets = [
+            referenceAsset('asset-1', 'Source Drawing'),
+            referenceAsset('asset-2', 'Character Sheet'),
+            referenceAsset('asset-3', 'Alternate Sheet'),
+        ]
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'awaiting-reference-resolution',
+            bindings: assets.map((asset, index) => referenceBinding(asset, index + 1)),
+            unresolvedBindings: [
+                unresolvedBinding('binding-reference-drawing', 'reference drawing', ['asset-1', 'asset-2']),
+                unresolvedBinding('binding-character-sheet', 'character sheet', ['asset-2', 'asset-3']),
+            ],
+            runs: [pendingRun()],
+        }
+        const eventLog = { append: vi.fn(async () => undefined) }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+        mocks.assetModel.get.mockImplementation(async ({ assetId }: { assetId: string }) => (
+            assets.find(asset => asset.assetId === assetId)!
+        ))
+
+        const result = await new MediaGenerationRequestService(eventLog as never).resolveReference({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            userId: request.userId,
+            requestRevision: request.revision,
+            bindingId: 'binding-reference-drawing',
+            assetId: 'asset-1',
+            requester: {} as never,
+        })
+
+        expect(result.unresolvedBindings.map(binding => binding.bindingId)).toEqual([
+            'binding-character-sheet',
+        ])
+        expect(mocks.operationProjection.update).toHaveBeenCalledWith(expect.objectContaining({
+            candidateAssetIds: ['asset-2', 'asset-3'],
+            unresolvedBindingId: 'binding-character-sheet',
+            requestRevision: 2,
+        }))
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_ACTION_REQUIRED',
+                requestRevision: 2,
+                payload: {
+                    status: 'awaiting-reference-resolution',
+                    bindingId: 'binding-character-sheet',
+                    candidateAssetIds: ['asset-2', 'asset-3'],
+                    resolvedBindingId: 'binding-reference-drawing',
+                    resolvedAssetId: 'asset-1',
+                },
+            }),
+        }))
+    })
+})
+
 describe('media generation request lineage binding', () => {
     it('materializes only the selected image run for a deferred scalar request', async () => {
         const request = deferredRequest()
         const lineagePlan = imageLineagePlan()
-        const operationNodeId = getPendingGeneratedMediaNodeId(lineagePlan.runAssignments[0]!)
+        const operationNodeId = getMediaGenerationOperationNodeId(lineagePlan.runAssignments[0]!)
         mocks.mediaRequestModel.get.mockResolvedValue(request)
         mocks.mediaRequestModel.transition.mockImplementation(async ({ request: next }) => next)
 
@@ -132,16 +383,26 @@ describe('media generation request lineage binding', () => {
             generationRun: 0,
             reasoningModelId: 'Anthropic:claude-haiku-4-5-20251001',
             reasoningIndex: 0,
+            reasoningRunId: 'media-request-1:reasoning:0',
             provider: 'Stability',
             modelId: 'Stability:sd3.5-large',
+            mediaRunId: 'media-request-1:reasoning:0:image:0',
+            mediaType: 'image',
+            mediaIndex: 0,
+            outputAssetId: 'asset-image-1',
+            outputNodeId: getPendingGeneratedMediaNodeId(lineagePlan.runAssignments[0]!),
             status: 'pending',
             operationNodeId,
         }])
-        expect(result.plannedCanvasNodeIds).toEqual([operationNodeId])
+        expect(result.plannedCanvasNodeIds).toEqual([
+            operationNodeId,
+            getPendingGeneratedMediaNodeId(lineagePlan.runAssignments[0]!),
+            'branch-origin-1',
+        ])
         expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
             request: expect.objectContaining({
                 runs: result.runs,
-                plannedCanvasNodeIds: [operationNodeId],
+                plannedCanvasNodeIds: result.plannedCanvasNodeIds,
                 revision: 2,
             }),
             expectedRevision: 1,
@@ -152,10 +413,587 @@ describe('media generation request lineage binding', () => {
             requestRevision: 2,
             bindings: [{
                 previousNodeId: operationNodeId,
+                previousOutputNodeId: getPendingGeneratedMediaNodeId(lineagePlan.runAssignments[0]!),
                 operationNodeId,
                 lineageParentNodeId: 'branch-origin-1',
+                lineageAssignment: lineagePlan.runAssignments[0],
                 run: result.runs[0],
             }],
         })
+    })
+
+    it('projects a provisional lineage marker in the same create transaction as pending media slots', async () => {
+        const lineagePlan = imageLineagePlan()
+        const assignment = lineagePlan.runAssignments[0]!
+        const run: MediaGenerationRun = {
+            generationRun: 0,
+            reasoningModelId: assignment.reasoningModelId!,
+            reasoningIndex: assignment.reasoningIndex!,
+            reasoningRunId: assignment.reasoningRunId,
+            provider: 'Stability',
+            modelId: assignment.mediaModelId!,
+            mediaRunId: assignment.mediaRunId,
+            mediaType: 'image',
+            mediaIndex: 0,
+            outputAssetId: assignment.assetId,
+            outputNodeId: getPendingGeneratedMediaNodeId(assignment),
+            status: 'pending',
+            operationNodeId: getMediaGenerationOperationNodeId(assignment),
+        }
+        mocks.operationProjection.project.mockResolvedValue({
+            generationRequestId: 'media-request-1',
+            layoutRevision: 10,
+            nodes: [{ nodeId: run.outputNodeId!, position: { x: 0, y: 0 }, dimensions: { width: 800, height: 800 } }],
+        })
+        mocks.canvasProjection.upsertLineage.mockResolvedValue({
+            generationRequestId: 'media-request-1',
+            layoutRevision: 11,
+            nodes: [{ nodeId: 'branch-origin-1', position: { x: -200, y: 0 }, dimensions: { width: 120, height: 60 } }],
+        })
+        const eventLog = { append: vi.fn(async () => undefined) }
+        const onCanvasGeometryProjected = vi.fn()
+
+        const result = await new MediaGenerationRequestService(eventLog as never).create({
+            generationRequestId: 'media-request-1',
+            workspaceId: 'workspace-1',
+            organizationId: 'organization-1',
+            userId: 'user-1',
+            conversationAssetId: 'conversation-1',
+            checkpoint: {
+                promptDocument: { type: 'doc' },
+                selectedReferences: [],
+                modelSelection: {},
+                configuration: {},
+            },
+            bindings: [],
+            unresolvedBindings: [],
+            runs: [run],
+            initialLineagePlan: lineagePlan,
+            onCanvasGeometryProjected,
+        })
+
+        expect(mocks.operationProjection.project).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'media-request-1',
+            runs: [run],
+            bindings: [],
+            lineagePlan,
+        })
+        expect(mocks.canvasProjection.upsertLineage).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            conversationAssetId: 'conversation-1',
+            lineagePlan,
+        })
+        expect(result.plannedCanvasNodeIds).toEqual([
+            run.operationNodeId,
+            run.outputNodeId,
+            'branch-origin-1',
+        ])
+        expect(onCanvasGeometryProjected).toHaveBeenCalledWith(expect.objectContaining({
+            layoutRevision: 11,
+            nodes: expect.arrayContaining([
+                expect.objectContaining({ nodeId: run.outputNodeId }),
+                expect.objectContaining({ nodeId: 'branch-origin-1' }),
+            ]),
+        }))
+    })
+})
+
+describe('media generation request terminal settlement', () => {
+    it('keeps heartbeat progress in JetStream without writing DynamoDB or Workspace geometry', async () => {
+        const run = {
+            ...pendingRun(),
+            status: 'running' as const,
+            progress: {
+                phase: 'rendering' as const,
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Provider rendering is active: 2m elapsed.',
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            runs: [run],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).recordRunProgress({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            progress: {
+                ...run.progress,
+                message: 'Provider rendering is active: 2m 5s elapsed.',
+            },
+        })
+
+        expect(result.revision).toBe(1)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            expectedLastSubjectSequence: 0,
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_PROGRESS',
+                payload: expect.objectContaining({
+                    message: 'Provider rendering is active: 2m 5s elapsed.',
+                }),
+            }),
+        }))
+    })
+
+    it('flushes the accumulated JetStream trace to DynamoDB once when the run finishes', async () => {
+        const run = { ...pendingRun(), status: 'running' as const }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            runs: [run],
+        }
+        const streamedProgress = {
+            phase: 'assessing' as const,
+            completedSteps: 2,
+            totalSteps: 3,
+            message: 'Assessment passed.',
+            items: [{
+                id: 'assess',
+                title: 'Assess result',
+                status: 'completed' as const,
+                trace: {
+                    traceVersion: 'execution-trace-v1' as const,
+                    facts: [{ label: 'Overall score', value: '0.91' }],
+                },
+            }],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => ({
+                userId: request.userId,
+                workspaceId: request.workspaceId,
+                event: {
+                    eventId: 'progress-1',
+                    generationRequestId: request.generationRequestId,
+                    sequence: request.revision,
+                    status: 'MEDIA_GENERATION_PROGRESS',
+                    requestRevision: request.revision,
+                    payload: { generationRun: 0, progress: streamedProgress },
+                    createdAt: 2,
+                },
+                streamSequence: 12,
+            })),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        await new MediaGenerationRequestService(eventLog as never).recordRunStatus({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'completed',
+        })
+
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledOnce()
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({
+                status: 'completed',
+                runs: [expect.objectContaining({
+                    status: 'completed',
+                    progress: expect.objectContaining({
+                        items: [expect.objectContaining({
+                            trace: streamedProgress.items[0].trace,
+                        })],
+                    }),
+                })],
+            }),
+            expectedRevision: 1,
+        })
+        expect(eventLog.purgeRequest).toHaveBeenCalledWith({
+            workspaceId: request.workspaceId,
+            generationRequestId: request.generationRequestId,
+        })
+    })
+
+    it('repairs a synthetic unsettled failure when the provider subsequently reports completion', async () => {
+        const run: MediaGenerationRun = {
+            ...pendingRun(),
+            status: 'failed',
+            problem: {
+                problemVersion: '1',
+                type: 'urn:lixpi:media-problem:media-run-unsettled',
+                title: 'Media generation did not complete',
+                detail: 'The generation workflow ended before this provider run reached a terminal result.',
+                category: 'internal',
+                stage: 'submit',
+                generationRequestId: 'media-request-1',
+                generationRun: 0,
+                supportCode: 'support-1',
+                action: 'none',
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'failed',
+            revision: 2,
+            runs: [run],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).recordRunStatus({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'completed',
+        })
+
+        expect(result).toMatchObject({
+            status: 'completed',
+            revision: 3,
+            runs: [{ status: 'completed' }],
+        })
+        expect(result.runs[0]).not.toHaveProperty('problem')
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({ status: 'completed', revision: 3 }),
+            expectedRevision: 2,
+        })
+        expect(mocks.operationProjection.removeOne).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: request.workspaceId,
+            operationNodeId: run.operationNodeId,
+            generationRequestId: request.generationRequestId,
+            generationRun: run.generationRun,
+        }))
+    })
+
+    it('does not overwrite a real provider failure with a late completion write', async () => {
+        const run: MediaGenerationRun = {
+            ...pendingRun(),
+            status: 'failed',
+            problem: {
+                problemVersion: '1',
+                type: 'urn:lixpi:media-problem:provider-failure',
+                title: 'Provider failed',
+                detail: 'The provider rejected the request.',
+                category: 'provider-output',
+                stage: 'submit',
+                generationRequestId: 'media-request-1',
+                generationRun: 0,
+                supportCode: 'support-2',
+                action: 'edit-request',
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'failed',
+            revision: 2,
+            runs: [run],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+
+        const result = await new MediaGenerationRequestService().recordRunStatus({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'completed',
+        })
+
+        expect(result).toBe(request)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.removeOne).not.toHaveBeenCalled()
+    })
+
+    it('ignores late progress and status writes after durable cancellation', async () => {
+        const cancelledRequest: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'cancelled',
+            runs: [{ ...pendingRun(), status: 'running' }],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(cancelledRequest)
+        const service = new MediaGenerationRequestService()
+        const run = cancelledRequest.runs[0]!
+
+        const progressResult = await service.recordRunProgress({
+            generationRequestId: cancelledRequest.generationRequestId,
+            workspaceId: cancelledRequest.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            progress: {
+                phase: 'rendering',
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Late provider progress',
+            },
+        })
+        const statusResult = await service.recordRunStatus({
+            generationRequestId: cancelledRequest.generationRequestId,
+            workspaceId: cancelledRequest.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            status: 'failed',
+        })
+
+        expect(progressResult).toBe(cancelledRequest)
+        expect(statusResult).toBe(cancelledRequest)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+        expect(mocks.canvasProjection.settleFailed).not.toHaveBeenCalled()
+    })
+
+    it('cancels the latest active request revision for an authoritative output deletion', async () => {
+        const activeRequest: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            revision: 5,
+            runs: [{ ...pendingRun(), status: 'running' }],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(activeRequest)
+        mocks.mediaRequestModel.transition.mockImplementation(async ({ request }) => request)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).cancelCurrent({
+            generationRequestId: activeRequest.generationRequestId,
+            workspaceId: activeRequest.workspaceId,
+            userId: activeRequest.userId,
+        })
+
+        expect(result).toMatchObject({ status: 'cancelled', revision: 6 })
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({ status: 'cancelled', revision: 6 }),
+            expectedRevision: 5,
+        })
+        expect(mocks.operationProjection.removeAll).toHaveBeenCalledWith({
+            workspaceId: 'workspace-1',
+            generationRequestId: 'media-request-1',
+            terminalStatus: 'cancelled',
+            discardUnboundOutputNodes: true,
+        })
+        expect(mocks.assetModel.removeAssetSurfaceReferenceSystem).toHaveBeenCalledWith({
+            assetId: 'asset-image-1',
+            organizationId: 'organization-1',
+            surfaceId: 'conversation#conversation-1#media#media-request-1:reasoning:0:image:0',
+        })
+        expect(mocks.blobModel.removeReference).toHaveBeenCalledWith(expect.objectContaining({
+            referenceKey: 'mediaGenerationRequest#media-request-1#checkpoint',
+        }))
+    })
+
+    it('dismisses an already-terminal request even when the rendered card revision is stale', async () => {
+        const terminalRequest: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'completed-with-errors',
+            revision: 7,
+            runs: [{ ...pendingRun(), status: 'failed' }],
+        }
+        mocks.mediaRequestModel.getAuthorized.mockResolvedValue(terminalRequest)
+
+        const result = await new MediaGenerationRequestService().cancel({
+            generationRequestId: terminalRequest.generationRequestId,
+            workspaceId: terminalRequest.workspaceId,
+            userId: terminalRequest.userId,
+            requestRevision: 2,
+        })
+
+        expect(result).toBe(terminalRequest)
+        expect(mocks.operationProjection.removeAll).toHaveBeenCalledWith({
+            workspaceId: terminalRequest.workspaceId,
+            generationRequestId: terminalRequest.generationRequestId,
+            terminalStatus: 'completed',
+            discardUnboundOutputNodes: true,
+        })
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+    })
+
+    it('fails a pending durable run and projects an actionable problem before request completion', async () => {
+        const request = {
+            ...deferredRequest(),
+            runs: [pendingRun()],
+        }
+        const eventLog = {
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+            purgeRequest: vi.fn(async () => undefined),
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        const result = await new MediaGenerationRequestService(eventLog as never).failUnfinishedRuns({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+        })
+
+        expect(result).toMatchObject({ status: 'failed' })
+        expect(mocks.mediaRequestModel.transition).toHaveBeenCalledWith({
+            request: expect.objectContaining({
+                status: 'failed',
+                revision: 2,
+                runs: [expect.objectContaining({
+                    status: 'failed',
+                    problem: expect.objectContaining({
+                        type: 'urn:lixpi:media-problem:media-invocation-missing',
+                        action: 'none',
+                    }),
+                })],
+            }),
+            expectedRevision: 1,
+        })
+        expect(mocks.canvasProjection.settleFailed).toHaveBeenCalledWith(expect.objectContaining({
+            workspaceId: 'workspace-1',
+            outputNodeId: 'pending-image-1',
+            assetId: 'asset-image-1',
+            requestRevision: 2,
+            problem: expect.objectContaining({
+                type: 'urn:lixpi:media-problem:media-invocation-missing',
+            }),
+            generationRun: expect.objectContaining({
+                generationRequestId: 'media-request-1',
+                mediaRunId: 'media-request-1:reasoning:0:image:0',
+                mediaIndex: 0,
+                variantIndex: 0,
+            }),
+        }))
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+        expect(eventLog.append).toHaveBeenCalledWith(expect.objectContaining({
+            event: expect.objectContaining({
+                status: 'MEDIA_GENERATION_PROBLEM',
+                payload: expect.objectContaining({ runStatus: 'failed' }),
+            }),
+        }))
+    })
+
+    it('preserves a reference-resolution pause instead of terminalizing its pending runs', async () => {
+        const request = {
+            ...deferredRequest(),
+            status: 'awaiting-reference-resolution' as const,
+            runs: [pendingRun()],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+
+        const result = await new MediaGenerationRequestService().failUnfinishedRuns({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+        })
+
+        expect(result).toBe(request)
+        expect(mocks.mediaRequestModel.transition).not.toHaveBeenCalled()
+        expect(mocks.operationProjection.update).not.toHaveBeenCalled()
+    })
+})
+
+// =============================================================================
+// EXECUTION TRACE MERGING ACROSS PROGRESS WRITES
+// =============================================================================
+
+describe('media generation run progress trace merging', () => {
+    const tracedItem = (trace?: Record<string, unknown>) => ({
+        id: 'render:body-front',
+        title: 'Front body',
+        status: 'running' as const,
+        ...(trace ? { trace } : {}),
+    })
+    const renderTrace = {
+        traceVersion: 'execution-trace-v1',
+        modelCalls: [{
+            id: 'render',
+            role: 'media',
+            provider: 'OpenAI',
+            modelId: 'OpenAI:gpt-image-2',
+            params: [{ name: 'size', value: '1024x1536' }],
+        }],
+    }
+
+    const recordProgress = async (
+        currentItems: unknown[],
+        incomingItems: unknown[],
+    ): Promise<MediaGenerationRequest> => {
+        const run = {
+            ...pendingRun(),
+            status: 'running' as const,
+            progress: {
+                phase: 'rendering' as const,
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Rendering.',
+                items: currentItems as never,
+            },
+        }
+        const request: MediaGenerationRequest = {
+            ...deferredRequest(),
+            status: 'running',
+            runs: [run],
+        }
+        mocks.mediaRequestModel.get.mockResolvedValue(request)
+        mocks.mediaRequestModel.transition.mockResolvedValue(undefined)
+
+        return await new MediaGenerationRequestService({
+            append: vi.fn(async () => undefined),
+            getLatestRunProgress: vi.fn(async () => null),
+        } as never).recordRunProgress({
+            generationRequestId: request.generationRequestId,
+            workspaceId: request.workspaceId,
+            mediaModelId: run.modelId,
+            reasoningIndex: run.reasoningIndex,
+            mediaRunId: run.mediaRunId,
+            progress: {
+                phase: 'rendering',
+                completedSteps: 1,
+                totalSteps: 3,
+                message: 'Rendering, still.',
+                items: incomingItems as never,
+            },
+        })
+    }
+
+    beforeEach(() => {
+        mocks.mediaRequestModel.transition.mockReset()
+    })
+
+    it('keeps a recorded trace when a later progress write carries none', async () => {
+        const next = await recordProgress([tracedItem(renderTrace)], [tracedItem()])
+
+        expect(next.runs[0]?.progress?.items?.[0]?.trace).toEqual(renderTrace)
+    })
+
+    it('replaces an older trace with the newer one', async () => {
+        const newerTrace = { ...renderTrace, facts: [{ label: 'Overall score', value: '0.91' }] }
+
+        const next = await recordProgress([tracedItem(renderTrace)], [tracedItem(newerTrace)])
+
+        expect(next.runs[0]?.progress?.items?.[0]?.trace).toEqual(newerTrace)
+    })
+
+    it('carries a trace forward on child items too', async () => {
+        const parent = (childTrace?: Record<string, unknown>) => ({
+            id: 'render-shots',
+            title: 'Generate shots',
+            status: 'running' as const,
+            children: [tracedItem(childTrace)],
+        })
+
+        const next = await recordProgress([parent(renderTrace)], [parent()])
+
+        expect(next.runs[0]?.progress?.items?.[0]?.children?.[0]?.trace).toEqual(renderTrace)
     })
 })

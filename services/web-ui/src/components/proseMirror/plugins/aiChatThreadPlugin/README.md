@@ -12,9 +12,10 @@
 
 ## What It Does
 
-- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
+- Registers chat-thread NodeViews for `aiChatThread`, `aiUserMessage`, `aiResponseMessage`, `aiReasoningSection`, `aiLineageEvent`, `aiMediaGenerationProgress`, `aiCollapsibleBlock`, `aiGeneratedImage`, and `aiGeneratedVideo`.
 - Handles image, video, context-resolution, branch-resolution, trace, and error side-effect events from `SegmentsReceiver`.
-- Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
+- Renders Capability media review details inside the image-generation trace, including per-shot status, match score, comparison issues, the zero-automatic-retry count, and the manual-variant recommendation.
+- Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response and the canvas branch marker's preflight timeline. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
 - Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
 - Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
@@ -35,6 +36,7 @@ createAiChatThreadPlugin({
         readOnly: false,
         traceDetailsOptions: undefined,
         contextPreview: undefined,
+        mediaGenerationProgress: undefined,
     },
 })
 ```
@@ -135,11 +137,21 @@ Per-model section inside one `aiResponseMessage` for media-generation matrix req
 Atom block for a materialized workflow event in chat history or a projected chat transcript.
 
 - Spec and NodeView live in `aiLineageEventNode.ts`; event labels and icon rendering live in `aiLineageEvents.ts`.
-- Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size.
+- Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size. The compact history icon is intentionally shadow-free; the full canvas node shadow becomes a blurred smear when scaled down to this glyph.
 - Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`
 - `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`; `kind: 'branch-line'` renders `Branch continued`.
 - Materialized events are keyed by their kind-specific lineage id. The live editor removes duplicate materialized events inside each response message on mount, then persists the normalized document through the regular editor change path.
 - Live streamed responses materialize these nodes directly from API `generationRun.lineageAssignment` when the response is not split into `aiReasoningSection` nodes. Matrix responses keep lineage ids on each `aiReasoningSection`; read-only projections materialize scoped copies as standalone events near the resolver audit.
+
+### `aiMediaGenerationProgress`
+
+Projection-only atom block for the pipeline timeline embedded in sealed generated-media provenance.
+
+- Attrs: `id`, structured `state`, and `showSummaryWhenCollapsedItemIds`.
+- The durable state remains owned by the matching `aiGeneratedImage` / `aiGeneratedVideo` node. Generated-media projection clones place this presentation node immediately after the submitted user message.
+- Standalone assistant preamble is absorbed into `Understand request` instead of being rendered twice. The matching trace's reasoning-authored media prompt becomes one top-level pipeline step after shared lineage resolution; its expanded summary reuses the trace prompt's purple surface and left border. Trace rendering suppresses its old standalone prompt section while retaining per-run references, resolver audit, Capability comparison, and output details.
+- Every pipeline step may carry a durable `trace`: the model calls it made, the params each was called with, the References and Capabilities passed to each one, its reasoning, and resulting facts. `$src/components/executionTrace` expands that trace into the timeline's detail block, rendering each Asset, Capability, Tool, and Skill as the same `prompt-reference-chip` and hover card a user message uses. Hosts supply the adapter because only they own the Asset and Capability resolvers those hover cards need.
+- `renderContext.mediaGenerationProgress` mounts the shared recursive pipeline component. Every sealed history projection starts with all levels expanded, whether opened from media info or a branch-lineage node, and it does not reuse focused live-progress disclosure state. Ordinary live conversation editors never synthesize this projection node.
 
 ### `aiGeneratedImage`
 
@@ -173,7 +185,7 @@ Inline generation trace block.
 - Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
 - Used for image and video generation details.
 - Renders generation details as one continuous response block. Prompt, final prompt, references, and resolver audit are separated by subsection titles instead of collapsible chrome.
-- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated Asset rendition URLs and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded.
+- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated Asset rendition URLs, collapse historical duplicate candidate IDs by Asset identity while retaining the strongest reference role, and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded.
 - Generated prompt text uses the same left-border output treatment as extraction-stage model output.
 - The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
 
@@ -294,7 +306,7 @@ Generated-image rendering is handled by `imageSelectionPlugin`.
 
 ## Read-Only Provenance Projections
 
-The read-only renderer mounts a conversation Asset snapshot with an optional trace-details context. `@lixpi/prosemirror/shared/generated-media-turn-projection` builds a scoped projection by cloning the producing user and response messages from the Asset's `conversation` document role. Matrix responses select the matching reasoning section by response, reasoning run, media run, Asset, or model identity. Per-media provenance can prune atom nodes to the exact `mediaRunId`, `assetId`, and `variantIndex`; branch-fork provenance leaves siblings visible.
+The read-only renderer mounts a conversation Asset snapshot with an optional trace-details context. `@lixpi/prosemirror/shared/generated-media-turn-projection` builds a scoped projection by cloning the producing user and response messages from the Asset's `conversation` document role. Matrix responses select the matching reasoning section by response, reasoning run, media run, Asset, or model identity. Per-media provenance prunes both generated-media atoms and sibling generation-trace blocks to the exact `mediaRunId`, `assetId`, and `variantIndex`; branch-fork provenance leaves siblings visible.
 
 Lineage rendering is projection-scoped instead of panel-specific. `conversation` preserves the full live-thread view. `branch-origin`, `branch-fork`, and `media-run` projections materialize scope-local branch decisions as standalone `aiLineageEvent` nodes, then relocate them directly after the generation trace block that renders resolver audit details so they stay with the branch decision context instead of at the top of the reasoning section. Projection cloning filters materialized lineage-event siblings through the selected generated media's lineage ids and deduplicates repeated event ids, so a scoped panel renders one matching workflow marker instead of every sibling marker in the response. This keeps branch-root, branch-fork, and branch-line workflow nodes independently reconstructable from the same stored message pieces without copying ancestor events into child projections.
 
@@ -303,6 +315,7 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 ## Files
 
 - `aiChatThreadPlugin.ts`: orchestration, stream handling, request construction, decorations, plugin state, NodeView registration.
+- `capabilityChatRunProgress.ts`: per-run Capability progress timelines mounted into the streaming response, given `renderContext.promptReferencePreviewRenderer` so step traces render Asset and Capability hover cards.
 - `aiChatThreadNode.ts`: thread schema and minimal wrapper NodeView.
 - `aiUserMessageNode.ts`: sent-user-message schema and shell NodeView.
 - `aiResponseMessageNode.ts`: assistant response schema and shell NodeView.

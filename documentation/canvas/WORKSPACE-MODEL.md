@@ -124,6 +124,10 @@ Attach with a node performs one DynamoDB transaction that:
 
 Detach removes only the requested node ID. The workspace reference row remains while another node or surface is present. Removing the row decrements the Asset counter once. Removing the last catalog/workspace reference changes lifecycle to `deleting` and queues maintenance.
 
+Canvas deletion may remove one node or a marquee-selected set. Each Asset-backed node uses its own ordered detach transaction, so multiple placements of the same Asset keep one workspace reference until the last selected placement is gone. The deletion state also removes incident edges, orphaned branch markers, and context-chip references to removed node IDs. A membership rebase carries the complete removed-node set so concurrent state reconciliation cannot restore a pruned marker.
+
+Rejecting a generated candidate is stronger than removing an ordinary placement. The API marks the candidate superseded, removes its generation conversation surface and catalog reference, then detaches its canvas node. Another node or surface reference still protects the Asset. If none remains, the node detach queues Asset maintenance.
+
 Surface IDs cover non-node workspace membership, for example:
 
 ```text

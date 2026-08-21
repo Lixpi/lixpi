@@ -1,7 +1,7 @@
 'use strict'
 
 import * as process from 'process'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
@@ -13,6 +13,7 @@ import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
+import { SMITHY_TRANSPORT_FAULT_NAMES } from '../utils/transport-retry.ts'
 
 const MODEL_ENDPOINT_MAP: Record<string, string> = {
     'stability-ultra': '/v2beta/stable-image/generate/ultra',
@@ -26,7 +27,6 @@ const STYLE_TRANSFER_ENDPOINT = '/v2beta/stable-image/control/style-transfer'
 const STYLE_CONTROL_FIDELITY = 0.7
 const STRUCTURE_CONTROL_STRENGTH = 0.9
 const MAX_STABILITY_REFERENCE_PIXELS = 9437184
-const STABILITY_REFERENCE_TILE_SIZE = 768
 
 type StabilityRoutingMode = 'generate' | 'style-control' | 'structure-control' | 'style-transfer'
 
@@ -38,9 +38,9 @@ type StabilityRoutingMode = 'generate' | 'style-control' | 'structure-control' |
 const BEDROCK_IMAGE_TO_IMAGE_STRENGTH: Record<Exclude<StabilityRoutingMode, 'generate'>, number> = {
     // Reference supplies style only, so the model needs room to compose new content.
     'style-control': 0.65,
-    // The reference is a layout template whose structure must survive.
+    // Structure controls should remain recognizable while allowing new content.
     'structure-control': 0.35,
-    // Draft plus style evidence: restyle heavily while keeping the draft's composition.
+    // Two controls use the primary image for composition and the secondary image for style.
     'style-transfer': 0.6,
 }
 
@@ -102,54 +102,6 @@ const resizeReferenceForStability = async (
     }
 }
 
-const composeCharacterSourceReferences = async (
-    references: ResolvedImageGenerationReference[],
-    logPrefix: string,
-): Promise<ResolvedImageGenerationReference | undefined> => {
-    if (references.length === 0) return undefined
-    if (references.length === 1) return references[0]
-
-    const columns = Math.ceil(Math.sqrt(references.length))
-    const rows = Math.ceil(references.length / columns)
-    const tiles = await Promise.all(references.map(async (reference, index) => ({
-        input: await sharp(reference.bytes)
-            .resize({
-                width: STABILITY_REFERENCE_TILE_SIZE,
-                height: STABILITY_REFERENCE_TILE_SIZE,
-                fit: 'contain',
-                background: '#ffffff',
-            })
-            .png()
-            .toBuffer(),
-        left: (index % columns) * STABILITY_REFERENCE_TILE_SIZE,
-        top: Math.floor(index / columns) * STABILITY_REFERENCE_TILE_SIZE,
-    })))
-    const bytes = await sharp({
-        create: {
-            width: columns * STABILITY_REFERENCE_TILE_SIZE,
-            height: rows * STABILITY_REFERENCE_TILE_SIZE,
-            channels: 3,
-            background: '#ffffff',
-        },
-    })
-        .composite(tiles)
-        .png()
-        .toBuffer()
-    const sha256 = createHash('sha256').update(bytes).digest('hex')
-
-    info(`${logPrefix} Composed ${references.length} authoritative character sources into one style-evidence board sha256=${sha256}`)
-    return {
-        url: `data:image/png;base64,${bytes.toString('base64')}`,
-        role: 'character-source',
-        fileName: 'character-source-composite.png',
-        bytes,
-        dataUrl: `data:image/png;base64,${bytes.toString('base64')}`,
-        mediaType: 'image/png',
-        byteLength: bytes.byteLength,
-        sha256,
-    }
-}
-
 const extractPrompt = (messages: ChatMessage[]): string => {
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i]!
@@ -188,6 +140,13 @@ export class StabilityProvider extends BaseProvider {
         if (this.useBedrock) bedrockInference.logRouting('stability', `Stability:${instanceKey}`)
     }
 
+    // The direct path calls fetch, whose socket codes the shared layer covers.
+    // The Bedrock path goes through the AWS SDK, which converts those same
+    // socket failures into the Smithy transient error names before we see them.
+    protected override get transportFaultNames(): readonly string[] {
+        return this.useBedrock ? SMITHY_TRANSPORT_FAULT_NAMES : []
+    }
+
     protected override async streamImpl(state: ProviderState): Promise<Partial<ProviderState>> {
         if (!state.enableImageGeneration) {
             throw new Error('Stability AI is an image-only provider and requires enableImageGeneration=true')
@@ -218,33 +177,17 @@ export class StabilityProvider extends BaseProvider {
         })))}`)
 
         const logPrefix = `[Stability:${this.instanceKey}]`
-        const characterLayoutRef = allRefs.find(reference => reference.role === 'character-layout-example')
-        const characterDraftRef = allRefs.find(reference => reference.role === 'character-sheet-draft')
-        const characterSourceRefs = allRefs.filter(reference => reference.role === 'character-source')
         let routingMode: StabilityRoutingMode = 'generate'
         let primaryRef: ResolvedImageGenerationReference | undefined
         let styleRef: ResolvedImageGenerationReference | undefined
 
-        if (characterLayoutRef) {
-            routingMode = 'structure-control'
-            primaryRef = characterLayoutRef
-            if (characterSourceRefs.length > 0) {
-                info(`${logPrefix} Character sources are reserved for the fidelity-restoration pass; the layout-synthesis pass uses the packaged template as structural control`)
-            }
-        } else if (characterDraftRef && characterSourceRefs.length > 0) {
+        if (allRefs.length >= 2) {
             routingMode = 'style-transfer'
-            primaryRef = characterDraftRef
-            styleRef = await composeCharacterSourceReferences(characterSourceRefs, logPrefix)
-        } else if (allRefs.length >= 2) {
-            routingMode = 'style-transfer'
-            allRefs.sort((a, b) => b.bytes.length - a.bytes.length)
             primaryRef = allRefs[0]
             styleRef = allRefs[1]
-            if (allRefs.length > 2) {
-                warn(`${logPrefix} ${allRefs.length - 2} extra non-character references skipped`)
-            }
+            if (allRefs.length > 2) warn(`${logPrefix} ${allRefs.length - 2} extra references skipped`)
         } else if (allRefs.length === 1) {
-            routingMode = allRefs[0]?.role === 'character-layout-example'
+            routingMode = allRefs[0]?.role === 'structure-reference'
                 ? 'structure-control'
                 : 'style-control'
             primaryRef = allRefs[0]
@@ -376,15 +319,19 @@ export class StabilityProvider extends BaseProvider {
             `aspect=${aspectRatio} refs=${referenceCount} mode=${routingMode} promptLen=${prompt.length}`,
         )
 
-        const response = await fetch(`https://api.stability.ai${endpoint}`, {
-            method: 'POST',
-            headers: {
-                authorization: `Bearer ${apiKey}`,
-                accept: 'application/json',
-            },
-            body: formData,
-            signal: this.signal,
-        })
+        // Single non-streaming request; nothing is published until it returns.
+        const response = await this.retryTransport(
+                'image',
+            async () => await fetch(`https://api.stability.ai${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    authorization: `Bearer ${apiKey}`,
+                    accept: 'application/json',
+                },
+                body: formData,
+                signal: this.signal,
+            }),
+        )
 
         info(`[Stability:${this.instanceKey}] API response status=${response.status}`)
 
@@ -467,14 +414,18 @@ export class StabilityProvider extends BaseProvider {
             `mode=${body.mode} aspect=${aspectRatio} promptLen=${prompt.length}`,
         )
 
-        const response = await this.bedrockClient.send(
-            new InvokeModelCommand({
-                modelId,
-                contentType: 'application/json',
-                accept: 'application/json',
-                body: JSON.stringify(body),
-            }),
-            { abortSignal: this.signal },
+        // Single non-streaming invocation; nothing is published until it returns.
+        const response = await this.retryTransport(
+                'bedrock',
+            async () => await this.bedrockClient.send(
+                new InvokeModelCommand({
+                    modelId,
+                    contentType: 'application/json',
+                    accept: 'application/json',
+                    body: JSON.stringify(body),
+                }),
+                { abortSignal: this.signal },
+            ),
         )
 
         if (!response.body) throw new Error('Stability Bedrock invocation returned an empty body')

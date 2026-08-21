@@ -1,12 +1,13 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView, NodeView } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
-import { imageResizeCornerIcon, brokenImageIcon } from '$src/svgIcons/index.ts'
+import { imageResizeCornerIcon, brokenImageIcon } from '@lixpi/ui-kit/svg'
+import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import AuthService from '$src/services/auth-service.ts'
 import { html, applyStyle } from '$src/utils/domTemplates.ts'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import { settings } from '$src/settings.ts'
-import { applyMediaModelBadgeStyleProperties, renderMediaModelBadge } from '$src/components/mediaModelBadge.ts'
+import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
@@ -233,9 +234,9 @@ export class ImageNodeView implements NodeView {
 
     private renderGeneratedImageModelBadge(): void {
         if (!this.modelChromeElement) return
-        renderMediaModelBadge(this.modelChromeElement, {
+        renderMediaModelBadge(this.modelChromeElement, resolveMediaModelBadgeConfig({
             modelId: this.node.attrs.mediaModelId,
-        })
+        }))
     }
 
     private createResizeHandle(corner: ResizeCorner): HTMLElement {

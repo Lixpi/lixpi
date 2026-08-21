@@ -8,12 +8,9 @@ import type { ProviderName } from '@lixpi/constants'
 export const TOOL_NAME = 'generate_image'
 
 const TOOL_DESCRIPTION =
-    'Generate an image based on a text prompt. ' +
-    'When the user requests an image, illustration, diagram, logo, or any visual content, ' +
-    'call this tool with a detailed, descriptive prompt optimized for image generation. ' +
-    'The prompt should be vivid, specific, and describe the desired style, composition, ' +
-    'colors, lighting, and mood. Do NOT include any harmful, violent, or explicit content ' +
-    'in the prompt. Always craft a safe, moderation-compliant prompt.'
+    'Generate still visual media from the user request and authorized references. ' +
+    'Call this tool for a still visual request. Preserve the request scope and reference roles; ' +
+    'do not add unrequested semantic or aesthetic content. The prompt must be safe and moderation-compliant.'
 
 const BASE_PARAMETERS = {
     type: 'object',
@@ -21,9 +18,8 @@ const BASE_PARAMETERS = {
         prompt: {
             type: 'string',
             description:
-                'A detailed, descriptive prompt for image generation. ' +
-                'Be specific about style, composition, colors, lighting, and mood. ' +
-                'Must be safe and moderation-compliant.',
+                'The exact still-media prompt derived from the user request and authorized reference roles. ' +
+                'It must preserve requested scope, avoid invented content, and be moderation-compliant.',
         },
     },
     required: ['prompt'],
@@ -112,9 +108,8 @@ const buildToolParameters = (
                 type: 'string',
                 maxLength: maxChars,
                 description:
-                    `A detailed, descriptive prompt for image generation (max ${maxChars} characters). ` +
-                    'Be specific about style, composition, colors, lighting, and mood. ' +
-                    'Must be safe and moderation-compliant.',
+                    `The exact still-media prompt derived from the request and authorized references, with a maximum of ${maxChars} characters. ` +
+                    'It must avoid invented content and be moderation-compliant.',
             },
         },
         required: ['prompt'],

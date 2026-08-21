@@ -6,6 +6,7 @@ import {
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
     type Asset,
+    type AssetMediaComposition,
     type CanvasGeometryUpdate,
     type MediaBranchCandidateSnapshot,
     type MediaBranchLineagePlan,
@@ -16,11 +17,15 @@ import {
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
 import AssetModel, {
+    assertAssetComponents,
     buildAssetProjectionOperations,
     getAssetRecord,
     publishAssetEvent,
 } from '../models/asset.ts'
-import BlobModel, { buildBlobReferenceOperations } from '../models/blob.ts'
+import BlobModel, {
+    buildBlobReferenceBatchOperations,
+    buildBlobReferenceOperations,
+} from '../models/blob.ts'
 import Workspace from '../models/workspace.ts'
 import {
     buildAssetCanvasGeometryUpdate,
@@ -79,6 +84,10 @@ export const ensurePendingGeneratedAssets = async ({
     for (const contextNode of workspaceContextSnapshot?.nodes ?? []) {
         if (contextNode.assetId) assetIdByNodeId.set(contextNode.nodeId, contextNode.assetId)
     }
+    const regenerationSource = lineagePlan.regenerationTarget
+    if (regenerationSource?.sourceMediaNodeId && regenerationSource.sourceMediaAssetId) {
+        assetIdByNodeId.set(regenerationSource.sourceMediaNodeId, regenerationSource.sourceMediaAssetId)
+    }
 
     await Promise.all(lineagePlan.runAssignments.map(async (assignment) => {
         const parentAssetId = assignment.parentMediaNodeId
@@ -91,7 +100,11 @@ export const ensurePendingGeneratedAssets = async ({
         )
         const sourceAssets = (await Promise.all(sourceAssetIds.map(getAssetRecord)))
             .filter((asset): asset is Asset => Boolean(asset))
-        const subjectIdentity = deriveSubjectIdentityFromLineage(sourceAssets, { generatedOutput: true })
+        const parentAsset = parentAssetId ? await getAssetRecord(parentAssetId) : undefined
+        const subjectIdentity = deriveSubjectIdentityFromLineage(
+            parentAsset ? [...sourceAssets, parentAsset] : sourceAssets,
+            { generatedOutput: true },
+        )
         const lineage = {
             sourceConversationAssetId: conversationAssetId,
             ...(parentAssetId ? { parentAssetId } : {}),
@@ -274,6 +287,145 @@ export const settleGeneratedAssetOriginal = async ({
     return { assetId, organizationId: asset.organizationId, url: `/api/assets/${assetId}/renditions/original` }
 }
 
+export const settleGeneratedAssetComposition = async ({
+    generationRun,
+    composition: inputComposition,
+}: {
+    generationRun: MediaGenerationRunMeta
+    composition: {
+        kind: string
+        capabilityId: string
+        sourceAssetIds: string[]
+        components: Array<{
+            componentId: string
+            role: string
+            title: string
+            imageBase64: string
+            mimeType: 'image/png'
+        }>
+    }
+}): Promise<AssetMediaComposition> => {
+    const assetId = generationRun.lineageAssignment?.assetId
+    if (!assetId) throw new Error('Generated media composition is missing assetId')
+    if (!inputComposition.kind.trim() || !inputComposition.capabilityId.trim()) {
+        throw new Error('GENERATED_MEDIA_COMPOSITION_IDENTITY_REQUIRED')
+    }
+    if (inputComposition.components.length === 0 || inputComposition.components.length > 32) {
+        throw new Error('GENERATED_MEDIA_COMPOSITION_COMPONENT_COUNT_INVALID')
+    }
+    const componentIds = new Set<string>()
+    for (const component of inputComposition.components) {
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
+            || componentIds.has(component.componentId)
+            || !component.role.trim()
+            || !component.title.trim()
+            || component.mimeType !== 'image/png') {
+            throw new Error('GENERATED_MEDIA_COMPOSITION_COMPONENT_INVALID')
+        }
+        componentIds.add(component.componentId)
+    }
+
+    const asset = await getAssetRecord(assetId)
+    if (!asset) throw new Error(`Pending Asset not found: ${assetId}`)
+    const storedComponents = await Promise.all(inputComposition.components.map(async component => {
+        const bytes = decodeCapabilityImage(component.imageBase64)
+        const blob = await BlobModel.store({
+            organizationId: asset.organizationId,
+            bytes,
+            mimeType: component.mimeType,
+            description: `${component.title} component for Asset ${assetId}`,
+        })
+        return {
+            blob,
+            component: {
+                componentId: component.componentId,
+                role: component.role.trim(),
+                title: component.title.trim(),
+                blobHash: blob.blobHash,
+                mimeType: component.mimeType,
+                byteSize: bytes.byteLength,
+            },
+        }
+    }))
+    const composition: AssetMediaComposition = {
+        schemaVersion: 'asset-media-composition-v1',
+        kind: inputComposition.kind.trim(),
+        capabilityId: inputComposition.capabilityId.trim(),
+        sourceAssetIds: [...new Set(inputComposition.sourceAssetIds)],
+        components: storedComponents.map(entry => entry.component),
+    }
+    const assertMatchingComposition = (candidate: AssetMediaComposition | undefined): void => {
+        if (!candidate || JSON.stringify(candidate) !== JSON.stringify(composition)) {
+            throw new Error('GENERATED_MEDIA_COMPOSITION_CONFLICT')
+        }
+    }
+    if (asset.composition) {
+        assertMatchingComposition(asset.composition)
+        return asset.composition
+    }
+
+    const now = Date.now()
+    const next: Asset = {
+        ...asset,
+        composition,
+        revision: asset.revision + 1,
+        updatedAt: now,
+    }
+    assertAssetComponents(next)
+    const additions = storedComponents.map(({ blob, component }) => ({
+        blob,
+        reference: {
+            blobKey: blob.blobKey,
+            blobHash: blob.blobHash,
+            organizationId: blob.organizationId,
+            referenceKey: `asset#${assetId}#composition#${component.componentId}`,
+            ownerType: 'asset' as const,
+            ownerId: assetId,
+            createdAt: now,
+        },
+    }))
+    try {
+        await dynamoDBService.transactWrite({
+            operations: [
+                ...buildBlobReferenceBatchOperations({ additions, now }).operations,
+                {
+                    type: 'update',
+                    tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
+                    key: { assetId },
+                    updates: { composition, revision: next.revision, updatedAt: now },
+                    conditionExpression: '#revision = :expectedRevision AND attribute_not_exists(#composition)',
+                    expressionAttributeNames: {
+                        '#revision': 'revision',
+                        '#composition': 'composition',
+                    },
+                    expressionAttributeValues: { ':expectedRevision': asset.revision },
+                },
+                ...await buildAssetProjectionOperations(next),
+            ],
+            logConditionalCheckFailures: false,
+            origin: 'settleGeneratedAssetComposition',
+        })
+    } catch (error) {
+        if (!isTransactionConditionalCheckFailure(error)) throw error
+        const concurrent = await getAssetRecord(assetId)
+        assertMatchingComposition(concurrent?.composition)
+        return concurrent!.composition!
+    }
+    publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
+    return composition
+}
+
+function decodeCapabilityImage(value: string): Buffer {
+    const dataUrlMatch = /^data:image\/png;base64,([A-Za-z0-9+/=\r\n]+)$/u.exec(value)
+    const base64 = dataUrlMatch?.[1] ?? value
+    if (!/^[A-Za-z0-9+/=\r\n]+$/u.test(base64)) {
+        throw new Error('GENERATED_MEDIA_COMPOSITION_COMPONENT_ENCODING_INVALID')
+    }
+    const bytes = Buffer.from(base64, 'base64')
+    if (bytes.length === 0) throw new Error('GENERATED_MEDIA_COMPOSITION_COMPONENT_EMPTY')
+    return bytes
+}
+
 export const attachGeneratedAssetNode = async ({
     assetId,
     workspaceId,
@@ -315,6 +467,7 @@ export const attachGeneratedAssetNode = async ({
             && (existingProjectedNode.type === 'image' || existingProjectedNode.type === 'video')
             && existingProjectedNode.assetId === assetId
             && existingProjectedNode.mediaGenerationPhase === 'pending-before-first-frame'
+            && existingProjectedNode.generatedBy?.generationRequestId === generationRun.generationRequestId
         ) {
             return buildAssetCanvasGeometryUpdate({
                 state: workspace.canvasState,
@@ -339,6 +492,10 @@ export const attachGeneratedAssetNode = async ({
                 workspaceMutation: {
                     expectedCanvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
                     canvasStateUpdatedAt,
+                    adoptUnboundGeneratedMediaReservation: {
+                        generationRequestId: generationRun.generationRequestId,
+                        ...(generationRun.mediaRunId ? { mediaRunId: generationRun.mediaRunId } : {}),
+                    },
                     canvasState: projection.canvasState,
                 },
             })

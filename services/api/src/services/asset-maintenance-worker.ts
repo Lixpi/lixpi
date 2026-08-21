@@ -10,7 +10,7 @@ import { retireSupersededCapabilityBlobReferences } from '../models/capability.t
 import AssetModel, { getAssetRecord } from '../models/asset.ts'
 import AssetMaintenance from './asset-maintenance.ts'
 import AssetDocumentService from './asset-document-service.ts'
-import AssetRenditionService from './asset-rendition-service.ts'
+import AssetRenditionService, { RENDITION_WORKER_UNAVAILABLE } from './asset-rendition-service.ts'
 import { deleteUnregisteredContentAddressedObjects } from './blob-storage.ts'
 import { materializeAssetProvenance } from './asset-provenance-materializer.ts'
 import {
@@ -106,10 +106,19 @@ const dispatchMaintenanceMessage = async ({
     }
     if (subject === NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.DELETE_BLOB) {
         if (!data.blobHash) throw new Error('BLOB_HASH_REQUIRED')
-        await BlobModel.deleteZeroReferenceBlob({
+        const deleted = await BlobModel.deleteZeroReferenceBlob({
             organizationId: data.organizationId,
             blobHash: data.blobHash,
         })
+        if (!deleted) {
+            const blob = await BlobModel.get({
+                organizationId: data.organizationId,
+                blobHash: data.blobHash,
+            })
+            if (blob?.referenceCount === 0 && blob.status === 'deleting') {
+                return { nakDelayMs: 30000 }
+            }
+        }
         return
     }
     if (subject === NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.REBUILD_PROVENANCE) {
@@ -159,10 +168,18 @@ const dispatchMaintenanceMessage = async ({
         const asset = await getAssetRecord(data.assetId)
         if (!asset || asset.states.lifecycle === 'deleting') return
         if (asset.organizationId !== data.organizationId) throw new Error('ASSET_TENANT_MISMATCH')
-        await AssetRenditionService.process({
-            assetId: data.assetId,
-            retryAttempt: data.retryAttempt ?? 1,
-        })
+        try {
+            await AssetRenditionService.process({
+                assetId: data.assetId,
+                retryAttempt: data.retryAttempt ?? 1,
+            })
+        } catch (error) {
+            // The file-conversion workload is not listening yet (NEX still deploying,
+            // or the node is restarting). Redeliver without consuming a retry attempt.
+            if ((error as { message?: string })?.message !== RENDITION_WORKER_UNAVAILABLE) throw error
+            console.warn(`Rendition worker unavailable; retrying asset ${data.assetId} in 30s`)
+            return { nakDelayMs: 30000 }
+        }
         return
     }
     if (subject === NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.REPAIR_PROJECTIONS) {

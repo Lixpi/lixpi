@@ -22,6 +22,7 @@ import type {
     BranchOriginCanvasNode,
     BranchForkCanvasNode,
     BranchLineCanvasNode,
+    MediaRunLineageAssignment,
     WorkspaceEdge,
 } from '@lixpi/constants'
 import { layoutTree, type TreeLayoutNode } from '../tree-layout/index.ts'
@@ -29,15 +30,19 @@ import { resolveCollisions } from '../collision/index.ts'
 
 import { computeWorldPosition, buildNodesById } from './canvas-node-helpers.ts'
 import {
+    getBranchLineageAssignment,
     getGeneratedMediaMidpointMarkerId,
     getStartedLineageMarkerState,
+    isBranchLineageOutputNode,
+    isFailedMediaGenerationOutputNode,
     isBranchLineageMarkerNode,
+    type BranchLineageOutputNode,
     type BranchLineageMarkerNode,
     type GeneratedOutputNode,
 } from './branch-lineage-state.ts'
 
 type BranchTreeMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
-type BranchTreeMemberNode = GeneratedOutputNode | BranchTreeMarkerNode
+type BranchTreeMemberNode = BranchLineageOutputNode | BranchTreeMarkerNode
 type Point = { x: number; y: number }
 type Rect = { x: number; y: number; width: number; height: number }
 type CollisionEnvelope = Rect & { overlapThreshold?: number }
@@ -94,10 +99,23 @@ export type BranchTreeLayoutOptions = {
 // completion-handler behavior that was in place before tree rebalancing.
 const DEFAULT_COLLISION_MARGIN = 20
 
-function isGeneratedMediaBranchMember(node: CanvasNode): node is GeneratedOutputNode {
-    return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
-        && !node.parentId
-        && Boolean(node.generatedBy?.branchId)
+function isGeneratedMediaBranchMember(node: CanvasNode): node is BranchLineageOutputNode {
+    if (!isBranchLineageOutputNode(node)) return false
+    const assignment = getBranchLineageAssignment(node)
+    const generatedBy = isFailedMediaGenerationOutputNode(node) ? undefined : node.generatedBy
+    return !node.parentId
+        && Boolean(
+            generatedBy?.branchId
+            || assignment?.branchId
+        )
+}
+
+function getPendingLineageAssignment(node: BranchLineageOutputNode): MediaRunLineageAssignment | undefined {
+    return getBranchLineageAssignment(node)
+}
+
+function getGeneratedBy(node: BranchLineageOutputNode): GeneratedOutputNode['generatedBy'] {
+    return isFailedMediaGenerationOutputNode(node) ? undefined : node.generatedBy
 }
 
 function isBranchOriginMember(node: CanvasNode): node is BranchOriginCanvasNode {
@@ -127,12 +145,14 @@ function isMidpointMarker(node: CanvasNode | undefined): node is BranchForkCanva
     return Boolean(node) && (node!.type === 'branchFork' || node!.type === 'branchLine')
 }
 
-function getGeneratedMediaParentCandidates(node: GeneratedOutputNode): Array<string | undefined> {
+function getGeneratedMediaParentCandidates(node: BranchLineageOutputNode): Array<string | undefined> {
+    const pendingLineage = getPendingLineageAssignment(node)
+    const generatedBy = getGeneratedBy(node)
     return [
-        node.generatedBy?.parentMediaNodeId,
-        node.generatedBy?.branchOriginNodeId,
-        node.generatedBy?.branchForkNodeId,
-        node.generatedBy?.branchLineNodeId,
+        generatedBy?.parentMediaNodeId ?? pendingLineage?.parentMediaNodeId,
+        generatedBy?.branchOriginNodeId ?? pendingLineage?.branchOriginNodeId,
+        generatedBy?.branchForkNodeId ?? pendingLineage?.branchForkNodeId,
+        generatedBy?.branchLineNodeId ?? pendingLineage?.branchLineNodeId,
     ]
 }
 
@@ -213,12 +233,20 @@ export function buildBranchTrees(nodes: CanvasNode[], _edges: WorkspaceEdge[]): 
     const reasoningIndexById = new Map<string, number | undefined>()
     const createdAtById = new Map<string, number>()
     for (const node of members) {
-        variantIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.variantIndex : undefined)
-        mediaIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.mediaIndex : undefined)
+        const pendingLineage = isGeneratedMediaBranchMember(node) ? getPendingLineageAssignment(node) : undefined
+        const generatedBy = isGeneratedMediaBranchMember(node) ? getGeneratedBy(node) : undefined
+        variantIndexById.set(node.nodeId, generatedBy?.variantIndex)
+        mediaIndexById.set(node.nodeId, isGeneratedMediaBranchMember(node)
+            ? generatedBy?.mediaIndex ?? pendingLineage?.mediaIndex
+            : undefined)
         reasoningIndexById.set(node.nodeId, isBranchForkMember(node) || isBranchLineMember(node)
             ? node.reasoningIndex
-            : isGeneratedMediaBranchMember(node) ? node.generatedBy?.reasoningIndex : undefined)
-        createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node) ? node.generatedBy?.createdAt ?? 0 : 0)
+            : isGeneratedMediaBranchMember(node)
+                ? generatedBy?.reasoningIndex ?? pendingLineage?.reasoningIndex
+                : undefined)
+        createdAtById.set(node.nodeId, isGeneratedMediaBranchMember(node)
+            ? generatedBy?.createdAt ?? pendingLineage?.createdAt ?? 0
+            : 0)
     }
     const compareOptionalIndex = (a: number | undefined, b: number | undefined): number => {
         if (a === undefined && b === undefined) return 0
@@ -586,9 +614,9 @@ function positionLineageMarkers(
     nextPositionById: Map<string, Point>,
     options: BranchTreeLayoutOptions,
 ): void {
-    const childrenByMarkerId = new Map<string, GeneratedOutputNode[]>()
+    const childrenByMarkerId = new Map<string, BranchLineageOutputNode[]>()
     for (const node of nodes) {
-        if (node.type !== 'image' && node.type !== 'video' && node.type !== 'capabilityArtifact') continue
+        if (!isGeneratedMediaBranchMember(node)) continue
         const markerId = getGeneratedMediaMidpointMarkerId(node)
         if (!markerId) continue
         const children = childrenByMarkerId.get(markerId) ?? []

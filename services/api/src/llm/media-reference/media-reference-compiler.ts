@@ -19,6 +19,7 @@ import {
 
 import {
     getMediaReferenceBindingVariants,
+    isIdentifyingMediaReferencePhrase,
     matchMediaReferencePhrase,
     MEDIA_REFERENCE_MAX_BINDINGS,
     normalizeMediaReferenceVariant,
@@ -95,7 +96,17 @@ export const segmentMediaPrompt = (node: ProseMirrorJsonNode): MediaPromptSegmen
                 ? normalizePromptReferenceAttrs(candidate.attrs)
                 : normalizeLegacyCapabilityReferenceAttrs(candidate.attrs)
             if (!attrs) return
-            if (attrs.referenceType !== 'media') return appendText(attrs.displayName)
+            if (attrs.referenceType !== 'media') {
+                segments.push({
+                    kind: 'non-media-reference',
+                    referenceType: attrs.referenceType,
+                    displayName: attrs.displayName,
+                    from: offset,
+                    to: offset + attrs.displayName.length,
+                })
+                offset += attrs.displayName.length
+                return
+            }
             segments.push({
                 kind: 'reference',
                 referenceType: 'media',
@@ -140,15 +151,25 @@ const replaceFreeFormMatches = ({
             const end = endMatch.index + endMatch[0].length
             if (replacements.some(replacement => start < replacement.to && end > replacement.from)) continue
             const phrase = text.slice(start, end)
+            if (!isIdentifyingMediaReferencePhrase(phrase)) continue
+            const match = matchMediaReferencePhrase({
+                phrase,
+                bindings,
+                promptRange: { from: offset + start, to: offset + end },
+            })
             const persistedResolution = resolvedReferences.find(resolution =>
                 normalizeMediaReferenceVariant(resolution.originalText) === normalizeMediaReferenceVariant(phrase))
-            if (persistedResolution) {
+            const persistedResolutionIsCurrentCandidate = persistedResolution && (
+                (match.kind === 'unique' && match.binding?.assetId === persistedResolution.assetId)
+                || (match.kind === 'ambiguous' && match.unresolved?.candidates
+                    .some(candidate => candidate.assetId === persistedResolution.assetId))
+            )
+            if (persistedResolution && persistedResolutionIsCurrentCandidate) {
                 const binding = bindings.find(candidate => candidate.assetId === persistedResolution.assetId)
                 if (!binding) throw new Error(`MEDIA_REFERENCE_RESOLUTION_ASSET_NOT_BOUND:${persistedResolution.assetId}`)
                 replacements.push({ from: start, to: end, value: binding.alias })
                 break
             }
-            const match = matchMediaReferencePhrase({ phrase, bindings, promptRange: { from: offset + start, to: offset + end } })
             if (match.kind === 'unique' && match.binding) {
                 replacements.push({ from: start, to: end, value: match.binding.alias })
                 break
@@ -165,6 +186,22 @@ const replaceFreeFormMatches = ({
         safeText = `${safeText.slice(0, replacement.from)}${replacement.value}${safeText.slice(replacement.to)}`
     }
     return { safeText, unresolved }
+}
+
+const escapeRegularExpression = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+
+export const sanitizeMediaReferenceText = (text: string, bindings: MediaReferenceBinding[]): string => {
+    let safe = text
+    for (const binding of bindings) {
+        const variants = [
+            binding.displayNameSnapshot,
+            ...binding.forbiddenNameVariants,
+        ].map(value => value.trim()).filter(Boolean).sort((left, right) => right.length - left.length)
+        for (const variant of variants) {
+            safe = safe.replace(new RegExp(`\\b${escapeRegularExpression(variant)}\\b`, 'giu'), binding.alias)
+        }
+    }
+    return safe
 }
 
 export const compileMediaReferenceIntent = ({
@@ -184,6 +221,9 @@ export const compileMediaReferenceIntent = ({
             if (!binding) throw new Error(`MEDIA_REFERENCE_NOT_AUTHORIZED:${segment.assetId}`)
             return binding.alias
         }
+        if (segment.kind === 'non-media-reference') {
+            return sanitizeMediaReferenceText(segment.displayName, bindings)
+        }
         const compiled = replaceFreeFormMatches({ text: segment.text, offset: segment.from, bindings, resolvedReferences })
         unresolvedBindings.push(...compiled.unresolved)
         return compiled.safeText
@@ -202,20 +242,4 @@ export const compileMediaReferenceIntent = ({
     }
     if (unresolvedBindings.length === 0) assertProviderSafeMediaIntent(intent)
     return { intent, unresolvedBindings }
-}
-
-const escapeRegularExpression = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-
-export const sanitizeMediaReferenceText = (text: string, bindings: MediaReferenceBinding[]): string => {
-    let safe = text
-    for (const binding of bindings) {
-        const variants = [
-            binding.displayNameSnapshot,
-            ...binding.forbiddenNameVariants,
-        ].map(value => value.trim()).filter(Boolean).sort((left, right) => right.length - left.length)
-        for (const variant of variants) {
-            safe = safe.replace(new RegExp(`\\b${escapeRegularExpression(variant)}\\b`, 'giu'), binding.alias)
-        }
-    }
-    return safe
 }

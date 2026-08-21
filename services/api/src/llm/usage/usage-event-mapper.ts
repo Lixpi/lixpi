@@ -57,6 +57,13 @@ export function imageUsageConfirm(report: ImageUsageReport, workflowId: string, 
 export function videoUsageConfirm(report: VideoUsageReport, workflowId: string, workflowSeq: number): ConfirmRequest {
     const v = report.video
 
+    // Seconds of source video fed in. Omitted for text-to-video, which is what
+    // absent means on the wire. The backend prices a run with video input at a
+    // different rate from one without, so this selects the tariff.
+    const inputVideo = typeof v.inputVideoSeconds === 'number' && v.inputVideoSeconds > 0
+        ? { inputVideoSeconds: v.inputVideoSeconds }
+        : {}
+
     // Token-metered (Seedance) vs per-second (VEO). Modality stays 'video' either way;
     // only the measuring unit + dimensions differ.
     if (v.measuringUnit === 'tokens') {
@@ -64,7 +71,7 @@ export function videoUsageConfirm(report: VideoUsageReport, workflowId: string, 
             ...common(report, workflowId, workflowSeq),
             modality: 'video',
             measuringUnit: 'tokens',
-            usage: { videoTokens: v.totalTokens ?? 0 },
+            usage: { videoTokens: v.totalTokens ?? 0, ...inputVideo },
         }
     }
 
@@ -72,6 +79,6 @@ export function videoUsageConfirm(report: VideoUsageReport, workflowId: string, 
         ...common(report, workflowId, workflowSeq),
         modality: 'video',
         measuringUnit: 'seconds',
-        usage: { durationSeconds: v.durationSeconds, resolution: v.resolution },
+        usage: { durationSeconds: v.durationSeconds, resolution: v.resolution, ...inputVideo },
     }
 }

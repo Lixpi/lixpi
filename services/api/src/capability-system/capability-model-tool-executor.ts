@@ -258,6 +258,7 @@ function reasoningVariantFromState(state: ProviderState): CapabilityReasoningMod
         modelVersion: state.modelVersion,
         contextWindow: state.aiModelMetaInfo?.contextWindow ?? 0,
         maxCompletionSize: state.maxCompletionSize ?? state.aiModelMetaInfo?.maxCompletionSize ?? 0,
+        inferenceCapabilities: state.aiModelMetaInfo.inferenceCapabilities,
     }
 }
 
@@ -283,6 +284,7 @@ function buildGenerationTraceSteps(
             ...(event.safeInputSummary ? { inputSummary: event.safeInputSummary } : {}),
             ...(event.safeOutputSummary ? { outputSummary: event.safeOutputSummary } : {}),
             ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+            ...(event.trace ? { trace: event.trace } : {}),
         }]
     })
 }

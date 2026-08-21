@@ -2,7 +2,10 @@
 
 import type NatsService from '@lixpi/nats-service'
 import type { ProviderName } from '@lixpi/constants'
-import type { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
+import {
+    CapabilityMediaStrategyRegistry,
+    type CapabilityModuleCatalog,
+} from '@lixpi/capability-system/backend'
 
 import { ProviderRegistry } from './providers/provider-registry.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './providers/current-media-provider-definitions.ts'
@@ -12,6 +15,7 @@ import { MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './orc
 import { capabilityActionRegistry, getCapabilityDispatcher } from '../capability-system/capability-runtime.ts'
 import { createDefaultCapabilityModuleCatalog } from '../installed-capabilities.ts'
 import type { MetricsClient } from '../metrics/metrics-client.ts'
+import { createCharacterCreatorRuntimePorts } from '../capability-system/character-creator-platform-adapter.ts'
 
 export type LlmModule = {
     process: (instanceKey: string, providerName: ProviderName, requestData: Record<string, any>) => Promise<void>
@@ -42,7 +46,8 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
         },
     )
 
-    const imageRouter = new ImageRouter(registry)
+    const capabilityMediaStrategies = new CapabilityMediaStrategyRegistry()
+    const imageRouter = new ImageRouter(registry, capabilityMediaStrategies, deps.natsService)
     registry.setImageRouter((state, options) => imageRouter.execute(state, options))
 
     const videoRouter = new VideoRouter(registry)
@@ -51,8 +56,13 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
     const capabilityModules = createDefaultCapabilityModuleCatalog({
         natsService: deps.natsService,
         imageRouter,
+        characterCreatorRuntime: createCharacterCreatorRuntimePorts({
+            registry,
+            natsService: deps.natsService,
+        }),
         metrics: deps.metrics,
     })
+    capabilityModules.registerMediaStrategies(capabilityMediaStrategies)
     capabilityModules.registerActions(capabilityActionRegistry)
     const capabilityDispatcher = getCapabilityDispatcher()
     const mediaGenerationMatrixOrchestrator = new MediaGenerationMatrixOrchestrator(registry, deps.natsService)

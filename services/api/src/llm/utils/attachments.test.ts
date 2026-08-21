@@ -24,8 +24,8 @@ describe('convertAttachmentsForProvider', () => {
             type: 'input_image',
             image_url: 'data:image/jpeg;base64,source',
             detail: 'high',
-            reference_role: 'character-source',
-            reference_file_name: 'character-source-1',
+            reference_role: 'original-source',
+            reference_file_name: 'original-source-1',
         }], 'OPENAI')
 
         expect(converted).toEqual([{
