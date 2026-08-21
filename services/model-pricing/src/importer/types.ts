@@ -24,6 +24,10 @@ export type CandidateHoldReason =
     | 'missing-upstream-entry'
     | 'provider-evidence-unavailable'
     | 'provider-source-invalid'
+    | 'provider-source-too-large'
+    | 'provider-source-challenged'
+    | 'provider-layout-changed'
+    | 'provider-spec-inconsistent'
     | 'unsupported-route'
 
 export type CandidateHold = {

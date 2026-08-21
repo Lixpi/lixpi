@@ -7,7 +7,8 @@ import { LiteLlmFeedImporter } from './litellm-feed.ts'
 import { createProviderAdapters } from './provider-adapters.ts'
 import { PricingStorage } from './pricing-storage.ts'
 import { resolveLiteLlmCandidate } from './route-resolution.ts'
-import type { CatalogPricingModel, CandidateHold } from './types.ts'
+import { ProviderSourceError } from './secure-fetch.ts'
+import type { CatalogPricingModel, CandidateHold, CandidateHoldReason, ProviderValidationResult } from './types.ts'
 
 type CatalogRecord = {
     provider: string
@@ -55,7 +56,19 @@ export class PricingImporter {
                 holds.push({ pricingKey: model.pricingKey, candidateHash: candidate.candidateHash, reason: 'unsupported-route', detail: `No provider adapter exists for ${model.providerRoute}`, createdAt })
                 continue
             }
-            const validation = await adapter.validate(candidate)
+            let validation: ProviderValidationResult
+            try {
+                validation = await adapter.validate(candidate)
+            } catch (error) {
+                // A single provider adapter failing (network hiccup, unexpected page
+                // shape) must hold only this pricingKey, never abort the whole run.
+                const reason: CandidateHoldReason = error instanceof ProviderSourceError
+                    ? error.reason
+                    : 'provider-evidence-unavailable'
+                const detail = error instanceof Error ? error.message : String(error)
+                holds.push({ pricingKey: model.pricingKey, candidateHash: candidate.candidateHash, reason, detail, createdAt })
+                continue
+            }
             if (validation.status === 'held') {
                 holds.push({ pricingKey: model.pricingKey, candidateHash: candidate.candidateHash, reason: validation.reason, detail: validation.detail, createdAt })
                 continue
