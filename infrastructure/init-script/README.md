@@ -18,7 +18,7 @@ This script runs inside a Docker container and:
 2. **Generates NATS keys** using `@nats-io/nkeys`:
    - `createAccount()` → `NATS_AUTH_NKEY_*` (seeds start with `SA`)
    - `createCurve()` → `NATS_AUTH_XKEY_*` (seeds start with `SX`)
-   - `createUser()` → service, NEX, model-pricing, pricing-operator, and pricing-billing NKeys (seeds start with `SU`)
+   - `createUser()` → service, NEX, model-pricing, pricing-operator (two distinct keypairs - proposer and approver, since an override approval must be signed by a different key than its proposal), and pricing-billing NKeys (seeds start with `SU`)
 
 3. **Creates secure passwords** for NATS system and regular users
 

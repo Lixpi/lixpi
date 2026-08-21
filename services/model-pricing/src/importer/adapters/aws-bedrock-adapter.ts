@@ -11,7 +11,7 @@ import type { PricingCandidate, ProviderAdapter, ProviderValidationResult } from
 // ~5.9 MB during planning.
 const OFFER_URL = 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json'
 const OFFER_ORIGIN = 'https://pricing.us-east-1.amazonaws.com'
-const PARSER_VERSION = 'aws-bedrock-price-list-v2'
+const PARSER_VERSION = 'aws-bedrock-price-list-v3'
 const MAX_OFFER_BYTES = 32 * 1024 * 1024
 
 type AwsPriceListProduct = {
@@ -33,28 +33,63 @@ type AwsPriceListDocument = {
 }
 
 // Reviewed vendorModel prefix -> the exact "servicename" prefix Bedrock uses
-// for that model family, e.g. "Claude Opus 5 (Amazon Bedrock Edition)".
-// Scoped to Anthropic models for this pass; Stability-via-Bedrock uses a
-// different servicename convention that hasn't been verified yet, so it
-// holds rather than guesses.
-const SERVICE_NAME_BY_PREFIX: ReadonlyArray<readonly [prefix: string, serviceName: string]> = [
-    ['claude-opus-4-1', 'Claude Opus 4.1'],
-    ['claude-opus-4-5', 'Claude Opus 4.5'],
-    ['claude-opus-4-6', 'Claude Opus 4.6'],
-    ['claude-opus-4-7', 'Claude Opus 4.7'],
-    ['claude-opus-4-8', 'Claude Opus 4.8'],
-    ['claude-opus-4', 'Claude Opus 4'],
-    ['claude-opus-5', 'Claude Opus 5'],
-    ['claude-sonnet-4-5', 'Claude Sonnet 4.5'],
-    ['claude-sonnet-4-6', 'Claude Sonnet 4.6'],
-    ['claude-sonnet-4', 'Claude Sonnet 4'],
-    ['claude-sonnet-5', 'Claude Sonnet 5'],
-    ['claude-haiku-4-5', 'Claude Haiku 4.5'],
-    ['claude-haiku-3-5', 'Claude Haiku 3.5'],
+// for that model family, e.g. "Claude Opus 5 (Amazon Bedrock Edition)", plus
+// which `usagetype` naming convention that family's SKUs use (see
+// `USAGE_TYPE_SUFFIXES` below). Scoped to Anthropic models for this pass;
+// Stability-via-Bedrock uses a different servicename convention that hasn't
+// been verified yet, so it holds rather than guesses.
+//
+// Verified against a real fetch of the offer file: `claude-haiku-3-5`'s
+// servicename is "Claude 3.5 Haiku", not "Claude Haiku 3.5" - the version
+// number sits before "Haiku" for the 3.x generation, after it from 4.x
+// onward. The previous mapping was never checked against real data and
+// would have held every Claude 3.5 Haiku candidate as
+// missing-upstream-entry forever.
+const SERVICE_NAME_BY_PREFIX: ReadonlyArray<readonly [prefix: string, serviceName: string, usageTypeConvention: 'current' | 'legacy']> = [
+    ['claude-opus-4-1', 'Claude Opus 4.1', 'current'],
+    ['claude-opus-4-5', 'Claude Opus 4.5', 'current'],
+    ['claude-opus-4-6', 'Claude Opus 4.6', 'current'],
+    ['claude-opus-4-7', 'Claude Opus 4.7', 'current'],
+    ['claude-opus-4-8', 'Claude Opus 4.8', 'current'],
+    ['claude-opus-4', 'Claude Opus 4', 'current'],
+    ['claude-opus-5', 'Claude Opus 5', 'current'],
+    ['claude-sonnet-4-5', 'Claude Sonnet 4.5', 'current'],
+    ['claude-sonnet-4-6', 'Claude Sonnet 4.6', 'current'],
+    ['claude-sonnet-4', 'Claude Sonnet 4', 'current'],
+    ['claude-sonnet-5', 'Claude Sonnet 5', 'current'],
+    // Verified against a real fetch: Haiku 4.5 and 3.5 both price on-demand
+    // input/output through a PascalCase, no-"_standard" usagetype
+    // ("InputTokenCount-Units"/"OutputTokenCount-Units"), not the
+    // snake_case "_standard" suffix current-generation models use.
+    ['claude-haiku-4-5', 'Claude Haiku 4.5', 'legacy'],
+    ['claude-haiku-3-5', 'Claude 3.5 Haiku', 'legacy'],
 ]
 
-const serviceNameFor = (vendorModel: string): string | undefined =>
-    SERVICE_NAME_BY_PREFIX.find(([prefix]) => vendorModel.startsWith(prefix))?.[1]
+const serviceNameFor = (vendorModel: string): { serviceName: string; usageTypeConvention: 'current' | 'legacy' } | undefined => {
+    const match = SERVICE_NAME_BY_PREFIX.find(([prefix]) => vendorModel.startsWith(prefix))
+    return match && { serviceName: match[1], usageTypeConvention: match[2] }
+}
+
+// The exact, anchored `usagetype` tail (always immediately preceded by "_"
+// and terminal - AWS's Price List usagetype is always "<descriptor>-Units")
+// identifying the plain on-demand regional rate for each convention.
+// Current-generation models fan out {standard, batch} x {global, regional} x
+// {input, output, cache_*} under a shared "_tokens_..." stem, so the
+// "_standard" qualifier is what selects the plain regional rate over its
+// "_global_standard"/"_batch" siblings. Legacy models instead fan out
+// "TokenCount" x {none, _Batch, _Global, _Global_Batch} for input/output,
+// and separately "CacheReadInputTokenCount"/"CacheWriteInputTokenCount"/
+// "CacheWrite1hInputTokenCount" (camelCase-concatenated, no separating "_",
+// so they never match an anchor requiring "_" immediately before
+// "InputTokenCount") - the bare "InputTokenCount-Units"/"OutputTokenCount-
+// Units" tail, with no qualifier at all, is what selects the plain regional
+// rate here. Confirmed unique (exactly one match per region/direction) for
+// both Claude Haiku 4.5 and Claude 3.5 Haiku against a real fetch of the
+// offer file.
+const USAGE_TYPE_SUFFIXES: Record<'current' | 'legacy', { input: string; output: string }> = {
+    current: { input: '_input_tokens_standard-Units', output: '_output_tokens_standard-Units' },
+    legacy: { input: '_InputTokenCount-Units', output: '_OutputTokenCount-Units' },
+}
 
 const trimTrailingZeros = (decimal: string): string => decimal.includes('.')
     ? decimal.replace(/0+$/, '').replace(/\.$/, '')
@@ -91,23 +126,21 @@ const findSkuRate = (
     regionCode: string,
     usageTypeSuffix: string,
 ): { amount: string; sku: string; usagetype: string } | undefined => {
-    // Verified against a real fetch: a given servicename+region carries up
-    // to 14 usagetype SKUs, fanning out across {standard, batch} x
-    // {global, regional} x {input, output, cache_read, cache_write,
-    // cache_write_1h} - e.g. "..._input_tokens_standard-Units" (wanted)
-    // alongside "..._input_tokens_global_standard-Units" and
-    // "..._input_tokens_batch-Units". Matching the full
-    // "<direction>_tokens_standard-Units" suffix (not just "input_tokens")
-    // already excludes the global/batch/cache variants on its own, since
-    // none of them contain that exact substring - no separate exclusion
-    // needed. This only covers current-generation snake_case usagetype
-    // naming; older model generations (e.g. Claude Haiku 4.5) use a
-    // different PascalCase convention ("InputTokenCount-Units") this
-    // pass does not match, so they hold rather than misfire.
+    // Verified against a real fetch: a given servicename+region carries up to
+    // 14 (current-generation) or dozens (legacy, including Reserved-capacity
+    // SKUs) usagetype rows. `usageTypeSuffix` is always anchored with a
+    // leading "_" and matched against the true end of the string (`endsWith`,
+    // not `includes`) so a plain regional rate like "..._input_tokens_
+    // standard-Units" or "..._InputTokenCount-Units" can never be satisfied
+    // by a longer sibling that merely contains it, e.g.
+    // "..._input_tokens_global_standard-Units" (extra suffix after the
+    // anchor) or "...CacheReadInputTokenCount-Units" (no "_" before the
+    // anchor - "CacheRead"/"CacheWrite"/"CacheWrite1h" are camelCase-
+    // concatenated, not underscore-separated, in the legacy convention).
     const matches = Object.values(document.products).filter(product =>
         product.attributes.servicename === serviceName
         && product.attributes.regionCode === regionCode
-        && product.attributes.usagetype?.includes(usageTypeSuffix))
+        && product.attributes.usagetype?.endsWith(usageTypeSuffix))
 
     if (matches.length !== 1) return undefined
 
@@ -132,16 +165,20 @@ const findSkuRate = (
 // this pass - cache read/write SKUs exist in the same offer file but are a
 // documented follow-up, and the "global" vs region-pinned endpoint premium
 // Anthropic's own docs describe is not disambiguated here: this deliberately
-// matches only the plain regional "_standard" SKU (see `findSkuRate`),
-// never the "_global_standard" one. Verified against a real fetch of the
-// offer file for `claude-opus-4-7`/`4-8`/`5` and `claude-sonnet-5`: each
-// resolves to exactly one input/output SKU per region, at prices ~10% above
-// Anthropic's direct-API rate (Bedrock's own published premium). Claude
-// Haiku 4.5 and 3.5 are in `SERVICE_NAME_BY_PREFIX` but confirmed to hold
-// today: those model generations use an entirely different, PascalCase
-// usagetype convention ("InputTokenCount-Units", no "_standard" suffix,
-// plus Reserved-capacity SKUs this pass doesn't have a query shape for) -
-// a real, separately-scoped follow-up, not a bug in this mapping.
+// matches only the plain regional rate for each convention (see
+// `USAGE_TYPE_SUFFIXES`/`findSkuRate`), never the "global" one. Verified
+// against a real fetch of the offer file for `claude-opus-4-7`/`4-8`/`5` and
+// `claude-sonnet-5`: each resolves to exactly one input/output SKU per
+// region, at prices ~10% above Anthropic's direct-API rate (Bedrock's own
+// published premium). Claude Haiku 4.5 and Claude 3.5 Haiku, previously held
+// unconditionally because this adapter only queried the current-generation
+// snake_case convention, are now resolved through the legacy PascalCase
+// convention and confirmed against a real fetch: Haiku 4.5 at $1.10/$5.50
+// per million (matching the same ~10% premium pattern) and Claude 3.5 Haiku
+// at $0.80/$4.00 per million, each with exactly one matching SKU per
+// region/direction. Reserved-capacity SKUs remain out of scope for both
+// conventions (this pass models on-demand rates only) and are naturally
+// excluded by the anchored suffix match, not by a separate check.
 export class AwsBedrockPricingAdapter implements ProviderAdapter {
     readonly route = 'aws-bedrock' as const
 
@@ -170,8 +207,8 @@ export class AwsBedrockPricingAdapter implements ProviderAdapter {
 
     async validate(candidate: PricingCandidate): Promise<ProviderValidationResult> {
         const { vendorModel, pricingRegion } = candidate.record
-        const modelServiceName = serviceNameFor(vendorModel)
-        if (!modelServiceName) {
+        const modelService = serviceNameFor(vendorModel)
+        if (!modelService) {
             return {
                 status: 'held',
                 reason: 'missing-upstream-entry',
@@ -186,7 +223,8 @@ export class AwsBedrockPricingAdapter implements ProviderAdapter {
             }
         }
 
-        const serviceName = `${modelServiceName} (Amazon Bedrock Edition)`
+        const serviceName = `${modelService.serviceName} (Amazon Bedrock Edition)`
+        const suffixes = USAGE_TYPE_SUFFIXES[modelService.usageTypeConvention]
 
         let document: AwsPriceListDocument
         let resolvedUrl: string
@@ -196,8 +234,8 @@ export class AwsBedrockPricingAdapter implements ProviderAdapter {
             return { status: 'held', reason: 'provider-source-invalid', detail: 'AWS Price List offer file could not be fetched or parsed' }
         }
 
-        const input = findSkuRate(document, serviceName, pricingRegion, 'input_tokens_standard-Units')
-        const output = findSkuRate(document, serviceName, pricingRegion, 'output_tokens_standard-Units')
+        const input = findSkuRate(document, serviceName, pricingRegion, suffixes.input)
+        const output = findSkuRate(document, serviceName, pricingRegion, suffixes.output)
         if (!input || !output) {
             return {
                 status: 'held',

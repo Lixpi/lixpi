@@ -43,8 +43,13 @@ type EnvConfig = {
     natsNexNodeNkeyPublic: string
     natsPricingServiceNkeySeed: string
     natsPricingServiceNkeyPublic: string
-    natsPricingOperatorNkeySeed: string
-    natsPricingOperatorNkeyPublic: string
+    // A pricing override approval must be signed by a different operator key than
+    // its proposal (see PricingOverrideService.assertCandidate), so two distinct
+    // operator keypairs are generated rather than one.
+    natsPricingOperatorProposerNkeySeed: string
+    natsPricingOperatorProposerNkeyPublic: string
+    natsPricingOperatorApproverNkeySeed: string
+    natsPricingOperatorApproverNkeyPublic: string
     natsPricingBillingNkeySeed: string
     natsPricingBillingNkeyPublic: string
     natsSysUserPassword: string
@@ -164,7 +169,8 @@ function generateNatsKeys(): {
     llmServiceNkey: { seed: string; public: string }
     nexNodeNkey: { seed: string; public: string }
     pricingServiceNkey: { seed: string; public: string }
-    pricingOperatorNkey: { seed: string; public: string }
+    pricingOperatorProposerNkey: { seed: string; public: string }
+    pricingOperatorApproverNkey: { seed: string; public: string }
     pricingBillingNkey: { seed: string; public: string }
 } {
     // createAccount() for NATS_AUTH_NKEY_* (seeds start with SA)
@@ -207,12 +213,22 @@ function generateNatsKeys(): {
     }
     pricingServiceKey.clear()
 
-    const pricingOperatorKey = createUser()
-    const pricingOperatorNkey = {
-        seed: new TextDecoder().decode(pricingOperatorKey.getSeed()),
-        public: pricingOperatorKey.getPublicKey(),
+    // Two distinct keypairs: an override approval must be signed by a different
+    // operator key than its proposal, so a single operator identity can never
+    // both propose and approve the same price change.
+    const pricingOperatorProposerKey = createUser()
+    const pricingOperatorProposerNkey = {
+        seed: new TextDecoder().decode(pricingOperatorProposerKey.getSeed()),
+        public: pricingOperatorProposerKey.getPublicKey(),
     }
-    pricingOperatorKey.clear()
+    pricingOperatorProposerKey.clear()
+
+    const pricingOperatorApproverKey = createUser()
+    const pricingOperatorApproverNkey = {
+        seed: new TextDecoder().decode(pricingOperatorApproverKey.getSeed()),
+        public: pricingOperatorApproverKey.getPublicKey(),
+    }
+    pricingOperatorApproverKey.clear()
 
     const pricingBillingKey = createUser()
     const pricingBillingNkey = {
@@ -227,7 +243,8 @@ function generateNatsKeys(): {
         llmServiceNkey,
         nexNodeNkey,
         pricingServiceNkey,
-        pricingOperatorNkey,
+        pricingOperatorProposerNkey,
+        pricingOperatorApproverNkey,
         pricingBillingNkey,
     }
 }
@@ -762,8 +779,10 @@ async function runInteractivePrompts(): Promise<EnvConfig | null> {
         natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
         natsPricingServiceNkeySeed: natsKeys.pricingServiceNkey.seed,
         natsPricingServiceNkeyPublic: natsKeys.pricingServiceNkey.public,
-        natsPricingOperatorNkeySeed: natsKeys.pricingOperatorNkey.seed,
-        natsPricingOperatorNkeyPublic: natsKeys.pricingOperatorNkey.public,
+        natsPricingOperatorProposerNkeySeed: natsKeys.pricingOperatorProposerNkey.seed,
+        natsPricingOperatorProposerNkeyPublic: natsKeys.pricingOperatorProposerNkey.public,
+        natsPricingOperatorApproverNkeySeed: natsKeys.pricingOperatorApproverNkey.seed,
+        natsPricingOperatorApproverNkeyPublic: natsKeys.pricingOperatorApproverNkey.public,
         natsPricingBillingNkeySeed: natsKeys.pricingBillingNkey.seed,
         natsPricingBillingNkeyPublic: natsKeys.pricingBillingNkey.public,
         natsSysUserPassword,
@@ -828,8 +847,17 @@ function generateEnvFileContent(config: EnvConfig): string {
         '{{NATS_NEX_NODE_NKEY_PUBLIC}}': config.natsNexNodeNkeyPublic,
         '{{NATS_PRICING_SERVICE_NKEY_SEED}}': config.natsPricingServiceNkeySeed,
         '{{NATS_PRICING_SERVICE_NKEY_PUBLIC}}': config.natsPricingServiceNkeyPublic,
-        '{{NATS_PRICING_OPERATOR_NKEY_SEED}}': config.natsPricingOperatorNkeySeed,
-        '{{NATS_PRICING_OPERATOR_NKEY_PUBLIC}}': config.natsPricingOperatorNkeyPublic,
+        '{{NATS_PRICING_OPERATOR_PROPOSER_NKEY_SEED}}': config.natsPricingOperatorProposerNkeySeed,
+        '{{NATS_PRICING_OPERATOR_PROPOSER_NKEY_PUBLIC}}': config.natsPricingOperatorProposerNkeyPublic,
+        '{{NATS_PRICING_OPERATOR_APPROVER_NKEY_SEED}}': config.natsPricingOperatorApproverNkeySeed,
+        '{{NATS_PRICING_OPERATOR_APPROVER_NKEY_PUBLIC}}': config.natsPricingOperatorApproverNkeyPublic,
+        // pricingctl defaults to acting as the proposer; export
+        // NATS_PRICING_OPERATOR_NKEY_SEED=$NATS_PRICING_OPERATOR_APPROVER_NKEY_SEED
+        // to run `pricingctl override approve` as the distinct approver identity.
+        // The auth callout must accept either key, so the deployed PUBLIC value
+        // lists both, comma-separated.
+        '{{NATS_PRICING_OPERATOR_NKEY_SEED}}': config.natsPricingOperatorProposerNkeySeed,
+        '{{NATS_PRICING_OPERATOR_NKEY_PUBLIC}}': `${config.natsPricingOperatorProposerNkeyPublic},${config.natsPricingOperatorApproverNkeyPublic}`,
         '{{NATS_PRICING_BILLING_NKEY_SEED}}': config.natsPricingBillingNkeySeed,
         '{{NATS_PRICING_BILLING_NKEY_PUBLIC}}': config.natsPricingBillingNkeyPublic,
         '{{NATS_CORS_COMMENT}}': isLocal ? ' (local development - allow all origins)' : '',
@@ -991,8 +1019,10 @@ async function main(): Promise<void> {
             natsNexNodeNkeyPublic: natsKeys.nexNodeNkey.public,
             natsPricingServiceNkeySeed: natsKeys.pricingServiceNkey.seed,
             natsPricingServiceNkeyPublic: natsKeys.pricingServiceNkey.public,
-            natsPricingOperatorNkeySeed: natsKeys.pricingOperatorNkey.seed,
-            natsPricingOperatorNkeyPublic: natsKeys.pricingOperatorNkey.public,
+            natsPricingOperatorProposerNkeySeed: natsKeys.pricingOperatorProposerNkey.seed,
+            natsPricingOperatorProposerNkeyPublic: natsKeys.pricingOperatorProposerNkey.public,
+            natsPricingOperatorApproverNkeySeed: natsKeys.pricingOperatorApproverNkey.seed,
+            natsPricingOperatorApproverNkeyPublic: natsKeys.pricingOperatorApproverNkey.public,
             natsPricingBillingNkeySeed: natsKeys.pricingBillingNkey.seed,
             natsPricingBillingNkeyPublic: natsKeys.pricingBillingNkey.public,
             natsSysUserPassword: generateSecurePassword(28),
