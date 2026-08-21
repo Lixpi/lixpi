@@ -419,7 +419,10 @@ export class PricingStorage {
                     candidateHash: verification.candidateHash,
                 },
             }))
-            .sort((left, right) => left.pricingKey.localeCompare(right.pricingKey)))
+            // Ordinal, not localeCompare: lixpi-billing's Go verifier reproduces this
+            // hash with a plain byte-order `<` sort, and locale-aware collation is not
+            // guaranteed to agree with it.
+            .sort((left, right) => left.pricingKey < right.pricingKey ? -1 : left.pricingKey > right.pricingKey ? 1 : 0))
     }
 
     private async putItemOrThrow({
