@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 
-const canonicalize = (value: unknown): string => {
+export const canonicalize = (value: unknown): string => {
     if (value === null || typeof value !== 'object') {
         return JSON.stringify(value)
     }

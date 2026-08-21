@@ -8,6 +8,8 @@ import DynamoDBService from '@lixpi/dynamodb-service'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import { PricingImporter } from './importer/pricing-importer.ts'
 import { PricingStorage } from './importer/pricing-storage.ts'
+import { PricingOverrideService } from './admin/override-service.ts'
+import { PricingResponders } from './serving/pricing-responders.ts'
 
 const requiredEnvironment = (name: string): string => {
     const value = process.env[name]?.trim()
@@ -45,9 +47,37 @@ const importer = new PricingImporter(
     pricingStorage,
     requiredEnvironment('AI_MODELS_LIST_TABLE_NAME'),
 )
+const operatorPublicKeys = new Set(
+    requiredEnvironment('NATS_PRICING_OPERATOR_NKEY_PUBLIC')
+        .split(',')
+        .map(key => key.trim())
+        .filter(Boolean),
+)
+const pricingResponders = new PricingResponders(
+    natsService,
+    pricingStorage,
+    new PricingOverrideService(
+        new DynamoDBService({
+            region: requiredEnvironment('AWS_REGION'),
+            endpoint: process.env.DYNAMODB_ENDPOINT?.trim(),
+        }),
+        pricingStorage,
+        requiredEnvironment('MODEL_PRICING_AUDIT_TABLE'),
+        operatorPublicKeys,
+    ),
+)
+pricingResponders.register()
 const importIntervalMs = Number(process.env.MODEL_PRICING_IMPORT_INTERVAL_MS ?? '21600000')
 if (!Number.isSafeInteger(importIntervalMs) || importIntervalMs < 60_000) {
     throw new Error('MODEL_PRICING_IMPORT_INTERVAL_MS must be an integer of at least 60000')
+}
+const snapshotRetentionMs = Number(process.env.MODEL_PRICING_SNAPSHOT_RETENTION_MS ?? '2592000000')
+if (!Number.isSafeInteger(snapshotRetentionMs) || snapshotRetentionMs < importIntervalMs) {
+    throw new Error('MODEL_PRICING_SNAPSHOT_RETENTION_MS must be an integer of at least MODEL_PRICING_IMPORT_INTERVAL_MS')
+}
+const retainedActivations = Number(process.env.MODEL_PRICING_RETAINED_ACTIVATIONS ?? '5')
+if (!Number.isSafeInteger(retainedActivations) || retainedActivations < 1) {
+    throw new Error('MODEL_PRICING_RETAINED_ACTIVATIONS must be an integer of at least 1')
 }
 
 let importInProgress: Promise<void> | undefined
@@ -59,10 +89,29 @@ const stageImport = async (): Promise<void> => {
     importInProgress = (async () => {
         try {
             const result = await importer.import()
-            info(`Staged non-serving pricing snapshot ${result.snapshotId}: ${result.records} verified records, ${result.holds} holds`)
+            const activation = await pricingStorage.activateSnapshot(result.snapshotId)
+            if (activation.activated && activation.activatedAt) {
+                pricingResponders.publishChanged(activation)
+                info(`Activated pricing snapshot ${result.snapshotId}: ${result.records} verified records, ${result.holds} holds`)
+            } else {
+                info(`Pricing snapshot ${result.snapshotId} is already active`)
+            }
         } catch (error) {
-            // An import failure never changes an active pointer. Phase 5 owns activation.
+            // An import or activation failure never replaces the prior active pointer.
             err('Model pricing import failed; no snapshot was activated:', error)
+        }
+
+        try {
+            const { prunedSnapshotIds } = await pricingStorage.pruneAbandonedSnapshots({
+                retentionMs: snapshotRetentionMs,
+                retainedActivations,
+            })
+            if (prunedSnapshotIds.length > 0) {
+                info(`Pruned ${prunedSnapshotIds.length} abandoned pricing snapshot(s): ${prunedSnapshotIds.join(', ')}`)
+            }
+        } catch (error) {
+            // Pruning is best-effort housekeeping; a failure never affects serving.
+            err('Model pricing snapshot pruning failed:', error)
         }
     })()
     try {
@@ -77,7 +126,7 @@ const importTimer = setInterval(() => { void stageImport() }, importIntervalMs)
 natsService.subscribe(NATS_SUBJECTS.AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED, async () => {
     await stageImport()
 })
-info('Model pricing service is connected and staging Phase 4 non-serving snapshots')
+info('Model pricing service is connected with Phase 5 activation, read APIs, and signed override handling')
 
 const shutdown = async (signal: string): Promise<void> => {
     info(`Model pricing service received ${signal}; draining NATS connection`)

@@ -44,6 +44,7 @@ export class PricingImporter {
         const catalogModels = await this.loadCatalogModels()
         const records: ModelPriceRecord[] = []
         const holds: CandidateHold[] = []
+        const previousRecords = new Map((await this.storage.getActiveTable())?.records.map(record => [record.pricingKey, record]) ?? [])
 
         for (const model of catalogModels) {
             const candidate = resolveLiteLlmCandidate(model, feed, createdAt)
@@ -70,6 +71,18 @@ export class PricingImporter {
                 continue
             }
             if (validation.status === 'held') {
+                const override = await this.storage.getApprovedOverride(model.pricingKey, candidate.candidateHash)
+                if (override) {
+                    records.push({
+                        ...candidate.record,
+                        snapshotId: '',
+                        variants: this.addOverrideEvidence(override.patch.variants ?? candidate.record.variants, override.eventId),
+                        effectiveFrom: override.patch.effectiveFrom ?? candidate.record.effectiveFrom,
+                        verification: { status: 'override-approved', candidateHash: candidate.candidateHash, verifiedAt: createdAt },
+                        createdAt,
+                    })
+                    continue
+                }
                 holds.push({ pricingKey: model.pricingKey, candidateHash: candidate.candidateHash, reason: validation.reason, detail: validation.detail, createdAt })
                 continue
             }
@@ -80,6 +93,15 @@ export class PricingImporter {
                 verification: { status: 'verified', candidateHash: candidate.candidateHash, verifiedAt: createdAt },
                 createdAt,
             })
+        }
+
+        // A held key retains its last verified record so an unrelated verified
+        // change can activate without silently removing a previously priceable route.
+        for (const hold of holds) {
+            const previous = previousRecords.get(hold.pricingKey)
+            if (previous && !records.some(record => record.pricingKey === hold.pricingKey)) {
+                records.push({ ...previous, snapshotId: '', createdAt })
+            }
         }
 
         const normalizedRecords = records
@@ -113,6 +135,31 @@ export class PricingImporter {
             provider: item.provider as CatalogPricingModel['provider'],
             model: item.model as string,
             ...(item.pricingReference as Omit<CatalogPricingModel, 'provider' | 'model'>),
+        }))
+    }
+
+    private addOverrideEvidence(variants: ModelPriceRecord['variants'], eventId: string): ModelPriceRecord['variants'] {
+        const evidence = {
+            mechanism: 'operator-approval' as const,
+            sourceId: eventId,
+            sourceLocators: ['MODEL_PRICING_AUDIT override approval event'],
+            observedAt: new Date().toISOString(),
+        }
+        return variants.map(variant => ({
+            ...variant,
+            components: Object.fromEntries(Object.entries(variant.components).map(([component, rate]) => [
+                component,
+                rate && {
+                    ...rate,
+                    derivation: {
+                        ...rate.derivation,
+                        inputs: rate.derivation.inputs.map(input => ({
+                            ...input,
+                            evidence: [...input.evidence, evidence],
+                        })),
+                    },
+                },
+            ])),
         }))
     }
 }

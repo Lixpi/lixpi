@@ -128,6 +128,7 @@ export type PricingSnapshotManifest = {
     snapshotId: string
     sourceRevision: string
     normalizedContentHash: string
+    recordsContentHash: string
     recordCount: number
     status: 'complete'
     createdAt: string
@@ -162,6 +163,11 @@ export type PricingOverrideCommand = {
     expectedActiveSnapshotId: string
     candidateHash: string
     patch?: Partial<Pick<ModelPriceRecord, 'variants' | 'effectiveFrom'>>
+    // Required on 'approve'/'reject', forbidden on 'propose': the exact proposal
+    // event id (its persisted sortKey) this decision resolves - binding a decision
+    // to the candidate hash alone would let a later, never-approved proposal for
+    // the same hash silently inherit an earlier approval.
+    proposalEventId?: string
     reason: string
     changeReference: string
     issuedAt: string

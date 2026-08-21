@@ -201,34 +201,39 @@ const pricingIdentityConfigs = [
     {
         environmentKey: 'NATS_PRICING_SERVICE_NKEY_PUBLIC',
         userId: 'svc:model-pricing',
-        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>', 'aiModels.syncCompleted'] } },
+        permissions: {
+            pub: { allow: ['_INBOX.>', 'pricing.changed'] },
+            sub: { allow: ['_INBOX.>', 'aiModels.syncCompleted', 'pricing.revision.get', 'pricing.model.get', 'pricing.table.get', 'pricing.admin.status.get', 'pricing.admin.override.command'] },
+        },
     },
     {
         environmentKey: 'NATS_PRICING_OPERATOR_NKEY_PUBLIC',
         userId: 'svc:pricing-operator',
-        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
+        permissions: { pub: { allow: ['_INBOX.>', 'pricing.admin.status.get', 'pricing.admin.override.command'] }, sub: { allow: ['_INBOX.>'] } },
     },
     {
         environmentKey: 'NATS_PRICING_BILLING_NKEY_PUBLIC',
         userId: 'svc:pricing-billing',
-        permissions: { pub: { allow: ['_INBOX.>'] }, sub: { allow: ['_INBOX.>'] } },
+        permissions: { pub: { allow: ['_INBOX.>', 'pricing.revision.get', 'pricing.model.get', 'pricing.table.get'] }, sub: { allow: ['_INBOX.>', 'pricing.changed'] } },
     },
 ]
 
 for (const pricingIdentity of pricingIdentityConfigs) {
-    const publicKey = env[pricingIdentity.environmentKey]
+    const publicKeys = env[pricingIdentity.environmentKey]?.split(',').map(publicKey => publicKey.trim()).filter(Boolean) ?? []
 
-    if (!publicKey) {
+    if (publicKeys.length === 0) {
         warn(`${pricingIdentity.environmentKey} is not configured; ${pricingIdentity.userId} cannot authenticate through auth callout`)
         continue
     }
 
-    serviceAuthConfigs.push({
-        publicKey,
-        userId: pricingIdentity.userId,
-        account: 'PRICING',
-        permissions: pricingIdentity.permissions,
-    })
+    for (const publicKey of publicKeys) {
+        serviceAuthConfigs.push({
+            publicKey,
+            userId: pricingIdentity.userId,
+            account: 'PRICING',
+            permissions: pricingIdentity.permissions,
+        })
+    }
 }
 
 // Initialize with your NATS server connection

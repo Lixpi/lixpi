@@ -6,13 +6,15 @@
     "description": "Lixpi model pricing service",
     "main": "src/main.ts",
     "scripts": {
-        "start": "node ./src/main.ts"
+        "start": "node ./src/main.ts",
+        "pricingctl": "node ./src/cli/pricingctl.ts"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",
-        "@lixpi/nats-service": "workspace:*"
+        "@lixpi/nats-service": "workspace:*",
+        "@nats-io/nkeys": "*"
     },
     "devDependencies": {
         "@types/node": "*"

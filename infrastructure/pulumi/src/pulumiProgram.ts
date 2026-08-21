@@ -458,6 +458,7 @@ export const createInfrastructure = async () => {
         aiModelsListTable: dynamoDBtables.aiModelsListTable,
         environment: {
             NATS_SERVERS: natsClusterService.outputs.natsUrl,
+            NATS_PRICING_OPERATOR_NKEY_PUBLIC: NATS_PRICING_OPERATOR_NKEY_PUBLIC!,
             MODEL_PRICING_SNAPSHOTS_TABLE: dynamoDBtables.modelPricingSnapshotsTable.name,
             MODEL_PRICING_RECORDS_TABLE: dynamoDBtables.modelPricingRecordsTable.name,
             MODEL_PRICING_AUDIT_TABLE: dynamoDBtables.modelPricingAuditTable.name,
