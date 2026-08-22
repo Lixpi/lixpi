@@ -8,6 +8,11 @@ const mockState = vi.hoisted(() => ({
         setOptions: ReturnType<typeof vi.fn>
         destroy: ReturnType<typeof vi.fn>
     }>,
+    slidingDropdownConfigs: [] as any[],
+    slidingDropdownInstances: [] as Array<{
+        setValue: ReturnType<typeof vi.fn>
+        destroy: ReturnType<typeof vi.fn>
+    }>,
     tagPillConfigs: [] as any[],
     tagPillDestroyFns: [] as Array<ReturnType<typeof vi.fn>>,
 }))
@@ -50,6 +55,18 @@ vi.mock('@lixpi/ui-kit/components/tag-pill', () => ({
             setSelected: vi.fn(),
             destroy,
         }
+    }),
+}))
+
+vi.mock('@lixpi/ui-kit/components/sliding-dropdown', () => ({
+    createSlidingDropdown: vi.fn((_parent: any, config: any) => {
+        const instance = {
+            setValue: vi.fn(),
+            destroy: vi.fn(),
+        }
+        mockState.slidingDropdownConfigs.push(config)
+        mockState.slidingDropdownInstances.push(instance)
+        return instance
     }),
 }))
 
@@ -109,6 +126,8 @@ type MediaGenerationConfigSelectionGroup = {
 function resetMocks(): void {
     mockState.dropdownConfigs.length = 0
     mockState.dropdownInstances.length = 0
+    mockState.slidingDropdownConfigs.length = 0
+    mockState.slidingDropdownInstances.length = 0
     mockState.tagPillConfigs.length = 0
     mockState.tagPillDestroyFns.length = 0
 }
@@ -248,10 +267,17 @@ describe('createMediaGenerationConfigMatrixView', () => {
         const tagLabels = mockState.tagPillConfigs.slice(-2).map((config) => config.label)
         expect(tagLabels).toEqual(['Imagen 4', 'GPT Image'])
 
-        const imageSizeDropdown = latestDropdownConfig((config) => config.id.endsWith('-imageSize'))
-        expect(imageSizeDropdown?.selectedValue).toEqual({ title: 'Square', value: '1:1' })
+        const imageSizeDropdown = mockState.slidingDropdownConfigs.find((config) => (
+            config.id.endsWith(':imageSize')
+        ))
+        expect(imageSizeDropdown?.selectedValue).toBe('1:1')
+        expect(imageSizeDropdown?.options).toEqual([
+            { value: '1:1', label: '1:1' },
+            { value: '16:9', label: '16:9' },
+        ])
+        expect(imageSizeDropdown?.renderOption).toEqual(expect.any(Function))
 
-        imageSizeDropdown.onSelect({ title: 'Wide', value: '16:9' })
+        imageSizeDropdown.onChange('16:9', 'image:google/openai:imageSize')
 
         expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
             groupId: 'image:google/openai',
@@ -287,6 +313,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         view.destroy()
         expect(mockState.dropdownInstances.every((instance) => instance.destroy.mock.calls.length > 0)).toBe(true)
+        expect(mockState.slidingDropdownInstances.every((instance) => instance.destroy.mock.calls.length > 0)).toBe(true)
         expect(mockState.tagPillDestroyFns.every((destroy) => destroy.mock.calls.length > 0)).toBe(true)
     })
 })

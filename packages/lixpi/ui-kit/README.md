@@ -46,6 +46,7 @@ The shared animated collapse/expand icon describes the available action: collaps
 - Side panel
 - Block card tiles list
 - Slider
+- Sliding dropdown
 - Sliding switch
 - Sliding tabs switch
 - Tag pill

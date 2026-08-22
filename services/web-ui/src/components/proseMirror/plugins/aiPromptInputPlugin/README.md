@@ -123,11 +123,11 @@ Multi-select controls update the scalar attr to the first selected model and ser
 
 `ModeAwareModelSelector` swaps between the single-select and multi-select dropdown for each section based on the section's multi-model flag. If a multi-select factory is omitted, the selector mounts the section's single-select dropdown.
 
-Model selector popovers are mounted to `document.body` and use InfoBubble viewport positioning so the model settings panel's scroll container cannot clip the list. The model settings menu treats those portaled popovers as part of its interaction surface.
+Model selector popovers and open sliding-dropdown SVGs are mounted to `document.body` so the model settings panel's scroll container cannot clip them. The model settings menu treats those portaled controls as part of its interaction surface.
 
 `SelectedModelTagsRow` subscribes to `aiModelsStore`, renders selected model tag pills while multi-model mode is enabled, and removes ids through the matching adapter when a tag is closed.
 
-`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders only the per-model matrix groups for currently selected image or video model ids. Provider groups remain unboxed and use the model menu's gradient section dividers. Aspect ratios and discrete settings use the ui-kit sliding switch and the same app-wide flat indicator appearance as every other sliding switch, with visual frame glyphs for ratios. Duration uses the ui-kit slider and keeps Seedance intelligent duration as an ordered slider value. Pipeline-owned negative prompting, moderation policy, output count, output format, and audio defaults are not configuration-matrix controls and are never exposed as composer inputs. User changes write a sanitized `imageGenerationConfigGroups` or `videoGenerationConfigGroups` attr containing `{ groupId, modelIds, values }`; the API validates every value against the synchronized controls. The frontend does not derive provider-specific controls.
+`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders only the per-model matrix groups for currently selected image or video model ids. Provider groups remain unboxed and use the model menu's gradient section dividers. Aspect ratios and resolutions use the compact ui-kit sliding dropdown. The matrix supplies the dropdown's custom option renderer, which draws a proportion frame above the option label. Resolution frames use their pixel dimensions or the group's selected aspect ratio. Other discrete settings use the ui-kit sliding switch with the same app-wide flat indicator appearance. Duration uses the ui-kit slider and keeps Seedance intelligent duration as an ordered slider value. Pipeline-owned negative prompting, moderation policy, output count, output format, and audio defaults are not configuration-matrix controls and are never exposed as composer inputs. User changes write a sanitized `imageGenerationConfigGroups` or `videoGenerationConfigGroups` attr containing `{ groupId, modelIds, values }`; the API validates every value against the synchronized controls. The frontend does not derive provider-specific controls.
 
 ## Model Settings Menu
 
@@ -149,7 +149,7 @@ Each section has a title, help tooltip, section switch, one or more controls, an
 
 `settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in `ai-prompt-input.scss`.
 
-The NodeView hides the model menu on document `mousedown` outside the controls row. It removes that listener in `destroy()`.
+The NodeView hides the model menu on document `mousedown` outside the controls row, model menu, model-selector popovers, and portaled sliding-dropdown scroll surfaces/SVGs. It removes that listener in `destroy()`.
 
 ## Submit
 

@@ -16,10 +16,14 @@ import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import { createSlider, type SliderInstance } from '@lixpi/ui-kit/components/slider'
 import {
+    createSlidingDropdown,
+    type SlidingDropdownInstance,
+    type SlidingDropdownOptionRenderInstance,
+    type SlidingDropdownOptionRenderState,
+} from '@lixpi/ui-kit/components/sliding-dropdown'
+import {
     createSlidingSwitch,
     type SlidingSwitchInstance,
-    type SlidingSwitchOptionRenderInstance,
-    type SlidingSwitchOptionRenderState,
 } from '@lixpi/ui-kit/components/sliding-switch'
 import { createTagPill as createSvgTagPill, type TagPillInstance } from '@lixpi/ui-kit/components/tag-pill'
 import { settings } from '$src/settings.ts'
@@ -117,59 +121,114 @@ type PendingMediaConfigSvgControl = {
 }
 
 const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
-const MEDIA_CONFIG_ASPECT_RATIO_CONTROL_HEIGHT = 66
 const MEDIA_CONFIG_SLIDER_HEIGHT = 66
 const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
+const MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH = 28
+const MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT = 15
+const MEDIA_DIMENSIONS_GLYPH_ADAPTIVE_SIZE = 15
+const MEDIA_DIMENSIONS_GLYPH_STROKE_WIDTH = 1.5
 
-class AspectRatioSwitchOptionView implements SlidingSwitchOptionRenderInstance<string> {
+function isAspectRatioValue(value: string): boolean {
+    return /^\d+:\d+$/.test(value)
+}
+
+function isPixelDimensionsValue(value: string): boolean {
+    return /^\d+\s*[x×]\s*\d+$/i.test(value)
+}
+
+function usesDimensionsDropdown(control: MediaGenerationConfigControl): boolean {
+    if (control.kind === 'aspect-ratio' || control.key === 'aspectRatio' || control.key === 'resolution') return true
+    if (control.key !== 'imageSize') return false
+    return control.options.some(option => (
+        isAspectRatioValue(option.value) || isPixelDimensionsValue(option.value)
+    ))
+}
+
+function dimensionDropdownOptions(control: MediaGenerationConfigControl): MediaGenerationConfigControl['options'] {
+    return control.options.map(option => ({
+        ...option,
+        label: option.value === 'auto' || option.value === 'adaptive' ? option.label : option.value,
+    }))
+}
+
+class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderInstance<string> {
     private readonly group: any
     private readonly glyph: any
     private readonly adaptiveLabel: any
     private readonly label: any
+    private value = ''
+    private optionHeight = 0
 
-    constructor(parent: any, state: SlidingSwitchOptionRenderState<string>) {
+    constructor(
+        parent: any,
+        state: SlidingDropdownOptionRenderState<string>,
+        private readonly getFallbackProportionValue: () => string,
+    ) {
         this.group = parent.append('g')
-            .attr('class', 'ai-media-config-aspect-switch-option')
+            .attr('class', 'ai-media-config-dimensions-dropdown-option')
             .attr('pointer-events', 'none')
         this.glyph = this.group.append('rect')
-            .attr('class', 'ai-media-config-aspect-switch-glyph')
+            .attr('class', 'ai-media-config-dimensions-dropdown-glyph')
             .attr('fill', 'none')
             .attr('rx', 2)
             .attr('ry', 2)
-            .attr('stroke-width', 1.5)
+            .attr('stroke-width', MEDIA_DIMENSIONS_GLYPH_STROKE_WIDTH)
         this.adaptiveLabel = this.group.append('text')
-            .attr('class', 'ai-media-config-aspect-switch-adaptive-label')
+            .attr('class', 'ai-media-config-dimensions-dropdown-adaptive-label')
             .attr('font-size', 8)
             .attr('font-weight', 700)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
             .text('A')
         this.label = this.group.append('text')
-            .attr('class', 'ai-media-config-aspect-switch-label')
+            .attr('class', 'ai-media-config-dimensions-dropdown-label')
             .attr('font-size', 12)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
         this.render(state)
     }
 
-    private glyphSize(value: string): { width: number; height: number; adaptive: boolean } {
-        const adaptive = value === 'adaptive' || value === 'auto'
-        if (adaptive) return { width: 15, height: 15, adaptive }
-
-        const [widthValue, heightValue] = value.split(':').map(Number)
-        const ratio = widthValue && heightValue ? widthValue / heightValue : 1
-        const maxWidth = 28
-        const maxHeight = 15
-        if (ratio >= 1) return { width: maxWidth, height: maxWidth / ratio, adaptive }
-        return { width: maxHeight * ratio, height: maxHeight, adaptive }
+    private proportionFor(value: string): number | null {
+        const separator = isAspectRatioValue(value) ? ':' : isPixelDimensionsValue(value) ? /[x×]/i : null
+        if (!separator) return null
+        const [widthValue, heightValue] = value.split(separator).map(Number)
+        if (!widthValue || !heightValue) return null
+        return widthValue / heightValue
     }
 
-    resize(x: number, y: number, width: number, height = MEDIA_CONFIG_ASPECT_RATIO_CONTROL_HEIGHT): void {
+    private glyphSize(value: string): { width: number; height: number; adaptive: boolean } {
+        const adaptive = value === 'adaptive' || value === 'auto'
+        if (adaptive) {
+            return {
+                width: MEDIA_DIMENSIONS_GLYPH_ADAPTIVE_SIZE,
+                height: MEDIA_DIMENSIONS_GLYPH_ADAPTIVE_SIZE,
+                adaptive,
+            }
+        }
+
+        const ratio = this.proportionFor(value)
+            ?? this.proportionFor(this.getFallbackProportionValue())
+            ?? 1
+        if (ratio >= 1) {
+            return {
+                width: MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH,
+                height: MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH / ratio,
+                adaptive,
+            }
+        }
+        return {
+            width: MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT * ratio,
+            height: MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT,
+            adaptive,
+        }
+    }
+
+    resize(x: number, y: number, width: number, height = this.optionHeight): void {
+        this.optionHeight = height
         const optionCenterX = x + width / 2
         const glyphCenterY = y + height * 0.37
         const labelY = y + height * 0.72
-        const value = String(this.group.attr('data-value') ?? '')
-        const size = this.glyphSize(value)
+        const size = this.glyphSize(this.value)
 
         this.glyph
             .attr('x', optionCenterX - size.width / 2)
@@ -184,12 +243,12 @@ class AspectRatioSwitchOptionView implements SlidingSwitchOptionRenderInstance<s
             .attr('y', labelY)
     }
 
-    render(state: SlidingSwitchOptionRenderState<string>): void {
+    render(state: SlidingDropdownOptionRenderState<string>): void {
         const color = state.disabled
             ? 'rgba(49, 59, 78, 0.3)'
             : state.selected || state.hovered ? '#1a2744' : 'rgba(49, 59, 78, 0.68)'
         const size = this.glyphSize(state.option.value)
-        this.group.attr('data-value', state.option.value)
+        this.value = state.option.value
         this.glyph
             .attr('stroke', color)
             .attr('stroke-dasharray', size.adaptive ? '3 2' : null)
@@ -818,7 +877,10 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     }
 
     private createSvgControlHost(
-        className: 'ai-media-config-sliding-switch-host' | 'ai-media-config-slider-host',
+        className:
+            | 'ai-media-config-sliding-dropdown-host'
+            | 'ai-media-config-sliding-switch-host'
+            | 'ai-media-config-slider-host',
         group: RenderedMediaConfigGroup,
         control: MediaGenerationConfigControl,
         selectedValue: string,
@@ -833,11 +895,40 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         return host.clientWidth || host.getBoundingClientRect().width || MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH
     }
 
+    private getGroupAspectRatioValue(group: RenderedMediaConfigGroup): string {
+        const aspectRatioControl = group.controls.find(control => control.key === 'aspectRatio')
+        if (!aspectRatioControl) return ''
+        const selectionGroup = this.getSelectionForGroup(this.controls.getConfigGroups(), group.groupId)
+        return normalizeControlValue(aspectRatioControl, selectionGroup?.values.aspectRatio)
+    }
+
+    private mountSlidingDropdownControl(pendingControl: PendingMediaConfigSvgControl): void {
+        const { host, group, control, selectedValue } = pendingControl
+        const svg = select(host).append('svg')
+        const slidingDropdown: SlidingDropdownInstance<string> = createSlidingDropdown(svg, {
+            id: `${group.groupId}:${control.key}`,
+            x: 0,
+            y: 0,
+            options: dimensionDropdownOptions(control),
+            selectedValue,
+            ariaLabel: control.label,
+            renderOption: (parent, state) => new MediaDimensionsDropdownOptionView(
+                parent,
+                state,
+                () => this.getGroupAspectRatioValue(group),
+            ),
+            onChange: value => this.setGroupControlValue(group, control, value),
+        })
+        this.mountedControls.push({
+            groupId: group.groupId,
+            control,
+            setValue: value => slidingDropdown.setValue(value),
+            destroy: () => slidingDropdown.destroy(),
+        })
+    }
+
     private mountSlidingSwitchControl(pendingControl: PendingMediaConfigSvgControl): void {
         const { host, group, control, selectedValue } = pendingControl
-        const height = control.kind === 'aspect-ratio'
-            ? MEDIA_CONFIG_ASPECT_RATIO_CONTROL_HEIGHT
-            : MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT
         const svg = select(host)
             .append('svg')
             .attr('class', 'ai-media-config-sliding-switch-svg')
@@ -846,16 +937,13 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             x: 0,
             y: 0,
             width: this.mountedControlWidth(host),
-            height,
+            height: MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT,
             options: control.options,
             selectedValue,
             observeParentResize: true,
             visualOverflowPadding: { top: 0, right: 0, bottom: 0, left: 0 },
             indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
             indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
-            ...(control.kind === 'aspect-ratio'
-                ? { renderOption: (parent, state) => new AspectRatioSwitchOptionView(parent, state) }
-                : {}),
             onChange: value => this.setGroupControlValue(group, control, value),
         })
         this.mountedControls.push({
@@ -893,6 +981,10 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     private mountSvgControl(pendingControl: PendingMediaConfigSvgControl): void {
         if (pendingControl.control.kind === 'duration') {
             this.mountSliderControl(pendingControl)
+            return
+        }
+        if (usesDimensionsDropdown(pendingControl.control)) {
+            this.mountSlidingDropdownControl(pendingControl)
             return
         }
         this.mountSlidingSwitchControl(pendingControl)
@@ -972,8 +1064,8 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         const selectedValue = normalizeControlValue(control, selectionGroup?.values?.[control.key])
         const field = control.readOnly || control.kind === 'fixed'
             ? html`<div className="ai-media-config-fixed-value">${control.options.find(option => option.value === selectedValue)?.label ?? selectedValue}</div>` as HTMLElement
-            : control.kind === 'aspect-ratio'
-                ? this.createSvgControlHost('ai-media-config-sliding-switch-host', group, control, selectedValue, pendingControls)
+            : usesDimensionsDropdown(control)
+                ? this.createSvgControlHost('ai-media-config-sliding-dropdown-host', group, control, selectedValue, pendingControls)
                 : control.kind === 'duration'
                     ? this.createSvgControlHost('ai-media-config-slider-host', group, control, selectedValue, pendingControls)
                     : control.kind === 'toggle'
@@ -1020,7 +1112,9 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     }
 
     update(): void {
-        const groups = this.getMatrixGroups()
+        const groups = this.controls.getUseMultipleModels()
+            ? this.getMatrixGroups()
+            : []
         const selectionGroups = this.normalizeSelectionGroups(groups)
         const structureSignature = JSON.stringify(groups)
         const connected = this.dom.isConnected

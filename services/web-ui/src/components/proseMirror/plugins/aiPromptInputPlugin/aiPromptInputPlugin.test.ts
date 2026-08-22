@@ -522,6 +522,36 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             ])
         })
 
+        it('keeps the model settings menu open for a portaled sliding dropdown interaction', () => {
+            const { nv } = createNodeView()
+            const trigger = nv.dom.querySelector('.ai-prompt-model-menu-trigger')!
+            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble')!
+            const dropdownScrollPortal = document.createElement('div')
+            const dropdownPortal = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+            const dropdownGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+            dropdownScrollPortal.classList.add('sliding-dropdown-scroll-portal')
+            dropdownPortal.setAttribute('data-sliding-dropdown-open', 'true')
+            dropdownGroup.classList.add('sliding-dropdown-group')
+            dropdownPortal.appendChild(dropdownGroup)
+            dropdownScrollPortal.appendChild(dropdownPortal)
+            document.body.appendChild(dropdownScrollPortal)
+
+            trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            dropdownGroup.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            dropdownScrollPortal.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(false)
+
+            dropdownScrollPortal.remove()
+            nv.destroy!()
+        })
+
         it('renders each model setup section with heading help, toggle, controls row, and selected-tags row', () => {
             const { nv } = createNodeView()
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
