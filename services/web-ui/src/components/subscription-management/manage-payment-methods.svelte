@@ -4,10 +4,12 @@
     } from 'svelte'
     import { fade } from 'svelte/transition'
 
-    import { Button } from "$lib/registry/ui/button/index.ts"
-    import { Label } from "$lib/registry/ui/label/index.ts";
-    import { Input } from "$lib/registry/ui/input/index.ts"
-    import * as Table from "$lib/registry/ui/table/index.js";
+    // shadcn-svelte has been removed from the project; the saved-cards table and
+    // buttons below are commented out pending a rewrite on top of @lixpi/ui-kit.
+    // import { Button } from '$lib/registry/ui/button/index.ts'
+    // import { Label } from '$lib/registry/ui/label/index.ts'
+    // import { Input } from '$lib/registry/ui/input/index.ts'
+    // import * as Table from '$lib/registry/ui/table/index.js'
 
     import WalletCardsIcon from "@lucide/svelte/icons/wallet-cards"
     import CreditCardIcon from "@lucide/svelte/icons/credit-card";
@@ -49,8 +51,9 @@
 
 <div class="relative min-h-20">
 
+<!--
     {#if $subscriptionStore.data.paymentMethods?.length > 0 && !showAddNewCard}
-        <!-- <h4>Saved credit cards</h4> -->
+         <h4>Saved credit cards</h4> 
         <Table.Root>
             <Table.Caption>Saved credit cards</Table.Caption>
             <Table.Header>
@@ -66,7 +69,7 @@
                 {#each $subscriptionStore.data.paymentMethods as paymentMethod}
                 <Table.Row>
                     <Table.Cell class="capitalize flex items-center"><CreditCardIcon class="mr-2" /> {paymentMethod.card.brand}</Table.Cell>
-                    <!-- <Table.Cell>{paymentMethod.id}</Table.Cell> -->
+                     <Table.Cell>{paymentMethod.id}</Table.Cell> 
                     <Table.Cell class="font-medium">
                         <div class="flex items-center">
                             <EllipsisIcon class="mr-0" />
@@ -89,6 +92,7 @@
             </Table.Body>
         </Table.Root>
     {/if}
+-->
 
     {#if showAddNewCard || $subscriptionStore.data.paymentMethods?.length === 0}
         <AddOrEditPaymentMethod
@@ -96,8 +100,10 @@
         />
     {/if}
 
+<!--
     {#if !showAddNewCard && $subscriptionStore.data.paymentMethods?.length > 0}
         <Button variant="outline" size="sm" class="" onclick={() => showAddNewCard = !showAddNewCard}><PlusIcon />Add New</Button>
     {/if}
+-->
 
 </div>

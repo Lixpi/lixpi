@@ -33,10 +33,9 @@ Tests use **Vitest** with the `happy-dom` DOM environment. The configuration liv
 
 ### Path Aliases
 
-Two aliases are available in tests, same as in app code:
+One alias is available in tests, same as in app code:
 
 - `$src` → `./src`
-- `$lib` → `./packages/shadcn-svelte/lib`
 
 ## Testing Classes with DOM Dependencies
 

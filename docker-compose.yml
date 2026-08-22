@@ -378,7 +378,6 @@ services:
             # The image bakes this file (services/web-ui/Dockerfile), so the container uses the baked
             # copy and pnpm's rewrite lands in the writable layer. Rebuild the image to pick up edits.
             # - ./services/web-ui/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
-            - ./services/web-ui/postcss.config.js:/usr/src/service/postcss.config.js:cached    # Tailwind 4 doesn't require postcss, but fucking shadcn DOES :( :( :(
 
             - ./services/web-ui/public:/usr/src/service/public:cached
             # - ./services/web-ui/dist:/usr/src/service/dist:cached    # Build output directory
@@ -388,7 +387,6 @@ services:
             - ./services/web-ui/vite.config.ts:/usr/src/service/vite.config.ts:cached
             - ./services/web-ui/svelte.config.js:/usr/src/service/svelte.config.js:cached
 
-            - ./services/web-ui/tailwind.config.ts:/usr/src/service/tailwind.config.ts:cached
 
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
@@ -423,7 +421,6 @@ services:
             - ./packages/lixpi/ui-kit/styles:/usr/src/service/packages/lixpi/ui-kit/styles:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
-            - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/packages/shadcn-svelte/lib:cached
 
             # CA certificate for browser installation
             - caddy-certs:/usr/src/service/public/certs:ro

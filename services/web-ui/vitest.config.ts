@@ -8,13 +8,11 @@ export default defineConfig({
 		include: ['src/**/*.test.ts'],
 		alias: {
 			$src: path.resolve('./src'),
-			$lib: path.resolve('./packages/shadcn-svelte/lib'),
 		},
 	},
 	resolve: {
 		alias: {
 			$src: path.resolve('./src'),
-			$lib: path.resolve('./packages/shadcn-svelte/lib'),
 		},
 	},
 })

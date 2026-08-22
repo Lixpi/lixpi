@@ -1,9 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte'
 
-    // ShadCN and Tailwind
-    import '$src/app.pcss'
-
     import Layout from '$src/views/layouts/layout.svelte'
     import Login from '$src/pages/login.svelte'
 

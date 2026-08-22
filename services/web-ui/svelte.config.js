@@ -22,9 +22,6 @@ const config = {
                         if (url.startsWith('$src/')) {
                             return { file: path.resolve('./src', url.slice(5)) };
                         }
-                        if (url.startsWith('$lib/')) {
-                            return { file: path.resolve('./packages/shadcn-svelte/lib', url.slice(5)) };
-                        }
                         return null;
                     }
                 ]
@@ -35,7 +32,7 @@ const config = {
     ],
 
     onwarn(warning, defaultHandler) {
-        if (warning.code === 'css_unused_selector') return;    // Fuck off unused css selector warning
+        if (warning.code === 'css_unused_selector') return;    // Silence unused css selector warning
 
         // handle all other warnings normally
         defaultHandler(warning);

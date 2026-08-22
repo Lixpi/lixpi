@@ -122,7 +122,6 @@ services:
             - ./packages/lixpi/ui-kit/package.json:/usr/src/service/web-ui/packages/lixpi/ui-kit/package.json:ro,cached
             - ./packages/lixpi/ui-kit/src:/usr/src/service/web-ui/packages/lixpi/ui-kit/src:ro,cached
             - ./packages/lixpi/ui-kit/styles:/usr/src/service/web-ui/packages/lixpi/ui-kit/styles:ro,cached
-            - ./packages-vendor/shadcn-svelte/docs/src/lib:/usr/src/service/web-ui/packages/shadcn-svelte/lib:cached
 
             # --- web-ui domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
