@@ -46,9 +46,6 @@ COPY ./infrastructure /usr/src/service/infrastructure
 COPY ./packages /usr/src/service/packages
 COPY ./services /usr/src/service/services
 
-# Copy `web-ui` specific packages
-COPY ./packages-vendor/shadcn-svelte/docs/src/lib /usr/src/service/packages-vendor/shadcn-svelte/docs/src/lib
-
 # Set the working directory
 WORKDIR /usr/src/service/infrastructure/pulumi
 

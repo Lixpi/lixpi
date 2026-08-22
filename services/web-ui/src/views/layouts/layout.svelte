@@ -10,7 +10,7 @@
     import '$src/components/navigationSidePanel/navigation-side-panel.scss'
     import IntroPage from '$src/components/intro-page.svelte'
     import WorkspaceCanvas from '$src/components/WorkspaceCanvas.svelte'
-    import PaymentDetails from '$src/components/subscription-management/payment-details.svelte'
+    // import PaymentDetails from '$src/components/subscription-management/payment-details.svelte'    // Rendered by the commented-out add-funds dialog below
 
     import AuthService from '$src/services/auth-service'
     import { authStore } from '$src/stores/authStore.ts'
@@ -25,36 +25,28 @@
     // import Spinner from '$src/components/spinner.svelte'
 
 
-    // import { toast } from "svelte-sonner";
+    // shadcn-svelte has been removed from the project. The user drawer, add-funds dialog
+    // and theme switcher below depended on it and are commented out pending a rewrite
+    // on top of @lixpi/ui-kit.
+    // import { toast } from "svelte-sonner"
     // import { Toaster } from '$lib/registry/ui/sonner/index.js'
-    import { Button } from '$lib/registry/ui/button/index.ts'
-	import * as DropdownMenu from '$lib/registry/ui/dropdown-menu/index.ts'
-    import { buttonVariants } from '$lib/registry/ui/button/index.ts'
-    import { Label } from '$lib/registry/ui/label/index.ts'
-    import * as Drawer from '$lib/registry/ui/drawer/index.ts'
-    import * as Card from '$lib/registry/ui/card/index.ts'
-
-    import LogOutIcon from '@lucide/svelte/icons/log-out'
-
-
-
-    import Sun from '@lucide/svelte/icons/sun'
-    import Moon from '@lucide/svelte/icons/moon'
-    import DollarSign from '@lucide/svelte/icons/dollar-sign'
-    import { ModeWatcher, mode, setMode, toggleMode } from 'mode-watcher'
-
-
-
-	import Search from "@lucide/svelte/icons/search";
-
-	import { cn } from "$lib/utils.ts";
-	import { Input } from '$lib/registry/ui/input/index.ts';
-	import { Separator } from '$lib/registry/ui/separator/index.ts';
-	import * as Tabs from '$lib/registry/ui/tabs/index.ts';
-	// import MailLight from '$lib/img/examples/mail-light.png?enhanced';
-	// import MailDark from '$lib/img/examples/mail-dark.png?enhanced';
-
-    import * as Dialog from '$lib/registry/ui/dialog/index.ts'
+    // import { Button } from '$lib/registry/ui/button/index.ts'
+    // import * as DropdownMenu from '$lib/registry/ui/dropdown-menu/index.ts'
+    // import { buttonVariants } from '$lib/registry/ui/button/index.ts'
+    // import { Label } from '$lib/registry/ui/label/index.ts'
+    // import * as Drawer from '$lib/registry/ui/drawer/index.ts'
+    // import * as Card from '$lib/registry/ui/card/index.ts'
+    // import { cn } from '$lib/utils.ts'
+    // import { Input } from '$lib/registry/ui/input/index.ts'
+    // import { Separator } from '$lib/registry/ui/separator/index.ts'
+    // import * as Tabs from '$lib/registry/ui/tabs/index.ts'
+    // import * as Dialog from '$lib/registry/ui/dialog/index.ts'
+    // import LogOutIcon from '@lucide/svelte/icons/log-out'
+    // import Sun from '@lucide/svelte/icons/sun'
+    // import Moon from '@lucide/svelte/icons/moon'
+    // import DollarSign from '@lucide/svelte/icons/dollar-sign'
+    // import Search from '@lucide/svelte/icons/search'
+    // import { ModeWatcher, mode, setMode, toggleMode } from 'mode-watcher'
 
     let {
         layout,
@@ -92,10 +84,11 @@
 </script>
 
 
+<!--
 <ModeWatcher />
 
 
-<!-- <Toaster /> -->
+ <Toaster /> 
 
 <Dialog.Root
     bind:open={$subscriptionStore.meta.isPaymentDialogOpen}
@@ -106,7 +99,7 @@
             }, 300);
         }
     }} >
-    <!-- TODO: HACK: setting preventScroll={false} fixes an issue with content and all controls end events propagation being locked afeter opening modal from the drawer section. Revise later -->
+     TODO: HACK: setting preventScroll={false} fixes an issue with content and all controls end events propagation being locked afeter opening modal from the drawer section. Revise later 
     <Dialog.Content class="h-auto" preventScroll={false}>
         <Dialog.Header>
             <Dialog.Title>{$subscriptionStore.ui.dialogTitle}</Dialog.Title>
@@ -130,7 +123,7 @@
                 <div in:fade|global="{{ duration: 300 }}">
                     <Drawer.Title>{$authStore.data.user?.name}</Drawer.Title>
                     <Drawer.Description class="mt-2">
-                        <!-- <span class="font-bold "><span class="">$</span>{$userStore.data.balance}</span> -->
+                         <span class="font-bold "><span class="">$</span>{$userStore.data.balance}</span> 
                     </Drawer.Description>
 
                     <Separator class="mt-5" />
@@ -175,13 +168,14 @@
         </Drawer.Content>
     </Drawer.Root>
 </div>
+-->
 
 
 
 <div class="navigation-side-panel-pane" bind:this={navigationSidePanelPaneEl}></div>
 
-<div class="md:block h-full">
-    <div class="workspace-main-content h-full">
+<div class="workspace-main-pane">
+    <div class="workspace-main-content">
         {#if $routerStore.data.currentRoute.path === '/workspace/:workspaceId'}
             <WorkspaceCanvas />
         {:else}
@@ -200,13 +194,20 @@
         right: .5rem;
     }
 
-    .workspace-main-content {
-        width: 100%;
+    // Replaces the Tailwind `h-full` utilities that used to size these panes
+    .workspace-main-pane {
+        height: 100%;
     }
 
-    :global([data-vaul-drawer]) {
+    .workspace-main-content {
+        width: 100%;
         height: 100%;
-        width: 300px;
-        left: auto;
     }
+
+    // Belonged to the shadcn-svelte/vaul drawer that was removed
+    // :global([data-vaul-drawer]) {
+    //     height: 100%;
+    //     width: 300px;
+    //     left: auto;
+    // }
 </style>

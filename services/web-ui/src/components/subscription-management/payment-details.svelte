@@ -9,12 +9,14 @@
         PaymentProcessingStatus
     } from '@lixpi/constants'
 
-    import { Button } from '$lib/registry/ui/button/index.ts'
-    import { Label } from '$lib/registry/ui/label/index.ts'
-    import { Input } from '$lib/registry/ui/input/index.ts'
-    import * as Table from '$lib/registry/ui/table/index.js'
-    import { Separator } from '$lib/registry/ui/separator/index.js'
-    import * as Alert from '$lib/registry/ui/alert/index.js'
+    // shadcn-svelte has been removed from the project; the top-up form and success
+    // notice below are commented out pending a rewrite on top of @lixpi/ui-kit.
+    // import { Button } from '$lib/registry/ui/button/index.ts'
+    // import { Label } from '$lib/registry/ui/label/index.ts'
+    // import { Input } from '$lib/registry/ui/input/index.ts'
+    // import * as Table from '$lib/registry/ui/table/index.js'
+    // import { Separator } from '$lib/registry/ui/separator/index.js'
+    // import * as Alert from '$lib/registry/ui/alert/index.js'
 
     import { STRIPE_COMISSION } from '@lixpi/constants'
 
@@ -111,7 +113,7 @@
     }
 </script>
 
-<Separator class="mb-2" />
+<!-- <Separator class="mb-2" /> -->
 
 <div class="relative min-h-20">
 
@@ -120,6 +122,7 @@
     {/if}
 
 
+<!--
     {#if $subscriptionStore.meta.paymentProcessingStatus === PaymentProcessingStatus.success}
         <h3 class="croll-m-20 text-2xl">Your payment has been processed!</h3>
         <div class="flex justify-end">
@@ -206,7 +209,7 @@
         </form>
 
     {/if}
-
+-->
 
     {#if showAddNewCard || !$subscriptionStore.data.paymentMethods.length === 0}
         <AddOrEditPaymentMethod

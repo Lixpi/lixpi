@@ -20,7 +20,7 @@ A few things make it unusual:
 
 ### 1. Clone with submodules
 
-Third-party sources under `packages-vendor/` are Git submodules ([shadcn-svelte](https://github.com/huntabyte/shadcn-svelte), [xyflow](https://github.com/xyflow/xyflow)):
+Third-party sources under `packages-vendor/` are Git submodules ([xyflow](https://github.com/xyflow/xyflow)):
 
 ```bash
 git clone --recurse-submodules <repository-url>

@@ -4,7 +4,9 @@
     } from 'svelte'
     import { fade } from 'svelte/transition'
 
-    import { Button } from "$lib/registry/ui/button/index.ts"
+    // shadcn-svelte has been removed from the project; the buttons below are commented
+    // out pending a rewrite on top of @lixpi/ui-kit.
+    // import { Button } from '$lib/registry/ui/button/index.ts'
     import SubscriptionService from '$src/services/subscription-service.ts'
 
     import WalletCardsIcon from "@lucide/svelte/icons/wallet-cards"
@@ -148,6 +150,7 @@
     {#if !$subscriptionStore.meta.isLoading}
         <div id="payment-element" bind:this={stripePaymentElement} />    <!-- Stripe.js injects the Payment Element -->
 
+<!--
         <div class="flex justify-end w-full" in:fade|global="{{ duration: 500 }}">
             <Button
                 onclick={onCancel}
@@ -164,6 +167,7 @@
                 <WalletCardsIcon /> Add Card
             </Button>
         </div>
+-->
     {/if}
 </form>
 

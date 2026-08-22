@@ -22,7 +22,6 @@ COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools
 COPY ./packages/lixpi/prosemirror ./packages/lixpi/prosemirror
 COPY ./packages/lixpi/ui-kit ./packages/lixpi/ui-kit
-COPY ./packages-vendor/shadcn-svelte/docs/src/lib ./packages/shadcn-svelte/lib
 COPY ./services/web-ui/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Install dependencies, redundant when running locally because starting service each time will install deps, but needed for deployment
