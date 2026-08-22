@@ -75,8 +75,7 @@ export type AiModelMetaInfo = {
     imagePromptMaxChars?: number
     imageReferenceCapabilities?: ImageReferenceCapabilities
     videoMaxReferenceImages?: number
-    pricingReference?: PricingReference
-    pricing?: Record<string, any>
+    pricingReference: PricingReference
     [key: string]: unknown
 }
 

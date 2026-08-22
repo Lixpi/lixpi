@@ -160,7 +160,6 @@ describe('MEDIA_DESCRIBE request handling', () => {
         expect(mocks.aiModel.getAiModel).toHaveBeenCalledWith({
             provider: 'Anthropic',
             model: 'claude-haiku-4-5',
-            omitPricing: true,
         })
         expect(mocks.mediaDescriptor.describeMediaStill).toHaveBeenCalledWith({
             provider: 'Anthropic',

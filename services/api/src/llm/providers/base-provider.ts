@@ -677,22 +677,28 @@ export abstract class BaseProvider {
         const orgId = (state.eventMeta?.organizationId as string) ?? ''
         const workflowKind = this.deriveWorkflowKind(state)
         const workflowId = uuid()
-        // Modality and unit count are derived together so they always describe the
-        // same model, the one named below. See llm/usage/usage-estimator.ts.
-        const model = state.modelVersion ?? ''
-        const { modality, estimatedUnits, basis } = resolveCheckMetering(state)
+        const pricingReference = state.aiModelMetaInfo.pricingReference
+        if (!pricingReference?.pricingKey) {
+            throw new Error(`Metrics: missing pricing reference for ${state.provider}:${state.modelVersion}`)
+        }
+        const { modality, estimatedUsage, basis } = resolveCheckMetering(state)
+        const pricingDimensions = modality === 'image'
+            ? { imageSize: state.imageSize ?? 'auto', imageQuality: state.imageUsage?.quality ?? 'high' }
+            : modality === 'video' && state.videoResolution
+                ? { resolution: state.videoResolution }
+                : {}
 
         const res = await metrics.check({
             orgId,
             userId,
             workspaceId: state.workspaceId,
             workflowId,
-            model,
+            pricingLookup: { pricingKey: pricingReference.pricingKey, pricingDimensions },
             modality,
-            estimatedUnits,
+            estimatedUsage,
             currency: 'USD',
         })
-        logUsageCheck({ model, modality, estimatedUnits, basis, workflowId, response: res })
+        logUsageCheck({ pricingKey: pricingReference.pricingKey, modality, estimatedUsage, basis, workflowId, response: res })
         if (!res.approved) {
             const reason = res.reason ? `: ${res.reason}` : ''
             throw new Error(`Metrics: balance does not cover this workflow (${workflowKind}${reason})`)
@@ -1249,7 +1255,6 @@ export abstract class BaseProvider {
                 eventMeta: state.eventMeta,
                 aiModelMetaInfo: state.aiModelMetaInfo,
                 aiVendorRequestId: state.aiVendorRequestId ?? 'unknown',
-                aiVendorModelName: state.modelVersion,
                 usage: state.usage,
                 aiRequestReceivedAt: state.aiRequestReceivedAt,
                 aiRequestFinishedAt: state.aiRequestFinishedAt ?? Date.now(),
@@ -1257,7 +1262,6 @@ export abstract class BaseProvider {
             if (metricsOn && report) {
                 await this.confirmUsage(
                     { ...tokenUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId },
-                    report.total,
                 )
             }
         }
@@ -1274,7 +1278,6 @@ export abstract class BaseProvider {
             if (metricsOn && report) {
                 await this.confirmUsage(
                     { ...imageUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId },
-                    report.image,
                 )
             }
         }
@@ -1295,28 +1298,18 @@ export abstract class BaseProvider {
             if (metricsOn && report) {
                 await this.confirmUsage(
                     { ...videoUsageConfirm(report, state.workflowId!, ++seq), operationId: state.metricsOperationId },
-                    report.video,
                 )
             }
         }
         return { workflowSeq: seq }
     }
 
-    // Posts one measured provider call and logs it in the same shape as its
-    // matching check, so the pair reads together in the log. The reporter has
-    // already priced the call locally; that cost travels to the log only, never
-    // over the wire, because the metering backend owns pricing.
+    // Posts one measured provider call and logs it beside its matching check.
     private async confirmUsage(
         request: ConfirmRequest,
-        cost: { purchasedFor: string; soldToClientFor: string },
     ): Promise<void> {
         const response = await this.deps.metrics!.confirm(request)
-        logUsageConfirm({
-            request,
-            response,
-            purchasedFor: cost.purchasedFor,
-            soldToClientFor: cost.soldToClientFor,
-        })
+        logUsageConfirm({ request, response })
     }
 
     protected async cleanup(_state: ProviderState): Promise<Partial<ProviderState>> {

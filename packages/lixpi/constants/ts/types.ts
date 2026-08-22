@@ -2,7 +2,7 @@
 
 import type { Merge, Except } from 'type-fest'
 import type { AssetSubjectIdentity, DepictionMedium } from './asset-types.ts'
-import type { PricingReference } from './model-pricing-contracts.ts'
+import type { PricingLookup, PricingReference } from './model-pricing-contracts.ts'
 
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
@@ -2102,51 +2102,8 @@ export type AiModel = {
     // ai-models-synchronization. The API derives AiModelsCatalogResponse.defaultModels
     // from these flags so the UI can pre-select the configured defaults.
     isDefaultFor?: DefaultAiModelCapability[]
-    // The route-aware cost identity is staged alongside legacy price data until
-    // the coordinated billing cutover can remove that legacy payload.
+    // The route-aware cost identity is the only pricing data Lixpi retains.
     pricingReference: PricingReference
-    pricing: {
-        currency: string
-        resaleMargin: string
-        text?: {
-            measuringUnit: string
-            pricePer: string
-            tiers: {
-                default: {
-                    prompt: string
-                    completion: string
-                }
-            }
-        }
-        audio?: {
-            measuringUnit: string
-            pricePer: string
-            prompt: string
-            completion: string
-        }
-        image?: {
-            measuringUnit: string
-            pricePer: string
-            prompt: string
-            completion: string
-        }
-        // Video models are billed per second of generated video (VEO) or per
-        // vendor video token (Seedance). `price` is the flat rate and stays the
-        // fallback for models that publish one. `tiers` carries the per-resolution
-        // rates for vendors that price by output resolution AND by whether the
-        // input contained video, keyed by the same resolution values as
-        // videoResolutions. Consumers use a matching tier when there is one and
-        // fall back to `price` otherwise.
-        video?: {
-            measuringUnit: string
-            pricePer: string
-            price: string
-            tiers?: Record<string, {
-                withoutVideoInput: string
-                withVideoInput: string
-            }>
-        }
-    }
     createdAt: number
     updatedAt: number
 }
@@ -2186,35 +2143,23 @@ export type TokensUsageEvent = {
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
-    textPricePer: string
-    textPromptPrice: string
-    textCompletionPrice: string
-    textPromptPriceResale: string
-    textCompletionPriceResale: string
+    pricingLookup: PricingLookup
     prompt: {
         usageTokens: number
         cachedTokens: number
         audioTokens: number
-        purchasedFor: string
-        soldToClientFor: string
     }
     completion: {
         usageTokens: number
         reasoningTokens: number
         audioTokens: number
-        purchasedFor: string
-        soldToClientFor: string
     }
     total: {
         usageTokens: number
-        purchasedFor: string
-        soldToClientFor: string
     }
     image?: {
         generatedCount: number
         size: string
-        purchasedFor: string
-        soldToClientFor: string
     }
 }
 

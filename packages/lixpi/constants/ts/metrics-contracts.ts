@@ -25,19 +25,6 @@ import type { PricingLookup } from './model-pricing-contracts.ts'
 export type Modality = 'tokens' | 'image' | 'video'
 export type MeasuringUnit = 'tokens' | 'images' | 'seconds'
 
-// CheckRequest asks whether the org's balance covers an upcoming paid provider
-// call. The implementation prices estimatedUnits as an upper bound.
-export type CheckRequest = {
-    orgId: string
-    userId: string
-    workspaceId?: string
-    workflowId: string
-    model: string
-    modality: Modality
-    estimatedUnits: number // upper-bound unit count for the estimate
-    currency: string // 'USD' at launch
-}
-
 // CheckResponse is the admission decision. operationId correlates this admission
 // to the later confirm (opaque to Lixpi; the metering side's handle for the call).
 export type CheckResponse = {
@@ -80,7 +67,10 @@ export type UsageBreakdown = {
 
 export type EstimatedUsage = UsageBreakdown
 
-export type PricingCheckRequest = {
+// CheckRequest identifies the exact billable route and passes an upper-bound,
+// dimensioned usage estimate. The metering service resolves its pinned pricing
+// snapshot; Lixpi never sends provider cost or a bare model identifier.
+export type CheckRequest = {
     orgId: string
     userId: string
     workspaceId?: string
@@ -95,22 +85,6 @@ export type PricingCheckRequest = {
 // It carries dimensioned unit counts only — the implementation prices them.
 // measuringUnit is the primary unit for the modality (and disambiguates video:
 // seconds vs tokens). Idempotent on providerRequestId.
-export type ConfirmRequest = {
-    providerRequestId: string
-    operationId?: string // from the matching check; empty/unknown → the backend charges by actuals
-    orgId: string
-    userId: string
-    workspaceId?: string
-    workflowId: string
-    workflowSeq: number
-    model: string
-    modality: Modality
-    measuringUnit: MeasuringUnit
-    usage: UsageBreakdown
-    currency: string // 'USD' at launch
-    occurredAt: string // ISO 8601
-}
-
 // ConfirmResponse is the posted charge and resulting balance.
 export type ConfirmResponse = {
     transferId?: string
@@ -118,7 +92,9 @@ export type ConfirmResponse = {
     balance?: number // micro-dollars, new balance after the debit
 }
 
-export type PricingConfirmRequest = {
+// ConfirmRequest must carry the same pricing lookup as its admission. Billing
+// settles an admitted operation using its pinned snapshot revision.
+export type ConfirmRequest = {
     providerRequestId: string
     operationId?: string
     orgId: string

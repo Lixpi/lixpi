@@ -1,30 +1,23 @@
 'use strict'
 
-import type { MeasuringUnit, Modality } from '@lixpi/constants'
+import type { EstimatedUsage, MeasuringUnit, Modality } from '@lixpi/constants'
 
 import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import { estimateInputTokens } from '../providers/provider-input-budget.ts'
 import { estimateVideoTokens } from './video-token-accounting.ts'
 
-// Pre-call spend estimate for the metrics check (the mirror image of
-// usage-event-mapper.ts, which reports what a call actually cost). The metering
-// backend prices `estimatedUnits` at the named model's rate, so the number here
-// must be an UPPER BOUND expressed in the unit that model is metered in.
+// Pre-call spend estimate for the metrics check. The metering backend resolves
+// the route-aware pricing lookup, so this module sends only a dimensioned upper
+// bound for the selected model's billable usage.
 //
 // Over-estimating only makes the admission gate stricter. Under-estimating lets a
 // run past a balance that cannot cover it, and a zero here prices the whole check
 // at $0.00, which approves everything and defeats the gate entirely.
 //
-// CheckRequest names exactly one model and one modality, so the two must always
-// describe the same thing. resolveCheckModality derives the modality from what the
-// named model IS, never from what the run might go on to do.
-//
-// CheckRequest carries no measuringUnit, so the backend reads estimatedUnits in
-// whatever unit the named model's own tariff meters: tokens for text, images for
-// image models, and for video either seconds or vendor video tokens depending on
-// that model's pricing.video.measuringUnit. video-token-accounting.ts does the
-// seconds-to-tokens conversion for the token-metered case.
+// CheckRequest names one pricing key and one modality. resolveCheckModality
+// derives the modality from the selected model itself, never from what the run
+// might later invoke through a transient media provider.
 
 // Reasoning providers build their system prompt from the same two flags, so the
 // gate can reproduce it exactly. Everything else the request picks up (tool
@@ -56,13 +49,12 @@ export type CheckMeteringBasis = {
 
 export type CheckMetering = {
     modality: Modality
-    estimatedUnits: number
+    estimatedUsage: EstimatedUsage
     basis: CheckMeteringBasis
 }
 
 // resolveCheckMetering derives every part of one graph run's admission check
-// together, so the unit count can never disagree with the modality it is counted
-// in. Returned as one value for exactly that reason.
+// together, so the usage dimensions can never disagree with the modality.
 export function resolveCheckMetering(state: ProviderState): CheckMetering {
     const modality = resolveCheckModality(state)
     // An image-modality check only ever names an image-generation model, and one
@@ -70,7 +62,7 @@ export function resolveCheckMetering(state: ProviderState): CheckMetering {
     // draft plus fidelity passes each dispatch their own transient run, so each is
     // admitted separately rather than multiplied in here.
     if (modality === 'image') {
-        return { modality, estimatedUnits: 1, basis: { measuringUnit: 'images' } }
+        return { modality, estimatedUsage: { imageCount: 1 }, basis: { measuringUnit: 'images' } }
     }
     if (modality === 'video') return estimateVideoMetering(state)
     return estimateReasoningMetering(state)
@@ -107,7 +99,7 @@ function estimateReasoningMetering(state: ProviderState): CheckMetering {
         ?? remainingContextWindow(contextWindow, promptTokensCharged)
     return {
         modality: 'tokens',
-        estimatedUnits: promptTokensCharged + completionCeiling,
+        estimatedUsage: { promptTokens: promptTokensCharged, completionTokens: completionCeiling },
         basis: {
             measuringUnit: 'tokens',
             promptTokensMeasured,
@@ -123,9 +115,8 @@ function estimateReasoningMetering(state: ProviderState): CheckMetering {
 
 // A video-modality check only ever names a video-generation model, and one such
 // run produces one clip. Seconds-metered models (VEO) are counted in seconds;
-// token-metered models (Seedance) are converted to vendor video tokens, because
-// the check carries no measuringUnit and the backend reads estimatedUnits in
-// whatever unit the model's own tariff meters.
+// token-metered models (Seedance) are converted to vendor video tokens before
+// sending the dimensioned estimate to billing.
 function estimateVideoMetering(state: ProviderState): CheckMetering {
     // Always the model the check names, never a routed-to model: the estimate has
     // to describe the same model the backend is about to price.
@@ -134,7 +125,7 @@ function estimateVideoMetering(state: ProviderState): CheckMetering {
     if (videoMeasuringUnit(model) === 'seconds') {
         return {
             modality: 'video',
-            estimatedUnits: seconds,
+            estimatedUsage: { durationSeconds: seconds, ...(state.videoResolution ? { resolution: state.videoResolution } : {}) },
             basis: { measuringUnit: 'seconds', videoSeconds: seconds },
         }
     }
@@ -154,7 +145,7 @@ function estimateVideoMetering(state: ProviderState): CheckMetering {
     })
     return {
         modality: 'video',
-        estimatedUnits: estimate.tokens,
+        estimatedUsage: { videoTokens: estimate.tokens, ...(inputSeconds > 0 ? { inputVideoSeconds: inputSeconds } : {}) },
         basis: {
             measuringUnit: 'tokens',
             videoSeconds: seconds,
@@ -192,11 +183,8 @@ function catalogDurationSeconds(model: AiModelMetaInfo): number[] {
 // The unit the catalog tariff meters this model's video in: 'seconds' for VEO,
 // 'tokens' for vendor-token providers. Same field usage-reporter branches on when
 // it prices the confirm.
-function videoMeasuringUnit(model: AiModelMetaInfo): string {
-    const video = asRecord(asRecord(model.pricing)?.video)
-    return typeof video?.measuringUnit === 'string' && video.measuringUnit.length > 0
-        ? video.measuringUnit
-        : 'seconds'
+function videoMeasuringUnit(model: AiModelMetaInfo): 'tokens' | 'seconds' {
+    return model.pricingReference.providerRoute === 'byteplus-modelark' ? 'tokens' : 'seconds'
 }
 
 // Catalog modality entries are published either as objects or as bare strings,

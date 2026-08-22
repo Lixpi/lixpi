@@ -439,7 +439,12 @@ describe('BaseProvider request validation', () => {
         const result = await provider.process({
             workspaceId: 'ws-1',
             aiChatThreadId: 'thread-1',
-            aiModelMetaInfo: { provider: 'Anthropic', model: 'claude', modelVersion: 'claude' },
+            aiModelMetaInfo: {
+                provider: 'Anthropic',
+                model: 'claude',
+                modelVersion: 'claude',
+                pricingReference: { pricingKey: 'Anthropic:claude:anthropic-api:global', providerRoute: 'anthropic-api', vendorModel: 'claude', pricingRegion: 'global' },
+            },
             messages: [{ role: 'user', content: 'make a picture' }],
             enableImageGeneration: true,
             eventMeta: { userId: 'user-1', organizationId: 'organization-1' },

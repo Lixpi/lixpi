@@ -331,7 +331,7 @@ type ProviderBlacklist = {
 // Default model capability/settings per provider.
 type ModelDefaults = Pick<
     AiModel,
-    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'inferenceCapabilities' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName' | 'imageReferenceCapabilities'
+    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'inferenceCapabilities' | 'modalities' | 'color' | 'iconName' | 'colorIconName' | 'imageReferenceCapabilities'
 > & {
     imagePromptMaxChars?: number
     imageSizeMode?: ImageSizeMode
@@ -569,9 +569,9 @@ export class AiModelsSync {
         OpenAI: {
             exact: {
                 // ChatGPT-4o alias page shows 128k context, 16,384 max output tokens
-                'chatgpt-4o-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '15.00' } } } } },
+                'chatgpt-4o-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], },
                 // GPT-5 Chat latest explicit alias
-                'gpt-5-chat-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } },
+                'gpt-5-chat-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, },
             },
             prefix: [
                 {
@@ -581,28 +581,28 @@ export class AiModelsSync {
                     modalities: ['text', 'image'],
                     defaultTemperature: 1,    // Supports only default value 1.
                     inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
-                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } }
+                    }
                 },
                 // GPT-5 Chat family: 128k context, 16,384 max output
-                { prefix: 'gpt-5-chat', values: { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                { prefix: 'gpt-5-chat', values: { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], } },
                 // GPT-4.1 family: ~1M context window, 32,768 max output
-                { prefix: 'gpt-4.1', values: { contextWindow: 1047576, maxCompletionSize: 32768, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
+                { prefix: 'gpt-4.1', values: { contextWindow: 1047576, maxCompletionSize: 32768, modalities: ['text', 'image'], } },
                 // GPT-4o (chat) family: 128k context, 16,384 max output
-                { prefix: 'gpt-4o', values: { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.50', completion: '10.00' } } } } } },
+                { prefix: 'gpt-4o', values: { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], } },
                 // GPT-4o Realtime family: 32k context, 4,096 max output; supports audio
-                { prefix: 'gpt-4o-realtime', values: { contextWindow: 32000, maxCompletionSize: 4096, modalities: ['text', 'image', 'audio'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '20.00' } } }, audio: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '40.00', completion: '80.00' } } } },
+                { prefix: 'gpt-4o-realtime', values: { contextWindow: 32000, maxCompletionSize: 4096, modalities: ['text', 'image', 'audio'], } },
                 // O3 Deep Research: 200k context, 100k max output
-                { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '40.00' } } } } } },
+                { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, } },
                 // O4 Mini Deep Research: 200k context, 100k max output (per page)
-                { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
+                { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, } },
                 { prefix: 'o1', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
                 { prefix: 'o3', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
                 { prefix: 'o4', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
                 // GPT Image family: image generation models
-                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_STANDARD_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
-                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
+                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES, } },
+                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, } },
+                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_STANDARD_IMAGE_REFERENCES, } },
+                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, } },
             ],
             contains: [],
             fallback: {
@@ -611,15 +611,7 @@ export class AiModelsSync {
                 defaultTemperature: 0.7,
                 inferenceCapabilities: OPENAI_INFERENCE_CAPABILITIES,
                 modalities: ['text'],
-                pricing: {
-                    currency: 'USD',
-                    resaleMargin: '1',    // for example set to 1.2 to add 20% margin
-                    text: {
-                        measuringUnit: 'tokens',
-                        pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
-                    }
-                },
+
                 // Provider UI defaults
                 color: '#56967c',
                 iconName: 'gptAvatarIcon',
@@ -667,18 +659,18 @@ export class AiModelsSync {
         Anthropic: {
             exact: {},
             prefix: [
-                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
-                { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '10.00' } } } } } },
-                { prefix: 'claude-opus-4-7', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-opus-4-6', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-sonnet-4-6', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-haiku-4', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
-                { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-3-5-haiku', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
-                { prefix: 'claude-3-haiku', values: { contextWindow: 200000, maxCompletionSize: 4096, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
+                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-opus-4-7', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-opus-4-6', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-sonnet-4-6', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-haiku-4', values: { contextWindow: 200000, maxCompletionSize: 8192, } },
+                { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, } },
+                { prefix: 'claude-3-5-haiku', values: { contextWindow: 200000, maxCompletionSize: 8192, } },
+                { prefix: 'claude-3-haiku', values: { contextWindow: 200000, maxCompletionSize: 4096, } },
                 { prefix: 'claude-mythos', values: { inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES } },
             ],
             contains: [],
@@ -688,15 +680,7 @@ export class AiModelsSync {
                 defaultTemperature: 0.7,
                 inferenceCapabilities: ANTHROPIC_INFERENCE_CAPABILITIES,
                 modalities: ['text', 'image'],
-                pricing: {
-                    currency: 'USD',
-                    resaleMargin: '1',
-                    text: {
-                        measuringUnit: 'tokens',
-                        pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
-                    }
-                },
+
                 color: '#D97757',
                 iconName: 'claudeIcon',
                 starSortingPosition: 100,
@@ -726,7 +710,7 @@ export class AiModelsSync {
                     modalities: ['text', 'image', 'image_generation'],
                     inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
                     imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES,
-                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
+
                 },
                 'gemini-2.5-flash-image': {
                     contextWindow: 1048576,
@@ -734,33 +718,33 @@ export class AiModelsSync {
                     modalities: ['text', 'image', 'image_generation'],
                     inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
                     imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES,
-                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
+
                 },
             },
             prefix: [
                 // Gemini 2.5 Pro family (text-only)
-                { prefix: 'gemini-2.5-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                { prefix: 'gemini-2.5-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, } },
                 // Gemini 2.5 Flash family (text-only, image generation only in gemini-2.5-flash-image)
-                { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, } },
                 // Gemini 3 Pro Image (Nano Banana Pro)
-                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, } },
                 // Gemini 3.1 Flash Image (Nano Banana 2)
-                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
+                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, } },
                 // Gemini 3.1 Pro
-                { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
+                { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, } },
                 // Gemini 3.1 Flash
-                { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, } },
                 // Gemini 3 Flash
-                { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
+                { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, } },
                 { prefix: 'gemini-3.', values: { inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES } },
                 // VEO 3 / 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
-                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
-                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
-                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, } },
+                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, } },
+                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, } },
+                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, } },
+                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, } },
             ],
             contains: [],
             fallback: {
@@ -769,15 +753,7 @@ export class AiModelsSync {
                 defaultTemperature: 0.7,
                 inferenceCapabilities: GOOGLE_INFERENCE_CAPABILITIES,
                 modalities: ['text'],
-                pricing: {
-                    currency: 'USD',
-                    resaleMargin: '1',
-                    text: {
-                        measuringUnit: 'tokens',
-                        pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
-                    }
-                },
+
                 color: '#4285F4',
                 iconName: 'geminiIcon',
                 colorIconName: 'geminiColorIcon',
@@ -851,12 +827,12 @@ export class AiModelsSync {
                 'stability-ultra': {
                     modalities: ['image_generation'],
                     imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } }
+
                 },
                 'sd3.5-large': {
                     modalities: ['image_generation'],
                     imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } }
+
                 },
             },
             prefix: [],
@@ -869,16 +845,7 @@ export class AiModelsSync {
                 inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
                 modalities: ['image_generation'],
                 imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                pricing: {
-                    currency: 'USD',
-                    resaleMargin: '1',
-                    image: {
-                        measuringUnit: 'credits',
-                        pricePer: '1',
-                        prompt: '0.00',
-                        completion: '0.00'
-                    }
-                },
+
                 color: '#A855F7',
                 iconName: 'stabilityIcon',
                 imageSizeMode: 'aspectRatio',
@@ -930,32 +897,10 @@ export class AiModelsSync {
         BytePlus: {
             exact: {
                 'dreamina-seedance-2-0-260128': {
-                    pricing: {
-                        video: {
-                            measuringUnit: 'tokens',
-                            pricePer: '1000000',
-                            price: '7.7',
-                            tiers: {
-                                '480p': { withoutVideoInput: '7.0', withVideoInput: '4.3' },
-                                '720p': { withoutVideoInput: '7.0', withVideoInput: '4.3' },
-                                '1080p': { withoutVideoInput: '7.7', withVideoInput: '4.7' },
-                                '4k': { withoutVideoInput: '4.0', withVideoInput: '2.4' },
-                            },
-                        },
-                    },
+
                 },
                 'dreamina-seedance-2-0-fast-260128': {
-                    pricing: {
-                        video: {
-                            measuringUnit: 'tokens',
-                            pricePer: '1000000',
-                            price: '5.6',
-                            tiers: {
-                                '480p': { withoutVideoInput: '5.6', withVideoInput: '3.3' },
-                                '720p': { withoutVideoInput: '5.6', withVideoInput: '3.3' },
-                            },
-                        },
-                    },
+
                 },
             },
             prefix: [],
@@ -972,11 +917,7 @@ export class AiModelsSync {
                 videoMaxReferenceImages: 9,
                 // Fallback for an unrecognized BytePlus video model: the highest
                 // Seedance 2.0 rate, so an unknown model is never under-charged.
-                pricing: {
-                    currency: 'USD',
-                    resaleMargin: '1',
-                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '7.7' }
-                },
+
                 // Seedance is a ByteDance model — brand color plus the ByteDance brand icon.
                 color: '#1664FF',
                 iconName: 'bytedanceIcon',
@@ -1001,20 +942,6 @@ export class AiModelsSync {
         }
     }
 
-    // Helper to merge pricing from partial values with provider fallback
-    private mergePricingWithFallback(partial: Partial<AiModel['pricing']> | undefined, fallback: AiModel['pricing']): AiModel['pricing'] {
-        const p = partial || {}
-        const merged: any = {
-            currency: p.currency || fallback.currency,
-            resaleMargin: p.resaleMargin || fallback.resaleMargin,
-        }
-        if (p.text || fallback.text) merged.text = p.text || fallback.text
-        if (p.audio || (fallback as any).audio) merged.audio = p.audio || (fallback as any).audio
-        if (p.image || (fallback as any).image) merged.image = p.image || (fallback as any).image
-        if ((p as any).video || (fallback as any).video) merged.video = (p as any).video || (fallback as any).video
-        return merged as AiModel['pricing']
-    }
-
     // Merge a (possibly partial) entry with the provider fallback to ensure all fields are present.
     private mergeWithFallback(partial: PartialDeep<ModelDefaults> | undefined, fallback: ModelDefaults): ModelDefaults {
         const p = partial || {}
@@ -1036,7 +963,6 @@ export class AiModelsSync {
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
             videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
             videoMaxReferenceImages: typeof p.videoMaxReferenceImages === 'number' ? p.videoMaxReferenceImages : fallback.videoMaxReferenceImages,
-            pricing: this.mergePricingWithFallback(p.pricing as any, fallback.pricing),
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
             iconName: typeof (p as any).iconName === 'string' ? (p as any).iconName : fallback.iconName,
             colorIconName: typeof (p as any).colorIconName === 'string' ? (p as any).colorIconName : fallback.colorIconName,
@@ -1335,7 +1261,6 @@ export class AiModelsSync {
                 catalogProvider: 'OpenAI',
                 catalogModel: openAIModel.id,
             }, process.env),
-            pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }
@@ -1382,7 +1307,6 @@ export class AiModelsSync {
                 catalogProvider: 'Anthropic',
                 catalogModel: anthropicModel.id,
             }, process.env),
-            pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }
@@ -1437,7 +1361,6 @@ export class AiModelsSync {
                 catalogProvider: 'Google',
                 catalogModel: googleModel.name,
             }, process.env),
-            pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }
@@ -1820,7 +1743,6 @@ export class AiModelsSync {
                 catalogProvider: 'Stability',
                 catalogModel: model.id,
             }, process.env),
-            pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }
@@ -1971,7 +1893,6 @@ export class AiModelsSync {
                 catalogProvider: 'BytePlus',
                 catalogModel: model.id,
             }, process.env),
-            pricing: modelDefaults.pricing,
             createdAt: now,
             updatedAt: now
         }

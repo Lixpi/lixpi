@@ -1,169 +1,77 @@
 'use strict'
 
-import { Decimal } from 'decimal.js'
-
-import { warn } from '@lixpi/debug-tools'
+import type { PricingLookup } from '@lixpi/constants'
 
 import type { AiModelMetaInfo, EventMeta, Usage } from '../graph/state.ts'
 
-// Match Python `Decimal` behavior (default 28-digit precision, ROUND_HALF_EVEN).
-// decimal.js defaults to 20-digit precision; bumping it here so pricing
-// arithmetic stays byte-identical to the Python implementation.
-Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_EVEN })
-
 export type UsageReport = {
     eventMeta: EventMeta
-    aiModel: string
-    modelVersion: string // canonical vendor id for the metering backend (aiModel is the display id)
+    pricingLookup: PricingLookup
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
-    textPricePer: string
-    textPromptPrice: string
-    textCompletionPrice: string
-    textPromptPriceResale: string
-    textCompletionPriceResale: string
-    prompt: {
-        usageTokens: number
-        cachedTokens: number
-        audioTokens: number
-        purchasedFor: string
-        soldToClientFor: string
-    }
-    completion: {
-        usageTokens: number
-        reasoningTokens: number
-        audioTokens: number
-        purchasedFor: string
-        soldToClientFor: string
-    }
-    total: {
-        usageTokens: number
-        purchasedFor: string
-        soldToClientFor: string
-    }
+    prompt: { usageTokens: number; cachedTokens: number; audioTokens: number }
+    completion: { usageTokens: number; reasoningTokens: number; audioTokens: number }
+    total: { usageTokens: number }
 }
 
 export type ImageUsageReport = {
     eventMeta: EventMeta
-    aiModel: string
-    modelVersion: string // canonical vendor id for the metering backend (aiModel is the display id)
+    pricingLookup: PricingLookup
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
-    image: {
-        size: string
-        quality: string
-        count: number
-        pricePerImage: string
-        pricePerImageResale: string
-        purchasedFor: string
-        soldToClientFor: string
-    }
+    image: { size: string; quality: string; count: number }
 }
 
 export type VideoUsageReport = {
     eventMeta: EventMeta
-    aiModel: string
-    modelVersion: string // canonical vendor id for the metering backend (aiModel is the display id)
+    pricingLookup: PricingLookup
     aiVendorRequestId: string
     aiRequestReceivedAt: number
     aiRequestFinishedAt: number
     video: {
-        measuringUnit: string
+        measuringUnit: 'tokens' | 'seconds'
         durationSeconds: number
         resolution: string
         aspectRatio: string
-        // Per-second metered (VEO).
-        pricePerSecond?: string
-        pricePerSecondResale?: string
-        // Token metered (Seedance via ModelArk).
         totalTokens?: number
         completionTokens?: number
-        pricePer?: string
-        price?: string
-        // Whole seconds of source video fed into the generation, rounded up.
-        // Absent means text-to-video. Vendors price the two differently.
         inputVideoSeconds?: number
-        purchasedFor: string
-        soldToClientFor: string
     }
 }
 
-const dec = (v: unknown, fallback: string = '0'): Decimal =>
-    new Decimal(v == null ? fallback : String(v))
+const pricingLookupFor = (model: AiModelMetaInfo, pricingDimensions: PricingLookup['pricingDimensions']): PricingLookup => {
+    const pricingKey = model.pricingReference?.pricingKey
+    if (!pricingKey) throw new Error(`Missing pricingReference for ${model.provider}:${model.model}`)
+    return { pricingKey, pricingDimensions }
+}
 
 export class UsageReporter {
-    // Currently logs only. Swap the return value for natsService.publish('usage.tokens.ai', report) when ready.
     reportTokensUsage(args: {
         eventMeta: EventMeta
         aiModelMetaInfo: AiModelMetaInfo
         aiVendorRequestId: string
-        aiVendorModelName: string
         usage: Partial<Usage>
         aiRequestReceivedAt: number
         aiRequestFinishedAt: number
     }): UsageReport | undefined {
         try {
             const { aiModelMetaInfo, usage, eventMeta, aiVendorRequestId, aiRequestReceivedAt, aiRequestFinishedAt } = args
-            const pricing = aiModelMetaInfo.pricing ?? {}
-            const resaleMargin = dec(pricing.resaleMargin, '1.0')
-            const pricePer = dec(pricing.text?.pricePer, '1000000')
-            const tiers = pricing.text?.tiers?.default ?? {}
-            const promptPrice = dec(tiers.prompt, '0')
-            const completionPrice = dec(tiers.completion, '0')
-
-            const promptResale = promptPrice.mul(resaleMargin)
-            const completionResale = completionPrice.mul(resaleMargin)
-
             const promptTokens = usage.promptTokens ?? 0
             const completionTokens = usage.completionTokens ?? 0
-            const totalTokens = usage.totalTokens ?? 0
-
-            const promptPurchased = promptPrice.div(pricePer).mul(dec(promptTokens))
-            const promptSold = promptResale.div(pricePer).mul(dec(promptTokens))
-            const completionPurchased = completionPrice.div(pricePer).mul(dec(completionTokens))
-            const completionSold = completionResale.div(pricePer).mul(dec(completionTokens))
-            const totalPurchased = promptPurchased.plus(completionPurchased)
-            const totalSold = promptSold.plus(completionSold)
-
-            const report: UsageReport = {
+            return {
                 eventMeta,
-                aiModel: `${aiModelMetaInfo.provider}:${aiModelMetaInfo.model}`,
-                modelVersion: aiModelMetaInfo.modelVersion ?? '',
+                pricingLookup: pricingLookupFor(aiModelMetaInfo, {}),
                 aiVendorRequestId,
                 aiRequestReceivedAt,
                 aiRequestFinishedAt,
-                textPricePer: pricePer.toString(),
-                textPromptPrice: promptPrice.toString(),
-                textCompletionPrice: completionPrice.toString(),
-                textPromptPriceResale: promptResale.toString(),
-                textCompletionPriceResale: completionResale.toString(),
-                prompt: {
-                    usageTokens: promptTokens,
-                    cachedTokens: usage.promptCachedTokens ?? 0,
-                    audioTokens: usage.promptAudioTokens ?? 0,
-                    purchasedFor: promptPurchased.toString(),
-                    soldToClientFor: promptSold.toString(),
-                },
-                completion: {
-                    usageTokens: completionTokens,
-                    reasoningTokens: usage.completionReasoningTokens ?? 0,
-                    audioTokens: usage.completionAudioTokens ?? 0,
-                    purchasedFor: completionPurchased.toString(),
-                    soldToClientFor: completionSold.toString(),
-                },
-                total: {
-                    usageTokens: totalTokens,
-                    purchasedFor: totalPurchased.toString(),
-                    soldToClientFor: totalSold.toString(),
-                },
+                prompt: { usageTokens: promptTokens, cachedTokens: usage.promptCachedTokens ?? 0, audioTokens: usage.promptAudioTokens ?? 0 },
+                completion: { usageTokens: completionTokens, reasoningTokens: usage.completionReasoningTokens ?? 0, audioTokens: usage.completionAudioTokens ?? 0 },
+                total: { usageTokens: usage.totalTokens ?? promptTokens + completionTokens },
             }
-
-            // TODO: publish to NATS once usage.tokens.ai subject is wired up.
-            return report
-        } catch (e) {
-            warn(`Failed to report token usage: ${e}`)
+        } catch (error) {
+            console.error(`Failed to normalize token usage: ${error}`)
             return undefined
         }
     }
@@ -179,45 +87,20 @@ export class UsageReporter {
     }): ImageUsageReport | undefined {
         try {
             const { eventMeta, aiModelMetaInfo, aiVendorRequestId, imageSize, imageQuality, aiRequestReceivedAt, aiRequestFinishedAt } = args
-            const pricing = aiModelMetaInfo.pricing ?? {}
-            const resaleMargin = dec(pricing.resaleMargin, '1.0')
-
-            const imagePricing = pricing.image ?? {}
-            const sizePricing = imagePricing[imageSize] ?? imagePricing.default ?? {}
-            const qualityKey = (imageQuality in sizePricing) ? imageQuality : 'high'
-            const pricePerImage = dec(sizePricing[qualityKey], '0.04')
-            const pricePerImageResale = pricePerImage.mul(resaleMargin)
-
-            const report: ImageUsageReport = {
+            return {
                 eventMeta,
-                aiModel: `${aiModelMetaInfo.provider}:${aiModelMetaInfo.model}`,
-                modelVersion: aiModelMetaInfo.modelVersion ?? '',
+                pricingLookup: pricingLookupFor(aiModelMetaInfo, { imageSize, imageQuality }),
                 aiVendorRequestId,
                 aiRequestReceivedAt,
                 aiRequestFinishedAt,
-                image: {
-                    size: imageSize,
-                    quality: imageQuality,
-                    count: 1,
-                    pricePerImage: pricePerImage.toString(),
-                    pricePerImageResale: pricePerImageResale.toString(),
-                    purchasedFor: pricePerImage.toString(),
-                    soldToClientFor: pricePerImageResale.toString(),
-                },
+                image: { size: imageSize, quality: imageQuality, count: 1 },
             }
-
-            // TODO: publish to NATS once usage.images.ai subject is wired up.
-            return report
-        } catch (e) {
-            warn(`Failed to report image usage: ${e}`)
+        } catch (error) {
+            console.error(`Failed to normalize image usage: ${error}`)
             return undefined
         }
     }
 
-    // Video models are billed either per second (VEO) or per vendor token
-    // (Seedance via ModelArk). The branch is driven by pricing.video.measuringUnit
-    // so a token-metered provider needs no new call-site — VEO's per-second math
-    // is byte-identical to before.
     reportVideoUsage(args: {
         eventMeta: EventMeta
         aiModelMetaInfo: AiModelMetaInfo
@@ -233,64 +116,24 @@ export class UsageReporter {
     }): VideoUsageReport | undefined {
         try {
             const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, totalTokens, completionTokens, inputVideoSeconds, aiRequestReceivedAt, aiRequestFinishedAt } = args
-            const pricing = aiModelMetaInfo.pricing ?? {}
-            const resaleMargin = dec(pricing.resaleMargin, '1.0')
-            const videoPricing = (pricing as any).video ?? {}
-            const measuringUnit = videoPricing.measuringUnit ?? 'seconds'
-            const price = dec(videoPricing.price, '0')
-            const priceResale = price.mul(resaleMargin)
-
-            const video: VideoUsageReport['video'] = {
-                measuringUnit,
-                durationSeconds: Number(durationSeconds) || 0,
-                resolution,
-                aspectRatio,
-                // Whole seconds, rounded up, per the metrics contract.
-                ...(typeof inputVideoSeconds === 'number' && inputVideoSeconds > 0
-                    ? { inputVideoSeconds: Math.ceil(inputVideoSeconds) }
-                    : {}),
-                purchasedFor: '0',
-                soldToClientFor: '0',
-            }
-
-            let purchased: Decimal
-            let sold: Decimal
-            if (measuringUnit === 'tokens') {
-                // total_tokens × price / pricePer (per-1M-token resource packs).
-                const pricePer = dec(videoPricing.pricePer, '1000000')
-                const tokens = dec(totalTokens, '0')
-                purchased = price.div(pricePer).mul(tokens)
-                sold = priceResale.div(pricePer).mul(tokens)
-                video.totalTokens = Number(totalTokens) || 0
-                video.completionTokens = Number(completionTokens) || 0
-                video.price = price.toString()
-                video.pricePer = pricePer.toString()
-            } else {
-                // seconds (VEO) — unchanged: price-per-second × duration.
-                const seconds = dec(durationSeconds, '0')
-                purchased = price.mul(seconds)
-                sold = priceResale.mul(seconds)
-                video.pricePerSecond = price.toString()
-                video.pricePerSecondResale = priceResale.toString()
-            }
-
-            video.purchasedFor = purchased.toString()
-            video.soldToClientFor = sold.toString()
-
-            const report: VideoUsageReport = {
+            const measuringUnit = aiModelMetaInfo.pricingReference?.providerRoute === 'byteplus-modelark' ? 'tokens' : 'seconds'
+            return {
                 eventMeta,
-                aiModel: `${aiModelMetaInfo.provider}:${aiModelMetaInfo.model}`,
-                modelVersion: aiModelMetaInfo.modelVersion ?? '',
+                pricingLookup: pricingLookupFor(aiModelMetaInfo, { resolution }),
                 aiVendorRequestId,
                 aiRequestReceivedAt,
                 aiRequestFinishedAt,
-                video,
+                video: {
+                    measuringUnit,
+                    durationSeconds: Number(durationSeconds) || 0,
+                    resolution,
+                    aspectRatio,
+                    ...(measuringUnit === 'tokens' ? { totalTokens: Number(totalTokens) || 0, completionTokens: Number(completionTokens) || 0 } : {}),
+                    ...(typeof inputVideoSeconds === 'number' && inputVideoSeconds > 0 ? { inputVideoSeconds: Math.ceil(inputVideoSeconds) } : {}),
+                },
             }
-
-            // TODO: publish to NATS once usage.videos.ai subject is wired up.
-            return report
-        } catch (e) {
-            warn(`Failed to report video usage: ${e}`)
+        } catch (error) {
+            console.error(`Failed to normalize video usage: ${error}`)
             return undefined
         }
     }

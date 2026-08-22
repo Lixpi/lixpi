@@ -74,7 +74,7 @@ async function resolveModel(modelId: string): Promise<{
     const [provider, ...modelParts] = modelId.split(':')
     const modelName = modelParts.join(':')
     if (!provider || !modelName) throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `Invalid AI model id ${modelId}`)
-    const model = await AiModel.getAiModel({ provider, model: modelName, omitPricing: false })
+    const model = await AiModel.getAiModel({ provider, model: modelName })
     if (!model) throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `AI model ${modelId} was not found`)
     return { provider: provider as ProviderName, model }
 }

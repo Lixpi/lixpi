@@ -12,6 +12,17 @@ const dynamoDBService = {
     deleteItems: vi.fn(),
 }
 
+// AiModel.pricingReference is required — every fixture below carries one so
+// warnIfMissingPricingReference's console.error path doesn't spam test output.
+// See "getAiModel warns loudly when pricingReference is missing" below for
+// coverage of that path itself.
+const pricingReference = (pricingKey: string) => ({
+    pricingKey,
+    providerRoute: 'openai-api',
+    vendorModel: pricingKey,
+    pricingRegion: 'global',
+})
+
 beforeEach(() => {
     vi.clearAllMocks()
     ;(globalThis as any).dynamoDBService = dynamoDBService
@@ -20,7 +31,7 @@ beforeEach(() => {
 })
 
 describe('AiModel.getAvailableAiModels', () => {
-    it('sorts models by sortingPosition and removes pricing before returning catalog data', async () => {
+    it('sorts models by sortingPosition and builds the media generation config matrix', async () => {
         dynamoDBService.scanItems.mockResolvedValue({
             items: [
                 {
@@ -30,7 +41,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     providerTitle: 'Anthropic',
                     sortingPosition: 2,
                     modalities: [{ modality: 'text' }],
-                    pricing: { input: 99 },
+                    pricingReference: pricingReference('Anthropic:claude-3-opus-20240229'),
                 },
                 {
                     provider: 'Google',
@@ -41,7 +52,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     modalities: [{ modality: 'image_generation' }],
                     imageSizeMode: 'resolution',
                     imageSizes: [{ value: '768x768' }],
-                    pricing: { input: 1 },
+                    pricingReference: pricingReference('Google:gemini-image-1'),
                 },
                 {
                     provider: 'Google',
@@ -53,7 +64,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     videoAspectRatios: [{ value: '16:9' }],
                     videoResolutions: [{ value: '720p' }],
                     videoDurations: [{ value: '8' }],
-                    pricing: { input: 2 },
+                    pricingReference: pricingReference('Google:veo-3.1-generate-preview'),
                 },
             ],
         })
@@ -71,8 +82,6 @@ describe('AiModel.getAvailableAiModels', () => {
             'Anthropic:claude-3-opus-20240229',
             'Google:veo-3.1-generate-preview',
         ])
-        expect(result.models[0]).not.toHaveProperty('pricing')
-        expect(result.models[2]).not.toHaveProperty('pricing')
 
         const imageGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'image')
         const videoGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'video')
@@ -124,7 +133,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     modelVersion: 'claude-sonnet',
                     sortingPosition: 1,
                     modalities: [{ modality: 'text' }],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-sonnet'),
                 },
                 {
                     provider: 'Anthropic',
@@ -133,7 +142,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     sortingPosition: 2,
                     modalities: [{ modality: 'text' }],
                     isDefaultFor: ['reasoning'],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-haiku-4-5'),
                 },
                 {
                     provider: 'Google',
@@ -142,7 +151,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     sortingPosition: 3,
                     modalities: [{ modality: 'image_generation' }],
                     isDefaultFor: ['image'],
-                    pricing: {},
+                    pricingReference: pricingReference('Google:gemini-2.5-flash-image'),
                 },
                 {
                     provider: 'Google',
@@ -151,7 +160,7 @@ describe('AiModel.getAvailableAiModels', () => {
                     sortingPosition: 4,
                     modalities: [{ modality: 'video_generation' }],
                     isDefaultFor: ['video'],
-                    pricing: {},
+                    pricingReference: pricingReference('Google:veo-3.1-lite-generate-preview'),
                 },
             ],
         })
@@ -163,6 +172,32 @@ describe('AiModel.getAvailableAiModels', () => {
             image: 'Google:gemini-2.5-flash-image',
             video: 'Google:veo-3.1-lite-generate-preview',
         })
+    })
+
+    it('warns loudly (and still returns the model) when a catalog row is missing pricingReference', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet',
+                    modelVersion: 'claude-sonnet',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'text' }],
+                    // pricingReference intentionally absent — simulates a row written
+                    // before ai-models-sync started populating it.
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+
+        expect(result.models).toHaveLength(1)
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Anthropic:claude-sonnet'))
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('pricingReference'))
+
+        consoleErrorSpy.mockRestore()
     })
 })
 
@@ -177,7 +212,7 @@ describe('AiModel.getAvailableAiModels — settings-configured defaults', () => 
                     sortingPosition: 1,
                     modalities: [{ modality: 'text' }],
                     isDefaultFor: ['reasoning'],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-sonnet'),
                 },
                 {
                     // Matches settings.aiModels.defaultReasoningModelId exactly.
@@ -186,7 +221,7 @@ describe('AiModel.getAvailableAiModels — settings-configured defaults', () => 
                     modelVersion: 'claude-haiku-4-5',
                     sortingPosition: 2,
                     modalities: [{ modality: 'text' }],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-haiku-4-5'),
                 },
             ],
         })
@@ -206,7 +241,7 @@ describe('AiModel.getAvailableAiModels — settings-configured defaults', () => 
                     modelVersion: 'claude-haiku-4-5-20250815',
                     sortingPosition: 1,
                     modalities: [{ modality: 'text' }],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-haiku-4-5-20250815'),
                 },
                 {
                     provider: 'Anthropic',
@@ -214,7 +249,7 @@ describe('AiModel.getAvailableAiModels — settings-configured defaults', () => 
                     modelVersion: 'claude-haiku-4-5-20250601',
                     sortingPosition: 2,
                     modalities: [{ modality: 'text' }],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-haiku-4-5-20250601'),
                 },
             ],
         })
@@ -235,7 +270,7 @@ describe('AiModel.getAvailableAiModels — settings-configured defaults', () => 
                     sortingPosition: 1,
                     modalities: [{ modality: 'text' }],
                     isDefaultFor: ['reasoning'],
-                    pricing: {},
+                    pricingReference: pricingReference('Anthropic:claude-sonnet'),
                 },
             ],
         })
@@ -247,7 +282,7 @@ describe('AiModel.getAvailableAiModels — settings-configured defaults', () => 
 })
 
 describe('AiModel.getAiModel', () => {
-    it('omits pricing metadata by default and preserves request contract fields', async () => {
+    it('returns the full model record, including pricingReference, and preserves request contract fields', async () => {
         const modelRecord = {
             provider: 'Google',
             model: 'gemini-2.5-flash-image',
@@ -269,10 +304,7 @@ describe('AiModel.getAiModel', () => {
                 supportedAspectRatios: ['1:1'],
             },
             modalities: [{ modality: 'image_generation' }],
-            pricing: {
-                input: 0.1,
-                output: 0.2,
-            },
+            pricingReference: pricingReference('Google:gemini-2.5-flash-image'),
         }
         dynamoDBService.getItem.mockImplementation(async () => ({ ...modelRecord }))
 
@@ -295,25 +327,27 @@ describe('AiModel.getAiModel', () => {
                 maxReferenceImages: 14,
                 inputFidelity: 'provider-managed',
             }),
+            pricingReference: pricingReference('Google:gemini-2.5-flash-image'),
         })
-        expect(model).not.toHaveProperty('pricing')
     })
 
-    it('returns pricing metadata when omitPricing is false', async () => {
+    it('warns loudly (and still returns the model) when pricingReference is missing', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
         dynamoDBService.getItem.mockImplementation(async () => ({
             provider: 'Google',
             model: 'gemini-2.5-flash-image',
             modelVersion: 'gemini-2.5-flash-image',
-            pricing: { input: 0.1, output: 0.2 },
         }))
 
         const model = await AiModelModel.getAiModel({
             provider: 'Google',
             model: 'gemini-2.5-flash-image',
-            omitPricing: false,
         })
 
-        expect(model).toHaveProperty('pricing', { input: 0.1, output: 0.2 })
-    })
+        expect(model).not.toHaveProperty('pricingReference')
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('pricingReference'))
 
+        consoleErrorSpy.mockRestore()
+    })
 })

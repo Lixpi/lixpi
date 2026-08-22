@@ -163,7 +163,7 @@ describe('AiModelsSync — default model flags', () => {
 })
 
 // =============================================================================
-// VEO VIDEO MODEL SYNC — mapping, pricing, option lists, and blacklist removal
+// VEO VIDEO MODEL SYNC — mapping, pricingReference, option lists, and blacklist removal
 // =============================================================================
 //
 // These exercise the private mapping/config that Phase 1 added for Google VEO.
@@ -185,7 +185,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
         })
     })
 
-    it('maps veo-3.0-generate-001 with video + video_generation modalities, per-second pricing, and safe option lists', () => {
+    it('maps veo-3.0-generate-001 with video + video_generation modalities, a route-aware pricingReference, and safe option lists', () => {
         const model = sync.mapGoogleModelToAiModel({ name: 'veo-3.0-generate-001' }, 1)
         const modalities = model.modalities.map((m: any) => m.modality)
 
@@ -193,8 +193,14 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(modalities).toContain('video')
         expect(modalities).not.toContain('image_generation')
 
-        expect(model.pricing.video?.measuringUnit).toBe('seconds')
-        expect(model.pricing.video?.price).toBe('0.40')
+        // Provider cost itself is no longer Lixpi-side data (see documentation/memory/MODEL-PRICING-SERVICE.md) —
+        // what this workload still owns is resolving the correct opaque, route-aware pricing key per model.
+        expect(model.pricingReference).toEqual({
+            pricingKey: 'Google:veo-3.0-generate-001:gemini-api:global',
+            providerRoute: 'gemini-api',
+            vendorModel: 'veo-3.0-generate-001',
+            pricingRegion: 'global',
+        })
 
         expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '9:16'])
         expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
@@ -204,33 +210,36 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(model.shortTitle).toBe('Veo 3')
     })
 
-    it('maps the fast variant to the cheaper per-second price and a Fast title (prefix order matters)', () => {
+    it('maps the fast variant to a distinct pricingKey and a Fast title (prefix order matters)', () => {
         const model = sync.mapGoogleModelToAiModel({ name: 'veo-3.0-fast-generate-001' }, 2)
-        expect(model.pricing.video?.price).toBe('0.15')
+        expect(model.pricingReference.pricingKey).toBe('Google:veo-3.0-fast-generate-001:gemini-api:global')
         expect(model.title).toBe('Veo 3 Fast')
     })
 
-    it('maps the veo-3.1 preview family with friendly names and correct pricing', () => {
+    it('maps the veo-3.1 preview family with friendly names and distinct pricingKeys per variant', () => {
         const v31 = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-generate-preview' }, 3)
         expect(v31.title).toBe('Veo 3.1')
-        expect(v31.pricing.video?.price).toBe('0.40')
+        expect(v31.pricingReference.pricingKey).toBe('Google:veo-3.1-generate-preview:gemini-api:global')
         expect(v31.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
         expect(v31.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
 
         const lite = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-lite-generate-preview' }, 4)
         expect(lite.title).toBe('Veo 3.1 Lite')
-        expect(lite.pricing.video?.price).toBe('0.10')
+        expect(lite.pricingReference.pricingKey).toBe('Google:veo-3.1-lite-generate-preview:gemini-api:global')
         expect(lite.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
         expect(lite.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
 
         const fast = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-fast-generate-preview' }, 5)
         expect(fast.title).toBe('Veo 3.1 Fast')
-        expect(fast.pricing.video?.price).toBe('0.15')
+        expect(fast.pricingReference.pricingKey).toBe('Google:veo-3.1-fast-generate-preview:gemini-api:global')
         expect(fast.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
         expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+
+        // Every variant above resolves to its own catalogModel-keyed pricingKey.
+        expect(new Set([v31, lite, fast].map((m) => m.pricingReference.pricingKey)).size).toBe(3)
     })
 
-    it('does NOT give gemini text models any video modality, options, or pricing (regression)', () => {
+    it('does NOT give gemini text models any video modality or option lists (regression)', () => {
         const gemini = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 6)
         const modalities = gemini.modalities.map((m: any) => m.modality)
 
@@ -239,7 +248,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(gemini.videoAspectRatios).toBeUndefined()
         expect(gemini.videoResolutions).toBeUndefined()
         expect(gemini.videoDurations).toBeUndefined()
-        expect(gemini.pricing.video).toBeUndefined()
+        expect(gemini.pricingReference.pricingKey).toBe('Google:gemini-3.1-pro:gemini-api:global')
     })
 
     it('allows veo models through the Google contains blacklist', () => {
@@ -291,7 +300,7 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(ids).toEqual(['dreamina-seedance-2-0-260128', 'dreamina-seedance-2-0-fast-260128'])
     })
 
-    it('maps dreamina-seedance-2-0-260128 with video modalities, token pricing, option lists, and a 9-image reference cap', () => {
+    it('maps dreamina-seedance-2-0-260128 with video modalities, a byteplus-modelark pricingReference, option lists, and a 9-image reference cap', () => {
         const model = sync.mapBytePlusModelToAiModel({ id: 'dreamina-seedance-2-0-260128', displayName: 'Seedance 2.0' }, 1)
         const modalities = model.modalities.map((m: any) => m.modality)
 
@@ -300,9 +309,14 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(modalities).toContain('video')
         expect(modalities).not.toContain('image_generation')
 
-        expect(model.pricing.video?.measuringUnit).toBe('tokens')
-        expect(model.pricing.video?.pricePer).toBe('1000000')
-        expect(model.pricing.video?.price).toBe('4.30')
+        // Provider cost (token-metered, per-1M-token) is now the model-pricing service's
+        // data, not this workload's — see documentation/memory/MODEL-PRICING-SERVICE.md.
+        expect(model.pricingReference).toEqual({
+            pricingKey: 'BytePlus:dreamina-seedance-2-0-260128:byteplus-modelark:global',
+            providerRoute: 'byteplus-modelark',
+            vendorModel: 'dreamina-seedance-2-0-260128',
+            pricingRegion: 'global',
+        })
 
         expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
         expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p'])
@@ -313,10 +327,9 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(model.shortTitle).toBe('Seedance 2.0')
     })
 
-    it('maps the fast variant to the cheaper per-1M-token price and a Fast title', () => {
+    it('maps the fast variant to a distinct pricingKey and a Fast title', () => {
         const model = sync.mapBytePlusModelToAiModel({ id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' }, 2)
-        expect(model.pricing.video?.measuringUnit).toBe('tokens')
-        expect(model.pricing.video?.price).toBe('3.30')
+        expect(model.pricingReference.pricingKey).toBe('BytePlus:dreamina-seedance-2-0-fast-260128:byteplus-modelark:global')
         expect(model.videoMaxReferenceImages).toBe(9)
         expect(model.title).toBe('Seedance 2.0 Fast')
         expect(model.shortTitle).toBe('Seedance 2.0 Fast')

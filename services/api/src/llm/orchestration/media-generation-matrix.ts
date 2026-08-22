@@ -673,7 +673,6 @@ export class MediaGenerationMatrixOrchestrator {
             const meta = await AiModelModel.getAiModel({
                 provider: parsed.provider,
                 model: parsed.model,
-                omitPricing: false,
             }) as AiModel | undefined
 
             if (!meta || !meta.modelVersion) {

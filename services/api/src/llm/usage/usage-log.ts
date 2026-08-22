@@ -7,11 +7,11 @@ import type { CheckMeteringBasis } from './usage-estimator.ts'
 
 // One readable shape for the two halves of metering, so a run's spend reads off
 // `docker logs lixpi-api` in one place. Both lines share the `[Metrics]` tag, lead
-// with model and modality, and put the unit count next to the unit it is counted
+// with pricing key and modality, and put the usage dimensions next to their unit
 // in.
 //
-//   [Metrics] usage check {"model":"gpt-5.5","modality":"tokens",...}
-//   [Metrics] usage confirm {"model":"gpt-5.5","modality":"tokens",...}
+//   [Metrics] usage check {"pricingKey":"...","modality":"tokens",...}
+//   [Metrics] usage confirm {"pricingKey":"...","modality":"tokens",...}
 //
 // Follows the repo's structured-log convention: a tagged prefix, a short phrase,
 // then one flat JSON object (see BaseProvider and ImageRouter).
@@ -20,18 +20,18 @@ import type { CheckMeteringBasis } from './usage-estimator.ts'
 const MICRO_DOLLARS_PER_USD = 1_000_000
 
 export function logUsageCheck(entry: {
-    model: string
+    pricingKey: string
     workflowId: string
-    estimatedUnits: number
+    estimatedUsage: Record<string, unknown>
     basis: CheckMeteringBasis
     response: CheckResponse
     modality: string
 }): void {
     const { basis, response } = entry
     const line = `[Metrics] usage check ${JSON.stringify({
-        model: entry.model,
+        pricingKey: entry.pricingKey,
         modality: entry.modality,
-        estimatedUnits: entry.estimatedUnits,
+        estimatedUsage: entry.estimatedUsage,
         unit: basis.measuringUnit,
         ...basisDetail(basis),
         approved: response.approved,
@@ -55,17 +55,13 @@ export function logUsageCheck(entry: {
 export function logUsageConfirm(entry: {
     request: ConfirmRequest
     response: ConfirmResponse | undefined
-    purchasedFor?: string | undefined
-    soldToClientFor?: string | undefined
 }): void {
     const { request, response } = entry
     info(`[Metrics] usage confirm ${JSON.stringify({
-        model: request.model,
+        pricingKey: request.pricingLookup.pricingKey,
         modality: request.modality,
         unit: request.measuringUnit,
         ...request.usage,
-        ...(entry.purchasedFor ? { purchasedForUsd: entry.purchasedFor } : {}),
-        ...(entry.soldToClientFor ? { soldToClientForUsd: entry.soldToClientFor } : {}),
         chargedUsd: usd(response?.resaleCost),
         balanceUsd: usd(response?.balance),
         workflowId: request.workflowId,

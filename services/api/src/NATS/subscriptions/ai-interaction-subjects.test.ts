@@ -872,7 +872,6 @@ describe('AI interaction message routing', () => {
         expect(mocks.aiModel.getAiModel).toHaveBeenCalledWith({
             provider: 'openai',
             model: 'missing',
-            omitPricing: false,
         })
         expect(mocks.nats.publish).toHaveBeenCalledWith(
             `${SUBJECTS.CHAT_SEND_MESSAGE_RESPONSE}.org-1.conv-1`,

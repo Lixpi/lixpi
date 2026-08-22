@@ -14,7 +14,7 @@ import {
     type MediaGenerationConfigGroup,
     type MediaGenerationConfigMatrix,
 } from '@lixpi/constants'
-import type { Omit, Pick } from 'type-fest'
+import type { Pick } from 'type-fest'
 
 import { settings } from '../settings.ts'
 
@@ -23,7 +23,7 @@ const {
     STAGE
 } = process.env
 
-const modelHasGenerationModality = (model: Omit<AiModel, 'pricing'>, modality: 'image_generation' | 'video_generation'): boolean =>
+const modelHasGenerationModality = (model: AiModel, modality: 'image_generation' | 'video_generation'): boolean =>
     model.modalities?.some(entry => entry.modality === modality) ?? false
 
 // AiModel.pricingReference is typed as required, but rows written before
@@ -41,10 +41,10 @@ const modelIdFor = (model: Pick<AiModel, 'provider' | 'model'>): AiModelId =>
     `${model.provider}:${model.model}` as AiModelId
 
 const findConfiguredCatalogModel = (
-    models: Array<Omit<AiModel, 'pricing'>>,
+    models: AiModel[],
     configuredModelId: AiModelId,
-    matchesCapability: (model: Omit<AiModel, 'pricing'>) => boolean,
-): Omit<AiModel, 'pricing'> | undefined => {
+    matchesCapability: (model: AiModel) => boolean,
+): AiModel | undefined => {
     const exactModel = models.find(model => modelIdFor(model) === configuredModelId && matchesCapability(model))
     if (exactModel) return exactModel
 
@@ -77,7 +77,7 @@ const isResolutionValue = (value: string): boolean => /^\d+x\d+$/i.test(value)
 
 const isAspectRatioValue = (value: string): boolean => /^\d+:\d+$/.test(value)
 
-const getImageSizeControlLabel = (model: Omit<AiModel, 'pricing'>): string => {
+const getImageSizeControlLabel = (model: AiModel): string => {
     if (model.imageSizeMode === 'resolution') return 'Resolution'
     if (model.imageSizeMode === 'aspectRatio') return 'Aspect ratio'
 
@@ -89,7 +89,7 @@ const getImageSizeControlLabel = (model: Omit<AiModel, 'pricing'>): string => {
     return 'Image option'
 }
 
-const buildImageControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
+const buildImageControls = (model: AiModel): MediaGenerationConfigControl[] => {
     const options = normalizeOptions(model.imageSizes, [{ value: 'auto', label: 'Auto' }])
     return [{
         key: 'imageSize',
@@ -99,7 +99,7 @@ const buildImageControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationCon
     }]
 }
 
-const buildVideoControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
+const buildVideoControls = (model: AiModel): MediaGenerationConfigControl[] => {
     const controls: MediaGenerationConfigControl[] = []
     const aspectRatioOptions = normalizeOptions(model.videoAspectRatios, [])
     const resolutionOptions = normalizeOptions(model.videoResolutions, [])
@@ -189,7 +189,7 @@ const mergeControls = (
 
 const appendMatrixGroup = (
     groupsByKey: Map<string, MediaGenerationConfigGroup>,
-    model: Omit<AiModel, 'pricing'>,
+    model: AiModel,
     mediaType: 'image' | 'video',
     controls: MediaGenerationConfigControl[],
 ): void => {
@@ -222,13 +222,13 @@ const appendMatrixGroup = (
 // Derive the default model id per capability from the catalog. API-configured
 // defaults win when available, followed by synchronization flags and then
 // the first model matching the requested capability.
-const resolveDefaultModels = (models: Array<Omit<AiModel, 'pricing'>>): DefaultAiModelSelection => {
-    const isReasoningModel = (model: Omit<AiModel, 'pricing'>): boolean =>
+const resolveDefaultModels = (models: AiModel[]): DefaultAiModelSelection => {
+    const isReasoningModel = (model: AiModel): boolean =>
         !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation')
 
     const resolve = (
         capability: DefaultAiModelCapability,
-        matches: (model: Omit<AiModel, 'pricing'>) => boolean,
+        matches: (model: AiModel) => boolean,
         configuredModelId?: AiModelId,
     ): AiModelId => {
         const configured = configuredModelId
@@ -258,7 +258,7 @@ const resolveDefaultModels = (models: Array<Omit<AiModel, 'pricing'>>): DefaultA
     }
 }
 
-const buildMediaGenerationConfigMatrix = (models: Array<Omit<AiModel, 'pricing'>>): MediaGenerationConfigMatrix => {
+const buildMediaGenerationConfigMatrix = (models: AiModel[]): MediaGenerationConfigMatrix => {
     const groupsByKey = new Map<string, MediaGenerationConfigGroup>()
     for (const model of models) {
         if (modelHasGenerationModality(model, 'image_generation')) {
@@ -284,11 +284,9 @@ export default {
             origin: 'model::AiModel->getAvailableAiModels()',
         })
 
-        const models = availableAiModels.items.map((item) => {
-            const model = { ...item }
-            delete model.pricing
-            return model as Omit<AiModel, 'pricing'>
-        }).sort((a, b) => a.sortingPosition - b.sortingPosition)
+        const models = availableAiModels.items
+            .map(item => item as AiModel)
+            .sort((a, b) => a.sortingPosition - b.sortingPosition)
 
         models.forEach(warnIfMissingPricingReference)
 
@@ -302,8 +300,7 @@ export default {
     getAiModel: async ({
         provider,
         model,
-        omitPricing = true
-    }: Pick<AiModel, 'provider' | 'model'> & { omitPricing?: boolean }): Promise<AiModel | Omit<AiModel, 'pricing'> | undefined> => {
+    }: Pick<AiModel, 'provider' | 'model'>): Promise<AiModel | undefined> => {
         const aiModel = await dynamoDBService.getItem({
             tableName: getDynamoDbTableStageName('AI_MODELS_LIST', ORG_NAME, STAGE),
             key: { provider, model },
@@ -312,14 +309,7 @@ export default {
 
         if (!aiModel) return undefined
 
-        if (omitPricing) {
-            const modelWithoutPricing = { ...aiModel }
-            delete modelWithoutPricing.pricing
-            return modelWithoutPricing
-        }
-
         warnIfMissingPricingReference(aiModel)
-
-        return aiModel
+        return aiModel as AiModel
     }
 }

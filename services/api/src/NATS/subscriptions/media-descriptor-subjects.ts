@@ -113,7 +113,7 @@ export const mediaDescriptorSubjects = [{
         const descriptorModelId = (isMedia ? settings.mediaDescriptor.defaultVlmModelId : data.aiModel) as AiModelId | undefined
         if (!descriptorModelId?.includes(':')) return { error: 'AI_MODEL_REQUIRED' }
         const [provider, modelVersion] = descriptorModelId.split(':')
-        const aiModelMetaInfo = await AiModel.getAiModel({ provider: provider!, model: modelVersion!, omitPricing: true })
+        const aiModelMetaInfo = await AiModel.getAiModel({ provider: provider!, model: modelVersion! })
         const maxTokens = aiModelMetaInfo?.maxCompletionSize || (isMedia ? settings.mediaDescriptor.defaultVlmMaxTokens : undefined)
         const inferenceCapabilities = aiModelMetaInfo?.inferenceCapabilities
             ?? (isMedia ? settings.mediaDescriptor.defaultVlmInferenceCapabilities : undefined)

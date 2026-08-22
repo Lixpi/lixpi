@@ -1546,7 +1546,6 @@ export const aiInteractionSubjects = [
                 const aiModelMetaInfo = await AiModel.getAiModel({
                     provider: provider!,
                     model: model!,
-                    omitPricing: false,
                 })
                 if (!aiModelMetaInfo || !aiModelMetaInfo.modelVersion) {
                     err('AI model meta info not found in the database', { aiModel })
@@ -1564,7 +1563,6 @@ export const aiInteractionSubjects = [
                     imageModelMetaInfo = await AiModel.getAiModel({
                         provider: imageProvider!,
                         model: imageModel!,
-                        omitPricing: false,
                     })
                     if (imageModelMetaInfo) {
                         info(`Image model resolved: ${imageProvider}:${imageModel}`)
@@ -1579,7 +1577,6 @@ export const aiInteractionSubjects = [
                     videoModelMetaInfo = await AiModel.getAiModel({
                         provider: videoProvider!,
                         model: videoModel!,
-                        omitPricing: false,
                     })
                     if (videoModelMetaInfo) {
                         info(`Video model resolved: ${videoProvider}:${videoModel}`)
