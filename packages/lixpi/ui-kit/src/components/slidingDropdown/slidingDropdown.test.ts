@@ -21,6 +21,7 @@ type Value = typeof OPTIONS[number]['value']
 const IMMEDIATE_TRANSITION: Partial<SlidingDropdownTransitionConfig> = {
     durationMs: 0,
     minDurationMs: 0,
+    snapDurationMs: 0,
 }
 const transitionDurations: number[] = []
 const transitionEasings: unknown[] = []
@@ -232,32 +233,79 @@ describe('createSlidingDropdown — motion and snap timing', () => {
     })
 
     it('slides and collapses concurrently with doubled click motion duration', () => {
-        const { svg, slidingDropdown, onChange } = mount('square', vi.fn(), null)
+        const { svg, slidingDropdown, onChange } = mount('landscape', vi.fn(), null)
 
         slidingDropdown.setOpen(true)
-        vi.advanceTimersByTime(150)
-        dispatchPointerClick(optionHit(svg, 'portrait'))
+        vi.advanceTimersByTime(100)
+        const indicator = svg.querySelector('.sliding-dropdown-indicator')!
+        const optionsGroup = svg.querySelector('.sliding-dropdown-options')!
+        const viewportClip = svg.querySelector('clipPath rect')!
+        const frameY = Number(indicator.getAttribute('y'))
+        const frameScreenY = renderedSvgTop(svg) + frameY * 2
+
+        dispatchPointerClick(optionHit(svg, 'automatic'))
 
         expect(slidingDropdown.isOpen()).toBe(false)
-        expect(svg.style.height).toBe(`${HEIGHT * 2}px`)
-        expect(slidingDropdown.getValue()).toBe('square')
+        expect(svg.style.height).toBe(`${OPTIONS.length * HEIGHT * 2}px`)
+        expect(svg.getAttribute('viewBox')).toBe(`0 0 ${WIDTH} ${OPTIONS.length * HEIGHT}`)
+        expect(renderedSvgTop(svg) + Number(indicator.getAttribute('y')) * 2).toBe(frameScreenY)
+        expect(optionsGroup.getAttribute('transform')).toBe(`translate(0, ${-2 * HEIGHT})`)
+        expect(
+            Number(optionHit(svg, 'automatic').getAttribute('y')) - 2 * HEIGHT,
+        ).toBe(frameY)
+        expect(viewportClip.getAttribute('y')).toBe(String(HEIGHT))
+        expect(viewportClip.getAttribute('height')).toBe(String(HEIGHT))
+        expect(slidingDropdown.getValue()).toBe('landscape')
         expect(onChange).not.toHaveBeenCalled()
 
-        vi.advanceTimersByTime(233)
-        expect(slidingDropdown.getValue()).toBe('square')
+        vi.advanceTimersByTime(155)
+        expect(slidingDropdown.getValue()).toBe('landscape')
         expect(onChange).not.toHaveBeenCalled()
 
         vi.advanceTimersByTime(1)
 
         expect(transitionEasings.length).toBeGreaterThan(0)
         expect(transitionEasings.every(easing => easing === easePupOut)).toBe(true)
-        expect(Math.max(...transitionDurations)).toBe(234)
+        expect(Math.max(...transitionDurations)).toBe(156)
+        expect(svg.style.height).toBe(`${HEIGHT}px`)
+        expect(svg.getAttribute('viewBox')).toBe(`0 0 ${WIDTH} ${HEIGHT}`)
+        expect(indicator.getAttribute('y')).toBe('2')
+        expect(optionsGroup.getAttribute('transform')).toBe(`translate(0, ${-3 * HEIGHT})`)
+        expect(slidingDropdown.getValue()).toBe('automatic')
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('automatic', 'dimensions')
+    })
+
+    it('keeps the current value fixed while an outside press closes the viewport', () => {
+        const { svg, slidingDropdown, onChange } = mount('portrait', vi.fn(), null)
+
+        slidingDropdown.setOpen(true)
+        vi.advanceTimersByTime(100)
+        const indicator = svg.querySelector('.sliding-dropdown-indicator')!
+        const optionsGroup = svg.querySelector('.sliding-dropdown-options')!
+        const viewportClip = svg.querySelector('clipPath rect')!
+        const frameY = Number(indicator.getAttribute('y'))
+        const frameScreenY = renderedSvgTop(svg) + frameY * 2
+
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+
+        expect(slidingDropdown.isOpen()).toBe(false)
+        expect(svg.style.height).toBe(`${OPTIONS.length * HEIGHT * 2}px`)
+        expect(renderedSvgTop(svg) + Number(indicator.getAttribute('y')) * 2).toBe(frameScreenY)
+        expect(optionsGroup.getAttribute('transform')).toBe('translate(0, 0)')
+        expect(viewportClip.getAttribute('y')).toBe(String(2 * HEIGHT))
+        expect(viewportClip.getAttribute('height')).toBe(String(HEIGHT))
+
+        vi.advanceTimersByTime(140)
+
+        expect(svg.style.height).toBe(`${HEIGHT}px`)
+        expect(indicator.getAttribute('y')).toBe('2')
+        expect(optionsGroup.getAttribute('transform')).toBe(`translate(0, ${-2 * HEIGHT})`)
         expect(slidingDropdown.getValue()).toBe('portrait')
-        expect(onChange).toHaveBeenCalledExactlyOnceWith('portrait', 'dimensions')
+        expect(onChange).not.toHaveBeenCalled()
     })
 
     it('waits for native scrollend before snapping while keeping the entire tape visible', () => {
-        const { svg, slidingDropdown, onChange } = mount('square')
+        const { svg, slidingDropdown, onChange } = mount('square', vi.fn(), null)
         slidingDropdown.setOpen(true)
         vi.runAllTimers()
         const scrollPortal = svg.closest('.sliding-dropdown-scroll-portal') as HTMLDivElement
@@ -277,6 +325,7 @@ describe('createSlidingDropdown — motion and snap timing', () => {
         scrollPortal.dispatchEvent(new Event('scrollend'))
         vi.runAllTimers()
 
+        expect(transitionDurations).toContain(50)
         expect(renderedSvgTop(svg)).toBeCloseTo(418)
         expect(svg.getAttribute('viewBox')).toBe(`0 0 ${WIDTH} ${OPTIONS.length * HEIGHT}`)
         expect(svg.querySelector('clipPath rect')?.getAttribute('height')).toBe(String(OPTIONS.length * HEIGHT))

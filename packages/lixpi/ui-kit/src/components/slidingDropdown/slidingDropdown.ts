@@ -3,10 +3,7 @@ import 'd3-transition'
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import {
-    DEFAULT_HOVER_TRANSITION_DURATION_MS,
-    easePupOut,
-} from '../../animation/easings.ts'
+import { easePupOut } from '../../animation/easings.ts'
 import { applyStyle, html } from '../../dom/domTemplates.ts'
 import {
     type SlidingSwitchIndicatorInsetShadow,
@@ -24,7 +21,9 @@ export type SlidingDropdownOptionRenderInstance<Value extends string = string> =
 export type SlidingDropdownOptionRenderer<Value extends string = string> = SlidingSwitchOptionRenderer<Value>
 export type SlidingDropdownIndicatorInsetShadow = SlidingSwitchIndicatorInsetShadow
 export type SlidingDropdownVisualOverflowPadding = SlidingSwitchVisualOverflowPadding
-export type SlidingDropdownTransitionConfig = SlidingSwitchTransitionConfig
+export type SlidingDropdownTransitionConfig = SlidingSwitchTransitionConfig & {
+    snapDurationMs: number
+}
 
 export type SlidingDropdownConfig<Value extends string = string> = {
     id: string
@@ -98,8 +97,9 @@ type SlidingDropdownSvgAttributeSnapshot = {
 }
 
 const PADDING = 2
-const DEFAULT_TRANSITION_DURATION_MS = DEFAULT_HOVER_TRANSITION_DURATION_MS
-const DEFAULT_MIN_TRANSITION_DURATION_MS = 70
+const DEFAULT_OPEN_TRANSITION_DURATION_MS = 130
+const DEFAULT_CLOSE_TRANSITION_DURATION_MS = 70
+const DEFAULT_SNAP_TRANSITION_DURATION_MS = 50
 const DEFAULT_DISTANCE_SPEEDUP_FACTOR = 0.28
 const CLICK_TRANSITION_DURATION_MULTIPLIER = 2
 const DEFAULT_WIDTH = 156
@@ -376,8 +376,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         config: Partial<SlidingDropdownTransitionConfig> | undefined,
     ): SlidingDropdownTransitionConfig {
         return {
-            durationMs: Math.max(0, config?.durationMs ?? DEFAULT_TRANSITION_DURATION_MS),
-            minDurationMs: Math.max(0, config?.minDurationMs ?? DEFAULT_MIN_TRANSITION_DURATION_MS),
+            durationMs: Math.max(0, config?.durationMs ?? DEFAULT_OPEN_TRANSITION_DURATION_MS),
+            minDurationMs: Math.max(0, config?.minDurationMs ?? DEFAULT_CLOSE_TRANSITION_DURATION_MS),
+            snapDurationMs: Math.max(0, config?.snapDurationMs ?? DEFAULT_SNAP_TRANSITION_DURATION_MS),
             distanceSpeedupFactor: Math.max(0, config?.distanceSpeedupFactor ?? DEFAULT_DISTANCE_SPEEDUP_FACTOR),
         }
     }
@@ -576,8 +577,6 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private updateHostSvgGeometry(
         contentHeight: number,
         top: number,
-        animate: boolean,
-        duration = 0,
     ): void {
         if (!this.svgNode) return
         const outerWidth = this.outerWidth()
@@ -599,11 +598,13 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const screenWidth = outerWidth * scaleX
         const screenHeight = outerHeight * scaleY
         this.updateOwnedHostLayout()
-        const svg = this.parent
+        this.parent
+            .interrupt()
             .attr('data-sliding-dropdown-open', String(overlayOpen))
             .style('display', 'block')
             .style('position', position)
             .style('left', `${left}px`)
+            .style('top', `${positionedTop}px`)
             .style('width', `${screenWidth}px`)
             .style('height', `${screenHeight}px`)
             .style('min-width', `${screenWidth}px`)
@@ -611,24 +612,6 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .style('overflow', 'hidden')
             .style('pointer-events', this.portaled ? 'auto' : this.svgStyleSnapshot?.pointerEvents || null)
             .style('z-index', overlayOpen ? String(OPEN_Z_INDEX) : this.svgStyleSnapshot?.zIndex || null)
-
-        if (!animate) {
-            svg
-                .interrupt()
-                .style('top', `${positionedTop}px`)
-                .attr('width', screenWidth)
-                .attr('height', screenHeight)
-                .attr('viewBox', `0 0 ${outerWidth} ${outerHeight}`)
-            return
-        }
-
-        svg
-            .interrupt()
-            .transition()
-            .duration(duration)
-            .ease(easePupOut)
-            .style('top', `${positionedTop}px`)
-            .style('height', `${screenHeight}px`)
             .attr('width', screenWidth)
             .attr('height', screenHeight)
             .attr('viewBox', `0 0 ${outerWidth} ${outerHeight}`)
@@ -923,7 +906,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.indicator.attr('y', this.openIndicatorY())
         this.indicatorInset.attr('y', this.openIndicatorY())
         if (syncScrollPortal) this.syncScrollPortalToTape()
-        this.updateHostSvgGeometry(this.openViewportHeight, this.openViewportTop, false)
+        this.updateHostSvgGeometry(this.openViewportHeight, this.openViewportTop)
         this.updateTapePreview()
     }
 
@@ -994,7 +977,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         }
 
         this.renderOptionViews()
-        this.animateScrollPortalToOffset(targetOffset, this.transitionConfig.minDurationMs)
+        this.animateScrollPortalToOffset(targetOffset, this.transitionConfig.snapDurationMs)
     }
 
     private readonly handleWheel = (event: WheelEvent): void => {
@@ -1075,16 +1058,13 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .style('touch-action', this.open ? 'none' : 'manipulation')
         this.viewportHit
             .attr('x', 0)
-            .attr('y', 0)
             .attr('width', this.width)
-            .attr('height', contentHeight)
         this.viewportClip
             .attr('x', 0)
-            .attr('y', 0)
             .attr('width', this.width)
-            .attr('height', contentHeight)
             .attr('rx', this.height / 2)
             .attr('ry', this.height / 2)
+        this.setViewportGeometry(0, contentHeight)
         this.setTapePosition(tapePosition)
         this.track
             .attr('x', 0)
@@ -1099,15 +1079,23 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             this.updateScrollPortalGeometry()
             this.syncScrollPortalToTape()
         }
-        this.updateHostSvgGeometry(contentHeight, top, false)
+        this.updateHostSvgGeometry(contentHeight, top)
         this.syncDocumentListener()
     }
 
-    private animateLayout(
-        contentHeight: number,
-        top: number,
+    private setViewportGeometry(y: number, height: number): void {
+        this.viewportClip
+            .attr('y', y)
+            .attr('height', height)
+        this.viewportHit
+            .attr('y', y)
+            .attr('height', height)
+    }
+
+    private animateTapeViewport(
+        viewportY: number,
+        viewportHeight: number,
         tapePosition: number,
-        indicatorY: number,
         trackFill: string,
         duration: number,
     ): void {
@@ -1116,27 +1104,16 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .transition()
             .duration(duration)
             .ease(easePupOut)
-            .attr('height', contentHeight)
+            .attr('y', viewportY)
+            .attr('height', viewportHeight)
         this.viewportHit
             .interrupt()
             .transition()
             .duration(duration)
             .ease(easePupOut)
-            .attr('height', contentHeight)
+            .attr('y', viewportY)
+            .attr('height', viewportHeight)
         this.animateTapePosition(tapePosition, duration, trackFill)
-        this.indicator
-            .interrupt()
-            .transition()
-            .duration(duration)
-            .ease(easePupOut)
-            .attr('y', indicatorY)
-        this.indicatorInset
-            .interrupt()
-            .transition()
-            .duration(duration)
-            .ease(easePupOut)
-            .attr('y', indicatorY)
-        this.updateHostSvgGeometry(contentHeight, top, true, duration)
     }
 
     private openDropdown(): void {
@@ -1148,7 +1125,6 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.pendingValue = null
         this.tapeOffset = this.optionsOffset(selectedIndex)
         this.portalSvg()
-        this.updateHostSvgGeometry(this.height, 0, false)
         this.refreshOpenViewport()
         this.open = true
         this.animating = true
@@ -1156,13 +1132,18 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .style('touch-action', 'none')
         this.parent.attr('data-sliding-dropdown-open', 'true')
         this.renderOptionViews()
+        const selectedFrameY = -this.openViewportTop
+        this.setViewportGeometry(selectedFrameY, this.height)
+        this.setTapePosition(this.renderedTapeOffset())
+        this.renderIndicator(selectedFrameY + PADDING)
+        this.track.attr('fill', COLORS.track)
+        this.updateHostSvgGeometry(this.openViewportHeight, this.openViewportTop)
         this.syncDocumentListener()
         this.onOpenChange?.(true, this.id)
-        this.animateLayout(
+        this.animateTapeViewport(
+            0,
             this.openViewportHeight,
-            this.openViewportTop,
             this.renderedTapeOffset(),
-            this.openIndicatorY(),
             COLORS.trackOpen,
             duration,
         )
@@ -1186,6 +1167,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const currentIndex = this.nearestTapeIndex()
         const targetIndex = this.indexOf(option.value)
         if (targetIndex < 0) return
+        const startOffset = this.tapeOffset
+        const targetOffset = this.optionsOffset(targetIndex)
         const closeDuration = this.transitionConfig.minDurationMs
         const slideDuration = currentIndex === targetIndex
             ? closeDuration
@@ -1196,8 +1179,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.clearAnimationTimer()
         this.interruptTransitions()
         this.pendingValue = option.value
-        this.tapeOffset = this.optionsOffset(targetIndex)
-        this.refreshOpenViewport()
+        this.tapeOffset = targetOffset
         this.animating = true
         this.hoveredValue = null
         this.renderOptionViews()
@@ -1205,11 +1187,13 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.group.attr('aria-expanded', 'false')
         this.syncDocumentListener()
         if (notify) this.onOpenChange?.(false, this.id)
-        this.animateLayout(
+        const selectedFrameY = -startOffset
+        this.renderIndicator(selectedFrameY + PADDING)
+        this.updateHostSvgGeometry(this.openViewportHeight, startOffset)
+        this.animateTapeViewport(
+            selectedFrameY,
             this.height,
-            0,
-            this.tapeOffset,
-            PADDING,
+            targetOffset - startOffset,
             COLORS.track,
             duration,
         )

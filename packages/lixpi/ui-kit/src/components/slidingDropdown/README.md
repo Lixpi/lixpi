@@ -23,7 +23,7 @@ const dropdown = createSlidingDropdown(svg, {
 })
 ```
 
-The default closed size is `156 × 66`. The config accepts the same option, custom option renderer, indicator shadow, overflow padding, and transition shapes as `slidingSwitch`. `ariaLabel` names the control, and `observeParentResize` constrains the default or requested width to the available parent width.
+The default closed size is `156 × 66`. The config accepts the same option, custom option renderer, indicator shadow, and overflow padding shapes as `slidingSwitch`. Its transition config adds `snapDurationMs` to the shared `durationMs`, `minDurationMs`, and `distanceSpeedupFactor` fields. `ariaLabel` names the control, and `observeParentResize` constrains the default or requested width to the available parent width.
 
 The component does not interpret option values or render domain-specific glyphs. A caller can pass `renderOption(parent, state)` to append custom SVG content for each option. The renderer receives the option value, label, geometry, selected state, hover state, and disabled state. It can return `resize`, `render`, and `destroy` lifecycle methods.
 
@@ -37,9 +37,9 @@ The returned instance exposes `render`, `resize`, `setValue`, `getValue`, `setOp
 - The grey track and its option content form one ordered tape. Wheel, trackpad, pointer drag, Arrow, Home, and End input move the entire tape through the fixed selection area without scrolling the parent.
 - Wheel and trackpad input use the portaled native scroll surface. Snapping starts on its `scrollend` event, after the browser reports that scrolling, momentum, and the physical gesture have ended. A stationary finger still touching a trackpad therefore does not release the tape. Pointer dragging snaps on `pointerup`.
 - An ordinary pointer press remains an option click. Pointer capture starts only after movement crosses the drag threshold.
-- Click a row to slide it into the fixed indicator while the overlay closes around it in the same transition, then apply it as the selected value.
+- Click a row to slide the tape behind the fixed indicator while the viewport closes around that stationary frame, then apply it as the selected value.
 - Wheel, trackpad, drag, and keyboard movement update the pending row. Closing with Escape, an outside press, or `setOpen(false)` aligns and applies that row.
 - Arrow keys move focus through enabled rows while the list is open. Home and End focus the first and last enabled rows.
 - The component exposes combobox, listbox, option, expanded, selected, and disabled ARIA state.
 
-All D3 motion uses `easePupOut` from `src/animation/easings.ts`. Opening uses the shared 150 ms timing, and scroll snapping uses 70 ms. A clicked selection uses one concurrent slide-and-collapse transition at twice the longer of its distance-adjusted travel timing and the 70 ms collapse timing. The component owns its SVG group, native scroll surface, host and root-SVG presentation while mounted, ResizeObserver, document listener, transitions, and animation timers. `destroy()` removes its group and restores the caller-owned host and SVG.
+All D3 motion uses `easePupOut` from `src/animation/easings.ts`. The selected indicator is a stationary frame: opening and closing never animate its position. The portaled root SVG also keeps one stable full-tape size and `viewBox` throughout those transitions. Opening expands only the tape viewport around the frame. Closing translates the tape behind the frame while the viewport contracts around it, then restores the closed root SVG after the transition. Opening uses 100 ms, the close timing floor is 70 ms, and scroll snapping uses 50 ms. A clicked selection keeps its existing 2× multiplier and uses one concurrent slide-and-collapse transition at twice the longer of its distance-adjusted travel timing and the 70 ms close timing. The component owns its SVG group, native scroll surface, host and root-SVG presentation while mounted, ResizeObserver, document listener, transitions, and animation timers. `destroy()` removes its group and restores the caller-owned host and SVG.
