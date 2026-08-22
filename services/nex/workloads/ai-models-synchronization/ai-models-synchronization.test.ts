@@ -215,19 +215,19 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(v31.title).toBe('Veo 3.1')
         expect(v31.pricing.video?.price).toBe('0.40')
         expect(v31.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
-        expect(v31.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+        expect(v31.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
 
         const lite = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-lite-generate-preview' }, 4)
         expect(lite.title).toBe('Veo 3.1 Lite')
         expect(lite.pricing.video?.price).toBe('0.10')
         expect(lite.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
-        expect(lite.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+        expect(lite.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
 
         const fast = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-fast-generate-preview' }, 5)
         expect(fast.title).toBe('Veo 3.1 Fast')
         expect(fast.pricing.video?.price).toBe('0.15')
         expect(fast.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
-        expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+        expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
     })
 
     it('does NOT give gemini text models any video modality, options, or pricing (regression)', () => {
@@ -302,11 +302,11 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
 
         expect(model.pricing.video?.measuringUnit).toBe('tokens')
         expect(model.pricing.video?.pricePer).toBe('1000000')
-        expect(model.pricing.video?.price).toBe('4.30')
+        expect(model.pricing.video?.price).toBe('7.7')
 
-        expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
-        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p'])
-        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
+        expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'])
+        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p', '1080p', '4k'])
+        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
         expect(model.videoMaxReferenceImages).toBe(9)
 
         expect(model.title).toBe('Seedance 2.0')
@@ -316,7 +316,7 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
     it('maps the fast variant to the cheaper per-1M-token price and a Fast title', () => {
         const model = sync.mapBytePlusModelToAiModel({ id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' }, 2)
         expect(model.pricing.video?.measuringUnit).toBe('tokens')
-        expect(model.pricing.video?.price).toBe('3.30')
+        expect(model.pricing.video?.price).toBe('5.6')
         expect(model.videoMaxReferenceImages).toBe(9)
         expect(model.title).toBe('Seedance 2.0 Fast')
         expect(model.shortTitle).toBe('Seedance 2.0 Fast')

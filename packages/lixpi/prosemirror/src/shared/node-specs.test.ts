@@ -31,7 +31,7 @@ describe('normalizeReferenceNodeIds', () => {
 })
 
 describe('aiPromptInputNodeSpec', () => {
-    it('normalizes list attrs and gating for config groups on serialization', () => {
+    it('normalizes list attrs and config groups on serialization regardless of multi-model flags', () => {
         const schema = createProseMirrorSchema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const promptNode = schema.nodes.aiPromptInput.create({
             aiReasoningModels: '["gpt-4","gpt-4","",""]',
@@ -51,11 +51,11 @@ describe('aiPromptInputNodeSpec', () => {
         expect(dom['data-ai-reasoning-models']).toBe('["gpt-4"]')
         expect(dom['data-ai-image-models']).toBe('["img"]')
         expect(dom['data-ai-video-models']).toBe('["video"]')
-        expect(dom['data-image-generation-config-groups']).toBe('')
+        expect(dom['data-image-generation-config-groups']).toBe('[{"groupId":"size","modelIds":["model"],"values":{"size":"large"}}]')
         expect(dom['data-video-generation-config-groups']).toBe('[{"groupId":"fps","modelIds":["v"],"values":{"fps":"60"}}]')
     })
 
-    it('normalizes parseDOM booleans and config-gating', () => {
+    it('normalizes parseDOM booleans independently of config groups', () => {
         const parseRule = aiPromptInputNodeSpec.parseDOM![0]
         const node = parseRule.getAttrs!(fakeDom({
             'data-ai-reasoning-models': '[\"r1\", \"r1\", \"\"]',
@@ -77,9 +77,18 @@ describe('aiPromptInputNodeSpec', () => {
             useMultipleVideoModels: true,
             aiImageModels: '["img"]',
             aiVideoModels: '["video"]',
-            imageGenerationConfigGroups: '',
+            imageGenerationConfigGroups: '[{"groupId":"size","modelIds":["x","y"],"values":{}}]',
             videoGenerationConfigGroups: '[{"groupId":"fps","modelIds":["v1"],"values":{}}]',
         })
+    })
+
+    it('drops config groups that have no model ids or an empty group id', () => {
+        const parseRule = aiPromptInputNodeSpec.parseDOM![0]
+        const node = parseRule.getAttrs!(fakeDom({
+            'data-image-generation-config-groups': '[{"groupId":"size","modelIds":[]},{"groupId":"","modelIds":["x"]},{"groupId":"quality","modelIds":["a","a"," "]}]',
+        })) as Record<string, any>
+
+        expect(node.imageGenerationConfigGroups).toBe('[{"groupId":"quality","modelIds":["a"],"values":{}}]')
     })
 })
 

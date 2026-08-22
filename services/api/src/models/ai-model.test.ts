@@ -50,9 +50,11 @@ describe('AiModel.getAvailableAiModels', () => {
                     providerTitle: 'Google',
                     sortingPosition: 3,
                     modalities: [{ modality: 'video_generation' }],
-                    videoAspectRatios: [{ value: '16:9' }],
-                    videoResolutions: [{ value: '720p' }],
-                    videoDurations: [{ value: '8' }],
+                    videoGenerationControls: [
+                        { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9', label: '16:9' }], defaultValue: '16:9' },
+                        { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p', label: '720p' }], defaultValue: '720p' },
+                        { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8', label: '8' }], defaultValue: '8' },
+                    ],
                     pricing: { input: 2 },
                 },
             ],
@@ -77,10 +79,11 @@ describe('AiModel.getAvailableAiModels', () => {
         const imageGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'image')
         const videoGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'video')
 
-        expect(imageGroup?.groupId).toBe('image:Google')
+        expect(imageGroup?.groupId).toBe('image:Google:gemini-image-1')
         expect(imageGroup?.controls).toEqual([{
             key: 'imageSize',
             label: 'Resolution',
+            kind: 'segmented',
             options: [{ value: '768x768', label: '768x768' }],
             defaultValue: '768x768',
         }])
@@ -92,7 +95,7 @@ describe('AiModel.getAvailableAiModels', () => {
             video: 'Google:veo-3.1-generate-preview',
         })
 
-        expect(videoGroup?.groupId).toBe('video:Google')
+        expect(videoGroup?.groupId).toBe('video:Google:veo-3.1-generate-preview')
         expect(videoGroup?.controls).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 key: 'aspectRatio',

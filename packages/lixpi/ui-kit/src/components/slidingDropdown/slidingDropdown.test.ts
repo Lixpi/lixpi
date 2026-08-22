@@ -258,7 +258,7 @@ describe('createSlidingDropdown — motion and snap timing', () => {
         expect(slidingDropdown.getValue()).toBe('landscape')
         expect(onChange).not.toHaveBeenCalled()
 
-        vi.advanceTimersByTime(155)
+        vi.advanceTimersByTime(203)
         expect(slidingDropdown.getValue()).toBe('landscape')
         expect(onChange).not.toHaveBeenCalled()
 
@@ -266,7 +266,7 @@ describe('createSlidingDropdown — motion and snap timing', () => {
 
         expect(transitionEasings.length).toBeGreaterThan(0)
         expect(transitionEasings.every(easing => easing === easePupOut)).toBe(true)
-        expect(Math.max(...transitionDurations)).toBe(156)
+        expect(Math.max(...transitionDurations)).toBe(204)
         expect(svg.style.height).toBe(`${HEIGHT}px`)
         expect(svg.getAttribute('viewBox')).toBe(`0 0 ${WIDTH} ${HEIGHT}`)
         expect(indicator.getAttribute('y')).toBe('2')

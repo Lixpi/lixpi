@@ -358,9 +358,14 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         })
 
         const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(nv.dom.childNodes[0]).toBe(contextTray)
-        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
-        expect(nv.dom.childNodes[2]).toBe(controlsEl)
+        const mediaModeSwitchHost = nv.dom.querySelector('.ai-prompt-media-mode-switch')!
+        // The media generation mode switch is mounted as the wrapper's first
+        // child (unless the caller supplies mountMediaModeSwitch to render it
+        // elsewhere), followed by the context tray, then content and controls.
+        expect(nv.dom.childNodes[0]).toBe(mediaModeSwitchHost)
+        expect(nv.dom.childNodes[1]).toBe(contextTray)
+        expect(nv.dom.childNodes[2]).toBe(nv.contentDOM)
+        expect(nv.dom.childNodes[3]).toBe(controlsEl)
         expect(controlsEl).toBeDefined()
     })
 
@@ -369,9 +374,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const { nv } = createNodeView('Hello', {}, { createContextTray })
 
         expect(createContextTray).toHaveBeenCalledTimes(1)
-        expect(nv.dom.childNodes).toHaveLength(2)
-        expect(nv.dom.childNodes[0]).toBe(nv.contentDOM)
-        expect((nv.dom.childNodes[1] as HTMLElement).className).toBe('ai-prompt-input-controls')
+        // media mode switch host, content, controls, and the model settings
+        // bubble menu (mounted directly under the wrapper) — no context tray.
+        expect(nv.dom.childNodes).toHaveLength(4)
+        expect((nv.dom.childNodes[0] as HTMLElement).className).toBe('ai-prompt-media-mode-switch')
+        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+        expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-controls')
     })
 
     it('applies model menu CSS variables from settings.aiPromptInput.modelMenu.styles', () => {
@@ -459,19 +467,20 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
     })
 
     describe('visual hierarchy — wrapper contains content then controls', () => {
-        it('wrapper has exactly 2 children: contentDOM and controlsEl', () => {
+        it('wrapper has exactly 4 children: media mode switch, contentDOM, controlsEl, and the model menu bubble', () => {
             const { nv } = createNodeView()
-            expect(nv.dom.childNodes.length).toBe(2)
-            expect(nv.dom.childNodes[0]).toBe(nv.contentDOM)
-            expect((nv.dom.childNodes[1] as HTMLElement).className).toBe('ai-prompt-input-controls')
+            expect(nv.dom.childNodes.length).toBe(4)
+            expect((nv.dom.childNodes[0] as HTMLElement).className).toBe('ai-prompt-media-mode-switch')
+            expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+            expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-controls')
+            expect((nv.dom.childNodes[3] as HTMLElement).classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
         })
 
         it('controls container is placed after content in DOM order', () => {
             const { nv } = createNodeView()
-            const controlsEl = nv.dom.childNodes[1] as HTMLElement
-            expect(controlsEl.className).toBe('ai-prompt-input-controls')
-            expect(nv.dom.firstChild).toBe(nv.contentDOM)
-            expect(nv.dom.lastChild).toBe(controlsEl)
+            const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls') as HTMLElement
+            const children = Array.from(nv.dom.childNodes)
+            expect(children.indexOf(nv.contentDOM as ChildNode)).toBeLessThan(children.indexOf(controlsEl))
         })
     })
 
@@ -488,10 +497,15 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(modelMenu.contains(factories.imageModelDropdownDom)).toBe(true)
         })
 
-        it('renders image size dropdown inside model settings bubble menu', () => {
+        it('renders the media generation config matrix (not a standalone image size dropdown) inside the model settings bubble menu', () => {
+            // Image size/aspect selection now comes from the API-authored media
+            // generation config matrix, not the legacy createImageSizeDropdown
+            // factory — that factory is threaded through as an option but is no
+            // longer invoked by the node view.
             const { nv, factories } = createNodeView()
             const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
-            expect(modelMenu.contains(factories.imageSizeDropdownDom)).toBe(true)
+            expect(modelMenu.querySelector('.ai-media-config-matrix[data-media-type="image"]')).not.toBeNull()
+            expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
         })
 
         it('renders submit button inside controls', () => {
@@ -505,9 +519,11 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
             const children = Array.from(controlsEl.children)
 
+            // The model settings bubble menu is mounted directly under the
+            // wrapper (BubbleMenu's parentEl), not inside the controls element.
+            expect(children).toHaveLength(2)
             expect(children[0].classList.contains('ai-prompt-model-menu-trigger')).toBe(true)
             expect(children[1]).toBe(factories.submitButtonDom)
-            expect(children[2].classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
         })
 
         it('model settings menu is split into reasoning, image, and video sections', () => {
@@ -565,15 +581,19 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 },
                 {
                     title: 'Image model',
-                    controlCount: 3,
-                    controlVisibility: ['true', 'true', 'false'],
+                    // Model dropdown + the API-driven media generation config
+                    // matrix (which replaces the standalone image size dropdown).
+                    controlCount: 2,
+                    controlVisibility: ['true', 'true'],
                     toggleLabel: 'Use multiple image models',
                     hasSelectedTagsRow: false,
                 },
                 {
                     title: 'Video model',
-                    controlCount: 5,
-                    controlVisibility: ['true', 'true', 'true', 'true', 'false'],
+                    // Model dropdown + the API-driven media generation config
+                    // matrix (which replaces the separate aspect/resolution/duration dropdowns).
+                    controlCount: 2,
+                    controlVisibility: ['true', 'true'],
                     toggleLabel: 'Use multiple video models',
                     hasSelectedTagsRow: false,
                 },
@@ -974,12 +994,12 @@ describe('createAiPromptInputNodeView — update', () => {
         expect(factories.createModelDropdown.mock.results[0].value.update).toHaveBeenCalled()
     })
 
-    it('calls imageSizeDropdown.update on update', () => {
+    it('never invokes createImageSizeDropdown — image size now comes from the media generation config matrix', () => {
         const { nv, factories } = createNodeViewForUpdate()
         const updatedDoc = doc(promptInput(p('Updated')))
         nv.update!(updatedDoc.firstChild!)
 
-        expect(factories.createImageSizeDropdown.mock.results[0].value.update).toHaveBeenCalled()
+        expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
     })
 })
 
@@ -1012,7 +1032,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
         expect(factories.createModelDropdown.mock.results[0].value.destroy).toHaveBeenCalled()
     })
 
-    it('calls imageSizeDropdown.destroy on destroy', () => {
+    it('never invokes createImageSizeDropdown on destroy either — it is not part of the node view lifecycle', () => {
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
         const factories = createMockControlFactories()
@@ -1033,7 +1053,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
 
         nv.destroy!()
 
-        expect(factories.createImageSizeDropdown.mock.results[0].value.destroy).toHaveBeenCalled()
+        expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
     })
 })
 
@@ -1068,7 +1088,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         expect(dropdownId).toBe('ai-prompt-input')
     })
 
-    it('createImageSizeDropdown receives ImageSizeControls adapter', () => {
+    it('does not call createImageSizeDropdown — the option is accepted but unused by the current node view', () => {
         const factories = createMockControlFactories()
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
@@ -1087,11 +1107,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
-        expect(factories.createImageSizeDropdown).toHaveBeenCalledTimes(1)
-        const [controls] = factories.createImageSizeDropdown.mock.calls[0]
-        expect(controls).toHaveProperty('getImageGenerationSize')
-        expect(controls).toHaveProperty('setImageGenerationSize')
-        expect(controls).toHaveProperty('getCurrentImageModel')
+        expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
     })
 
     it('createSubmitButton receives SubmitControls adapter', () => {
@@ -1178,11 +1194,15 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
         const nv = renderNodeView()
 
         // SCSS: .ai-prompt-input-wrapper uses flex-direction: column
-        // content is flex: 1 (fills space), controls are at the bottom
+        // content is flex: 1 (fills space), controls are at the bottom. The
+        // media mode switch host and the model settings bubble menu are also
+        // direct children of the wrapper.
         const children = Array.from(nv.dom.children) as HTMLElement[]
-        expect(children.length).toBe(2)
-        expect(children[0].className).toBe('ai-prompt-input-content')
-        expect(children[1].className).toBe('ai-prompt-input-controls')
+        expect(children.length).toBe(4)
+        expect(children[0].className).toBe('ai-prompt-media-mode-switch')
+        expect(children[1].className).toBe('ai-prompt-input-content')
+        expect(children[2].className).toBe('ai-prompt-input-controls')
+        expect(children[3].classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
     })
 
     it('data-empty attribute enables placeholder pseudo-element from SCSS', () => {
@@ -1253,15 +1273,17 @@ describe('Visual proportions — SCSS sizing expectations', () => {
     it('controls has compact child elements for balanced layout', () => {
         const nv = renderNodeView()
         const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        // SCSS expects: model settings trigger, submit button, and hidden bubble menu.
-        expect(controls.children.length).toBe(3)
+        // SCSS expects: model settings trigger and submit button. The bubble
+        // menu is mounted directly under the wrapper, not inside controls.
+        expect(controls.children.length).toBe(2)
     })
 
-    it('content area is the first child — gets flex: 1 for vertical fill', () => {
+    it('content area comes right after the media mode switch — gets flex: 1 for vertical fill', () => {
         const nv = renderNodeView()
         // SCSS: .ai-prompt-input-content { flex: 1; }
-        // Being the first child in a column flex ensures it takes available space
-        expect(nv.dom.children[0]).toBe(nv.contentDOM)
+        // The media mode switch host is the wrapper's first child; content
+        // still precedes the controls element in the column flex layout.
+        expect(nv.dom.children[1]).toBe(nv.contentDOM)
     })
 
     it('controls sit below content — no absolute positioning, natural flow', () => {
