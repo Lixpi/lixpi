@@ -35,7 +35,6 @@ import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
-import { hasExplicitVideoOutputRequest } from '../orchestration/scalar-media-output-routing.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -51,30 +50,6 @@ type GoogleToolStreamResult = {
     textCharacterCount: number
     finishReasons: string[]
     functionCallNames: string[]
-}
-
-const getGoogleMessageText = (content: unknown): string => {
-    if (typeof content === 'string') return content
-    if (!Array.isArray(content)) return ''
-    return content
-        .map((block: unknown) => {
-            if (!block || typeof block !== 'object') return ''
-            const text = (block as Record<string, unknown>).text
-            return typeof text === 'string' ? text : ''
-        })
-        .filter(Boolean)
-        .join('\n')
-}
-
-const hasExplicitVideoRequest = (messages: ChatMessage[]): boolean => {
-    for (let index = messages.length - 1; index >= 0; index--) {
-        const message = messages[index]
-        if (message?.role !== 'user') continue
-        const text = getGoogleMessageText(message.content).trim()
-        if (!text) continue
-        return hasExplicitVideoOutputRequest(text)
-    }
-    return false
 }
 
 type VeoOperationSummary = {
@@ -571,7 +546,7 @@ export class GoogleProvider extends BaseProvider {
 
                 const explicitVideoToolRequired = injectVideoTool
                     && state.capabilityUsageMode !== 'character-creator'
-                    && hasExplicitVideoRequest(messages)
+                    && !injectTool
                 // AUTO tool selection is unreliable on the smaller Gemini models — they
                 // answer a media request with plain text instead of calling the tool. Any
                 // media request (fanout or single-media) retries with a forced call.
@@ -760,6 +735,7 @@ export class GoogleProvider extends BaseProvider {
             numberOfVideos: 1,
             abortSignal: this.signal,
         }
+        const generationConfig = state.videoGenerationConfig ?? {}
         // `generateAudio` is a Vertex-AI-only knob. The Gemini Developer API
         // (apiKey mode) rejects it outright — VEO 3 still generates audio there
         // by default — so only send the flag when the client is in Vertex mode.
@@ -767,6 +743,8 @@ export class GoogleProvider extends BaseProvider {
         if (state.videoAspectRatio) veoConfig.aspectRatio = state.videoAspectRatio
         if (state.videoResolution) veoConfig.resolution = state.videoResolution
         if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds
+        if (generationConfig.seed) veoConfig.seed = Number(generationConfig.seed)
+        if (generationConfig.negativePrompt) veoConfig.negativePrompt = generationConfig.negativePrompt
 
         // Video extension (Phase 6) is mutually exclusive with image/referenceImages
         // per the VEO API ("Not allowed if image is provided"). When the canvas
@@ -804,6 +782,15 @@ export class GoogleProvider extends BaseProvider {
             if (frameUrls[1]) lastFrameImage = this.dataUrlToImageBytes(frameUrls[1])
         }
         if (lastFrameImage) veoConfig.lastFrame = lastFrameImage
+
+        const requiresEightSeconds = Boolean(extensionVideo || firstFrameImage || lastFrameImage)
+            || veoConfig.resolution === '1080p'
+            || veoConfig.resolution === '4k'
+        if (requiresEightSeconds) veoConfig.durationSeconds = 8
+        if (extensionVideo) veoConfig.resolution = '720p'
+        if (modelVersion.startsWith('veo-3.0') && veoConfig.resolution === '1080p') {
+            veoConfig.aspectRatio = '16:9'
+        }
 
         const usesImageConditioning = !!firstFrameImage || !!lastFrameImage
         // VEO validates personGeneration by input mode: text-to-video and extension

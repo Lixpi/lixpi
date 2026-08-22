@@ -21,6 +21,7 @@ import {
     type ImageReferenceCapabilities,
     type ImageSizeMode,
     type ImageSizeOption,
+    type MediaGenerationConfigControl,
 } from '@lixpi/constants'
 import type { PartialDeep } from 'type-fest'
 
@@ -60,7 +61,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 }
 
 // VEO video-generation option lists. Reuse the ImageSizeOption { value, label }
-// shape so the frontend video dropdowns consume them like image sizes.
+// shape across every synchronized media-generation control.
 const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
     { value: '16:9', label: '16:9' },
     { value: '9:16', label: '9:16' },
@@ -73,14 +74,18 @@ const VEO_31_RESOLUTIONS: ImageSizeOption[] = [
     ...VEO_RESOLUTIONS,
     { value: '4k', label: '4K' },
 ]
-const VEO_SAFE_DURATIONS: ImageSizeOption[] = [
+const VEO_DURATIONS: ImageSizeOption[] = [
+    { value: '4', label: '4s' },
+    { value: '6', label: '6s' },
+    { value: '8', label: '8s' },
+]
+const VEO_3_DURATIONS: ImageSizeOption[] = [
     { value: '8', label: '8s' },
 ]
 
-// Seedance 2.0 (BytePlus ModelArk) option lists. Same ImageSizeOption { value,
-// label } shape as VEO so the frontend video dropdowns consume them identically.
-// v1 ships 480p/720p only — 1080p/2k are reported only by aggregators; the
-// official ceiling is unconfirmed (see proposal Risks). No adaptive/auto values.
+// Seedance 2.0 (BytePlus ModelArk) option lists. Standard supports up to 4K;
+// Fast supports 480p/720p. Both support adaptive aspect ratio and intelligent
+// duration selection.
 const SEEDANCE_ASPECT_RATIOS: ImageSizeOption[] = [
     { value: '16:9', label: '16:9' },
     { value: '4:3', label: '4:3' },
@@ -88,12 +93,20 @@ const SEEDANCE_ASPECT_RATIOS: ImageSizeOption[] = [
     { value: '3:4', label: '3:4' },
     { value: '9:16', label: '9:16' },
     { value: '21:9', label: '21:9' },
+    { value: 'adaptive', label: 'Auto' },
 ]
-const SEEDANCE_RESOLUTIONS: ImageSizeOption[] = [
+const SEEDANCE_STANDARD_RESOLUTIONS: ImageSizeOption[] = [
+    { value: '480p', label: '480p' },
+    { value: '720p', label: '720p' },
+    { value: '1080p', label: '1080p' },
+    { value: '4k', label: '4K' },
+]
+const SEEDANCE_FAST_RESOLUTIONS: ImageSizeOption[] = [
     { value: '480p', label: '480p' },
     { value: '720p', label: '720p' },
 ]
 const SEEDANCE_DURATIONS: ImageSizeOption[] = [
+    { value: '-1', label: 'Smart length' },
     { value: '4', label: '4s' },
     { value: '5', label: '5s' },
     { value: '6', label: '6s' },
@@ -107,6 +120,129 @@ const SEEDANCE_DURATIONS: ImageSizeOption[] = [
     { value: '14', label: '14s' },
     { value: '15', label: '15s' },
 ]
+
+const toggleControl = (
+    key: MediaGenerationConfigControl['key'],
+    label: string,
+    defaultValue: 'true' | 'false',
+    description?: string,
+): MediaGenerationConfigControl => ({
+    key,
+    label,
+    kind: 'toggle',
+    options: [
+        { value: 'true', label: 'On' },
+        { value: 'false', label: 'Off' },
+    ],
+    defaultValue,
+    ...(description ? { description } : {}),
+})
+
+const buildVeoControls = (
+    resolutions: ImageSizeOption[],
+    durations: ImageSizeOption[] = VEO_DURATIONS,
+): MediaGenerationConfigControl[] => [
+    {
+        key: 'aspectRatio',
+        label: 'Aspect ratio',
+        kind: 'aspect-ratio',
+        options: VEO_ASPECT_RATIOS,
+        defaultValue: '16:9',
+    },
+    {
+        key: 'resolution',
+        label: 'Resolution',
+        kind: 'segmented',
+        options: resolutions,
+        defaultValue: '720p',
+        description: '1080p and 4K require an 8 second duration.',
+    },
+    {
+        key: 'duration',
+        label: 'Duration',
+        kind: 'duration',
+        options: durations,
+        defaultValue: '8',
+        description: 'Reference-image, extension, 1080p, and 4K requests use 8 seconds.',
+    },
+    {
+        key: 'seed',
+        label: 'Seed',
+        kind: 'number',
+        options: [],
+        placeholder: 'Random',
+        min: 0,
+        max: 4294967295,
+        step: 1,
+        description: 'Use the same seed to improve consistency between generations.',
+    },
+]
+
+const buildSeedanceControls = (
+    resolutions: ImageSizeOption[],
+    serviceTiers: ImageSizeOption[],
+): MediaGenerationConfigControl[] => [
+    {
+        key: 'aspectRatio',
+        label: 'Aspect ratio',
+        kind: 'aspect-ratio',
+        options: SEEDANCE_ASPECT_RATIOS,
+        defaultValue: '16:9',
+    },
+    {
+        key: 'resolution',
+        label: 'Resolution',
+        kind: 'segmented',
+        options: resolutions,
+        defaultValue: '720p',
+    },
+    {
+        key: 'duration',
+        label: 'Duration',
+        kind: 'duration',
+        options: SEEDANCE_DURATIONS,
+        defaultValue: '-1',
+        description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
+    },
+    {
+        key: 'seed',
+        label: 'Seed',
+        kind: 'number',
+        options: [],
+        placeholder: 'Random',
+        step: 1,
+    },
+    toggleControl('cameraFixed', 'Fixed camera', 'false'),
+    toggleControl('watermark', 'Watermark', 'false'),
+    toggleControl('returnLastFrame', 'Return last frame', 'false'),
+    {
+        key: 'serviceTier',
+        label: 'Service tier',
+        kind: serviceTiers.length === 1 ? 'fixed' : 'segmented',
+        options: serviceTiers,
+        defaultValue: serviceTiers[0]?.value ?? 'default',
+        ...(serviceTiers.length === 1 ? { readOnly: true } : {}),
+    },
+    {
+        key: 'priority',
+        label: 'Task priority',
+        kind: 'number',
+        options: [],
+        placeholder: 'Default (0)',
+        step: 1,
+        description: 'Sets request priority within the same ModelArk inference endpoint.',
+    },
+]
+
+const VEO_CONTROLS = buildVeoControls(VEO_31_RESOLUTIONS)
+const VEO_LITE_CONTROLS = buildVeoControls(VEO_RESOLUTIONS)
+const VEO_3_CONTROLS = buildVeoControls(VEO_RESOLUTIONS, VEO_3_DURATIONS)
+const SEEDANCE_STANDARD_CONTROLS = buildSeedanceControls(SEEDANCE_STANDARD_RESOLUTIONS, [
+    { value: 'default', label: 'Default' },
+])
+const SEEDANCE_FAST_CONTROLS = buildSeedanceControls(SEEDANCE_FAST_RESOLUTIONS, [
+    { value: 'default', label: 'Default' },
+])
 
 const OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES: ImageReferenceCapabilities = {
     maxReferenceImages: 16,
@@ -303,6 +439,33 @@ export function assertValidImageReferenceCapabilities(model: AiModel): AiModel {
     return model
 }
 
+export function assertValidVideoGenerationControls(model: AiModel): AiModel {
+    const supportsVideoGeneration = model.modalities.some(({ modality }) => modality === 'video_generation')
+    const controls = model.videoGenerationControls
+    if (!supportsVideoGeneration) {
+        if (controls?.length) throw new Error(`VIDEO_GENERATION_CONTROLS_UNEXPECTED:${model.provider}:${model.model}`)
+        return model
+    }
+    if (!controls?.length) throw new Error(`VIDEO_GENERATION_CONTROLS_REQUIRED:${model.provider}:${model.model}`)
+    if (new Set(controls.map(control => control.key)).size !== controls.length) {
+        throw new Error(`VIDEO_GENERATION_CONTROL_KEYS_INVALID:${model.provider}:${model.model}`)
+    }
+    for (const control of controls) {
+        const optionValues = control.options.map(option => option.value)
+        if (!control.label
+            || new Set(optionValues).size !== optionValues.length
+            || (control.kind !== 'number' && control.kind !== 'text' && optionValues.length === 0)
+            || (control.defaultValue !== undefined
+                && control.kind !== 'number'
+                && control.kind !== 'text'
+                && !optionValues.includes(control.defaultValue))
+            || (control.kind === 'fixed' && control.readOnly !== true)) {
+            throw new Error(`VIDEO_GENERATION_CONTROL_INVALID:${model.provider}:${model.model}:${control.key}`)
+        }
+    }
+    return model
+}
+
 // OpenAI API types (using SDK types)
 type OpenAIModel = OpenAI.Models.Model
 type AnthropicModel = {
@@ -338,6 +501,7 @@ type ModelDefaults = Pick<
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
     videoDurations?: ImageSizeOption[]
+    videoGenerationControls?: MediaGenerationConfigControl[]
     videoMaxReferenceImages?: number
     // Not part of AiModel, used only for provider-grouped sorting
     starSortingPosition: number
@@ -755,11 +919,11 @@ export class AiModelsSync {
                 // VEO 3 / 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
-                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
-                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
-                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_SAFE_DURATIONS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_3_DURATIONS, videoGenerationControls: VEO_3_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_3_DURATIONS, videoGenerationControls: VEO_3_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
+                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_LITE_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
+                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
             ],
             contains: [],
             fallback: {
@@ -923,12 +1087,13 @@ export class AiModelsSync {
         // resolution with no matching tier and is set to the model's HIGHEST
         // published rate so an unmatched tier never under-charges.
         //
-        // 4K is listed for Seedance 2.0 even though SEEDANCE_RESOLUTIONS does not
-        // offer it yet; a tier table ahead of the resolution list is harmless, and
-        // the resolution list is the stale one.
+        // Exact profiles below are authoritative for provider/model generation
+        // controls and override provider-level fallback values.
         BytePlus: {
             exact: {
                 'dreamina-seedance-2-0-260128': {
+                    videoResolutions: SEEDANCE_STANDARD_RESOLUTIONS,
+                    videoGenerationControls: SEEDANCE_STANDARD_CONTROLS,
                     pricing: {
                         video: {
                             measuringUnit: 'tokens',
@@ -944,6 +1109,8 @@ export class AiModelsSync {
                     },
                 },
                 'dreamina-seedance-2-0-fast-260128': {
+                    videoResolutions: SEEDANCE_FAST_RESOLUTIONS,
+                    videoGenerationControls: SEEDANCE_FAST_CONTROLS,
                     pricing: {
                         video: {
                             measuringUnit: 'tokens',
@@ -966,8 +1133,9 @@ export class AiModelsSync {
                 inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
                 modalities: ['video', 'video_generation'],
                 videoAspectRatios: SEEDANCE_ASPECT_RATIOS,
-                videoResolutions: SEEDANCE_RESOLUTIONS,
+                videoResolutions: SEEDANCE_STANDARD_RESOLUTIONS,
                 videoDurations: SEEDANCE_DURATIONS,
+                videoGenerationControls: SEEDANCE_STANDARD_CONTROLS,
                 videoMaxReferenceImages: 9,
                 // Fallback for an unrecognized BytePlus video model: the highest
                 // Seedance 2.0 rate, so an unknown model is never under-charged.
@@ -1034,6 +1202,9 @@ export class AiModelsSync {
             videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
             videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
+            videoGenerationControls: Array.isArray(p.videoGenerationControls)
+                ? structuredClone(p.videoGenerationControls as MediaGenerationConfigControl[])
+                : fallback.videoGenerationControls,
             videoMaxReferenceImages: typeof p.videoMaxReferenceImages === 'number' ? p.videoMaxReferenceImages : fallback.videoMaxReferenceImages,
             pricing: this.mergePricingWithFallback(p.pricing as any, fallback.pricing),
             color: typeof (p as any).color === 'string' ? (p as any).color : fallback.color,
@@ -1344,7 +1515,7 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model))
+        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model)))
     }
 
     // Map Anthropic model to our AiModel format
@@ -1387,7 +1558,7 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model))
+        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model)))
     }
 
     // Map Google model to our AiModel format
@@ -1423,6 +1594,7 @@ export class AiModelsSync {
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
+            videoGenerationControls: modelDefaults.videoGenerationControls,
             videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1438,7 +1610,7 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model))
+        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model)))
     }
 
     // Update existing models sequentially to avoid overwhelming DynamoDB
@@ -1817,7 +1989,7 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel))
+        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel)))
     }
 
     // Synchronize Stability AI models with database
@@ -1949,6 +2121,7 @@ export class AiModelsSync {
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
             videoDurations: modelDefaults.videoDurations,
+            videoGenerationControls: modelDefaults.videoGenerationControls,
             videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1964,7 +2137,7 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel))
+        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel)))
     }
 
     // Synchronize BytePlus (Seedance) models with database. Mirrors the Stability

@@ -106,6 +106,7 @@ export class BytePlusProvider extends BaseProvider {
             videoReferenceImages: providerFrames.slice(1, 2),
         })
         const duration = Number(state.videoDurationSeconds) || undefined
+        const generationConfig = state.videoGenerationConfig ?? {}
 
         const payload: CreateVideoGenerationTaskPayload = {
             model: modelVersion,
@@ -113,8 +114,13 @@ export class BytePlusProvider extends BaseProvider {
             ...(state.videoResolution ? { resolution: state.videoResolution } : {}),
             ...(state.videoAspectRatio ? { ratio: state.videoAspectRatio } : {}),
             ...(duration ? { duration } : {}),
-            generate_audio: true,
-            watermark: false,
+            generate_audio: generationConfig.generateAudio !== 'false',
+            watermark: generationConfig.watermark === 'true',
+            ...(generationConfig.seed ? { seed: Number(generationConfig.seed) } : {}),
+            camera_fixed: generationConfig.cameraFixed === 'true',
+            return_last_frame: generationConfig.returnLastFrame === 'true',
+            ...(generationConfig.serviceTier ? { service_tier: generationConfig.serviceTier } : {}),
+            ...(generationConfig.priority ? { priority: Number(generationConfig.priority) } : {}),
         }
 
         const hasFirstFrame = content.some((c) => c.type === 'image_url' && c.role === 'first_frame')
@@ -124,6 +130,10 @@ export class BytePlusProvider extends BaseProvider {
             ratio: payload.ratio,
             resolution: payload.resolution,
             duration: payload.duration,
+            generateAudio: payload.generate_audio,
+            cameraFixed: payload.camera_fixed,
+            serviceTier: payload.service_tier,
+            priority: payload.priority,
             promptLen: providerPrompt.length,
             hasFirstFrame,
             hasLastFrame,

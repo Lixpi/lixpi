@@ -38,6 +38,7 @@ type ImageOptions = {
 
 type AiSubmitPayload = {
     messages: any[]
+    mediaGenerationMode: 'image' | 'video'
     aiReasoningModels: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
@@ -58,6 +59,7 @@ type TargetNode = {
 
 type PendingMessage = {
     content: any
+    mediaGenerationMode: 'image' | 'video'
     aiReasoningModels: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
@@ -156,6 +158,7 @@ export class AiPromptInputController {
 
     async submitMessage(params: {
         contentJSON: any
+        mediaGenerationMode: 'image' | 'video'
         aiReasoningModels: string[]
         useMultipleReasoningModels?: boolean
         useMultipleImageModels?: boolean
@@ -167,6 +170,7 @@ export class AiPromptInputController {
     }): Promise<void> {
         const {
             contentJSON,
+            mediaGenerationMode,
             aiReasoningModels,
             useMultipleReasoningModels,
             useMultipleImageModels,
@@ -192,6 +196,7 @@ export class AiPromptInputController {
             const threadId = this.target.referenceId
             this.injectMessageAndSubmit(threadId, {
                 content: contentJSON,
+                mediaGenerationMode,
                 aiReasoningModels,
                 useMultipleReasoningModels,
                 useMultipleImageModels,
@@ -205,6 +210,7 @@ export class AiPromptInputController {
             // Target is a document or image — auto-create a new AI chat thread
             await this.createThreadAndSubmit({
                 contentJSON,
+                mediaGenerationMode,
                 aiReasoningModels,
                 useMultipleReasoningModels,
                 useMultipleImageModels,
@@ -289,14 +295,10 @@ export class AiPromptInputController {
             ? serializeAiModelSelectionAttr(collapseForMode(pending.videoOptions.aiVideoModels, pendingUseMultipleVideoModels))
             : undefined
         const pendingImageConfigGroups = pending.imageOptions
-            ? serializeMediaGenerationConfigSelectionAttr(
-                pendingUseMultipleImageModels ? pending.imageOptions.configGroups ?? [] : []
-            )
+            ? serializeMediaGenerationConfigSelectionAttr(pending.imageOptions.configGroups ?? [])
             : undefined
         const pendingVideoConfigGroups = pending.videoOptions
-            ? serializeMediaGenerationConfigSelectionAttr(
-                pendingUseMultipleVideoModels ? pending.videoOptions.configGroups ?? [] : []
-            )
+            ? serializeMediaGenerationConfigSelectionAttr(pending.videoOptions.configGroups ?? [])
             : undefined
         const pendingCapabilityInputs = serializeCapabilityInputsAttr(pending.capabilityInputs ?? {})
         const currentUseMultipleReasoningModels = currentAttrs.useMultipleReasoningModels === true
@@ -306,6 +308,7 @@ export class AiPromptInputController {
         const currentUseMultipleVideoModels = currentAttrs.useMultipleVideoModels === true
             || currentAttrs.useMultipleVideoModels === 'true'
         const needsUpdate = currentAttrs.aiReasoningModels !== pendingReasoningModels
+            || currentAttrs.mediaGenerationMode !== pending.mediaGenerationMode
             || currentUseMultipleReasoningModels !== pendingUseMultipleReasoningModels
             || currentUseMultipleImageModels !== pendingUseMultipleImageModels
             || currentUseMultipleVideoModels !== pendingUseMultipleVideoModels
@@ -323,6 +326,7 @@ export class AiPromptInputController {
             const mappedThreadPos = tr.mapping.map(threadPos)
             tr = tr.setNodeMarkup(mappedThreadPos, undefined, {
                 ...currentAttrs,
+                mediaGenerationMode: pending.mediaGenerationMode,
                 aiReasoningModels: pendingReasoningModels,
                 useMultipleReasoningModels: pendingUseMultipleReasoningModels,
                 useMultipleImageModels: pendingUseMultipleImageModels,
@@ -354,6 +358,7 @@ export class AiPromptInputController {
 
     private async createThreadAndSubmit(params: {
         contentJSON: any
+        mediaGenerationMode: 'image' | 'video'
         aiReasoningModels: string[]
         useMultipleReasoningModels?: boolean
         useMultipleImageModels?: boolean
@@ -365,6 +370,7 @@ export class AiPromptInputController {
     }): Promise<void> {
         const {
             contentJSON,
+            mediaGenerationMode,
             aiReasoningModels,
             useMultipleReasoningModels,
             useMultipleImageModels,
@@ -391,12 +397,8 @@ export class AiPromptInputController {
         const threadVideoModels = videoOptions
             ? serializeAiModelSelectionAttr(collapseForMode(videoOptions.aiVideoModels, threadUseMultipleVideoModels))
             : ''
-        const threadImageConfigGroups = threadUseMultipleImageModels
-            ? serializeMediaGenerationConfigSelectionAttr(imageOptions?.configGroups ?? [])
-            : ''
-        const threadVideoConfigGroups = threadUseMultipleVideoModels
-            ? serializeMediaGenerationConfigSelectionAttr(videoOptions?.configGroups ?? [])
-            : ''
+        const threadImageConfigGroups = serializeMediaGenerationConfigSelectionAttr(imageOptions?.configGroups ?? [])
+        const threadVideoConfigGroups = serializeMediaGenerationConfigSelectionAttr(videoOptions?.configGroups ?? [])
 
         // Create the initial thread content
         const initialContent = {
@@ -406,6 +408,7 @@ export class AiPromptInputController {
                     type: 'aiChatThread',
                     attrs: {
                         threadId,
+                        mediaGenerationMode,
                         aiReasoningModels: threadReasoningModels,
                         useMultipleReasoningModels: threadUseMultipleReasoningModels,
                         useMultipleImageModels: threadUseMultipleImageModels,
@@ -452,6 +455,7 @@ export class AiPromptInputController {
             // so we just need to trigger the AI request.
             this.pendingMessages.set(threadId, {
                 content: contentJSON,
+                mediaGenerationMode,
                 aiReasoningModels,
                 useMultipleReasoningModels: threadUseMultipleReasoningModels,
                 useMultipleImageModels: threadUseMultipleImageModels,

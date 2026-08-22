@@ -38,7 +38,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Open Asset details** from any Asset-backed node; every created Asset already has its initial catalog reference and survives placement removal without copying bytes
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
 - **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the bottom-center canvas composer** to send prompts with context previews and workspace relevance
+- **Use the bottom-center canvas composer** to select Image or Video explicitly and send prompts with context previews and workspace relevance. Its mode panel and upload/image panel share one in-flow left rail, so adding the mode panel shifts the upload controls instead of overlapping them
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -608,6 +608,6 @@ During surface resizing, the gradient canvas keeps the existing bitmap visible w
 The thread node gradient and the bottom-center composer gradient are controlled by feature flags in `settings.ts`:
 
 - `settings.aiPromptInput.useShiftingGradientBackground` — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
-- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet. The capture is a second full-stage render, so it is only re-taken when something beneath the glass actually changed. Frames driven purely by the traveling outline animation reuse the previous capture unless an animating outline overlaps a glass panel.
+- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer, explicit media-mode panel, and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet. The capture is a second full-stage render, so it is only re-taken when something beneath the glass actually changed. Frames driven purely by the traveling outline animation reuse the previous capture unless an animating outline overlaps a glass panel.
 
 For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).

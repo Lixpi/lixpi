@@ -14,6 +14,13 @@ import { select } from 'd3-selection'
 import { html } from '$src/utils/domTemplates.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
+import { createSlider, type SliderInstance } from '@lixpi/ui-kit/components/slider'
+import {
+    createSlidingSwitch,
+    type SlidingSwitchInstance,
+    type SlidingSwitchOptionRenderInstance,
+    type SlidingSwitchOptionRenderState,
+} from '@lixpi/ui-kit/components/sliding-switch'
 import { createTagPill as createSvgTagPill, type TagPillInstance } from '@lixpi/ui-kit/components/tag-pill'
 import { settings } from '$src/settings.ts'
 
@@ -95,6 +102,112 @@ type PendingMediaConfigTagHost = {
     modelId: string
 }
 
+type MountedMediaConfigControl = {
+    groupId: string
+    control: MediaGenerationConfigControl
+    setValue: (value: string) => void
+    destroy: () => void
+}
+
+type PendingMediaConfigSvgControl = {
+    host: HTMLElement
+    group: RenderedMediaConfigGroup
+    control: MediaGenerationConfigControl
+    selectedValue: string
+}
+
+const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
+const MEDIA_CONFIG_ASPECT_RATIO_CONTROL_HEIGHT = 66
+const MEDIA_CONFIG_SLIDER_HEIGHT = 66
+const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
+
+class AspectRatioSwitchOptionView implements SlidingSwitchOptionRenderInstance<string> {
+    private readonly group: any
+    private readonly glyph: any
+    private readonly adaptiveLabel: any
+    private readonly label: any
+
+    constructor(parent: any, state: SlidingSwitchOptionRenderState<string>) {
+        this.group = parent.append('g')
+            .attr('class', 'ai-media-config-aspect-switch-option')
+            .attr('pointer-events', 'none')
+        this.glyph = this.group.append('rect')
+            .attr('class', 'ai-media-config-aspect-switch-glyph')
+            .attr('fill', 'none')
+            .attr('rx', 2)
+            .attr('ry', 2)
+            .attr('stroke-width', 1.5)
+        this.adaptiveLabel = this.group.append('text')
+            .attr('class', 'ai-media-config-aspect-switch-adaptive-label')
+            .attr('font-size', 8)
+            .attr('font-weight', 700)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .text('A')
+        this.label = this.group.append('text')
+            .attr('class', 'ai-media-config-aspect-switch-label')
+            .attr('font-size', 12)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+        this.render(state)
+    }
+
+    private glyphSize(value: string): { width: number; height: number; adaptive: boolean } {
+        const adaptive = value === 'adaptive' || value === 'auto'
+        if (adaptive) return { width: 15, height: 15, adaptive }
+
+        const [widthValue, heightValue] = value.split(':').map(Number)
+        const ratio = widthValue && heightValue ? widthValue / heightValue : 1
+        const maxWidth = 28
+        const maxHeight = 15
+        if (ratio >= 1) return { width: maxWidth, height: maxWidth / ratio, adaptive }
+        return { width: maxHeight * ratio, height: maxHeight, adaptive }
+    }
+
+    resize(x: number, y: number, width: number, height = MEDIA_CONFIG_ASPECT_RATIO_CONTROL_HEIGHT): void {
+        const optionCenterX = x + width / 2
+        const glyphCenterY = y + height * 0.37
+        const labelY = y + height * 0.72
+        const value = String(this.group.attr('data-value') ?? '')
+        const size = this.glyphSize(value)
+
+        this.glyph
+            .attr('x', optionCenterX - size.width / 2)
+            .attr('y', glyphCenterY - size.height / 2)
+            .attr('width', size.width)
+            .attr('height', size.height)
+        this.adaptiveLabel
+            .attr('x', optionCenterX)
+            .attr('y', glyphCenterY)
+        this.label
+            .attr('x', optionCenterX)
+            .attr('y', labelY)
+    }
+
+    render(state: SlidingSwitchOptionRenderState<string>): void {
+        const color = state.disabled
+            ? 'rgba(49, 59, 78, 0.3)'
+            : state.selected || state.hovered ? '#1a2744' : 'rgba(49, 59, 78, 0.68)'
+        const size = this.glyphSize(state.option.value)
+        this.group.attr('data-value', state.option.value)
+        this.glyph
+            .attr('stroke', color)
+            .attr('stroke-dasharray', size.adaptive ? '3 2' : null)
+        this.adaptiveLabel
+            .attr('display', size.adaptive ? null : 'none')
+            .attr('fill', color)
+        this.label
+            .attr('fill', color)
+            .attr('font-weight', state.selected ? 700 : 400)
+            .text(state.option.label)
+        this.resize(state.x, state.y, state.width, state.height)
+    }
+
+    destroy(): void {
+        this.group.remove()
+    }
+}
+
 function findMatrixControlForModel(
     mediaType: 'image' | 'video',
     modelId: string | undefined,
@@ -150,6 +263,18 @@ export function transformModelsToOptions(models: any[]): AiModelDropdownOption[]
         model: aiModel.model,
         tags: aiModel.modalities?.map((m: any) => m.shortTitle) || []
     }))
+}
+
+function getModelOptionsSignature(models: any[]): string {
+    return JSON.stringify(models.map(model => ({
+        provider: model.provider,
+        model: model.model,
+        shortTitle: model.shortTitle,
+        iconName: model.iconName,
+        color: model.color,
+        sortingPosition: model.sortingPosition,
+        modalities: model.modalities,
+    })))
 }
 
 function extractAvailableTags(models: any[]) {
@@ -208,8 +333,9 @@ export function createGenericAiModelDropdown(
         renderIconForOptions: true,
         enableTagFilter: settings.modelSelectorDropdown.useModalityFilter,
         availableTags: settings.modelSelectorDropdown.useModalityFilter ? availableTags : [],
-        mountToBody: false,
-        disableAutoPositioning: true,
+        mountToBody: true,
+        disableAutoPositioning: false,
+        popoverClassName: 'ai-model-selector-popover',
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setAiModel(selected.aiModel)
@@ -227,7 +353,7 @@ export function createGenericAiModelDropdown(
     }
 
     let currentOptions = aiModelsSelectorDropdownOptions
-    let lastProcessedCount = aiModelsData.length
+    let lastProcessedSignature = getModelOptionsSignature(aiModelsData)
 
     const updateSelection = () => {
         const currentAiModel = controls.getCurrentAiModel()
@@ -251,9 +377,10 @@ export function createGenericAiModelDropdown(
 
     const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
         const newModelsData = storeState.data
-        if (newModelsData.length === 0 || newModelsData.length === lastProcessedCount) return
+        const nextSignature = getModelOptionsSignature(newModelsData)
+        if (newModelsData.length === 0 || nextSignature === lastProcessedSignature) return
 
-        lastProcessedCount = newModelsData.length
+        lastProcessedSignature = nextSignature
         aiModelsData = newModelsData
 
         const { options, tags } = buildDropdownData(aiModelsData)
@@ -423,8 +550,9 @@ export function createGenericImageModelDropdown(
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        mountToBody: false,
-        disableAutoPositioning: true,
+        mountToBody: true,
+        disableAutoPositioning: false,
+        popoverClassName: 'ai-model-selector-popover',
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setImageModel(selected.aiModel)
@@ -440,7 +568,7 @@ export function createGenericImageModelDropdown(
         }, 0)
     }
 
-    let lastProcessedCount = aiModelsData.length
+    let lastProcessedSignature = getModelOptionsSignature(aiModelsData)
 
     const updateSelection = () => {
         const current = controls.getCurrentImageModel()
@@ -464,9 +592,10 @@ export function createGenericImageModelDropdown(
 
     const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
         const newModelsData = storeState.data
-        if (newModelsData.length === 0 || newModelsData.length === lastProcessedCount) return
+        const nextSignature = getModelOptionsSignature(newModelsData)
+        if (newModelsData.length === 0 || nextSignature === lastProcessedSignature) return
 
-        lastProcessedCount = newModelsData.length
+        lastProcessedSignature = nextSignature
         aiModelsData = newModelsData
 
         imageModels = filterImageModels(aiModelsData)
@@ -498,13 +627,10 @@ export function createGenericImageModelDropdown(
 }
 
 function normalizeControlValue(control: MediaGenerationConfigControl, value: string | undefined): string {
+    if ((control.kind === 'number' || control.kind === 'text') && value !== undefined) return value
     const optionValues = new Set(control.options.map(option => option.value))
     if (value && optionValues.has(value)) return value
     return control.defaultValue || control.options[0]?.value || ''
-}
-
-function toDomSafeId(value: string): string {
-    return value.replace(/[^a-zA-Z0-9_-]/g, '-')
 }
 
 function getSelectedMatrixGroups(
@@ -526,11 +652,11 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     readonly dom: HTMLElement
 
     private readonly unsubscribe: () => void
-    private readonly dropdowns: Array<{ destroy?: () => void }> = []
     private readonly tagPills: TagPillInstance[] = []
+    private readonly mountedControls: MountedMediaConfigControl[] = []
     private modelLabelsById = new Map<string, string>()
     private modelIconsById = new Map<string, string>()
-    private renderedSignature = ''
+    private renderedStructureSignature = ''
     private builtConnected = false
 
     constructor(private readonly controls: MediaGenerationConfigMatrixControls) {
@@ -538,7 +664,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         this.syncModelLabels(aiModelsStore.getData())
         this.unsubscribe = aiModelsStore.subscribe((storeState: any) => {
             this.syncModelLabels(storeState.data)
-            this.renderedSignature = ''
+            this.renderedStructureSignature = ''
             this.builtConnected = false
             this.update()
         })
@@ -560,8 +686,6 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     }
 
     private getMatrixGroups(): RenderedMediaConfigGroup[] {
-        if (!this.controls.getUseMultipleModels()) return []
-
         const matrix = aiModelsStore.getMediaGenerationConfigMatrix()
         return getSelectedMatrixGroups(
             matrix.groups,
@@ -588,18 +712,28 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         })
     }
 
-    private destroyDropdowns(): void {
-        for (const dropdown of this.dropdowns) {
-            dropdown.destroy?.()
-        }
-        this.dropdowns.length = 0
-    }
-
     private destroyTagPills(): void {
         for (const tagPill of this.tagPills) {
             tagPill.destroy()
         }
         this.tagPills.length = 0
+    }
+
+    private destroyMountedControls(): void {
+        for (const control of this.mountedControls) {
+            control.destroy()
+        }
+        this.mountedControls.length = 0
+    }
+
+    private syncMountedControls(selectionGroups: MediaGenerationConfigSelectionGroup[]): void {
+        for (const mountedControl of this.mountedControls) {
+            const selectionGroup = this.getSelectionForGroup(selectionGroups, mountedControl.groupId)
+            mountedControl.setValue(normalizeControlValue(
+                mountedControl.control,
+                selectionGroup?.values?.[mountedControl.control.key],
+            ))
+        }
     }
 
     private getSelectionForGroup(
@@ -626,7 +760,6 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             }
         })
         this.controls.setConfigGroups(nextGroups)
-        this.renderedSignature = ''
         this.update()
     }
 
@@ -634,7 +767,6 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         const nextModelIds = this.controls.getSelectedModelIds()
             .filter((selectedModelId) => selectedModelId !== modelId)
         this.controls.setSelectedModelIds(nextModelIds)
-        this.renderedSignature = ''
         this.update()
     }
 
@@ -659,7 +791,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             iconColor: tagStyles.selectedModelTagIconColor,
             textColor: tagStyles.selectedModelTagTextColor,
             selected: true,
-            closable: true,
+            closable: this.controls.getUseMultipleModels(),
             className: 'ai-prompt-selected-model-tag-pill',
             closeAriaLabel: `Remove ${label}`,
             onClose: () => this.removeModel(modelId),
@@ -685,37 +817,176 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         return tagsEl
     }
 
-    private createControlDropdown(
+    private createSvgControlHost(
+        className: 'ai-media-config-sliding-switch-host' | 'ai-media-config-slider-host',
+        group: RenderedMediaConfigGroup,
+        control: MediaGenerationConfigControl,
+        selectedValue: string,
+        pendingControls: PendingMediaConfigSvgControl[],
+    ): HTMLElement {
+        const host = html`<div className=${className}></div>` as HTMLElement
+        pendingControls.push({ host, group, control, selectedValue })
+        return host
+    }
+
+    private mountedControlWidth(host: HTMLElement): number {
+        return host.clientWidth || host.getBoundingClientRect().width || MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH
+    }
+
+    private mountSlidingSwitchControl(pendingControl: PendingMediaConfigSvgControl): void {
+        const { host, group, control, selectedValue } = pendingControl
+        const height = control.kind === 'aspect-ratio'
+            ? MEDIA_CONFIG_ASPECT_RATIO_CONTROL_HEIGHT
+            : MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT
+        const svg = select(host)
+            .append('svg')
+            .attr('class', 'ai-media-config-sliding-switch-svg')
+        const slidingSwitch: SlidingSwitchInstance<string> = createSlidingSwitch(svg, {
+            id: `${group.groupId}:${control.key}`,
+            x: 0,
+            y: 0,
+            width: this.mountedControlWidth(host),
+            height,
+            options: control.options,
+            selectedValue,
+            observeParentResize: true,
+            visualOverflowPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+            indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
+            indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
+            ...(control.kind === 'aspect-ratio'
+                ? { renderOption: (parent, state) => new AspectRatioSwitchOptionView(parent, state) }
+                : {}),
+            onChange: value => this.setGroupControlValue(group, control, value),
+        })
+        this.mountedControls.push({
+            groupId: group.groupId,
+            control,
+            setValue: value => slidingSwitch.setValue(value),
+            destroy: () => slidingSwitch.destroy(),
+        })
+    }
+
+    private mountSliderControl(pendingControl: PendingMediaConfigSvgControl): void {
+        const { host, group, control, selectedValue } = pendingControl
+        const svg = select(host)
+            .append('svg')
+            .attr('class', 'ai-media-config-slider-svg')
+        const slider: SliderInstance<string> = createSlider(svg, {
+            id: `${group.groupId}:${control.key}`,
+            x: 0,
+            y: 0,
+            width: this.mountedControlWidth(host),
+            height: MEDIA_CONFIG_SLIDER_HEIGHT,
+            options: control.options,
+            selectedValue,
+            observeParentResize: true,
+            onChange: value => this.setGroupControlValue(group, control, value),
+        })
+        this.mountedControls.push({
+            groupId: group.groupId,
+            control,
+            setValue: value => slider.setValue(value),
+            destroy: () => slider.destroy(),
+        })
+    }
+
+    private mountSvgControl(pendingControl: PendingMediaConfigSvgControl): void {
+        if (pendingControl.control.kind === 'duration') {
+            this.mountSliderControl(pendingControl)
+            return
+        }
+        this.mountSlidingSwitchControl(pendingControl)
+    }
+
+    private createToggleControl(
+        group: RenderedMediaConfigGroup,
+        control: MediaGenerationConfigControl,
+        selectedValue: string,
+    ): HTMLElement {
+        const button = html`
+            <button
+                type="button"
+                className="ai-media-config-toggle"
+                role="switch"
+                aria-checked=${String(selectedValue === 'true')}
+                data-checked=${String(selectedValue === 'true')}
+            >
+                <span className="ai-media-config-toggle-track"><span className="ai-media-config-toggle-thumb"></span></span>
+                <span className="ai-media-config-toggle-label">${selectedValue === 'true' ? 'On' : 'Off'}</span>
+            </button>
+        ` as HTMLButtonElement
+        const label = button.querySelector('.ai-media-config-toggle-label') as HTMLElement
+        const syncValue = (value: string): void => {
+            const checked = value === 'true'
+            button.dataset.checked = String(checked)
+            button.ariaChecked = String(checked)
+            label.textContent = checked ? 'On' : 'Off'
+        }
+        button.addEventListener('click', () => {
+            this.setGroupControlValue(group, control, button.dataset.checked === 'true' ? 'false' : 'true')
+        })
+        this.mountedControls.push({
+            groupId: group.groupId,
+            control,
+            setValue: syncValue,
+            destroy: () => undefined,
+        })
+        return button
+    }
+
+    private createInputControl(
+        group: RenderedMediaConfigGroup,
+        control: MediaGenerationConfigControl,
+        selectedValue: string,
+    ): HTMLElement {
+        const input = html`
+            <input
+                className="ai-media-config-input"
+                type=${control.kind === 'number' ? 'number' : 'text'}
+                value=${selectedValue}
+                placeholder=${control.placeholder ?? ''}
+                aria-label=${control.label}
+            />
+        ` as HTMLInputElement
+        if (control.min !== undefined) input.min = String(control.min)
+        if (control.max !== undefined) input.max = String(control.max)
+        if (control.step !== undefined) input.step = String(control.step)
+        input.addEventListener('change', () => this.setGroupControlValue(group, control, input.value.trim()))
+        this.mountedControls.push({
+            groupId: group.groupId,
+            control,
+            setValue: value => {
+                if (input.value !== value) input.value = value
+            },
+            destroy: () => undefined,
+        })
+        return input
+    }
+
+    private createControl(
         group: RenderedMediaConfigGroup,
         control: MediaGenerationConfigControl,
         selectionGroup: MediaGenerationConfigSelectionGroup | undefined,
+        pendingControls: PendingMediaConfigSvgControl[],
     ): HTMLElement {
-        const options = control.options.map(option => ({
-            title: option.label,
-            value: option.value,
-        }))
         const selectedValue = normalizeControlValue(control, selectionGroup?.values?.[control.key])
-        const selectedOption = options.find(option => option.value === selectedValue) || options[0] || { title: '', value: '' }
-        const dropdown = createPureDropdown({
-            id: `ai-media-config-${this.controls.mediaType}-${toDomSafeId(group.groupId)}-${control.key}`,
-            selectedValue: selectedOption,
-            options,
-            theme: 'dark',
-            buttonIcon: chevronDownIcon,
-            ignoreColorValuesForOptions: true,
-            ignoreColorValuesForSelectedValue: true,
-            renderIconForSelectedValue: false,
-            renderIconForOptions: false,
-            mountToBody: false,
-            disableAutoPositioning: true,
-            onSelect: (option: any) => this.setGroupControlValue(group, control, option.value),
-        })
-        this.dropdowns.push(dropdown)
+        const field = control.readOnly || control.kind === 'fixed'
+            ? html`<div className="ai-media-config-fixed-value">${control.options.find(option => option.value === selectedValue)?.label ?? selectedValue}</div>` as HTMLElement
+            : control.kind === 'aspect-ratio'
+                ? this.createSvgControlHost('ai-media-config-sliding-switch-host', group, control, selectedValue, pendingControls)
+                : control.kind === 'duration'
+                    ? this.createSvgControlHost('ai-media-config-slider-host', group, control, selectedValue, pendingControls)
+                    : control.kind === 'toggle'
+                        ? this.createToggleControl(group, control, selectedValue)
+                        : control.kind === 'number' || control.kind === 'text'
+                            ? this.createInputControl(group, control, selectedValue)
+                            : this.createSvgControlHost('ai-media-config-sliding-switch-host', group, control, selectedValue, pendingControls)
 
         return html`
-            <div className="ai-media-config-control">
+            <div className="ai-media-config-control" data-control-kind=${control.kind}>
                 <span className="ai-prompt-model-menu-control-label">${control.label}</span>
-                ${dropdown.dom}
+                ${field}
+                ${control.description ? html`<span className="ai-media-config-description">${control.description}</span>` : undefined}
             </div>
         ` as HTMLElement
     }
@@ -724,10 +995,11 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         group: RenderedMediaConfigGroup,
         selectionGroups: MediaGenerationConfigSelectionGroup[],
         pendingTagHosts: PendingMediaConfigTagHost[],
+        pendingControls: PendingMediaConfigSvgControl[],
     ): HTMLElement {
         const selectionGroup = this.getSelectionForGroup(selectionGroups, group.groupId)
         const modelTags = this.renderModelTags(group.selectedModelIds, pendingTagHosts)
-        const controlEls = group.controls.map(control => this.createControlDropdown(group, control, selectionGroup))
+        const controlEls = group.controls.map(control => this.createControl(group, control, selectionGroup, pendingControls))
 
         return html`
             <div className="ai-media-config-group" data-group-id=${group.groupId}>
@@ -750,14 +1022,17 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     update(): void {
         const groups = this.getMatrixGroups()
         const selectionGroups = this.normalizeSelectionGroups(groups)
-        const signature = JSON.stringify({ groups, selectionGroups })
+        const structureSignature = JSON.stringify(groups)
         const connected = this.dom.isConnected
-        if (signature === this.renderedSignature && (this.builtConnected || !connected)) return
-        this.renderedSignature = signature
+        if (structureSignature === this.renderedStructureSignature && (this.builtConnected || !connected)) {
+            this.syncMountedControls(selectionGroups)
+            return
+        }
+        this.renderedStructureSignature = structureSignature
         this.builtConnected = connected || groups.length === 0
 
-        this.destroyDropdowns()
         this.destroyTagPills()
+        this.destroyMountedControls()
         if (groups.length === 0) {
             this.dom.dataset.visible = 'false'
             this.dom.replaceChildren()
@@ -766,16 +1041,25 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
 
         this.dom.dataset.visible = 'true'
         const pendingTagHosts: PendingMediaConfigTagHost[] = []
-        this.dom.replaceChildren(...groups.map(group => this.renderGroup(group, selectionGroups, pendingTagHosts)))
+        const pendingControls: PendingMediaConfigSvgControl[] = []
+        this.dom.replaceChildren(...groups.map(group => this.renderGroup(
+            group,
+            selectionGroups,
+            pendingTagHosts,
+            pendingControls,
+        )))
         for (const pendingTagHost of pendingTagHosts) {
             this.createTagPill(pendingTagHost.host, pendingTagHost.modelId)
+        }
+        for (const pendingControl of pendingControls) {
+            this.mountSvgControl(pendingControl)
         }
     }
 
     destroy(): void {
         this.unsubscribe()
-        this.destroyDropdowns()
         this.destroyTagPills()
+        this.destroyMountedControls()
         this.dom.remove()
     }
 }
@@ -786,10 +1070,8 @@ export function createMediaGenerationConfigMatrixView(
     return new MediaGenerationConfigMatrixView(controls)
 }
 
-// Filters models that expose the `video_generation` modality. Mirrors the
-// image-model dropdown so the prompt input gets a parallel Video selector that
-// can coexist with the image selector — the text model decides between
-// generate_image and generate_video based on user intent.
+// Filters models that expose the `video_generation` modality. The composer mode
+// switch decides whether this selector or the image selector is authoritative.
 export function createGenericVideoModelDropdown(
     controls: VideoModelControls,
     dropdownId: string
@@ -833,8 +1115,9 @@ export function createGenericVideoModelDropdown(
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        mountToBody: false,
-        disableAutoPositioning: true,
+        mountToBody: true,
+        disableAutoPositioning: false,
+        popoverClassName: 'ai-model-selector-popover',
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setVideoModel(selected.aiModel)
@@ -851,7 +1134,7 @@ export function createGenericVideoModelDropdown(
         }, 0)
     }
 
-    let lastProcessedCount = aiModelsData.length
+    let lastProcessedSignature = getModelOptionsSignature(aiModelsData)
 
     const updateSelection = () => {
         const current = controls.getCurrentVideoModel()
@@ -875,9 +1158,10 @@ export function createGenericVideoModelDropdown(
 
     const unsubscribe = aiModelsStore.subscribe((storeState: any) => {
         const newModelsData = storeState.data
-        if (newModelsData.length === 0 || newModelsData.length === lastProcessedCount) return
+        const nextSignature = getModelOptionsSignature(newModelsData)
+        if (newModelsData.length === 0 || nextSignature === lastProcessedSignature) return
 
-        lastProcessedCount = newModelsData.length
+        lastProcessedSignature = nextSignature
         aiModelsData = newModelsData
 
         videoModels = filterVideoModels(aiModelsData)

@@ -132,3 +132,5 @@ createSlidingSwitch(svg, {
 - Closable options render the close button on the left on hover and call `onClose(value, id, option)` without changing selection.
 - Custom renderers inherit selection, hover, disabled, geometry, and close state through their `render(state)` method.
 - The consumer owns the meaning of each value. If the parent selection is not an `<svg>` root, the consumer remains responsible for sizing the outer SVG.
+
+Lixpi application surfaces must use the single shared sliding-switch appearance from `settings.slidingSwitch.styles`; feature-specific active-indicator shadows are not allowed.

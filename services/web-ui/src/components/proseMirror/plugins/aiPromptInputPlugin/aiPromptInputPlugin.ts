@@ -18,6 +18,7 @@ import {
 
 type SubmitHandler = (data: {
     contentJSON: any[]
+    mediaGenerationMode: 'image' | 'video'
     aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
@@ -40,6 +41,7 @@ type SubmitHandler = (data: {
 type AiPromptInputPluginOptions = {
     onSubmit: SubmitHandler
     createContextTray?: Parameters<typeof createAiPromptInputNodeView>[0]['createContextTray']
+    mountMediaModeSwitch?: Parameters<typeof createAiPromptInputNodeView>[0]['mountMediaModeSwitch']
     createModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createModelDropdown']
     createModelMultiSelect?: Parameters<typeof createAiPromptInputNodeView>[0]['createModelMultiSelect']
     createImageModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageModelDropdown']
@@ -84,6 +86,7 @@ export function extractContentJSON(state: EditorState): any[] | null {
 }
 
 type InputAttrs = {
+    mediaGenerationMode: 'image' | 'video'
     aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
@@ -101,6 +104,7 @@ type InputAttrs = {
 
 function getInputAttrs(state: EditorState): InputAttrs {
     let attrs: InputAttrs = {
+        mediaGenerationMode: 'image',
         aiReasoningModels: [],
         useMultipleReasoningModels: false,
         useMultipleImageModels: false,
@@ -118,6 +122,7 @@ function getInputAttrs(state: EditorState): InputAttrs {
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
             attrs = {
+                mediaGenerationMode: node.attrs.mediaGenerationMode === 'video' ? 'video' : 'image',
                 aiReasoningModels: parseAiModelSelectionAttr(node.attrs.aiReasoningModels),
                 useMultipleReasoningModels: node.attrs.useMultipleReasoningModels === true || node.attrs.useMultipleReasoningModels === 'true',
                 useMultipleImageModels: node.attrs.useMultipleImageModels === true || node.attrs.useMultipleImageModels === 'true',
@@ -174,6 +179,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
     const {
         onSubmit,
         createContextTray,
+        mountMediaModeSwitch,
         createModelDropdown,
         createModelMultiSelect,
         createImageModelDropdown,
@@ -196,31 +202,28 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         const aiReasoningModels = collapseForMode(attrs.aiReasoningModels, attrs.useMultipleReasoningModels)
         const aiImageModels = collapseForMode(attrs.aiImageModels, attrs.useMultipleImageModels)
         const aiVideoModels = collapseForMode(attrs.aiVideoModels, attrs.useMultipleVideoModels)
-        const imageGenerationConfigGroups = attrs.useMultipleImageModels
-            ? attrs.imageGenerationConfigGroups
-            : []
-        const videoGenerationConfigGroups = attrs.useMultipleVideoModels
-            ? attrs.videoGenerationConfigGroups
-            : []
+        const imageGenerationConfigGroups = attrs.imageGenerationConfigGroups
+        const videoGenerationConfigGroups = attrs.videoGenerationConfigGroups
 
         return {
             contentJSON,
+            mediaGenerationMode: attrs.mediaGenerationMode,
             aiReasoningModels,
             useMultipleReasoningModels: attrs.useMultipleReasoningModels,
             useMultipleImageModels: attrs.useMultipleImageModels,
             useMultipleVideoModels: attrs.useMultipleVideoModels,
-            imageOptions: {
+            imageOptions: attrs.mediaGenerationMode === 'image' ? {
                 aiImageModels,
                 imageGenerationSize: attrs.imageGenerationSize,
                 ...(imageGenerationConfigGroups.length > 0 ? { configGroups: imageGenerationConfigGroups } : {}),
-            },
-            videoOptions: {
+            } : undefined,
+            videoOptions: attrs.mediaGenerationMode === 'video' ? {
                 aiVideoModels,
                 videoAspectRatio: attrs.videoAspectRatio,
                 videoResolution: attrs.videoResolution,
                 videoDuration: attrs.videoDuration,
                 ...(videoGenerationConfigGroups.length > 0 ? { configGroups: videoGenerationConfigGroups } : {}),
-            },
+            } : undefined,
             capabilityInputs: attrs.capabilityInputs,
         }
     }
@@ -287,6 +290,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     },
                     placeholderText,
                     createContextTray,
+                    mountMediaModeSwitch,
                     createModelDropdown,
                     createModelMultiSelect,
                     createImageModelDropdown,

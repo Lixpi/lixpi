@@ -8,6 +8,7 @@
 
 @use '@lixpi/ui-kit/styles/help-tooltip';
 @import '$src/sass/_variables.scss';
+@import '$src/sass/_transitions.scss';
 
 .ai-prompt-input-floating {
     position: absolute;
@@ -265,17 +266,18 @@
 .ai-prompt-model-menu-trigger {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: var(--ai-prompt-model-menu-trigger-size, 32px);
-    height: var(--ai-prompt-model-menu-trigger-size, 32px);
-    flex: 0 0 var(--ai-prompt-model-menu-trigger-size, 32px);
-    padding: 0;
+    justify-content: flex-start;
+    gap: 12px;
+    min-width: 0;
+    height: 32px;
+    flex: 1 1 auto;
+    padding: 0 12px;
     border: none;
-    border-radius: 50%;
-    background: transparent;
+    border-radius: 10px;
+    background: rgba(105, 115, 133, 0.06);
     color: var(--ai-prompt-model-menu-trigger-color, #{$steelBlue});
     cursor: pointer;
-    transition: var(--ai-prompt-model-menu-trigger-transition, background 150ms ease, color 150ms ease);
+    transition: hoverTransition(background-color), hoverTransition(color);
 }
 
 .ai-prompt-model-menu-trigger:hover,
@@ -297,6 +299,48 @@
     height: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
 }
 
+.ai-prompt-model-menu-trigger-leading {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    color: var(--ai-prompt-model-menu-trigger-active-color, #{$nightBlue});
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ai-prompt-model-menu-trigger-summary {
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(49, 59, 78, 0.68);
+    font-size: 12px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ai-prompt-media-mode-switch {
+    position: absolute;
+    left: -166px;
+    bottom: 4px;
+    width: 154px;
+    height: 40px;
+    box-sizing: border-box;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    pointer-events: auto;
+    user-select: none;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.ai-prompt-media-mode-switch-svg {
+    display: block;
+    width: 154px;
+    height: 40px;
+    overflow: visible;
+}
+
 .ai-prompt-model-menu-trigger-icon svg {
     width: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
     height: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
@@ -310,7 +354,12 @@
 .ai-prompt-model-menu-info-bubble .bubble-menu-content {
     display: block;
     width: var(--ai-prompt-model-menu-info-bubble-width, max-content);
-    max-width: var(--ai-prompt-model-menu-info-bubble-max-width, min(640px, calc(100vw - 20px)));
+    max-width: var(--ai-prompt-model-menu-info-bubble-max-width, min(720px, calc(100vw - 20px)));
+    max-height: min(780px, calc(100vh - 24px));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
     padding: var(--ai-prompt-model-menu-info-bubble-padding, 12px 14px);
     border: none;
     border-radius: var(--ai-prompt-model-menu-info-bubble-border-radius, 12px);
@@ -331,6 +380,10 @@
     flex-direction: column;
     gap: var(--ai-prompt-model-menu-section-gap, 8px);
     min-width: 0;
+}
+
+.ai-prompt-model-menu-section[data-visible="false"] {
+    display: none;
 }
 
 .ai-prompt-model-menu-section + .ai-prompt-model-menu-section {
@@ -465,7 +518,7 @@
 .ai-media-config-matrix {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ai-prompt-model-menu-content-gap, 12px);
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -484,7 +537,23 @@
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
-    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-media-config-group + .ai-media-config-group {
+    position: relative;
+    padding-top: var(--ai-prompt-model-menu-section-divider-padding-top, 14px);
+}
+
+.ai-media-config-group + .ai-media-config-group::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: var(--ai-prompt-model-menu-section-divider-width, 92%);
+    height: var(--ai-prompt-model-menu-section-divider-height, 2px);
+    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, rgba(247, 247, 253, 0) 100%));
+    border-radius: var(--ai-prompt-model-menu-section-divider-border-radius, 999px);
+    transform: translateX(-50%);
 }
 
 .ai-media-config-group-title {
@@ -508,10 +577,10 @@
 }
 
 .ai-media-config-group-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) max-content;
+    display: flex;
+    flex-direction: column;
     align-items: start;
-    column-gap: 16px;
+    gap: 12px;
     width: 100%;
     min-width: 0;
 }
@@ -552,11 +621,10 @@
 }
 
 .ai-media-config-group-controls {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    align-items: flex-start;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
 }
@@ -568,6 +636,95 @@
     flex: 0 0 auto;
     min-width: 0;
     max-width: 100%;
+}
+
+.ai-media-config-control[data-control-kind="aspect-ratio"],
+.ai-media-config-control[data-control-kind="segmented"],
+.ai-media-config-control[data-control-kind="duration"] {
+    grid-column: 1 / -1;
+}
+
+.ai-media-config-sliding-switch-host,
+.ai-media-config-slider-host {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.ai-media-config-sliding-switch-svg,
+.ai-media-config-slider-svg {
+    display: block;
+    max-width: 100%;
+}
+
+.ai-media-config-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 0 10px;
+    border: 1px solid rgba(96, 108, 133, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    color: rgba(49, 59, 78, 0.76);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ai-media-config-toggle-track {
+    position: relative;
+    width: 30px;
+    height: 18px;
+    border-radius: 999px;
+    background: rgba(105, 115, 133, 0.22);
+    transition: hoverTransition(background-color);
+}
+
+.ai-media-config-toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(38, 51, 77, 0.18);
+    transition: hoverTransition(transform);
+}
+
+.ai-media-config-toggle[data-checked="true"] .ai-media-config-toggle-track {
+    background: #6379c8;
+}
+
+.ai-media-config-toggle[data-checked="true"] .ai-media-config-toggle-thumb {
+    transform: translateX(12px);
+}
+
+.ai-media-config-input,
+.ai-media-config-fixed-value {
+    width: 100%;
+    min-height: 38px;
+    box-sizing: border-box;
+    padding: 9px 11px;
+    border: 1px solid rgba(96, 108, 133, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.78);
+    color: #1a2744;
+    font: inherit;
+    font-size: 12px;
+}
+
+.ai-media-config-fixed-value {
+    color: rgba(49, 59, 78, 0.68);
+}
+
+.ai-media-config-description {
+    max-width: 300px;
+    color: rgba(49, 59, 78, 0.52);
+    font-size: 10px;
+    line-height: 1.35;
 }
 
 .ai-media-config-control .dropdown-menu-tag-pill-wrapper,
@@ -670,6 +827,11 @@
     min-width: 220px;
 }
 
+.ai-model-selector-popover,
+.ai-model-multi-select-popover {
+    z-index: var(--ai-model-selector-popover-z-index, 10090);
+}
+
 .ai-model-multi-select-option {
     gap: 8px;
 }
@@ -698,6 +860,11 @@
 }
 
 @media (max-width: 520px) {
+    .ai-prompt-media-mode-switch {
+        left: 0;
+        bottom: calc(100% + 6px);
+    }
+
     .ai-prompt-model-menu-info-bubble .bubble-menu-content {
         max-width: var(--ai-prompt-model-menu-info-bubble-mobile-max-width, calc(100vw - 16px));
     }
@@ -714,14 +881,12 @@
         gap: 6px;
     }
 
-    .ai-media-config-group-row {
+    .ai-media-config-group-controls {
         grid-template-columns: 1fr;
-        row-gap: 6px;
     }
 
-    .ai-media-config-group-controls {
-        flex-wrap: wrap;
-        justify-content: flex-start;
+    .ai-media-config-control {
+        grid-column: 1;
     }
 
     .ai-prompt-model-menu-section-controls .dots-dropdown-menu button {

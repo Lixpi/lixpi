@@ -270,6 +270,7 @@ export class ProseMirrorEditor {
                 createAiPromptInputPlugin({
                     onSubmit: (data) => this.onPromptSubmit?.(data),
                     createContextTray: this.promptControlFactories?.createContextTray,
+                    mountMediaModeSwitch: this.promptControlFactories?.mountMediaModeSwitch,
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
                     createModelMultiSelect: this.promptControlFactories?.createModelMultiSelect,
                     createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,

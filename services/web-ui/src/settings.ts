@@ -57,6 +57,16 @@ export type DropdownSettings = {
     }
 }
 
+export type SlidingSwitchSettings = {
+    styles: {
+        indicatorBoxShadow: string
+        indicatorInsetShadow: {
+            topColor: string
+            bottomColor: string
+        }
+    }
+}
+
 export type GradientSettings = {
     styles: {
         shiftingColors: [string, string, string, string]
@@ -152,13 +162,7 @@ export type RightPanelModeSwitchSettings = {
     transitionDurationMs: number
     transitionMinDurationMs: number
     transitionDistanceSpeedupFactor: number
-    styles: {
-        activeTabBoxShadow: string
-        activeTabInsetShadow: {
-            topColor: string
-            bottomColor: string
-        }
-    }
+    styles: SlidingSwitchSettings['styles']
 }
 
 export type AiChatThreadContextPreviewSettings = {
@@ -577,6 +581,8 @@ export type Settings = {
 
     dropdown: DropdownSettings
 
+    slidingSwitch: SlidingSwitchSettings
+
     gradient: GradientSettings
 
     helpTooltip: HelpTooltipSettings
@@ -616,6 +622,14 @@ export type Settings = {
     contentDescriptor: ContentDescriptorSettings
 }
 
+const settingsSlidingSwitchStyles: SlidingSwitchSettings['styles'] = {
+    indicatorBoxShadow: 'none',
+    indicatorInsetShadow: {
+        topColor: 'rgba(255, 255, 255, 0.86)',
+        bottomColor: 'rgba(0, 0, 0, 0)',
+    },
+}
+
 export const settings: Settings = {
     // Model selector dropdown behavior settings.
     modelSelectorDropdown: {
@@ -633,6 +647,11 @@ export const settings: Settings = {
             // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
             popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
         },
+    },
+
+    // One active-indicator appearance shared by every sliding switch in the app.
+    slidingSwitch: {
+        styles: settingsSlidingSwitchStyles,
     },
 
     // Shared generated-gradient settings.
@@ -927,15 +946,7 @@ export const settings: Settings = {
             transitionMinDurationMs: 100,
             // Per-mode distance speedup. Higher values compress long jumps more.
             transitionDistanceSpeedupFactor: 0.28,
-            styles: {
-                // Active mode outer shadow. Keep this setting isolated from dropdown shadows.
-                activeTabBoxShadow: 'none',
-                // Active mode inset shadow overlay. Keep this setting isolated from dropdown shadows.
-                activeTabInsetShadow: {
-                    topColor: 'rgba(255, 255, 255, 0.86)',
-                    bottomColor: 'rgba(0, 0, 0, 0)',
-                },
-            },
+            styles: settingsSlidingSwitchStyles,
         },
 
         // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused by generated-output details but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
@@ -996,7 +1007,7 @@ export const settings: Settings = {
                 triggerActiveColor: colorPalette.nightBlue,
                 triggerActiveBackground: '#eef0f4',
                 triggerFocusOutline: '2px solid #b8bec8',
-                infoBubbleWidth: '410px',
+                infoBubbleWidth: '680px',
                 infoBubbleBorderRadius: '12px',
                 infoBubbleBackground: '#fff',
                 infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',

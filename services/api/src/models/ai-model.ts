@@ -80,100 +80,25 @@ const getImageSizeControlLabel = (model: Omit<AiModel, 'pricing'>): string => {
 
 const buildImageControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
     const options = normalizeOptions(model.imageSizes, [{ value: 'auto', label: 'Auto' }])
+    const concreteValues = options.map(option => option.value).filter(value => value !== 'auto')
+    const usesAspectRatios = model.imageSizeMode === 'aspectRatio'
+        || (model.imageSizeMode === undefined
+            && concreteValues.length > 0
+            && concreteValues.every(isAspectRatioValue))
     return [{
         key: 'imageSize',
         label: getImageSizeControlLabel(model),
+        kind: usesAspectRatios ? 'aspect-ratio' : 'segmented',
         options,
         defaultValue: options[0]?.value ?? 'auto',
     }]
 }
 
 const buildVideoControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
-    const controls: MediaGenerationConfigControl[] = []
-    const aspectRatioOptions = normalizeOptions(model.videoAspectRatios, [])
-    const resolutionOptions = normalizeOptions(model.videoResolutions, [])
-    const durationOptions = normalizeOptions(model.videoDurations, [])
-
-    if (aspectRatioOptions.length > 0) {
-        controls.push({
-            key: 'aspectRatio',
-            label: 'Aspect ratio',
-            options: aspectRatioOptions,
-            ...(aspectRatioOptions[0]?.value ? { defaultValue: aspectRatioOptions[0].value } : {}),
-        })
-    }
-    if (resolutionOptions.length > 0) {
-        controls.push({
-            key: 'resolution',
-            label: 'Resolution',
-            options: resolutionOptions,
-            ...(resolutionOptions[0]?.value ? { defaultValue: resolutionOptions[0].value } : {}),
-        })
-    }
-    if (durationOptions.length > 0) {
-        controls.push({
-            key: 'duration',
-            label: 'Duration',
-            options: durationOptions,
-            ...(durationOptions[0]?.value ? { defaultValue: durationOptions[0].value } : {}),
-        })
-    }
-
-    return controls
-}
-
-const mergeOptionLists = (existingOptions: ImageSizeOption[], incomingOptions: ImageSizeOption[]): ImageSizeOption[] => {
-    const mergedOptions = [...existingOptions]
-    const seenValues = new Set(mergedOptions.map(option => option.value))
-
-    for (const option of incomingOptions) {
-        if (seenValues.has(option.value)) continue
-        mergedOptions.push(option)
-        seenValues.add(option.value)
-    }
-
-    return mergedOptions
-}
-
-const getMergedControlLabel = (
-    existingControl: MediaGenerationConfigControl,
-    incomingControl: MediaGenerationConfigControl,
-): string => {
-    if (existingControl.label === incomingControl.label) return existingControl.label
-    if (existingControl.key === 'imageSize') return 'Image option'
-    return existingControl.label
-}
-
-const getControlOrder = (control: MediaGenerationConfigControl): number => {
-    const controlOrder: MediaGenerationConfigControl['key'][] = ['imageSize', 'aspectRatio', 'resolution', 'duration']
-    const index = controlOrder.indexOf(control.key)
-    return index === -1 ? controlOrder.length : index
-}
-
-const mergeControls = (
-    existingControls: MediaGenerationConfigControl[],
-    incomingControls: MediaGenerationConfigControl[],
-): MediaGenerationConfigControl[] => {
-    const controlsByKey = new Map(existingControls.map(control => [control.key, control]))
-
-    for (const incomingControl of incomingControls) {
-        const existingControl = controlsByKey.get(incomingControl.key)
-        if (!existingControl) {
-            existingControls.push({
-                ...incomingControl,
-                options: [...incomingControl.options],
-            })
-            continue
-        }
-
-        existingControl.label = getMergedControlLabel(existingControl, incomingControl)
-        existingControl.options = mergeOptionLists(existingControl.options, incomingControl.options)
-        if (!existingControl.defaultValue && incomingControl.defaultValue) {
-            existingControl.defaultValue = incomingControl.defaultValue
-        }
-    }
-
-    return existingControls.sort((a, b) => getControlOrder(a) - getControlOrder(b))
+    return (model.videoGenerationControls ?? []).map(control => ({
+        ...control,
+        options: control.options.map(option => ({ ...option })),
+    }))
 }
 
 const appendMatrixGroup = (
@@ -182,28 +107,16 @@ const appendMatrixGroup = (
     mediaType: 'image' | 'video',
     controls: MediaGenerationConfigControl[],
 ): void => {
-    const key = `${mediaType}:${model.provider}`
-    const existingGroup = groupsByKey.get(key)
-    if (existingGroup) {
-        const modelId = modelIdFor(model)
-        if (!existingGroup.modelIds.includes(modelId)) {
-            existingGroup.modelIds.push(modelId)
-        }
-        existingGroup.controls = mergeControls(existingGroup.controls, controls)
-        if (!existingGroup.providerTitle && model.providerTitle) {
-            existingGroup.providerTitle = model.providerTitle
-            existingGroup.title = model.providerTitle
-        }
-        return
-    }
+    const modelId = modelIdFor(model)
+    const key = `${mediaType}:${modelId}`
 
     groupsByKey.set(key, {
         groupId: key,
         mediaType,
         provider: model.provider,
         ...(model.providerTitle ? { providerTitle: model.providerTitle } : {}),
-        title: model.providerTitle || model.provider,
-        modelIds: [modelIdFor(model)],
+        title: `${model.providerTitle || model.provider} · ${model.shortTitle || model.title}`,
+        modelIds: [modelId],
         controls,
     })
 }

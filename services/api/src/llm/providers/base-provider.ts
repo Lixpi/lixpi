@@ -1155,6 +1155,7 @@ export abstract class BaseProvider {
             const durableRun = state.durableMediaRuns?.find(run => (
                 run.reasoningIndex === state.generationRun?.reasoningIndex
                 && run.modelId === catalogModelIdFor(videoModelMetaInfo)
+                && run.mediaIndex === videoIndex
             ))
             if (durableRun && ['completed', 'failed', 'cancelled'].includes(durableRun.status)) {
                 return { generatedVideos: [] }
@@ -1186,6 +1187,7 @@ export abstract class BaseProvider {
                 videoAspectRatio: normalizedVideoAspectRatio,
                 videoResolution: normalizedVideoResolution,
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+                videoGenerationConfig: videoModelOptions,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
                 videoSourceDurationSeconds: state.videoSourceDurationSeconds,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),

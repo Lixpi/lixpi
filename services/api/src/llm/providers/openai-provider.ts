@@ -16,12 +16,14 @@ import {
 } from '../utils/attachments.ts'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import {
+    TOOL_NAME,
     applyImagePromptLimitToSystemPrompt,
     extractToolCall,
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
 import {
+    VIDEO_TOOL_NAME,
     extractVideoToolCall,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
@@ -288,6 +290,14 @@ export class OpenAIProvider extends BaseProvider {
         const pendingRequiredToolName = args.capabilityToolExecutor?.pendingRequiredToolName()
         if (pendingRequiredToolName) {
             requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(pendingRequiredToolName)
+        } else if (!args.capabilityToolExecutor
+            && !args.state.capabilityMediaExecutionPlan
+            && !args.enableImageGeneration
+            && !args.enableVideoGeneration
+            && args.hasImageModel !== args.hasVideoModel) {
+            requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(
+                args.hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME,
+            )
         }
         assessProviderInputBudget({ state: args.state, request: requestKwargs })
 

@@ -7,8 +7,8 @@
 1. The user writes rich-text prompt content in the `aiPromptInput` node.
 2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
-4. `getInputAttrs()` reads reasoning, image, video, and multi-model attrs from the input node.
-5. `onSubmit()` receives `{ contentJSON, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections when image or video multi-model mode is active. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
+4. `getInputAttrs()` reads the explicit image/video mode, reasoning, media model, configuration-matrix, and multi-model attrs from the input node.
+5. `onSubmit()` receives `{ contentJSON, mediaGenerationMode, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Only the media options for `mediaGenerationMode` are included. Prompt wording never changes the selected media type. Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections for singular and multi-model requests. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
 7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker. Capability-module atoms remain in the stored user message, and the marker renders them through the same `prompt-reference-chip-capability-module` factory used by the editable composer.
 
@@ -71,6 +71,7 @@ Prompt composer node.
 Attrs declared in `aiPromptInputNode.ts`:
 
 - `aiReasoningModels`
+- `mediaGenerationMode` (`image` or `video`; authoritative for the submitted media branch)
 - `useMultipleReasoningModels`
 - `useMultipleImageModels`
 - `useMultipleVideoModels`
@@ -85,32 +86,32 @@ Attrs declared in `aiPromptInputNode.ts`:
 
 `aiReasoningModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays — each section's single source of truth, with an array of length 1 meaning a singular selection. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
 
-The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels` control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section.
-When a section switch is disabled, its model-list attr is collapsed back to the scalar model; image/video config group attrs are cleared for disabled media sections so stale provider-matrix values cannot be submitted or restored.
+The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels` control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section. When a section switch is disabled, its model-list attr is collapsed to the first model. Configuration groups remain stored per model so switching between modes or singular/multi-model selection preserves each model's settings; only the active mode is submitted.
 
 ## NodeView Structure
 
-`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, injected dropdowns, selected-model tag rows, and injected submit button.
+`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, injected dropdowns, selected-model tag rows, and injected submit button. A host may provide `mountMediaModeSwitch()` to portal the Image / Video switch into adjacent layout chrome; otherwise the switch remains a child of the node view.
 
 ```text
 div.ai-prompt-input-wrapper[data-empty]
+├── [div.ai-prompt-media-mode-switch  Image / Video, unless externally mounted]
 ├── [context tray from createContextTray()]
 ├── div.ai-prompt-input-content
-└── div.ai-prompt-input-controls
+├── div.ai-prompt-input-controls
     ├── button.ai-prompt-model-menu-trigger
-    ├── [submit button from createSubmitButton()]
-    └── div.bubble-menu.ai-prompt-model-menu-info-bubble
-        └── div.ai-prompt-model-menu-content
-            ├── section.ai-prompt-model-menu-section  Reasoning model
-            ├── section.ai-prompt-model-menu-section  Image model
-            └── section.ai-prompt-model-menu-section  Video model
+    └── [submit button from createSubmitButton()]
+└── div.bubble-menu.ai-prompt-model-menu-info-bubble
+    └── div.ai-prompt-model-menu-content
+        ├── section.ai-prompt-model-menu-section  Reasoning model
+        ├── section.ai-prompt-model-menu-section  Image model
+        └── section.ai-prompt-model-menu-section  Video model
 ```
 
 The reasoning section mounts a model selector and a multi-model switch.
 
-The image section mounts a model selector, an API-authored provider configuration matrix, and a multi-model switch.
+The image section mounts a model selector, an API-authored per-model configuration matrix, and a multi-model switch. It is visible only in image mode.
 
-The video section mounts a model selector, an API-authored provider configuration matrix, and a multi-model switch.
+The video section mounts a model selector, an API-authored per-model configuration matrix, and a multi-model switch. It is visible only in video mode.
 
 ## Control Adapters
 
@@ -122,9 +123,11 @@ Multi-select controls update the scalar attr to the first selected model and ser
 
 `ModeAwareModelSelector` swaps between the single-select and multi-select dropdown for each section based on the section's multi-model flag. If a multi-select factory is omitted, the selector mounts the section's single-select dropdown.
 
+Model selector popovers are mounted to `document.body` and use InfoBubble viewport positioning so the model settings panel's scroll container cannot clip the list. The model settings menu treats those portaled popovers as part of its interaction surface.
+
 `SelectedModelTagsRow` subscribes to `aiModelsStore`, renders selected model tag pills while multi-model mode is enabled, and removes ids through the matching adapter when a tag is closed.
 
-`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders only the matrix groups that contain currently selected image or video model ids. Each rendered provider/API group has a model-pill column for that group's selected models and a property-control column for that group's controls. User changes write a sanitized `imageGenerationConfigGroups` or `videoGenerationConfigGroups` attr containing `{ groupId, modelIds, values }`; untouched controls are left for the API to normalize against provider/model defaults. The frontend does not derive provider-specific controls from model metadata.
+`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders only the per-model matrix groups for currently selected image or video model ids. Provider groups remain unboxed and use the model menu's gradient section dividers. Aspect ratios and discrete settings use the ui-kit sliding switch and the same app-wide flat indicator appearance as every other sliding switch, with visual frame glyphs for ratios. Duration uses the ui-kit slider and keeps Seedance intelligent duration as an ordered slider value. Pipeline-owned negative prompting, moderation policy, output count, output format, and audio defaults are not configuration-matrix controls and are never exposed as composer inputs. User changes write a sanitized `imageGenerationConfigGroups` or `videoGenerationConfigGroups` attr containing `{ groupId, modelIds, values }`; the API validates every value against the synchronized controls. The frontend does not derive provider-specific controls.
 
 ## Model Settings Menu
 
@@ -136,7 +139,11 @@ The menu content is built from three `ai-prompt-model-menu-section` blocks:
 - `Image model`
 - `Video model`
 
-Image and video setting rows render provider/model groups from the API configuration matrix. When one provider group is selected, a single group row appears; when selected models span multiple API groups, each group gets its own controls.
+The bottom settings row summarizes the active model and its primary configuration. The entire row opens the menu. Image and video setting sections render per-model groups from the API configuration matrix, and the inactive media section is hidden.
+
+The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper, so configuration-value changes cannot move the open menu. Changes to media mode, multi-model mode, or selected model ids trigger a new position measurement after the menu's structure updates.
+
+The bounded menu content owns native vertical scrolling. Wheel and touch scrolling remain inside the menu instead of propagating into workspace canvas pan or zoom handling.
 
 Each section has a title, help tooltip, section switch, one or more controls, and an optional selected-model tag row. Reasoning multi-select uses the section-level tag row; image and video multi-select tags render inside their API matrix provider groups.
 
@@ -173,14 +180,14 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## NodeView Lifecycle
 
-- `ignoreMutation()` returns `true` for mutations inside the controls row and injected context tray.
-- `stopEvent()` returns `true` for events inside the controls row and injected context tray.
+- `ignoreMutation()` returns `true` for mutations inside the controls row, media-mode switch, and injected context tray.
+- `stopEvent()` returns `true` for events inside the controls row, media-mode switch, and injected context tray.
 - `update()` accepts `aiPromptInput` nodes, syncs empty state, and updates every mounted dropdown/tag row.
 - `destroy()` removes the document mouse listener, destroys the model menu content, destroys the `BubbleMenu`, and destroys mounted toggles, dropdowns, and tag rows.
 
 ## Workspace Surfaces
 
-`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
+`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. Its Image / Video switch is mounted into the in-flow left control rail, between the composer and the upload/image action panel, so the mode panel occupies layout space and pushes the action panel left. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
 
 ## Styling
 
@@ -191,6 +198,7 @@ SCSS lives in `ai-prompt-input.scss`.
 ├── .shifting-gradient-canvas
 └── .floating-input-editor
     └── .ai-prompt-input-wrapper
+        ├── [.ai-prompt-media-mode-switch when not externally mounted]
         ├── .ai-prompt-input-content
         └── .ai-prompt-input-controls
             ├── .ai-prompt-model-menu-trigger

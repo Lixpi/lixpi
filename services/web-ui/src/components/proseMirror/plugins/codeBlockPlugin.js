@@ -60,12 +60,12 @@ class CodeBlockView {
             state: CodeMirrorEditorState.create({
                 doc: node.textContent,
                 extensions: [
-                    // basicLight,      // Light :: Shit, hard to read
+                    // basicLight,      // Light :: looks bad, hard to read
                     // basicDark,           // Dark :: !!! Quite decent
                     // solarizedDark,           // Dark :: !!! Quite decent
-                    // solarizedLight,        // Light, yellow :: shit
-                    // materialDark,            // Dark :: Not shit, but not the greatest
-                    // nord,                    // Dark :: Shit
+                    // solarizedLight,        // Light, yellow :: look bad
+                    // materialDark,            // Dark :: Not look bad, but not the greatest
+                    // nord,                    // Dark :: looks bad
                     gruvboxLight,               // Light :: !!!!!!! awesome
                     // gruvboxDark,                  // Dark :: !!!!!!! awesome
 

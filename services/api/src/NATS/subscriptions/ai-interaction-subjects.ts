@@ -100,7 +100,6 @@ import {
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import {
     resolveScalarMediaModelSelection,
-    restrictMediaRequestToExplicitVideoOutput,
 } from '../../llm/orchestration/scalar-media-output-routing.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -355,6 +354,29 @@ const createDurableMediaRuns = ({
             operationNodeId: getMediaGenerationOperationNodeId(assignment),
         }
     }))
+}
+
+const expandVideoModelIdsForOutputCount = async (
+    videoModelIds: string[],
+    mediaGenerationRequest: AiInteractionChatSendMessagePayload['mediaGenerationRequest'],
+): Promise<string[]> => {
+    return (await Promise.all(videoModelIds.map(async (modelId) => {
+        const [provider, ...modelParts] = modelId.split(':')
+        const model = modelParts.join(':')
+        if (!provider || !model) return [modelId]
+        const modelMeta = await AiModel.getAiModel({ provider, model, omitPricing: true })
+        const outputCountControl = modelMeta?.videoGenerationControls?.find(control => control.key === 'outputCount')
+        if (!outputCountControl) return [modelId]
+        const requestedValue = mediaGenerationRequest?.videoOptions?.configGroups
+            ?.find(group => group.modelIds.includes(modelId as `${string}:${string}`))
+            ?.values.outputCount
+        const allowedValues = outputCountControl.options.map(option => option.value)
+        const normalizedValue = requestedValue && allowedValues.includes(requestedValue)
+            ? requestedValue
+            : outputCountControl.defaultValue ?? allowedValues[0] ?? '1'
+        const outputCount = Math.max(1, Number.parseInt(normalizedValue, 10) || 1)
+        return Array.from({ length: outputCount }, () => modelId)
+    }))).flat()
 }
 
 const readAuthoritativeCapabilityInputs = (
@@ -1094,11 +1116,7 @@ export const aiInteractionSubjects = [
                     }
                     : characterCreatorRouting.isCharacterCreator
                         ? restrictMediaRequestToCharacterImages(canonicalMediaGenerationRequest)
-                        : restrictMediaRequestToExplicitVideoOutput({
-                            request: canonicalMediaGenerationRequest,
-                            prompt: routableAuthoritativePromptText,
-                            hasVideoSource: Boolean(resolvedVideoSourceForExtension),
-                        })
+                        : canonicalMediaGenerationRequest
                 : undefined
             const scalarMediaModelSelection = routedMediaGenerationRequest
                 ? { imageModelId: undefined, videoModelId: undefined }
@@ -1179,13 +1197,17 @@ export const aiInteractionSubjects = [
                     ?? [routedAiImageModel].filter((value): value is string => Boolean(value))
                 const videoModelIds = routedMediaGenerationRequest?.videoModelIds
                     ?? [routedAiVideoModel].filter((value): value is string => Boolean(value))
+                const videoRunModelIds = await expandVideoModelIdsForOutputCount(
+                    videoModelIds,
+                    routedMediaGenerationRequest,
+                )
                 const mediaModelIds = [...imageModelIds, ...videoModelIds]
                 const reasoningModelIds = routedMediaGenerationRequest?.reasoningModelIds ?? aiReasoningModels
                 const durableMediaRuns = createDurableMediaRuns({
                     generationRequestId,
                     reasoningModelIds,
                     imageModelIds,
-                    videoModelIds,
+                    videoModelIds: videoRunModelIds,
                 })
                 const provisionalPromptText = compiled.intent.safePrompt || authoritativePromptText
                 const initialLineagePlan = new MediaBranchLineagePlanner().buildPlan({

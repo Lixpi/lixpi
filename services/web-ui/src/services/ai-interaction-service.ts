@@ -38,6 +38,7 @@ function debugAiInteractionLog(...args: unknown[]): void {
 }
 
 type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'conversationAssetId'> & {
+    mediaGenerationMode?: 'image' | 'video'
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
@@ -653,6 +654,7 @@ export default class AiInteractionService {
     async sendChatMessage({
         generationRequestId,
         aiReasoningModels,
+        mediaGenerationMode,
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
@@ -681,8 +683,10 @@ export default class AiInteractionService {
         const collapseForMode = (modelIds: string[] | undefined, useMultiple: boolean): string[] =>
             useMultiple ? (modelIds ?? []) : (modelIds ?? []).slice(0, 1)
         const reasoningModelIds = collapseForMode(aiReasoningModels, reasoningModelsEnabled)
-        const imageModelIds = collapseForMode(aiImageModels, imageModelsEnabled)
-        const videoModelIds = collapseForMode(aiVideoModels, videoModelsEnabled)
+        const selectedImageModelIds = collapseForMode(aiImageModels, imageModelsEnabled)
+        const selectedVideoModelIds = collapseForMode(aiVideoModels, videoModelsEnabled)
+        const imageModelIds = mediaGenerationMode === 'video' ? [] : selectedImageModelIds
+        const videoModelIds = mediaGenerationMode === 'image' ? [] : selectedVideoModelIds
 
         const payload: Record<string, any> = {
             token: await AuthService.getTokenSilently(),
@@ -715,9 +719,7 @@ export default class AiInteractionService {
             payload.imageSize = imageSize || 'auto'
         }
 
-        // Add video model routing options if a video model is selected. The
-        // text model decides between generate_image vs generate_video at runtime
-        // when both are present — see MediaBranchResolver + LangGraph routing.
+        // Add video model routing options only when video mode is explicitly selected.
         if (videoModelIds.length > 0) {
             payload.aiVideoModels = videoModelIds
             if (videoAspectRatio) payload.videoAspectRatio = videoAspectRatio
@@ -726,8 +728,8 @@ export default class AiInteractionService {
             if (videoSourceForExtension) payload.videoSourceForExtension = videoSourceForExtension
         }
 
-        // The media-generation matrix is needed only when some section carries
-        // more than one model; a single model per section runs the plain path.
+        // Explicit media mode always uses the matrix request contract; the same
+        // contract also carries regeneration and multi-model fanout.
         const regenerationMediaTypes = regeneration?.mode === 'existing-prompt'
             ? Array.from(new Set(regeneration.replayPrompts.map(prompt => prompt.mediaType)))
             : []
@@ -739,19 +741,22 @@ export default class AiInteractionService {
             : imageModelsEnabled || !hasVideoOutput
         const outputMediaTypes: Array<'image' | 'video'> = regenerationMediaTypes.length > 0
             ? regenerationMediaTypes
-            : [
-                ...(hasImageOutput ? ['image' as const] : []),
-                ...(hasVideoOutput ? ['video' as const] : []),
-            ]
+            : mediaGenerationMode
+                ? [mediaGenerationMode]
+                : [
+                    ...(hasImageOutput ? ['image' as const] : []),
+                    ...(hasVideoOutput ? ['video' as const] : []),
+                ]
         const matrixImageModelIds = outputMediaTypes.includes('image') ? imageModelIds : []
         const matrixVideoModelIds = outputMediaTypes.includes('video') ? videoModelIds : []
         const selectedSectionCounts = [reasoningModelIds.length, matrixImageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
         const sectionsWithSelection = selectedSectionCounts.filter((count) => count > 0).length
-        if (regeneration || totalSelectedModelCount > sectionsWithSelection) {
+        if (mediaGenerationMode || regeneration || totalSelectedModelCount > sectionsWithSelection) {
             payload.mediaGenerationRequest = {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: generationRequestId ?? uuidv4(),
+                ...(mediaGenerationMode ? { mediaGenerationMode } : {}),
                 outputMediaTypes,
                 useMultipleReasoningModels: reasoningModelsEnabled,
                 useMultipleImageModels: imageModelsEnabled,
@@ -761,14 +766,14 @@ export default class AiInteractionService {
                 videoModelIds: matrixVideoModelIds,
                 ...(matrixImageModelIds.length > 0 ? { imageOptions: {
                     imageSize: imageSize || 'auto',
-                    ...(imageModelsEnabled && imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
+                    ...(imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
                 } } : {}),
                 ...(matrixVideoModelIds.length > 0 ? { videoOptions: {
                     ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
                     ...(videoResolution ? { resolution: videoResolution } : {}),
                     ...(videoDuration ? { duration: videoDuration } : {}),
                     ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
-                    ...(videoModelsEnabled && videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
+                    ...(videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
                 } } : {}),
                 ...(regeneration ? { regeneration } : {}),
             }

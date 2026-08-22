@@ -217,6 +217,7 @@ export class VideoRouter {
                 videoAspectRatio: state.videoAspectRatio,
                 videoResolution: state.videoResolution,
                 videoDurationSeconds: state.videoDurationSeconds,
+                videoGenerationConfig: state.videoGenerationConfig,
                 videoFirstFrameImage: state.videoFirstFrameImage,
                 videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,

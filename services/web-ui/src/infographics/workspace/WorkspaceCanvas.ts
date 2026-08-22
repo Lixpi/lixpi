@@ -838,6 +838,7 @@ type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | '
 type WorkspaceCanvasOptions = {
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement
+    mediaModeSwitchMountEl: HTMLDivElement
     workspaceId: string
     canvasState: CanvasState | null
     documents: Document[]
@@ -2877,6 +2878,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const firstVideo = videoDescriptors[0]
         return {
             contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: promptText }] }],
+            mediaGenerationMode: firstVideo && !firstImage ? 'video' : 'image',
             aiReasoningModels: reasoningModels,
             useMultipleReasoningModels: reasoningModels.length > 1,
             useMultipleImageModels: imageModels.length > 1,
@@ -6008,8 +6010,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     minDurationMs: settings.aiChatThread.panelSwitch.transitionMinDurationMs,
                     distanceSpeedupFactor: settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor,
                 },
-                indicatorBoxShadow: settings.aiChatThread.panelSwitch.styles.activeTabBoxShadow,
-                indicatorInsetShadow: settings.aiChatThread.panelSwitch.styles.activeTabInsetShadow,
+                indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
+                indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
                 onChange: (nextMode) => {
                     const previousSwitchMode = aiChatPanelState.topLevelMode
                     if (nextMode === previousSwitchMode) return
@@ -6114,7 +6116,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const contextTrayEl = createCanvasGlobalContextTrayElement()
         globalCanvasComposer = createAiPromptComposer({
             className: 'workspace-canvas-global-composer',
-            controlFactories: createDefaultPromptControlFactories(),
+            controlFactories: {
+                ...createDefaultPromptControlFactories(),
+                mountMediaModeSwitch: switchElement => options.mediaModeSwitchMountEl.replaceChildren(switchElement),
+            },
             initialContent: readGlobalComposerDraft(),
             promptReferenceCatalog: getPromptReferenceCatalogClient(),
             promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
@@ -6281,6 +6286,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
+                mediaGenerationMode,
                 imageOptions,
                 videoOptions,
                 referenceNodeIds: submittedReferenceNodeIds = [],
@@ -6382,6 +6388,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     await getAiService().sendChatMessage({
                         ...(generationRequestId ? { generationRequestId } : {}),
                         aiReasoningModels: aiReasoningModels ?? [],
+                        mediaGenerationMode,
                         useMultipleReasoningModels,
                         useMultipleImageModels,
                         useMultipleVideoModels,
@@ -6549,10 +6556,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? serializeAiModelSelectionAttr(collapseForMode(data.videoOptions.aiVideoModels, useMultipleVideoModels))
             : ''
         const imageGenerationConfigGroups = data.imageOptions
-            ? serializeMediaGenerationConfigSelectionAttr(useMultipleImageModels ? data.imageOptions.configGroups ?? [] : [])
+            ? serializeMediaGenerationConfigSelectionAttr(data.imageOptions.configGroups ?? [])
             : ''
         const videoGenerationConfigGroups = data.videoOptions
-            ? serializeMediaGenerationConfigSelectionAttr(useMultipleVideoModels ? data.videoOptions.configGroups ?? [] : [])
+            ? serializeMediaGenerationConfigSelectionAttr(data.videoOptions.configGroups ?? [])
             : ''
         const initialContent = {
             type: 'doc',
@@ -6561,6 +6568,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     type: 'aiChatThread',
                     attrs: {
                         threadId,
+                        mediaGenerationMode: data.mediaGenerationMode,
                         aiReasoningModels,
                         useMultipleReasoningModels,
                         useMultipleImageModels,
@@ -7018,13 +7026,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const selectedVideoModelIds = data.useMultipleVideoModels
             ? uniqueAiModelIds(data.videoOptions?.aiVideoModels ?? [])
             : uniqueAiModelIds((data.videoOptions?.aiVideoModels ?? []).slice(0, 1))
-        const hasExplicitMediaFanout = data.useMultipleImageModels || data.useMultipleVideoModels
-        const imageModelIds = hasExplicitMediaFanout && !data.useMultipleImageModels
-            ? []
-            : selectedImageModelIds
-        const videoModelIds = hasExplicitMediaFanout && !data.useMultipleVideoModels
-            ? []
-            : selectedVideoModelIds
+        const imageModelIds = data.mediaGenerationMode === 'image' ? selectedImageModelIds : []
+        const videoModelIds = data.mediaGenerationMode === 'video' ? selectedVideoModelIds : []
         return {
             phase: 'preflight',
             promptText,
@@ -13049,6 +13052,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     content: [{
                         type: 'aiPromptInput',
                         attrs: {
+                            mediaGenerationMode: generation?.mediaGenerationMode
+                                ?? (generation?.outputMediaTypes?.includes('video') ? 'video' : 'image'),
                             aiReasoningModels: serializeAiModelSelectionAttr(selection.reasoningModelIds ?? []),
                             useMultipleReasoningModels: (selection.reasoningModelIds?.length ?? 0) > 1,
                             useMultipleImageModels: imageModelIds.length > 1,

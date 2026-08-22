@@ -100,6 +100,7 @@
     let imageSubmenuMode: 'menu' | 'url' = $state('menu')
     let imageUrlValue = $state('')
     let imageWrapperEl: HTMLDivElement
+    let mediaModeSwitchMountEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     let transientCanvasMutationInProgress = false
@@ -586,6 +587,7 @@
         renderer = createWorkspaceCanvas({
             paneEl,
             viewportEl,
+            mediaModeSwitchMountEl,
             workspaceId,
             canvasState,
             documents,
@@ -715,55 +717,58 @@
     class:workspace-canvas-right-side-panel-open={isRightSidePanelOpen}
     style={rightSidePanelStyle}
 >
-    <!-- Left action panel — flanks the composer. Two icons render it as an oval. -->
-    <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
-        <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">
-            {@html createNewFileIcon}
-            <span class="workspace-floating-toolbar-tooltip">New Document</span>
-        </button>
-        <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
-            <button
-                class="workspace-floating-toolbar-button"
-                class:active={imageSubmenuOpen}
-                onclick={toggleImageSubmenu}
-                aria-label="Add Image"
-            >
-                {@html imageIcon}
-                {#if !imageSubmenuOpen}
-                    <span class="workspace-floating-toolbar-tooltip">Add Image</span>
-                {/if}
+    <!-- The in-flow rail keeps the mode panel between the composer and upload panel. -->
+    <div class="workspace-canvas-left-control-rail">
+        <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
+            <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">
+                {@html createNewFileIcon}
+                <span class="workspace-floating-toolbar-tooltip">New Document</span>
             </button>
-            {#if imageSubmenuOpen}
-                <div class="workspace-image-submenu">
-                    {#if imageSubmenuMode === 'menu'}
-                        <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
-                            Upload from Device
-                        </button>
-                        <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
-                            Paste Image URL
-                        </button>
-                    {:else}
-                        <div class="workspace-image-submenu-url-form">
-                            <input
-                                type="url"
-                                class="workspace-image-submenu-url-input"
-                                placeholder="https://example.com/image.jpg"
-                                bind:value={imageUrlValue}
-                                onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
-                            />
-                            <div class="workspace-image-submenu-url-actions">
-                                <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
-                                    Back
-                                </button>
-                                <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
-                                    Add
-                                </button>
-                            </div>
-                        </div>
+            <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
+                <button
+                    class="workspace-floating-toolbar-button"
+                    class:active={imageSubmenuOpen}
+                    onclick={toggleImageSubmenu}
+                    aria-label="Add Image"
+                >
+                    {@html imageIcon}
+                    {#if !imageSubmenuOpen}
+                        <span class="workspace-floating-toolbar-tooltip">Add Image</span>
                     {/if}
-                </div>
-            {/if}
+                </button>
+                {#if imageSubmenuOpen}
+                    <div class="workspace-image-submenu">
+                        {#if imageSubmenuMode === 'menu'}
+                            <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
+                                Upload from Device
+                            </button>
+                            <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
+                                Paste Image URL
+                            </button>
+                        {:else}
+                            <div class="workspace-image-submenu-url-form">
+                                <input
+                                    type="url"
+                                    class="workspace-image-submenu-url-input"
+                                    placeholder="https://example.com/image.jpg"
+                                    bind:value={imageUrlValue}
+                                    onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
+                                />
+                                <div class="workspace-image-submenu-url-actions">
+                                    <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
+                                        Back
+                                    </button>
+                                    <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
+            </div>
         </div>
+        <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
     </div>
 
     <!-- Right action panel — a single icon renders it as a circle. -->

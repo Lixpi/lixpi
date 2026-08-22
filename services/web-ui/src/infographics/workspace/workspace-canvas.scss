@@ -20,6 +20,8 @@
     --workspace-canvas-action-panel-size: 40px;
     // Horizontal gap between an action panel and the composer pill.
     --workspace-canvas-action-panel-gap: 20.28px;
+    // Width of the explicit Image / Video mode panel in the left control rail.
+    --workspace-canvas-media-mode-panel-width: 154px;
     // Distance of the composer pill from the canvas bottom edge.
     --workspace-canvas-action-panel-bottom: 24px;
 }
@@ -70,8 +72,39 @@
     padding: 0;
 }
 
-.workspace-canvas-action-panel-left {
+.workspace-canvas-left-control-rail {
+    position: absolute;
     right: calc(50% + min(380px, (100% - 48px) / 2) + var(--workspace-canvas-action-panel-gap));
+    bottom: calc(var(--workspace-canvas-action-panel-bottom) + (var(--workspace-canvas-composer-pill-height) - var(--workspace-canvas-action-panel-size)) / 2);
+    z-index: 9991;
+    display: flex;
+    align-items: center;
+    gap: var(--workspace-canvas-action-panel-gap);
+    height: var(--workspace-canvas-action-panel-size);
+    pointer-events: auto;
+}
+
+.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+}
+
+.workspace-canvas-media-mode-panel {
+    position: relative;
+    width: var(--workspace-canvas-media-mode-panel-width);
+    height: var(--workspace-canvas-action-panel-size);
+    flex: 0 0 var(--workspace-canvas-media-mode-panel-width);
+    border-radius: 9999px;
+}
+
+.workspace-canvas-media-mode-panel > .ai-prompt-media-mode-switch {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: 100%;
+    height: 100%;
 }
 
 .workspace-canvas-action-panel-right {

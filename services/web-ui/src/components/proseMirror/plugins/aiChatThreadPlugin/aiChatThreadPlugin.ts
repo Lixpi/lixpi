@@ -87,6 +87,7 @@ type VideoOptions = {
 }
 
 type SendAiRequestHandler = (data: AiInteractionChatSubmitPayload & {
+    mediaGenerationMode: 'image' | 'video'
     aiReasoningModels?: string[]
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
@@ -2416,6 +2417,7 @@ class AiChatThreadPluginClass {
         // useMultiple* flag is the safeguard that gates whether the whole array
         // is submitted (multi) or collapsed to its first model (singular).
         const {
+            mediaGenerationMode: rawMediaGenerationMode = 'image',
             aiReasoningModels = '',
             useMultipleReasoningModels = false,
             useMultipleImageModels = false,
@@ -2433,6 +2435,7 @@ class AiChatThreadPluginClass {
             sourceVideoNodeId = ''
         } = threadNode.attrs
         const threadId = threadIdFromMeta || threadIdFromNode
+        const mediaGenerationMode: 'image' | 'video' = rawMediaGenerationMode === 'video' ? 'video' : 'image'
 
         const reasoningModelsEnabled = useMultipleReasoningModels === true
             || useMultipleReasoningModels === 'true'
@@ -2447,8 +2450,12 @@ class AiChatThreadPluginClass {
         const videoConfigGroups = parseMediaGenerationConfigSelectionAttr(videoGenerationConfigGroups)
         // Multi disabled → only the first selected model is used for that section.
         const reasoningModelIds = reasoningModelsEnabled ? rawReasoningModelIds : rawReasoningModelIds.slice(0, 1)
-        const imageModelIds = imageModelsEnabled ? rawImageModelIds : rawImageModelIds.slice(0, 1)
-        const videoModelIds = videoModelsEnabled ? rawVideoModelIds : rawVideoModelIds.slice(0, 1)
+        const imageModelIds = mediaGenerationMode === 'image'
+            ? (imageModelsEnabled ? rawImageModelIds : rawImageModelIds.slice(0, 1))
+            : []
+        const videoModelIds = mediaGenerationMode === 'video'
+            ? (videoModelsEnabled ? rawVideoModelIds : rawVideoModelIds.slice(0, 1))
+            : []
         const effectiveAiModel = reasoningModelIds[0] || ''
         const effectiveImageModel = imageModelIds[0] || ''
         const effectiveVideoModel = videoModelIds[0] || ''
@@ -2463,11 +2470,11 @@ class AiChatThreadPluginClass {
             console.error('[AI_CHAT_THREAD] Cannot submit without a reasoning model.')
             return null
         }
-        if (imageModelsEnabled && imageModelIds.length === 0) {
+        if (mediaGenerationMode === 'image' && imageModelIds.length === 0) {
             console.error('[AI_CHAT_THREAD] Image generation requires at least one image model.')
             return null
         }
-        if (videoModelsEnabled && videoModelIds.length === 0) {
+        if (mediaGenerationMode === 'video' && videoModelIds.length === 0) {
             console.error('[AI_CHAT_THREAD] Video generation requires at least one video model.')
             return null
         }
@@ -2495,7 +2502,7 @@ class AiChatThreadPluginClass {
         const imageOptions = effectiveImageModel ? {
             aiImageModels: imageModelIds,
             imageGenerationSize,
-            ...(imageModelsEnabled && imageConfigGroups.length > 0 ? { configGroups: imageConfigGroups } : {}),
+            ...(imageConfigGroups.length > 0 ? { configGroups: imageConfigGroups } : {}),
         } : undefined
 
         // Build video generation options if a video model is selected. The
@@ -2506,12 +2513,12 @@ class AiChatThreadPluginClass {
             videoAspectRatio,
             videoResolution,
             videoDuration,
-            ...(videoModelsEnabled && videoConfigGroups.length > 0 ? { configGroups: videoConfigGroups } : {}),
+            ...(videoConfigGroups.length > 0 ? { configGroups: videoConfigGroups } : {}),
             ...(sourceVideoNodeId ? { sourceVideoNodeId } : {})
         } : undefined
 
-        // The media-generation matrix is needed only when some section carries
-        // more than one model; a single model per section runs the plain path.
+        // This flag controls the local response placeholder shape. Submission
+        // still carries the explicit media-mode matrix contract for singular runs.
         const matrixVideoModelIds = videoModelsEnabled || Boolean(sourceVideoNodeId) ? videoModelIds : []
         const selectedSectionCounts = [reasoningModelIds.length, imageModelIds.length, matrixVideoModelIds.length]
         const totalSelectedModelCount = selectedSectionCounts.reduce((sum, count) => sum + count, 0)
@@ -2528,6 +2535,7 @@ class AiChatThreadPluginClass {
 
         const requestPayload = {
             messages,
+            mediaGenerationMode,
             aiReasoningModels: reasoningModelIds,
             useMultipleReasoningModels: reasoningModelsEnabled,
             useMultipleImageModels: imageModelsEnabled,

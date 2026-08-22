@@ -10,6 +10,7 @@ import type {
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
     MediaGenerationConfigSelectionGroup,
+    MediaGenerationConfigControlKey,
     MediaGenerationRunMeta,
     MediaGenerationRun,
     MediaReferenceBinding,
@@ -88,7 +89,7 @@ export type MediaFanoutPlan = {
     videoResolution?: string
     videoDuration?: string | number
     videoDurationSeconds?: number
-    videoModelOptions?: Record<string, { aspectRatio?: string; resolution?: string; duration?: string | number }>
+    videoModelOptions?: Record<string, Partial<Record<MediaGenerationConfigControlKey, string>>>
     videoSourceForExtension?: string
     imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
@@ -194,6 +195,7 @@ export type ProviderState = {
     videoAspectRatio?: string | undefined
     videoResolution?: string | undefined
     videoDurationSeconds?: number | undefined
+    videoGenerationConfig?: Partial<Record<MediaGenerationConfigControlKey, string>> | undefined
     generatedVideoPrompt?: string | undefined
     videoFirstFrameImage?: string | undefined
     videoReferenceImages?: string[] | undefined
@@ -304,6 +306,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     videoAspectRatio: { reducer: keep },
     videoResolution: { reducer: keep },
     videoDurationSeconds: { reducer: keep },
+    videoGenerationConfig: { reducer: keep },
     generatedVideoPrompt: { reducer: keep },
     videoFirstFrameImage: { reducer: keep },
     videoReferenceImages: { reducer: keep },

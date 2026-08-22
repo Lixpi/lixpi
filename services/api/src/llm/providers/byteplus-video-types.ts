@@ -42,7 +42,10 @@ export type CreateVideoGenerationTaskPayload = {
     generate_audio?: boolean
     watermark?: boolean
     seed?: number
+    camera_fixed?: boolean
     return_last_frame?: boolean
+    service_tier?: string
+    priority?: number
     callback_url?: string
 }
 

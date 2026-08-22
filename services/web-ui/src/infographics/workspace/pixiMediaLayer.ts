@@ -1244,9 +1244,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
-    // Build one screen-space datum per glass target. The left/right action
-    // panels are searched from the workspace root because they are siblings of
-    // the pane, while the global composer is inside the pane.
+    // Build one screen-space datum per glass target. The action and mode panels
+    // are searched from the workspace root because they are siblings of the
+    // pane, while the global composer is inside the pane.
     function getScreenGlassBorderDatums(): PixiGlassBorderDatum[] {
         const glassBorder = settings.canvasChrome.glassBorder
         if (!glassBorder.enabled) return []
@@ -1289,6 +1289,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             {
                 id: 'workspace-action-panel-left',
                 element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-left'),
+            },
+            {
+                id: 'workspace-media-mode-panel',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-media-mode-panel'),
             },
             {
                 id: 'workspace-global-composer',

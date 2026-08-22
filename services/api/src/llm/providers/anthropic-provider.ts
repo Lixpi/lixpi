@@ -17,12 +17,14 @@ import {
     resolveImageUrls,
 } from '../utils/attachments.ts'
 import {
+    TOOL_NAME,
     applyImagePromptLimitToSystemPrompt,
     extractToolCall,
     extractReferenceImages,
     getToolForProvider,
 } from '../tools/image-generation.ts'
 import {
+    VIDEO_TOOL_NAME,
     extractVideoToolCall,
     getVideoToolForProvider,
 } from '../tools/video-generation.ts'
@@ -152,6 +154,12 @@ export class AnthropicProvider extends BaseProvider {
                 const pendingRequiredToolName = capabilityToolExecutor?.pendingRequiredToolName()
                 if (pendingRequiredToolName) {
                     streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(pendingRequiredToolName)
+                } else if (!capabilityToolExecutor
+                    && !state.capabilityMediaExecutionPlan
+                    && hasImageModel !== hasVideoModel) {
+                    streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(
+                        hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME,
+                    )
                 }
                 assessProviderInputBudget({ state, request: streamArgs })
                 // messages.stream() connects lazily, so a connection failure
