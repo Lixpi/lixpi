@@ -30,9 +30,8 @@ export default defineConfig({
             $src: path.resolve("./src"),
         },
 
-        // YOU FUCKING PIECE OF FUCKING SHIT!!!!!
         // Without this it was throwing  (Error during service initialization Svelte error: lifecycle_function_unavailable`mount(...)` is not available on the server)
-        // What the fuck does it even mean???
+        // What does it even mean???
         // Found solution here:
         //      https://github.com/sveltejs/svelte/discussions/12037
         //      https://github.com/sveltejs/svelte/issues/11394
