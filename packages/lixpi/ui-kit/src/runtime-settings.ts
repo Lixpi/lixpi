@@ -155,7 +155,7 @@ export const uiKitSettings: UiKitRuntimeSettings = {
                     bottomColor: 'rgba(0, 0, 0, 0)',
                 },
                 closedBorderColor: 'rgba(105, 115, 133, 0.1)',
-                closedBorderWidth: 2,
+                closedBorderWidth: 0,
                 openBorderColor: 'rgba(105, 115, 133, 0.07)',
                 openBorderWidth: 1.5,
             },

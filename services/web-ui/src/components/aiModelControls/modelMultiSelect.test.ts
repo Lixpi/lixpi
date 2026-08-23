@@ -133,12 +133,12 @@ describe('createGenericAiModelMultiSelect', () => {
         control.destroy()
     })
 
-    it('keeps the regular menu nested and lets overflowing options scroll internally', () => {
+    it('portals the regular menu without disabling viewport positioning and lets overflowing options scroll internally', () => {
         const controls = createAiModelControls()
         const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-placement')
         const infoBubbleConfig = createInfoBubbleMock.mock.calls.at(-1)?.[0]
         const infoBubble = createInfoBubbleMock.mock.results.at(-1)?.value
-        const optionList = control.dom.querySelector('.ai-model-multi-select-list') as HTMLUListElement
+        const optionList = infoBubble?.dom.querySelector('.ai-model-multi-select-list') as HTMLUListElement
         const wheelEvent = new WheelEvent('wheel', {
             bubbles: true,
             cancelable: true,
@@ -151,9 +151,9 @@ describe('createGenericAiModelMultiSelect', () => {
 
         optionList.dispatchEvent(wheelEvent)
 
-        expect(infoBubbleConfig?.disableAutoPositioning).toBe(true)
-        expect(infoBubble?.dom.parentElement?.classList.contains('dots-dropdown-menu')).toBe(true)
-        expect(infoBubble?.dom.parentElement).not.toBe(document.body)
+        expect(infoBubbleConfig?.disableAutoPositioning).toBe(false)
+        expect(infoBubbleConfig?.className).toContain('ai-prompt-model-selector-popover')
+        expect(infoBubble?.dom.parentElement).toBe(document.body)
         expect(wheelEvent.defaultPrevented).toBe(false)
         expect(stopSpy).toHaveBeenCalledOnce()
 

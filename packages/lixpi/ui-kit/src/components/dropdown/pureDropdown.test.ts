@@ -95,6 +95,38 @@ describe('pureDropdown — trigger alignment', () => {
     })
 })
 
+describe('pureDropdown — portaled popovers', () => {
+    beforeEach(() => {
+        document.body.innerHTML = ''
+    })
+
+    afterEach(() => {
+        document.body.innerHTML = ''
+    })
+
+    it('mounts a caller-classified popover on the document body with viewport positioning enabled', () => {
+        const dropdown = createPureDropdown({
+            id: 'portaled-dropdown',
+            selectedValue: defaultOptions[0],
+            options: defaultOptions,
+            mountToBody: true,
+            disableAutoPositioning: false,
+            popoverClassName: 'ai-prompt-model-selector-popover',
+            onSelect: vi.fn(),
+        })
+
+        const popover = document.body.querySelector('.dropdown-menu-popover') as HTMLElement
+
+        expect(popover).not.toBeNull()
+        expect(popover.classList.contains('ai-prompt-model-selector-popover')).toBe(true)
+        expect(popover.classList.contains('static-position')).toBe(false)
+        expect(dropdown.dom.contains(popover)).toBe(false)
+
+        dropdown.destroy()
+        expect(document.body.querySelector('.ai-prompt-model-selector-popover')).toBeNull()
+    })
+})
+
 describe('pureDropdown — outside click behavior', () => {
     let addEventListenerSpy: ReturnType<typeof vi.spyOn>
     let removeEventListenerSpy: ReturnType<typeof vi.spyOn>

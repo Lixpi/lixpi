@@ -134,8 +134,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             arrowSide: 'top',
             bodyContent: this.optionsList,
             visible: false,
-            className: 'dropdown-menu-popover ai-model-multi-select-popover',
-            disableAutoPositioning: true,
+            className: 'dropdown-menu-popover ai-model-multi-select-popover ai-prompt-model-selector-popover',
+            disableAutoPositioning: false,
             onOpen: () => {
                 this.dom.classList.add('dropdown-open')
                 this.dotsMenu.classList.add('is-active')
@@ -146,7 +146,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             },
         })
         this.infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
-        this.dotsMenu.appendChild(this.infoBubble.dom)
+        document.body.appendChild(this.infoBubble.dom)
         this.handleDocumentMouseDown = (event: MouseEvent): void => {
             if (!this.infoBubble.isOpen?.()) return
 

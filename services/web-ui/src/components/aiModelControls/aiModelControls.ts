@@ -25,6 +25,7 @@ import {
     createSlidingSwitch,
     type SlidingSwitchInstance,
 } from '@lixpi/ui-kit/components/sliding-switch'
+import { createToggleSwitch } from '@lixpi/ui-kit/components/toggle-switch'
 import { createTagPill as createSvgTagPill, type TagPillInstance } from '@lixpi/ui-kit/components/tag-pill'
 import { settings } from '$src/settings.ts'
 
@@ -123,6 +124,12 @@ type PendingMediaConfigSvgControl = {
 const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
 const MEDIA_CONFIG_SLIDER_HEIGHT = 66
 const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
+const MEDIA_CONFIG_TOGGLE_DIMENSIONS = {
+    width: 30,
+    height: 18,
+    svgWidth: 34,
+    svgHeight: 22,
+}
 
 function isAspectRatioValue(value: string): boolean {
     return /^\d+:\d+$/.test(value)
@@ -222,13 +229,18 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
     resize(x: number, y: number, width: number, height = this.optionHeight): void {
         this.optionHeight = height
         const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
+        const glyphStyles = settings.aiModelControls.styles.dimensionsGlyph
         const contentCenterY = y + height * dropdownStyles.contentCenterYRatio
         const size = this.glyphSize(this.value)
         const availableColumnWidth = Math.max(0, width - dropdownStyles.horizontalPadding * 2)
         const glyphColumnWidth = Math.min(dropdownStyles.glyphColumnWidth, availableColumnWidth)
-        const glyphColumnStartX = x + dropdownStyles.horizontalPadding
+        const glyphStrokeInset = glyphStyles.strokeWidth / 2
+        const glyphColumnStartX = x + dropdownStyles.horizontalPadding + glyphStrokeInset
         const glyphCenterX = glyphColumnStartX + glyphColumnWidth / 2
-        const labelX = glyphColumnStartX + glyphColumnWidth + dropdownStyles.glyphValueGap
+        const labelX = glyphColumnStartX
+            + glyphColumnWidth
+            + glyphStrokeInset
+            + dropdownStyles.glyphValueGap
 
         this.glyph
             .attr('x', glyphCenterX - size.width / 2)
@@ -394,8 +406,9 @@ export function createGenericAiModelDropdown(
         renderIconForOptions: true,
         enableTagFilter: settings.modelSelectorDropdown.useModalityFilter,
         availableTags: settings.modelSelectorDropdown.useModalityFilter ? availableTags : [],
-        mountToBody: false,
-        disableAutoPositioning: true,
+        mountToBody: true,
+        disableAutoPositioning: false,
+        popoverClassName: 'ai-prompt-model-selector-popover',
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setAiModel(selected.aiModel)
@@ -610,8 +623,9 @@ export function createGenericImageModelDropdown(
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        mountToBody: false,
-        disableAutoPositioning: true,
+        mountToBody: true,
+        disableAutoPositioning: false,
+        popoverClassName: 'ai-prompt-model-selector-popover',
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setImageModel(selected.aiModel)
@@ -915,6 +929,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             y: 0,
             width: dropdownStyles.width,
             height: dropdownStyles.height,
+            optionHorizontalPadding: dropdownStyles.horizontalPadding,
             options: dimensionDropdownOptions(control),
             selectedValue,
             ariaLabel: control.label,
@@ -1001,33 +1016,59 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         control: MediaGenerationConfigControl,
         selectedValue: string,
     ): HTMLElement {
+        const checked = selectedValue === 'true'
+        const svgHost = html`<span className="ai-media-config-toggle-svg-host" aria-hidden="true"></span>` as HTMLElement
+        const svgEl = select(svgHost)
+            .append('svg')
+            .attr('class', 'ai-media-config-toggle-svg')
+            .attr('width', MEDIA_CONFIG_TOGGLE_DIMENSIONS.svgWidth)
+            .attr('height', MEDIA_CONFIG_TOGGLE_DIMENSIONS.svgHeight)
+            .attr('viewBox', `0 0 ${MEDIA_CONFIG_TOGGLE_DIMENSIONS.svgWidth} ${MEDIA_CONFIG_TOGGLE_DIMENSIONS.svgHeight}`)
+            .node() as SVGSVGElement
         const button = html`
             <button
                 type="button"
                 className="ai-media-config-toggle"
-                role="switch"
-                aria-checked=${String(selectedValue === 'true')}
-                data-checked=${String(selectedValue === 'true')}
+                aria-label=${control.label}
+                aria-pressed=${String(checked)}
             >
-                <span className="ai-media-config-toggle-track"><span className="ai-media-config-toggle-thumb"></span></span>
-                <span className="ai-media-config-toggle-label">${selectedValue === 'true' ? 'On' : 'Off'}</span>
+                <span className="ai-media-config-toggle-text">${control.label}</span>
+                ${svgHost}
             </button>
         ` as HTMLButtonElement
-        const label = button.querySelector('.ai-media-config-toggle-label') as HTMLElement
+
+        const toggleSwitch = createToggleSwitch(select(svgEl), {
+            id: `${group.groupId}:${control.key}`,
+            x: 2,
+            y: 2,
+            width: MEDIA_CONFIG_TOGGLE_DIMENSIONS.width,
+            height: MEDIA_CONFIG_TOGGLE_DIMENSIONS.height,
+            checked,
+            onChange: (nextChecked) => {
+                button.setAttribute('aria-pressed', String(nextChecked))
+                this.setGroupControlValue(group, control, String(nextChecked))
+            },
+        })
         const syncValue = (value: string): void => {
-            const checked = value === 'true'
-            button.dataset.checked = String(checked)
-            button.ariaChecked = String(checked)
-            label.textContent = checked ? 'On' : 'Off'
+            const nextChecked = value === 'true'
+            button.setAttribute('aria-pressed', String(nextChecked))
+            if (toggleSwitch.getChecked() !== nextChecked) {
+                toggleSwitch.setChecked(nextChecked)
+            }
         }
-        button.addEventListener('click', () => {
-            this.setGroupControlValue(group, control, button.dataset.checked === 'true' ? 'false' : 'true')
+        button.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            const nextChecked = !toggleSwitch.getChecked()
+            toggleSwitch.setChecked(nextChecked)
+            button.setAttribute('aria-pressed', String(nextChecked))
+            this.setGroupControlValue(group, control, String(nextChecked))
         })
         this.mountedControls.push({
             groupId: group.groupId,
             control,
             setValue: syncValue,
-            destroy: () => undefined,
+            destroy: () => toggleSwitch.destroy(),
         })
         return button
     }
@@ -1068,6 +1109,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         pendingControls: PendingMediaConfigSvgControl[],
     ): HTMLElement {
         const selectedValue = normalizeControlValue(control, selectionGroup?.values?.[control.key])
+        const rendersInlineToggle = !control.readOnly && control.kind === 'toggle'
         const field = control.readOnly || control.kind === 'fixed'
             ? html`<div className="ai-media-config-fixed-value">${control.options.find(option => option.value === selectedValue)?.label ?? selectedValue}</div>` as HTMLElement
             : usesDimensionsDropdown(control)
@@ -1082,7 +1124,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
 
         return html`
             <div className="ai-media-config-control" data-control-kind=${control.kind}>
-                <span className="ai-prompt-model-menu-control-label">${control.label}</span>
+                ${rendersInlineToggle ? undefined : html`<span className="ai-prompt-model-menu-control-label">${control.label}</span>`}
                 ${field}
                 ${control.description ? html`<span className="ai-media-config-description">${control.description}</span>` : undefined}
             </div>
@@ -1118,11 +1160,10 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     }
 
     update(): void {
-        const groups = this.controls.getUseMultipleModels()
-            ? this.getMatrixGroups()
-            : []
+        const useMultipleModels = this.controls.getUseMultipleModels()
+        const groups = this.getMatrixGroups()
         const selectionGroups = this.normalizeSelectionGroups(groups)
-        const structureSignature = JSON.stringify(groups)
+        const structureSignature = JSON.stringify({ groups, useMultipleModels })
         const connected = this.dom.isConnected
         if (structureSignature === this.renderedStructureSignature && (this.builtConnected || !connected)) {
             this.syncMountedControls(selectionGroups)
@@ -1215,8 +1256,9 @@ export function createGenericVideoModelDropdown(
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        mountToBody: false,
-        disableAutoPositioning: true,
+        mountToBody: true,
+        disableAutoPositioning: false,
+        popoverClassName: 'ai-prompt-model-selector-popover',
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setVideoModel(selected.aiModel)

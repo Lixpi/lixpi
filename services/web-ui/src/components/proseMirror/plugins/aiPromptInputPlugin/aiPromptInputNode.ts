@@ -147,6 +147,8 @@ const modelMenuToggleDimensions = {
     svgWidth: 34,
     svgHeight: 22,
 }
+const modelMenuTargetGap = 8
+const modelMenuViewportInset = 8
 
 function uniqueNonEmptyValues(values: string[]): string[] {
     return Array.from(new Set(values.filter((value) => value.trim().length > 0)))
@@ -795,8 +797,21 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         }
         const getModelMenuPosition = () => {
             if (!modelMenuTrigger) return null
+            const targetRect = modelMenuTrigger.getBoundingClientRect()
+            if (modelMenu) {
+                const viewportTop = window.visualViewport?.offsetTop ?? 0
+                const scale = modelMenu.getScale()
+                const availableHeight = Math.max(
+                    0,
+                    (targetRect.top - viewportTop - modelMenuViewportInset) / scale - modelMenuTargetGap,
+                )
+                modelMenu.element.style.setProperty(
+                    '--ai-prompt-model-menu-info-bubble-max-height',
+                    `${availableHeight}px`,
+                )
+            }
             return {
-                targetRect: modelMenuTrigger.getBoundingClientRect(),
+                targetRect,
                 placement: 'above' as const,
                 horizontalAlignment: 'end' as const,
                 clampToParent: false,
@@ -954,7 +969,8 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             if (modelMenu?.element.contains(target)) return
             if (target instanceof Element
                 && target.closest(
-                    '.sliding-dropdown-scroll-portal, '
+                    '.ai-prompt-model-selector-popover, '
+                    + '.sliding-dropdown-scroll-portal, '
                     + '[data-sliding-dropdown-open="true"], '
                     + '.sliding-dropdown-group',
                 )) return

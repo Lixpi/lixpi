@@ -40,6 +40,7 @@ export type PureDropdownConfig<Option extends DropdownOption = DropdownOption> =
     availableTags?: string[]
     mountToBody?: boolean
     disableAutoPositioning?: boolean
+    popoverClassName?: string
     disableTriggerHover?: boolean
     errorState?: DropdownErrorState
     onSelect: (option: Option) => void
@@ -75,6 +76,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         enableTagFilter = false,
         mountToBody = false,
         disableAutoPositioning = false,
+        popoverClassName = '',
         disableTriggerHover = false,
         errorState,
         onSelect
@@ -284,7 +286,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         headerContent,
         bodyContent,
         visible: false,
-        className: 'dropdown-menu-popover',
+        className: `dropdown-menu-popover${popoverClassName ? ` ${popoverClassName}` : ''}`,
         disableAutoPositioning,
         onOpen: () => {
             dom.classList.add('dropdown-open')

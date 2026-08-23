@@ -705,7 +705,7 @@ export const settings: Settings = {
                 // Border color around the selected row while collapsed. This is ignored visually when `closedBorderWidth` is zero.
                 closedBorderColor: 'rgba(105, 115, 133, 0.1)',
                 // Border width around the selected row while collapsed. Zero removes the closed-state border.
-                closedBorderWidth: 1,
+                closedBorderWidth: 0,
                 // Border color around the selected row while the option tape is expanded.
                 openBorderColor: 'rgba(105, 115, 133, 0.07)',
                 // Border width around the selected row while the option tape is expanded.
@@ -746,14 +746,14 @@ export const settings: Settings = {
     aiModelControls: {
         styles: {
             dimensionsDropdown: {
-                // Width of the closed oval aspect-ratio and resolution control in SVG user units.
+                // Initial layout width used before the dropdown can measure its option content.
                 width: 68,
                 // Height of the closed oval aspect-ratio and resolution control in SVG user units.
                 height: 38,
                 // Font size of the aspect-ratio or resolution value in SVG user units.
                 valueFontSize: 12,
-                // Minimum gap between the indicator border and its content, matching the model tag pill's horizontal padding.
-                horizontalPadding: 4,
+                // Minimum visible gap between the indicator border and option content.
+                horizontalPadding: 5,
                 // Width of the first layout column. Every glyph is centered in this column so values share one left edge.
                 glyphColumnWidth: 20,
                 // Gap between the glyph and value, matching the model tag pill's icon gap.

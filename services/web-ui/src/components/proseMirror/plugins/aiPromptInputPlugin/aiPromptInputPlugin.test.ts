@@ -472,6 +472,32 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expectSourceNotToContain(nodeSource, 'settings.aiPromptInput.modelMenu.infoBubbleZIndex')
     })
 
+    it('caps the model settings surface to the viewport space above its trigger', () => {
+        const { nv } = createNodeView()
+        document.body.appendChild(nv.dom)
+
+        const trigger = nv.dom.querySelector('.ai-prompt-model-menu-trigger') as HTMLButtonElement
+        vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+            x: 800,
+            y: 600,
+            top: 600,
+            right: 960,
+            bottom: 622,
+            left: 800,
+            width: 160,
+            height: 22,
+            toJSON: () => ({}),
+        } as DOMRect)
+
+        trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble') as HTMLElement
+        expect(modelMenu.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-max-height')).toBe('584px')
+
+        nv.destroy!()
+        nv.dom.remove()
+    })
+
     describe('visual hierarchy — wrapper contains content then controls', () => {
         it('wrapper has exactly 4 children: media mode switch, contentDOM, controlsEl, and the model menu bubble', () => {
             const { nv } = createNodeView()
@@ -544,21 +570,27 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             ])
         })
 
-        it('keeps the model settings menu open for a portaled sliding dropdown interaction', () => {
+        it('keeps the model settings menu open for portaled model selectors and sliding dropdowns', () => {
             const { nv } = createNodeView()
             const trigger = nv.dom.querySelector('.ai-prompt-model-menu-trigger')!
             const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble')!
+            const modelSelectorPortal = document.createElement('div')
             const dropdownScrollPortal = document.createElement('div')
             const dropdownPortal = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
             const dropdownGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+            modelSelectorPortal.classList.add('ai-prompt-model-selector-popover')
             dropdownScrollPortal.classList.add('sliding-dropdown-scroll-portal')
             dropdownPortal.setAttribute('data-sliding-dropdown-open', 'true')
             dropdownGroup.classList.add('sliding-dropdown-group')
             dropdownPortal.appendChild(dropdownGroup)
             dropdownScrollPortal.appendChild(dropdownPortal)
+            document.body.appendChild(modelSelectorPortal)
             document.body.appendChild(dropdownScrollPortal)
 
             trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            modelSelectorPortal.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
             expect(modelMenu.classList.contains('is-visible')).toBe(true)
 
             dropdownGroup.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
@@ -570,6 +602,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
             expect(modelMenu.classList.contains('is-visible')).toBe(false)
 
+            modelSelectorPortal.remove()
             dropdownScrollPortal.remove()
             nv.destroy!()
         })
