@@ -79,6 +79,8 @@ describe('settings - grouped configuration', () => {
 		const topLevelSettingsSections = [
 			'modelSelectorDropdown',
 			'dropdown',
+			'slidingDropdown',
+			'aiModelControls',
 			'gradient',
 			'helpTooltip',
 			'canvasBubbleMenu',
@@ -119,6 +121,9 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
 		expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
 		expectFiniteNumber(settings.helpTooltip.interactiveHideDelayMs, 'settings.helpTooltip.interactiveHideDelayMs')
+		expectFiniteNumber(settings.aiModelControls.styles.dimensionsGlyph.targetArea, 'settings.aiModelControls.styles.dimensionsGlyph.targetArea')
+		expectFiniteNumber(settings.aiModelControls.styles.dimensionsGlyph.maxDimension, 'settings.aiModelControls.styles.dimensionsGlyph.maxDimension')
+		expectFiniteNumber(settings.aiModelControls.styles.dimensionsGlyph.adaptiveSize, 'settings.aiModelControls.styles.dimensionsGlyph.adaptiveSize')
 		expectFiniteNumber(settings.connector.proximityConnectThreshold, 'settings.connector.proximityConnectThreshold')
 		expectFiniteNumber(settings.connector.menuConnectionSnapRadius, 'settings.connector.menuConnectionSnapRadius')
 		expectFiniteNumber(settings.connector.scaling.strokeWidth, 'settings.connector.scaling.strokeWidth')
@@ -229,6 +234,8 @@ describe('settings - grouped configuration', () => {
 
 		const styleGroups = {
 			'settings.dropdown.styles': settings.dropdown.styles,
+			'settings.slidingDropdown.styles': settings.slidingDropdown.styles,
+			'settings.aiModelControls.styles': settings.aiModelControls.styles,
 			'settings.aiChatThread.styles': settings.aiChatThread.styles,
 			'settings.aiPromptInput.modelMenu.styles': settings.aiPromptInput.modelMenu.styles,
 			'settings.aiChatThread.panelSwitch.styles': settings.aiChatThread.panelSwitch.styles,

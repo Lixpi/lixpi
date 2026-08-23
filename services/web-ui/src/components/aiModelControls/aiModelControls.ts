@@ -124,10 +124,6 @@ const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
 const MEDIA_CONFIG_SLIDER_HEIGHT = 66
 const MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE = 66
 const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
-const MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH = 28
-const MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT = 15
-const MEDIA_DIMENSIONS_GLYPH_ADAPTIVE_SIZE = 15
-const MEDIA_DIMENSIONS_GLYPH_STROKE_WIDTH = 1.5
 
 function isAspectRatioValue(value: string): boolean {
     return /^\d+:\d+$/.test(value)
@@ -148,7 +144,7 @@ function usesDimensionsDropdown(control: MediaGenerationConfigControl): boolean 
 function dimensionDropdownOptions(control: MediaGenerationConfigControl): MediaGenerationConfigControl['options'] {
     return control.options.map(option => ({
         ...option,
-        label: option.value === 'auto' || option.value === 'adaptive' ? option.label : option.value,
+        label: option.label || option.value,
     }))
 }
 
@@ -165,25 +161,26 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
         state: SlidingDropdownOptionRenderState<string>,
         private readonly getFallbackProportionValue: () => string,
     ) {
+        const glyphStyles = settings.aiModelControls.styles.dimensionsGlyph
         this.group = parent.append('g')
             .attr('class', 'ai-media-config-dimensions-dropdown-option')
             .attr('pointer-events', 'none')
         this.glyph = this.group.append('rect')
             .attr('class', 'ai-media-config-dimensions-dropdown-glyph')
             .attr('fill', 'none')
-            .attr('rx', 2)
-            .attr('ry', 2)
-            .attr('stroke-width', MEDIA_DIMENSIONS_GLYPH_STROKE_WIDTH)
+            .attr('rx', glyphStyles.cornerRadius)
+            .attr('ry', glyphStyles.cornerRadius)
+            .attr('stroke-width', glyphStyles.strokeWidth)
         this.adaptiveLabel = this.group.append('text')
             .attr('class', 'ai-media-config-dimensions-dropdown-adaptive-label')
-            .attr('font-size', 8)
-            .attr('font-weight', 700)
+            .attr('font-size', glyphStyles.adaptiveLabelFontSize)
+            .attr('font-weight', glyphStyles.adaptiveLabelFontWeight)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
             .text('A')
         this.label = this.group.append('text')
             .attr('class', 'ai-media-config-dimensions-dropdown-label')
-            .attr('font-size', 12)
+            .attr('font-size', settings.slidingDropdown.styles.option.fontSize)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
         this.render(state)
@@ -198,11 +195,12 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
     }
 
     private glyphSize(value: string): { width: number; height: number; adaptive: boolean } {
+        const glyphStyles = settings.aiModelControls.styles.dimensionsGlyph
         const adaptive = value === 'adaptive' || value === 'auto'
         if (adaptive) {
             return {
-                width: MEDIA_DIMENSIONS_GLYPH_ADAPTIVE_SIZE,
-                height: MEDIA_DIMENSIONS_GLYPH_ADAPTIVE_SIZE,
+                width: glyphStyles.adaptiveSize,
+                height: glyphStyles.adaptiveSize,
                 adaptive,
             }
         }
@@ -210,16 +208,13 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
         const ratio = this.proportionFor(value)
             ?? this.proportionFor(this.getFallbackProportionValue())
             ?? 1
-        if (ratio >= 1) {
-            return {
-                width: MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH,
-                height: MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH / ratio,
-                adaptive,
-            }
-        }
+        const width = Math.sqrt(glyphStyles.targetArea * ratio)
+        const height = width / ratio
+        const scale = Math.min(1, glyphStyles.maxDimension / Math.max(width, height))
+
         return {
-            width: MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT * ratio,
-            height: MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT,
+            width: width * scale,
+            height: height * scale,
             adaptive,
         }
     }
@@ -245,9 +240,10 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
     }
 
     render(state: SlidingDropdownOptionRenderState<string>): void {
+        const optionStyles = settings.slidingDropdown.styles.option
         const color = state.disabled
-            ? 'rgba(49, 59, 78, 0.3)'
-            : state.selected || state.hovered ? '#1a2744' : 'rgba(49, 59, 78, 0.68)'
+            ? optionStyles.disabledTextColor
+            : state.selected || state.hovered ? optionStyles.activeTextColor : optionStyles.textColor
         const size = this.glyphSize(state.option.value)
         this.value = state.option.value
         this.glyph
@@ -258,7 +254,7 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
             .attr('fill', color)
         this.label
             .attr('fill', color)
-            .attr('font-weight', state.selected ? 700 : 400)
+            .attr('font-weight', state.selected ? optionStyles.selectedFontWeight : optionStyles.fontWeight)
             .text(state.option.label)
         this.resize(state.x, state.y, state.width, state.height)
     }

@@ -237,7 +237,7 @@ Settings hooks:
 ## Related Modules
 
 - `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, and tracks thread receiving state for transcript projection.
-- `$src/components/aiModelControls/`: reusable model, media, multi-select, and submit controls shared by prompt surfaces.
+- `$src/components/aiModelControls/`: reusable model, media, multi-select, and submit controls shared by prompt surfaces. Dimension glyphs use `settings.aiModelControls.styles.dimensionsGlyph`; fixed ratios receive equal visual area so portrait and landscape options have matching weight.
 - `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
 - `$src/infographics/workspace/WorkspaceCanvas.ts`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
 - `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

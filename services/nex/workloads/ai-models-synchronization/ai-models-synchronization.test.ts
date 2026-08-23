@@ -4,7 +4,18 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { PROVIDER_NAMES } from '@lixpi/constants'
 
-import { AiModelsSync } from './ai-models-synchronization.ts'
+vi.mock('@lixpi/debug-tools', () => ({
+    log: vi.fn(),
+    info: vi.fn(),
+    infoStr: vi.fn(),
+    warn: vi.fn(),
+    err: vi.fn(),
+}))
+
+import {
+    AiModelsSync,
+    mapResolutionOptionsToAspectRatioLabels,
+} from './ai-models-synchronization.ts'
 
 // =============================================================================
 // IMAGE GENERATION OPTION METADATA — resolution vs aspect ratio
@@ -24,12 +35,52 @@ describe('AiModelsSync — image generation option metadata', () => {
         })
     })
 
-    it('marks OpenAI image options as resolutions and labels them with pixel values', () => {
+    it('stores OpenAI provider resolutions as values and reduced aspect ratios as display labels', () => {
         const model = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 1)
 
         expect(model.imageSizeMode).toBe('resolution')
         expect(model.imageSizes?.map((o: any) => o.value)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'auto'])
-        expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'Auto'])
+        expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1:1', '3:2', '2:3', 'Auto'])
+    })
+
+    it('maps only pixel-dimension labels and leaves real resolution tiers unchanged', () => {
+        const options = mapResolutionOptionsToAspectRatioLabels([
+            { value: '1920x1080', label: '1920x1080' },
+            { value: '0x1080', label: 'Invalid dimensions' },
+            { value: '720p', label: '720p' },
+            { value: '4k', label: '4K' },
+            { value: 'adaptive', label: 'Auto' },
+        ])
+
+        expect(options).toEqual([
+            { value: '1920x1080', label: '16:9' },
+            { value: '0x1080', label: 'Invalid dimensions' },
+            { value: '720p', label: '720p' },
+            { value: '4k', label: '4K' },
+            { value: 'adaptive', label: 'Auto' },
+        ])
+    })
+
+    it('persists the provider value and presentation label together', async () => {
+        const putItem = vi.fn(async () => undefined)
+        const persistenceSync: any = new AiModelsSync({
+            dynamoDBService: { putItem } as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+        const model = persistenceSync.mapOpenAIModelToAiModel({ id: 'gpt-image-1.5' }, 1)
+
+        await persistenceSync.updateModelsSequentially([model], 'ai-models-test', 'test')
+
+        expect(putItem).toHaveBeenCalledWith(expect.objectContaining({
+            tableName: 'ai-models-test',
+            item: expect.objectContaining({
+                imageSizes: expect.arrayContaining([
+                    { value: '1536x1024', label: '3:2' },
+                ]),
+            }),
+        }))
     })
 
     it('marks Gemini image options as aspect ratios because Google receives imageConfig.aspectRatio', () => {
@@ -306,6 +357,7 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
 
         expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'])
         expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p', '1080p', '4k'])
+        expect(model.videoResolutions?.map((o: any) => o.label)).toEqual(['480p', '720p', '1080p', '4K'])
         expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
         expect(model.videoMaxReferenceImages).toBe(9)
 

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { select } from 'd3-selection'
+import { settings } from '$src/settings.ts'
 
 const mockState = vi.hoisted(() => ({
     dropdownConfigs: [] as any[],
@@ -275,8 +277,8 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(imageSizeDropdown?.width).toBe(66)
         expect(imageSizeDropdown?.height).toBe(66)
         expect(imageSizeDropdown?.options).toEqual([
-            { value: '1:1', label: '1:1' },
-            { value: '16:9', label: '16:9' },
+            { value: '1:1', label: 'Square' },
+            { value: '16:9', label: 'Wide' },
         ])
         expect(imageSizeDropdown?.renderOption).toEqual(expect.any(Function))
 
@@ -286,6 +288,52 @@ describe('createMediaGenerationConfigMatrixView', () => {
             groupId: 'image:google/openai',
             modelIds: ['google:imagen-4', 'openai:gpt-image-1'],
             values: { imageSize: '16:9' },
+        }])
+
+        view.destroy()
+    })
+
+    it('renders persisted aspect-ratio labels without replacing provider resolution values', () => {
+        const imageGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
+            group.groupId === 'image:google/openai'
+        ))
+        imageGroup.controls = [{
+            key: 'imageSize',
+            label: 'Resolution',
+            kind: 'segmented',
+            defaultValue: '1024x1024',
+            options: [
+                { value: '1024x1024', label: '1:1' },
+                { value: '1536x1024', label: '3:2' },
+            ],
+        }]
+        const controls = createControls({
+            configGroups: [{
+                groupId: 'image:google/openai',
+                modelIds: ['google:imagen-4', 'openai:gpt-image-1'],
+                values: { imageSize: '1536x1024' },
+            }],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const imageSizeDropdown = mockState.slidingDropdownConfigs.find((config) => (
+            config.id.endsWith(':imageSize')
+        ))
+        expect(imageSizeDropdown.options).toEqual([
+            { value: '1024x1024', label: '1:1' },
+            { value: '1536x1024', label: '3:2' },
+        ])
+        expect(imageSizeDropdown.selectedValue).toBe('1536x1024')
+
+        imageSizeDropdown.onChange('1024x1024', 'image:google/openai:imageSize')
+
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
+            groupId: 'image:google/openai',
+            modelIds: ['google:imagen-4', 'openai:gpt-image-1'],
+            values: { imageSize: '1024x1024' },
         }])
 
         view.destroy()
@@ -308,6 +356,108 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(new Set(videoDropdowns.map((config) => config.id)).size).toBe(2)
         expect(videoDropdowns.every((config) => config.width === 66)).toBe(true)
         expect(videoDropdowns.every((config) => config.height === 66)).toBe(true)
+
+        view.destroy()
+    })
+
+    it('uses sliding-dropdown option styles for dimension glyphs and labels', () => {
+        const controls = createControls()
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const dropdownConfig = mockState.slidingDropdownConfigs.find((config) => (
+            config.id.endsWith(':imageSize')
+        ))
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        const parent = select(svg).append('g')
+        const state = {
+            id: 'image:google/openai:imageSize:1:1',
+            option: dropdownConfig.options[0],
+            index: 0,
+            x: 2,
+            y: 2,
+            width: 62,
+            height: 62,
+            selected: true,
+            hovered: false,
+            disabled: false,
+            closable: false,
+            onClose: vi.fn(),
+        }
+        const renderer = dropdownConfig.renderOption(parent, state)
+        const glyph = svg.querySelector('.ai-media-config-dimensions-dropdown-glyph')!
+        const label = svg.querySelector('.ai-media-config-dimensions-dropdown-label')!
+        const optionStyles = settings.slidingDropdown.styles.option
+
+        expect(glyph.getAttribute('stroke')).toBe(optionStyles.activeTextColor)
+        expect(label.getAttribute('fill')).toBe(optionStyles.activeTextColor)
+        expect(label.getAttribute('font-size')).toBe(String(optionStyles.fontSize))
+        expect(label.getAttribute('font-weight')).toBe(String(optionStyles.selectedFontWeight))
+
+        renderer.render({ ...state, selected: false, disabled: true })
+
+        expect(glyph.getAttribute('stroke')).toBe(optionStyles.disabledTextColor)
+        expect(label.getAttribute('fill')).toBe(optionStyles.disabledTextColor)
+        expect(label.getAttribute('font-weight')).toBe(String(optionStyles.fontWeight))
+
+        view.destroy()
+    })
+
+    it('gives horizontal and vertical aspect-ratio glyphs equal visual weight', () => {
+        const controls = createControls()
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const dropdownConfig = mockState.slidingDropdownConfigs.find((config) => (
+            config.id.endsWith(':imageSize')
+        ))
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        const parent = select(svg).append('g')
+        const state = {
+            id: 'image:google/openai:imageSize:21:9',
+            option: { value: '21:9', label: '21:9' },
+            index: 0,
+            x: 2,
+            y: 2,
+            width: 62,
+            height: 62,
+            selected: false,
+            hovered: false,
+            disabled: false,
+            closable: false,
+            onClose: vi.fn(),
+        }
+        const renderer = dropdownConfig.renderOption(parent, state)
+        const glyph = svg.querySelector('.ai-media-config-dimensions-dropdown-glyph')!
+        const horizontalWidth = Number(glyph.getAttribute('width'))
+        const horizontalHeight = Number(glyph.getAttribute('height'))
+
+        renderer.render({
+            ...state,
+            id: 'image:google/openai:imageSize:9:21',
+            option: { value: '9:21', label: '9:21' },
+        })
+        const verticalWidth = Number(glyph.getAttribute('width'))
+        const verticalHeight = Number(glyph.getAttribute('height'))
+
+        expect(verticalWidth).toBeCloseTo(horizontalHeight)
+        expect(verticalHeight).toBeCloseTo(horizontalWidth)
+
+        renderer.render({
+            ...state,
+            id: 'image:google/openai:imageSize:1:1',
+            option: { value: '1:1', label: '1:1' },
+        })
+        const squareWidth = Number(glyph.getAttribute('width'))
+        const squareHeight = Number(glyph.getAttribute('height'))
+
+        expect(squareWidth).toBeCloseTo(squareHeight)
+        expect(squareWidth).toBeLessThan(horizontalWidth)
+        expect(verticalHeight).toBeGreaterThan(squareHeight)
 
         view.destroy()
     })

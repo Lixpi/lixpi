@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { select, selection } from 'd3-selection'
 import { easePupOut } from '../../animation/easings.ts'
+import { uiKitSettings } from '../../runtime-settings.ts'
 import {
     createSlidingDropdown,
     type SlidingDropdownTransitionConfig,
@@ -25,15 +26,20 @@ const IMMEDIATE_TRANSITION: Partial<SlidingDropdownTransitionConfig> = {
 }
 const transitionDurations: number[] = []
 const transitionEasings: unknown[] = []
+const shadowTransitionDurations: number[] = []
+const shadowTransitionEasings: unknown[] = []
 
 const makeImmediateTransition = (target: any): any => {
     const chain: any = {}
+    const isOpenShadowTransition = target.node?.()?.classList?.contains('sliding-dropdown-open-shadow') ?? false
     chain.duration = (duration: number) => {
         transitionDurations.push(duration)
+        if (isOpenShadowTransition) shadowTransitionDurations.push(duration)
         return chain
     }
     chain.ease = (easing: unknown) => {
         transitionEasings.push(easing)
+        if (isOpenShadowTransition) shadowTransitionEasings.push(easing)
         return chain
     }
     chain.attr = (name: string, value: unknown) => {
@@ -137,6 +143,8 @@ describe('createSlidingDropdown — pointer selection', () => {
         document.body.innerHTML = ''
         transitionDurations.length = 0
         transitionEasings.length = 0
+        shadowTransitionDurations.length = 0
+        shadowTransitionEasings.length = 0
         vi.useFakeTimers()
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1200 })
     })
@@ -172,6 +180,8 @@ describe('createSlidingDropdown — portaled viewport geometry', () => {
         document.body.innerHTML = ''
         transitionDurations.length = 0
         transitionEasings.length = 0
+        shadowTransitionDurations.length = 0
+        shadowTransitionEasings.length = 0
         vi.useFakeTimers()
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1200 })
         Object.defineProperty(window, 'visualViewport', {
@@ -242,6 +252,71 @@ describe('createSlidingDropdown — portaled viewport geometry', () => {
             expect(option.getAttribute('rx')).toBe(String((HEIGHT - 4) / 2))
         }
     })
+
+    it('uses configured surface, indicator, border, and option styles for each state', () => {
+        const { svg, slidingDropdown } = mount('landscape')
+        const styles = uiKitSettings.slidingDropdown.styles
+        const track = svg.querySelector('.sliding-dropdown-track')!
+        const indicator = svg.querySelector('.sliding-dropdown-indicator')!
+        const indicatorBorder = svg.querySelector('.sliding-dropdown-indicator-inset-shadow')!
+        const selectedLabel = svg.querySelector('.sliding-dropdown-option-group[data-value="landscape"] text')!
+
+        expect(track.getAttribute('fill')).toBe(styles.surface.closedBackgroundColor)
+        expect(indicator.getAttribute('fill')).toBe(styles.indicator.backgroundColor)
+        expect(indicatorBorder.getAttribute('stroke')).toBe(styles.indicator.closedBorderColor)
+        expect(indicatorBorder.getAttribute('stroke-width')).toBe(String(styles.indicator.closedBorderWidth))
+        expect(selectedLabel.getAttribute('fill')).toBe(styles.option.activeTextColor)
+        expect(selectedLabel.getAttribute('font-size')).toBe(String(styles.option.fontSize))
+        expect(selectedLabel.getAttribute('font-weight')).toBe(String(styles.option.selectedFontWeight))
+
+        slidingDropdown.setOpen(true)
+        vi.runAllTimers()
+
+        expect(track.getAttribute('fill')).toBe(styles.surface.openBackgroundColor)
+        expect(indicatorBorder.getAttribute('stroke')).toBe(styles.indicator.openBorderColor)
+        expect(indicatorBorder.getAttribute('stroke-width')).toBe(String(styles.indicator.openBorderWidth))
+
+        slidingDropdown.setOpen(false)
+
+        expect(track.getAttribute('fill')).toBe(styles.surface.closedBackgroundColor)
+        expect(indicatorBorder.getAttribute('stroke')).toBe(styles.indicator.closedBorderColor)
+        expect(indicatorBorder.getAttribute('stroke-width')).toBe(String(styles.indicator.closedBorderWidth))
+    })
+
+    it('starts its separate shadow with opening and removes it on the first closing frame', () => {
+        const { svg, slidingDropdown } = mount('landscape', vi.fn(), null)
+        const openShadow = svg.querySelector('.sliding-dropdown-open-shadow') as SVGRectElement
+        const shadowFilter = svg.querySelector('.sliding-dropdown-open-shadow-filter') as SVGFilterElement
+        const shadowStyle = uiKitSettings.slidingDropdown.styles.openShadow
+
+        expect(openShadow.getAttribute('display')).toBe('none')
+        expect(openShadow.getAttribute('filter')).toBe(`url(#${shadowFilter.id})`)
+        expect(shadowFilter.querySelector('feMorphology')?.getAttribute('radius')).toBe(String(shadowStyle.spreadRadius))
+        expect(shadowFilter.querySelector('feGaussianBlur')?.getAttribute('stdDeviation')).toBe(String(shadowStyle.blurRadius / 2))
+        expect(shadowFilter.querySelector('feOffset')?.getAttribute('dx')).toBe(String(shadowStyle.offsetX))
+        expect(shadowFilter.querySelector('feOffset')?.getAttribute('dy')).toBe(String(shadowStyle.offsetY))
+        expect(shadowFilter.querySelector('feFlood')?.getAttribute('flood-color')).toBe(shadowStyle.color)
+        expect(shadowFilter.querySelector('feFlood')?.getAttribute('flood-opacity')).toBe(String(shadowStyle.opacity))
+
+        slidingDropdown.setOpen(true)
+
+        expect(openShadow.getAttribute('display')).toBeNull()
+        expect(shadowTransitionDurations).toEqual([200])
+        expect(shadowTransitionEasings).toEqual([easePupOut])
+
+        vi.advanceTimersByTime(200)
+
+        slidingDropdown.setOpen(false)
+        expect(openShadow.getAttribute('display')).toBe('none')
+        expect(shadowTransitionDurations).toEqual([200])
+        expect(shadowTransitionEasings).toEqual([easePupOut])
+
+        vi.advanceTimersByTime(139)
+        expect(openShadow.getAttribute('display')).toBe('none')
+
+        vi.advanceTimersByTime(1)
+        expect(openShadow.getAttribute('display')).toBe('none')
+    })
 })
 
 // =============================================================================
@@ -253,6 +328,8 @@ describe('createSlidingDropdown — motion and snap timing', () => {
         document.body.innerHTML = ''
         transitionDurations.length = 0
         transitionEasings.length = 0
+        shadowTransitionDurations.length = 0
+        shadowTransitionEasings.length = 0
         vi.useFakeTimers()
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1200 })
     })
@@ -288,7 +365,7 @@ describe('createSlidingDropdown — motion and snap timing', () => {
         expect(slidingDropdown.getValue()).toBe('landscape')
         expect(onChange).not.toHaveBeenCalled()
 
-        vi.advanceTimersByTime(203)
+        vi.advanceTimersByTime(311)
         expect(slidingDropdown.getValue()).toBe('landscape')
         expect(onChange).not.toHaveBeenCalled()
 
@@ -296,7 +373,7 @@ describe('createSlidingDropdown — motion and snap timing', () => {
 
         expect(transitionEasings.length).toBeGreaterThan(0)
         expect(transitionEasings.every(easing => easing === easePupOut)).toBe(true)
-        expect(Math.max(...transitionDurations)).toBe(204)
+        expect(Math.max(...transitionDurations)).toBe(312)
         expect(svg.style.height).toBe(`${HEIGHT}px`)
         expect(svg.getAttribute('viewBox')).toBe(`0 0 ${WIDTH} ${HEIGHT}`)
         expect(indicator.getAttribute('y')).toBe('2')

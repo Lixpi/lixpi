@@ -9,6 +9,7 @@ import {
     type WorkspacePersistenceSettings,
 } from '@lixpi/constants'
 import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine'
+import type { UiKitSlidingDropdownStyles } from '@lixpi/ui-kit'
 
 export const colorPalette = {
     nightBlue: '#42494f',
@@ -54,6 +55,24 @@ export type DropdownSettings = {
     }
     styles: {
         popoverBoxShadow: string
+    }
+}
+
+export type SlidingDropdownSettings = {
+    styles: UiKitSlidingDropdownStyles
+}
+
+export type AiModelControlsSettings = {
+    styles: {
+        dimensionsGlyph: {
+            targetArea: number
+            maxDimension: number
+            adaptiveSize: number
+            cornerRadius: number
+            strokeWidth: number
+            adaptiveLabelFontSize: number
+            adaptiveLabelFontWeight: number
+        }
     }
 }
 
@@ -581,6 +600,10 @@ export type Settings = {
 
     dropdown: DropdownSettings
 
+    slidingDropdown: SlidingDropdownSettings
+
+    aiModelControls: AiModelControlsSettings
+
     slidingSwitch: SlidingSwitchSettings
 
     gradient: GradientSettings
@@ -646,6 +669,88 @@ export const settings: Settings = {
         styles: {
             // Shadow for dropdown popover menus. Increasing it raises menus visually from their backdrop.
             popoverBoxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
+        },
+    },
+
+    // Expanded sliding-dropdown surface settings.
+    slidingDropdown: {
+        styles: {
+            surface: {
+                // Background behind the selected row while collapsed. Keep this transparent to remove the outer ring created by the indicator inset.
+                closedBackgroundColor: 'transparent',
+                // Background of the full option tape while expanded.
+                openBackgroundColor: 'rgb(241, 242, 244)',
+            },
+            indicator: {
+                // Fill of the selected row in both collapsed and expanded states.
+                backgroundColor: 'rgba(255, 255, 255, 0.72)',
+                // SVG drop-shadow parameters for the selected row. Use `none` to disable its independent shadow.
+                boxShadow: 'none',
+                insetShadow: {
+                    // Highlight color along the selected row's upper edge.
+                    topColor: 'rgba(255, 255, 255, 0.86)',
+                    // Shadow color along the selected row's lower edge. Use a transparent color to disable the lower inset shadow.
+                    bottomColor: 'rgba(0, 0, 0, 0)',
+                },
+                // Border color around the selected row while collapsed. This is ignored visually when `closedBorderWidth` is zero.
+                closedBorderColor: 'rgba(105, 115, 133, 0.1)',
+                // Border width around the selected row while collapsed. Zero removes the closed-state border.
+                closedBorderWidth: 2,
+                // Border color around the selected row while the option tape is expanded.
+                openBorderColor: 'rgba(105, 115, 133, 0.07)',
+                // Border width around the selected row while the option tape is expanded.
+                openBorderWidth: 1.5,
+            },
+            option: {
+                // Text and glyph color for unselected options.
+                textColor: 'rgba(49, 59, 78, 0.68)',
+                // Text and glyph color for the selected or hovered option.
+                activeTextColor: '#1a2744',
+                // Text and glyph color for disabled options.
+                disabledTextColor: 'rgba(49, 59, 78, 0.32)',
+                // Option-label font size in SVG user units.
+                fontSize: 12,
+                // Font weight for unselected option labels.
+                fontWeight: 400,
+                // Font weight for the selected option label.
+                selectedFontWeight: 400,
+            },
+            openShadow: {
+                // Color of the separate shadow behind the expanded tape.
+                color: '#000000',
+                // Shadow opacity from zero (invisible) to one (fully opaque).
+                opacity: 0.09,
+                // Horizontal shadow offset in SVG user units. Positive values move it right.
+                offsetX: 0,
+                // Vertical shadow offset in SVG user units. Positive values move it down.
+                offsetY: 2,
+                // CSS-style blur radius. Larger values make the shadow softer and extend it farther.
+                blurRadius: 6,
+                // Distance the shadow shape expands before blurring. Larger values increase its footprint without increasing density.
+                spreadRadius: 3,
+            },
+        },
+    },
+
+    // Model-specific controls rendered inside the shared dropdown primitives.
+    aiModelControls: {
+        styles: {
+            dimensionsGlyph: {
+                // Target rectangle area in square SVG user units. Equal area keeps wide, square, and tall ratios at comparable visual weight.
+                targetArea: 256,
+                // Maximum width or height in SVG user units. This prevents extreme ratios from overflowing their option row.
+                maxDimension: 26,
+                // Width and height of the dashed Auto glyph in SVG user units.
+                adaptiveSize: 15,
+                // Corner radius of aspect-ratio and resolution rectangles in SVG user units.
+                cornerRadius: 2,
+                // Outline width of aspect-ratio and resolution rectangles in SVG user units.
+                strokeWidth: 1.5,
+                // Font size of the A inside the dashed Auto glyph in SVG user units.
+                adaptiveLabelFontSize: 8,
+                // Font weight of the A inside the dashed Auto glyph.
+                adaptiveLabelFontWeight: 700,
+            },
         },
     },
 

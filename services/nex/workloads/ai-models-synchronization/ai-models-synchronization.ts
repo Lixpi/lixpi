@@ -60,6 +60,48 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     BytePlus: 'ByteDance',
 }
 
+const greatestCommonDivisor = (left: number, right: number): number => {
+    let dividend = Math.abs(left)
+    let divisor = Math.abs(right)
+
+    while (divisor !== 0) {
+        const remainder = dividend % divisor
+        dividend = divisor
+        divisor = remainder
+    }
+
+    return dividend
+}
+
+// Some image providers accept fixed pixel resolutions even though each option
+// represents an aspect-ratio choice in the UI. Keep the provider value intact
+// and store the reduced ratio in the persisted display label. Video resolution
+// controls are separate metadata and never pass through this mapper.
+export const mapResolutionOptionsToAspectRatioLabels = (
+    options: ImageSizeOption[],
+): ImageSizeOption[] => options.map((option) => {
+    const dimensions = option.value.match(/^(\d+)\s*[x×]\s*(\d+)$/i)
+    if (!dimensions) return { ...option }
+
+    const width = Number(dimensions[1])
+    const height = Number(dimensions[2])
+    if (width === 0 || height === 0) return { ...option }
+
+    const divisor = greatestCommonDivisor(width, height)
+
+    return {
+        ...option,
+        label: `${width / divisor}:${height / divisor}`,
+    }
+})
+
+const OPENAI_IMAGE_SIZES = mapResolutionOptionsToAspectRatioLabels([
+    { value: '1024x1024', label: '1024x1024' },
+    { value: '1536x1024', label: '1536x1024' },
+    { value: '1024x1536', label: '1024x1536' },
+    { value: 'auto', label: 'Auto' },
+])
+
 // VEO video-generation option lists. Reuse the ImageSizeOption { value, label }
 // shape across every synchronized media-generation control.
 const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
@@ -787,12 +829,7 @@ export class AiModelsSync {
                 color: '#56967c',
                 iconName: 'gptAvatarIcon',
                 imageSizeMode: 'resolution',
-                imageSizes: [
-                    { value: '1024x1024', label: '1024x1024' },
-                    { value: '1536x1024', label: '1536x1024' },
-                    { value: '1024x1536', label: '1024x1536' },
-                    { value: 'auto', label: 'Auto' },
-                ],
+                imageSizes: OPENAI_IMAGE_SIZES,
                 // Base offset for sorting; used to group providers
                 starSortingPosition: 200,
                 transforms: {

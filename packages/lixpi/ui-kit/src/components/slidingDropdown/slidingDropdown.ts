@@ -5,6 +5,7 @@ import 'd3-transition'
 import { select } from 'd3-selection'
 import { easePupOut } from '../../animation/easings.ts'
 import { applyStyle, html } from '../../dom/domTemplates.ts'
+import { type UiKitSlidingDropdownStyles, uiKitSettings } from '../../runtime-settings.ts'
 import {
     type SlidingSwitchIndicatorInsetShadow,
     type SlidingSwitchOption,
@@ -104,8 +105,6 @@ const DEFAULT_DISTANCE_SPEEDUP_FACTOR = 0.28
 const CLICK_TRANSITION_DURATION_MULTIPLIER = 2
 const DEFAULT_WIDTH = 156
 const DEFAULT_HEIGHT = 66
-const FONT_SIZE = 12
-const FONT_WEIGHT = 400
 const OPEN_Z_INDEX = 2147483647
 const POINTER_DRAG_THRESHOLD_PX = 6
 const SHADOW_PADDING_TOP = 10
@@ -114,20 +113,6 @@ const SHADOW_PADDING_BOTTOM = 0
 const SHADOW_PADDING_LEFT = 14
 let slidingDropdownInstanceCounter = 0
 
-const COLORS = {
-    track: 'rgba(105, 115, 133, 0.09)',
-    trackOpen: 'rgb(241, 242, 244)',
-    indicator: 'rgba(255, 255, 255, 0.72)',
-    optionText: 'rgba(49, 59, 78, 0.68)',
-    optionTextActive: '#1a2744',
-    optionTextDisabled: 'rgba(49, 59, 78, 0.32)',
-}
-
-const DEFAULT_INDICATOR_INSET_SHADOW: SlidingDropdownIndicatorInsetShadow = {
-    topColor: 'rgba(255, 255, 255, 0.86)',
-    bottomColor: 'rgba(0, 0, 0, 0)',
-}
-
 class SlidingDropdown<Value extends string = string> implements SlidingDropdownInstance<Value> {
     private readonly id: string
     private readonly options: SlidingDropdownOption<Value>[]
@@ -135,9 +120,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private readonly ariaLabel: string
     private readonly observeParentResize: boolean
     private readonly visualOverflowPadding: SlidingDropdownVisualOverflowPadding
+    private readonly styles: UiKitSlidingDropdownStyles
     private readonly indicatorBoxShadow: string
     private readonly indicatorInsetShadow: SlidingDropdownIndicatorInsetShadow | null
     private readonly indicatorInsetGradientId: string
+    private readonly openShadowFilterId: string
     private readonly transitionConfig: SlidingDropdownTransitionConfig
     private readonly renderOption?: SlidingDropdownOptionRenderer<Value>
     private readonly onChange?: (value: Value, id: string) => void
@@ -177,6 +164,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private readonly viewportClipId: string
     private readonly viewportClip: any
     private readonly viewportHit: any
+    private readonly openShadow: any
     private readonly track: any
     private readonly indicator: any
     private readonly indicatorInset: any
@@ -206,8 +194,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.className = config.className ?? ''
         this.ariaLabel = config.ariaLabel ?? config.id
         this.observeParentResize = config.observeParentResize ?? true
-        this.indicatorBoxShadow = config.indicatorBoxShadow ?? 'none'
-        this.indicatorInsetShadow = config.indicatorInsetShadow ?? DEFAULT_INDICATOR_INSET_SHADOW
+        this.styles = uiKitSettings.slidingDropdown.styles
+        this.indicatorBoxShadow = config.indicatorBoxShadow ?? this.styles.indicator.boxShadow
+        this.indicatorInsetShadow = config.indicatorInsetShadow ?? this.styles.indicator.insetShadow
         this.transitionConfig = this.createTransitionConfig(config.transition)
         this.visualOverflowPadding = this.createVisualOverflowPadding(config.visualOverflowPadding)
         this.renderOption = config.renderOption
@@ -238,6 +227,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
 
         slidingDropdownInstanceCounter += 1
         this.indicatorInsetGradientId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingDropdownInstanceCounter}-indicator-inset`
+        this.openShadowFilterId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingDropdownInstanceCounter}-open-shadow`
         this.viewportClipId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingDropdownInstanceCounter}-viewport-clip`
 
         this.group = parent.append('g')
@@ -256,6 +246,41 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('x2', '0%')
             .attr('y2', '100%')
 
+        const openShadowFilter = defs.append('filter')
+            .attr('id', this.openShadowFilterId)
+            .attr('class', 'sliding-dropdown-open-shadow-filter')
+            .attr('x', '-50%')
+            .attr('y', '-50%')
+            .attr('width', '200%')
+            .attr('height', '200%')
+            .attr('color-interpolation-filters', 'sRGB')
+        openShadowFilter.append('feMorphology')
+            .attr('in', 'SourceAlpha')
+            .attr('operator', 'dilate')
+            .attr('radius', this.styles.openShadow.spreadRadius)
+            .attr('result', 'spread')
+        openShadowFilter.append('feGaussianBlur')
+            .attr('in', 'spread')
+            .attr('stdDeviation', this.styles.openShadow.blurRadius / 2)
+            .attr('result', 'blur')
+        openShadowFilter.append('feOffset')
+            .attr('in', 'blur')
+            .attr('dx', this.styles.openShadow.offsetX)
+            .attr('dy', this.styles.openShadow.offsetY)
+            .attr('result', 'offset')
+        openShadowFilter.append('feFlood')
+            .attr('flood-color', this.styles.openShadow.color)
+            .attr('flood-opacity', this.styles.openShadow.opacity)
+            .attr('result', 'color')
+        openShadowFilter.append('feComposite')
+            .attr('in', 'color')
+            .attr('in2', 'offset')
+            .attr('operator', 'in')
+            .attr('result', 'shadow')
+        openShadowFilter.append('feMerge')
+            .append('feMergeNode')
+            .attr('in', 'shadow')
+
         this.viewportClip = defs.append('clipPath')
             .attr('id', this.viewportClipId)
             .attr('clipPathUnits', 'userSpaceOnUse')
@@ -264,6 +289,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.viewportHit = this.group.append('rect')
             .attr('class', 'sliding-dropdown-viewport-hit')
             .attr('fill', 'transparent')
+
+        this.openShadow = this.group.append('rect')
+            .attr('class', 'sliding-dropdown-open-shadow')
+            .attr('pointer-events', 'none')
 
         const trackViewport = this.group.append('g')
             .attr('clip-path', `url(#${this.viewportClipId})`)
@@ -440,6 +469,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.indicator.interrupt()
         this.indicatorInset.interrupt()
         this.optionsGroup.interrupt()
+        this.openShadow.interrupt()
     }
 
     private setTapePosition(offset: number): void {
@@ -462,6 +492,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .duration(duration)
             .ease(easePupOut)
             .attr('transform', `translate(0, ${offset})`)
+    }
+
+    private hasOpenShadow(): boolean {
+        return this.styles.openShadow.opacity > 0
+    }
+
+    private openShadowOverflowPadding(): number {
+        if (!this.hasOpenShadow()) return 0
+        const blurOverflow = this.styles.openShadow.blurRadius * 1.5
+        const offsetOverflow = Math.max(
+            Math.abs(this.styles.openShadow.offsetX),
+            Math.abs(this.styles.openShadow.offsetY),
+        )
+        return Math.ceil(this.styles.openShadow.spreadRadius + blurOverflow + offsetOverflow)
     }
 
     private outerWidth(): number {
@@ -551,13 +595,16 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const scaleY = hostRect.height / this.closedOuterHeight()
         const maximumScrollTop = (this.options.length - 1) * this.height * scaleY
         const fullTapeHeight = this.outerHeight(this.options.length * this.height) * scaleY
-        const portalHeight = fullTapeHeight + maximumScrollTop
+        const shadowPadding = this.openShadowOverflowPadding()
+        const shadowPaddingX = shadowPadding * scaleX
+        const shadowPaddingY = shadowPadding * scaleY
+        const portalHeight = fullTapeHeight + maximumScrollTop + shadowPaddingY * 2
         this.scrollScaleY = scaleY
         this.scrollMaximumTop = maximumScrollTop
         applyStyle(this.scrollPortalNode, {
-            top: `${hostRect.top - this.visualOverflowPadding.top * scaleY - maximumScrollTop}px`,
-            left: `${hostRect.left}px`,
-            width: `${this.outerWidth() * scaleX}px`,
+            top: `${hostRect.top - this.visualOverflowPadding.top * scaleY - maximumScrollTop - shadowPaddingY}px`,
+            left: `${hostRect.left - shadowPaddingX}px`,
+            width: `${this.outerWidth() * scaleX + shadowPaddingX * 2}px`,
             height: `${portalHeight}px`,
         })
         applyStyle(this.scrollPortalSpacerNode, {
@@ -590,10 +637,17 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const scaleY = this.portaled && hostRect && hostRect.height > 0
             ? hostRect.height / this.closedOuterHeight()
             : 1
+        const shadowPadding = this.openShadowOverflowPadding()
+        const shadowPaddingX = this.portaled
+            ? shadowPadding * scaleX
+            : 0
+        const shadowPaddingY = this.portaled
+            ? shadowPadding * scaleY
+            : 0
         const position = 'absolute'
-        const left = 0
+        const left = shadowPaddingX
         const positionedTop = this.portaled && this.scrollPortalNode
-            ? top * scaleY + this.scrollMaximumTop + this.scrollPortalNode.scrollTop
+            ? top * scaleY + this.scrollMaximumTop + this.scrollPortalNode.scrollTop + shadowPaddingY
             : topOffset
         const screenWidth = outerWidth * scaleX
         const screenHeight = outerHeight * scaleY
@@ -609,7 +663,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .style('height', `${screenHeight}px`)
             .style('min-width', `${screenWidth}px`)
             .style('max-width', this.portaled ? 'none' : '100%')
-            .style('overflow', 'hidden')
+            .style('overflow', overlayOpen ? 'visible' : 'hidden')
             .style('pointer-events', this.portaled ? 'auto' : this.svgStyleSnapshot?.pointerEvents || null)
             .style('z-index', overlayOpen ? String(OPEN_Z_INDEX) : this.svgStyleSnapshot?.zIndex || null)
             .attr('width', screenWidth)
@@ -743,8 +797,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
                 .attr('class', 'sliding-dropdown-option')
                 .attr('text-anchor', 'middle')
                 .attr('dominant-baseline', 'central')
-                .attr('font-size', FONT_SIZE)
-                .attr('font-weight', FONT_WEIGHT)
+                .attr('font-size', this.styles.option.fontSize)
+                .attr('font-weight', this.styles.option.fontWeight)
                 .attr('pointer-events', 'none')
         }
 
@@ -767,8 +821,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const state = this.createOptionState(view.option, view.sourceIndex)
         const visible = this.open || this.animating || state.selected
         const textColor = state.disabled
-            ? COLORS.optionTextDisabled
-            : state.selected || state.hovered ? COLORS.optionTextActive : COLORS.optionText
+            ? this.styles.option.disabledTextColor
+            : state.selected || state.hovered
+                ? this.styles.option.activeTextColor
+                : this.styles.option.textColor
 
         view.group
             .attr('display', visible ? null : 'none')
@@ -798,7 +854,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             ?.attr('x', state.x + state.width / 2)
             .attr('y', state.y + state.height / 2)
             .attr('fill', textColor)
-            .attr('font-weight', state.selected ? 700 : FONT_WEIGHT)
+            .attr(
+                'font-weight',
+                state.selected ? this.styles.option.selectedFontWeight : this.styles.option.fontWeight,
+            )
             .text(state.option.label)
     }
 
@@ -810,6 +869,12 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private renderIndicator(y: number): void {
         const indicatorHeight = this.height - PADDING * 2
         const indicatorWidth = this.width - PADDING * 2
+        const borderColor = this.open
+            ? this.styles.indicator.openBorderColor
+            : this.styles.indicator.closedBorderColor
+        const borderWidth = this.open
+            ? this.styles.indicator.openBorderWidth
+            : this.styles.indicator.closedBorderWidth
 
         this.indicator
             .attr('x', PADDING)
@@ -818,7 +883,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('height', indicatorHeight)
             .attr('rx', indicatorHeight / 2)
             .attr('ry', indicatorHeight / 2)
-            .attr('fill', COLORS.indicator)
+            .attr('fill', this.styles.indicator.backgroundColor)
             .attr('stroke', 'none')
             .attr('stroke-width', 0)
             .style('filter', this.indicatorBoxShadow === 'none' ? null : `drop-shadow(${this.indicatorBoxShadow})`)
@@ -847,8 +912,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('rx', indicatorHeight / 2)
             .attr('ry', indicatorHeight / 2)
             .attr('fill', this.indicatorInsetShadow ? `url(#${this.indicatorInsetGradientId})` : 'transparent')
-            .attr('stroke', 'none')
-            .attr('stroke-width', 0)
+            .attr('stroke', borderColor)
+            .attr('stroke-width', borderWidth)
     }
 
     private selectedIndex(): number {
@@ -1072,7 +1137,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('height', this.options.length * this.height)
             .attr('rx', this.height / 2)
             .attr('ry', this.height / 2)
-            .attr('fill', this.open ? COLORS.trackOpen : COLORS.track)
+            .attr(
+                'fill',
+                this.open
+                    ? this.styles.surface.openBackgroundColor
+                    : this.styles.surface.closedBackgroundColor,
+            )
+        this.openShadow
+            .attr('x', 0)
+            .attr('width', this.width)
+            .attr('rx', this.height / 2)
+            .attr('ry', this.height / 2)
+            .attr('fill', '#000000')
+            .attr('display', this.open && this.hasOpenShadow() ? null : 'none')
+            .attr('filter', this.hasOpenShadow() ? `url(#${this.openShadowFilterId})` : null)
         this.renderIndicator(indicatorY)
         this.renderOptionViews()
         if (this.open && this.portaled) {
@@ -1088,6 +1166,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('y', y)
             .attr('height', height)
         this.viewportHit
+            .attr('y', y)
+            .attr('height', height)
+        this.openShadow
             .attr('y', y)
             .attr('height', height)
     }
@@ -1113,6 +1194,15 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .ease(easePupOut)
             .attr('y', viewportY)
             .attr('height', viewportHeight)
+        if (this.open && this.hasOpenShadow()) {
+            this.openShadow
+                .interrupt()
+                .transition()
+                .duration(duration)
+                .ease(easePupOut)
+                .attr('y', viewportY)
+                .attr('height', viewportHeight)
+        }
         this.animateTapePosition(tapePosition, duration, trackFill)
     }
 
@@ -1128,6 +1218,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.refreshOpenViewport()
         this.open = true
         this.animating = true
+        this.openShadow
+            .attr('display', this.hasOpenShadow() ? null : 'none')
         this.group.attr('aria-expanded', 'true')
             .style('touch-action', 'none')
         this.parent.attr('data-sliding-dropdown-open', 'true')
@@ -1136,7 +1228,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.setViewportGeometry(selectedFrameY, this.height)
         this.setTapePosition(this.renderedTapeOffset())
         this.renderIndicator(selectedFrameY + PADDING)
-        this.track.attr('fill', COLORS.track)
+        this.track.attr('fill', this.styles.surface.closedBackgroundColor)
         this.updateHostSvgGeometry(this.openViewportHeight, this.openViewportTop)
         this.syncDocumentListener()
         this.onOpenChange?.(true, this.id)
@@ -1144,7 +1236,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             0,
             this.openViewportHeight,
             this.renderedTapeOffset(),
-            COLORS.trackOpen,
+            this.styles.surface.openBackgroundColor,
             duration,
         )
         this.animationTimer = setTimeout(() => {
@@ -1184,6 +1276,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.hoveredValue = null
         this.renderOptionViews()
         this.open = false
+        this.openShadow
+            .interrupt()
+            .attr('display', 'none')
         this.group.attr('aria-expanded', 'false')
         this.syncDocumentListener()
         if (notify) this.onOpenChange?.(false, this.id)
@@ -1194,7 +1289,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             selectedFrameY,
             this.height,
             targetOffset - startOffset,
-            COLORS.track,
+            this.styles.surface.closedBackgroundColor,
             duration,
         )
 
