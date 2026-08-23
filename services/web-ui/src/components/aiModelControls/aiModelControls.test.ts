@@ -222,6 +222,7 @@ afterEach(() => {
 
 describe('createMediaGenerationConfigMatrixView', () => {
     function createControls(overrides: {
+        mediaType?: 'image' | 'video'
         useMultipleModels?: boolean
         selectedModelIds?: string[]
         configGroups?: MediaGenerationConfigSelectionGroup[]
@@ -238,7 +239,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
                 modelIds: ['google:imagen-4'],
                 values: { imageSize: 'stale-size' },
             }],
-            mediaType: 'image' as const,
+            mediaType: overrides.mediaType ?? 'image',
             getUseMultipleModels: vi.fn(() => overrides.useMultipleModels ?? true),
             getSelectedModelIds: vi.fn(() => controls.selectedModelIds),
             setSelectedModelIds: vi.fn((modelIds: string[]) => {
@@ -271,6 +272,8 @@ describe('createMediaGenerationConfigMatrixView', () => {
             config.id.endsWith(':imageSize')
         ))
         expect(imageSizeDropdown?.selectedValue).toBe('1:1')
+        expect(imageSizeDropdown?.width).toBe(66)
+        expect(imageSizeDropdown?.height).toBe(66)
         expect(imageSizeDropdown?.options).toEqual([
             { value: '1:1', label: '1:1' },
             { value: '16:9', label: '16:9' },
@@ -284,6 +287,27 @@ describe('createMediaGenerationConfigMatrixView', () => {
             modelIds: ['google:imagen-4', 'openai:gpt-image-1'],
             values: { imageSize: '16:9' },
         }])
+
+        view.destroy()
+    })
+
+    it('passes circular geometry to every video dimensions dropdown', () => {
+        const controls = createControls({
+            mediaType: 'video',
+            selectedModelIds: ['google:veo-3', 'bytedance:seedance'],
+            configGroups: [],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const videoDropdowns = mockState.slidingDropdownConfigs.filter((config) => (
+            config.id.endsWith(':aspectRatio')
+        ))
+        expect(new Set(videoDropdowns.map((config) => config.id)).size).toBe(2)
+        expect(videoDropdowns.every((config) => config.width === 66)).toBe(true)
+        expect(videoDropdowns.every((config) => config.height === 66)).toBe(true)
 
         view.destroy()
     })

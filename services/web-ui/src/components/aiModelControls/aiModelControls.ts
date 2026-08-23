@@ -122,6 +122,7 @@ type PendingMediaConfigSvgControl = {
 
 const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
 const MEDIA_CONFIG_SLIDER_HEIGHT = 66
+const MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE = 66
 const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
 const MEDIA_DIMENSIONS_GLYPH_MAX_WIDTH = 28
 const MEDIA_DIMENSIONS_GLYPH_MAX_HEIGHT = 15
@@ -909,6 +910,8 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             id: `${group.groupId}:${control.key}`,
             x: 0,
             y: 0,
+            width: MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE,
+            height: MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE,
             options: dimensionDropdownOptions(control),
             selectedValue,
             ariaLabel: control.label,

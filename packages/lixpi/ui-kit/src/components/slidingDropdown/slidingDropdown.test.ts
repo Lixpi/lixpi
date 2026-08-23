@@ -74,6 +74,7 @@ function mount(
     selectedValue: Value = 'square',
     onChange = vi.fn(),
     transition: Partial<SlidingDropdownTransitionConfig> | null = IMMEDIATE_TRANSITION,
+    dimensions: { width: number; height: number } = { width: WIDTH, height: HEIGHT },
 ) {
     const host = document.createElement('div')
     const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
@@ -82,15 +83,15 @@ function mount(
     setRect(host, {
         top: 550,
         left: 80,
-        width: WIDTH * 2,
-        height: HEIGHT * 2,
+        width: dimensions.width * 2,
+        height: dimensions.height * 2,
     })
     const slidingDropdown = createSlidingDropdown<Value>(select(svg), {
         id: 'dimensions',
         x: 0,
         y: 0,
-        width: WIDTH,
-        height: HEIGHT,
+        width: dimensions.width,
+        height: dimensions.height,
         options: [...OPTIONS],
         selectedValue,
         observeParentResize: false,
@@ -212,6 +213,35 @@ describe('createSlidingDropdown — portaled viewport geometry', () => {
             ))).toEqual(OPTIONS.map(option => option.value))
         })
     }
+
+    it('preserves caller-configured circular geometry while expanded', () => {
+        const { svg, slidingDropdown } = mount(
+            'landscape',
+            vi.fn(),
+            IMMEDIATE_TRANSITION,
+            { width: HEIGHT, height: HEIGHT },
+        )
+        const indicator = svg.querySelector('.sliding-dropdown-indicator')!
+        const viewportClip = svg.querySelector('clipPath rect')!
+
+        expect(indicator.getAttribute('width')).toBe(String(HEIGHT - 4))
+        expect(indicator.getAttribute('height')).toBe(String(HEIGHT - 4))
+        expect(indicator.getAttribute('rx')).toBe(String((HEIGHT - 4) / 2))
+        expect(viewportClip.getAttribute('width')).toBe(String(HEIGHT))
+        expect(viewportClip.getAttribute('rx')).toBe(String(HEIGHT / 2))
+
+        slidingDropdown.setOpen(true)
+        vi.runAllTimers()
+
+        expect(indicator.getAttribute('width')).toBe(String(HEIGHT - 4))
+        expect(indicator.getAttribute('height')).toBe(String(HEIGHT - 4))
+        expect(indicator.getAttribute('rx')).toBe(String((HEIGHT - 4) / 2))
+        for (const option of svg.querySelectorAll('.sliding-dropdown-hit')) {
+            expect(option.getAttribute('width')).toBe(String(HEIGHT - 4))
+            expect(option.getAttribute('height')).toBe(String(HEIGHT - 4))
+            expect(option.getAttribute('rx')).toBe(String((HEIGHT - 4) / 2))
+        }
+    })
 })
 
 // =============================================================================
