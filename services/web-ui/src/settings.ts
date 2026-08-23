@@ -64,6 +64,12 @@ export type SlidingDropdownSettings = {
 
 export type AiModelControlsSettings = {
     styles: {
+        dimensionsDropdown: {
+            size: number
+            valueFontSize: number
+            glyphCenterYRatio: number
+            valueCenterYRatio: number
+        }
         dimensionsGlyph: {
             targetArea: number
             maxDimension: number
@@ -237,6 +243,7 @@ export type AiPromptInputModelMenuSettings = {
         sectionDividerBorderRadius: string
         sectionTitleColor: string
         controlLabelColor: string
+        controlLabelFontSize: string
         selectedModelTagTextColor: string
         selectedModelTagIconColor: string
         helpTooltipTriggerBorder: string
@@ -735,19 +742,29 @@ export const settings: Settings = {
     // Model-specific controls rendered inside the shared dropdown primitives.
     aiModelControls: {
         styles: {
+            dimensionsDropdown: {
+                // Diameter of the closed circular aspect-ratio and resolution control in SVG user units.
+                size: 46,
+                // Font size of the aspect-ratio or resolution value below the glyph in SVG user units.
+                valueFontSize: 12,
+                // Vertical glyph center as a fraction of the option height. A smaller value leaves room for tall portrait glyphs above the value.
+                glyphCenterYRatio: 0.34,
+                // Vertical value center as a fraction of the option height. This keeps the value large without adding empty space below it.
+                valueCenterYRatio: 0.73,
+            },
             dimensionsGlyph: {
                 // Target rectangle area in square SVG user units. Equal area keeps wide, square, and tall ratios at comparable visual weight.
-                targetArea: 256,
+                targetArea: 169,
                 // Maximum width or height in SVG user units. This prevents extreme ratios from overflowing their option row.
-                maxDimension: 26,
+                maxDimension: 20,
                 // Width and height of the dashed Auto glyph in SVG user units.
-                adaptiveSize: 15,
+                adaptiveSize: 12,
                 // Corner radius of aspect-ratio and resolution rectangles in SVG user units.
                 cornerRadius: 2,
                 // Outline width of aspect-ratio and resolution rectangles in SVG user units.
                 strokeWidth: 1.5,
                 // Font size of the A inside the dashed Auto glyph in SVG user units.
-                adaptiveLabelFontSize: 8,
+                adaptiveLabelFontSize: 7,
                 // Font weight of the A inside the dashed Auto glyph.
                 adaptiveLabelFontWeight: 700,
             },
@@ -1112,7 +1129,8 @@ export const settings: Settings = {
                 triggerActiveColor: colorPalette.nightBlue,
                 triggerActiveBackground: '#eef0f4',
                 triggerFocusOutline: '2px solid #b8bec8',
-                infoBubbleWidth: '680px',
+                // Width of the model-settings surface. This matches the compact layout used before provider-specific controls were introduced.
+                infoBubbleWidth: '410px',
                 infoBubbleBorderRadius: '12px',
                 infoBubbleBackground: '#fff',
                 infoBubbleBoxShadow: '0 14px 32px rgba(66, 73, 79, 0.12), 0 2px 10px rgba(66, 73, 79, 0.08), inset 0 0 1px 1px rgba(66, 73, 79, 0.2)',
@@ -1122,6 +1140,8 @@ export const settings: Settings = {
                 sectionDividerBorderRadius: '999px',
                 sectionTitleColor: '#59626b',
                 controlLabelColor: '#9299a1',
+                // Font size used by Model, Models, Aspect ratio, Resolution, and other control labels.
+                controlLabelFontSize: '12px',
                 // Text and icon share one color, matching the dropdown value text (the menu panel foreground).
                 selectedModelTagTextColor: colorPalette.nightBlue,
                 selectedModelTagIconColor: colorPalette.nightBlue,

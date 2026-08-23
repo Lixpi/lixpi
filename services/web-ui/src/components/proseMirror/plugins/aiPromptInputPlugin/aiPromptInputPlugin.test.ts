@@ -397,6 +397,9 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-focus-outline')).toBe(
             settings.aiPromptInput.modelMenu.styles.triggerFocusOutline,
         )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-width')).toBe(
+            settings.aiPromptInput.modelMenu.styles.infoBubbleWidth,
+        )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toBe(
             settings.aiPromptInput.modelMenu.styles.infoBubbleBorderRadius,
         )
@@ -411,6 +414,9 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toBe(
             settings.aiPromptInput.modelMenu.styles.controlLabelColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-font-size')).toBe(
+            settings.aiPromptInput.modelMenu.styles.controlLabelFontSize,
         )
         expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-border')).toBe(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerBorder,

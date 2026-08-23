@@ -1,5 +1,6 @@
 'use strict'
 
+import { createHash } from 'node:crypto'
 import * as process from 'process'
 
 import {
@@ -101,6 +102,25 @@ const buildVideoControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationCon
     }))
 }
 
+const getControlOptionsSignature = (controls: MediaGenerationConfigControl[]): string => {
+    return JSON.stringify(controls.map(control => [
+        control.key,
+        control.kind,
+        control.options.map(option => [option.value, option.label]),
+    ]))
+}
+
+const getMatrixGroupKey = (
+    model: Omit<AiModel, 'pricing'>,
+    mediaType: 'image' | 'video',
+    controls: MediaGenerationConfigControl[],
+): string => {
+    const optionsHash = createHash('sha256')
+        .update(getControlOptionsSignature(controls))
+        .digest('hex')
+    return `${mediaType}:${model.provider}:${optionsHash}`
+}
+
 const appendMatrixGroup = (
     groupsByKey: Map<string, MediaGenerationConfigGroup>,
     model: Omit<AiModel, 'pricing'>,
@@ -108,14 +128,23 @@ const appendMatrixGroup = (
     controls: MediaGenerationConfigControl[],
 ): void => {
     const modelId = modelIdFor(model)
-    const key = `${mediaType}:${modelId}`
+    const key = getMatrixGroupKey(model, mediaType, controls)
+    const existingGroup = groupsByKey.get(key)
+    if (existingGroup) {
+        if (!existingGroup.modelIds.includes(modelId)) existingGroup.modelIds.push(modelId)
+        if (!existingGroup.providerTitle && model.providerTitle) {
+            existingGroup.providerTitle = model.providerTitle
+            existingGroup.title = model.providerTitle
+        }
+        return
+    }
 
     groupsByKey.set(key, {
         groupId: key,
         mediaType,
         provider: model.provider,
         ...(model.providerTitle ? { providerTitle: model.providerTitle } : {}),
-        title: `${model.providerTitle || model.provider} · ${model.shortTitle || model.title}`,
+        title: model.providerTitle || model.provider,
         modelIds: [modelId],
         controls,
     })

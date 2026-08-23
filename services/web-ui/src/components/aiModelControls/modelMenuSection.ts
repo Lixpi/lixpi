@@ -46,6 +46,7 @@ const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSet
     ['--ai-prompt-model-menu-section-divider-border-radius', 'sectionDividerBorderRadius'],
     ['--ai-prompt-model-menu-section-title-color', 'sectionTitleColor'],
     ['--ai-prompt-model-menu-control-label-color', 'controlLabelColor'],
+    ['--ai-prompt-model-menu-control-label-font-size', 'controlLabelFontSize'],
     ['--help-tooltip-trigger-border', 'helpTooltipTriggerBorder'],
     ['--help-tooltip-trigger-background', 'helpTooltipTriggerBackground'],
     ['--help-tooltip-trigger-color', 'helpTooltipTriggerColor'],

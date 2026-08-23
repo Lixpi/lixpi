@@ -124,7 +124,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         this.button = this.dom.querySelector('button') as HTMLButtonElement
         this.titleEl = this.dom.querySelector('.title') as HTMLElement
         this.dotsMenu = this.dom.querySelector('.dots-dropdown-menu') as HTMLElement
-        this.optionsList = html`<ul className="submenu ai-model-multi-select-list" onwheel=${this.handleWheel}></ul>` as HTMLUListElement
+        this.optionsList = html`<ul className="submenu ai-model-multi-select-list dropdown-option-list-no-scroll" onwheel=${this.handleWheel}></ul>` as HTMLUListElement
 
         this.infoBubble = createInfoBubble({
             id: `model-multi-select-${config.id}`,
@@ -135,7 +135,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             bodyContent: this.optionsList,
             visible: false,
             className: 'dropdown-menu-popover ai-model-multi-select-popover',
-            disableAutoPositioning: false,
+            disableAutoPositioning: true,
             onOpen: () => {
                 this.dom.classList.add('dropdown-open')
                 this.dotsMenu.classList.add('is-active')
@@ -146,7 +146,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             },
         })
         this.infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
-        document.body.appendChild(this.infoBubble.dom)
+        this.dotsMenu.appendChild(this.infoBubble.dom)
         this.handleDocumentMouseDown = (event: MouseEvent): void => {
             if (!this.infoBubble.isOpen?.()) return
 
@@ -201,23 +201,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     private handleWheel = (event: WheelEvent): void => {
-        if (event.ctrlKey) {
-            event.preventDefault()
-            return
-        }
-
-        const listEl = event.currentTarget as HTMLElement
-        const hasOverflow = listEl.scrollHeight > listEl.clientHeight
-        if (!hasOverflow) return
-
-        const atTop = listEl.scrollTop <= 0
-        const atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight
-        const scrollingDown = event.deltaY > 0
-        const scrollingUp = event.deltaY < 0
-
-        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
-            event.stopPropagation()
-        }
+        event.preventDefault()
+        event.stopPropagation()
     }
 
     // The option to auto-select when nothing is selected. The API owns the

@@ -7,17 +7,24 @@ import {
     createGenericImageModelMultiSelect,
     createGenericVideoModelMultiSelect,
 } from '$src/components/aiModelControls/modelMultiSelect.ts'
+import { createInfoBubble } from '@lixpi/ui-kit/components/info-bubble'
 
 vi.mock('@lixpi/ui-kit/components/info-bubble', () => ({
-    createInfoBubble: vi.fn(() => ({
-        dom: document.createElement('div'),
-        open: vi.fn(),
-        close: vi.fn(),
-        toggle: vi.fn(),
-        isOpen: vi.fn(() => false),
-        destroy: vi.fn(),
-    })),
+    createInfoBubble: vi.fn((config: any) => {
+        const dom = document.createElement('div')
+        dom.appendChild(config.bodyContent)
+        return {
+            dom,
+            open: vi.fn(),
+            close: vi.fn(),
+            toggle: vi.fn(),
+            isOpen: vi.fn(() => false),
+            destroy: vi.fn(),
+        }
+    }),
 }))
+
+const createInfoBubbleMock = vi.mocked(createInfoBubble)
 
 const reasoningModels = [
     {
@@ -94,6 +101,7 @@ describe('createGenericAiModelMultiSelect', () => {
     let removeListenerSpy: ReturnType<typeof vi.spyOn>
 
     beforeEach(() => {
+        createInfoBubbleMock.mockClear()
         aiModelsStore.setAiModelsCatalog({
             models: [...reasoningModels, ...imageModels, ...videoModels],
             defaultModels: {
@@ -121,6 +129,31 @@ describe('createGenericAiModelMultiSelect', () => {
 
         expect(button.classList.contains('dropdown-trigger-button')).toBe(true)
         expect(stateIndicator.classList.contains('dropdown-trigger-state-indicator')).toBe(true)
+
+        control.destroy()
+    })
+
+    it('keeps the regular menu nested, viewport-aware, and fixed under wheel input', () => {
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-placement')
+        const infoBubbleConfig = createInfoBubbleMock.mock.calls.at(-1)?.[0]
+        const infoBubble = createInfoBubbleMock.mock.results.at(-1)?.value
+        const optionList = control.dom.querySelector('.ai-model-multi-select-list') as HTMLUListElement
+        const wheelEvent = new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            deltaY: 120,
+        })
+        const stopSpy = vi.spyOn(wheelEvent, 'stopPropagation')
+
+        optionList.dispatchEvent(wheelEvent)
+
+        expect(infoBubbleConfig?.disableAutoPositioning).toBe(true)
+        expect(infoBubble?.dom.parentElement?.classList.contains('dots-dropdown-menu')).toBe(true)
+        expect(infoBubble?.dom.parentElement).not.toBe(document.body)
+        expect(optionList.classList.contains('dropdown-option-list-no-scroll')).toBe(true)
+        expect(wheelEvent.defaultPrevented).toBe(true)
+        expect(stopSpy).toHaveBeenCalledOnce()
 
         control.destroy()
     })

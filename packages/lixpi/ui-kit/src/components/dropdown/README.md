@@ -96,7 +96,7 @@ createPureDropdown({
   availableTags?: ['tag1', 'tag2'],
   mountToBody?: boolean,
   disableAutoPositioning?: boolean,
-  popoverClassName?: string,
+  disableOptionListScroll?: boolean,
   errorState?: {
     enabled?: boolean,
     title?: string,
@@ -118,7 +118,7 @@ createPureDropdown({
 - `availableTags`: Tags for filtering options
 - `mountToBody`: Appends bubble to `document.body` when `true`, otherwise nests it under the trigger container
 - `disableAutoPositioning`: Disables viewport `top/left` placement and relies on CSS placement while keeping arrow-to-anchor alignment
-- `popoverClassName`: Adds a consumer-owned class to the InfoBubble popover surface for portal stacking or other integration-specific styling
+- `disableOptionListScroll`: Keeps the complete option list visible and prevents wheel input from moving it
 - `errorState`: Enables red error text for the selected-value label unless `enabled` is `false`. Missing `title` falls back to `Error state`; missing `textColor` uses `settings.dropdown.errorState.textColor`
 - Various rendering flags for icons, colors, titles
 

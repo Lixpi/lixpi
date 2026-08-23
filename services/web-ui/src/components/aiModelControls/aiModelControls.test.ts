@@ -274,8 +274,8 @@ describe('createMediaGenerationConfigMatrixView', () => {
             config.id.endsWith(':imageSize')
         ))
         expect(imageSizeDropdown?.selectedValue).toBe('1:1')
-        expect(imageSizeDropdown?.width).toBe(66)
-        expect(imageSizeDropdown?.height).toBe(66)
+        expect(imageSizeDropdown?.width).toBe(settings.aiModelControls.styles.dimensionsDropdown.size)
+        expect(imageSizeDropdown?.height).toBe(settings.aiModelControls.styles.dimensionsDropdown.size)
         expect(imageSizeDropdown?.options).toEqual([
             { value: '1:1', label: 'Square' },
             { value: '16:9', label: 'Wide' },
@@ -354,13 +354,17 @@ describe('createMediaGenerationConfigMatrixView', () => {
             config.id.endsWith(':aspectRatio')
         ))
         expect(new Set(videoDropdowns.map((config) => config.id)).size).toBe(2)
-        expect(videoDropdowns.every((config) => config.width === 66)).toBe(true)
-        expect(videoDropdowns.every((config) => config.height === 66)).toBe(true)
+        expect(videoDropdowns.every((config) => (
+            config.width === settings.aiModelControls.styles.dimensionsDropdown.size
+        ))).toBe(true)
+        expect(videoDropdowns.every((config) => (
+            config.height === settings.aiModelControls.styles.dimensionsDropdown.size
+        ))).toBe(true)
 
         view.destroy()
     })
 
-    it('uses sliding-dropdown option styles for dimension glyphs and labels', () => {
+    it('uses shared sliding-dropdown colors and a readable dimension-value size', () => {
         const controls = createControls()
         const view = createMediaGenerationConfigMatrixView(controls)
 
@@ -372,14 +376,15 @@ describe('createMediaGenerationConfigMatrixView', () => {
         ))
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
         const parent = select(svg).append('g')
+        const optionSize = settings.aiModelControls.styles.dimensionsDropdown.size - 4
         const state = {
             id: 'image:google/openai:imageSize:1:1',
             option: dropdownConfig.options[0],
             index: 0,
             x: 2,
             y: 2,
-            width: 62,
-            height: 62,
+            width: optionSize,
+            height: optionSize,
             selected: true,
             hovered: false,
             disabled: false,
@@ -393,7 +398,9 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         expect(glyph.getAttribute('stroke')).toBe(optionStyles.activeTextColor)
         expect(label.getAttribute('fill')).toBe(optionStyles.activeTextColor)
-        expect(label.getAttribute('font-size')).toBe(String(optionStyles.fontSize))
+        expect(label.getAttribute('font-size')).toBe(String(
+            settings.aiModelControls.styles.dimensionsDropdown.valueFontSize,
+        ))
         expect(label.getAttribute('font-weight')).toBe(String(optionStyles.selectedFontWeight))
 
         renderer.render({ ...state, selected: false, disabled: true })
@@ -401,6 +408,22 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(glyph.getAttribute('stroke')).toBe(optionStyles.disabledTextColor)
         expect(label.getAttribute('fill')).toBe(optionStyles.disabledTextColor)
         expect(label.getAttribute('font-weight')).toBe(String(optionStyles.fontWeight))
+
+        renderer.render({
+            ...state,
+            id: 'image:google/openai:imageSize:auto',
+            option: { value: 'auto', label: 'Auto' },
+            selected: true,
+            disabled: false,
+        })
+        const glyphY = Number(glyph.getAttribute('y'))
+        const glyphHeight = Number(glyph.getAttribute('height'))
+        const labelY = Number(label.getAttribute('y'))
+        const valueFontSize = settings.aiModelControls.styles.dimensionsDropdown.valueFontSize
+
+        expect(glyphY).toBeGreaterThanOrEqual(state.y)
+        expect(labelY - valueFontSize / 2).toBeGreaterThanOrEqual(glyphY + glyphHeight)
+        expect(labelY + valueFontSize / 2).toBeLessThanOrEqual(state.y + state.height)
 
         view.destroy()
     })
@@ -417,14 +440,15 @@ describe('createMediaGenerationConfigMatrixView', () => {
         ))
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
         const parent = select(svg).append('g')
+        const optionSize = settings.aiModelControls.styles.dimensionsDropdown.size - 4
         const state = {
             id: 'image:google/openai:imageSize:21:9',
             option: { value: '21:9', label: '21:9' },
             index: 0,
             x: 2,
             y: 2,
-            width: 62,
-            height: 62,
+            width: optionSize,
+            height: optionSize,
             selected: false,
             hovered: false,
             disabled: false,
@@ -443,9 +467,16 @@ describe('createMediaGenerationConfigMatrixView', () => {
         })
         const verticalWidth = Number(glyph.getAttribute('width'))
         const verticalHeight = Number(glyph.getAttribute('height'))
+        const verticalY = Number(glyph.getAttribute('y'))
+        const label = svg.querySelector('.ai-media-config-dimensions-dropdown-label')!
+        const labelY = Number(label.getAttribute('y'))
+        const valueFontSize = settings.aiModelControls.styles.dimensionsDropdown.valueFontSize
 
         expect(verticalWidth).toBeCloseTo(horizontalHeight)
         expect(verticalHeight).toBeCloseTo(horizontalWidth)
+        expect(verticalY).toBeGreaterThanOrEqual(state.y)
+        expect(labelY - valueFontSize / 2).toBeGreaterThanOrEqual(verticalY + verticalHeight)
+        expect(labelY + valueFontSize / 2).toBeLessThanOrEqual(state.y + state.height)
 
         renderer.render({
             ...state,

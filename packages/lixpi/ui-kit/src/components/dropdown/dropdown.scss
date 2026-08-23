@@ -76,6 +76,11 @@
         }
     }
 
+    .bubble-body .dropdown-option-list-no-scroll {
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+
     // Themes
     &.theme-light {
         @include tagPillDropdownLightTheme();

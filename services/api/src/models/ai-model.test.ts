@@ -79,7 +79,8 @@ describe('AiModel.getAvailableAiModels', () => {
         const imageGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'image')
         const videoGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'video')
 
-        expect(imageGroup?.groupId).toBe('image:Google:gemini-image-1')
+        expect(imageGroup?.groupId).toMatch(/^image:Google:[a-f0-9]{64}$/)
+        expect(imageGroup?.title).toBe('Google')
         expect(imageGroup?.controls).toEqual([{
             key: 'imageSize',
             label: 'Resolution',
@@ -95,7 +96,8 @@ describe('AiModel.getAvailableAiModels', () => {
             video: 'Google:veo-3.1-generate-preview',
         })
 
-        expect(videoGroup?.groupId).toBe('video:Google:veo-3.1-generate-preview')
+        expect(videoGroup?.groupId).toMatch(/^video:Google:[a-f0-9]{64}$/)
+        expect(videoGroup?.title).toBe('Google')
         expect(videoGroup?.controls).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 key: 'aspectRatio',
@@ -116,6 +118,65 @@ describe('AiModel.getAvailableAiModels', () => {
                 options: [{ value: '8', label: '8' }],
             }),
         ]))
+    })
+
+    it('groups provider models with matching options and splits different option sets', async () => {
+        const matchingImageSizes = [
+            { value: '1024x1024', label: '1:1' },
+            { value: '1536x1024', label: '3:2' },
+        ]
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'OpenAI',
+                    providerTitle: 'OpenAI',
+                    model: 'gpt-image-1.5',
+                    modelVersion: 'gpt-image-1.5',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: matchingImageSizes,
+                    pricing: {},
+                },
+                {
+                    provider: 'OpenAI',
+                    providerTitle: 'OpenAI',
+                    model: 'gpt-image-2',
+                    modelVersion: 'gpt-image-2',
+                    sortingPosition: 2,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: matchingImageSizes,
+                    pricing: {},
+                },
+                {
+                    provider: 'OpenAI',
+                    providerTitle: 'OpenAI',
+                    model: 'gpt-image-mini',
+                    modelVersion: 'gpt-image-mini',
+                    sortingPosition: 3,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: [{ value: '1024x1024', label: '1:1' }],
+                    pricing: {},
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+        const imageGroups = result.mediaGenerationConfigMatrix.groups.filter(group => group.mediaType === 'image')
+        const sharedOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-1.5'))
+        const differentOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-mini'))
+
+        expect(imageGroups).toHaveLength(2)
+        expect(sharedOptionsGroup?.title).toBe('OpenAI')
+        expect(sharedOptionsGroup?.modelIds).toEqual([
+            'OpenAI:gpt-image-1.5',
+            'OpenAI:gpt-image-2',
+        ])
+        expect(differentOptionsGroup?.title).toBe('OpenAI')
+        expect(differentOptionsGroup?.modelIds).toEqual(['OpenAI:gpt-image-mini'])
+        expect(differentOptionsGroup?.groupId).not.toBe(sharedOptionsGroup?.groupId)
     })
 
     it('derives defaultModels from the isDefaultFor flag regardless of sort order', async () => {

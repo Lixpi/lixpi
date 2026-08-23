@@ -102,6 +102,22 @@ describe('createGenericAiModelDropdown', () => {
         dropdown.destroy()
     })
 
+    it('uses the nested viewport-aware regular dropdown without wheel scrolling', () => {
+        const controls = {
+            getCurrentAiModel: vi.fn(() => 'anthropic:haiku-4-5'),
+            setAiModel: vi.fn(),
+        }
+
+        const dropdown = createGenericAiModelDropdown(controls, 'reasoning-model-placement')
+
+        expect(lastConfig).toMatchObject({
+            mountToBody: false,
+            disableAutoPositioning: true,
+            disableOptionListScroll: true,
+        })
+        dropdown.destroy()
+    })
+
     it('does not paint the default over an unavailable persisted selection', () => {
         const controls = {
             getCurrentAiModel: vi.fn(() => 'anthropic:removed-model'),
@@ -408,6 +424,35 @@ describe('createGenericImageModelDropdown', () => {
         dropdown.destroy()
     })
 
+    it('uses the nested viewport-aware regular dropdown without wheel scrolling', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
+                provider: 'google',
+                model: 'imagen-3',
+                iconName: 'gpt',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [],
+            } as any],
+            defaultModels: {
+                reasoning: '',
+                image: 'google:imagen-3',
+                video: '',
+            } as any,
+        } as any)
+
+        const dropdown = createGenericImageModelDropdown({
+            getCurrentImageModel: vi.fn(() => 'google:imagen-3'),
+            setImageModel: vi.fn(),
+        }, 'image-model-placement')
+
+        expect(lastConfig).toMatchObject({
+            mountToBody: false,
+            disableAutoPositioning: true,
+            disableOptionListScroll: true,
+        })
+        dropdown.destroy()
+    })
+
     it('does not auto-select when default image model is unavailable', () => {
         aiModelsStore.setAiModelsCatalog({
             models: [{
@@ -480,6 +525,31 @@ describe('createGenericVideoModelDropdown', () => {
         ])
 
         dropdown.update()
+        dropdown.destroy()
+    })
+
+    it('uses the nested viewport-aware regular dropdown without wheel scrolling', () => {
+        aiModelsStore.setAiModels([{
+            provider: 'google',
+            model: 'veo',
+            iconName: 'gpt',
+            shortTitle: 'Veo',
+            modalities: [{ modality: 'video_generation' }],
+            videoAspectRatios: [{ value: '16:9', label: '16:9' }],
+            videoResolutions: [{ value: '1080p', label: '1080p' }],
+            videoDurations: [{ value: '30s', label: '30s' }],
+        }] as any)
+
+        const dropdown = createGenericVideoModelDropdown({
+            getCurrentVideoModel: vi.fn(() => 'google:veo'),
+            setVideoModel: vi.fn(),
+        }, 'video-model-placement')
+
+        expect(lastConfig).toMatchObject({
+            mountToBody: false,
+            disableAutoPositioning: true,
+            disableOptionListScroll: true,
+        })
         dropdown.destroy()
     })
 })

@@ -40,7 +40,7 @@ export type PureDropdownConfig<Option extends DropdownOption = DropdownOption> =
     availableTags?: string[]
     mountToBody?: boolean
     disableAutoPositioning?: boolean
-    popoverClassName?: string
+    disableOptionListScroll?: boolean
     disableTriggerHover?: boolean
     errorState?: DropdownErrorState
     onSelect: (option: Option) => void
@@ -76,7 +76,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         enableTagFilter = false,
         mountToBody = false,
         disableAutoPositioning = false,
-        popoverClassName = '',
+        disableOptionListScroll = false,
         disableTriggerHover = false,
         errorState,
         onSelect
@@ -233,6 +233,12 @@ export function createPureDropdown<Option extends DropdownOption>(
     // At scroll boundaries or when content doesn't overflow, let the event propagate
     // so the canvas can pan normally. Always block browser zoom (pinch / ctrlKey).
     const handleWheel = (e: WheelEvent) => {
+        if (disableOptionListScroll) {
+            e.preventDefault()
+            e.stopPropagation()
+            return
+        }
+
         if (e.ctrlKey) {
             e.preventDefault()
             return
@@ -253,7 +259,10 @@ export function createPureDropdown<Option extends DropdownOption>(
     }
 
     // Build body content (dropdown items)
-    const bodyContent = html`<ul class="submenu" onwheel=${handleWheel}></ul>`
+    const optionListClassName = disableOptionListScroll
+        ? 'submenu dropdown-option-list-no-scroll'
+        : 'submenu'
+    const bodyContent = html`<ul class=${optionListClassName} onwheel=${handleWheel}></ul>`
 
     // Build dropdown wrapper with button first
     const dom = html`
@@ -286,7 +295,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         headerContent,
         bodyContent,
         visible: false,
-        className: ['dropdown-menu-popover', popoverClassName].filter(Boolean).join(' '),
+        className: 'dropdown-menu-popover',
         disableAutoPositioning,
         onOpen: () => {
             dom.classList.add('dropdown-open')

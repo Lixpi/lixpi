@@ -953,8 +953,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             if (controlsEl.contains(target)) return
             if (modelMenu?.element.contains(target)) return
             if (target instanceof Element
-                && target.closest('.ai-model-selector-popover, .ai-model-multi-select-popover')) return
-            if (target instanceof Element
                 && target.closest(
                     '.sliding-dropdown-scroll-portal, '
                     + '[data-sliding-dropdown-open="true"], '

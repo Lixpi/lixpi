@@ -122,7 +122,6 @@ type PendingMediaConfigSvgControl = {
 
 const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
 const MEDIA_CONFIG_SLIDER_HEIGHT = 66
-const MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE = 66
 const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
 
 function isAspectRatioValue(value: string): boolean {
@@ -161,6 +160,7 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
         state: SlidingDropdownOptionRenderState<string>,
         private readonly getFallbackProportionValue: () => string,
     ) {
+        const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
         const glyphStyles = settings.aiModelControls.styles.dimensionsGlyph
         this.group = parent.append('g')
             .attr('class', 'ai-media-config-dimensions-dropdown-option')
@@ -180,7 +180,7 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
             .text('A')
         this.label = this.group.append('text')
             .attr('class', 'ai-media-config-dimensions-dropdown-label')
-            .attr('font-size', settings.slidingDropdown.styles.option.fontSize)
+            .attr('font-size', dropdownStyles.valueFontSize)
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
         this.render(state)
@@ -221,9 +221,10 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
 
     resize(x: number, y: number, width: number, height = this.optionHeight): void {
         this.optionHeight = height
+        const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
         const optionCenterX = x + width / 2
-        const glyphCenterY = y + height * 0.37
-        const labelY = y + height * 0.72
+        const glyphCenterY = y + height * dropdownStyles.glyphCenterYRatio
+        const labelY = y + height * dropdownStyles.valueCenterYRatio
         const size = this.glyphSize(this.value)
 
         this.glyph
@@ -389,9 +390,9 @@ export function createGenericAiModelDropdown(
         renderIconForOptions: true,
         enableTagFilter: settings.modelSelectorDropdown.useModalityFilter,
         availableTags: settings.modelSelectorDropdown.useModalityFilter ? availableTags : [],
-        mountToBody: true,
-        disableAutoPositioning: false,
-        popoverClassName: 'ai-model-selector-popover',
+        mountToBody: false,
+        disableAutoPositioning: true,
+        disableOptionListScroll: true,
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setAiModel(selected.aiModel)
@@ -606,9 +607,9 @@ export function createGenericImageModelDropdown(
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        mountToBody: true,
-        disableAutoPositioning: false,
-        popoverClassName: 'ai-model-selector-popover',
+        mountToBody: false,
+        disableAutoPositioning: true,
+        disableOptionListScroll: true,
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setImageModel(selected.aiModel)
@@ -901,13 +902,14 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
 
     private mountSlidingDropdownControl(pendingControl: PendingMediaConfigSvgControl): void {
         const { host, group, control, selectedValue } = pendingControl
+        const dropdownSize = settings.aiModelControls.styles.dimensionsDropdown.size
         const svg = select(host).append('svg')
         const slidingDropdown: SlidingDropdownInstance<string> = createSlidingDropdown(svg, {
             id: `${group.groupId}:${control.key}`,
             x: 0,
             y: 0,
-            width: MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE,
-            height: MEDIA_CONFIG_DIMENSIONS_DROPDOWN_SIZE,
+            width: dropdownSize,
+            height: dropdownSize,
             options: dimensionDropdownOptions(control),
             selectedValue,
             ariaLabel: control.label,
@@ -1208,9 +1210,9 @@ export function createGenericVideoModelDropdown(
         ignoreColorValuesForSelectedValue: false,
         renderIconForSelectedValue: false,
         renderIconForOptions: true,
-        mountToBody: true,
-        disableAutoPositioning: false,
-        popoverClassName: 'ai-model-selector-popover',
+        mountToBody: false,
+        disableAutoPositioning: true,
+        disableOptionListScroll: true,
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setVideoModel(selected.aiModel)
