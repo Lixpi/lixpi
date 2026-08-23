@@ -222,22 +222,23 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
     resize(x: number, y: number, width: number, height = this.optionHeight): void {
         this.optionHeight = height
         const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
-        const optionCenterX = x + width / 2
-        const glyphCenterY = y + height * dropdownStyles.glyphCenterYRatio
-        const labelY = y + height * dropdownStyles.valueCenterYRatio
+        const glyphCenterX = x + width * dropdownStyles.glyphCenterXRatio
+        const contentCenterY = y + height * dropdownStyles.contentCenterYRatio
+        const labelX = x + width * dropdownStyles.valueStartXRatio
         const size = this.glyphSize(this.value)
 
         this.glyph
-            .attr('x', optionCenterX - size.width / 2)
-            .attr('y', glyphCenterY - size.height / 2)
+            .attr('x', glyphCenterX - size.width / 2)
+            .attr('y', contentCenterY - size.height / 2)
             .attr('width', size.width)
             .attr('height', size.height)
         this.adaptiveLabel
-            .attr('x', optionCenterX)
-            .attr('y', glyphCenterY)
+            .attr('x', glyphCenterX)
+            .attr('y', contentCenterY)
         this.label
-            .attr('x', optionCenterX)
-            .attr('y', labelY)
+            .attr('x', labelX)
+            .attr('y', contentCenterY)
+            .attr('text-anchor', 'start')
     }
 
     render(state: SlidingDropdownOptionRenderState<string>): void {
@@ -902,14 +903,14 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
 
     private mountSlidingDropdownControl(pendingControl: PendingMediaConfigSvgControl): void {
         const { host, group, control, selectedValue } = pendingControl
-        const dropdownSize = settings.aiModelControls.styles.dimensionsDropdown.size
+        const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
         const svg = select(host).append('svg')
         const slidingDropdown: SlidingDropdownInstance<string> = createSlidingDropdown(svg, {
             id: `${group.groupId}:${control.key}`,
             x: 0,
             y: 0,
-            width: dropdownSize,
-            height: dropdownSize,
+            width: dropdownStyles.width,
+            height: dropdownStyles.height,
             options: dimensionDropdownOptions(control),
             selectedValue,
             ariaLabel: control.label,

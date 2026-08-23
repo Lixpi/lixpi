@@ -65,10 +65,12 @@ export type SlidingDropdownSettings = {
 export type AiModelControlsSettings = {
     styles: {
         dimensionsDropdown: {
-            size: number
+            width: number
+            height: number
             valueFontSize: number
-            glyphCenterYRatio: number
-            valueCenterYRatio: number
+            glyphCenterXRatio: number
+            valueStartXRatio: number
+            contentCenterYRatio: number
         }
         dimensionsGlyph: {
             targetArea: number
@@ -743,14 +745,18 @@ export const settings: Settings = {
     aiModelControls: {
         styles: {
             dimensionsDropdown: {
-                // Diameter of the closed circular aspect-ratio and resolution control in SVG user units.
-                size: 46,
-                // Font size of the aspect-ratio or resolution value below the glyph in SVG user units.
+                // Width of the closed oval aspect-ratio and resolution control in SVG user units.
+                width: 68,
+                // Height of the closed oval aspect-ratio and resolution control in SVG user units.
+                height: 38,
+                // Font size of the aspect-ratio or resolution value in SVG user units.
                 valueFontSize: 12,
-                // Vertical glyph center as a fraction of the option height. A smaller value leaves room for tall portrait glyphs above the value.
-                glyphCenterYRatio: 0.34,
-                // Vertical value center as a fraction of the option height. This keeps the value large without adding empty space below it.
-                valueCenterYRatio: 0.73,
+                // Horizontal center of the aspect-ratio or resolution glyph, as a fraction of the option width.
+                glyphCenterXRatio: 0.23,
+                // Horizontal start of the aspect-ratio or resolution value, as a fraction of the option width.
+                valueStartXRatio: 0.46,
+                // Shared vertical center of the glyph and value, as a fraction of the option height.
+                contentCenterYRatio: 0.5,
             },
             dimensionsGlyph: {
                 // Target rectangle area in square SVG user units. Equal area keeps wide, square, and tall ratios at comparable visual weight.

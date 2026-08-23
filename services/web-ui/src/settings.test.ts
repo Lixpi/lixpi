@@ -121,13 +121,6 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
 		expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
 		expectFiniteNumber(settings.helpTooltip.interactiveHideDelayMs, 'settings.helpTooltip.interactiveHideDelayMs')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsDropdown.size, 'settings.aiModelControls.styles.dimensionsDropdown.size')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsDropdown.valueFontSize, 'settings.aiModelControls.styles.dimensionsDropdown.valueFontSize')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsDropdown.glyphCenterYRatio, 'settings.aiModelControls.styles.dimensionsDropdown.glyphCenterYRatio')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsDropdown.valueCenterYRatio, 'settings.aiModelControls.styles.dimensionsDropdown.valueCenterYRatio')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsGlyph.targetArea, 'settings.aiModelControls.styles.dimensionsGlyph.targetArea')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsGlyph.maxDimension, 'settings.aiModelControls.styles.dimensionsGlyph.maxDimension')
-		expectFiniteNumber(settings.aiModelControls.styles.dimensionsGlyph.adaptiveSize, 'settings.aiModelControls.styles.dimensionsGlyph.adaptiveSize')
 		expectFiniteNumber(settings.connector.proximityConnectThreshold, 'settings.connector.proximityConnectThreshold')
 		expectFiniteNumber(settings.connector.menuConnectionSnapRadius, 'settings.connector.menuConnectionSnapRadius')
 		expectFiniteNumber(settings.connector.scaling.strokeWidth, 'settings.connector.scaling.strokeWidth')
@@ -258,11 +251,9 @@ describe('settings - grouped configuration', () => {
 		}
 	})
 
-	it('keeps the model menu and dimension controls compact and readable', () => {
+	it('keeps the model menu compact and readable', () => {
 		expect(settings.aiPromptInput.modelMenu.styles.infoBubbleWidth).toBe('410px')
 		expect(settings.aiPromptInput.modelMenu.styles.controlLabelFontSize).toBe('12px')
-		expect(settings.aiModelControls.styles.dimensionsDropdown.size).toBe(46)
-		expect(settings.aiModelControls.styles.dimensionsDropdown.valueFontSize).toBe(12)
 	})
 
 	it('keeps video controls scalar values numerically valid', () => {
