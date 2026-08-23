@@ -74,6 +74,17 @@ run_nex() {
     fi
 }
 
+# --- Sync the bind-mounted @lixpi packages ------------------------------------
+# The host tree is mounted read-only at /usr/src/host-packages/lixpi; this copies
+# it into ${SERVICE_DIR}/packages/lixpi (container-writable) and keeps copying on a
+# timer. Must run before pnpm install so the workspace members are in place.
+#
+# Note: this keeps the files on disk current, but a workload already deployed into
+# the nex node is a separate process launched by the nexlet, so it does not pick up
+# an edit until the workload is redeployed.
+/usr/local/bin/workspace-package-sync.sh sync || echo "WARN: package sync failed"
+/usr/local/bin/workspace-package-sync.sh watch &
+
 # --- Install the workload's Node dependencies ---------------------------------
 # Mirrors lixpi-api: @lixpi/* packages are bind-mounted; resolve them with pnpm
 # against the baked pnpm-workspace.yaml so the native nexlet can later launch the

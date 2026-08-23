@@ -1,5 +1,11 @@
 # Project Guidelines
 
+## Required Human-Facing Communication Skill
+
+At the start of every agent turn, before writing any human-facing text, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule for every interaction, including answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies even when the task is unrelated to documentation.
+
+If the skill cannot be resolved or read, stop immediately. Do not continue the task and do not produce any substantive response. The only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
+
 ## Architecture
 
 Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm monorepo with TypeScript services and NATS messaging. See [documentation/PRODUCT-OVERVIEW.md](documentation/PRODUCT-OVERVIEW.md) for full architecture details.

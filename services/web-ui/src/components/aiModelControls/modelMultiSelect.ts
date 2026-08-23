@@ -182,12 +182,12 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
                 <span className="dots-dropdown-menu">
                     <button
                         type="button"
-                        className="flex justify-between items-center"
+                        className="dropdown-trigger-button"
                         onmousedown=${this.preventProseMirrorEdit}
                         contenteditable="false"
                     >
                         <span className="title"></span>
-                        <span className="state-indicator flex items-center" innerHTML=${chevronDownIcon}></span>
+                        <span className="state-indicator dropdown-trigger-state-indicator" innerHTML=${chevronDownIcon}></span>
                     </button>
                 </span>
             </div>

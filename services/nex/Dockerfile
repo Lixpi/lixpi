@@ -37,7 +37,7 @@ ARG TARGETARCH
 # Character fidelity uses onnxruntime-web's WASM backend rather than a native
 # musl binding. Its pinned YuNet/SFace artifacts are copied with workloads and
 # verified by SHA-256 before a session is created.
-RUN apk add --update --no-cache curl ca-certificates libc6-compat ffmpeg libreoffice poppler-utils libheif-tools
+RUN apk add --update --no-cache curl ca-certificates libc6-compat ffmpeg libreoffice poppler-utils libheif-tools rsync
 
 # pnpm installs the workload's node_modules (mirrors services/api).
 RUN npm install -g pnpm
@@ -66,6 +66,11 @@ RUN pnpm install --force && pnpm store prune && rm -rf ~/.pnpm-store
 # entrypoint still passes connection details + the node nkey as flags (flags
 # override config), so nothing secret is ever baked into the image.
 COPY services/nex/config.json /etc/nex/config.json
+
+# Dev-loop package sync (see scripts/docker/workspace-package-sync.sh). Inert in
+# deployed images, where there is no host mount to sync from.
+COPY scripts/docker/workspace-package-sync.sh /usr/local/bin/workspace-package-sync.sh
+RUN chmod +x /usr/local/bin/workspace-package-sync.sh
 
 COPY services/nex/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

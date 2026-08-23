@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { uiKitSettings } from '../../runtime-settings.ts'
@@ -7,6 +9,18 @@ const defaultOptions = [
     { title: 'Model A', value: 'a' },
     { title: 'Model B', value: 'b' },
 ]
+
+const dropdownMixinsSource = readFileSync(
+    resolve(process.cwd(), 'src/components/dropdown/_dropdown-mixins.scss'),
+    'utf8',
+)
+
+function expectSourceToContain(source: string, snippet: string, label: string): void {
+    expect(
+        source.includes(snippet),
+        `${label} should contain:\n${snippet}`,
+    ).toBe(true)
+}
 
 function createTestDropdown() {
     const onSelect = vi.fn()
@@ -47,6 +61,39 @@ function createModalityDropdown() {
 
     return { dropdown, onSelect, options }
 }
+
+describe('pureDropdown — trigger alignment', () => {
+    it('uses component-owned trigger alignment classes', () => {
+        const { dropdown, button } = createTestDropdown()
+        const selectedIcon = dropdown.dom.querySelector('.selected-option-icon')!
+        const stateIndicator = dropdown.dom.querySelector('.state-indicator')!
+
+        expect(button.classList.contains('dropdown-trigger-button')).toBe(true)
+        expect(selectedIcon.classList.contains('dropdown-trigger-selected-icon')).toBe(true)
+        expect(stateIndicator.classList.contains('dropdown-trigger-state-indicator')).toBe(true)
+    })
+
+    it('keeps button content and icons vertically centered without utility CSS', () => {
+        expectSourceToContain(
+            dropdownMixinsSource,
+            `.dropdown-trigger-button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }`,
+            'dropdown trigger structure',
+        )
+        expectSourceToContain(
+            dropdownMixinsSource,
+            `.dropdown-trigger-selected-icon,
+    .dropdown-trigger-state-indicator {
+        display: flex;
+        align-items: center;
+    }`,
+            'dropdown icon structure',
+        )
+    })
+})
 
 describe('pureDropdown — outside click behavior', () => {
     let addEventListenerSpy: ReturnType<typeof vi.spyOn>

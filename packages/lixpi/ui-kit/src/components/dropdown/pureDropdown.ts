@@ -260,13 +260,13 @@ export function createPureDropdown<Option extends DropdownOption>(
         <div class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}" data-dropdown-id="${id}" data-arrow-side="top" data-side-panel-no-drag="true" contenteditable="false">
             <span class="dots-dropdown-menu">
                 <button
-                    class="flex justify-between items-center"
+                    class="dropdown-trigger-button"
                     onmousedown=${preventProseMirrorEdit}
                     contenteditable="false"
                 >
-                    <span class="selected-option-icon flex items-center"></span>
+                    <span class="selected-option-icon dropdown-trigger-selected-icon"></span>
                     <span class="title"></span>
-                    <span class="state-indicator flex items-center" innerHTML=${buttonIcon}></span>
+                    <span class="state-indicator dropdown-trigger-state-indicator" innerHTML=${buttonIcon}></span>
                 </button>
             </span>
         </div>

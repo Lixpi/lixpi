@@ -40,6 +40,18 @@ export default defineConfig({
         entries: [
             'index.html',
         ],
+        // The @lixpi/* packages are workspace source, not third-party deps. Without
+        // this Vite can pre-bundle them into a cached chunk, and an edit synced in
+        // from the host then changes nothing until the container restarts and the
+        // scanner runs again.
+        exclude: [
+            '@lixpi/capability-system',
+            '@lixpi/canvas-engine',
+            '@lixpi/constants',
+            '@lixpi/nats-service',
+            '@lixpi/prosemirror',
+            '@lixpi/ui-kit',
+        ],
     },
     // mode:'development',
     resolve: {

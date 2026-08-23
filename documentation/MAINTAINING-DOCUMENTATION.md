@@ -1,13 +1,17 @@
 ---
 title: Maintaining Documentation
-description: How to keep Lixpi's developer documentation accurate, readable, Markdoc-compatible, and easy to navigate as the product and architecture change.
+description: How to discover, move, link, render, and verify Lixpi's developer documentation as the product and architecture change.
 ---
 
 # Maintaining Documentation
 
-Lixpi documentation should be useful to a human developer first. It can help agents too, but it should not read like agent scaffolding, a checklist dump, or a frozen snapshot of the repo tree.
-
 Use this guide when creating, moving, deleting, or reorganizing documentation.
+
+## Required Writing Skill
+
+Before creating, revising, reviewing, or replying about any documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. This is a hard rule. The skill owns prose style, live-system framing, durable factual claims, and document organization. This guide owns discovery, Markdoc compatibility, page moves, navigation, and verification.
+
+If the skill cannot be resolved or read, stop immediately. Do not edit the documentation and do not continue the task. Report that `talk-like-a-human` could not be resolved, then wait for the user's instructions.
 
 ## Start by Discovering the Live Shape
 
@@ -20,97 +24,6 @@ Do not assume folders, page names, or architecture boundaries are permanent. Bef
 5. Fact-check behavior against the live code before repeating or rewriting it.
 
 The docs index is a map, not a contract. If the product shape changes, update the map to match the new shape. Avoid adding tiny "read this folder first" files whose only job is routing; put real guidance in this guide, in the relevant domain page, or in the docs index.
-
-## Document the Live System, Not a Timeline
-
-Hard rule: product and developer docs describe how the system works. They are
-not a history record, migration diary, before/after report, or commentary on
-what changed.
-
-Never frame normal documentation with phrases like:
-
-- "Current Responsibilities"
-- "Current State"
-- "now"
-- "previously"
-- "used to"
-- "no longer"
-- "old behavior"
-- "new behavior"
-- "deprecated path"
-- "legacy path"
-
-Write the contract directly:
-
-- Use "Responsibilities", not "Current Responsibilities".
-- Use "Input Flow", not "Current Flow".
-- Use "Schema", "Runtime Wiring", "Files", "Transaction Meta", and similar direct headings.
-- Say what the code does, not what it replaced.
-
-Mention removed or replaced behavior only in an explicit archive, migration
-plan, changelog, or compatibility section where that history is the subject. If
-a symbol remains for compatibility, document the live compatibility contract:
-"parses `legacyFooNode` and removes it in `appendTransaction()`", not "this used
-to be the composer."
-
-## Keep the Structure Flexible
-
-Organize by stable product or engineering concerns, not by whatever filenames happen to exist today. Good documentation domains usually answer one of these questions:
-
-- What is this part of the product?
-- What data does it persist?
-- How does the runtime path work?
-- How does a user flow move through the system?
-- How is it deployed or operated?
-- What conventions must implementation code follow?
-
-When the architecture changes, the documentation shape should change with it. Moving a page is fine. Splitting a page is fine. Deleting a page is fine if the content was moved or is false.
-
-Before deleting or replacing docs, compare against the existing version and account for every important concept:
-
-- Keep still-true product behavior.
-- Drop false behavior.
-- Keep history out of normal docs unless the page is explicitly an archive, migration plan, changelog, or compatibility note.
-- Preserve useful rationale, constraints, and gotchas.
-- Remove stale route-finding breadcrumbs.
-
-## Keep the Docs Honest
-
-Every factual claim should be easy to defend from live code, infrastructure, tests, or linked external source.
-
-Prefer durable statements over brittle ones:
-
-- Say "application tables" instead of freezing a table count.
-- Say "configured by the deployment" instead of hardcoding a task count unless the exact number is the point.
-- Say "configured default" when a setting can change.
-- Say "computed and logged" if the code does not publish or persist something.
-- Say "future split needs worker subscription code" if the boundary exists but the implementation is not wired.
-
-Avoid broad absolute claims unless the code enforces them:
-
-- "all"
-- "every"
-- "never"
-- "guarantees"
-- "only source"
-- "production-ready"
-- "no code changes"
-
-If the claim is a benchmark, capacity estimate, market comparison, legal/compliance statement, or vendor capability, either cite an up-to-date source or make it clear that it is a hypothesis that needs validation.
-
-## Write Like a Developer
-
-Use direct, natural language. Prefer the plain sentence that explains the thing.
-
-Avoid bureaucratic filler:
-
-- "source of truth" when "covers" or "explains" works
-- "owned by" when "covered in" works
-- "delta" when "what is specific to this page" works
-- "leverage" when "use" works
-- "robust solution" without saying what failure it handles
-
-Documentation should sound like a senior engineer explaining the system to another engineer: precise, calm, and not puffed up.
 
 ## Keep Markdoc Compatibility
 
@@ -196,11 +109,7 @@ substitutes for permitted tests.
 
 Check these:
 
-- The docs describe the live code as the actual system.
-- Normal docs do not use before/after framing, "current" headings, or old-vs-new commentary.
-- Historical behavior appears only when the page is explicitly an archive, migration plan, changelog, or compatibility note.
+- The `talk-like-a-human` rules are satisfied.
 - Links work in the generated site, not only on GitHub.
-- Page names and headings are human-readable.
 - The docs index still gives a good starting point.
 - No tiny routing-only guide was added.
-- No brittle counts, capacity promises, or exact file inventories were added unless they are intentionally part of the subject.

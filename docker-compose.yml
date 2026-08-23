@@ -298,28 +298,14 @@ services:
             - nex-workloads:/opt/nex/private-workloads:ro # Private repos place native workload binaries here
             - ./services/nex/pnpm-workspace.yaml:/usr/src/service/pnpm-workspace.yaml:cached
 
-            # @lixpi workspace packages the workload imports (mirrors lixpi-api)
-            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
-            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
-            # Every file `constants/ts/index.ts` re-exports must be listed here. An
-            # unlisted one silently resolves to the copy baked into the image, so host
-            # edits never arrive and any runtime value added to it surfaces in this
-            # service as "does not provide an export named ...".
-            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/packages/lixpi/constants/ts/asset-types.ts:ro,cached
-            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
-            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
-            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
-            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
-            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
-            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
-            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
-            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
-            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
-            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
-            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
-            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
-            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
-            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
+            # Host packages, mounted READ-ONLY and outside the pnpm workspace root. The
+            # copy the service actually uses lives in the container's writable layer at
+            # /usr/src/service/packages/lixpi and is rsynced from here every second, so
+            # host edits reach a running service without a restart and pnpm can write
+            # each package's node_modules without ever touching the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
 
         networks:
             - nats
@@ -391,34 +377,14 @@ services:
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
 
-            - ./packages/lixpi/capability-system/package.json:/usr/src/service/packages/lixpi/capability-system/package.json:ro,cached
-            - ./packages/lixpi/capability-system/src:/usr/src/service/packages/lixpi/capability-system/src:ro,cached
-            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
-            - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
-            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
-            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
-            # Every file `constants/ts/index.ts` re-exports must be listed here. An
-            # unlisted one silently resolves to the copy baked into the image, so host
-            # edits never arrive and any runtime value added to it surfaces in this
-            # service as "does not provide an export named ...".
-            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/packages/lixpi/constants/ts/asset-types.ts:ro,cached
-            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
-            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
-            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
-            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
-            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
-            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
-            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
-            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
-            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
-            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
-            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
-            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
-            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
-            - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
-            - ./packages/lixpi/ui-kit/package.json:/usr/src/service/packages/lixpi/ui-kit/package.json:ro,cached
-            - ./packages/lixpi/ui-kit/src:/usr/src/service/packages/lixpi/ui-kit/src:ro,cached
-            - ./packages/lixpi/ui-kit/styles:/usr/src/service/packages/lixpi/ui-kit/styles:ro,cached
+            # Host packages, mounted READ-ONLY and outside the pnpm workspace root. The
+            # copy the service actually uses lives in the container's writable layer at
+            # /usr/src/service/packages/lixpi and is rsynced from here every second, so
+            # host edits reach a running service without a restart and pnpm can write
+            # each package's node_modules without ever touching the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
 
             # - ./packages-vendor/bits-ui/packages/bits-ui:/usr/src/service/packages/bits-ui
 
@@ -436,6 +402,7 @@ services:
         # non-interactively (no TTY in the container) instead of aborting. Narrower than CI=true,
         # which would also force --frozen-lockfile.
         command: >
+            /usr/local/bin/workspace-package-sync.sh run
             sh -c "pnpm i --config.confirm-modules-purge=false
             && pnpm run dev"
         stop_signal: SIGTERM
@@ -538,37 +505,14 @@ services:
             - ./services/api/src:/usr/src/service/src:cached
             - ./services/api/temp-ai-responses:/usr/src/service/temp-ai-responses:cached
 
-            - ./packages/lixpi/auth-service/package.json:/usr/src/service/packages/lixpi/auth-service/package.json:ro,cached
-            - ./packages/lixpi/auth-service/src:/usr/src/service/packages/lixpi/auth-service/src:ro,cached
-            - ./packages/lixpi/capability-system/package.json:/usr/src/service/packages/lixpi/capability-system/package.json:ro,cached
-            - ./packages/lixpi/capability-system/src:/usr/src/service/packages/lixpi/capability-system/src:ro,cached
-            - ./packages/lixpi/canvas-engine/package.json:/usr/src/service/packages/lixpi/canvas-engine/package.json:ro,cached
-            - ./packages/lixpi/canvas-engine/src:/usr/src/service/packages/lixpi/canvas-engine/src:ro,cached
-            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
-            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/packages/lixpi/constants/nats-subjects.json:ro,cached
-            # Every file `constants/ts/index.ts` re-exports must be listed here. An
-            # unlisted one silently resolves to the copy baked into the image, so host
-            # edits never arrive and any runtime value added to it surfaces in this
-            # service as "does not provide an export named ...".
-            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/packages/lixpi/constants/ts/asset-types.ts:ro,cached
-            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
-            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/packages/lixpi/constants/ts/index.ts:ro,cached
-            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
-            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
-            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
-            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
-            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/packages/lixpi/constants/ts/package.json:ro,cached
-            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/packages/lixpi/constants/ts/types.ts:ro,cached
-            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
-            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/packages/lixpi/debug-tools/ts/package.json:ro,cached
-            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/packages/lixpi/dynamodb-service/package.json:ro,cached
-            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/packages/lixpi/dynamodb-service/src:ro,cached
-            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
-            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/packages/lixpi/nats-service/ts/package.json:ro,cached
-            - ./packages/lixpi/nats-auth-callout-service/package.json:/usr/src/service/packages/lixpi/nats-auth-callout-service/package.json:ro,cached
-            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/packages/lixpi/nats-auth-callout-service/src:ro,cached
-            - ./packages/lixpi/prosemirror/package.json:/usr/src/service/packages/lixpi/prosemirror/package.json:ro,cached
-            - ./packages/lixpi/prosemirror/src:/usr/src/service/packages/lixpi/prosemirror/src:ro,cached
+            # Host packages, mounted READ-ONLY and outside the pnpm workspace root. The
+            # copy the service actually uses lives in the container's writable layer at
+            # /usr/src/service/packages/lixpi and is rsynced from here every second, so
+            # host edits reach a running service without a restart and pnpm can write
+            # each package's node_modules without ever touching the host.
+            # See scripts/docker/workspace-package-sync.sh.
+            - ./packages/lixpi:/usr/src/host-packages/lixpi:ro,cached
+            - ./scripts/docker/workspace-package-sync.sh:/usr/local/bin/workspace-package-sync.sh:ro,cached
 
         networks:
             - nats
@@ -579,6 +523,7 @@ services:
         # non-interactively (no TTY in the container) instead of aborting. Narrower than CI=true,
         # which would also force --frozen-lockfile.
         command: >
+            /usr/local/bin/workspace-package-sync.sh run
             sh -c "pnpm i --config.confirm-modules-purge=false
             && pnpm run dev"
         # command: >

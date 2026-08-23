@@ -4,7 +4,7 @@ This document defines how Lixpi exposes project guidance to coding agents withou
 
 ## Design
 
-Authoritative guidance lives under `documentation/`. A harness skill is a short discovery alias: its frontmatter states when the guidance applies, and its body points to a specific authoritative documentation file. A prohibition that must be known before tool selection may be named in the skill description so discovery cannot hide it.
+Most authoritative Lixpi guidance lives under `documentation/`. Cross-workspace guidance may live in the umbrella repository when it applies to Lixpi and its sibling projects. A harness skill is a short discovery alias: its frontmatter states when the guidance applies, and its body points to the authoritative file. A prohibition that must be known before tool selection may be named in the skill description so discovery cannot hide it.
 
 The project maintains matching aliases in these native harness locations as needed:
 
@@ -14,6 +14,14 @@ The project maintains matching aliases in these native harness locations as need
 - `.agents/skills/<name>/SKILL.md` for Codex.
 
 Some harnesses also recognize compatibility directories. Matching aliases intentionally have identical names, descriptions, and pointer bodies, so discovery order is not behaviorally significant when a tool scans more than one location.
+
+## Required Human-Facing Interaction Skill
+
+The canonical `talk-like-a-human` skill lives in the umbrella repository at `skills/talk-like-a-human/SKILL.md`. Every agent must resolve and read `$talk-like-a-human` through the active harness's skill discovery at the start of every turn before writing human-facing text. The rule covers answers, clarification questions, progress updates, review comments, documentation, tickets, reports, and final responses. It applies to every interaction, not only documentation work.
+
+Lixpi exposes `talk-like-a-human` through matching pointer aliases in `.github/skills/`, `.claude/skills/`, `.cursor/skills/`, and `.agents/skills/`. The aliases do not copy the writing rules. They locate the umbrella repository without using developer-specific absolute paths, then point the harness to the canonical skill.
+
+If the canonical skill cannot be resolved or read, the agent must stop immediately. It must not continue the task or produce a substantive response. Its only permitted response is a brief report that `talk-like-a-human` could not be resolved, followed by waiting for the user's instructions.
 
 ## Command Execution Rule
 
@@ -46,7 +54,7 @@ For harness-specific behavior, keep the alias and its source of truth in the loc
 
 ## Documentation Roots
 
-Reusable project guidance belongs in the most relevant documentation area, such as `documentation/coding-style-guides/`, `documentation/documentation-style-guides/`, `documentation/testing/`, or `documentation/development-workflow/`. Browse the native skills directories to see which guidance is currently exposed to each harness; this document deliberately does not maintain a skill inventory.
+Reusable project guidance belongs in the most relevant documentation area, such as `documentation/coding-style-guides/`, `documentation/documentation-style-guides/`, `documentation/testing/`, or `documentation/development-workflow/`. Cross-workspace guidance that deliberately applies to more than one repository may live in the umbrella repository, as `talk-like-a-human` does. Browse the native skills directories to see which guidance is currently exposed to each harness; this document deliberately does not maintain a general skill inventory.
 
 ## Basis For This Layout
 

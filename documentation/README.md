@@ -19,17 +19,18 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, Capability ownership boundaries, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
-| [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to keep docs accurate, flexible, Markdoc-compatible, and readable as the architecture changes |
+| [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
 ## Finding the Right Guide
 
 Do not rely on tiny routing files or stale folder names. To find the right guidance:
 
-1. Use this index for the main product and platform entry points.
-2. Use the generated docs-site sidebar for the complete current file list.
-3. Search by the concept you are changing, then read nearby pages before editing.
-4. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
-5. For any code change, read [`Coding Style Guide Selection`](coding-style-guides/USING-CODING-STYLE-GUIDES.md). [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) is mandatory for every TypeScript file in the repository; [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) is additionally mandatory for `services/web-ui` UI work.
+1. Before writing or revising documentation, resolve and read `$talk-like-a-human` through the active harness's skill discovery. If it cannot be resolved or read, stop, report the failure, and wait for the user's instructions.
+2. Use this index for the main product and platform entry points.
+3. Use the generated docs-site sidebar for the complete current file list.
+4. Search by the concept you are changing, then read nearby pages before editing.
+5. For every implementation iteration, read [`Testing Guide Selection`](testing/USING-TESTING-GUIDES.md), then read the relevant coding and source README guidance that matches the files being touched. Tests must not be written or run unless the user explicitly asks for tests in the current thread.
+6. For any code change, read [`Coding Style Guide Selection`](coding-style-guides/USING-CODING-STYLE-GUIDES.md). [`TypeScript Coding Style`](coding-style-guides/TYPESCRIPT.md) is mandatory for every TypeScript file in the repository; [`UI Components Coding Style`](coding-style-guides/UI-COMPONENTS.md) is additionally mandatory for `services/web-ui` UI work.
 
 When the architecture changes, update this map and the affected domain pages together. Avoid creating new "using this folder" stubs; add useful guidance to a real page instead.
 
@@ -100,7 +101,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 | Page | What it covers |
 |------|----------------|
-| [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation structure, migration workflow, Markdoc compatibility, link hygiene, and tone |
+| [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
 | [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
 | [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |
 | [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules — mandatory for all TypeScript in the repo |

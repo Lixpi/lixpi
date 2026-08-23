@@ -113,6 +113,18 @@ describe('createGenericAiModelMultiSelect', () => {
         aiModelsStore.resetStore()
     })
 
+    it('uses the shared dropdown trigger alignment classes', () => {
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-alignment')
+        const button = control.dom.querySelector('button')!
+        const stateIndicator = control.dom.querySelector('.state-indicator')!
+
+        expect(button.classList.contains('dropdown-trigger-button')).toBe(true)
+        expect(stateIndicator.classList.contains('dropdown-trigger-state-indicator')).toBe(true)
+
+        control.destroy()
+    })
+
     it('auto-selects configured default reasoning model and updates title on multi-selection changes', () => {
         const controls = createAiModelControls()
         const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select')

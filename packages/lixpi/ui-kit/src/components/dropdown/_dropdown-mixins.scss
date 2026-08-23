@@ -37,6 +37,18 @@
     );
     $s: map.merge($defaults, $config);
 
+    .dropdown-trigger-button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .dropdown-trigger-selected-icon,
+    .dropdown-trigger-state-indicator {
+        display: flex;
+        align-items: center;
+    }
+
     .dots-dropdown-menu {
         position: relative;
         display: block;
