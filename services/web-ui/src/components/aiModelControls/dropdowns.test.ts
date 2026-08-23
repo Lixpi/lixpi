@@ -102,7 +102,7 @@ describe('createGenericAiModelDropdown', () => {
         dropdown.destroy()
     })
 
-    it('uses the nested viewport-aware regular dropdown without wheel scrolling', () => {
+    it('uses the nested regular dropdown placement', () => {
         const controls = {
             getCurrentAiModel: vi.fn(() => 'anthropic:haiku-4-5'),
             setAiModel: vi.fn(),
@@ -113,7 +113,6 @@ describe('createGenericAiModelDropdown', () => {
         expect(lastConfig).toMatchObject({
             mountToBody: false,
             disableAutoPositioning: true,
-            disableOptionListScroll: true,
         })
         dropdown.destroy()
     })
@@ -424,7 +423,7 @@ describe('createGenericImageModelDropdown', () => {
         dropdown.destroy()
     })
 
-    it('uses the nested viewport-aware regular dropdown without wheel scrolling', () => {
+    it('uses the nested regular dropdown placement', () => {
         aiModelsStore.setAiModelsCatalog({
             models: [{
                 provider: 'google',
@@ -448,7 +447,6 @@ describe('createGenericImageModelDropdown', () => {
         expect(lastConfig).toMatchObject({
             mountToBody: false,
             disableAutoPositioning: true,
-            disableOptionListScroll: true,
         })
         dropdown.destroy()
     })
@@ -528,7 +526,7 @@ describe('createGenericVideoModelDropdown', () => {
         dropdown.destroy()
     })
 
-    it('uses the nested viewport-aware regular dropdown without wheel scrolling', () => {
+    it('uses the nested regular dropdown placement', () => {
         aiModelsStore.setAiModels([{
             provider: 'google',
             model: 'veo',
@@ -548,7 +546,6 @@ describe('createGenericVideoModelDropdown', () => {
         expect(lastConfig).toMatchObject({
             mountToBody: false,
             disableAutoPositioning: true,
-            disableOptionListScroll: true,
         })
         dropdown.destroy()
     })

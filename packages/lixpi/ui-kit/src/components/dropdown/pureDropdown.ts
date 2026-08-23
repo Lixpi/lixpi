@@ -40,7 +40,6 @@ export type PureDropdownConfig<Option extends DropdownOption = DropdownOption> =
     availableTags?: string[]
     mountToBody?: boolean
     disableAutoPositioning?: boolean
-    disableOptionListScroll?: boolean
     disableTriggerHover?: boolean
     errorState?: DropdownErrorState
     onSelect: (option: Option) => void
@@ -76,7 +75,6 @@ export function createPureDropdown<Option extends DropdownOption>(
         enableTagFilter = false,
         mountToBody = false,
         disableAutoPositioning = false,
-        disableOptionListScroll = false,
         disableTriggerHover = false,
         errorState,
         onSelect
@@ -182,13 +180,13 @@ export function createPureDropdown<Option extends DropdownOption>(
 
             const li = html`
                 <li
-                    class="flex justify-start items-center"
+                    class="dropdown-option-item"
                     role="button"
                     tabindex="0"
                     data-selected=${isSelected ? 'true' : 'false'}
                     onclick=${(e: Event) => optionClickHandler(e, option)}
                 >
-                    ${renderIconForOptions && option.icon ? html`<span innerHTML=${ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}></span>` : ''}
+                    ${renderIconForOptions && option.icon ? html`<span class="dropdown-option-icon" innerHTML=${ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}></span>` : ''}
                     ${option.title}
                 </li>
             ` as HTMLElement
@@ -233,12 +231,6 @@ export function createPureDropdown<Option extends DropdownOption>(
     // At scroll boundaries or when content doesn't overflow, let the event propagate
     // so the canvas can pan normally. Always block browser zoom (pinch / ctrlKey).
     const handleWheel = (e: WheelEvent) => {
-        if (disableOptionListScroll) {
-            e.preventDefault()
-            e.stopPropagation()
-            return
-        }
-
         if (e.ctrlKey) {
             e.preventDefault()
             return
@@ -259,10 +251,7 @@ export function createPureDropdown<Option extends DropdownOption>(
     }
 
     // Build body content (dropdown items)
-    const optionListClassName = disableOptionListScroll
-        ? 'submenu dropdown-option-list-no-scroll'
-        : 'submenu'
-    const bodyContent = html`<ul class=${optionListClassName} onwheel=${handleWheel}></ul>`
+    const bodyContent = html`<ul class="submenu" onwheel=${handleWheel}></ul>`
 
     // Build dropdown wrapper with button first
     const dom = html`

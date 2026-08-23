@@ -124,7 +124,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         this.button = this.dom.querySelector('button') as HTMLButtonElement
         this.titleEl = this.dom.querySelector('.title') as HTMLElement
         this.dotsMenu = this.dom.querySelector('.dots-dropdown-menu') as HTMLElement
-        this.optionsList = html`<ul className="submenu ai-model-multi-select-list dropdown-option-list-no-scroll" onwheel=${this.handleWheel}></ul>` as HTMLUListElement
+        this.optionsList = html`<ul className="submenu ai-model-multi-select-list" onwheel=${this.handleWheel}></ul>` as HTMLUListElement
 
         this.infoBubble = createInfoBubble({
             id: `model-multi-select-${config.id}`,
@@ -201,8 +201,23 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
     }
 
     private handleWheel = (event: WheelEvent): void => {
-        event.preventDefault()
-        event.stopPropagation()
+        if (event.ctrlKey) {
+            event.preventDefault()
+            return
+        }
+
+        const listEl = event.currentTarget as HTMLElement
+        const hasOverflow = listEl.scrollHeight > listEl.clientHeight
+        if (!hasOverflow) return
+
+        const atTop = listEl.scrollTop <= 0
+        const atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight
+        const scrollingDown = event.deltaY > 0
+        const scrollingUp = event.deltaY < 0
+
+        if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+            event.stopPropagation()
+        }
     }
 
     // The option to auto-select when nothing is selected. The API owns the
@@ -326,16 +341,16 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
 
             return html`
                 <li
-                    className="ai-model-multi-select-option flex justify-start items-center"
+                    className="dropdown-option-item ai-model-multi-select-option"
                     role="button"
                     tabindex="0"
                     data-selected=${isSelected ? 'true' : 'false'}
                     data-model-id=${option.aiModel}
                     onclick=${handleClick}
                 >
-                    ${option.icon ? html`<span className="ai-model-multi-select-icon" innerHTML=${option.icon}></span>` : null}
+                    ${option.icon ? html`<span className="dropdown-option-icon ai-model-multi-select-icon" innerHTML=${option.icon}></span>` : null}
                     <span className="ai-model-multi-select-title">${option.title}</span>
-                    <span className="ai-model-multi-select-check" innerHTML=${isSelected ? checkMarkIcon : ''}></span>
+                    <span className="dropdown-option-icon ai-model-multi-select-check" innerHTML=${isSelected ? checkMarkIcon : ''}></span>
                 </li>
             ` as HTMLLIElement
         })

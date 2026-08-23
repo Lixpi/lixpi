@@ -68,8 +68,9 @@ export type AiModelControlsSettings = {
             width: number
             height: number
             valueFontSize: number
-            glyphCenterXRatio: number
-            valueStartXRatio: number
+            horizontalPadding: number
+            glyphColumnWidth: number
+            glyphValueGap: number
             contentCenterYRatio: number
         }
         dimensionsGlyph: {
@@ -704,11 +705,11 @@ export const settings: Settings = {
                 // Border color around the selected row while collapsed. This is ignored visually when `closedBorderWidth` is zero.
                 closedBorderColor: 'rgba(105, 115, 133, 0.1)',
                 // Border width around the selected row while collapsed. Zero removes the closed-state border.
-                closedBorderWidth: 2,
+                closedBorderWidth: 1,
                 // Border color around the selected row while the option tape is expanded.
                 openBorderColor: 'rgba(105, 115, 133, 0.07)',
                 // Border width around the selected row while the option tape is expanded.
-                openBorderWidth: 1.5,
+                openBorderWidth: 1,
             },
             option: {
                 // Text and glyph color for unselected options.
@@ -751,10 +752,12 @@ export const settings: Settings = {
                 height: 38,
                 // Font size of the aspect-ratio or resolution value in SVG user units.
                 valueFontSize: 12,
-                // Horizontal center of the aspect-ratio or resolution glyph, as a fraction of the option width.
-                glyphCenterXRatio: 0.23,
-                // Horizontal start of the aspect-ratio or resolution value, as a fraction of the option width.
-                valueStartXRatio: 0.46,
+                // Minimum gap between the indicator border and its content, matching the model tag pill's horizontal padding.
+                horizontalPadding: 4,
+                // Width of the first layout column. Every glyph is centered in this column so values share one left edge.
+                glyphColumnWidth: 20,
+                // Gap between the glyph and value, matching the model tag pill's icon gap.
+                glyphValueGap: 3,
                 // Shared vertical center of the glyph and value, as a fraction of the option height.
                 contentCenterYRatio: 0.5,
             },

@@ -133,7 +133,7 @@ describe('createGenericAiModelMultiSelect', () => {
         control.destroy()
     })
 
-    it('keeps the regular menu nested, viewport-aware, and fixed under wheel input', () => {
+    it('keeps the regular menu nested and lets overflowing options scroll internally', () => {
         const controls = createAiModelControls()
         const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-placement')
         const infoBubbleConfig = createInfoBubbleMock.mock.calls.at(-1)?.[0]
@@ -146,13 +146,15 @@ describe('createGenericAiModelMultiSelect', () => {
         })
         const stopSpy = vi.spyOn(wheelEvent, 'stopPropagation')
 
+        Object.defineProperty(optionList, 'clientHeight', { configurable: true, value: 100 })
+        Object.defineProperty(optionList, 'scrollHeight', { configurable: true, value: 400 })
+
         optionList.dispatchEvent(wheelEvent)
 
         expect(infoBubbleConfig?.disableAutoPositioning).toBe(true)
         expect(infoBubble?.dom.parentElement?.classList.contains('dots-dropdown-menu')).toBe(true)
         expect(infoBubble?.dom.parentElement).not.toBe(document.body)
-        expect(optionList.classList.contains('dropdown-option-list-no-scroll')).toBe(true)
-        expect(wheelEvent.defaultPrevented).toBe(true)
+        expect(wheelEvent.defaultPrevented).toBe(false)
         expect(stopSpy).toHaveBeenCalledOnce()
 
         control.destroy()

@@ -183,6 +183,18 @@
             padding: 4px 0;
             margin: 0;
 
+            .dropdown-option-item {
+                display: flex;
+                align-items: center;
+            }
+
+            .dropdown-option-icon {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
             li {
                 // Two-color highlight pulled from the shifting gradient palette.
                 // Left uses a slightly darker tone than #FFF5FA.

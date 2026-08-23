@@ -222,10 +222,13 @@ class MediaDimensionsDropdownOptionView implements SlidingDropdownOptionRenderIn
     resize(x: number, y: number, width: number, height = this.optionHeight): void {
         this.optionHeight = height
         const dropdownStyles = settings.aiModelControls.styles.dimensionsDropdown
-        const glyphCenterX = x + width * dropdownStyles.glyphCenterXRatio
         const contentCenterY = y + height * dropdownStyles.contentCenterYRatio
-        const labelX = x + width * dropdownStyles.valueStartXRatio
         const size = this.glyphSize(this.value)
+        const availableColumnWidth = Math.max(0, width - dropdownStyles.horizontalPadding * 2)
+        const glyphColumnWidth = Math.min(dropdownStyles.glyphColumnWidth, availableColumnWidth)
+        const glyphColumnStartX = x + dropdownStyles.horizontalPadding
+        const glyphCenterX = glyphColumnStartX + glyphColumnWidth / 2
+        const labelX = glyphColumnStartX + glyphColumnWidth + dropdownStyles.glyphValueGap
 
         this.glyph
             .attr('x', glyphCenterX - size.width / 2)
@@ -393,7 +396,6 @@ export function createGenericAiModelDropdown(
         availableTags: settings.modelSelectorDropdown.useModalityFilter ? availableTags : [],
         mountToBody: false,
         disableAutoPositioning: true,
-        disableOptionListScroll: true,
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setAiModel(selected.aiModel)
@@ -610,7 +612,6 @@ export function createGenericImageModelDropdown(
         renderIconForOptions: true,
         mountToBody: false,
         disableAutoPositioning: true,
-        disableOptionListScroll: true,
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setImageModel(selected.aiModel)
@@ -840,6 +841,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             .node() as SVGSVGElement
 
         const tagStyles = settings.aiPromptInput.modelMenu.styles
+        const dimensionStyles = settings.aiModelControls.styles.dimensionsDropdown
         const tagPill = createSvgTagPill(select(svgEl), {
             id: modelId,
             x: 0,
@@ -848,6 +850,8 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             icon: this.getModelIcon(modelId),
             iconColor: tagStyles.selectedModelTagIconColor,
             textColor: tagStyles.selectedModelTagTextColor,
+            horizontalPadding: dimensionStyles.horizontalPadding,
+            iconGap: dimensionStyles.glyphValueGap,
             selected: true,
             closable: this.controls.getUseMultipleModels(),
             className: 'ai-prompt-selected-model-tag-pill',
@@ -1213,7 +1217,6 @@ export function createGenericVideoModelDropdown(
         renderIconForOptions: true,
         mountToBody: false,
         disableAutoPositioning: true,
-        disableOptionListScroll: true,
         onSelect: (option: any) => {
             const selected = option as AiModelDropdownOption
             controls.setVideoModel(selected.aiModel)

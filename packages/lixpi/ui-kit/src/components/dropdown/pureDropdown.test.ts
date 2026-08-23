@@ -352,29 +352,6 @@ describe('pureDropdown — wheel behavior', () => {
         expect(preventSpy).toHaveBeenCalled()
     })
 
-    it('keeps a non-scrolling option list fixed and absorbs wheel input', () => {
-        const dropdown = createPureDropdown({
-            id: 'fixed-option-list',
-            selectedValue: defaultOptions[0],
-            options: defaultOptions,
-            disableOptionListScroll: true,
-            onSelect: vi.fn(),
-        })
-        const fixedList = dropdown.dom.querySelector('.submenu') as HTMLUListElement
-        const wheelEvent = new WheelEvent('wheel', {
-            bubbles: true,
-            cancelable: true,
-            deltaY: 120,
-        })
-        const stopSpy = vi.spyOn(wheelEvent, 'stopPropagation')
-
-        fixedList.dispatchEvent(wheelEvent)
-
-        expect(fixedList.classList.contains('dropdown-option-list-no-scroll')).toBe(true)
-        expect(wheelEvent.defaultPrevented).toBe(true)
-        expect(stopSpy).toHaveBeenCalledOnce()
-        dropdown.destroy()
-    })
 })
 
 describe('pureDropdown — error state', () => {
