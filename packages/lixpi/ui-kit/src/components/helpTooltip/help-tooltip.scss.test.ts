@@ -21,6 +21,7 @@ describe('help-tooltip.scss', () => {
     it('defines tooltip content defaults, layering, and visibility states', () => {
         expectSourceToContain(scss, '.help-tooltip-content')
         expectSourceToContain(scss, 'position: fixed;')
+        expectSourceToContain(scss, 'z-index: var(--help-tooltip-content-z-index, 10120);')
         expectSourceToContain(scss, 'visibility: hidden;')
         expectSourceToContain(scss, 'pointer-events: none;')
         expectSourceToContain(scss, '.help-tooltip-content.is-visible')
@@ -30,5 +31,15 @@ describe('help-tooltip.scss', () => {
     it('keeps interactive content behavior explicitly opt-in', () => {
         expectSourceToContain(scss, '.help-tooltip-content-interactive')
         expectSourceToContain(scss, 'pointer-events: auto;')
+    })
+
+    it('keeps the question-mark glyph inside the configurable trigger bounds', () => {
+        expectSourceToContain(scss, '.help-tooltip-mark')
+        expectSourceToContain(scss, 'width: 100%;')
+        expectSourceToContain(scss, 'height: 100%;')
+        expectSourceToContain(scss, 'width: var(--help-tooltip-icon-size, 12px);')
+        expectSourceToContain(scss, 'height: var(--help-tooltip-icon-size, 12px);')
+        expectSourceToContain(scss, 'max-width: 100%;')
+        expectSourceToContain(scss, 'max-height: 100%;')
     })
 })

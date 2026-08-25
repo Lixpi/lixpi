@@ -8,6 +8,7 @@ export {
     createGenericVideoAspectDropdown,
     createGenericVideoResolutionDropdown,
     createGenericVideoDurationDropdown,
+    getModelOptionsForCapability,
     transformModelsToOptions,
     type AiModelDropdownOption,
     type MediaGenerationConfigMatrixControls,

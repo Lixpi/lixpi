@@ -12,7 +12,9 @@ import DynamoDBService, { marshall, unmarshall } from '@lixpi/dynamodb-service'
 import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
 
 import {
+    GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
     getDynamoDbTableStageName,
+    MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT,
     type AiModel,
     type AiModelId,
     type AiModelInferenceCapabilities,
@@ -110,19 +112,35 @@ const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
 ]
 const VEO_RESOLUTIONS: ImageSizeOption[] = [
     { value: '720p', label: '720p' },
-    { value: '1080p', label: '1080p' },
+    {
+        value: '1080p',
+        label: '1080p',
+        description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.resolution?.['1080p'],
+    },
 ]
 const VEO_31_RESOLUTIONS: ImageSizeOption[] = [
     ...VEO_RESOLUTIONS,
-    { value: '4k', label: '4K' },
+    {
+        value: '4k',
+        label: '4K',
+        description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.resolution?.['4k'],
+    },
 ]
 const VEO_DURATIONS: ImageSizeOption[] = [
     { value: '4', label: '4s' },
     { value: '6', label: '6s' },
-    { value: '8', label: '8s' },
+    {
+        value: '8',
+        label: '8s',
+        description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.duration?.['8'],
+    },
 ]
 const VEO_3_DURATIONS: ImageSizeOption[] = [
-    { value: '8', label: '8s' },
+    {
+        value: '8',
+        label: '8s',
+        description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.duration?.['8'],
+    },
 ]
 
 // Seedance 2.0 (BytePlus ModelArk) option lists. Standard supports up to 4K;
@@ -148,7 +166,11 @@ const SEEDANCE_FAST_RESOLUTIONS: ImageSizeOption[] = [
     { value: '720p', label: '720p' },
 ]
 const SEEDANCE_DURATIONS: ImageSizeOption[] = [
-    { value: '-1', label: 'Smart length' },
+    {
+        value: '-1',
+        label: 'Smart length',
+        description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
+    },
     { value: '4', label: '4s' },
     { value: '5', label: '5s' },
     { value: '6', label: '6s' },
@@ -197,7 +219,6 @@ const buildVeoControls = (
         kind: 'segmented',
         options: resolutions,
         defaultValue: '720p',
-        description: '1080p and 4K require an 8 second duration.',
     },
     {
         key: 'duration',
@@ -205,7 +226,6 @@ const buildVeoControls = (
         kind: 'duration',
         options: durations,
         defaultValue: '8',
-        description: 'Reference-image, extension, 1080p, and 4K requests use 8 seconds.',
     },
     {
         key: 'seed',
@@ -220,10 +240,7 @@ const buildVeoControls = (
     },
 ]
 
-const buildSeedanceControls = (
-    resolutions: ImageSizeOption[],
-    serviceTiers: ImageSizeOption[],
-): MediaGenerationConfigControl[] => [
+const buildSeedanceControls = (resolutions: ImageSizeOption[]): MediaGenerationConfigControl[] => [
     {
         key: 'aspectRatio',
         label: 'Aspect ratio',
@@ -244,7 +261,6 @@ const buildSeedanceControls = (
         kind: 'duration',
         options: SEEDANCE_DURATIONS,
         defaultValue: '-1',
-        description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
     },
     {
         key: 'seed',
@@ -254,37 +270,31 @@ const buildSeedanceControls = (
         placeholder: 'Random',
         step: 1,
     },
-    toggleControl('cameraFixed', 'Fixed camera', 'false'),
-    toggleControl('watermark', 'Watermark', 'false'),
-    toggleControl('returnLastFrame', 'Return last frame', 'false'),
-    {
-        key: 'serviceTier',
-        label: 'Service tier',
-        kind: serviceTiers.length === 1 ? 'fixed' : 'segmented',
-        options: serviceTiers,
-        defaultValue: serviceTiers[0]?.value ?? 'default',
-        ...(serviceTiers.length === 1 ? { readOnly: true } : {}),
-    },
-    {
-        key: 'priority',
-        label: 'Task priority',
-        kind: 'number',
-        options: [],
-        placeholder: 'Default (0)',
-        step: 1,
-        description: 'Sets request priority within the same ModelArk inference endpoint.',
-    },
+    toggleControl(
+        'cameraFixed',
+        'Fixed camera',
+        'false',
+        MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.cameraFixed,
+    ),
+    toggleControl(
+        'watermark',
+        'Watermark',
+        'false',
+        MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.watermark,
+    ),
+    toggleControl(
+        'returnLastFrame',
+        'Return last frame',
+        'false',
+        MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.returnLastFrame,
+    ),
 ]
 
 const VEO_CONTROLS = buildVeoControls(VEO_31_RESOLUTIONS)
 const VEO_LITE_CONTROLS = buildVeoControls(VEO_RESOLUTIONS)
 const VEO_3_CONTROLS = buildVeoControls(VEO_RESOLUTIONS, VEO_3_DURATIONS)
-const SEEDANCE_STANDARD_CONTROLS = buildSeedanceControls(SEEDANCE_STANDARD_RESOLUTIONS, [
-    { value: 'default', label: 'Default' },
-])
-const SEEDANCE_FAST_CONTROLS = buildSeedanceControls(SEEDANCE_FAST_RESOLUTIONS, [
-    { value: 'default', label: 'Default' },
-])
+const SEEDANCE_STANDARD_CONTROLS = buildSeedanceControls(SEEDANCE_STANDARD_RESOLUTIONS)
+const SEEDANCE_FAST_CONTROLS = buildSeedanceControls(SEEDANCE_FAST_RESOLUTIONS)
 
 const OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES: ImageReferenceCapabilities = {
     maxReferenceImages: 16,
@@ -828,7 +838,7 @@ export class AiModelsSync {
                 // Provider UI defaults
                 color: '#56967c',
                 iconName: 'gptAvatarIcon',
-                imageSizeMode: 'resolution',
+                imageSizeMode: 'aspectRatio',
                 imageSizes: OPENAI_IMAGE_SIZES,
                 // Base offset for sorting; used to group providers
                 starSortingPosition: 200,

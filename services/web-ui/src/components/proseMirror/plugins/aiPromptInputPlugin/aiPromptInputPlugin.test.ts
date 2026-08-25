@@ -523,12 +523,6 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(modelMenu.contains(factories.modelDropdownDom)).toBe(true)
         })
 
-        it('renders image model dropdown inside model settings bubble menu', () => {
-            const { nv, factories } = createNodeView()
-            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
-            expect(modelMenu.contains(factories.imageModelDropdownDom)).toBe(true)
-        })
-
         it('renders the media generation config matrix (not a standalone image size dropdown) inside the model settings bubble menu', () => {
             // Image size/aspect selection now comes from the API-authored media
             // generation config matrix, not the legacy createImageSizeDropdown
@@ -607,147 +601,75 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             nv.destroy!()
         })
 
-        it('renders each model setup section with heading help, toggle, controls row, and selected-tags row', () => {
+        it('renders heading help and an add-model action for each model section', () => {
             const { nv } = createNodeView()
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
-            const expectedSections = [
-                {
-                    title: 'Reasoning model',
-                    controlCount: 1,
-                    controlVisibility: ['true'],
-                    toggleLabel: 'Use multiple reasoning models',
-                    hasSelectedTagsRow: true,
-                },
-                {
-                    title: 'Image model',
-                    // Model dropdown + the API-driven media generation config
-                    // matrix (which replaces the standalone image size dropdown).
-                    controlCount: 2,
-                    controlVisibility: ['true', 'true'],
-                    toggleLabel: 'Use multiple image models',
-                    hasSelectedTagsRow: false,
-                },
-                {
-                    title: 'Video model',
-                    // Model dropdown + the API-driven media generation config
-                    // matrix (which replaces the separate aspect/resolution/duration dropdowns).
-                    controlCount: 2,
-                    controlVisibility: ['true', 'true'],
-                    toggleLabel: 'Use multiple video models',
-                    hasSelectedTagsRow: false,
-                },
-            ]
+            const titles = ['Reasoning model', 'Image model', 'Video model']
 
-            expect(sections).toHaveLength(expectedSections.length)
-            for (const [index, expectedSection] of expectedSections.entries()) {
+            expect(sections).toHaveLength(titles.length)
+            for (const [index, title] of titles.entries()) {
                 const section = sections[index]!
                 const heading = section.querySelector('.ai-prompt-model-menu-section-heading')!
                 const headingMain = section.querySelector('.ai-prompt-model-menu-section-heading-main')!
                 const headingAction = section.querySelector('.ai-prompt-model-menu-section-heading-action')!
-                const controlsRow = section.querySelector('.ai-prompt-model-menu-section-controls')!
-                const selectedTagsRow = section.querySelector('.ai-prompt-selected-model-tags-row')
-                const selectedTagsRows = section.querySelectorAll('.ai-prompt-selected-model-tags-row')
-                const sectionControlRows = Array.from(section.querySelectorAll('.ai-prompt-model-menu-control'))
 
                 expect(heading.contains(headingMain)).toBe(true)
-                expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(expectedSection.title)
+                expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(title)
                 expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
-                expect(headingAction.querySelector('.ai-prompt-model-menu-toggle')?.getAttribute('aria-label')).toBe(expectedSection.toggleLabel)
-                expect(headingAction.querySelector('.ai-prompt-model-menu-toggle-text')?.textContent).toBe('Use multiple models')
-                expect(sectionControlRows).toHaveLength(expectedSection.controlCount)
-                expect(Array.from(controlsRow.querySelectorAll('.ai-prompt-model-menu-control')).map((control) => {
-                    return control.getAttribute('data-visible')
-                })).toEqual(expectedSection.controlVisibility)
-
-                if (expectedSection.hasSelectedTagsRow) {
-                    expect(selectedTagsRow).not.toBeNull()
-                    expect(section.children[2]).toBe(selectedTagsRow)
-                    expect(selectedTagsRow?.getAttribute('data-visible')).toBe('false')
-                    expect(selectedTagsRows).toHaveLength(1)
-                } else {
-                    expect(selectedTagsRow).toBeNull()
-                    expect(selectedTagsRows).toHaveLength(0)
-                    expect(section.children).toHaveLength(2)
-                }
+                expect(headingAction.querySelector('.ai-model-config-add')?.getAttribute('aria-label')).toBe('Add model')
+                expect(section.querySelector('.ai-prompt-model-menu-toggle')).toBeNull()
+                expect(section.querySelector('.ai-prompt-selected-model-tags-row')).toBeNull()
             }
 
             nv.destroy!()
         })
 
-        it('keeps single-select dropdowns mounted until a section toggle enables multi-select mode', () => {
-            const { nv, factories, mockView } = createNodeView('Hello', {
-                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6']),
-            })
-
-            expect(factories.createModelDropdown).toHaveBeenCalledTimes(1)
-            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
-            expect(nv.dom.contains(factories.modelDropdownDom)).toBe(true)
-
-            const reasoningToggle = nv.dom.querySelector(
-                '.ai-prompt-model-menu-toggle[aria-label="Use multiple reasoning models"]'
-            )!
-            reasoningToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-            nv.update!(mockView.state.doc.firstChild!)
-
-            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(true)
-            expect(mockView.state.doc.firstChild!.attrs.useMultipleImageModels).toBe(false)
-            expect(mockView.state.doc.firstChild!.attrs.useMultipleVideoModels).toBe(false)
-            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['Anthropic:sonnet-4-6']))
-            expect(factories.createModelMultiSelect).toHaveBeenCalledTimes(1)
-            expect(nv.dom.contains(factories.modelMultiSelectDom)).toBe(true)
-            expect(nv.dom.contains(factories.modelDropdownDom)).toBe(false)
-
-            nv.destroy!()
-        })
-
-        it('renders selected model tag pills only below the enabled multi-model section and removes models from that row', () => {
+        it('adds and removes independently configured reasoning-model rows while keeping one row required', () => {
             aiModelsStore.setAiModels([
                 {
                     provider: 'Anthropic',
                     model: 'sonnet-4-6',
                     shortTitle: 'Sonnet 4.6',
                     iconName: 'claudeIcon',
-                    color: '#1a2744',
-                    modalities: [{ modality: 'TEXT', shortTitle: 'Text' }],
+                    modalities: [{ modality: 'text_generation' }],
                 },
                 {
-                    provider: 'Anthropic',
-                    model: 'opus-4-8',
-                    shortTitle: 'Opus 4.8',
-                    iconName: 'claudeIcon',
-                    color: '#1a2744',
-                    modalities: [{ modality: 'TEXT', shortTitle: 'Text' }],
+                    provider: 'OpenAI',
+                    model: 'gpt-5-4',
+                    shortTitle: 'GPT 5.4',
+                    iconName: 'gptAvatarIcon',
+                    modalities: [{ modality: 'text_generation' }],
                 },
             ] as any)
-
-            const { nv, mockView } = createNodeView('Hello', {
-                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'Anthropic:opus-4-8']),
-                useMultipleReasoningModels: true,
-                aiImageModels: JSON.stringify(['Anthropic:sonnet-4-6']),
+            const { nv, factories, mockView } = createNodeView('Hello', {
+                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6']),
             })
-            const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
-            const reasoningTagsRow = sections[0]!.querySelector('.ai-prompt-selected-model-tags-row')!
-            const imageTagsRow = sections[1]!.querySelector('.ai-prompt-selected-model-tags-row')
-            const reasoningLabels = () => Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-label'))
-                .map((element) => element.textContent)
+            const reasoningSection = nv.dom.querySelectorAll('.ai-prompt-model-menu-section')[0] as HTMLElement
 
-            expect(reasoningTagsRow.getAttribute('data-visible')).toBe('true')
-            expect(imageTagsRow).toBeNull()
-            expect(reasoningLabels()).toEqual(['Sonnet 4.6', 'Opus 4.8'])
-            expect(reasoningTagsRow.querySelector('.tag-pill-label')!.getAttribute('text-anchor')).toBe('middle')
-            expect(reasoningTagsRow.querySelector('.tag-pill-close')!.getAttribute('transform')).toBe('translate(11, 12)')
-            expect(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('stroke')).toBe('rgba(105, 115, 133, 0.12)')
-            const initialPillWidths = Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-background'))
-                .map((element) => Number(element.getAttribute('width')))
-            expect(initialPillWidths[1]).toBeLessThan(initialPillWidths[0]!)
-            expect(initialPillWidths[1]).toBeGreaterThan(0)
+            expect(factories.createModelDropdown).toHaveBeenCalledTimes(1)
+            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
+            expect(reasoningSection.querySelectorAll('.ai-model-config-row')).toHaveLength(1)
+            expect(reasoningSection.querySelector('.ai-model-config-remove')).toBeNull()
 
-            reasoningTagsRow.querySelector('.tag-pill-close')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            const addButton = reasoningSection.querySelector('.ai-model-config-add') as HTMLButtonElement
+            addButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
             nv.update!(mockView.state.doc.firstChild!)
 
-            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['Anthropic:opus-4-8']))
-            expect(reasoningLabels()).toEqual(['Opus 4.8'])
-            expect(Number(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('width'))).toBe(initialPillWidths[1])
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(true)
+            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(
+                JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
+            )
+            expect(reasoningSection.querySelectorAll('.ai-model-config-row')).toHaveLength(2)
+
+            const removeButton = reasoningSection.querySelector('.ai-model-config-remove') as HTMLButtonElement
+            removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+            nv.update!(mockView.state.doc.firstChild!)
+
+            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['OpenAI:gpt-5-4']))
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(false)
+            expect(reasoningSection.querySelectorAll('.ai-model-config-row')).toHaveLength(1)
+            expect(reasoningSection.querySelector('.ai-model-config-remove')).toBeNull()
+            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
 
             nv.destroy!()
             aiModelsStore.setAiModels([])
@@ -1124,7 +1046,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         const [controls, dropdownId] = factories.createModelDropdown.mock.calls[0]
         expect(controls).toHaveProperty('getCurrentAiModel')
         expect(controls).toHaveProperty('setAiModel')
-        expect(dropdownId).toBe('ai-prompt-input')
+        expect(dropdownId).toBe('ai-reasoning-model-0')
     })
 
     it('does not call createImageSizeDropdown — the option is accepted but unused by the current node view', () => {
@@ -1499,6 +1421,37 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         expect(submitCall.contentJSON).toBeInstanceOf(Array)
         expect(submitCall.contentJSON.length).toBeGreaterThan(0)
         expect(submitCall.aiReasoningModels).toEqual(['gpt-4'])
+    })
+
+    it('submits every selected model and derives multiple-model flags from the selected rows', () => {
+        const { options } = createPluginOptions()
+        const plugin = createAiPromptInputPlugin(options)
+        const testDoc = doc(promptInput({
+            mediaGenerationMode: 'video',
+            aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
+            aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-1']),
+            aiVideoModels: JSON.stringify(['Google:veo-3', 'BytePlus:seedance-2']),
+            useMultipleReasoningModels: false,
+            useMultipleImageModels: false,
+            useMultipleVideoModels: false,
+        }, p('Create a clip')))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+        const mockView = { state, dispatch: vi.fn() } as unknown as EditorView
+
+        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+        }))
+
+        expect(options.onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+            aiReasoningModels: ['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4'],
+            useMultipleReasoningModels: true,
+            useMultipleImageModels: true,
+            useMultipleVideoModels: true,
+            videoOptions: expect.objectContaining({
+                aiVideoModels: ['Google:veo-3', 'BytePlus:seedance-2'],
+            }),
+        }))
     })
 
     it('keeps the Capability module atom in the submitted message JSON', () => {

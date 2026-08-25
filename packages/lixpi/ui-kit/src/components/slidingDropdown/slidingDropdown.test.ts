@@ -337,6 +337,18 @@ describe('createSlidingDropdown — intrinsic width and chevron', () => {
         expect(chevronIcon.getAttribute('transform')).toBe('rotate(0)')
     })
 
+    it('layers its open portal below help tooltips', () => {
+        const { svg, slidingDropdown } = mount('square')
+
+        slidingDropdown.setOpen(true)
+        vi.runAllTimers()
+
+        const scrollPortal = svg.closest('.sliding-dropdown-scroll-portal') as HTMLDivElement
+        const chevronPortal = document.querySelector('.sliding-dropdown-chevron-portal') as SVGSVGElement
+        expect(scrollPortal.style.zIndex).toBe('10110')
+        expect(chevronPortal.style.zIndex).toBe('10110')
+    })
+
     it('keeps content padding and the chevron gap when the selected border is enabled', () => {
         uiKitSettings.slidingDropdown.styles.indicator.closedBorderWidth = 4
         uiKitSettings.slidingDropdown.styles.indicator.openBorderWidth = 4

@@ -64,6 +64,14 @@ export type SlidingDropdownSettings = {
 
 export type AiModelControlsSettings = {
     styles: {
+        modelDropdown: {
+            width: number
+            height: number
+            valueFontSize: number
+            horizontalPadding: number
+            iconSize: number
+            iconLabelGap: number
+        }
         dimensionsDropdown: {
             width: number
             height: number
@@ -745,12 +753,26 @@ export const settings: Settings = {
     // Model-specific controls rendered inside the shared dropdown primitives.
     aiModelControls: {
         styles: {
-            dimensionsDropdown: {
-                // Initial layout width used before the dropdown can measure its option content.
-                width: 68,
-                // Height of the closed oval aspect-ratio and resolution control in SVG user units.
+            modelDropdown: {
+                // Initial width before the sliding dropdown measures the selected model name.
+                width: 190,
+                // Height of each model selector row in SVG user units.
                 height: 38,
-                // Font size of the aspect-ratio or resolution value in SVG user units.
+                // Font size of model names in SVG user units.
+                valueFontSize: 12,
+                // Minimum visible gap between the indicator border and model content.
+                horizontalPadding: 7,
+                // Size of provider icons in SVG user units.
+                iconSize: 14,
+                // Gap between the provider icon and model name.
+                iconLabelGap: 7,
+            },
+            dimensionsDropdown: {
+                // Initial layout width used before a media configuration dropdown can measure its option content.
+                width: 68,
+                // Height of a closed media configuration dropdown in SVG user units.
+                height: 38,
+                // Font size of the media configuration value in SVG user units.
                 valueFontSize: 12,
                 // Minimum visible gap between the indicator border and option content.
                 horizontalPadding: 5,
@@ -762,15 +784,15 @@ export const settings: Settings = {
                 contentCenterYRatio: 0.5,
             },
             dimensionsGlyph: {
-                // Target rectangle area in square SVG user units. Equal area keeps wide, square, and tall ratios at comparable visual weight.
+                // Target rectangle area in square SVG user units. Equal area keeps image sizes and aspect ratios at comparable visual weight.
                 targetArea: 169,
                 // Maximum width or height in SVG user units. This prevents extreme ratios from overflowing their option row.
                 maxDimension: 20,
                 // Width and height of the dashed Auto glyph in SVG user units.
                 adaptiveSize: 12,
-                // Corner radius of aspect-ratio and resolution rectangles in SVG user units.
+                // Corner radius of image-size and aspect-ratio rectangles in SVG user units.
                 cornerRadius: 2,
-                // Outline width of aspect-ratio and resolution rectangles in SVG user units.
+                // Outline width of image-size and aspect-ratio rectangles in SVG user units.
                 strokeWidth: 1.5,
                 // Font size of the A inside the dashed Auto glyph in SVG user units.
                 adaptiveLabelFontSize: 7,
@@ -1138,7 +1160,7 @@ export const settings: Settings = {
                 triggerActiveColor: colorPalette.nightBlue,
                 triggerActiveBackground: '#eef0f4',
                 triggerFocusOutline: '2px solid #b8bec8',
-                // Width of the model-settings surface. This matches the compact layout used before provider-specific controls were introduced.
+                // Minimum width of the model-settings surface. Its content can expand the surface up to the viewport-aware CSS cap.
                 infoBubbleWidth: '410px',
                 infoBubbleBorderRadius: '12px',
                 infoBubbleBackground: '#fff',

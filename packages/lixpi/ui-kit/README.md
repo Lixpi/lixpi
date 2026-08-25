@@ -34,6 +34,8 @@ The Web UI calls `configureUiKit(settings)` once during startup so package primi
 
 The shared animated collapse/expand icon describes the available action: collapsed content shows outward expand chevrons, while expanded content shows inward collapse chevrons. Hosts provide the label and ARIA state; they do not reverse the icon state themselves.
 
+Portaled sliding dropdowns reserve the overlay layer directly below the default help-tooltip layer, so help content rendered from a dropdown option covers the dropdown surface and chevron.
+
 ## Components
 
 - Bubble menu

@@ -30,10 +30,13 @@ describe('ai-prompt-input.scss', () => {
         expectSourceToContain(scss, '.ai-prompt-model-menu-control-label')
     })
 
-    it('covers selected model tag row styling', () => {
-        expectSourceToContain(scss, '.ai-prompt-selected-model-tags-row')
-        expectSourceToContain(scss, '.ai-prompt-selected-model-tag')
-        expectSourceToContain(scss, '.ai-prompt-selected-model-tag-svg')
+    it('lays out image model and image-size fields in two flexible columns', () => {
+        expectSourceToContain(scss, '.ai-media-config-group-primary-row')
+        expectSourceToContain(scss, 'flex-wrap: nowrap;')
+        expectSourceToContain(scss, '.ai-media-config-group-model-column,')
+        expectSourceToContain(scss, '.ai-media-config-group-size-column')
+        expectSourceToContain(scss, 'justify-content: flex-end;')
+        expectSourceToContain(scss, 'width: max-content;')
     })
 
     it('caps the model settings surface and scrolls only that surface when content exceeds the viewport space', () => {
@@ -43,21 +46,25 @@ describe('ai-prompt-input.scss', () => {
         expectSourceToContain(scss, 'overscroll-behavior: contain;')
     })
 
-    it('renders each media configuration group as one vertical column with the shared gradient separator', () => {
+    it('renders each media configuration group as one vertical column and keeps video choices in one row', () => {
         expectSourceToContain(scss, '.ai-media-config-group-row')
         expectSourceToContain(scss, 'flex-direction: column;')
         expectSourceToContain(scss, '.ai-media-config-group-controls')
         expectSourceToContain(scss, 'grid-template-columns: minmax(0, 1fr);')
+        expectSourceToContain(scss, '.ai-media-config-matrix[data-media-type="video"] .ai-media-config-group-controls')
+        expectSourceToContain(scss, 'grid-template-columns: repeat(3, minmax(0, 1fr));')
         expectSourceToContain(scss, '.ai-media-config-group + .ai-media-config-group::before')
         expectSourceToContain(scss, '--ai-prompt-model-menu-section-divider-gradient')
     })
 
-    it('keeps media toggle controls inline and removes the redundant state label and track wrapper', () => {
-        expectSourceToContain(scss, '.ai-media-config-toggle-text')
+    it('puts video toggle switches below their label and keeps the tooltip label aligned', () => {
+        expectSourceToContain(scss, '.ai-media-config-control[data-control-kind="toggle"] .ai-media-config-control-field')
+        expectSourceToContain(scss, 'padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);')
+        expectSourceToContain(scss, '.ai-media-config-control-label')
+        expectSourceToContain(scss, 'align-self: flex-start;')
         expectSourceToContain(scss, '.ai-media-config-toggle-svg-host')
         expectSourceToContain(scss, 'border: none;')
         expectSourceToContain(scss, 'background: transparent;')
         expectSourceNotToContain(scss, '.ai-media-config-toggle-track')
-        expectSourceNotToContain(scss, '.ai-media-config-toggle-label')
     })
 })

@@ -173,6 +173,7 @@ export type ImageGenerationSize =
 export type ImageSizeOption = {
     value: string
     label: string
+    description?: string
 }
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
@@ -259,8 +260,22 @@ export type MediaGenerationConfigControlKey =
     | 'cameraFixed'
     | 'watermark'
     | 'returnLastFrame'
-    | 'serviceTier'
-    | 'priority'
+
+export const MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT: Readonly<Partial<Record<MediaGenerationConfigControlKey, string>>> = {
+    cameraFixed: 'Keeps the camera stationary instead of allowing generated camera movement.',
+    watermark: 'Adds an AI-generated watermark to the lower-right corner of the output video.',
+    returnLastFrame: 'Returns the final video frame as a separate image that can continue a video sequence.',
+}
+
+export const GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT: Readonly<Partial<Record<MediaGenerationConfigControlKey, Readonly<Record<string, string>>>>> = {
+    resolution: {
+        '1080p': '1080p requires an 8 second duration.',
+        '4k': '4K requires an 8 second duration.',
+    },
+    duration: {
+        '8': 'Required for reference-image, extension, and high-resolution requests.',
+    },
+}
 
 export type MediaGenerationConfigControlKind =
     | 'aspect-ratio'

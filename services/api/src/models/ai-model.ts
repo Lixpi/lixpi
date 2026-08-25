@@ -12,6 +12,7 @@ import {
     type DefaultAiModelSelection,
     type ImageSizeOption,
     type MediaGenerationConfigControl,
+    type MediaGenerationConfigControlKey,
     type MediaGenerationConfigGroup,
     type MediaGenerationConfigMatrix,
 } from '@lixpi/constants'
@@ -58,6 +59,7 @@ const normalizeOptions = (options: ImageSizeOption[] | undefined, fallback: Imag
         .map(option => ({
             value: option.value,
             label: option.label || option.value,
+            ...(option.description ? { description: option.description } : {}),
         }))
 
     return normalized.length > 0 ? normalized : fallback
@@ -95,18 +97,37 @@ const buildImageControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationCon
     }]
 }
 
+const SUPPORTED_MEDIA_GENERATION_CONTROL_KEYS = new Set<MediaGenerationConfigControlKey>([
+    'imageSize',
+    'aspectRatio',
+    'resolution',
+    'duration',
+    'outputFormat',
+    'outputCount',
+    'generateAudio',
+    'seed',
+    'negativePrompt',
+    'personGeneration',
+    'cameraFixed',
+    'watermark',
+    'returnLastFrame',
+])
+
 const buildVideoControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
-    return (model.videoGenerationControls ?? []).map(control => ({
-        ...control,
-        options: control.options.map(option => ({ ...option })),
-    }))
+    return (model.videoGenerationControls ?? [])
+        .filter(control => SUPPORTED_MEDIA_GENERATION_CONTROL_KEYS.has(control.key))
+        .map(control => ({
+            ...control,
+            options: control.options.map(option => ({ ...option })),
+        }))
 }
 
 const getControlOptionsSignature = (controls: MediaGenerationConfigControl[]): string => {
     return JSON.stringify(controls.map(control => [
         control.key,
         control.kind,
-        control.options.map(option => [option.value, option.label]),
+        control.description ?? null,
+        control.options.map(option => [option.value, option.label, option.description ?? null]),
     ]))
 }
 

@@ -8,7 +8,7 @@
 2. Cmd/Ctrl+Enter, the injected submit button, or `SUBMIT_AI_PROMPT_META` starts submission.
 3. `extractContentJSON()` returns the input node children as ProseMirror JSON.
 4. `getInputAttrs()` reads the explicit image/video mode, reasoning, media model, configuration-matrix, and multi-model attrs from the input node.
-5. `onSubmit()` receives `{ contentJSON, mediaGenerationMode, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Only the media options for `mediaGenerationMode` are included. Prompt wording never changes the selected media type. Each section's array is collapsed to its first model when its multi flag is off. Media options include API-authored configuration matrix group selections for singular and multi-model requests. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
+5. `onSubmit()` receives `{ contentJSON, mediaGenerationMode, aiReasoningModels, useMultipleReasoningModels, useMultipleImageModels, useMultipleVideoModels, imageOptions, videoOptions }` (where `imageOptions.aiImageModels` / `videoOptions.aiVideoModels` are ordered arrays). Only the media options for `mediaGenerationMode` are included. Prompt wording never changes the selected media type. The three multi-model booleans are derived from whether the corresponding model array contains more than one row. Media options include one API-authored configuration selection per selected media model. `contentJSON` retains typed `prompt_reference` atoms; the browser does not derive or send a second reference list.
 6. Keyboard and button submission clear the input to one empty paragraph and place the cursor at the start.
 7. The host routes the payload. The canvas-wide host creates a standalone hidden AI chat thread for the submitted user message and projects its pending branch marker. Capability-module atoms remain in the stored user message, and the marker renders them through the same `prompt-reference-chip-capability-module` factory used by the editable composer.
 
@@ -25,12 +25,9 @@ createAiPromptInputPlugin({
     onSubmit: data => this.onPromptSubmit?.(data),
     createContextTray: this.promptControlFactories?.createContextTray,
     createModelDropdown: this.promptControlFactories?.createModelDropdown,
-    createModelMultiSelect: this.promptControlFactories?.createModelMultiSelect,
     createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,
-    createImageModelMultiSelect: this.promptControlFactories?.createImageModelMultiSelect,
     createImageSizeDropdown: this.promptControlFactories?.createImageSizeDropdown,
     createVideoModelDropdown: this.promptControlFactories?.createVideoModelDropdown,
-    createVideoModelMultiSelect: this.promptControlFactories?.createVideoModelMultiSelect,
     createVideoAspectDropdown: this.promptControlFactories?.createVideoAspectDropdown,
     createVideoResolutionDropdown: this.promptControlFactories?.createVideoResolutionDropdown,
     createVideoDurationDropdown: this.promptControlFactories?.createVideoDurationDropdown,
@@ -84,13 +81,13 @@ Attrs declared in `aiPromptInputNode.ts`:
 - `videoDuration`
 - `videoGenerationConfigGroups`
 
-`aiReasoningModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays — each section's single source of truth, with an array of length 1 meaning a singular selection. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
+`aiReasoningModels`, `aiImageModels`, and `aiVideoModels` are JSON-serialized ordered model-id arrays. Each entry maps to one model configuration row, and each section must keep at least one row. `parseAiModelSelectionAttr()` accepts array values or serialized arrays and filters empty entries. `serializeAiModelSelectionAttr()` deduplicates non-empty model ids.
 
-The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels` control reasoning, image, and video sections independently. When a section switch is enabled and its model-list attr is empty, the scalar model attr is used as the single selected model for that section. When a section switch is disabled, its model-list attr is collapsed to the first model. Configuration groups remain stored per model so switching between modes or singular/multi-model selection preserves each model's settings; only the active mode is submitted.
+The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels` remain in the document and API contracts, but the UI derives them from row count instead of exposing switches. Configuration groups remain stored per model so adding, removing, or changing rows does not merge settings for models from the same provider; only the active media mode is submitted.
 
 ## NodeView Structure
 
-`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, injected dropdowns, selected-model tag rows, and injected submit button. A host may provide `mountMediaModeSwitch()` to portal the Image / Video switch into adjacent layout chrome; otherwise the switch remains a child of the node view.
+`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` to portal the Image / Video switch into adjacent layout chrome; otherwise the switch remains a child of the node view.
 
 ```text
 div.ai-prompt-input-wrapper[data-empty]
@@ -107,27 +104,21 @@ div.ai-prompt-input-wrapper[data-empty]
         └── section.ai-prompt-model-menu-section  Video model
 ```
 
-The reasoning section mounts a model selector and a multi-model switch.
+The reasoning section mounts one single-select sliding dropdown per model row and an `add model` action.
 
-The image section mounts a model selector, an API-authored per-model configuration matrix, and a multi-model switch. It is visible only in image mode.
+The image section mounts an `add model` action and one API-authored configuration row per selected image model. Each row has its own single-select sliding dropdown and removal control. It is visible only in image mode.
 
-The video section mounts a model selector, an API-authored per-model configuration matrix, and a multi-model switch. It is visible only in video mode.
+The video section mounts an `add model` action and one API-authored configuration row per selected video model. Each row has its own single-select sliding dropdown and removal control. It is visible only in video mode.
 
 ## Control Adapters
 
-Controls read and write ProseMirror node attrs through small adapter objects. Each adapter exposes getter/setter callbacks for the scalar model attr, the serialized model-list attr, or the media option attr it controls.
+Controls read and write ProseMirror node attrs through small adapter objects. Each model dropdown reads one index from the serialized model-list attr, while media controls read the configuration selection for that row's model id.
 
-Single-select controls update the scalar attr and serialize that value into the matching model-list attr.
+Every row adapter reads one array index and replaces only that index when its dropdown changes. Options already selected by another row are disabled. The `add model` action appends the first available unselected model. Removal controls align with the top-right edge of their model block and are omitted when the section contains only one model.
 
-Multi-select controls update the scalar attr to the first selected model and serialize the full ordered selection into the matching model-list attr.
+Model selectors use the ui-kit sliding dropdown. Every option renders its provider icon and a `Provider: Model` label in both selected and unselected states. The provider uses the dropdown's muted text color, while the model uses its darker active text color. Every model row renders a `Model` field label above the selector. Model rows remount their selectors after the host is connected and remeasure them after the model menu or a media section becomes visible, so closed width and chevron position use rendered SVG geometry instead of detached or hidden fallback estimates. Expanded selectors size to their longest model label instead of the shrink-wrapped model row. Open dropdowns use their own portaled native scroll surface, so the scrollable model-settings surface cannot clip them.
 
-`ModeAwareModelSelector` swaps between the single-select and multi-select dropdown for each section based on the section's multi-model flag. If a multi-select factory is omitted, the selector mounts the section's single-select dropdown.
-
-Regular model selector popovers are portaled to `document.body` and use viewport-aware fixed positioning, so the scrollable model-settings surface cannot clip them. Their option lists ignore wheel input. Open sliding-dropdown SVGs use their own portaled native scroll surface.
-
-`SelectedModelTagsRow` subscribes to `aiModelsStore`, renders selected model tag pills while multi-model mode is enabled, and removes ids through the matching adapter when a tag is closed.
-
-`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders the matching groups for every selected media model in both single-model and multi-model mode. The catalog groups models from the same provider when their control keys, kinds, and option sets match. Models with different options use separate groups. Each group heading names the provider once, and the selected model names render as chips below it. The group's settings render below those chips in one column, and the shared model-menu gradient separates adjacent groups. Groups remain unboxed and compact. Aspect ratios and resolutions use the ui-kit sliding dropdown with initial measurement width, height, value typography, horizontal padding, column width, content gap, and glyph positioning from `settings.aiModelControls.styles.dimensionsDropdown`. Closed controls measure the selected glyph and value, while expanded controls fit the longest option without extra width from that initial measurement. Both controls use two fixed columns: glyphs are centered in the first column, and values are left-aligned in the second. The columns keep the same side and icon gaps as the model tag pills. Resolution frames use their pixel dimensions or the group's selected aspect ratio. Binary settings render their label and shared ui-kit toggle switch on one line, without a separate state label. Their dimensions and colors match the `Use multiple models` switches. Other discrete settings use the ui-kit sliding switch with the same app-wide flat indicator appearance. Duration uses the ui-kit slider and keeps Seedance intelligent duration as an ordered slider value. Pipeline-owned negative prompting, moderation policy, output count, output format, and audio defaults are not configuration-matrix controls and are never exposed as composer inputs. User changes write a sanitized `imageGenerationConfigGroups` or `videoGenerationConfigGroups` attr containing `{ groupId, modelIds, values }`; the API validates every value against the synchronized controls. The frontend does not derive provider-specific controls.
+`MediaGenerationConfigMatrixView` reads `aiModelsStore.mediaGenerationConfigMatrix`, which is returned by the API model catalog. It renders one row per selected media model in selection order, including separate rows for models that share a provider and catalog group. Each row owns one `{ groupId, modelIds: [modelId], values }` selection so configuration values never leak between models. The shared model-menu gradient separates adjacent rows. Every image model keeps its model selector and image-size control on one non-wrapping flex row, whether that control represents aspect ratio or resolution. The row has flexible model and image-size columns. The image-size label and field are right-justified inside the second column. The model-settings surface uses its configured width as a minimum and grows with that row until it reaches the viewport-aware maximum width. Video aspect ratio, resolution, and duration controls share one three-column row below the model selector. Seed spans the full row below them. Aspect ratios, image dimensions, video resolutions, and durations use the ui-kit sliding dropdown with initial measurement width, height, value typography, and horizontal padding from `settings.aiModelControls.styles.dimensionsDropdown`. Aspect ratios and image dimensions add a dimension glyph whose column width, content gap, and position come from the same settings. Closed controls measure the selected content, while expanded controls fit the longest option without extra width from that initial measurement. Video resolutions and durations are text-only because neither value represents an aspect ratio. Every dropdown option with a description renders the shared help tooltip beside that option in both closed and expanded states; dropdown controls never render a separate description below the field. Seedance Smart length and constrained Google video resolutions and durations use this option-level contract. Seedance's fixed-camera, watermark, and return-last-frame settings share the next three-column row. Each control renders the shared help tooltip beside its label and aligns the toggle switch below the label. Other discrete settings use the ui-kit sliding switch with the same app-wide flat indicator appearance. Pipeline-owned negative prompting, moderation policy, output count, output format, and audio defaults are not configuration-matrix controls and are never exposed as composer inputs. The API validates every value against the synchronized controls. The frontend does not derive provider-specific controls.
 
 ## Model Settings Menu
 
@@ -141,15 +132,15 @@ The menu content is built from three `ai-prompt-model-menu-section` blocks:
 
 The bottom settings row summarizes the active model and its primary configuration. The entire row opens the menu. Image and video setting sections render provider and option-set groups from the API configuration matrix, and the inactive media section is hidden.
 
-The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper, so configuration-value changes cannot move the open menu. Changes to media mode, multi-model mode, or selected model ids trigger a new position measurement after the menu's structure updates.
+The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper, so configuration-value changes cannot move the open menu. Changes to media mode or selected model rows trigger a new position measurement after the menu's structure updates.
 
-The model settings surface is capped to the viewport space above its trigger. Its content scrolls when the configured model groups exceed that height. Regular model lists absorb wheel input without moving; sliding dropdowns use their portaled wheel and touch scroll surface.
+The model settings surface is capped to the viewport space above its trigger. Its content scrolls when the configured model rows exceed that height. Sliding dropdowns use their portaled wheel and touch scroll surface.
 
-Each section has a title, help tooltip, section switch, one or more controls, and an optional selected-model tag row. Reasoning multi-select uses the section-level tag row; image and video multi-select tags render inside their API matrix provider groups.
+Each section has a title, help tooltip, `add model` action, and one or more removable model rows. The final row's removal control stays disabled.
 
 `settings.aiPromptInput.modelMenu.styles` is copied to CSS custom properties on the NodeView root by `applyModelMenuStyleSettings()`. Layout rules stay in `ai-prompt-input.scss`.
 
-The NodeView hides the model menu on document `mousedown` outside the controls row, model menu, portaled model selectors, and sliding-dropdown scroll surfaces/SVGs. It removes that listener in `destroy()`.
+The NodeView hides the model menu on document `mousedown` outside the controls row, model menu, and sliding-dropdown scroll surfaces/SVGs. It removes that listener in `destroy()`.
 
 ## Submit
 
@@ -231,13 +222,13 @@ Settings hooks:
 - `aiPromptInputPlugin.ts`: plugin creation, submit payload construction, content extraction, attr reading, clearing, placeholder decorations, keydown handling, meta handling.
 - `aiPromptInputNode.ts`: node spec, attr parsing/serialization helpers, NodeView, model menu, control adapters, multi-model selectors, media config matrix rendering, selected tag rows, lifecycle handling.
 - `aiPromptInputPluginConstants.ts`: `AI_PROMPT_INPUT_PLUGIN_KEY`, `SUBMIT_AI_PROMPT_META`.
-- `ai-prompt-input.scss`: floating prompt input, wrapper, editable content, controls row, submit styling, model settings menu, selected-model tag row styles.
+- `ai-prompt-input.scss`: floating prompt input, wrapper, editable content, controls row, submit styling, model settings menu, and model configuration row styles.
 - `index.ts`: public exports.
 
 ## Related Modules
 
 - `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, and tracks thread receiving state for transcript projection.
-- `$src/components/aiModelControls/`: reusable model, media, multi-select, and submit controls shared by prompt surfaces. Dimension controls use `settings.aiModelControls.styles.dimensionsDropdown`, while their glyph geometry uses `settings.aiModelControls.styles.dimensionsGlyph`; fixed ratios receive equal visual area so portrait and landscape options have matching weight.
+- `$src/components/aiModelControls/`: reusable model, media, and submit controls shared by prompt surfaces. Model selectors use `settings.aiModelControls.styles.modelDropdown`. Dimension controls use `settings.aiModelControls.styles.dimensionsDropdown`, while their glyph geometry uses `settings.aiModelControls.styles.dimensionsGlyph`; fixed ratios receive equal visual area so portrait and landscape options have matching weight.
 - `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
 - `$src/infographics/workspace/WorkspaceCanvas.ts`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
 - `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

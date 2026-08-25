@@ -11,6 +11,12 @@ const mockState = vi.hoisted(() => ({
     }>,
     slidingDropdownConfigs: [] as any[],
     slidingDropdownInstances: [] as Array<{
+        render: ReturnType<typeof vi.fn>
+        setValue: ReturnType<typeof vi.fn>
+        destroy: ReturnType<typeof vi.fn>
+    }>,
+    slidingSwitchConfigs: [] as any[],
+    slidingSwitchInstances: [] as Array<{
         setValue: ReturnType<typeof vi.fn>
         destroy: ReturnType<typeof vi.fn>
     }>,
@@ -22,10 +28,16 @@ const mockState = vi.hoisted(() => ({
         setChecked: ReturnType<typeof vi.fn>
         destroy: ReturnType<typeof vi.fn>
     }>,
+    helpTooltipConfigs: [] as any[],
 }))
 
 const aiModelsStoreState = vi.hoisted(() => ({
     data: [] as any[],
+    defaultModels: {
+        reasoning: '',
+        image: '',
+        video: '',
+    } as Record<'reasoning' | 'image' | 'video', string>,
     mediaGenerationConfigMatrix: {
         version: 'media-generation-config-matrix-v1',
         groups: [] as any[],
@@ -68,12 +80,37 @@ vi.mock('@lixpi/ui-kit/components/tag-pill', () => ({
 vi.mock('@lixpi/ui-kit/components/sliding-dropdown', () => ({
     createSlidingDropdown: vi.fn((_parent: any, config: any) => {
         const instance = {
+            render: vi.fn(),
             setValue: vi.fn(),
             destroy: vi.fn(),
         }
         mockState.slidingDropdownConfigs.push(config)
         mockState.slidingDropdownInstances.push(instance)
         return instance
+    }),
+}))
+
+vi.mock('@lixpi/ui-kit/components/sliding-switch', () => ({
+    createSlidingSwitch: vi.fn((_parent: any, config: any) => {
+        const instance = {
+            setValue: vi.fn(),
+            destroy: vi.fn(),
+        }
+        mockState.slidingSwitchConfigs.push(config)
+        mockState.slidingSwitchInstances.push(instance)
+        return instance
+    }),
+}))
+
+vi.mock('@lixpi/ui-kit/components/help-tooltip', () => ({
+    createHelpTooltip: vi.fn((config: any) => {
+        const dom = document.createElement('span')
+        dom.className = 'mock-help-tooltip'
+        mockState.helpTooltipConfigs.push(config)
+        return {
+            dom,
+            destroy: vi.fn(() => dom.remove()),
+        }
     }),
 }))
 
@@ -108,11 +145,21 @@ vi.mock('$src/stores/aiModelsStore.ts', () => {
             getMediaGenerationConfigMatrix: () => aiModelsStoreState.mediaGenerationConfigMatrix,
             setAiModelsCatalog: (catalog: any) => {
                 aiModelsStoreState.data = catalog.models
+                aiModelsStoreState.defaultModels = catalog.defaultModels ?? {
+                    reasoning: '',
+                    image: '',
+                    video: '',
+                }
                 aiModelsStoreState.mediaGenerationConfigMatrix = catalog.mediaGenerationConfigMatrix
                 notify()
             },
             resetStore: () => {
                 aiModelsStoreState.data = []
+                aiModelsStoreState.defaultModels = {
+                    reasoning: '',
+                    image: '',
+                    video: '',
+                }
                 aiModelsStoreState.mediaGenerationConfigMatrix = {
                     version: 'media-generation-config-matrix-v1',
                     groups: [],
@@ -129,6 +176,9 @@ vi.mock('$src/stores/aiModelsStore.ts', () => {
                     aiModelsStoreState.subscribers.delete(subscriber)
                 }
             },
+            getDefaultModelId: (capability: 'reasoning' | 'image' | 'video') => (
+                aiModelsStoreState.defaultModels[capability]
+            ),
         },
     }
 })
@@ -155,10 +205,13 @@ function resetMocks(): void {
     mockState.dropdownInstances.length = 0
     mockState.slidingDropdownConfigs.length = 0
     mockState.slidingDropdownInstances.length = 0
+    mockState.slidingSwitchConfigs.length = 0
+    mockState.slidingSwitchInstances.length = 0
     mockState.tagPillConfigs.length = 0
     mockState.tagPillDestroyFns.length = 0
     mockState.toggleSwitchConfigs.length = 0
     mockState.toggleSwitchInstances.length = 0
+    mockState.helpTooltipConfigs.length = 0
 }
 
 function model(provider: string, modelId: string, shortTitle: string, modality: string): any {
@@ -173,6 +226,10 @@ function model(provider: string, modelId: string, shortTitle: string, modality: 
 
 function latestDropdownConfig(predicate: (config: any) => boolean): any {
     return [...mockState.dropdownConfigs].reverse().find(predicate)
+}
+
+function latestSlidingDropdownConfig(predicate: (config: any) => boolean): any {
+    return [...mockState.slidingDropdownConfigs].reverse().find(predicate)
 }
 
 beforeEach(() => {
@@ -252,7 +309,6 @@ afterEach(() => {
 describe('createMediaGenerationConfigMatrixView', () => {
     function createControls(overrides: {
         mediaType?: 'image' | 'video'
-        useMultipleModels?: boolean
         selectedModelIds?: string[]
         configGroups?: MediaGenerationConfigSelectionGroup[]
     } = {}): MediaGenerationConfigMatrixControls & {
@@ -269,7 +325,6 @@ describe('createMediaGenerationConfigMatrixView', () => {
                 values: { imageSize: 'stale-size' },
             }],
             mediaType: overrides.mediaType ?? 'image',
-            getUseMultipleModels: vi.fn(() => overrides.useMultipleModels ?? true),
             getSelectedModelIds: vi.fn(() => controls.selectedModelIds),
             setSelectedModelIds: vi.fn((modelIds: string[]) => {
                 controls.selectedModelIds = modelIds
@@ -278,11 +333,19 @@ describe('createMediaGenerationConfigMatrixView', () => {
             setConfigGroups: vi.fn((groups: MediaGenerationConfigSelectionGroup[]) => {
                 controls.configGroups = groups
             }),
+            createModelDropdown: vi.fn(() => {
+                const dom = document.createElement('div')
+                return {
+                    dom,
+                    update: vi.fn(),
+                    destroy: vi.fn(),
+                }
+            }),
         }
         return controls
     }
 
-    it('renders only selected groups for the requested media type and writes normalized config on dropdown changes', () => {
+    it('renders one independently configured group for every selected image model', () => {
         const controls = createControls()
         const view = createMediaGenerationConfigMatrixView(controls)
 
@@ -290,15 +353,21 @@ describe('createMediaGenerationConfigMatrixView', () => {
         view.update()
 
         expect(view.dom.dataset.visible).toBe('true')
-        expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(1)
-        expect(view.dom.textContent).toContain('Image generators')
-        expect(view.dom.textContent).not.toContain('Google video')
-
-        const tagLabels = mockState.tagPillConfigs.slice(-2).map((config) => config.label)
-        expect(tagLabels).toEqual(['Imagen 4', 'GPT Image'])
-
-        const imageSizeDropdown = mockState.slidingDropdownConfigs.find((config) => (
+        expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(2)
+        expect(Array.from(view.dom.querySelectorAll('.ai-media-config-group')).map((group) => (
+            group.getAttribute('data-model-id')
+        ))).toEqual(['google:imagen-4', 'openai:gpt-image-1'])
+        const imageSizeDropdowns = mockState.slidingDropdownConfigs.filter((config) => (
             config.id.endsWith(':imageSize')
+        ))
+        expect(new Set(imageSizeDropdowns.map(config => config.id))).toEqual(new Set([
+            'image:google/openai:google:imagen-4:imageSize',
+            'image:google/openai:openai:gpt-image-1:imageSize',
+        ]))
+        expect(mockState.dropdownConfigs).toHaveLength(0)
+
+        const imageSizeDropdown = latestSlidingDropdownConfig((config) => (
+            config.id === 'image:google/openai:google:imagen-4:imageSize'
         ))
         expect(imageSizeDropdown?.selectedValue).toBe('1:1')
         expect(imageSizeDropdown?.options).toEqual([
@@ -313,11 +382,18 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         imageSizeDropdown.onChange('16:9', 'image:google/openai:imageSize')
 
-        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
-            groupId: 'image:google/openai',
-            modelIds: ['google:imagen-4', 'openai:gpt-image-1'],
-            values: { imageSize: '16:9' },
-        }])
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([
+            {
+                groupId: 'image:google/openai',
+                modelIds: ['google:imagen-4'],
+                values: { imageSize: '16:9' },
+            },
+            {
+                groupId: 'image:google/openai',
+                modelIds: ['openai:gpt-image-1'],
+                values: { imageSize: '1:1' },
+            },
+        ])
 
         view.destroy()
     })
@@ -329,8 +405,8 @@ describe('createMediaGenerationConfigMatrixView', () => {
         document.body.appendChild(view.dom)
         view.update()
 
-        const imageSizeDropdown = mockState.slidingDropdownConfigs.find((config) => (
-            config.id.endsWith(':imageSize')
+        const imageSizeDropdown = latestSlidingDropdownConfig((config) => (
+            config.id === 'image:google/openai:google:imagen-4:imageSize'
         ))
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
         const optionState = {
@@ -366,7 +442,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
         view.destroy()
     })
 
-    it('renders persisted aspect-ratio labels without replacing provider resolution values', () => {
+    it('persists dimension values separately for every model configuration row', () => {
         const imageGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
             group.groupId === 'image:google/openai'
         ))
@@ -392,8 +468,8 @@ describe('createMediaGenerationConfigMatrixView', () => {
         document.body.appendChild(view.dom)
         view.update()
 
-        const imageSizeDropdown = mockState.slidingDropdownConfigs.find((config) => (
-            config.id.endsWith(':imageSize')
+        const imageSizeDropdown = latestSlidingDropdownConfig((config) => (
+            config.id === 'image:google/openai:google:imagen-4:imageSize'
         ))
         expect(imageSizeDropdown.options).toEqual([
             { value: '1024x1024', label: '1:1' },
@@ -403,46 +479,46 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         imageSizeDropdown.onChange('1024x1024', 'image:google/openai:imageSize')
 
-        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
-            groupId: 'image:google/openai',
-            modelIds: ['google:imagen-4', 'openai:gpt-image-1'],
-            values: { imageSize: '1024x1024' },
-        }])
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([
+            {
+                groupId: 'image:google/openai',
+                modelIds: ['google:imagen-4'],
+                values: { imageSize: '1024x1024' },
+            },
+            {
+                groupId: 'image:google/openai',
+                modelIds: ['openai:gpt-image-1'],
+                values: { imageSize: '1536x1024' },
+            },
+        ])
 
         view.destroy()
     })
 
-    it('removes a selected model from the matrix tag close action', () => {
-        const controls = createControls()
+    it('renders block-level remove buttons only when another model remains', () => {
+        const controls = createControls({
+            selectedModelIds: ['google:imagen-4', 'openai:gpt-image-1'],
+        })
         const view = createMediaGenerationConfigMatrixView(controls)
 
         document.body.appendChild(view.dom)
         view.update()
 
-        const imagenTag = [...mockState.tagPillConfigs].reverse()
-            .find((config) => config.id === 'google:imagen-4')
-        imagenTag.onClose('google:imagen-4', new MouseEvent('click'))
+        const firstGroup = view.dom.querySelector('[data-model-id="google:imagen-4"]') as HTMLElement
+        const removeButton = firstGroup.querySelector('.ai-model-config-remove') as HTMLButtonElement
+        expect(removeButton).not.toBeNull()
+        removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
-        expect(controls.setSelectedModelIds).toHaveBeenLastCalledWith([
-            'openai:gpt-image-1',
-            'google:veo-3',
-        ])
-        expect(view.dom.textContent).toContain('Image generators')
-
-        vi.mocked(controls.getUseMultipleModels).mockReturnValue(false)
-        view.update()
+        expect(controls.setSelectedModelIds).toHaveBeenLastCalledWith(['openai:gpt-image-1'])
 
         expect(view.dom.dataset.visible).toBe('true')
         expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(1)
-        expect(view.dom.textContent).toContain('Image generators')
+        expect(view.dom.querySelector('.ai-model-config-remove')).toBeNull()
 
         view.destroy()
-        expect(mockState.dropdownInstances.every((instance) => instance.destroy.mock.calls.length > 0)).toBe(true)
-        expect(mockState.slidingDropdownInstances.every((instance) => instance.destroy.mock.calls.length > 0)).toBe(true)
-        expect(mockState.tagPillDestroyFns.every((destroy) => destroy.mock.calls.length > 0)).toBe(true)
     })
 
-    it('renders a selected media group and its inline toggle when multiple-model mode is disabled', () => {
+    it('puts toggle help in a label tooltip instead of rendering text below the field', () => {
         const imageGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
             group.groupId === 'image:google/openai'
         ))
@@ -468,7 +544,6 @@ describe('createMediaGenerationConfigMatrixView', () => {
             },
         ]
         const controls = createControls({
-            useMultipleModels: false,
             selectedModelIds: ['google:imagen-4'],
             configGroups: [{
                 groupId: 'image:google/openai',
@@ -487,12 +562,16 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         expect(view.dom.dataset.visible).toBe('true')
         expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(1)
-        expect(mockState.tagPillConfigs.at(-1)?.label).toBe('Imagen 4')
-        expect(toggle.textContent).toBe('Fixed camera')
         expect(toggle.getAttribute('aria-pressed')).toBe('false')
-        expect(toggleControl.querySelector('.ai-prompt-model-menu-control-label')).toBeNull()
+        expect(toggleControl.querySelector('.ai-prompt-model-menu-control-label')?.textContent).toBe('Fixed camera')
+        expect(toggleControl.querySelector('.mock-help-tooltip')).not.toBeNull()
+        expect(toggleControl.querySelector('.ai-media-config-description')).toBeNull()
+        expect(mockState.helpTooltipConfigs.at(-1)).toMatchObject({
+            label: 'Fixed camera details',
+            text: expect.any(String),
+        })
         expect(toggleConfig).toEqual(expect.objectContaining({
-            id: 'image:google/openai:cameraFixed',
+            id: 'image:google/openai:google:imagen-4:cameraFixed',
             width: 30,
             height: 18,
             checked: false,
@@ -511,6 +590,65 @@ describe('createMediaGenerationConfigMatrixView', () => {
         view.destroy()
         expect(mockState.toggleSwitchInstances.at(-1)?.destroy).toHaveBeenCalledOnce()
     })
+
+    it('renders Google video option help on the dropdown option instead of below the control', () => {
+        const videoGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
+            group.groupId === 'video:google'
+        ))
+        videoGroup.controls = [{
+            key: 'resolution',
+            label: 'Resolution',
+            kind: 'segmented',
+            defaultValue: '720p',
+            options: [
+                { value: '720p', label: '720p' },
+                { value: '1080p', label: '1080p', description: '1080p requires an 8 second duration.' },
+            ],
+        }]
+        const controls = createControls({
+            mediaType: 'video',
+            selectedModelIds: ['google:veo-3'],
+            configGroups: [{
+                groupId: 'video:google',
+                modelIds: ['google:veo-3'],
+                values: { resolution: '1080p' },
+            }],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const resolutionDropdown = mockState.slidingDropdownConfigs.find((config) => (
+            config.id.endsWith(':resolution')
+        ))
+        const resolutionControl = view.dom.querySelector('[data-control-key="resolution"]') as HTMLElement
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        resolutionDropdown.renderOption(select(svg).append('g'), {
+            id: 'video-resolution',
+            option: { value: '1080p', label: '1080p' },
+            index: 1,
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 38,
+            selected: true,
+            hovered: false,
+            disabled: false,
+            closable: false,
+            onClose: () => undefined,
+        })
+
+        expect(svg.querySelector('.ai-media-config-text-dropdown-option')).not.toBeNull()
+        expect(svg.querySelector('.ai-media-config-dimensions-dropdown-glyph')).toBeNull()
+        expect(resolutionControl.querySelector('.ai-media-config-description')).toBeNull()
+        expect(mockState.helpTooltipConfigs.at(-1)).toMatchObject({
+            label: '1080p details',
+            text: '1080p requires an 8 second duration.',
+        })
+
+        view.destroy()
+    })
 })
 
 // =============================================================================
@@ -518,7 +656,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
 // =============================================================================
 
 describe('model selector popovers', () => {
-    it('portal every model selector above the scrollable settings surface', () => {
+    it('uses sliding dropdowns for every model selector', () => {
         const reasoningSelector = createGenericAiModelDropdown({
             getCurrentAiModel: () => 'google:imagen-4',
             setAiModel: vi.fn(),
@@ -532,18 +670,15 @@ describe('model selector popovers', () => {
             setVideoModel: vi.fn(),
         }, 'video-selector')
 
-        const selectorConfigs = [
-            latestDropdownConfig(config => config.id === 'reasoning-selector'),
-            latestDropdownConfig(config => config.id === 'image-selector'),
-            latestDropdownConfig(config => config.id === 'video-selector'),
-        ]
+        const selectorConfigs = mockState.slidingDropdownConfigs.filter((config) => (
+            ['reasoning-selector', 'image-selector', 'video-selector'].includes(config.id)
+        ))
 
         expect(selectorConfigs).toHaveLength(3)
         for (const config of selectorConfigs) {
             expect(config).toEqual(expect.objectContaining({
-                mountToBody: true,
-                disableAutoPositioning: false,
-                popoverClassName: 'ai-prompt-model-selector-popover',
+                observeParentResize: false,
+                renderOption: expect.any(Function),
             }))
         }
 

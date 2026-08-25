@@ -45,6 +45,16 @@ describe('helpTooltip', () => {
         expect(root!.className).toContain('help-tooltip')
     })
 
+    it('uses proportional default icon sizing and supports trigger-size overrides', () => {
+        const { tooltip: defaultTooltip } = createTooltip()
+        const { tooltip: customTooltip } = createTooltip({ triggerSize: 18, iconSize: 14 })
+
+        expect(defaultTooltip.dom.style.getPropertyValue('--help-tooltip-trigger-size')).toBe('14px')
+        expect(defaultTooltip.dom.style.getPropertyValue('--help-tooltip-icon-size')).toBe('12px')
+        expect(customTooltip.dom.style.getPropertyValue('--help-tooltip-trigger-size')).toBe('18px')
+        expect(customTooltip.dom.style.getPropertyValue('--help-tooltip-icon-size')).toBe('14px')
+    })
+
     it('adds tooltip content on pointer enter and removes it on pointer leave', () => {
         const { tooltip, trigger } = createTooltip()
         document.body.appendChild(tooltip.dom)

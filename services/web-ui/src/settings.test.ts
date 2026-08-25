@@ -256,6 +256,18 @@ describe('settings - grouped configuration', () => {
 		expect(settings.aiPromptInput.modelMenu.styles.controlLabelFontSize).toBe('12px')
 	})
 
+	it('keeps model selector sizing separate from media configuration dropdown sizing', () => {
+		const modelDropdown = settings.aiModelControls.styles.modelDropdown
+		const mediaDropdown = settings.aiModelControls.styles.dimensionsDropdown
+
+		for (const [name, value] of Object.entries(modelDropdown)) {
+			expectFiniteNumber(value, `settings.aiModelControls.styles.modelDropdown.${name}`)
+		}
+		expect(modelDropdown.width).toBeGreaterThan(mediaDropdown.width)
+		expect(modelDropdown.iconSize).toBeGreaterThan(0)
+		expect(modelDropdown.iconLabelGap).toBeGreaterThan(0)
+	})
+
 	it('keeps video controls scalar values numerically valid', () => {
 		const videoControlNumbers = [
 			['videoControls.height', settings.videoControls.height],

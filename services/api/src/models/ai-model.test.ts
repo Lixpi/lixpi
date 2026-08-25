@@ -179,6 +179,74 @@ describe('AiModel.getAvailableAiModels', () => {
         expect(differentOptionsGroup?.groupId).not.toBe(sharedOptionsGroup?.groupId)
     })
 
+    it('keeps option help in the catalog, filters removed video controls, and splits groups with different help text', async () => {
+        const videoModel = (model: string, optionDescription: string) => ({
+            provider: 'Google',
+            providerTitle: 'Google',
+            model,
+            modelVersion: model,
+            sortingPosition: 1,
+            modalities: [{ modality: 'video_generation' }],
+            videoGenerationControls: [
+                {
+                    key: 'resolution',
+                    label: 'Resolution',
+                    kind: 'segmented',
+                    defaultValue: '1080p',
+                    options: [{ value: '1080p', label: '1080p', description: optionDescription }],
+                },
+                {
+                    key: 'serviceTier',
+                    label: 'Service tier',
+                    kind: 'segmented',
+                    options: [{ value: 'default', label: 'Default' }],
+                },
+                {
+                    key: 'priority',
+                    label: 'Task priority',
+                    kind: 'number',
+                    options: [],
+                },
+            ],
+            pricing: {},
+        })
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                videoModel('veo-a', '1080p requires an 8 second duration.'),
+                videoModel('veo-b', 'This model has a different 1080p constraint.'),
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+        const videoGroups = result.mediaGenerationConfigMatrix.groups.filter(group => group.mediaType === 'video')
+
+        expect(videoGroups).toHaveLength(2)
+        expect(videoGroups.map(group => group.controls)).toEqual([
+            [{
+                key: 'resolution',
+                label: 'Resolution',
+                kind: 'segmented',
+                defaultValue: '1080p',
+                options: [{
+                    value: '1080p',
+                    label: '1080p',
+                    description: '1080p requires an 8 second duration.',
+                }],
+            }],
+            [{
+                key: 'resolution',
+                label: 'Resolution',
+                kind: 'segmented',
+                defaultValue: '1080p',
+                options: [{
+                    value: '1080p',
+                    label: '1080p',
+                    description: 'This model has a different 1080p constraint.',
+                }],
+            }],
+        ])
+    })
+
     it('derives defaultModels from the isDefaultFor flag regardless of sort order', async () => {
         dynamoDBService.scanItems.mockResolvedValue({
             items: [

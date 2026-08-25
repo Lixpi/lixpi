@@ -2,7 +2,11 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PROVIDER_NAMES } from '@lixpi/constants'
+import {
+    GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
+    MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT,
+    PROVIDER_NAMES,
+} from '@lixpi/constants'
 
 vi.mock('@lixpi/debug-tools', () => ({
     log: vi.fn(),
@@ -35,10 +39,10 @@ describe('AiModelsSync — image generation option metadata', () => {
         })
     })
 
-    it('stores OpenAI provider resolutions as values and reduced aspect ratios as display labels', () => {
+    it('stores OpenAI provider dimensions as values while exposing them as aspect-ratio choices', () => {
         const model = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 1)
 
-        expect(model.imageSizeMode).toBe('resolution')
+        expect(model.imageSizeMode).toBe('aspectRatio')
         expect(model.imageSizes?.map((o: any) => o.value)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'auto'])
         expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1:1', '3:2', '2:3', 'Auto'])
     })
@@ -279,6 +283,18 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(fast.pricing.video?.price).toBe('0.15')
         expect(fast.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
         expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
+
+        const controlsByKey = new Map(v31.videoGenerationControls.map((control: any) => [control.key, control]))
+        expect(controlsByKey.get('resolution').options.find((option: any) => option.value === '1080p')).toMatchObject({
+            description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.resolution?.['1080p'],
+        })
+        expect(controlsByKey.get('resolution').options.find((option: any) => option.value === '4k')).toMatchObject({
+            description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.resolution?.['4k'],
+        })
+        expect(controlsByKey.get('duration')).toMatchObject({ kind: 'duration' })
+        expect(controlsByKey.get('duration').options.find((option: any) => option.value === '8')).toMatchObject({
+            description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.duration?.['8'],
+        })
     })
 
     it('does NOT give gemini text models any video modality, options, or pricing (regression)', () => {
@@ -360,6 +376,23 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(model.videoResolutions?.map((o: any) => o.label)).toEqual(['480p', '720p', '1080p', '4K'])
         expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
         expect(model.videoMaxReferenceImages).toBe(9)
+
+        const controlsByKey = new Map(model.videoGenerationControls.map((control: any) => [control.key, control]))
+        expect([...controlsByKey.keys()]).not.toContain('serviceTier')
+        expect([...controlsByKey.keys()]).not.toContain('priority')
+        expect(controlsByKey.get('duration')).toMatchObject({ kind: 'duration' })
+        expect(controlsByKey.get('duration').options.find((option: any) => option.value === '-1')).toMatchObject({
+            description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
+        })
+        expect(controlsByKey.get('cameraFixed')).toMatchObject({
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.cameraFixed,
+        })
+        expect(controlsByKey.get('watermark')).toMatchObject({
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.watermark,
+        })
+        expect(controlsByKey.get('returnLastFrame')).toMatchObject({
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.returnLastFrame,
+        })
 
         expect(model.title).toBe('Seedance 2.0')
         expect(model.shortTitle).toBe('Seedance 2.0')

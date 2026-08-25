@@ -357,7 +357,8 @@
 
 .ai-prompt-model-menu-info-bubble .bubble-menu-content {
     display: block;
-    width: var(--ai-prompt-model-menu-info-bubble-width, max-content);
+    width: max-content;
+    min-width: var(--ai-prompt-model-menu-info-bubble-width, 410px);
     max-width: var(--ai-prompt-model-menu-info-bubble-max-width, min(640px, calc(100vw - 20px)));
     max-height: min(var(--ai-prompt-model-menu-info-bubble-max-height, calc(100dvh - 16px)), calc(100dvh - 16px));
     box-sizing: border-box;
@@ -560,26 +561,6 @@
     transform: translateX(-50%);
 }
 
-.ai-media-config-group-title {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.ai-media-config-provider-title {
-    color: var(--ai-prompt-model-menu-section-title-color, #59626b);
-    font-size: var(--ai-prompt-model-menu-control-label-font-size, 11px);
-    font-weight: 700;
-    line-height: 1.2;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .ai-media-config-group-row {
     display: flex;
     flex-direction: column;
@@ -588,15 +569,63 @@
     min-width: 0;
 }
 
-.ai-media-config-group-models {
+.ai-media-config-group-primary-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 8px;
+    width: max-content;
+    min-width: 100%;
+}
+
+.ai-media-config-model-field,
+.ai-model-config-field {
     display: flex;
     flex-direction: column;
     gap: var(--ai-prompt-model-menu-control-gap, 3px);
-    min-width: 0;
+    flex: 0 0 auto;
 }
 
-.ai-media-config-models-label {
-    padding-left: 0;
+.ai-media-config-group-model-column,
+.ai-media-config-group-size-column {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: max-content;
+}
+
+.ai-media-config-group-model-column {
+    justify-content: flex-start;
+}
+
+.ai-media-config-group-size-column {
+    justify-content: flex-end;
+}
+
+.ai-media-config-group-size-column .ai-media-config-control {
+    width: 100%;
+}
+
+.ai-media-config-group-size-column .ai-prompt-model-menu-control-label {
+    align-self: flex-end;
+}
+
+.ai-media-config-group-size-column .ai-media-config-control-field {
+    justify-content: flex-end;
+    width: 100%;
+}
+
+.ai-model-config-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    width: max-content;
+    min-width: 100%;
+}
+
+.ai-media-config-model-dropdown,
+.ai-model-config-dropdown {
+    display: inline-flex;
+    flex: 0 0 auto;
 }
 
 .ai-media-config-model-tags {
@@ -641,16 +670,53 @@
     max-width: 100%;
 }
 
-.ai-media-config-sliding-switch-host,
-.ai-media-config-slider-host {
+.ai-media-config-control-field {
+    display: flex;
+    min-width: 0;
+}
+
+.ai-media-config-control[data-control-kind="toggle"] .ai-media-config-control-field {
+    padding-left: var(--ai-prompt-model-menu-control-label-inset, 7px);
+}
+
+.ai-media-config-control-label {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 4px;
+    width: max-content;
+    white-space: nowrap;
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-group-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control {
+    grid-column: 1 / -1;
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="aspectRatio"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="resolution"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="duration"] {
+    grid-column: auto;
+}
+
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="cameraFixed"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="watermark"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="returnLastFrame"] {
+    grid-column: auto;
+    min-width: max-content;
+}
+
+.ai-media-config-sliding-switch-host {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
     overflow: hidden;
 }
 
-.ai-media-config-sliding-switch-svg,
-.ai-media-config-slider-svg {
+.ai-media-config-sliding-switch-svg {
     display: block;
     max-width: 100%;
 }
@@ -658,8 +724,7 @@
 .ai-media-config-toggle {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: var(--ai-prompt-model-menu-toggle-gap, 8px);
+    justify-content: flex-start;
     height: 22px;
     padding: 0;
     border: none;
@@ -687,12 +752,6 @@
     overflow: visible;
 }
 
-.ai-media-config-toggle-text {
-    font-size: var(--ai-prompt-model-menu-control-label-font-size, 10px);
-    font-weight: var(--ai-prompt-model-menu-control-label-font-weight, 600);
-    line-height: var(--ai-prompt-model-menu-control-label-line-height, 1.2);
-}
-
 .ai-media-config-input,
 .ai-media-config-fixed-value {
     width: 100%;
@@ -718,6 +777,16 @@
     line-height: 1.35;
 }
 
+.ai-media-config-option-help {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    line-height: 0;
+    vertical-align: top;
+}
+
 .ai-media-config-control .dropdown-menu-tag-pill-wrapper,
 .ai-media-config-control .dots-dropdown-menu,
 .ai-media-config-control .dots-dropdown-menu button {
@@ -725,47 +794,99 @@
     max-width: 100%;
 }
 
-.ai-prompt-model-selector-host {
-    display: inline-flex;
+.ai-model-config-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
     min-width: 0;
 }
 
-.ai-prompt-model-menu-toggle {
+.ai-model-sliding-dropdown-host {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--ai-prompt-model-menu-toggle-gap, 8px);
-    height: 22px;
-    padding: 0;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ai-model-sliding-dropdown-svg {
+    display: block;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.ai-model-config-add,
+.ai-model-config-remove {
     border: none;
     background: transparent;
     color: var(--ai-prompt-model-menu-control-label-color, #7a828a);
-    font: inherit;
-    white-space: nowrap;
     cursor: pointer;
+    transition: hoverTransition(color), hoverTransition(background-color);
 }
 
-.ai-prompt-model-menu-toggle-text {
+.ai-model-config-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0;
+    font: inherit;
+    white-space: nowrap;
+}
+
+.ai-model-config-add-label {
     font-size: var(--ai-prompt-model-menu-control-label-font-size, 10px);
     font-weight: var(--ai-prompt-model-menu-control-label-font-weight, 600);
     line-height: var(--ai-prompt-model-menu-control-label-line-height, 1.2);
 }
 
-.ai-prompt-model-menu-toggle:focus-visible {
+.ai-model-config-add-icon,
+.ai-model-config-add-icon svg {
+    display: block;
+    width: 9px;
+    height: 9px;
+    fill: currentColor;
+}
+
+.ai-model-config-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    flex: 0 0 24px;
+    margin-left: auto;
+    width: 24px;
+    height: 24px;
+    padding: 6px;
+    border-radius: 50%;
+}
+
+.ai-model-config-remove-icon,
+.ai-model-config-remove-icon svg {
+    display: block;
+    width: 8px;
+    height: 8px;
+    fill: currentColor;
+}
+
+.ai-model-config-add:hover:not(:disabled),
+.ai-model-config-remove:hover:not(:disabled) {
+    color: var(--ai-prompt-model-menu-section-title-color, #59626b);
+}
+
+.ai-model-config-remove:hover:not(:disabled) {
+    background: rgba(96, 108, 133, 0.08);
+}
+
+.ai-model-config-add:disabled {
+    opacity: 0.38;
+    cursor: default;
+}
+
+.ai-model-config-add:focus-visible,
+.ai-model-config-remove:focus-visible {
     outline: var(--ai-prompt-model-menu-trigger-focus-outline, 2px solid #b8bec8);
     outline-offset: var(--ai-prompt-model-menu-trigger-focus-outline-offset, 2px);
-}
-
-.ai-prompt-model-menu-toggle-svg-host,
-.ai-prompt-model-menu-toggle-svg {
-    display: block;
-    width: 34px;
-    height: 22px;
-    flex: 0 0 34px;
-}
-
-.ai-prompt-model-menu-toggle-svg {
-    overflow: visible;
 }
 
 .ai-prompt-model-menu-section-controls .dropdown-menu-tag-pill-wrapper {

@@ -4,6 +4,10 @@ import { uiKitSettings } from '../../runtime-settings.ts'
 
 let nextHelpTooltipId = 0
 
+const DEFAULT_HELP_TOOLTIP_TRIGGER_SIZE = 14
+const DEFAULT_HELP_TOOLTIP_ICON_SIZE = 12
+const DEFAULT_HELP_TOOLTIP_ICON_SCALE = DEFAULT_HELP_TOOLTIP_ICON_SIZE / DEFAULT_HELP_TOOLTIP_TRIGGER_SIZE
+
 type HelpTooltipPlacement = 'right' | 'left' | 'bottom' | 'top'
 
 type HelpTooltipViewportBounds = {
@@ -52,6 +56,9 @@ export type HelpTooltipConfig = {
     text?: string
     content?: HelpTooltipContent
     triggerContent?: HTMLElement
+    icon?: string
+    triggerSize?: number
+    iconSize?: number
     preferredPlacement?: HelpTooltipPlacement
     className?: string
     triggerClassName?: string
@@ -79,6 +86,7 @@ class HelpTooltip implements HelpTooltipInstance {
 
     constructor(private readonly config: HelpTooltipConfig) {
         this.dom = this.render()
+        this.applyTriggerDimensions()
         this.trigger = this.dom.querySelector('.help-tooltip-trigger') as HTMLElement
         this.content = this.dom.querySelector('.help-tooltip-content') as HTMLElement
         this.addTriggerListeners()
@@ -106,6 +114,7 @@ class HelpTooltip implements HelpTooltipInstance {
                     tabindex="0"
                     aria-label=${this.config.label}
                     aria-describedby=${this.tooltipId}
+                    onpointerdown=${this.stopControlEvent}
                     onmousedown=${this.stopControlEvent}
                     onclick=${this.stopControlEvent}
                 >
@@ -120,12 +129,22 @@ class HelpTooltip implements HelpTooltipInstance {
                 className=${`help-tooltip-trigger${triggerClassName}`}
                 aria-label=${this.config.label}
                 aria-describedby=${this.tooltipId}
+                onpointerdown=${this.stopControlEvent}
                 onmousedown=${this.stopControlEvent}
                 onclick=${this.stopControlEvent}
             >
-                <span className="help-tooltip-mark" innerHTML=${questionMarkCircleIcon}></span>
+                <span className="help-tooltip-mark" innerHTML=${this.config.icon ?? questionMarkCircleIcon}></span>
             </button>
         ` as HTMLButtonElement
+    }
+
+    private applyTriggerDimensions(): void {
+        if (this.config.triggerContent) return
+
+        const triggerSize = Math.max(1, this.config.triggerSize ?? DEFAULT_HELP_TOOLTIP_TRIGGER_SIZE)
+        const iconSize = Math.max(1, this.config.iconSize ?? triggerSize * DEFAULT_HELP_TOOLTIP_ICON_SCALE)
+        this.dom.style.setProperty('--help-tooltip-trigger-size', `${triggerSize}px`)
+        this.dom.style.setProperty('--help-tooltip-icon-size', `${iconSize}px`)
     }
 
     private stopControlEvent = (event: Event): void => {

@@ -121,7 +121,16 @@ describe('BytePlusProvider', () => {
         })
         byteplusMocks.downloadVideo.mockResolvedValueOnce(mp4Buffer)
 
-        const result = await (provider as any).streamImpl(makeState())
+        const result = await (provider as any).streamImpl(makeState({
+            videoGenerationConfig: {
+                seed: '42',
+                cameraFixed: 'true',
+                watermark: 'true',
+                returnLastFrame: 'true',
+                serviceTier: 'default',
+                priority: '21',
+            },
+        }))
 
         expect(publisherState.pending).toHaveBeenCalledTimes(1)
         expect(publisherState.generating).toHaveBeenCalledTimes(0)
@@ -141,6 +150,15 @@ describe('BytePlusProvider', () => {
             posterBuffer: null,
             frameBuffer: null,
         })
+        const submittedPayload = byteplusMocks.createVideoGenerationTask.mock.calls[0]?.[1]
+        expect(submittedPayload).toMatchObject({
+            seed: 42,
+            camera_fixed: true,
+            watermark: true,
+            return_last_frame: true,
+        })
+        expect(submittedPayload).not.toHaveProperty('service_tier')
+        expect(submittedPayload).not.toHaveProperty('priority')
         expect(result).toEqual(expect.objectContaining({
             generatedVideos: ['seedance-complete'],
             aiVendorRequestId: 'byteplus-seedance-task-1',

@@ -119,8 +119,6 @@ export class BytePlusProvider extends BaseProvider {
             ...(generationConfig.seed ? { seed: Number(generationConfig.seed) } : {}),
             camera_fixed: generationConfig.cameraFixed === 'true',
             return_last_frame: generationConfig.returnLastFrame === 'true',
-            ...(generationConfig.serviceTier ? { service_tier: generationConfig.serviceTier } : {}),
-            ...(generationConfig.priority ? { priority: Number(generationConfig.priority) } : {}),
         }
 
         const hasFirstFrame = content.some((c) => c.type === 'image_url' && c.role === 'first_frame')
@@ -132,8 +130,6 @@ export class BytePlusProvider extends BaseProvider {
             duration: payload.duration,
             generateAudio: payload.generate_audio,
             cameraFixed: payload.camera_fixed,
-            serviceTier: payload.service_tier,
-            priority: payload.priority,
             promptLen: providerPrompt.length,
             hasFirstFrame,
             hasLastFrame,
