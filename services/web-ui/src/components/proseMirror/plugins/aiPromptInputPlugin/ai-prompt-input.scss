@@ -509,17 +509,17 @@
     overflow: visible;
 }
 
-.ai-prompt-model-menu-control:has(.ai-media-config-matrix) {
+.ai-prompt-model-menu-control:has(.ai-model-config-row-collection) {
     flex: 1 0 100%;
     width: 100%;
     max-width: 100%;
 }
 
-.ai-prompt-model-menu-control:has(.ai-media-config-matrix) .ai-prompt-model-menu-control-field {
+.ai-prompt-model-menu-control:has(.ai-model-config-row-collection) .ai-prompt-model-menu-control-field {
     width: 100%;
 }
 
-.ai-media-config-matrix {
+.ai-model-config-row-collection {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -533,11 +533,11 @@
     display: none;
 }
 
-.ai-media-config-group {
+.ai-model-config-row {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -561,15 +561,7 @@
     transform: translateX(-50%);
 }
 
-.ai-media-config-group-row {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-}
-
-.ai-media-config-group-primary-row {
+.ai-model-config-primary-row {
     display: flex;
     flex-wrap: nowrap;
     align-items: flex-end;
@@ -578,7 +570,6 @@
     min-width: 100%;
 }
 
-.ai-media-config-model-field,
 .ai-model-config-field {
     display: flex;
     flex-direction: column;
@@ -586,43 +577,34 @@
     flex: 0 0 auto;
 }
 
-.ai-media-config-group-model-column,
-.ai-media-config-group-size-column {
+.ai-model-config-model-column,
+.ai-model-config-inline-control {
     display: flex;
     flex: 1 1 auto;
     min-width: max-content;
 }
 
-.ai-media-config-group-model-column {
+.ai-model-config-model-column {
     justify-content: flex-start;
 }
 
-.ai-media-config-group-size-column {
+.ai-model-config-inline-control {
     justify-content: flex-end;
 }
 
-.ai-media-config-group-size-column .ai-media-config-control {
+.ai-model-config-inline-control .ai-media-config-control {
     width: 100%;
 }
 
-.ai-media-config-group-size-column .ai-prompt-model-menu-control-label {
+.ai-model-config-inline-control .ai-prompt-model-menu-control-label {
     align-self: flex-end;
 }
 
-.ai-media-config-group-size-column .ai-media-config-control-field {
+.ai-model-config-inline-control .ai-media-config-control-field {
     justify-content: flex-end;
     width: 100%;
 }
 
-.ai-model-config-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-    width: max-content;
-    min-width: 100%;
-}
-
-.ai-media-config-model-dropdown,
 .ai-model-config-dropdown {
     display: inline-flex;
     flex: 0 0 auto;
@@ -652,7 +634,7 @@
     overflow: visible;
 }
 
-.ai-media-config-group-controls {
+.ai-model-config-controls {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
@@ -688,7 +670,7 @@
     white-space: nowrap;
 }
 
-.ai-media-config-matrix[data-media-type="video"] .ai-media-config-group-controls {
+.ai-media-config-matrix[data-media-type="video"] .ai-model-config-controls {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -752,7 +734,6 @@
     overflow: visible;
 }
 
-.ai-media-config-input,
 .ai-media-config-fixed-value {
     width: 100%;
     min-height: 38px;
@@ -794,14 +775,6 @@
     max-width: 100%;
 }
 
-.ai-model-config-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-}
-
 .ai-model-sliding-dropdown-host {
     display: inline-flex;
     min-width: 0;
@@ -827,7 +800,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 4px;
     height: 22px;
     padding: 0;
     font: inherit;
@@ -843,9 +816,23 @@
 .ai-model-config-add-icon,
 .ai-model-config-add-icon svg {
     display: block;
-    width: 9px;
-    height: 9px;
-    fill: currentColor;
+}
+
+.ai-model-config-add-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: $nightBlue;
+}
+
+.ai-model-config-add-icon svg {
+    width: 8px;
+    height: 8px;
+    fill: #fff;
 }
 
 .ai-model-config-remove {
@@ -980,7 +967,7 @@
         min-width: 0;
     }
 
-    .ai-media-config-group {
+    .ai-model-config-row {
         gap: 6px;
     }
 

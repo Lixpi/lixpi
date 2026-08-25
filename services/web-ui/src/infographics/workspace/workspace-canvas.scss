@@ -841,14 +841,25 @@
         width: 100%;
     }
 
+    .canvas-asset-seed-label {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
     .canvas-asset-details-status,
     .canvas-asset-renditions,
-    .canvas-asset-lineage {
+    .canvas-asset-lineage,
+    .canvas-asset-seed {
         color: #59656f;
         font-size: 0.72rem;
         line-height: 1.4;
         overflow-wrap: anywhere;
         white-space: pre-wrap;
+    }
+
+    .canvas-asset-seed {
+        font-variant-numeric: tabular-nums;
     }
 
     .canvas-asset-details-status.is-error {

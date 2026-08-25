@@ -11,6 +11,7 @@ import {
 import { select } from 'd3-selection'
 import { v4 as uuidv4 } from 'uuid'
 import {
+    ASSET_GENERATION_SEED_HELP_TEXT,
     NATS_SUBJECTS,
     LoadingStatus,
     type CanvasState,
@@ -1042,9 +1043,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
+    const generatedMediaSeedTooltips: Map<string, HelpTooltipInstance> = new Map()
     const generatedOutputDetailsAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedOutputDetailsAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedOutputDetailsIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
+    const generatedOutputDetailsSeedTooltips: Map<string, HelpTooltipInstance> = new Map()
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const mediaGenerationProgressInstances = new Map<string, MediaGenerationProgressInstance>()
     const generatedOutputNodeFooters = new Map<string, CanvasNodeFooterInstance>()
@@ -2416,12 +2419,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         <span className="canvas-asset-diagnostics-label">Lineage</span>
                         <div className="canvas-asset-lineage"></div>
                     </div>
+                    <div className="canvas-asset-detail-row canvas-asset-seed-row">
+                        <span className="canvas-asset-diagnostics-label canvas-asset-seed-label"></span>
+                        <div className="canvas-asset-seed"></div>
+                    </div>
                 </div>
             </section>
         ` as HTMLElement
         const statusEl = section.querySelector('.canvas-asset-details-status') as HTMLElement
         const renditionsEl = section.querySelector('.canvas-asset-renditions') as HTMLElement
         const lineageEl = section.querySelector('.canvas-asset-lineage') as HTMLElement
+        const seedRow = section.querySelector('.canvas-asset-seed-row') as HTMLElement
+        const seedLabel = section.querySelector('.canvas-asset-seed-label') as HTMLElement
+        const seedEl = section.querySelector('.canvas-asset-seed') as HTMLElement
         const storageLabel = section.querySelector('.canvas-asset-storage-label') as HTMLElement
         const identityControlMount = section.querySelector('.canvas-asset-subject-identity-control') as HTMLElement
         const identityError = (message: string): void => {
@@ -2458,6 +2468,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...(asset.lineage?.sourceAssetIds ?? []).map((assetId) => `source ${assetId}`),
         ].filter(Boolean)
         lineageEl.textContent = lineageParts.length > 0 ? lineageParts.join('\n') : 'No lineage'
+
+        // Only models that accept a seed record one, so the row stays hidden for
+        // the rest instead of showing an empty value.
+        const seedTooltips = owner === 'sidebar'
+            ? generatedOutputDetailsSeedTooltips
+            : generatedMediaSeedTooltips
+        seedTooltips.get(node.nodeId)?.destroy()
+        seedTooltips.delete(node.nodeId)
+        const generationSeed = asset.lineage?.generationSeed
+        if (generationSeed === undefined) {
+            seedRow.remove()
+        } else {
+            const seedTooltip = createHelpTooltip({
+                label: 'Seed details',
+                text: ASSET_GENERATION_SEED_HELP_TEXT,
+                className: 'canvas-asset-seed-help',
+            })
+            seedTooltips.set(node.nodeId, seedTooltip)
+            seedLabel.textContent = 'Seed'
+            seedLabel.append(seedTooltip.dom)
+            seedEl.textContent = String(generationSeed)
+        }
 
         const scopeOptions: Array<{ title: string; scope: Asset['scope'] }> = [
             { title: 'Workspace', scope: 'workspace' },
@@ -3560,6 +3592,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedMediaAssetDropdowns.clear()
         for (const control of generatedMediaIdentityControls.values()) control.destroy()
         generatedMediaIdentityControls.clear()
+        for (const tooltip of generatedMediaSeedTooltips.values()) tooltip.destroy()
+        generatedMediaSeedTooltips.clear()
     }
 
     function destroyGeneratedOutputDetailsControls(): void {
@@ -3569,6 +3603,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedOutputDetailsAssetDropdowns.clear()
         for (const control of generatedOutputDetailsIdentityControls.values()) control.destroy()
         generatedOutputDetailsIdentityControls.clear()
+        for (const tooltip of generatedOutputDetailsSeedTooltips.values()) tooltip.destroy()
+        generatedOutputDetailsSeedTooltips.clear()
     }
 
     function destroyGeneratedOutputNodeFooters(): void {

@@ -122,6 +122,8 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### Media Library Panel
 
+The Asset details section renders subject identity, status, renditions, lineage, and the generation seed. The seed row appears only when the media model recorded one on `asset.lineage.generationSeed`, and it carries a `createHelpTooltip` explaining what reusing a seed does.
+
 The canvas details panel and Media Library inspector mount one shared Subject identity dropdown using the same `createPureDropdown` component and configuration as the Asset scope selector. It performs the direct revisioned attestation mutation and restores the previous selection on conflict/error. Medium and identity remain separate fields; there is no modal or proof form.
 - Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the zoom badge, and both bottom controls align to the same right side panel gap as the panel toggle when the panel is open.
 - The top-level `Capabilities` / `Media` / `AI Threads` switch is the shared mode control for the right side panel. Capabilities lists authorized Tools; Media hosts cataloged Assets.
@@ -515,13 +517,13 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
 - **Download** — downloads the Asset's `original` rendition through the authenticated `/api/assets` route
-- **Open Asset details** — opens global title, scope, content, lineage, rendition state, and provenance
+- **Open Asset details** — opens global title, scope, content, lineage, rendition state, generation seed, and provenance
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
 - **Replace** — uploads a new video Asset and atomically changes the placement reference while keeping node geometry
 - **Download** — downloads the Asset's `original` rendition through the authenticated `/api/assets` route
-- **Open Asset details** — opens global title, scope, content, lineage, rendition state, and provenance
+- **Open Asset details** — opens global title, scope, content, lineage, rendition state, generation seed, and provenance
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Delete** — removes the node and its associated edges from canvas state
 

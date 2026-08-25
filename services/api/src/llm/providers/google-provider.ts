@@ -35,6 +35,7 @@ import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
+import { VEO_SEED_MAX } from './media-generation-seed.ts'
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -743,7 +744,10 @@ export class GoogleProvider extends BaseProvider {
         if (state.videoAspectRatio) veoConfig.aspectRatio = state.videoAspectRatio
         if (state.videoResolution) veoConfig.resolution = state.videoResolution
         if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds
-        if (generationConfig.seed) veoConfig.seed = Number(generationConfig.seed)
+        // VEO accepts a seed but never reports it back, so the value we send is
+        // the one stored on the Asset.
+        const generationSeed = await this.resolveGenerationSeed(state, VEO_SEED_MAX)
+        veoConfig.seed = generationSeed
         if (generationConfig.negativePrompt) veoConfig.negativePrompt = generationConfig.negativePrompt
 
         // Video extension (Phase 6) is mutually exclusive with image/referenceImages
@@ -918,6 +922,7 @@ export class GoogleProvider extends BaseProvider {
                 responseId: typeof operation.name === 'string' ? operation.name : '',
                 revisedPrompt: prompt,
                 videoModelId: modelVersion,
+                generationSeed,
             })
         } catch (e: any) {
             const message = e?.message ?? String(e)

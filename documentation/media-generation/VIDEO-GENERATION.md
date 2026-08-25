@@ -112,6 +112,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 | `videoFirstFrameImage` | `string` | VLM-selected first frame, as a data URL (image-to-video). |
 | `videoReferenceImages` | `string[]` | VLM-selected style/content references (≤3). |
 | `videoSourceForExtension` | `string` | `nats-obj://…` URI of a source MP4 to extend (multi-turn). |
+| `isMediaRegenerationRun` | `boolean` | Set by the media routers when the lineage plan carries a `regenerationTarget`, so the provider takes a fresh seed instead of inheriting one. |
 | `generatedVideos` | `string[]` | Resulting video URLs/ids. |
 | `videoUsage` | `VideoUsage` | `{ durationSeconds, resolution, aspectRatio }` for billing, plus optional `completionTokens` / `totalTokens` for token-metered providers (Seedance). |
 
@@ -119,7 +120,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 `GoogleProvider.runVeoGeneration` ([`google-provider.ts`](../../services/api/src/llm/providers/google-provider.ts)) runs **only** when `enableVideoGeneration && modelNameImpliesVideoOutput` — a non-VEO Google model never enters this path, and the existing Gemini image branch is untouched.
 
-**Config.** The synchronized VEO profiles expose visual `aspectRatio`, per-model `resolution`, per-model `durationSeconds`, fixed `numberOfVideos: 1`, fixed MP4 output, always-on audio, optional unsigned-32-bit `seed`, and optional `negativePrompt`. Veo 3.1/3.1 Fast support 720p/1080p/4K while 3.1 Lite omits 4K; Veo 3 is fixed to 8 seconds and 1080p is 16:9 only. The provider forces 8 seconds for frame/reference conditioning and 1080p/4K, forces 720p for extension, and selects `personGeneration` through the registered moderation profile rather than exposing a user safety bypass. `generateAudio` is sent only for Vertex clients; the Gemini Developer API rejects that knob but still generates VEO 3 audio by default.
+**Config.** The synchronized VEO profiles expose visual `aspectRatio`, per-model `resolution`, per-model `durationSeconds`, fixed `numberOfVideos: 1`, fixed MP4 output, always-on audio, and optional `negativePrompt`. The provider sends an unsigned-32-bit `seed` on every request and records it on the generated Asset as `lineage.generationSeed`; it is not a user control. VEO never reports a seed back, so the value sent is the value stored. Seed selection follows the shared rule in [Seed inheritance](#seed-inheritance). Veo 3.1/3.1 Fast support 720p/1080p/4K while 3.1 Lite omits 4K; Veo 3 is fixed to 8 seconds and 1080p is 16:9 only. The provider forces 8 seconds for frame/reference conditioning and 1080p/4K, forces 720p for extension, and selects `personGeneration` through the registered moderation profile rather than exposing a user safety bypass. `generateAudio` is sent only for Vertex clients; the Gemini Developer API rejects that knob but still generates VEO 3 audio by default.
 
 **Input precedence.** Exactly one conditioning input is sent, in this fixed order. The first applicable input wins; the rest are ignored:
 
@@ -147,7 +148,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 The typed REST client lives in [`byteplus-video-types.ts`](../../services/api/src/llm/providers/byteplus-video-types.ts) (`createVideoGenerationTask` / `retrieveVideoGenerationTask` / `downloadVideo` over `fetch` + `AbortSignal`, preserving ModelArk `error.code`), with pure `buildSeedanceContent` and an injectable `pollVideoGenerationTask`.
 
-**Config.** The exact synchronized Standard/Fast profiles expose aspect ratios `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, and adaptive; dynamic duration `4–15` or `-1` intelligent length; audio; fixed MP4 output; Lixpi fanout quantity `1–8`; seed; fixed camera; watermark; and return-last-frame. Fixed camera keeps the generated camera stationary. Watermark adds the provider's AI-generated mark to the lower-right corner. Return last frame supplies the final frame as a separate image for continuing a sequence. Standard exposes 480p/720p/1080p/4K, while Fast exposes 480p/720p. The provider serializes these validated values to ModelArk's `ratio`, `resolution`, `duration`, `generate_audio`, `seed`, `camera_fixed`, `watermark`, and `return_last_frame` fields. Quantity fans out one provider task per requested output because ModelArk returns one video per task.
+**Config.** The exact synchronized Standard/Fast profiles expose aspect ratios `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, and adaptive; dynamic duration `4–15` or `-1` intelligent length; audio; fixed MP4 output; Lixpi fanout quantity `1–8`; fixed camera; watermark; and return-last-frame. Fixed camera keeps the generated camera stationary. Watermark adds the provider's AI-generated mark to the lower-right corner. Return last frame supplies the final frame as a separate image for continuing a sequence. Standard exposes 480p/720p/1080p/4K, while Fast exposes 480p/720p. The provider serializes these validated values to ModelArk's `ratio`, `resolution`, `duration`, `generate_audio`, `seed`, `camera_fixed`, `watermark`, and `return_last_frame` fields, where `seed` comes from [Seed inheritance](#seed-inheritance) rather than from the user. The finished task echoes the seed it used, and that value is stored on the generated Asset as `lineage.generationSeed`. Quantity fans out one provider task per requested output because ModelArk returns one video per task.
 
 **Input precedence.** `content[]` is text-first, then ONE input family — first-frame and reference are mutually exclusive in Seedance, matching VEO:
 
@@ -183,6 +184,19 @@ The registered Google profile requires `GOOGLE_VEO_PERSON_GENERATION_PROFILE=sta
 {% callout type="important" %}
 **Videos are grounded by a single still, never the MP4.** The browser's candidate snapshot includes prior video Assets alongside images, each contributing the `representativeFrame` rendition and falling back to `poster`. An edit therefore continues a previous video branch at the same VLM cost as an image. The full `original` rendition reaches VEO only for explicit extension. The candidate-snapshot mechanics live in [Branch Lineage](./BRANCH-LINEAGE.md).
 {% /callout %}
+
+## Seed inheritance
+
+Seeds are provider state, not a composer control. `BaseProvider.resolveGenerationSeed` picks one for every provider that accepts a seed, and every media path shares the rule:
+
+1. Read the pending Asset's lineage and walk its `parentAssetId`, then its `sourceAssetIds` in recorded order.
+2. Reuse the first `lineage.generationSeed` found, so a branch continued for editing or a prompt that references an earlier generated Asset lands near that output.
+3. Skip an inherited seed that falls outside the target provider's accepted range, which is how a seed recorded by one provider can never be rejected by another.
+4. Generate a fresh seed when nothing in the lineage carries one.
+
+Regeneration is the deliberate exception. A regeneration run carries `isMediaRegenerationRun`, set by `ImageRouter` and `VideoRouter` from the lineage plan's `regenerationTarget`, and always gets a fresh seed. Reusing the source seed there would return the output the user just asked to redo.
+
+A lineage read failure never blocks generation; the provider logs it and falls back to a fresh seed.
 
 ## Storage & Durability
 
@@ -251,7 +265,7 @@ Matrix child video lifecycle events are mirrored onto the live canonical respons
 
 - A new `video_generation` modality (`{ title: 'Video Generation', shortTitle: 'VID GEN' }`); VEO models carry modalities `['video', 'video_generation']`.
 - `'veo'` is removed from the Google blacklist; `fetchGoogleModels` allows VEO ids through (keeping `-preview` ids, dropping dated snapshots).
-- Every VEO profile authors its complete `videoGenerationControls` list: aspect ratio, family-specific resolution and duration, always-on audio, MP4, one output, seed, negative prompt, and server-managed people policy.
+- Every VEO profile authors its complete `videoGenerationControls` list: aspect ratio, family-specific resolution and duration, always-on audio, MP4, one output, negative prompt, and server-managed people policy.
 - **Per-second pricing** on `AiModel.pricing.video` (`{ measuringUnit: 'seconds', pricePer: '1', price }`). Current prices are **placeholders** to reconcile against [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
 - Friendly titles: `veo-3.0-generate-001` → "Veo 3", `veo-3.0-fast-generate-001` → "Veo 3 Fast", `veo-3.1-generate-preview` → "Veo 3.1", etc.
 

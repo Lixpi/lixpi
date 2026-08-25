@@ -204,7 +204,7 @@ describe('AiModel.getAvailableAiModels', () => {
                 {
                     key: 'priority',
                     label: 'Task priority',
-                    kind: 'number',
+                    kind: 'segmented',
                     options: [],
                 },
             ],

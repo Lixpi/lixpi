@@ -5,13 +5,14 @@ import { select } from 'd3-selection'
 import { html } from '$src/utils/domTemplates.ts'
 import { BubbleMenu, type BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
 import { createSlidingSwitch } from '@lixpi/ui-kit/components/sliding-switch'
-import { atomIcon, plusIcon, xIcon } from '@lixpi/ui-kit/svg'
+import { atomIcon, plusIcon } from '@lixpi/ui-kit/svg'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     applyAiModelMenuStyleSettings,
     createAiModelMenuContent,
     createMediaGenerationConfigMatrixView,
+    createModelConfigurationRow,
     getModelOptionsForCapability,
     transformModelsToOptions,
     type AiModelMenuContentView,
@@ -219,7 +220,7 @@ class ModelSelectionRows implements DropdownView {
     private builtConnected = false
 
     constructor(private readonly controls: ModelSelectionRowsControls) {
-        this.dom = html`<div className="ai-model-config-rows" contenteditable="false"></div>` as HTMLElement
+        this.dom = html`<div className="ai-model-config-row-collection ai-model-config-rows" contenteditable="false"></div>` as HTMLElement
         this.update()
     }
 
@@ -235,39 +236,17 @@ class ModelSelectionRows implements DropdownView {
     }
 
     private createRow(modelIndex: number, canRemove: boolean): HTMLElement {
-        const dropdownHost = html`<span className="ai-model-config-dropdown"></span>` as HTMLElement
-        const handleRemove = (event: MouseEvent): void => {
-            event.preventDefault()
-            event.stopPropagation()
-            this.removeModel(modelIndex)
-        }
-        const removeButton = canRemove
-            ? html`
-                <button
-                    type="button"
-                    className="ai-model-config-remove"
-                    aria-label="Remove model"
-                    title="Remove model"
-                    onclick=${handleRemove}
-                >
-                    <span className="ai-model-config-remove-icon" innerHTML=${xIcon}></span>
-                </button>
-            ` as HTMLButtonElement
-            : undefined
+        const dropdownHost = html`<span></span>` as HTMLElement
 
         const dropdown = this.controls.createModelDropdown(modelIndex)
         dropdownHost.replaceChildren(dropdown.dom)
         this.dropdowns.push(dropdown)
 
-        return html`
-            <div className="ai-model-config-row">
-                <div className="ai-model-config-field">
-                    <span className="ai-prompt-model-menu-control-label">Model</span>
-                    ${dropdownHost}
-                </div>
-                ${removeButton}
-            </div>
-        ` as HTMLElement
+        return createModelConfigurationRow({
+            modelDropdownHost: dropdownHost,
+            canRemove,
+            onRemove: () => this.removeModel(modelIndex),
+        }).dom
     }
 
     update(): void {
@@ -328,8 +307,8 @@ class AddModelButton implements DropdownView {
                 contenteditable="false"
                 onclick=${handleClick}
             >
+                <span className="ai-model-config-add-label">Add model</span>
                 <span className="ai-model-config-add-icon" innerHTML=${plusIcon}></span>
-                <span className="ai-model-config-add-label">add model</span>
             </button>
         ` as HTMLButtonElement
         this.unsubscribe = aiModelsStore.subscribe(() => this.update())

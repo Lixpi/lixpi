@@ -18,6 +18,7 @@ import {
     type BytePlusClientConfig,
     type CreateVideoGenerationTaskPayload,
 } from './byteplus-video-types.ts'
+import { SEEDANCE_SEED_MAX, resolveReportedSeed } from './media-generation-seed.ts'
 
 // First-party video provider for BytePlus ModelArk's official Seedance 2.0 API.
 // A clean peer of GoogleProvider: it is invoked as a transient provider by the
@@ -107,6 +108,9 @@ export class BytePlusProvider extends BaseProvider {
         })
         const duration = Number(state.videoDurationSeconds) || undefined
         const generationConfig = state.videoGenerationConfig ?? {}
+        // Seedance accepts a seed and echoes it back on the finished task, so we
+        // always send one and store whichever value the task reports.
+        const requestedSeed = await this.resolveGenerationSeed(state, SEEDANCE_SEED_MAX)
 
         const payload: CreateVideoGenerationTaskPayload = {
             model: modelVersion,
@@ -116,7 +120,7 @@ export class BytePlusProvider extends BaseProvider {
             ...(duration ? { duration } : {}),
             generate_audio: generationConfig.generateAudio !== 'false',
             watermark: generationConfig.watermark === 'true',
-            ...(generationConfig.seed ? { seed: Number(generationConfig.seed) } : {}),
+            seed: requestedSeed,
             camera_fixed: generationConfig.cameraFixed === 'true',
             return_last_frame: generationConfig.returnLastFrame === 'true',
         }
@@ -182,6 +186,7 @@ export class BytePlusProvider extends BaseProvider {
             const aspectRatio = task.ratio ?? state.videoAspectRatio ?? ''
             const resolution = task.resolution ?? state.videoResolution ?? ''
             const hasAudio = payload.generate_audio ?? true
+            const generationSeed = resolveReportedSeed(task.seed, requestedSeed)
 
             await this.videoPub.complete({
                 videoBuffer,
@@ -193,11 +198,13 @@ export class BytePlusProvider extends BaseProvider {
                 responseId: taskId,
                 revisedPrompt: providerPrompt,
                 videoModelId: modelVersion,
+                generationSeed,
             })
 
             info(`[BytePlus:${this.instanceKey}] Seedance complete ${JSON.stringify({
                 taskId,
                 durationSeconds,
+                generationSeed,
                 totalTokens: task.usage?.total_tokens,
             }, null, 0)}`)
 

@@ -25,6 +25,7 @@ import {
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import { plusIcon } from '@lixpi/ui-kit/svg'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -605,6 +606,8 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             const { nv } = createNodeView()
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
             const titles = ['Reasoning model', 'Image model', 'Video model']
+            const expectedPlusIcon = document.createElement('span')
+            expectedPlusIcon.innerHTML = plusIcon
 
             expect(sections).toHaveLength(titles.length)
             for (const [index, title] of titles.entries()) {
@@ -612,16 +615,151 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 const heading = section.querySelector('.ai-prompt-model-menu-section-heading')!
                 const headingMain = section.querySelector('.ai-prompt-model-menu-section-heading-main')!
                 const headingAction = section.querySelector('.ai-prompt-model-menu-section-heading-action')!
+                const addButton = headingAction.querySelector('.ai-model-config-add') as HTMLButtonElement
+                const addLabel = addButton.querySelector('.ai-model-config-add-label') as HTMLElement
+                const addIcon = addButton.querySelector('.ai-model-config-add-icon') as HTMLElement
 
                 expect(heading.contains(headingMain)).toBe(true)
                 expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(title)
                 expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
-                expect(headingAction.querySelector('.ai-model-config-add')?.getAttribute('aria-label')).toBe('Add model')
+                expect(addButton.getAttribute('aria-label')).toBe('Add model')
+                expect(addLabel.textContent).toBe('Add model')
+                expect(addButton.children[0]).toBe(addLabel)
+                expect(addButton.children[1]).toBe(addIcon)
+                expect(addIcon.innerHTML).toBe(expectedPlusIcon.innerHTML)
                 expect(section.querySelector('.ai-prompt-model-menu-toggle')).toBeNull()
                 expect(section.querySelector('.ai-prompt-selected-model-tags-row')).toBeNull()
             }
 
             nv.destroy!()
+        })
+
+        it('uses a compact nightBlue circle around the Add model plus icon', () => {
+            const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+            const iconRule = stylesSource.match(/\.ai-model-config-add-icon \{[\s\S]*?\n\}/)?.[0] ?? ''
+
+            expectSourceToContain(iconRule, 'flex: 0 0 12px;')
+            expectSourceToContain(iconRule, 'width: 12px;')
+            expectSourceToContain(iconRule, 'height: 12px;')
+            expectSourceToContain(iconRule, 'background-color: $nightBlue;')
+        })
+
+        it('uses the same row renderer and remove-button slot for reasoning, image, and video models', () => {
+            aiModelsStore.setAiModelsCatalog({
+                models: [
+                    {
+                        provider: 'Anthropic',
+                        model: 'sonnet-4-6',
+                        shortTitle: 'Sonnet 4.6',
+                        iconName: 'claudeIcon',
+                        modalities: [{ modality: 'text_generation' }],
+                    },
+                    {
+                        provider: 'OpenAI',
+                        model: 'gpt-5-4',
+                        shortTitle: 'GPT 5.4',
+                        iconName: 'gptAvatarIcon',
+                        modalities: [{ modality: 'text_generation' }],
+                    },
+                    {
+                        provider: 'Google',
+                        model: 'imagen-4',
+                        shortTitle: 'Imagen 4',
+                        iconName: 'geminiIcon',
+                        modalities: [{ modality: 'image_generation' }],
+                    },
+                    {
+                        provider: 'OpenAI',
+                        model: 'gpt-image-1',
+                        shortTitle: 'GPT Image',
+                        iconName: 'gptAvatarIcon',
+                        modalities: [{ modality: 'image_generation' }],
+                    },
+                    {
+                        provider: 'Google',
+                        model: 'veo-3',
+                        shortTitle: 'Veo 3',
+                        iconName: 'geminiIcon',
+                        modalities: [{ modality: 'video_generation' }],
+                    },
+                    {
+                        provider: 'ByteDance',
+                        model: 'seedance',
+                        shortTitle: 'Seedance',
+                        iconName: 'bytedanceIcon',
+                        modalities: [{ modality: 'video_generation' }],
+                    },
+                ],
+                mediaGenerationConfigMatrix: {
+                    version: 'media-generation-config-matrix-v1',
+                    groups: [
+                        {
+                            groupId: 'image:test',
+                            mediaType: 'image',
+                            provider: 'test',
+                            title: 'Image models',
+                            modelIds: ['Google:imagen-4', 'OpenAI:gpt-image-1'],
+                            controls: [],
+                        },
+                        {
+                            groupId: 'video:test',
+                            mediaType: 'video',
+                            provider: 'test',
+                            title: 'Video models',
+                            modelIds: ['Google:veo-3', 'ByteDance:seedance'],
+                            controls: [],
+                        },
+                    ],
+                },
+            } as any)
+            const { nv } = createNodeView('Hello', {
+                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
+                aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-1']),
+                aiVideoModels: JSON.stringify(['Google:veo-3', 'ByteDance:seedance']),
+            })
+            const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section'))
+
+            expect(sections).toHaveLength(3)
+            for (const section of sections) {
+                const rowCollection = section.querySelector('.ai-model-config-row-collection')
+                const rows = Array.from(section.querySelectorAll('.ai-model-config-row'))
+                expect(rowCollection).not.toBeNull()
+                expect(rows).toHaveLength(2)
+
+                for (const row of rows) {
+                    const primaryRow = row.querySelector('.ai-model-config-primary-row') as HTMLElement
+                    const removeButton = row.querySelector('.ai-model-config-remove') as HTMLButtonElement
+                    expect(row.querySelector('.ai-model-config-model-column')).not.toBeNull()
+                    expect(removeButton.parentElement).toBe(primaryRow)
+                    expect(primaryRow.lastElementChild).toBe(removeButton)
+                }
+            }
+
+            nv.destroy!()
+            aiModelsStore.resetStore()
+        })
+
+        it('keeps model-row markup behind one shared renderer entry point', () => {
+            const nodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
+            const modelControlsSource = readFileSync(
+                resolve(__dirname, '../../../aiModelControls/aiModelControls.ts'),
+                'utf-8',
+            )
+            const rowRendererSource = readFileSync(
+                resolve(__dirname, '../../../aiModelControls/modelConfigurationRow.ts'),
+                'utf-8',
+            )
+            const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+
+            expectSourceToContain(nodeSource, 'return createModelConfigurationRow({')
+            expectSourceToContain(modelControlsSource, 'return createModelConfigurationRow({')
+            expectSourceNotToContain(nodeSource, 'className="ai-model-config-remove"')
+            expectSourceNotToContain(modelControlsSource, 'className="ai-model-config-remove"')
+            expectSourceToContain(rowRendererSource, 'className="ai-model-config-remove"')
+            expectSourceToContain(
+                stylesSource,
+                '.ai-prompt-model-menu-control:has(.ai-model-config-row-collection)',
+            )
         })
 
         it('adds and removes independently configured reasoning-model rows while keeping one row required', () => {

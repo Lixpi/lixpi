@@ -227,17 +227,6 @@ const buildVeoControls = (
         options: durations,
         defaultValue: '8',
     },
-    {
-        key: 'seed',
-        label: 'Seed',
-        kind: 'number',
-        options: [],
-        placeholder: 'Random',
-        min: 0,
-        max: 4294967295,
-        step: 1,
-        description: 'Use the same seed to improve consistency between generations.',
-    },
 ]
 
 const buildSeedanceControls = (resolutions: ImageSizeOption[]): MediaGenerationConfigControl[] => [
@@ -261,14 +250,6 @@ const buildSeedanceControls = (resolutions: ImageSizeOption[]): MediaGenerationC
         kind: 'duration',
         options: SEEDANCE_DURATIONS,
         defaultValue: '-1',
-    },
-    {
-        key: 'seed',
-        label: 'Seed',
-        kind: 'number',
-        options: [],
-        placeholder: 'Random',
-        step: 1,
     },
     toggleControl(
         'cameraFixed',

@@ -32,3 +32,9 @@ export {
     type AiModelMenuSectionConfig,
     type AiModelMenuSectionView,
 } from '$src/components/aiModelControls/modelMenuSection.ts'
+
+export {
+    createModelConfigurationRow,
+    type ModelConfigurationRowConfig,
+    type ModelConfigurationRowInstance,
+} from '$src/components/aiModelControls/modelConfigurationRow.ts'

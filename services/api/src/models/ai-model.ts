@@ -105,7 +105,6 @@ const SUPPORTED_MEDIA_GENERATION_CONTROL_KEYS = new Set<MediaGenerationConfigCon
     'outputFormat',
     'outputCount',
     'generateAudio',
-    'seed',
     'negativePrompt',
     'personGeneration',
     'cameraFixed',

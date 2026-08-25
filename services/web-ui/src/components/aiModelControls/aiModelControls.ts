@@ -8,7 +8,6 @@ import {
     bytedanceIcon,
     imageIcon,
     appendSvgPathIcon,
-    xIcon,
 } from '@lixpi/ui-kit/svg'
 
 // @ts-ignore - runtime import
@@ -32,6 +31,7 @@ import {
     type HelpTooltipInstance,
 } from '@lixpi/ui-kit/components/help-tooltip'
 import { settings } from '$src/settings.ts'
+import { createModelConfigurationRow } from '$src/components/aiModelControls/modelConfigurationRow.ts'
 
 import {
     GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
@@ -921,7 +921,6 @@ export function createGenericImageModelDropdown(
 }
 
 function normalizeControlValue(control: MediaGenerationConfigControl, value: string | undefined): string {
-    if ((control.kind === 'number' || control.kind === 'text') && value !== undefined) return value
     const optionValues = new Set(control.options.map(option => option.value))
     if (value && optionValues.has(value)) return value
     return control.defaultValue || control.options[0]?.value || ''
@@ -954,7 +953,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     private builtConnected = false
 
     constructor(private readonly controls: MediaGenerationConfigMatrixControls) {
-        this.dom = html`<div className="ai-media-config-matrix" data-media-type=${controls.mediaType} data-visible="false" contenteditable="false"></div>` as HTMLElement
+        this.dom = html`<div className="ai-model-config-row-collection ai-media-config-matrix" data-media-type=${controls.mediaType} data-visible="false" contenteditable="false"></div>` as HTMLElement
         this.unsubscribe = aiModelsStore.subscribe((storeState: any) => {
             void storeState
             this.renderedStructureSignature = ''
@@ -1245,36 +1244,6 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         return button
     }
 
-    private createInputControl(
-        group: RenderedMediaConfigGroup,
-        control: MediaGenerationConfigControl,
-        selectedValue: string,
-    ): HTMLElement {
-        const input = html`
-            <input
-                className="ai-media-config-input"
-                type=${control.kind === 'number' ? 'number' : 'text'}
-                value=${selectedValue}
-                placeholder=${control.placeholder ?? ''}
-                aria-label=${control.label}
-            />
-        ` as HTMLInputElement
-        if (control.min !== undefined) input.min = String(control.min)
-        if (control.max !== undefined) input.max = String(control.max)
-        if (control.step !== undefined) input.step = String(control.step)
-        input.addEventListener('change', () => this.setGroupControlValue(group, control, input.value.trim()))
-        this.mountedControls.push({
-            groupId: group.groupId,
-            modelId: group.selectedModelIds[0] ?? '',
-            control,
-            setValue: value => {
-                if (input.value !== value) input.value = value
-            },
-            destroy: () => undefined,
-        })
-        return input
-    }
-
     private createControlLabel(control: MediaGenerationConfigControl): HTMLElement {
         const tooltipText = control.kind === 'toggle'
             ? control.description?.trim() || MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT[control.key]
@@ -1316,9 +1285,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
                 ? this.createSvgControlHost('ai-media-config-sliding-dropdown-host', group, control, selectedValue, pendingControls)
                 : control.kind === 'toggle'
                     ? this.createToggleControl(group, control, selectedValue)
-                    : control.kind === 'number' || control.kind === 'text'
-                        ? this.createInputControl(group, control, selectedValue)
-                        : this.createSvgControlHost('ai-media-config-sliding-switch-host', group, control, selectedValue, pendingControls)
+                    : this.createSvgControlHost('ai-media-config-sliding-switch-host', group, control, selectedValue, pendingControls)
 
         return html`
             <div className="ai-media-config-control" data-control-kind=${control.kind} data-control-key=${control.key}>
@@ -1352,53 +1319,22 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         const remainingControlEls = renderedControls
             .filter(renderedControl => renderedControl !== inlineImageSizeControl)
             .map(({ dom }) => dom)
-        const modelDropdownHost = html`<span className="ai-media-config-model-dropdown"></span>` as HTMLElement
+        const modelDropdownHost = html`<span></span>` as HTMLElement
         pendingModelDropdowns.push({ host: modelDropdownHost, modelIndex })
         const canRemove = this.controls.getSelectedModelIds().length > 1
-        const handleRemove = (event: MouseEvent): void => {
-            event.preventDefault()
-            event.stopPropagation()
-            this.removeModel(modelId)
-        }
-        const removeButton = canRemove
-            ? html`
-                <button
-                    type="button"
-                    className="ai-model-config-remove"
-                    aria-label="Remove model"
-                    title="Remove model"
-                    onclick=${handleRemove}
-                >
-                    <span className="ai-model-config-remove-icon" innerHTML=${xIcon}></span>
-                </button>
-            ` as HTMLButtonElement
-            : undefined
 
-        return html`
-            <div className="ai-media-config-group" data-group-id=${group.groupId} data-model-id=${modelId}>
-                <div className="ai-media-config-group-row">
-                    <div className="ai-media-config-group-primary-row">
-                        <div className="ai-media-config-group-model-column">
-                            <div className="ai-media-config-model-field">
-                                <span className="ai-prompt-model-menu-control-label">Model</span>
-                                ${modelDropdownHost}
-                            </div>
-                        </div>
-                        ${inlineImageSizeControl
-                            ? html`
-                                <div className="ai-media-config-group-size-column">
-                                    ${inlineImageSizeControl.dom}
-                                </div>
-                            `
-                            : undefined}
-                        ${removeButton}
-                    </div>
-                    ${remainingControlEls.length > 0
-                        ? html`<div className="ai-media-config-group-controls">${remainingControlEls}</div>`
-                        : undefined}
-                </div>
-            </div>
-        ` as HTMLElement
+        return createModelConfigurationRow({
+            modelDropdownHost,
+            inlineControl: inlineImageSizeControl?.dom,
+            controls: remainingControlEls,
+            canRemove,
+            onRemove: () => this.removeModel(modelId),
+            className: 'ai-media-config-group',
+            data: {
+                groupId: group.groupId,
+                modelId,
+            },
+        }).dom
     }
 
     update(): void {

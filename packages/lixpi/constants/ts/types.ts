@@ -254,7 +254,6 @@ export type MediaGenerationConfigControlKey =
     | 'outputFormat'
     | 'outputCount'
     | 'generateAudio'
-    | 'seed'
     | 'negativePrompt'
     | 'personGeneration'
     | 'cameraFixed'
@@ -282,8 +281,6 @@ export type MediaGenerationConfigControlKind =
     | 'segmented'
     | 'duration'
     | 'toggle'
-    | 'number'
-    | 'text'
     | 'fixed'
 
 export type MediaGenerationConfigControl = {
@@ -293,10 +290,6 @@ export type MediaGenerationConfigControl = {
     options: ImageSizeOption[]
     defaultValue?: string
     description?: string
-    placeholder?: string
-    min?: number
-    max?: number
-    step?: number
     readOnly?: boolean
 }
 

@@ -506,7 +506,12 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         const firstGroup = view.dom.querySelector('[data-model-id="google:imagen-4"]') as HTMLElement
         const removeButton = firstGroup.querySelector('.ai-model-config-remove') as HTMLButtonElement
+        const primaryRow = firstGroup.querySelector('.ai-model-config-primary-row') as HTMLElement
+        expect(firstGroup.classList.contains('ai-model-config-row')).toBe(true)
+        expect(firstGroup.querySelector('.ai-model-config-model-column')).not.toBeNull()
         expect(removeButton).not.toBeNull()
+        expect(removeButton.parentElement).toBe(primaryRow)
+        expect(primaryRow.lastElementChild).toBe(removeButton)
         removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
         expect(controls.setSelectedModelIds).toHaveBeenLastCalledWith(['openai:gpt-image-1'])

@@ -223,6 +223,7 @@ export class VideoRouter {
                 videoSourceForExtension: state.videoSourceForExtension,
                 videoSourceDurationSeconds: state.videoSourceDurationSeconds,
                 generationRun,
+                isMediaRegenerationRun: Boolean(state.mediaBranchLineagePlan?.regenerationTarget),
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                 proseMirrorContentHandler: options.onProseMirrorContent,
                 proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,

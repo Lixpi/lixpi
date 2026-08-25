@@ -182,6 +182,10 @@ export type ProviderState = {
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot | undefined
     mediaBranchResolution?: MediaBranchVlmResolution | undefined
     mediaBranchLineagePlan?: MediaBranchLineagePlan | undefined
+    // Set by the media routers on the transient provider run so the provider can
+    // tell a regeneration from an edit or a reference-driven generation without
+    // carrying the whole lineage plan across the boundary.
+    isMediaRegenerationRun?: boolean | undefined
     promptReferenceAssetIds?: string[] | undefined
     canvasVisibleArea?: { width: number; height: number } | undefined
 
@@ -297,6 +301,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     mediaBranchCandidateSnapshot: { reducer: keep },
     mediaBranchResolution: { reducer: keep },
     mediaBranchLineagePlan: { reducer: keep },
+    isMediaRegenerationRun: { reducer: keep, default: () => false },
     promptReferenceAssetIds: { reducer: keep },
     canvasVisibleArea: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },

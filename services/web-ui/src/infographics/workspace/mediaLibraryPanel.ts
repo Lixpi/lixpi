@@ -1,4 +1,4 @@
-import type { Asset, AssetMeta } from '@lixpi/constants'
+import { ASSET_GENERATION_SEED_HELP_TEXT, type Asset, type AssetMeta } from '@lixpi/constants'
 
 import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor.ts'
 import {
@@ -15,6 +15,7 @@ import { resolveMediaUrl } from '$src/utils/mediaUrls.ts'
 import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
 import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
 import { createExecutionTraceTimelineDetailAdapter } from '$src/components/executionTrace/index.ts'
+import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
 import { createMediaGenerationProgress } from '$src/infographics/workspace/mediaGenerationProgress.ts'
 import {
     mountAssetSubjectIdentityControl,
@@ -75,6 +76,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
     private assetDetailEditor: ProseMirrorEditor | null = null
     private provenanceRenderer: ReadOnlyAiChatThreadRendererInstance | null = null
     private subjectIdentityControl: AssetSubjectIdentityControlInstance | null = null
+    private seedHelpTooltip: HelpTooltipInstance | null = null
 
     constructor(private readonly options: MediaLibraryPanelOptions) {
         this.rootEl = html`<div className="media-library-panel media-library-panel-embedded media-library-panel-images nopan nowheel">
@@ -269,6 +271,7 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             <div className="media-library-detail-subject-identity"></div>
             <p className="media-library-detail-descriptor"></p>
             <p className="media-library-detail-lineage"></p>
+            <p className="media-library-detail-seed"></p>
             <button type="button" className="media-library-detail-remove">Remove from library</button>
             <div className="media-library-detail-content"></div>
             <div className="media-library-detail-provenance"></div>
@@ -293,6 +296,19 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
         ;(detail.querySelector('.media-library-detail-lineage') as HTMLElement).textContent = asset.lineage
             ? `Sources: ${[asset.lineage.parentAssetId, ...asset.lineage.sourceAssetIds].filter(Boolean).join(', ') || 'conversation only'}`
             : 'No lineage'
+        const seedEl = detail.querySelector('.media-library-detail-seed') as HTMLElement
+        const generationSeed = asset.lineage?.generationSeed
+        if (generationSeed === undefined) {
+            seedEl.remove()
+        } else {
+            this.seedHelpTooltip = createHelpTooltip({
+                label: 'Seed details',
+                text: ASSET_GENERATION_SEED_HELP_TEXT,
+                className: 'media-library-detail-seed-help',
+            })
+            seedEl.textContent = `Seed: ${generationSeed}`
+            seedEl.append(this.seedHelpTooltip.dom)
+        }
         detail.querySelector('.media-library-detail-back')?.addEventListener('click', () => {
             this.selectedAssetId = null
             this.render()
@@ -420,6 +436,8 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
         this.provenanceRenderer = null
         this.subjectIdentityControl?.destroy()
         this.subjectIdentityControl = null
+        this.seedHelpTooltip?.destroy()
+        this.seedHelpTooltip = null
     }
 }
 
