@@ -8,6 +8,7 @@ export {
     type SlidingSwitchOptionRenderInstance,
     type SlidingSwitchOptionRenderState,
     type SlidingSwitchOptionRenderer,
+    type SlidingSwitchReshuffleItemsOnValueChange,
     type SlidingSwitchTransitionConfig,
     type SlidingSwitchVisualOverflowPadding,
 } from './slidingSwitch.ts'

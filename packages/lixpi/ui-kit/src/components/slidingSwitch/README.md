@@ -43,9 +43,13 @@ Appends an SVG group to a d3 selection of an SVG element.
         bottomColor: string
     }
     transition?: {
-        durationMs?: number             // base slide duration
+        durationMs?: number             // base slide duration; total timeline when reshuffling
         minDurationMs?: number          // lower bound for distant jumps
         distanceSpeedupFactor?: number  // per-segment speedup for distant jumps
+    }
+    reshuffleItemsOnValueChange?: {
+        enable: boolean
+        selectedElementPosition: 'left' | 'right'
     }
     renderOption?: (parent, state) => SlidingSwitchOptionRenderInstance | void
     onChange?: (value: Value, id: string) => void
@@ -123,6 +127,7 @@ createSlidingSwitch(svg, {
 - Renders an SVG track, a sliding indicator, and one centered text label + transparent hit area per option by default.
 - The indicator slides to the active option via a d3 transition on its `x` attribute (numeric — no CSS, no transform parsing).
 - Slide timing is configurable; distant jumps divide the base duration by `1 + (distance - 1) * distanceSpeedupFactor`, clamped by `minDurationMs`.
+- `reshuffleItemsOnValueChange` keeps the selected option at the configured edge. A value change runs the normal indicator slide toward the clicked option, then begins the sequential adjacent swaps during the final 30% of that slide. The configured transition duration is the total budget for the complete slide-and-reshuffle timeline and is divided across its phases. Switches without reshuffling keep the regular slide-duration behavior.
 - The indicator does not render a stroke; callers can add elevation with `indicatorBoxShadow` and an inset highlight/shade with `indicatorInsetShadow`.
 - When `indicatorBoxShadow` is set, the component adds top and side SVG padding for the active indicator shadow while clipping bottom overflow.
 - `resize(x, y, width, height)` treats `width` as the visible viewport width. If `minOptionWidth` is set, the switch computes a larger scrollable content width internally.

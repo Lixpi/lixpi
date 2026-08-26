@@ -548,6 +548,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
             indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
             indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
+            reshuffleItemsOnValueChange: {
+                enable: true,
+                selectedElementPosition: 'right',
+            },
             onChange: value => setNodeAttrs(view, getPos, { mediaGenerationMode: value }),
         })
         const capabilityControlsEl = html`<div className="ai-prompt-capability-controls"></div>` as HTMLDivElement
