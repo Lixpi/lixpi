@@ -840,6 +840,7 @@ type WorkspaceCanvasOptions = {
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement
     mediaModeSwitchMountEl: HTMLDivElement
+    modelMenuControlMountEl: HTMLDivElement
     workspaceId: string
     canvasState: CanvasState | null
     documents: Document[]
@@ -6155,6 +6156,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             controlFactories: {
                 ...createDefaultPromptControlFactories(),
                 mountMediaModeSwitch: switchElement => options.mediaModeSwitchMountEl.replaceChildren(switchElement),
+                mountModelMenuControl: controlElement => options.modelMenuControlMountEl.replaceChildren(controlElement),
             },
             initialContent: readGlobalComposerDraft(),
             promptReferenceCatalog: getPromptReferenceCatalogClient(),

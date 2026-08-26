@@ -42,6 +42,7 @@ type AiPromptInputPluginOptions = {
     onSubmit: SubmitHandler
     createContextTray?: Parameters<typeof createAiPromptInputNodeView>[0]['createContextTray']
     mountMediaModeSwitch?: Parameters<typeof createAiPromptInputNodeView>[0]['mountMediaModeSwitch']
+    mountModelMenuControl?: Parameters<typeof createAiPromptInputNodeView>[0]['mountModelMenuControl']
     createModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createModelDropdown']
     createModelMultiSelect?: Parameters<typeof createAiPromptInputNodeView>[0]['createModelMultiSelect']
     createImageModelDropdown: Parameters<typeof createAiPromptInputNodeView>[0]['createImageModelDropdown']
@@ -171,6 +172,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         onSubmit,
         createContextTray,
         mountMediaModeSwitch,
+        mountModelMenuControl,
         createModelDropdown,
         createModelMultiSelect,
         createImageModelDropdown,
@@ -279,6 +281,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     placeholderText,
                     createContextTray,
                     mountMediaModeSwitch,
+                    mountModelMenuControl,
                     createModelDropdown,
                     createModelMultiSelect,
                     createImageModelDropdown,

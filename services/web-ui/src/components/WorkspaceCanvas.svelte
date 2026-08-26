@@ -101,6 +101,7 @@
     let imageUrlValue = $state('')
     let imageWrapperEl: HTMLDivElement
     let mediaModeSwitchMountEl: HTMLDivElement
+    let modelMenuControlMountEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     let transientCanvasMutationInProgress = false
@@ -588,6 +589,7 @@
             paneEl,
             viewportEl,
             mediaModeSwitchMountEl,
+            modelMenuControlMountEl,
             workspaceId,
             canvasState,
             documents,
@@ -717,7 +719,7 @@
     class:workspace-canvas-right-side-panel-open={isRightSidePanelOpen}
     style={rightSidePanelStyle}
 >
-    <!-- The in-flow rail keeps the mode panel between the composer and upload panel. -->
+    <!-- The in-flow rail keeps the Media Library between the composer and upload panel. -->
     <div class="workspace-canvas-left-control-rail">
         <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
             <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">
@@ -768,15 +770,20 @@
                 {/if}
             </div>
         </div>
-        <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
+        <div class="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
+            <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
+                {@html mediaFoloderIcon}
+                <span class="workspace-floating-toolbar-tooltip">Media Library</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Right action panel — a single icon renders it as a circle. -->
-    <div class="workspace-canvas-action-panel workspace-canvas-action-panel-right workspace-canvas-action-panel-single">
-        <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
-            {@html mediaFoloderIcon}
-            <span class="workspace-floating-toolbar-tooltip">Media Library</span>
-        </button>
+    <div class="workspace-canvas-right-control-rail">
+        <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
+        <div
+            class="workspace-canvas-action-panel workspace-canvas-model-menu-panel"
+            bind:this={modelMenuControlMountEl}
+        ></div>
     </div>
 
     <input

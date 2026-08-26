@@ -484,24 +484,42 @@ function createLayerWithScreenGlassTargets(): ReturnType<typeof createPixiMediaL
     composerEl.style.borderTopRightRadius = '999px'
     composerEl.style.borderBottomRightRadius = '999px'
     composerEl.style.borderBottomLeftRadius = '999px'
-    const rightPanel = document.createElement('div')
-    rightPanel.className = 'workspace-canvas-action-panel-right'
-    rightPanel.style.borderRadius = '22px'
-    rightPanel.style.borderTopLeftRadius = '22px'
-    rightPanel.style.borderTopRightRadius = '22px'
-    rightPanel.style.borderBottomRightRadius = '22px'
-    rightPanel.style.borderBottomLeftRadius = '22px'
+    const mediaLibraryPanel = document.createElement('div')
+    mediaLibraryPanel.className = 'workspace-canvas-media-library-panel'
+    mediaLibraryPanel.style.borderRadius = '50%'
+    mediaLibraryPanel.style.borderTopLeftRadius = '50%'
+    mediaLibraryPanel.style.borderTopRightRadius = '50%'
+    mediaLibraryPanel.style.borderBottomRightRadius = '50%'
+    mediaLibraryPanel.style.borderBottomLeftRadius = '50%'
+    const mediaModePanel = document.createElement('div')
+    mediaModePanel.className = 'workspace-canvas-media-mode-panel'
+    mediaModePanel.style.borderRadius = '999px'
+    mediaModePanel.style.borderTopLeftRadius = '999px'
+    mediaModePanel.style.borderTopRightRadius = '999px'
+    mediaModePanel.style.borderBottomRightRadius = '999px'
+    mediaModePanel.style.borderBottomLeftRadius = '999px'
+    const modelMenuPanel = document.createElement('div')
+    modelMenuPanel.className = 'workspace-canvas-model-menu-panel'
+    modelMenuPanel.style.borderRadius = '999px'
+    modelMenuPanel.style.borderTopLeftRadius = '999px'
+    modelMenuPanel.style.borderTopRightRadius = '999px'
+    modelMenuPanel.style.borderBottomRightRadius = '999px'
+    modelMenuPanel.style.borderBottomLeftRadius = '999px'
 
-    setElementRect(paneEl, { left: 10, top: 20, width: 500, height: 300 })
+    setElementRect(paneEl, { left: 10, top: 20, width: 900, height: 300 })
     setElementRect(leftPanel, { left: 30, top: 260, width: 80, height: 56 })
-    setElementRect(composerEl, { left: 140, top: 250, width: 300, height: 64 })
-    setElementRect(rightPanel, { left: 460, top: 260, width: 56, height: 56 })
+    setElementRect(mediaLibraryPanel, { left: 130, top: 268, width: 40, height: 40 })
+    setElementRect(composerEl, { left: 190, top: 250, width: 300, height: 64 })
+    setElementRect(mediaModePanel, { left: 510, top: 268, width: 76, height: 40 })
+    setElementRect(modelMenuPanel, { left: 606, top: 268, width: 220, height: 40 })
 
     paneEl.appendChild(composerEl)
     paneEl.appendChild(viewportEl)
     rootEl.appendChild(leftPanel)
+    rootEl.appendChild(mediaLibraryPanel)
     rootEl.appendChild(paneEl)
-    rootEl.appendChild(rightPanel)
+    rootEl.appendChild(mediaModePanel)
+    rootEl.appendChild(modelMenuPanel)
     document.body.appendChild(rootEl)
 
     return createPixiMediaLayer({
@@ -972,7 +990,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(generated?.snakeLengthFraction).toBeGreaterThan(0)
     })
 
-    it('syncs screen-glass border geometry from pane-local composer and action-panel targets', async () => {
+    it('syncs screen-glass border geometry from the composer and its left and right control rails', async () => {
         const layer = createLayerWithScreenGlassTargets()
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
 
@@ -984,7 +1002,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
 
         const syncCall = glassRenderer!.sync.mock.calls.at(-1)
         expect(syncCall).toBeTruthy()
-        expect(syncCall?.[1]).toEqual({ width: 500, height: 300 })
+        expect(syncCall?.[1]).toEqual({ width: 900, height: 300 })
         expect(syncCall?.[0]).toEqual([
             {
                 id: 'workspace-action-panel-left',
@@ -996,8 +1014,17 @@ describe('createPixiMediaLayer runtime behavior', () => {
                 visible: true,
             },
             {
+                id: 'workspace-media-library-panel',
+                x: 120,
+                y: 248,
+                width: 40,
+                height: 40,
+                radius: 20,
+                visible: true,
+            },
+            {
                 id: 'workspace-global-composer',
-                x: 130,
+                x: 180,
                 y: 230,
                 width: 300,
                 height: 64,
@@ -1005,12 +1032,21 @@ describe('createPixiMediaLayer runtime behavior', () => {
                 visible: true,
             },
             {
-                id: 'workspace-action-panel-right',
-                x: 450,
-                y: 240,
-                width: 56,
-                height: 56,
-                radius: 22,
+                id: 'workspace-media-mode-panel',
+                x: 500,
+                y: 248,
+                width: 76,
+                height: 40,
+                radius: 20,
+                visible: true,
+            },
+            {
+                id: 'workspace-model-menu-panel',
+                x: 596,
+                y: 248,
+                width: 220,
+                height: 40,
+                radius: 20,
                 visible: true,
             },
         ])

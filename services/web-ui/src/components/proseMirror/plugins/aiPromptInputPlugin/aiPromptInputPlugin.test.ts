@@ -351,6 +351,57 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.contentDOM!.getAttribute('data-placeholder')).toBe('Talk to me...')
     })
 
+    it('renders the image and video choices as 36px circular icon values', () => {
+        const { nv, mockView } = createNodeView()
+        const svg = nv.dom.querySelector('.ai-prompt-media-mode-switch-svg') as SVGSVGElement
+        const track = svg.querySelector('.sliding-switch-track') as SVGRectElement
+        const indicator = svg.querySelector('.sliding-switch-indicator') as SVGRectElement
+        const optionGroups = Array.from(svg.querySelectorAll('.sliding-switch-option-group')) as SVGGElement[]
+        const hits = Array.from(svg.querySelectorAll('.sliding-switch-hit')) as SVGRectElement[]
+        const iconGroups = Array.from(svg.querySelectorAll('.ai-prompt-media-mode-switch-icon')) as SVGGElement[]
+
+        expect(svg.getAttribute('width')).toBe('76')
+        expect(svg.getAttribute('height')).toBe('40')
+        expect(svg.getAttribute('viewBox')).toBe('0 0 76 40')
+        expect(track.getAttribute('width')).toBe('76')
+        expect(track.getAttribute('height')).toBe('40')
+        expect(track.getAttribute('rx')).toBe('20')
+        expect(indicator.getAttribute('width')).toBe('36')
+        expect(indicator.getAttribute('height')).toBe('36')
+        expect(indicator.getAttribute('rx')).toBe('18')
+        expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['image', 'video'])
+        expect(hits.map(hit => [hit.getAttribute('x'), hit.getAttribute('width'), hit.getAttribute('height')])).toEqual([
+            ['2', '36', '36'],
+            ['38', '36', '36'],
+        ])
+        expect(iconGroups).toHaveLength(2)
+        expect(iconGroups.every(group => group.querySelector('path') !== null)).toBe(true)
+        expect(svg.querySelectorAll('text')).toHaveLength(0)
+
+        optionGroups[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        expect(mockView.state.doc.firstChild!.attrs.mediaGenerationMode).toBe('video')
+        expect(optionGroups[0]!.getAttribute('aria-checked')).toBe('false')
+        expect(optionGroups[1]!.getAttribute('aria-checked')).toBe('true')
+    })
+
+    it('mounts the icon switch outside the input wrapper when requested and removes it on destroy', () => {
+        const mediaModeMountEl = document.createElement('div')
+        const mountMediaModeSwitch = vi.fn((switchElement: HTMLElement) => {
+            mediaModeMountEl.appendChild(switchElement)
+        })
+        const { nv } = createNodeView('Hello', {}, { mountMediaModeSwitch })
+
+        const mediaModeSwitch = mediaModeMountEl.querySelector('.ai-prompt-media-mode-switch') as HTMLElement
+        expect(mountMediaModeSwitch).toHaveBeenCalledOnce()
+        expect(mediaModeSwitch).not.toBeNull()
+        expect(nv.dom.contains(mediaModeSwitch)).toBe(false)
+
+        nv.destroy!()
+
+        expect(mediaModeMountEl.children).toHaveLength(0)
+    })
+
     it('inserts context tray before the editable content when provided', () => {
         const contextTray = document.createElement('div')
         contextTray.className = 'provided-context-tray'
@@ -463,6 +514,102 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe('#ff00ff')
         } finally {
             settings.aiPromptInput.modelMenu.styles.triggerColor = originalTriggerColor
+        }
+    })
+
+    it('mounts the model configuration trigger beside the composer without mode text or a leading icon', () => {
+        const modelMenuControlMountEl = document.createElement('div')
+        const mountModelMenuControl = vi.fn((controlElement: HTMLElement) => {
+            modelMenuControlMountEl.appendChild(controlElement)
+        })
+        const { nv, factories } = createNodeView('Hello', {}, { mountModelMenuControl })
+        const trigger = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger') as HTMLButtonElement
+        const summary = trigger.querySelector('.ai-prompt-model-menu-trigger-summary')
+        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
+
+        expect(mountModelMenuControl).toHaveBeenCalledOnce()
+        expect(trigger).toBeInstanceOf(HTMLButtonElement)
+        expect(summary?.textContent).toBe('Select model')
+        expect(trigger.querySelector('svg')).toBeNull()
+        expect(trigger.querySelector('.ai-prompt-model-menu-trigger-leading')).toBeNull()
+        expect(trigger.querySelector('.ai-prompt-model-menu-trigger-mode')).toBeNull()
+        expect(nv.dom.contains(trigger)).toBe(false)
+        expect(controls.children).toHaveLength(1)
+        expect(controls.firstElementChild).toBe(factories.submitButtonDom)
+        expect(trigger.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.triggerColor,
+        )
+
+        document.body.append(nv.dom, modelMenuControlMountEl)
+        trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble')!
+        expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        expect(modelMenu.classList.contains('is-visible')).toBe(false)
+
+        nv.destroy!()
+        expect(modelMenuControlMountEl.children).toHaveLength(0)
+        nv.dom.remove()
+        modelMenuControlMountEl.remove()
+    })
+
+    it('summarizes the selected model and its configuration without repeating the media type', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [
+                {
+                    provider: 'Google',
+                    model: 'imagen-4',
+                    shortTitle: 'Imagen 4',
+                    iconName: 'geminiIcon',
+                    modalities: [{ modality: 'image_generation' }],
+                },
+            ],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [
+                    {
+                        groupId: 'image:google',
+                        mediaType: 'image',
+                        provider: 'Google',
+                        title: 'Google image models',
+                        modelIds: ['Google:imagen-4'],
+                        controls: [
+                            {
+                                key: 'imageSize',
+                                label: 'Image size',
+                                kind: 'segmented',
+                                options: [{ value: '1:1', label: 'Square' }],
+                                defaultValue: '1:1',
+                            },
+                        ],
+                    },
+                ],
+            },
+        } as any)
+
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            const { nv } = createNodeView('Hello', {
+                aiImageModels: JSON.stringify(['Google:imagen-4']),
+                imageGenerationConfigGroups: JSON.stringify([
+                    {
+                        groupId: 'image:google',
+                        modelIds: ['Google:imagen-4'],
+                        values: { imageSize: '1:1' },
+                    },
+                ]),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            })
+
+            const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
+            expect(summary?.textContent).toBe('Imagen 4 · Square')
+
+            nv.destroy!()
+        } finally {
+            aiModelsStore.resetStore()
         }
     })
 

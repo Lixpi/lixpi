@@ -87,15 +87,17 @@ The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels
 
 ## NodeView Structure
 
-`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` to portal the Image / Video switch into adjacent layout chrome; otherwise the switch remains a child of the node view.
+`createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` and `mountModelMenuControl()` to portal those controls into adjacent layout chrome; otherwise they remain children of the node view.
+
+The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
 
 ```text
 div.ai-prompt-input-wrapper[data-empty]
-├── [div.ai-prompt-media-mode-switch  Image / Video, unless externally mounted]
+├── [div.ai-prompt-media-mode-switch  Image / Video icon switch, unless externally mounted]
 ├── [context tray from createContextTray()]
 ├── div.ai-prompt-input-content
 ├── div.ai-prompt-input-controls
-    ├── button.ai-prompt-model-menu-trigger
+    ├── [button.ai-prompt-model-menu-trigger, unless externally mounted]
     └── [submit button from createSubmitButton()]
 └── div.bubble-menu.ai-prompt-model-menu-info-bubble
     └── div.ai-prompt-model-menu-content
@@ -122,7 +124,7 @@ Model selectors use the ui-kit sliding dropdown. Every option renders its provid
 
 ## Model Settings Menu
 
-The model settings button is created by `createModelMenuTrigger()` and opens a shared `BubbleMenu` anchored to the trigger.
+The model settings button is created by `createModelMenuTrigger()` and opens a shared `BubbleMenu` anchored to the trigger. Its visible summary contains only the selected model and configuration values because the adjacent Image / Video switch already shows the active media mode. Hosts may mount the button outside the prompt wrapper while the menu remains owned and positioned by the NodeView. In the workspace right control rail, the button fills its outer pill and uses that full surface for hover and active states.
 
 The menu content is built from three `ai-prompt-model-menu-section` blocks:
 
@@ -132,7 +134,7 @@ The menu content is built from three `ai-prompt-model-menu-section` blocks:
 
 The bottom settings row summarizes the active model and its primary configuration. The entire row opens the menu. Image and video setting sections render provider and option-set groups from the API configuration matrix, and the inactive media section is hidden.
 
-The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper, so configuration-value changes cannot move the open menu. Changes to media mode or selected model rows trigger a new position measurement after the menu's structure updates.
+The menu opens above the settings trigger with its right edge aligned to the trigger's right edge. Its positioning parent is the stable prompt wrapper. Model and configuration changes trigger a new position measurement after the trigger summary and menu structure update.
 
 The model settings surface is capped to the viewport space above its trigger. Its content scrolls when the configured model rows exceed that height. Sliding dropdowns use their portaled wheel and touch scroll surface.
 
@@ -178,7 +180,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## Workspace Surfaces
 
-`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. Its Image / Video switch is mounted into the in-flow left control rail, between the composer and the upload/image action panel, so the mode panel occupies layout space and pushes the action panel left. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
+`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. The right control rail contains the Image / Video switch followed by the current model-configuration control. The Media Library and upload/image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
 
 ## Styling
 
@@ -192,7 +194,7 @@ SCSS lives in `ai-prompt-input.scss`.
         ├── [.ai-prompt-media-mode-switch when not externally mounted]
         ├── .ai-prompt-input-content
         └── .ai-prompt-input-controls
-            ├── .ai-prompt-model-menu-trigger
+            ├── [.ai-prompt-model-menu-trigger when not externally mounted]
             ├── .ai-submit-button
             │   ├── .button-default
             │   ├── .button-hover

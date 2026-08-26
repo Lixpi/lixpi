@@ -152,6 +152,8 @@ describe('createAiPromptComposer', () => {
     it('allows overriding all control factories via config', () => {
         const customFactories = {
             createContextTray: vi.fn(),
+            mountMediaModeSwitch: vi.fn(),
+            mountModelMenuControl: vi.fn(),
             createModelDropdown: vi.fn(),
             createImageModelDropdown: vi.fn(),
             createSubmitButton: vi.fn(),

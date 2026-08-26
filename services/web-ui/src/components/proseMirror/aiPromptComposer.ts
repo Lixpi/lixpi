@@ -58,6 +58,7 @@ type NodeViewOptions = Parameters<typeof createAiPromptInputNodeView>[0]
 export type PromptControlFactories = {
     createContextTray?: NodeViewOptions['createContextTray']
     mountMediaModeSwitch?: NodeViewOptions['mountMediaModeSwitch']
+    mountModelMenuControl?: NodeViewOptions['mountModelMenuControl']
     createModelDropdown: NodeViewOptions['createModelDropdown']
     createModelMultiSelect?: NodeViewOptions['createModelMultiSelect']
     createImageModelDropdown: NodeViewOptions['createImageModelDropdown']

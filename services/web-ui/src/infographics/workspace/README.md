@@ -34,11 +34,11 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** from the bottom-center composer; each submit creates a standalone session. The right-side panel opens as a view-only transcript of past sessions
 - **Upload files** via the toolbar button; the server sniffs the bytes, stores the original, and returns or later publishes the canonical canvas-safe media object
-- **Open the Media Library** from the independent bottom-right icon to browse cataloged Assets; an open composer reference picker is temporarily stacked above that action button so its results remain unobstructed
+- **Open the Media Library** from the independent icon to the left of the composer to browse cataloged Assets; an open composer reference picker is temporarily stacked above that action button so its results remain unobstructed
 - **Open Asset details** from any Asset-backed node; every created Asset already has its initial catalog reference and survives placement removal without copying bytes
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
 - **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the bottom-center canvas composer** to select Image or Video explicitly and send prompts with context previews and workspace relevance. Its mode panel and upload/image panel share one in-flow left rail, so adding the mode panel shifts the upload controls instead of overlapping them
+- **Use the bottom-center canvas composer** to select Image or Video explicitly and send prompts with context previews and workspace relevance. The right control rail places the current model-configuration control after the mode switch, while the Media Library and upload/image controls share the in-flow left rail
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -125,7 +125,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 The Asset details section renders subject identity, status, renditions, lineage, and the generation seed. The seed row appears only when the media model recorded one on `asset.lineage.generationSeed`, and it carries a `createHelpTooltip` explaining what reusing a seed does.
 
 The canvas details panel and Media Library inspector mount one shared Subject identity dropdown using the same `createPureDropdown` component and configuration as the Asset scope selector. It performs the direct revisioned attestation mutation and restores the previous selection on conflict/error. Medium and identity remain separate fields; there is no modal or proof form.
-- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the zoom badge, and both bottom controls align to the same right side panel gap as the panel toggle when the panel is open.
+- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent launcher to the left of the composer, beside the upload/image controls.
 - The top-level `Capabilities` / `Media` / `AI Threads` switch is the shared mode control for the right side panel. Capabilities lists authorized Tools; Media hosts cataloged Assets.
 - Renders media through Asset metadata projections; save and insertion create references without copying Blob bytes.
 - Shows the authorized Assets attachable to the current canvas: its own Workspace-scoped Assets plus available user- and Organization-scoped Assets. Assets scoped to another Workspace are excluded because the API cannot attach them to the current canvas.

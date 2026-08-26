@@ -1291,16 +1291,20 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-left'),
             },
             {
-                id: 'workspace-media-mode-panel',
-                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-media-mode-panel'),
+                id: 'workspace-media-library-panel',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-media-library-panel'),
             },
             {
                 id: 'workspace-global-composer',
                 element: paneEl.querySelector<HTMLElement>('.workspace-canvas-global-composer'),
             },
             {
-                id: 'workspace-action-panel-right',
-                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-right'),
+                id: 'workspace-media-mode-panel',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-media-mode-panel'),
+            },
+            {
+                id: 'workspace-model-menu-panel',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-model-menu-panel'),
             },
         ]
         const targets: ScreenGlassBorderTarget[] = []

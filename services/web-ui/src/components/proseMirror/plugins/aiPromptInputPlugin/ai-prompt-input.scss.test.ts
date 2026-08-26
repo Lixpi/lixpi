@@ -30,11 +30,22 @@ describe('ai-prompt-input.scss', () => {
         expectSourceToContain(scss, '.ai-prompt-model-menu-control-label')
     })
 
-    it('lays out image model and image-size fields in two flexible columns', () => {
-        expectSourceToContain(scss, '.ai-media-config-group-primary-row')
+    it('keeps the embedded image/video fallback compact and leaves model trigger content to its summary', () => {
+        expectSourceToContain(scss, '.ai-prompt-media-mode-switch')
+        expectSourceToContain(scss, 'width: 76px;')
+        expectSourceToContain(scss, 'height: 40px;')
+        expectSourceToContain(scss, '.ai-prompt-media-mode-switch-svg')
+        expectSourceToContain(scss, '.ai-prompt-model-menu-trigger-summary')
+        expectSourceNotToContain(scss, '.ai-prompt-model-menu-trigger-leading')
+        expectSourceNotToContain(scss, '.ai-prompt-model-menu-trigger-icon')
+        expectSourceNotToContain(scss, '.ai-prompt-model-menu-trigger-mode')
+    })
+
+    it('lays out model and inline configuration fields in one flexible row', () => {
+        expectSourceToContain(scss, '.ai-model-config-primary-row')
         expectSourceToContain(scss, 'flex-wrap: nowrap;')
-        expectSourceToContain(scss, '.ai-media-config-group-model-column,')
-        expectSourceToContain(scss, '.ai-media-config-group-size-column')
+        expectSourceToContain(scss, '.ai-model-config-model-column,')
+        expectSourceToContain(scss, '.ai-model-config-inline-control')
         expectSourceToContain(scss, 'justify-content: flex-end;')
         expectSourceToContain(scss, 'width: max-content;')
     })
@@ -47,11 +58,11 @@ describe('ai-prompt-input.scss', () => {
     })
 
     it('renders each media configuration group as one vertical column and keeps video choices in one row', () => {
-        expectSourceToContain(scss, '.ai-media-config-group-row')
+        expectSourceToContain(scss, '.ai-model-config-controls')
         expectSourceToContain(scss, 'flex-direction: column;')
-        expectSourceToContain(scss, '.ai-media-config-group-controls')
+        expectSourceToContain(scss, '.ai-media-config-control')
         expectSourceToContain(scss, 'grid-template-columns: minmax(0, 1fr);')
-        expectSourceToContain(scss, '.ai-media-config-matrix[data-media-type="video"] .ai-media-config-group-controls')
+        expectSourceToContain(scss, '.ai-media-config-matrix[data-media-type="video"] .ai-model-config-controls')
         expectSourceToContain(scss, 'grid-template-columns: repeat(3, minmax(0, 1fr));')
         expectSourceToContain(scss, '.ai-media-config-group + .ai-media-config-group::before')
         expectSourceToContain(scss, '--ai-prompt-model-menu-section-divider-gradient')

@@ -271,6 +271,7 @@ export class ProseMirrorEditor {
                     onSubmit: (data) => this.onPromptSubmit?.(data),
                     createContextTray: this.promptControlFactories?.createContextTray,
                     mountMediaModeSwitch: this.promptControlFactories?.mountMediaModeSwitch,
+                    mountModelMenuControl: this.promptControlFactories?.mountModelMenuControl,
                     createModelDropdown: this.promptControlFactories?.createModelDropdown,
                     createModelMultiSelect: this.promptControlFactories?.createModelMultiSelect,
                     createImageModelDropdown: this.promptControlFactories?.createImageModelDropdown,

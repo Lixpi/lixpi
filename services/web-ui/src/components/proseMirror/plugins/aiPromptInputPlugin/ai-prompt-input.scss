@@ -267,7 +267,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 12px;
     min-width: 0;
     height: 32px;
     flex: 1 1 auto;
@@ -291,24 +290,6 @@
     outline-offset: var(--ai-prompt-model-menu-trigger-focus-outline-offset, 2px);
 }
 
-.ai-prompt-model-menu-trigger-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
-    height: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
-}
-
-.ai-prompt-model-menu-trigger-leading {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    flex: 0 0 auto;
-    color: var(--ai-prompt-model-menu-trigger-active-color, #{$nightBlue});
-    font-size: 12px;
-    font-weight: 700;
-}
-
 .ai-prompt-model-menu-trigger-summary {
     min-width: 0;
     overflow: hidden;
@@ -321,9 +302,9 @@
 
 .ai-prompt-media-mode-switch {
     position: absolute;
-    left: -166px;
+    left: -88px;
     bottom: 4px;
-    width: 154px;
+    width: 76px;
     height: 40px;
     box-sizing: border-box;
     border-radius: 9999px;
@@ -336,15 +317,9 @@
 
 .ai-prompt-media-mode-switch-svg {
     display: block;
-    width: 154px;
+    width: 76px;
     height: 40px;
     overflow: visible;
-}
-
-.ai-prompt-model-menu-trigger-icon svg {
-    width: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
-    height: var(--ai-prompt-model-menu-trigger-icon-size, 18px);
-    fill: currentColor;
 }
 
 .ai-prompt-model-menu-info-bubble {

@@ -4,8 +4,17 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { select } from 'd3-selection'
 import { html } from '$src/utils/domTemplates.ts'
 import { BubbleMenu, type BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
-import { createSlidingSwitch } from '@lixpi/ui-kit/components/sliding-switch'
-import { atomIcon, plusIcon } from '@lixpi/ui-kit/svg'
+import {
+    createSlidingSwitch,
+    type SlidingSwitchOptionRenderInstance,
+    type SlidingSwitchOptionRenderState,
+} from '@lixpi/ui-kit/components/sliding-switch'
+import {
+    appendSvgPathIcon,
+    imageIcon,
+    plusIcon,
+    videoIcon,
+} from '@lixpi/ui-kit/svg'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
@@ -105,6 +114,7 @@ type AiPromptInputNodeViewOptions = {
     placeholderText?: string
     createContextTray?: () => HTMLElement | null
     mountMediaModeSwitch?: (switchElement: HTMLElement) => void
+    mountModelMenuControl?: (controlElement: HTMLElement) => void
     createModelDropdown: (controls: AiModelControls, dropdownId: string) => DropdownView
     createModelMultiSelect?: (controls: AiModelControls, dropdownId: string) => DropdownView
     createImageModelDropdown: (controls: ImageModelControls, dropdownId: string) => DropdownView
@@ -135,6 +145,58 @@ export type CapabilityControlsView = {
 
 const modelMenuTargetGap = 8
 const modelMenuViewportInset = 8
+const mediaModeSwitchHeight = 40
+const mediaModeSwitchInset = 2
+const mediaModeOptionDiameter = mediaModeSwitchHeight - mediaModeSwitchInset * 2
+const mediaModeSwitchWidth = mediaModeOptionDiameter * 2 + mediaModeSwitchInset * 2
+const mediaModeIconSize = 20
+
+type MediaGenerationMode = 'image' | 'video'
+
+const mediaModeIcons: Record<MediaGenerationMode, string> = {
+    image: imageIcon,
+    video: videoIcon,
+}
+
+class MediaModeSwitchOptionView implements SlidingSwitchOptionRenderInstance<MediaGenerationMode> {
+    private readonly iconGroup: any
+    private optionHeight = 0
+
+    constructor(parent: any, state: SlidingSwitchOptionRenderState<MediaGenerationMode>) {
+        this.iconGroup = parent.append('g')
+            .attr('class', 'ai-prompt-media-mode-switch-icon')
+            .attr('pointer-events', 'none')
+            .attr('aria-hidden', 'true')
+        appendSvgPathIcon(this.iconGroup, mediaModeIcons[state.option.value], {
+            x: 0,
+            y: 0,
+            size: mediaModeIconSize,
+            fill: settings.slidingDropdown.styles.option.textColor,
+        })
+        this.render(state)
+    }
+
+    resize(x: number, y: number, width: number, height = this.optionHeight): void {
+        this.optionHeight = height
+        this.iconGroup.attr(
+            'transform',
+            `translate(${x + (width - mediaModeIconSize) / 2}, ${y + (height - mediaModeIconSize) / 2})`,
+        )
+    }
+
+    render(state: SlidingSwitchOptionRenderState<MediaGenerationMode>): void {
+        const optionStyles = settings.slidingDropdown.styles.option
+        const iconColor = state.disabled
+            ? optionStyles.disabledTextColor
+            : state.selected || state.hovered ? optionStyles.activeTextColor : optionStyles.textColor
+        this.iconGroup.selectAll('path').attr('fill', iconColor)
+        this.resize(state.x, state.y, state.width, state.height)
+    }
+
+    destroy(): void {
+        this.iconGroup.remove()
+    }
+}
 
 function uniqueNonEmptyValues(values: string[]): string[] {
     return Array.from(new Set(values.filter((value) => value.trim().length > 0)))
@@ -197,10 +259,6 @@ function createModelMenuTrigger(onClick: (event: MouseEvent) => void): HTMLButto
             onmousedown=${handleMouseDown}
             onclick=${onClick}
         >
-            <span className="ai-prompt-model-menu-trigger-leading">
-                <span className="ai-prompt-model-menu-trigger-icon" innerHTML=${atomIcon}></span>
-                <span className="ai-prompt-model-menu-trigger-mode"></span>
-            </span>
             <span className="ai-prompt-model-menu-trigger-summary"></span>
         </button>
     ` as HTMLButtonElement
@@ -339,9 +397,9 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const mediaModeSwitchSvg = select(mediaModeSwitchHost)
             .append('svg')
             .attr('class', 'ai-prompt-media-mode-switch-svg')
-            .attr('width', 154)
-            .attr('height', 40)
-            .attr('viewBox', '0 0 154 40')
+            .attr('width', mediaModeSwitchWidth)
+            .attr('height', mediaModeSwitchHeight)
+            .attr('viewBox', `0 0 ${mediaModeSwitchWidth} ${mediaModeSwitchHeight}`)
             .node() as SVGSVGElement
         contentDOM.setAttribute('data-placeholder', options.placeholderText ?? '')
         applyAiModelMenuStyleSettings(dom)
@@ -351,7 +409,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const getSelectedModelIds = (selectionAttrName: string): string[] => {
             return parseAiModelSelectionAttr(getNodeAttr(view, getPos, selectionAttrName))
         }
-        const getMediaGenerationMode = (): 'image' | 'video' => (
+        const getMediaGenerationMode = (): MediaGenerationMode => (
             getNodeAttr(view, getPos, 'mediaGenerationMode') === 'video' ? 'video' : 'image'
         )
 
@@ -469,18 +527,19 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setSelectedModelIds: modelIds => setSelectedModelIds('aiVideoModels', modelIds),
         })
         const submitButton = options.createSubmitButton(submitControls)
-        const mediaModeSwitch = createSlidingSwitch(select(mediaModeSwitchSvg), {
+        const mediaModeSwitch = createSlidingSwitch<MediaGenerationMode>(select(mediaModeSwitchSvg), {
             id: 'ai-prompt-media-generation-mode',
             x: 0,
             y: 0,
-            width: 154,
-            height: 40,
+            width: mediaModeSwitchWidth,
+            height: mediaModeSwitchHeight,
             options: [
                 { label: 'Image', value: 'image', ariaLabel: 'Generate an image' },
                 { label: 'Video', value: 'video', ariaLabel: 'Generate a video' },
             ],
             selectedValue: getMediaGenerationMode(),
             className: 'ai-prompt-media-mode-sliding-switch',
+            renderOption: (parent, state) => new MediaModeSwitchOptionView(parent, state),
             visualOverflowPadding: {
                 top: 0,
                 right: 0,
@@ -536,7 +595,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         let modelMenu: BubbleMenu | null = null
         let modelMenuTrigger: HTMLButtonElement | null = null
         let modelMenuContent: AiModelMenuContentView
-        let modelMenuLayoutSignature = ''
         const getModelTitle = (modelId: string): string => {
             const model = transformModelsToOptions(aiModelsStore.getData())
                 .find(option => option.aiModel === modelId)
@@ -577,9 +635,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 const label = control.options.find(option => option.value === value)?.label ?? value
                 return [formatSummaryValue(control.key, value, label)]
             })
-            const modeEl = modelMenuTrigger.querySelector('.ai-prompt-model-menu-trigger-mode')
             const summaryEl = modelMenuTrigger.querySelector('.ai-prompt-model-menu-trigger-summary')
-            if (modeEl) modeEl.textContent = mediaMode === 'image' ? 'Image' : 'Video'
             if (summaryEl) summaryEl.textContent = [modelSummary, ...controlSummary].join(' · ')
         }
         const getModelMenuPosition = () => {
@@ -619,13 +675,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             reposition()
         }
 
-        const getModelMenuLayoutSignature = (): string => JSON.stringify({
-            reasoningModelIds: getSelectedModelIds('aiReasoningModels'),
-            imageModelIds: getSelectedModelIds('aiImageModels'),
-            videoModelIds: getSelectedModelIds('aiVideoModels'),
-            mediaGenerationMode: getMediaGenerationMode(),
-        })
-
         const updateModelMenuRows = (): void => {
             modelMenuContent.update()
         }
@@ -644,12 +693,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             updateModelMenuRows()
             updateModelMenuControls()
             updateModelMenuTriggerSummary()
-
-            const nextLayoutSignature = getModelMenuLayoutSignature()
-            if (nextLayoutSignature !== modelMenuLayoutSignature) {
-                modelMenuLayoutSignature = nextLayoutSignature
-                scheduleModelMenuReposition()
-            }
+            scheduleModelMenuReposition()
         }
         modelMenuContent = createAiModelMenuContent([
             {
@@ -709,9 +753,11 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         }
 
         modelMenuTrigger = createModelMenuTrigger(toggleModelMenu)
+        applyAiModelMenuStyleSettings(modelMenuTrigger)
         updateModelMenuTriggerSummary()
 
-        controlsEl.appendChild(modelMenuTrigger)
+        if (options.mountModelMenuControl) options.mountModelMenuControl(modelMenuTrigger)
+        else controlsEl.appendChild(modelMenuTrigger)
         controlsEl.appendChild(submitButton)
 
         if (options.mountMediaModeSwitch) options.mountMediaModeSwitch(mediaModeSwitchHost)
@@ -749,6 +795,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const handleDocumentMouseDown = (event: MouseEvent): void => {
             const target = event.target as Node
             if (controlsEl.contains(target)) return
+            if (modelMenuTrigger?.contains(target)) return
             if (modelMenu?.element.contains(target)) return
             if (target instanceof Element
                 && target.closest(
@@ -808,6 +855,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 videoConfigMatrix.destroy?.()
                 mediaModeSwitch.destroy()
                 mediaModeSwitchHost.remove()
+                modelMenuTrigger?.remove()
                 capabilityControls?.destroy()
             },
             stopEvent: (e: Event) => {

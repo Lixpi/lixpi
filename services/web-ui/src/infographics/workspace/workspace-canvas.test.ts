@@ -1970,6 +1970,79 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceNotToContain(ts, "zIndex: '9990',")
 	})
 
+	it('places the media library on the left and the icon switch plus model control on the composer’s right', () => {
+		const ts = loadTs()
+		const scss = loadScss()
+		const svelte = loadWorkspaceCanvasSvelte()
+		const pixiMediaLayer = loadPixiMediaLayer()
+		const leftRailItems = extractBlockContainingSelector(
+			scss,
+			'.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel'
+		)
+		const rightRail = extractBlock(scss, '.workspace-canvas-right-control-rail')
+		const modelMenuPanel = extractBlock(scss, '.workspace-canvas-model-menu-panel')
+		const modelMenuTrigger = extractBlock(
+			scss,
+			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger'
+		)
+		const modelMenuTriggerActive = extractBlockContainingSelector(
+			scss,
+			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover'
+		)
+		const rightRailStart = svelte.indexOf('<div class="workspace-canvas-right-control-rail">')
+		const rightRailEnd = svelte.indexOf('\n    </div>\n\n    <input', rightRailStart)
+		const rightRailMarkup = svelte.slice(rightRailStart, rightRailEnd)
+		const screenGlassTargets = extractFunctionBody(pixiMediaLayer, 'getScreenGlassBorderTargets')
+
+		expectSourceToContain(
+			svelte,
+			'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single'
+		)
+		expectSourceToContain(svelte, 'workspace-canvas-right-control-rail')
+		expectSourceToContain(svelte, 'class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}')
+		expectSourceToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
+		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
+		expectSourceNotToContain(svelte, 'workspace-canvas-media-mode-panel-right')
+		expect(rightRailStart).toBeGreaterThan(-1)
+		expect(rightRailEnd).toBeGreaterThan(rightRailStart)
+		expect(rightRailMarkup.indexOf('workspace-canvas-media-mode-panel')).toBeLessThan(
+			rightRailMarkup.indexOf('workspace-canvas-model-menu-panel')
+		)
+
+		expectSourceToContain(
+			scss,
+			'.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel'
+		)
+		expectExcerptToContain(leftRailItems, 'right: auto;', 'left control rail')
+		expectExcerptToContain(rightRail, 'left: calc(', 'right control rail')
+		expectExcerptToContain(rightRail, 'display: flex;', 'right control rail')
+		expectSourceToContain(scss, '--workspace-canvas-media-mode-panel-width: 76px;')
+		expectExcerptToContain(modelMenuPanel, 'padding: 0;', 'model menu panel')
+		expectExcerptToContain(modelMenuTrigger, 'width: 100%;', 'model menu trigger')
+		expectExcerptToContain(modelMenuTrigger, 'height: 100%;', 'model menu trigger')
+		expectExcerptToContain(modelMenuTrigger, 'border-radius: inherit;', 'model menu trigger')
+		expectExcerptToContain(modelMenuTrigger, 'background: transparent;', 'model menu trigger')
+		expectExcerptToContain(
+			modelMenuTriggerActive,
+			'background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);',
+			'model menu trigger active state'
+		)
+
+		expectSourceToContain(ts, 'modelMenuControlMountEl: HTMLDivElement')
+		expectSourceToContain(
+			ts,
+			'mountMediaModeSwitch: switchElement => options.mediaModeSwitchMountEl.replaceChildren(switchElement),'
+		)
+		expectSourceToContain(
+			ts,
+			'mountModelMenuControl: controlElement => options.modelMenuControlMountEl.replaceChildren(controlElement),'
+		)
+		expectSourceToContain(screenGlassTargets, "id: 'workspace-media-library-panel'")
+		expectSourceToContain(screenGlassTargets, "id: 'workspace-media-mode-panel'")
+		expectSourceToContain(screenGlassTargets, "id: 'workspace-model-menu-panel'")
+		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-action-panel-right'")
+	})
+
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
 		expectSourceToContain(ts, 'function openAiChatPanel(): void')
 		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
@@ -2186,7 +2259,8 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
-		expectSourceToContain(svelte, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
+		expectSourceToContain(svelte, 'workspace-canvas-media-library-panel workspace-canvas-action-panel-single')
+		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
 		expectSourceToContain(svelte, 'mediaFoloderIcon')
 		expectSourceToContain(svelte, 'workspace-zoom-indicator')
 		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
