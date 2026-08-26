@@ -6,7 +6,7 @@ Read `documentation/testing/USING-TESTING-GUIDES.md` first. Never write, modify,
 
 ## Test Runner Container
 
-All TypeScript tests — across `services/web-ui`, `services/api`, `services/nex`, and the individual `packages/lixpi/*` packages — run inside one image, `lixpi-typescript-test-runner`, defined in `docker-compose.typescript-test-runner.yml` and pulled into the root `docker-compose.yml` via its top-level `include:`. The app-runtime containers (`lixpi-web-ui`, `lixpi-api`, `lixpi-nex`) do not ship a test runner; tests are never executed there.
+All TypeScript tests — across `services/web-ui`, `services/api`, `services/nex`, `services/model-pricing`, and the individual `packages/lixpi/*` packages — run inside one image, `lixpi-typescript-test-runner`, defined in `docker-compose.typescript-test-runner.yml` and pulled into the root `docker-compose.yml` via its top-level `include:`. The app-runtime containers (`lixpi-web-ui`, `lixpi-api`, `lixpi-nex`, `lixpi-model-pricing`) do not ship a test runner; tests are never executed there.
 
 The test runner is invoked as a one-shot `docker compose run --rm` command, never a long-lived container — each invocation gets a fresh container (so it always reflects the current compose config) with a Compose auto-generated unique name (so concurrent invocations never collide).
 
@@ -22,13 +22,14 @@ Each service is fully self-contained and bind-mounted into the test-runner conta
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner model-pricing
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner all
 ```
 
 (`--rm` removes the container once it exits; `-T` disables pseudo-TTY allocation for non-interactive shells; `--no-deps` prevents Compose from starting unrelated services; both `--profile dev` and `--profile main` are required because the compose file has a cross-profile `depends_on` elsewhere that Compose validates regardless of which service you're targeting.)
 
-Pass a specific test file after the domain to target it (for `api`/`web-ui`/`nex` only — `shared` runs every `packages/lixpi/*` package that defines a `test:run` script):
+Pass a specific test file after the domain to target it (for `api`/`web-ui`/`nex`/`model-pricing` only — `shared` runs every `packages/lixpi/*` package that defines a `test:run` script):
 
 ```bash
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/workspace/workspace-canvas.test.ts

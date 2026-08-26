@@ -7,7 +7,9 @@
     "main": "src/main.ts",
     "scripts": {
         "start": "node ./src/main.ts",
-        "pricingctl": "node ./src/cli/pricingctl.ts"
+        "pricingctl": "node ./src/cli/pricingctl.ts",
+        "test:run": "vitest run",
+        "test": "vitest"
     },
     "dependencies": {
         "@lixpi/constants": "workspace:*",
@@ -17,7 +19,8 @@
         "@nats-io/nkeys": "*"
     },
     "devDependencies": {
-        "@types/node": "*"
+        "@types/node": "*",
+        "vitest": "latest"
     },
     "packageManager": "pnpm@11.6.0"
 }

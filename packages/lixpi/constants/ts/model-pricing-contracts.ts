@@ -181,10 +181,66 @@ export type DailyPredictedProviderCost = {
     providerRoute: ProviderRoute
     providerAccountRef: string
     day: string
+    // pricingKey remains accepted for rolling compatibility with an older
+    // publisher. New publishers send the complete deterministic key set.
     pricingKey?: string
+    pricingKeys?: string[]
     snapshotId: string
     predictedProviderCostUsd: string
     usage: Record<string, string>
+    usageGroups?: PredictedProviderUsageGroup[]
+}
+
+export type PredictedProviderUsageGroup = {
+    pricingKey: string
+    providerModel: string
+    usageKind: 'completions' | 'images' | 'video'
+    grouping: Record<string, string>
+    usage: Record<string, string>
+}
+
+export type ReconciliationActualCost = {
+    providerRoute: ProviderRoute
+    providerAccountRef: string
+    day: string
+    grouping: Record<string, string>
+    actualProviderCostUsd: string
+    sourceId: string
+    sourceHash: string
+    observedAt: string
+}
+
+export type ReconciliationActualUsage = {
+    providerRoute: ProviderRoute
+    providerAccountRef: string
+    day: string
+    grouping: Record<string, string>
+    usage: Record<string, string>
+    sourceId: string
+    sourceHash: string
+    observedAt: string
+}
+
+export type ReconciliationIncident = {
+    incidentId: string
+    kind?: 'cost' | 'usage'
+    providerRoute: ProviderRoute
+    providerAccountRef: string
+    day: string
+    pricingKeys: string[]
+    providerModel?: string
+    grouping?: Record<string, string>
+    usageDimension?: string
+    predictedProviderCostUsd?: string
+    actualProviderCostUsd?: string
+    differenceUsd?: string
+    predictedQuantity?: string
+    actualQuantity?: string
+    quantityDifference?: string
+    material: boolean
+    status: 'open' | 'resolved'
+    createdAt: string
+    resolvedAt?: string
 }
 
 const normalizeRequiredComponent = (component: string, label: string): string => {

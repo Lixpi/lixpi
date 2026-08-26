@@ -1,7 +1,7 @@
 #!/bin/sh
 # Universal entrypoint for lixpi-typescript-test-runner.
 #
-# api / web-ui / nex are bind-mounted from their own service directories
+# api / web-ui / nex / model-pricing are bind-mounted from their own service directories
 # (docker-compose.typescript-test-runner.yml, included from the root
 # docker-compose.yml) — each is fully self-contained, with its own
 # package.json, pnpm-workspace.yaml, and vitest.config.ts, identical to what
@@ -31,6 +31,7 @@
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/utils/zoomScaling.test.ts
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex
+#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner model-pricing
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared auth-service
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared debug-tools src/debug-tools.test.ts
@@ -96,7 +97,7 @@ run_shared() {
 }
 
 case "$domain" in
-    api|web-ui|nex)
+    api|web-ui|nex|model-pricing)
         run_domain "$domain" "$@"
         ;;
     shared)
@@ -106,10 +107,11 @@ case "$domain" in
         run_domain api
         run_domain web-ui
         run_domain nex
+        run_domain model-pricing
         run_shared
         ;;
     *)
-        echo "Usage: run-tests.sh {api|web-ui|nex|shared|all} [vitest args]" >&2
+        echo "Usage: run-tests.sh {api|web-ui|nex|model-pricing|shared|all} [vitest args]" >&2
         exit 1
         ;;
 esac

@@ -22,6 +22,7 @@ export type PricingStorageTables = {
     snapshots: string
     records: string
     audit: string
+    reconciliation?: string
 }
 
 export class PricingStorage {
@@ -266,6 +267,7 @@ export class PricingStorage {
         const records = await this.getSnapshotRecords(snapshotId)
         this.assertSnapshotRecords(manifest, records)
         const active = await this.getActivePointer()
+        await this.assertReconciliationAllowsActivation(records, active?.snapshotId)
         if (active?.snapshotId === snapshotId) {
             return {
                 activated: false,
@@ -403,6 +405,54 @@ export class PricingStorage {
         if (manifest.recordsContentHash !== this.createRecordsContentHash(records)) {
             throw new Error(`Pricing snapshot ${manifest.snapshotId} immutable record hash mismatch`)
         }
+    }
+
+    private async assertReconciliationAllowsActivation(records: ModelPriceRecord[], activeSnapshotId?: string): Promise<void> {
+        if (!this.tables.reconciliation) return
+
+        const incidentsResponse = await this.dynamo.queryItems({
+            tableName: this.tables.reconciliation,
+            keyConditions: { recordKey: 'INCIDENT' },
+            fetchAllItems: true,
+            consistentRead: true,
+            origin: 'model-pricing.activation-reconciliation-incidents',
+        })
+        const incidents = (incidentsResponse?.items ?? []) as Array<{
+            providerRoute?: string
+            pricingKeys?: string[]
+            material?: boolean
+            status?: string
+        }>
+        const activeRecords = activeSnapshotId ? await this.getSnapshotRecords(activeSnapshotId) : []
+        const activeByKey = new Map(activeRecords.map(record => [record.pricingKey, record]))
+        const candidateByKey = new Map(records.map(record => [record.pricingKey, record]))
+        const changedKeys = new Set([...new Set([...activeByKey.keys(), ...candidateByKey.keys()])]
+            .filter(pricingKey => {
+                const active = activeByKey.get(pricingKey)
+                const candidate = candidateByKey.get(pricingKey)
+                return !active || !candidate || this.pricingContentHash(active) !== this.pricingContentHash(candidate)
+            }))
+        if (changedKeys.size === 0) return
+
+        const blockingIncident = incidents.find(incident => incident.material === true
+            && incident.status === 'open'
+            && (incident.pricingKeys ?? []).some(pricingKey => changedKeys.has(pricingKey)))
+        if (blockingIncident) {
+            throw new Error(`Activation is blocked by an unresolved material reconciliation incident for ${blockingIncident.providerRoute}`)
+        }
+    }
+
+    private pricingContentHash(record: ModelPriceRecord): string {
+        return canonicalHash({
+            pricingKey: record.pricingKey,
+            catalogProvider: record.catalogProvider,
+            catalogModel: record.catalogModel,
+            vendorModel: record.vendorModel,
+            providerRoute: record.providerRoute,
+            pricingRegion: record.pricingRegion,
+            currency: record.currency,
+            variants: record.variants,
+        })
     }
 
     private createRecordsContentHash(records: ModelPriceRecord[]): string {

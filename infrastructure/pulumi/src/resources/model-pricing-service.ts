@@ -25,6 +25,7 @@ export type ModelPricingServiceArgs = {
     aiModelsListTable: aws.dynamodb.Table
     environment: Record<string, pulumi.Input<string>>
     pricingServiceNkeySeed: pulumi.Input<string>
+    openAiAdminApiKey?: pulumi.Input<string>
     dockerBuildContext: string
     dockerfilePath: string
     dependencies?: pulumi.Resource[]
@@ -39,6 +40,7 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         aiModelsListTable,
         environment,
         pricingServiceNkeySeed,
+        openAiAdminApiKey,
         dockerBuildContext,
         dockerfilePath,
         dependencies = [],
@@ -96,8 +98,10 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
                     Action: [
                         'dynamodb:GetItem',
                         'dynamodb:Query',
+                        'dynamodb:Scan',
                         'dynamodb:PutItem',
                         'dynamodb:UpdateItem',
+                        'dynamodb:BatchWriteItem',
                         'dynamodb:TransactWriteItems',
                         'dynamodb:DescribeTable',
                     ],
@@ -160,6 +164,17 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         secretString: pulumi.secret(pricingServiceNkeySeed),
     })
 
+    const openAiAdminSecret = openAiAdminApiKey ? new aws.secretsmanager.Secret(`${serviceName}-openai-admin`, {
+        name: `${formatStageResourceName(serviceName, ORG_NAME!, STAGE!)}/openai-admin-api-key`,
+        description: 'OpenAI organization admin key for provider-cost reconciliation',
+    }) : undefined
+    const openAiAdminSecretVersion = openAiAdminSecret && openAiAdminApiKey
+        ? new aws.secretsmanager.SecretVersion(`${serviceName}-openai-admin-value`, {
+            secretId: openAiAdminSecret.id,
+            secretString: pulumi.secret(openAiAdminApiKey),
+        })
+        : undefined
+
     const secretAccessPolicy = new aws.iam.Policy(`${serviceName}-secret-access-policy`, {
         policy: pricingServiceSecret.arn.apply(secretArn => JSON.stringify({
             Version: '2012-10-17',
@@ -176,6 +191,23 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         policyArn: secretAccessPolicy.arn,
     })
 
+    if (openAiAdminSecret) {
+        const openAiSecretAccessPolicy = new aws.iam.Policy(`${serviceName}-openai-secret-access-policy`, {
+            policy: openAiAdminSecret.arn.apply(secretArn => JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Effect: 'Allow',
+                    Action: ['secretsmanager:GetSecretValue'],
+                    Resource: secretArn,
+                }],
+            })),
+        })
+        new aws.iam.RolePolicyAttachment(`${serviceName}-openai-secret-access-attachment`, {
+            role: executionRole.name,
+            policyArn: openAiSecretAccessPolicy.arn,
+        })
+    }
+
     const taskDefinition = new aws.ecs.TaskDefinition(`${serviceName}-task`, {
         family: serviceName,
         cpu: '256',
@@ -189,21 +221,29 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
             imageRef,
             pulumi.output(environment),
             pricingServiceSecretVersion.arn,
+            openAiAdminSecretVersion?.arn ?? pulumi.output(''),
         ]).apply(([
             logGroupName,
             imageReference,
             configuredEnvironment,
             secretVersionArn,
+            openAiAdminSecretVersionArn,
         ]) => JSON.stringify([{
             name: serviceName,
             image: imageReference,
             essential: true,
             environment: Object.entries(configuredEnvironment as Record<string, string>)
                 .map(([name, value]) => ({ name, value })),
-            secrets: [{
-                name: 'NATS_PRICING_SERVICE_NKEY_SEED',
-                valueFrom: secretVersionArn,
-            }],
+            secrets: [
+                {
+                    name: 'NATS_PRICING_SERVICE_NKEY_SEED',
+                    valueFrom: secretVersionArn,
+                },
+                ...(openAiAdminSecretVersionArn ? [{
+                    name: 'OPENAI_ADMIN_API_KEY',
+                    valueFrom: openAiAdminSecretVersionArn,
+                }] : []),
+            ],
             logConfiguration: {
                 logDriver: 'awslogs',
                 options: {
@@ -236,8 +276,8 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         enableExecuteCommand: true,
         waitForSteadyState: false,
     }, {
-        dependsOn: [pricingServiceSecretVersion, ...dependencies],
+        dependsOn: [pricingServiceSecretVersion, ...(openAiAdminSecretVersion ? [openAiAdminSecretVersion] : []), ...dependencies],
     })
 
-    return { repository, image, executionRole, taskRole, taskDefinition, ecsService, pricingServiceSecret }
+    return { repository, image, executionRole, taskRole, taskDefinition, ecsService, pricingServiceSecret, openAiAdminSecret }
 }

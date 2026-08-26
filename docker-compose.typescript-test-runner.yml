@@ -174,6 +174,43 @@ services:
             - typescript-test-runner-node-modules-nex-dynamodb-service:/usr/src/service/nex/packages/lixpi/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-nex-nats-service-ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/node_modules
 
+            # --- model-pricing domain (bind-mounts services/model-pricing's own
+            #     files — same package.json/pnpm-workspace.yaml/vitest.config.ts
+            #     the lixpi-model-pricing container uses; shared packages are the
+            #     same set as nex, since both depend on exactly
+            #     constants/debug-tools/dynamodb-service/nats-service) ---
+            - ./services/model-pricing/package.json:/usr/src/service/model-pricing/package.json:cached
+            - ./services/model-pricing/pnpm-workspace.yaml:/usr/src/service/model-pricing/pnpm-workspace.yaml:cached
+            - ./services/model-pricing/vitest.config.ts:/usr/src/service/model-pricing/vitest.config.ts:cached
+            - ./services/model-pricing/src:/usr/src/service/model-pricing/src:cached
+            - ./packages/lixpi/constants/ai-interaction-constants.json:/usr/src/service/model-pricing/packages/lixpi/constants/ai-interaction-constants.json:ro,cached
+            - ./packages/lixpi/constants/nats-subjects.json:/usr/src/service/model-pricing/packages/lixpi/constants/nats-subjects.json:ro,cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/aws-resources.ts:ro,cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/asset-types.ts:ro,cached
+            - ./packages/lixpi/constants/ts/model-pricing-contracts.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/model-pricing-contracts.ts:ro,cached
+            - ./packages/lixpi/constants/ts/provider-route-config.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/provider-route-config.ts:ro,cached
+            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/metrics-contracts.ts:ro,cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/index.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/media-generation-layout-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/media-generation-progress.ts:ro,cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/workspace-persistence-settings.ts:ro,cached
+            - ./packages/lixpi/constants/ts/package.json:/usr/src/service/model-pricing/packages/lixpi/constants/ts/package.json:ro,cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/types.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/service/model-pricing/packages/lixpi/debug-tools/ts/debug-tools.ts:ro,cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/service/model-pricing/packages/lixpi/debug-tools/ts/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/package.json:/usr/src/service/model-pricing/packages/lixpi/dynamodb-service/package.json:ro,cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/service/model-pricing/packages/lixpi/dynamodb-service/src:ro,cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/model-pricing/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
+            - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/model-pricing/packages/lixpi/nats-service/ts/package.json:ro,cached
+
+            # --- model-pricing domain: persisted node_modules (see the
+            #     typescript-test-runner-node-modules-* comment above) ---
+            - typescript-test-runner-node-modules-model-pricing:/usr/src/service/model-pricing/node_modules
+            - typescript-test-runner-node-modules-model-pricing-constants-ts:/usr/src/service/model-pricing/packages/lixpi/constants/ts/node_modules
+            - typescript-test-runner-node-modules-model-pricing-debug-tools-ts:/usr/src/service/model-pricing/packages/lixpi/debug-tools/ts/node_modules
+            - typescript-test-runner-node-modules-model-pricing-dynamodb-service:/usr/src/service/model-pricing/packages/lixpi/dynamodb-service/node_modules
+            - typescript-test-runner-node-modules-model-pricing-nats-service-ts:/usr/src/service/model-pricing/packages/lixpi/nats-service/ts/node_modules
+
             # --- shared domain: this IS the source under test (read-write),
             #     but mounted file-by-file like the domains above rather than
             #     as a whole directory. Mounting the whole packages/lixpi dir
@@ -268,6 +305,11 @@ volumes:
     typescript-test-runner-node-modules-nex-debug-tools-ts:
     typescript-test-runner-node-modules-nex-dynamodb-service:
     typescript-test-runner-node-modules-nex-nats-service-ts:
+    typescript-test-runner-node-modules-model-pricing:
+    typescript-test-runner-node-modules-model-pricing-constants-ts:
+    typescript-test-runner-node-modules-model-pricing-debug-tools-ts:
+    typescript-test-runner-node-modules-model-pricing-dynamodb-service:
+    typescript-test-runner-node-modules-model-pricing-nats-service-ts:
     typescript-test-runner-node-modules-shared-auth-service:
     typescript-test-runner-node-modules-shared-capability-system:
     typescript-test-runner-node-modules-shared-canvas-engine:

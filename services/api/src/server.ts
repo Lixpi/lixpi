@@ -203,7 +203,7 @@ const pricingIdentityConfigs = [
         userId: 'svc:model-pricing',
         permissions: {
             pub: { allow: ['_INBOX.>', 'pricing.changed'] },
-            sub: { allow: ['_INBOX.>', 'aiModels.syncCompleted', 'pricing.revision.get', 'pricing.model.get', 'pricing.table.get', 'pricing.admin.status.get', 'pricing.admin.override.command'] },
+            sub: { allow: ['_INBOX.>', 'aiModels.syncCompleted', 'pricing.revision.get', 'pricing.model.get', 'pricing.table.get', 'pricing.admin.status.get', 'pricing.admin.override.command', 'pricing.reconciliation.predicted.daily'] },
         },
     },
     {
@@ -214,7 +214,7 @@ const pricingIdentityConfigs = [
     {
         environmentKey: 'NATS_PRICING_BILLING_NKEY_PUBLIC',
         userId: 'svc:pricing-billing',
-        permissions: { pub: { allow: ['_INBOX.>', 'pricing.revision.get', 'pricing.model.get', 'pricing.table.get'] }, sub: { allow: ['_INBOX.>', 'pricing.changed'] } },
+        permissions: { pub: { allow: ['_INBOX.>', 'pricing.revision.get', 'pricing.model.get', 'pricing.table.get', 'pricing.reconciliation.predicted.daily'] }, sub: { allow: ['_INBOX.>', 'pricing.changed'] } },
     },
 ]
 

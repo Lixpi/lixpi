@@ -4,6 +4,7 @@ import NatsService from '@lixpi/nats-service'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 import { PricingOverrideService } from '../admin/override-service.ts'
 import { PricingStorage } from '../importer/pricing-storage.ts'
+import { PricingReconciliationService } from '../reconciliation/reconciliation-service.ts'
 
 const requiredPricingKey = (value: unknown): string => {
     if (!value || typeof value !== 'object' || typeof (value as { pricingKey?: unknown }).pricingKey !== 'string') {
@@ -19,6 +20,7 @@ export class PricingResponders {
         private readonly nats: NatsService,
         private readonly storage: PricingStorage,
         private readonly overrides: PricingOverrideService,
+        private readonly reconciliation: PricingReconciliationService,
     ) {}
 
     register(): void {
@@ -46,9 +48,12 @@ export class PricingResponders {
                     // compare "what's serving" against "what's stuck" without a second
                     // round trip.
                     .map(hold => ({ ...hold, activeRecord: activeRecordsByKey.get(hold.pricingKey) })),
+                reconciliation: await this.reconciliation.health(),
             }
         })
         this.nats.reply(NATS_SUBJECTS.PRICING_SUBJECTS.ADMIN_OVERRIDE_COMMAND, async command => await this.overrides.submit(command))
+        this.nats.reply(NATS_SUBJECTS.PRICING_SUBJECTS.RECONCILIATION_PREDICTED_DAILY, async prediction =>
+            await this.reconciliation.recordPrediction(prediction))
     }
 
     publishChanged({

@@ -57,5 +57,13 @@ export const resolveLiteLlmCandidate = (
         effectiveFrom: observedAt,
     }
 
-    return { record, upstreamKey, candidateHash: canonicalHash({ record, upstream: feed.entries[upstreamKey] }) }
+    const { effectiveFrom: _observedAt, ...candidateIdentity } = record
+    return {
+        record,
+        upstreamKey,
+        // effectiveFrom is the observation time when the provider does not
+        // publish a rate-effective timestamp. It must not make an unchanged
+        // upstream candidate look new on every import.
+        candidateHash: canonicalHash({ record: candidateIdentity, upstream: feed.entries[upstreamKey] }),
+    }
 }
