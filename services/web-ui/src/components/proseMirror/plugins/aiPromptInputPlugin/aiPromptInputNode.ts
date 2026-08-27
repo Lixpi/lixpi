@@ -157,6 +157,7 @@ type MediaGenerationMode = 'image' | 'video'
 type ModelMenuTriggerSummaryItem = {
     label: string
     icon?: string
+    trailingIcons?: string[]
     iconVariant?: 'clock'
     aspectRatio?: string
 }
@@ -193,6 +194,14 @@ function createModelMenuTriggerSummaryAspectRatioIcon(value: string): HTMLElemen
 }
 
 function createModelMenuTriggerSummaryItem(item: ModelMenuTriggerSummaryItem): HTMLElement {
+    const trailingIconNodes = item.trailingIcons?.map(icon => html`
+        <span
+            className="ai-prompt-model-menu-trigger-summary-icon"
+            innerHTML=${icon}
+            aria-hidden="true"
+        ></span>
+    ` as HTMLSpanElement) ?? []
+
     return html`
         <span className="ai-prompt-model-menu-trigger-summary-item">
             ${item.icon ? html`
@@ -204,6 +213,7 @@ function createModelMenuTriggerSummaryItem(item: ModelMenuTriggerSummaryItem): H
             ` : null}
             ${item.aspectRatio ? createModelMenuTriggerSummaryAspectRatioIcon(item.aspectRatio) : null}
             <span className="ai-prompt-model-menu-trigger-summary-label">${item.label}</span>
+            ${trailingIconNodes}
         </span>
     ` as HTMLSpanElement
 }
@@ -667,9 +677,13 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             const selectedModelIds = getSelectedModelIds(mediaMode === 'image' ? 'aiImageModels' : 'aiVideoModels')
             const primaryModelId = selectedModelIds[0]
             const primaryModelOption = primaryModelId ? getModelOption(primaryModelId) : undefined
-            const modelSummary = selectedModelIds.length > 1
-                ? `${getModelTitle(selectedModelIds[0] ?? '')} +${selectedModelIds.length - 1}`
+            const usesMultipleModels = selectedModelIds.length > 1
+            const modelSummary = usesMultipleModels
+                ? 'Using multiple models'
                 : selectedModelIds[0] ? getModelTitle(selectedModelIds[0]) : 'Select model'
+            const selectedModelIcons = usesMultipleModels
+                ? selectedModelIds.flatMap(modelId => getModelOption(modelId)?.icon ?? [])
+                : undefined
             const matrix = aiModelsStore.getMediaGenerationConfigMatrix()
             const configGroups = getConfigSelectionGroups(
                 mediaMode === 'image' ? 'imageGenerationConfigGroups' : 'videoGenerationConfigGroups',
@@ -705,8 +719,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             if (!summaryEl) return
 
             const summaryItems: ModelMenuTriggerSummaryItem[] = [
-                { label: modelSummary, icon: primaryModelOption?.icon },
-                ...controlSummary,
+                {
+                    label: modelSummary,
+                    icon: usesMultipleModels ? undefined : primaryModelOption?.icon,
+                    trailingIcons: selectedModelIcons,
+                },
+                ...(usesMultipleModels ? [] : controlSummary),
             ]
             const summaryNodes: HTMLElement[] = []
             for (const [index, item] of summaryItems.entries()) {
