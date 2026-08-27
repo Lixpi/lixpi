@@ -113,3 +113,13 @@ describe('media generation mode switch', () => {
         expectSourceNotToContain(mediaModeSwitchSource, 'transition:')
     })
 })
+
+describe('simple tooltip wiring', () => {
+    it('uses ARIA-backed delegated tooltips for model and submit controls', () => {
+        expectSourceToContain(aiPromptInputNodeSource, 'aria-label="Generation settings"')
+        expectSourceToContain(aiPromptInputNodeSource, 'data-help-tooltip="aria-label"')
+        expectSourceToContain(aiPromptInputNodeSource, "submitButton.dataset.helpTooltip = 'aria-description'")
+        expectSourceToContain(aiPromptInputNodeSource, "submitButton.setAttribute('aria-description', invalid.message)")
+        expectSourceNotToContain(aiPromptInputNodeSource, "submitButton.setAttribute('title'")
+    })
+})

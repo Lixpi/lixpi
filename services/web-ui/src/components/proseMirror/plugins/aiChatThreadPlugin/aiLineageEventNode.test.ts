@@ -33,8 +33,9 @@ describe('aiLineageEventNodeSpec', () => {
 
         expect(domSpec[0]).toBe('div')
         expect(domSpec[1].class).toBe('ai-lineage-event ai-lineage-event-branch-origin')
-        expect(domSpec[1].title).toBe('Branch started')
         expect(domSpec[1]['aria-label']).toBe('Branch started')
+        expect(domSpec[1]['data-help-tooltip']).toBe('aria-label')
+        expect(domSpec[1].title).toBeUndefined()
         expect(domSpec[1]['data-branch-origin-node-id']).toBe('origin-id')
         expect(domSpec[1]['data-branch-fork-node-id']).toBe('fork-id')
     })

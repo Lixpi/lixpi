@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { uiKitSettings } from '../../runtime-settings.ts'
-import { createHelpTooltip } from './index.ts'
+import { createHelpTooltip, createHelpTooltipProvider } from './index.ts'
 
 function createTooltip(
     override: Parameters<typeof createHelpTooltip>[0] = {},
@@ -139,6 +139,35 @@ describe('helpTooltip', () => {
         expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
     })
 
+    it('suppresses a tooltip after its trigger is clicked until the pointer leaves', () => {
+        const trigger = document.createElement('button')
+        trigger.setAttribute('aria-label', 'Open model settings')
+        document.body.appendChild(trigger)
+        const tooltip = createHelpTooltip({
+            label: 'Open model settings',
+            text: 'Choose the model and output size',
+            triggerElement: trigger,
+            describeTrigger: true,
+        })
+
+        trigger.dispatchEvent(new PointerEvent('pointerenter'))
+        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+        expect(trigger.getAttribute('aria-describedby')).toContain('help-tooltip-')
+
+        trigger.click()
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+        expect(trigger.getAttribute('aria-describedby')).toBeNull()
+
+        trigger.dispatchEvent(new PointerEvent('pointerenter'))
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+        trigger.dispatchEvent(new PointerEvent('pointerleave'))
+        trigger.dispatchEvent(new PointerEvent('pointerenter'))
+        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+
+        tooltip.destroy()
+    })
+
     it('destroys tooltip DOM and detached listeners cleanly', () => {
         const { tooltip, trigger } = createTooltip({
             interactive: true,
@@ -244,7 +273,7 @@ describe('helpTooltip', () => {
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
 
-        expect(content.style.getPropertyValue('--help-tooltip-available-max-height')).toBe('84px')
+        expect(content.style.getPropertyValue('--help-tooltip-available-max-height')).toBe('78px')
         expect(content.dataset.placement).toBe('top')
     })
 
@@ -614,6 +643,102 @@ describe('helpTooltip', () => {
             windowRemoveSpy.mockRestore()
             documentAddSpy.mockRestore()
             documentRemoveSpy.mockRestore()
+        }
+    })
+
+    it('delays delegated ARIA tooltip activation by the configured provider delay', () => {
+        vi.useFakeTimers()
+
+        try {
+            const root = document.createElement('div')
+            const trigger = document.createElement('button')
+            trigger.setAttribute('aria-label', 'Open media library')
+            trigger.dataset.helpTooltip = 'aria-label'
+            root.appendChild(trigger)
+            document.body.appendChild(root)
+            const provider = createHelpTooltipProvider({ root })
+
+            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs - 1)
+            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+            vi.advanceTimersByTime(1)
+            const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
+            expect(content.textContent).toBe('Open media library')
+            expect(content.classList.contains('help-tooltip-content-simple')).toBe(true)
+
+            provider.destroy()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('keeps delegated tooltips hidden after a click until the pointer re-enters', () => {
+        vi.useFakeTimers()
+
+        try {
+            const root = document.createElement('div')
+            const trigger = document.createElement('button')
+            trigger.setAttribute('aria-label', 'Generation settings')
+            trigger.dataset.helpTooltip = 'aria-label'
+            root.appendChild(trigger)
+            document.body.appendChild(root)
+            const provider = createHelpTooltipProvider({ root })
+
+            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs)
+            expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+
+            trigger.click()
+            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs)
+            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+            trigger.dispatchEvent(new PointerEvent('pointerleave'))
+            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs)
+            expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+
+            provider.destroy()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('respects provider visibility guards before and after an expanded control opens', async () => {
+        const originalShowDelay = uiKitSettings.helpTooltip.providerShowDelayMs
+        uiKitSettings.helpTooltip.providerShowDelayMs = 0
+
+        try {
+            const root = document.createElement('div')
+            const trigger = document.createElement('button')
+            trigger.setAttribute('aria-label', 'Generation settings')
+            trigger.setAttribute('aria-expanded', 'false')
+            trigger.dataset.helpTooltip = 'aria-label'
+            root.appendChild(trigger)
+            document.body.appendChild(root)
+            const provider = createHelpTooltipProvider({
+                root,
+                shouldShow: element => element.getAttribute('aria-expanded') !== 'true',
+            })
+
+            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+            expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+
+            trigger.setAttribute('aria-expanded', 'true')
+            await Promise.resolve()
+            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+
+            provider.destroy()
+        } finally {
+            uiKitSettings.helpTooltip.providerShowDelayMs = originalShowDelay
         }
     })
 })

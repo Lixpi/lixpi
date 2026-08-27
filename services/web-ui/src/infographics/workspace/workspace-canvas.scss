@@ -1,8 +1,3 @@
-@use '@lixpi/ui-kit/styles/bubble-menu';
-@use '@lixpi/ui-kit/styles/canvas-node-footer';
-@use '@lixpi/ui-kit/styles/dropdown';
-@use '@lixpi/ui-kit/styles/media-model-badge';
-@use '@lixpi/ui-kit/styles/progress-timeline';
 @import '$src/sass/_transitions.scss';
 @import '$src/sass/_variables.scss';
 @import '$src/sass/components/animations';
@@ -94,10 +89,12 @@
 
 .workspace-canvas-media-mode-panel {
     position: relative;
+    z-index: 1;
     width: var(--workspace-canvas-media-mode-panel-width);
     height: var(--workspace-canvas-action-panel-size);
     flex: 0 0 var(--workspace-canvas-media-mode-panel-width);
     border-radius: 9999px;
+    background: #fff;
 }
 
 .workspace-canvas-media-mode-panel > .ai-prompt-media-mode-switch {
@@ -123,11 +120,23 @@
     padding: 0;
     border-radius: 9999px;
     pointer-events: auto;
+    isolation: isolate;
+}
+
+.workspace-canvas-model-menu-hover-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    transition: hoverTransition(background-color);
 }
 
 .workspace-canvas-model-menu-panel {
     position: relative;
     bottom: auto;
+    z-index: 1;
     display: flex;
     min-width: 0;
     height: 100%;
@@ -145,9 +154,14 @@
     background: transparent;
 }
 
+.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background,
+.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active) > .workspace-canvas-model-menu-hover-background {
+    background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);
+}
+
 .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,
 .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {
-    background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);
+    background: transparent;
 }
 
 .workspace-floating-toolbar-button {
@@ -180,36 +194,6 @@
             fill: $nightBlue;
         }
     }
-
-    // Tooltip — appears above the button on hover
-    &:hover .workspace-floating-toolbar-tooltip {
-        opacity: 1;
-        visibility: visible;
-        transform: translateX(-50%) translateY(0);
-    }
-}
-
-.workspace-floating-toolbar-tooltip {
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 10px);
-    transform: translateX(-50%) translateY(4px);
-    white-space: nowrap;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: $nightBlue;
-    color: $offWhite;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1;
-    pointer-events: none;
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        hoverTransition(opacity, $defaultHoverTransitionDuration),
-        hoverTransition(transform, $defaultHoverTransitionDuration),
-        hoverTransition(visibility, $defaultHoverTransitionDuration);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .workspace-floating-toolbar-image-wrapper {

@@ -273,7 +273,10 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             <p className="media-library-detail-lineage"></p>
             <p className="media-library-detail-seed"></p>
             <button type="button" className="media-library-detail-remove">Remove from library</button>
-            <div className="media-library-detail-content"></div>
+            <div
+                className="media-library-detail-content"
+                data-help-tooltip="aria-description"
+            ></div>
             <div className="media-library-detail-provenance"></div>
         </section>` as HTMLElement
         const titleInput = detail.querySelector('.media-library-detail-title') as HTMLInputElement
@@ -388,7 +391,11 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
                         baseVersion: snapshot.version,
                         onLeaseStateChange: (state: { readOnly: boolean; holderWorkspaceId?: string }) => {
                             mount.classList.toggle('is-read-only', state.readOnly)
-                            mount.title = state.readOnly ? `Read-only${state.holderWorkspaceId ? `; lease held by ${state.holderWorkspaceId}` : ''}` : ''
+                            const readOnlyDescription = state.readOnly
+                                ? `Read-only${state.holderWorkspaceId ? `; lease held by ${state.holderWorkspaceId}` : ''}`
+                                : ''
+                            if (readOnlyDescription) mount.setAttribute('aria-description', readOnlyDescription)
+                            else mount.removeAttribute('aria-description')
                         },
                     },
                 })

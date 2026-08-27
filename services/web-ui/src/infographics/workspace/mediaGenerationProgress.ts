@@ -367,6 +367,7 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
                         type="button"
                         className="workspace-media-generation-pipeline-disclosure nopan"
                         aria-controls=${timelineId}
+                        data-help-tooltip="aria-label"
                     ></button>
                 </header>
             </section>
@@ -444,7 +445,6 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
             : 'Expand pipeline details'
         this.disclosureButton.ariaExpanded = String(showsAllSteps)
         this.disclosureButton.ariaLabel = accessibleLabel
-        this.disclosureButton.title = accessibleLabel
         this.disclosureButton.hidden = viewState.totalItemCount === 0
         this.disclosureButton.classList.toggle('is-expanded', showsAllSteps)
         this.disclosureLabel.textContent = showsAllSteps

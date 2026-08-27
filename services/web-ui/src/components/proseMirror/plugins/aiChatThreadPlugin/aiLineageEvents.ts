@@ -34,9 +34,9 @@ export function createAiLineageEventMarker(event: AiLineageEventDescriptor): HTM
     return html`
         <div
             className=${`ai-lineage-event ai-lineage-event-${event.kind}`}
-            title=${label}
             aria-label=${label}
             data=${{
+                helpTooltip: 'aria-label',
                 lineageEventKind: event.kind,
                 branchOriginNodeId: event.branchOriginNodeId ?? '',
                 branchForkNodeId: event.branchForkNodeId ?? '',

@@ -30,7 +30,7 @@ const plugins = [
 ]
 ```
 
-Styles are imported from `@lixpi/ui-kit/styles/bubble-menu` by `ProseMirror.scss`.
+Styles are imported once from `@lixpi/ui-kit/styles/bubble-menu` by `App.svelte`.
 
 ## Architecture
 
@@ -106,6 +106,8 @@ The bubble menu is defined via a structured list in `bubbleMenuItems.ts`:
 - Action buttons: Create Variant, Blockquote, Delete
 
 Each button is built with `createEl` from `$src/utils/domTemplates.ts`.
+
+Icon-only menu actions keep their labels in `aria-label` and opt into the application-level ui-kit help-tooltip provider. The link apply and remove controls are keyboard focusable and activate with Enter or Space. This adapter does not create native `title` tooltips or feature-local tooltip markup.
 
 ### Mobile Considerations
 

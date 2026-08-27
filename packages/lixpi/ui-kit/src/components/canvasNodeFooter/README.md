@@ -4,6 +4,8 @@ Framework-agnostic below-node controls for canvas nodes that expose details or g
 
 Both the info control and active progress control call the same `onOpenDetails` callback. The host owns node state, sidebar state, model attribution, and review behavior; it updates the footer through `update()` and disposes it through `destroy()`.
 
+The icon-only controls use ARIA labels and opt into the shared help-tooltip provider. They never create native `title` tooltips or feature-local hover labels.
+
 ```typescript
 import { createCanvasNodeFooter } from '@lixpi/ui-kit/components/canvas-node-footer'
 

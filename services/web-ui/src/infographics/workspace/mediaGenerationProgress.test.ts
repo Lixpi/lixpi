@@ -418,6 +418,9 @@ describe('media generation progress disclosure', () => {
 
         expect(disclosure.textContent).toContain('Expand')
         expect(disclosure.textContent).not.toContain('all')
+        expect(disclosure.dataset.helpTooltip).toBe('aria-label')
+        expect(disclosure.ariaLabel).toBe('Expand pipeline details')
+        expect(disclosure.title).toBe('')
         expect(renderedItemIds(progress.element)).toEqual([
             'completed-root',
             'problem-root',

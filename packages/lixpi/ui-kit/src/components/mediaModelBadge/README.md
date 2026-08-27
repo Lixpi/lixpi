@@ -6,6 +6,8 @@ The component accepts already-resolved presentation metadata. Provider/model cat
 
 Every provider SVG renders inside the same configured square icon slot. Optical scale corrections for unusually dense or sparse provider glyphs belong to this component's stylesheet, so all consumers receive identical icon sizing and spacing without local overrides.
 
+The badge exposes its resolved label through ARIA and opts into the shared help-tooltip provider. It never creates a native `title` tooltip.
+
 ```typescript
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 

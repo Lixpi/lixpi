@@ -34,7 +34,7 @@ class GeneratedOutputDetailsSidebar implements GeneratedOutputDetailsSidebarInst
                         type="button"
                         className="workspace-media-generation-trace-panel-close"
                         aria-label="Close item details"
-                        title="Close item details"
+                        data-help-tooltip="aria-label"
                         innerHTML=${xCircleIcon}
                     ></button>
                 </header>

@@ -20,7 +20,10 @@ describe('createMediaModelBadge', () => {
         })
 
         expect(badge?.className).toBe('media-model-badge')
-        expect(badge?.title).toBe('Google : Nano Banana Pro')
+        expect(badge?.getAttribute('role')).toBe('img')
+        expect(badge?.getAttribute('aria-label')).toBe('Google : Nano Banana Pro')
+        expect(badge?.getAttribute('data-help-tooltip')).toBe('aria-label')
+        expect(badge?.getAttribute('title')).toBeNull()
         expect(badge?.querySelector('.media-model-badge-icon svg')).not.toBeNull()
         expect(badge?.querySelector('.media-model-badge-provider')?.textContent).toBe('Google')
         expect(badge?.querySelector('.media-model-badge-model')?.textContent).toBe('Nano Banana Pro')
@@ -39,7 +42,8 @@ describe('createMediaModelBadge', () => {
         })
 
         expect(badge?.classList.contains('media-model-badge-icon-only')).toBe(true)
-        expect(badge?.title).toBe('Anthropic')
+        expect(badge?.getAttribute('aria-label')).toBe('Anthropic')
+        expect(badge?.getAttribute('data-help-tooltip')).toBe('aria-label')
         expect(badge?.querySelector('.media-model-badge-name')).toBeNull()
     })
 })

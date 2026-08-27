@@ -2540,7 +2540,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const contentSnapshot = assetDocumentsStore.get(asset.assetId, 'content')
         if (asset.documents.content && contentSnapshot) {
-            const contentMount = html`<div className="canvas-asset-content-editor nopan"></div>` as HTMLElement
+            const contentMount = html`
+                <div
+                    className="canvas-asset-content-editor nopan"
+                    data-help-tooltip="aria-description"
+                ></div>
+            ` as HTMLElement
             section.appendChild(contentMount)
             const editor = new ProseMirrorEditor({
                 editorMountElement: contentMount,
@@ -2556,9 +2561,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     baseVersion: contentSnapshot.version,
                     onLeaseStateChange: (state: { readOnly: boolean; holderWorkspaceId?: string; expiresAt?: number }) => {
                         contentMount.classList.toggle('is-read-only', state.readOnly)
-                        contentMount.title = state.readOnly
+                        const readOnlyDescription = state.readOnly
                             ? `Read-only${state.holderWorkspaceId ? `; lease held by ${state.holderWorkspaceId}` : ''}`
                             : ''
+                        if (readOnlyDescription) contentMount.setAttribute('aria-description', readOnlyDescription)
+                        else contentMount.removeAttribute('aria-description')
                     },
                 },
                 onEditorChange: () => {},
@@ -3098,8 +3105,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <button
                 className="media-review-action media-review-accept nopan"
                 type="button"
-                aria-label="Accept generated output"
-                title=${disabled ? 'Generation history is still being sealed' : 'Accept generated output'}
+                aria-label=${disabled ? 'Generation history is still being sealed' : 'Accept generated output'}
+                data-help-tooltip="aria-label"
                 onclick=${handleClick}
             >
                 <span className="media-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span>
@@ -3127,10 +3134,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <button
                 className="media-review-action media-review-reject nopan"
                 type="button"
-                aria-label="Reject and delete generated output"
-                title=${generationStillActive
+                aria-label=${generationStillActive
                     ? 'Cancel generation and delete output'
                     : 'Reject and delete generated output'}
+                data-help-tooltip="aria-label"
                 onclick=${reject}
             >
                 <span className="media-review-action-icon" innerHTML=${trashBinIcon} aria-hidden="true"></span>
@@ -3159,8 +3166,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 <button
                     className="media-review-action media-review-regenerate"
                     type="button"
-                    title="Generate another result with the existing media prompt"
                     aria-label="Regenerate with existing media prompt"
+                    data-help-tooltip="aria-label"
                     onclick=${regenerate}
                 >
                     <span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span>
@@ -3203,7 +3210,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const title = getGeneratedOutputInfoTitle(node)
         const footer = createCanvasNodeFooter({
             infoLabel: title,
-            infoTitle: title,
             infoButtonClassName: node.type !== 'capabilityArtifact'
                 && getAssetDescriptor(node)?.status === 'analyzing'
                 ? 'is-analyzing'
@@ -3319,8 +3325,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const button = html`<button
             className="media-review-action media-review-accept nopan"
             type="button"
-            aria-label="Accept generated Artifact"
-            title=${disabled ? 'Generation history is still being sealed' : 'Accept generated Artifact'}
+            aria-label=${disabled ? 'Generation history is still being sealed' : 'Accept generated Artifact'}
+            data-help-tooltip="aria-label"
         ><span className="media-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
         button.disabled = disabled
         button.addEventListener('click', (event) => {
@@ -3338,8 +3344,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const button = html`<button
             className="media-review-action media-review-regenerate"
             type="button"
-            title="Generate another Artifact from the sealed request"
             aria-label="Regenerate Artifact"
+            data-help-tooltip="aria-label"
         ><span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
         button.disabled = !isGeneratedOutputReviewReady(node)
         button.addEventListener('click', (event) => {
@@ -12495,6 +12501,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): void {
         try {
             editorContainer.replaceChildren()
+            editorContainer.dataset.helpTooltip = 'aria-description'
             const editor = new ProseMirrorEditor({
                 editorMountElement: editorContainer,
                 content: html`<div></div>` as HTMLDivElement,
@@ -12510,13 +12517,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     baseVersion: getStoredProseMirrorVersion(doc),
                     onLeaseStateChange: (state: { readOnly: boolean; holderWorkspaceId?: string; expiresAt?: number }) => {
                         nodeEl.classList.toggle('is-asset-lease-read-only', state.readOnly)
-                        if (state.readOnly) {
-                            const holder = state.holderWorkspaceId ? ` by workspace ${state.holderWorkspaceId}` : ''
-                            const expiry = state.expiresAt ? ` until ${new Date(state.expiresAt).toLocaleTimeString()}` : ''
-                            editorContainer.title = `Read-only: Asset edit lease is held${holder}${expiry}`
-                        } else {
-                            editorContainer.removeAttribute('title')
-                        }
+                        const holder = state.holderWorkspaceId ? ` by workspace ${state.holderWorkspaceId}` : ''
+                        const expiry = state.expiresAt ? ` until ${new Date(state.expiresAt).toLocaleTimeString()}` : ''
+                        const readOnlyDescription = state.readOnly
+                            ? `Read-only: Asset edit lease is held${holder}${expiry}`
+                            : ''
+                        if (readOnlyDescription) editorContainer.setAttribute('aria-description', readOnlyDescription)
+                        else editorContainer.removeAttribute('aria-description')
                     },
                 },
                 onEditorChange: (value: any) => {
@@ -13551,7 +13558,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 className="workspace-branch-marker-stop-control nopan"
                 data=${{ branchStopKey: getBranchMarkerStopControlKey(node) }}
                 aria-label="Stop all branch generations"
-                title="Stop all branch generations"
+                data-help-tooltip="aria-label"
                 onpointerdown=${handlePointerDown}
                 onpointerup=${handlePointerDown}
                 onmousedown=${handleMouseEvent}
@@ -13609,8 +13616,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 <button
                     type="button"
                     className="workspace-branch-marker-review-action is-accept"
-                    aria-label="Accept all generated variants"
-                    title=${canAcceptAll ? 'Accept all generated variants' : 'Wait for every variant history to finish sealing'}
+                    aria-label=${canAcceptAll ? 'Accept all generated variants' : 'Wait for every variant history to finish sealing'}
+                    data-help-tooltip="aria-label"
                     onpointerdown=${stopPointerEvent}
                     onclick=${handleAcceptAll}
                 >
@@ -13652,10 +13659,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         regenerationDropdown.dom.classList.add('workspace-branch-marker-regeneration-dropdown')
         const regenerationButton = regenerationDropdown.dom.querySelector('button') as HTMLButtonElement
         regenerationButton.disabled = !canAcceptAll
-        regenerationButton.setAttribute('aria-label', 'Regenerate branch outputs')
-        regenerationButton.title = canAcceptAll
+        regenerationButton.ariaLabel = canAcceptAll
             ? 'Choose how to regenerate branch outputs'
             : 'Wait for every variant history to finish sealing'
+        regenerationButton.dataset.helpTooltip = 'aria-label'
         controls.appendChild(regenerationDropdown.dom)
         applyBranchMarkerReviewControlsZoom(controls, getCurrentViewportZoom())
         branchMarkerReviewDropdowns.set(node.nodeId, regenerationDropdown)

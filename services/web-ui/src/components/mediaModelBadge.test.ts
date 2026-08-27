@@ -207,7 +207,8 @@ describe('createMediaModelBadge', () => {
 
         expect(badge).not.toBeNull()
         expect(badge?.className).toContain('media-model-badge')
-        expect(badge?.title).toBe(`google${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}Gemini Pro`)
+        expect(badge?.getAttribute('aria-label')).toBe(`google${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}Gemini Pro`)
+        expect(badge?.getAttribute('data-help-tooltip')).toBe('aria-label')
         expect(badge?.querySelector('.media-model-badge-provider')?.textContent).toBe('google')
         expect(badge?.querySelector('.media-model-badge-model')?.textContent).toBe('Gemini Pro')
         expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
@@ -229,7 +230,8 @@ describe('createMediaModelBadge', () => {
         expect(badge?.className).toContain('media-model-badge-icon-only')
         expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
         expect(badge?.querySelector('.media-model-badge-name')).toBeNull()
-        expect(badge?.title).toBe(`OpenAI${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}GPT-4o`)
+        expect(badge?.getAttribute('aria-label')).toBe(`OpenAI${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}GPT-4o`)
+        expect(badge?.getAttribute('data-help-tooltip')).toBe('aria-label')
     })
 
     it('keeps only provider text for provider-only metadata and no model value', () => {
@@ -260,7 +262,7 @@ describe('createMediaModelBadge', () => {
 
         expect(badge?.querySelector('.media-model-badge-icon')).not.toBeNull()
         expect(badgeIconPath).toBe(expectedIconPath)
-        expect(badge?.title).toContain('OpenAI')
+        expect(badge?.getAttribute('aria-label')).toContain('OpenAI')
     })
 
     it('returns null for resolved providers that resolve to no label and no icon', () => {
@@ -337,7 +339,7 @@ describe('renderMediaModelBadge', () => {
         expect(host.querySelector('.media-model-badge-provider')).toBeNull()
         expect(host.querySelector('.media-model-badge-name')).toBeNull()
         expect(host.querySelector('.media-model-badge-icon')).not.toBeNull()
-        expect(host.querySelector('.media-model-badge')?.title).toBe('Anthropic')
+        expect(host.querySelector('.media-model-badge')?.getAttribute('aria-label')).toBe('Anthropic')
     })
 })
 

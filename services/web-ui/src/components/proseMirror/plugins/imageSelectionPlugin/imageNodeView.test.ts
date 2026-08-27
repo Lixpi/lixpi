@@ -111,10 +111,12 @@ describe('ImageNodeView — initialization and source resolution', () => {
     it('resolves API image paths through resolveAuthenticatedMediaUrl', async () => {
         const { nodeView } = createImageView(createImageNode({
             src: '/api/images/workspace-1/final-file',
+            title: 'Native image hover text',
         }))
 
         await vi.waitFor(() => expect(getResolvedImageSrc(nodeView)).toContain('token=token-1'))
         expect(getResolvedImageSrc(nodeView)).toContain('/api/images/workspace-1/final-file')
+        expect(getImageElement(nodeView).getAttribute('title')).toBeNull()
         expect(AuthService.getTokenSilently).toHaveBeenCalledTimes(1)
     })
 

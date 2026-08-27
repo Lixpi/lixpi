@@ -149,6 +149,9 @@ describe('createImageGenerationTraceDetails — reference grid', () => {
             }),
         ])
         expect(tiles).toHaveLength(2)
+        expect(tiles[0].getAttribute('aria-label')).toBe('painted portrait of the man')
+        expect(tiles[0].dataset.helpTooltip).toBe('aria-label')
+        expect(tiles[0].getAttribute('title')).toBeNull()
         expect(tiles[0].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Target')
         expect(tiles[1].querySelector('.ai-image-generation-reference-role')?.textContent).toBe('Style Reference')
     })

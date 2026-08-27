@@ -116,6 +116,7 @@ export type GradientSettings = {
 
 export type HelpTooltipSettings = {
     interactiveHideDelayMs: number
+    providerShowDelayMs: number
 }
 
 export type HoverSettings = {
@@ -830,6 +831,8 @@ export const settings: Settings = {
     helpTooltip: {
         // Delay before an interactive tooltip closes after the pointer leaves its trigger/content.
         interactiveHideDelayMs: 80,
+        // Delay before the delegated provider shows simple ARIA-backed tooltips.
+        providerShowDelayMs: 1000,
     },
 
     // Shared hover-state motion used by interactive Web UI controls.
@@ -1196,9 +1199,8 @@ export const settings: Settings = {
                 helpTooltipBackground: colorPalette.steelBlue,
                 helpTooltipBorder: 'none',
                 helpTooltipBorderRadius: '8px',
-                // Outer shadow value intentionally duplicates dropdown.popoverBoxShadow; keep this setting separate.
-                helpTooltipBoxShadow: `0 2px 12px rgba(0, 0, 0, 0.1), 0 10px 26px rgba(35, 41, 45, 0.22), inset 0 0 1px 1px rgba(0, 0, 0, 0.1)`,
-                helpTooltipColor: colorPalette.offWhite,
+                helpTooltipBoxShadow: '0 6px 18px rgba(0, 0, 0, 0.18)',
+                helpTooltipColor: '#fff',
             },
         },
     },

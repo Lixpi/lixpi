@@ -391,7 +391,8 @@ class PromptReferencePickerMenu {
                 className="prompt-reference-picker-item"
                 role="option"
                 aria-selected="false"
-                title=${`${label} — ${summary}`}
+                data-help-tooltip="aria-label"
+                aria-label=${`${label}: ${summary}`}
                 onmousedown=${(event: MouseEvent) => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -428,7 +429,8 @@ class PromptReferencePickerMenu {
             className="prompt-reference-picker-item prompt-reference-picker-item-capability-artifact"
             role="option"
             aria-selected="false"
-            title=${item.title}
+            data-help-tooltip="aria-label"
+            aria-label=${item.title}
             onmousedown=${(event: MouseEvent) => {
                 event.preventDefault()
                 event.stopPropagation()

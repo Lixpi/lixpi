@@ -124,6 +124,7 @@ export type UiKitRuntimeSettings = {
     }
     helpTooltip: {
         interactiveHideDelayMs: number
+        providerShowDelayMs: number
     }
     videoControls: UiKitVideoControlsSettings
 }
@@ -179,6 +180,7 @@ export const uiKitSettings: UiKitRuntimeSettings = {
     },
     helpTooltip: {
         interactiveHideDelayMs: 80,
+        providerShowDelayMs: 1000,
     },
     videoControls: {
         height: 40,

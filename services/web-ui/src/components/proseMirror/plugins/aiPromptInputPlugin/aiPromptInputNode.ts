@@ -298,8 +298,8 @@ function createModelMenuTrigger(onClick: (event: MouseEvent) => void): HTMLButto
         <button
             type="button"
             className="ai-prompt-model-menu-trigger"
-            title="Generation settings"
             aria-label="Generation settings"
+            data-help-tooltip="aria-label"
             aria-expanded="false"
             contenteditable="false"
             onmousedown=${handleMouseDown}
@@ -408,6 +408,7 @@ class AddModelButton implements DropdownView {
                 type="button"
                 className="ai-model-config-add"
                 aria-label="Add model"
+                data-help-tooltip="aria-label"
                 contenteditable="false"
                 onclick=${handleClick}
             >
@@ -424,7 +425,7 @@ class AddModelButton implements DropdownView {
         const hasAvailableModel = getModelOptionsForCapability(aiModelsStore.getData(), this.controls.capability)
             .some(option => !selectedModelIdSet.has(option.aiModel))
         this.dom.disabled = !hasAvailableModel
-        this.dom.title = hasAvailableModel ? 'Add model' : 'All available models are selected'
+        this.dom.ariaLabel = hasAvailableModel ? 'Add model' : 'All available models are selected'
     }
 
     destroy(): void {
@@ -573,6 +574,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setSelectedModelIds: modelIds => setSelectedModelIds('aiVideoModels', modelIds),
         })
         const submitButton = options.createSubmitButton(submitControls)
+        submitButton.dataset.helpTooltip = 'aria-description'
         const mediaModeSwitch = createSlidingSwitch<MediaGenerationMode>(select(mediaModeSwitchSvg), {
             id: 'ai-prompt-media-generation-mode',
             x: 0,
@@ -610,8 +612,8 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             const invalid = [...capabilityValidity.values()].find(value => !value.valid)
             if (submitButton instanceof HTMLButtonElement) submitButton.disabled = Boolean(invalid)
             submitButton.setAttribute('aria-disabled', String(Boolean(invalid)))
-            if (invalid?.message) submitButton.setAttribute('title', invalid.message)
-            else submitButton.removeAttribute('title')
+            if (invalid?.message) submitButton.setAttribute('aria-description', invalid.message)
+            else submitButton.removeAttribute('aria-description')
         }
         const getModuleIds = (): string[] => {
             const moduleIds: string[] = []

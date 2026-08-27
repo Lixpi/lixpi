@@ -219,6 +219,8 @@ describe('aiLineageEventNodeSpec', () => {
         const dom = aiLineageEventNodeSpec.toDOM(node as any)[1] as Record<string, string>
 
         expect(dom.class).toBe('ai-lineage-event ai-lineage-event-branch-fork')
+        expect(dom['aria-label']).toBe('Branch fork created')
+        expect(dom['data-help-tooltip']).toBe('aria-label')
         expect(dom['data-lineage-event-kind']).toBe('branch-fork')
     })
 })

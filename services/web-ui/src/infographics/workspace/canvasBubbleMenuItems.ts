@@ -43,8 +43,9 @@ function createCanvasButton(config: {
     const button = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
-        title: config.title,
+        'aria-label': config.title,
         innerHTML: config.icon,
+        data: { helpTooltip: 'aria-label' },
     })
 
     const svg = button.querySelector('svg')
@@ -112,8 +113,9 @@ export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks)
     const connectButton = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
-        title: 'Connect to node',
+        'aria-label': 'Connect to node',
         innerHTML: triggerNodesConnectionIcon,
+        data: { helpTooltip: 'aria-label' },
     })
     const connectSvg = connectButton.querySelector('svg')
     if (connectSvg) {

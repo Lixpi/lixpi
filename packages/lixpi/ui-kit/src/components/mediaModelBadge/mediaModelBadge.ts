@@ -36,7 +36,12 @@ export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElemen
     if (!icon && !visibleLabel) return null
 
     return html`
-        <div className=${`media-model-badge${config.iconOnly ? ' media-model-badge-icon-only' : ''}`} title=${label}>
+        <div
+            className=${`media-model-badge${config.iconOnly ? ' media-model-badge-icon-only' : ''}`}
+            role="img"
+            aria-label=${label}
+            data-help-tooltip="aria-label"
+        >
             ${icon ? html`<span className="media-model-badge-icon" innerHTML=${icon}></span>` : null}
             ${visibleLabel ? html`<span className="media-model-badge-name">${
                 providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null

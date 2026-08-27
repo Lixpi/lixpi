@@ -252,8 +252,9 @@ function createButton(
     const button = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
-        title: item.title,
+        'aria-label': item.title,
         innerHTML: item.icon,
+        data: { helpTooltip: 'aria-label' },
     })
 
     const svg = button.querySelector('svg')
@@ -387,9 +388,9 @@ function createImageAlignmentButton(
     const button = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
-        title: item.title,
+        'aria-label': item.title,
         innerHTML: item.icon,
-        data: { imageAlignment: item.alignment },
+        data: { helpTooltip: 'aria-label', imageAlignment: item.alignment },
     })
 
     const svg = button.querySelector('svg')
@@ -424,9 +425,9 @@ function createImageWrapButton(
     const button = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
-        title: item.title,
+        'aria-label': item.title,
         innerHTML: item.icon,
-        data: { imageWrap: item.wrap },
+        data: { helpTooltip: 'aria-label', imageWrap: item.wrap },
     })
 
     const svg = button.querySelector('svg')
@@ -461,9 +462,9 @@ function createImageActionButton(
     const button = createEl('button', {
         className: 'bubble-menu-button',
         type: 'button',
-        title: item.title,
+        'aria-label': item.title,
         innerHTML: item.icon,
-        data: { imageAction: item.action },
+        data: { helpTooltip: 'aria-label', imageAction: item.action },
     })
 
     const svg = button.querySelector('svg')
@@ -538,13 +539,19 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
     const applyIcon = createEl('span', {
         className: 'link-input-apply',
         innerHTML: checkMarkIcon,
-        title: 'Apply link',
+        role: 'button',
+        tabindex: '0',
+        'aria-label': 'Apply link',
+        data: { helpTooltip: 'aria-label' },
     })
 
     const removeIcon = createEl('span', {
         className: 'link-input-remove',
         innerHTML: trashBinIcon,
-        title: 'Remove link',
+        role: 'button',
+        tabindex: '0',
+        'aria-label': 'Remove link',
+        data: { helpTooltip: 'aria-label' },
     })
 
     applyIcon.addEventListener('click', (e) => {
@@ -552,8 +559,22 @@ function createLinkInputPanel(view: EditorView, bubbleMenuView: BubbleMenuView):
         e.stopPropagation()
         bubbleMenuView.applyLink(input.value)
     })
+    applyIcon.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+
+        e.preventDefault()
+        e.stopPropagation()
+        bubbleMenuView.applyLink(input.value)
+    })
 
     removeIcon.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        bubbleMenuView.removeLink()
+    })
+    removeIcon.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+
         e.preventDefault()
         e.stopPropagation()
         bubbleMenuView.removeLink()

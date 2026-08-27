@@ -31,7 +31,7 @@ class ModelConfigurationRow implements ModelConfigurationRowInstance {
                     type="button"
                     className="ai-model-config-remove"
                     aria-label="Remove model"
-                    title="Remove model"
+                    data-help-tooltip="aria-label"
                     onclick=${handleRemove}
                 >
                     <span className="ai-model-config-remove-icon" innerHTML=${xIcon}></span>

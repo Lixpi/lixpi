@@ -70,7 +70,6 @@ export class ImageNodeView implements NodeView {
         // Set src asynchronously to handle auth token
         this.updateImageSrc(getImageSrcAttr(node))
         if (node.attrs.alt) this.img.alt = node.attrs.alt
-        if (node.attrs.title) this.img.title = node.attrs.title
         if (node.attrs.assetId) this.img.dataset.assetId = node.attrs.assetId
         if (node.attrs.documentId) this.img.dataset.documentId = node.attrs.documentId
 
@@ -374,10 +373,6 @@ export class ImageNodeView implements NodeView {
         if (node.attrs.alt !== this.img.alt) {
             this.img.alt = node.attrs.alt || ''
         }
-        if (node.attrs.title !== this.img.title) {
-            this.img.title = node.attrs.title || ''
-        }
-
         // Update width
         if (node.attrs.width) {
             applyStyle(this.figure, { width: node.attrs.width })

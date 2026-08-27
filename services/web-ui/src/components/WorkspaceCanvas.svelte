@@ -34,7 +34,6 @@
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
     import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '@lixpi/ui-kit/svg'
-    import '@lixpi/ui-kit/styles/side-panel'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -110,6 +109,7 @@
     const assetService = new AssetService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
     const rightSidePanelSettings = settings.rightSidePanel
+    const modelMenuHoverBackgroundStyle = `--ai-prompt-model-menu-trigger-active-background: ${settings.aiPromptInput.modelMenu.styles.triggerActiveBackground}`
     const rightSidePanelStyle = [
         `--workspace-right-side-panel-width: min(${rightSidePanelSettings.defaultDimensions.width}px, calc(100vw - ${rightSidePanelSettings.dimensions.maxPaneMargin}px))`,
         '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)',
@@ -722,9 +722,13 @@
     <!-- The in-flow rail keeps the Media Library between the composer and upload panel. -->
     <div class="workspace-canvas-left-control-rail">
         <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
-            <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">
+            <button
+                class="workspace-floating-toolbar-button"
+                onclick={handleCreateDocument}
+                aria-label="New Document"
+                data-help-tooltip="aria-label"
+            >
                 {@html createNewFileIcon}
-                <span class="workspace-floating-toolbar-tooltip">New Document</span>
             </button>
             <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
                 <button
@@ -732,11 +736,9 @@
                     class:active={imageSubmenuOpen}
                     onclick={toggleImageSubmenu}
                     aria-label="Add Image"
+                    data-help-tooltip="aria-label"
                 >
                     {@html imageIcon}
-                    {#if !imageSubmenuOpen}
-                        <span class="workspace-floating-toolbar-tooltip">Add Image</span>
-                    {/if}
                 </button>
                 {#if imageSubmenuOpen}
                     <div class="workspace-image-submenu">
@@ -771,14 +773,23 @@
             </div>
         </div>
         <div class="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
-            <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
+            <button
+                class="workspace-floating-toolbar-button"
+                onclick={handleToggleMediaLibrary}
+                aria-label="Media Library"
+                data-help-tooltip="aria-label"
+            >
                 {@html mediaFoloderIcon}
-                <span class="workspace-floating-toolbar-tooltip">Media Library</span>
             </button>
         </div>
     </div>
 
     <div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">
+        <div
+            class="workspace-canvas-model-menu-hover-background"
+            aria-hidden="true"
+            style={modelMenuHoverBackgroundStyle}
+        ></div>
         <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
         <div
             class="workspace-canvas-model-menu-panel"

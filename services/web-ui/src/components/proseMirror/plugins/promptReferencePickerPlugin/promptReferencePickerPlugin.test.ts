@@ -204,6 +204,9 @@ describe('promptReferencePickerPlugin', () => {
 
         const row = mount.querySelector('.prompt-reference-picker-item-capability-artifact')
         expect(row?.children).toHaveLength(3)
+        expect(row?.getAttribute('aria-label')).toBe('Action Timeline')
+        expect(row?.getAttribute('data-help-tooltip')).toBe('aria-label')
+        expect(row?.getAttribute('title')).toBeNull()
         expect(row?.children[0]?.classList.contains('prompt-reference-picker-glyph')).toBe(true)
         expect(row?.children[0]?.querySelector('svg')).not.toBeNull()
         expect(row?.children[1]?.classList.contains('prompt-reference-picker-artifact-host')).toBe(true)

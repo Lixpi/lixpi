@@ -549,6 +549,9 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.dom.contains(trigger)).toBe(false)
         expect(controls.children).toHaveLength(1)
         expect(controls.firstElementChild).toBe(factories.submitButtonDom)
+        expect(trigger.getAttribute('aria-label')).toBe('Generation settings')
+        expect(trigger.dataset.helpTooltip).toBe('aria-label')
+        expect(trigger.getAttribute('title')).toBeNull()
         expect(trigger.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(
             settings.aiPromptInput.modelMenu.styles.triggerColor,
         )
@@ -907,6 +910,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(title)
                 expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
                 expect(addButton.getAttribute('aria-label')).toBe('Add model')
+                expect(addButton.dataset.helpTooltip).toBe('aria-label')
                 expect(addLabel.textContent).toBe('Add model')
                 expect(addButton.children[0]).toBe(addLabel)
                 expect(addButton.children[1]).toBe(addIcon)

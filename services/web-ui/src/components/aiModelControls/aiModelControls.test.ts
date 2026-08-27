@@ -512,6 +512,9 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(removeButton).not.toBeNull()
         expect(removeButton.parentElement).toBe(primaryRow)
         expect(primaryRow.lastElementChild).toBe(removeButton)
+        expect(removeButton.getAttribute('aria-label')).toBe('Remove model')
+        expect(removeButton.getAttribute('data-help-tooltip')).toBe('aria-label')
+        expect(removeButton.getAttribute('title')).toBeNull()
         removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
         expect(controls.setSelectedModelIds).toHaveBeenLastCalledWith(['openai:gpt-image-1'])

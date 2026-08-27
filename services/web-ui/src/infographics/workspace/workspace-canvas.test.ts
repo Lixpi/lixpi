@@ -1980,14 +1980,15 @@ describe('Right side panel — TS infrastructure', () => {
 			'.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel'
 		)
 		const rightRail = extractBlock(scss, '.workspace-canvas-right-control-rail')
+		const modelMenuHoverBackground = extractBlock(scss, '.workspace-canvas-model-menu-hover-background')
 		const modelMenuPanel = extractBlock(scss, '.workspace-canvas-model-menu-panel')
 		const modelMenuTrigger = extractBlock(
 			scss,
 			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger'
 		)
-		const modelMenuTriggerActive = extractBlockContainingSelector(
+		const modelMenuHoverBackgroundActive = extractBlockContainingSelector(
 			scss,
-			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover'
+			'.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background'
 		)
 		const rightRailStart = svelte.indexOf(
 			'<div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">'
@@ -2001,6 +2002,7 @@ describe('Right side panel — TS infrastructure', () => {
 			'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single'
 		)
 		expectSourceToContain(svelte, 'workspace-canvas-right-control-rail')
+		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-hover-background"')
 		expectSourceToContain(svelte, 'class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}')
 		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-panel"')
 		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
@@ -2021,17 +2023,21 @@ describe('Right side panel — TS infrastructure', () => {
 		expectExcerptToContain(rightRail, 'display: flex;', 'right control rail')
 		expectExcerptToContain(rightRail, 'gap: 2px;', 'right control rail')
 		expectExcerptToContain(rightRail, 'border-radius: 9999px;', 'right control rail')
+		expectExcerptToContain(modelMenuHoverBackground, 'position: absolute;', 'model menu hover background')
+		expectExcerptToContain(modelMenuHoverBackground, 'inset: 0;', 'model menu hover background')
+		expectExcerptToContain(modelMenuHoverBackground, 'pointer-events: none;', 'model menu hover background')
+		expectExcerptToContain(modelMenuHoverBackgroundActive, 'background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);', 'model menu hover state')
 		expectSourceToContain(scss, '--workspace-canvas-media-mode-panel-width: 76px;')
 		expectExcerptToContain(modelMenuPanel, 'padding: 0;', 'model menu panel')
 		expectExcerptToContain(modelMenuTrigger, 'width: 100%;', 'model menu trigger')
 		expectExcerptToContain(modelMenuTrigger, 'height: 100%;', 'model menu trigger')
 		expectExcerptToContain(modelMenuTrigger, 'border-radius: inherit;', 'model menu trigger')
 		expectExcerptToContain(modelMenuTrigger, 'background: transparent;', 'model menu trigger')
-		expectExcerptToContain(
-			modelMenuTriggerActive,
-			'background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);',
-			'model menu trigger active state'
+		expectSourceToContain(
+			scss,
+			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,\n.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {\n    background: transparent;\n}'
 		)
+		expectSourceNotToContain(scss, '.workspace-floating-toolbar-tooltip')
 		expectSourceToContain(screenGlassTargets, "id: 'workspace-right-control-rail'")
 		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-media-mode-panel'")
 		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-model-menu-panel'")
@@ -3340,7 +3346,8 @@ describe('canvas node deletion', () => {
 		expectSourceToContain(ts, 'async function deleteCanvasNodes(nodeIds: ReadonlySet<string>): Promise<void>')
 		expectSourceToContain(ts, 'return isGeneratedOutputRejectableForCanvas({')
 		expectSourceToContain(ts, "action: 'reject'")
-		expectSourceToContain(ts, 'aria-label="Reject and delete generated output"')
+		expectSourceToContain(ts, 'aria-label=${generationStillActive')
+		expectSourceToContain(ts, 'data-help-tooltip="aria-label"')
 		expectSourceToContain(ts, 'innerHTML=${trashBinIcon}')
 	})
 

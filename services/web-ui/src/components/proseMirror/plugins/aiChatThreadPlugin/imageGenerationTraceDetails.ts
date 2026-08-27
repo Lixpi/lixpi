@@ -192,8 +192,8 @@ const createReferenceTile = (
     const tile = html`
         <figure
             className="ai-image-generation-reference"
-            title=${reference.label}
-            data=${{ source: reference.source, role: reference.role }}
+            aria-label=${reference.label}
+            data=${{ helpTooltip: 'aria-label', source: reference.source, role: reference.role }}
         >
             <div className="ai-image-generation-reference-thumb">
                 ${image}

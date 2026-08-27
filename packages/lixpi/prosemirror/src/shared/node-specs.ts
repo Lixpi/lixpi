@@ -700,8 +700,8 @@ export const aiLineageEventNodeSpec = {
             'div',
             {
                 class: `ai-lineage-event ai-lineage-event-${kind}`,
-                title: getAiLineageEventLabel(kind),
                 'aria-label': getAiLineageEventLabel(kind),
+                'data-help-tooltip': 'aria-label',
                 'data-lineage-event-kind': kind,
                 'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
                 'data-branch-fork-node-id': node.attrs.branchForkNodeId,

@@ -159,6 +159,8 @@ AI chat runs are conversation Assets whose `conversation` ProseMirror role is au
 - Drag membership is planned by `workspaceDragPlan.ts`, so AI chat thread drags move only the thread node and real `parentId` descendants. Generated outputs remain independent branch nodes.
 - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active right side panel emits a stale metadata render while a local user-driven canvas commit is still waiting for store acknowledgement, the canvas preserves the locally committed visual node/edge state until the store catches up. Generated branch markers, partial media, and completion handoff visuals are transient and do not create a pending local visual commit that can mask the API-owned canvas projection. Active generated-media trackers are overlaid back onto incoming API canvas renders until the run completes, so a lineage-plan projection cannot erase an in-flight placeholder/progress outline.
 
+Icon-only canvas controls keep their ARIA labels and opt into the ui-kit help-tooltip provider. They never use native `title` tooltips or feature-local hover labels.
+
 ## Architecture
 
 ```mermaid
