@@ -17,6 +17,7 @@ For the topology these pieces scale within, see [Infrastructure Overview](./INFR
 |---------|-------------------|-------|
 | `web-ui` | CloudFront edge cache | No origin scaling needed; global CDN |
 | `api` | ECS desired count + NATS queue group `aiInteraction` | Stateless — add tasks freely. Hosts both the gateway logic and the in-process LangGraph LLM workflow. CPU-bound on provider streaming, ProseMirror step assembly, and media routing. |
+| `model-pricing` | One ECS task with serialized import/reconciliation maintenance | Serving and scheduled maintenance share one process. Scale only after measuring responder availability or import/reconciliation duration; concurrent importers must not race active-pointer activation. |
 | `nats` | Three-instance ECS EC2 capacity provider plus daemon scheduling | One NATS task per host; scale only through a reviewed cluster topology and replica-placement change |
 | `DynamoDB` | On-demand capacity mode (default) | No manual scaling; pay per request |
 | `Lambda` (cert-manager, sidecar) | AWS-managed | Short-lived, invoked rarely |
@@ -66,6 +67,9 @@ If a stack needs to handle higher real-world load, the steps in order of impact 
 | Cert-manager Lambda fails | Existing certs keep working until they expire. Alarming on Lambda errors is the remediation path. |
 | CloudFront origin S3 unavailable | Edge cache continues serving existing assets. New users hit stale cache until restored. |
 | DynamoDB throttle | Retryable errors; `api` handles retries. On-demand mode makes this rare. |
+| `model-pricing` task dies | ECS replaces it. Billing retains its verified last-known-good snapshot, but boot and metering stay fail-closed if billing has no healthy cache. CloudWatch alarms on a missing heartbeat. |
+| Pricing import or provider parser fails | The active verified snapshot remains unchanged. Live holds and parser-failure metrics identify affected routes; a route without an active record is unpriceable. |
+| Billing misses `pricing.changed` | Boot, reconnect, and periodic revision checks fetch the active table. Billing acknowledges only after verification, persistence, and installation; `ConsumerRefreshPending` alarms until that acknowledgement arrives. |
 
 ## Environments and Stacks
 
@@ -112,6 +116,7 @@ flowchart LR
 - **Container Insights** — Opt-in per stack via `CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED`. When on, ECS publishes CPU/memory/task-count metrics and you get per-task debugging in the console.
 - **NATS monitoring** — Every NATS node exposes `/healthz` and `/varz` on port 8222 inside the VPC; the ECS health check uses `/healthz`. For deeper metrics, point the [Prometheus NATS exporter](https://github.com/nats-io/prometheus-nats-exporter) at the same endpoint.
 - **DynamoDB metrics** — Native CloudWatch metrics cover throttles, latency, item counts per table.
+- **Model-pricing metrics**: `/aws/ecs/model-pricing` carries one-minute Embedded Metric Format health events. Pulumi alarms on snapshot availability/age, route coverage, parser holds, consumer refresh, maintenance, and material reconciliation incidents. See [Model Pricing Operations](./MODEL-PRICING-OPERATIONS.md).
 
 ## Related Pages
 
@@ -119,4 +124,5 @@ flowchart LR
 |------|----------------|
 | [Infrastructure Overview](./INFRASTRUCTURE-OVERVIEW.md) | The high-level AWS topology, Pulumi, network layout, the `api` ECS service, Web UI, and DynamoDB |
 | [NATS Cluster](./NATS-CLUSTER.md) | The NATS cluster internals: ports, CloudMap discovery, the Lambda sidecar, Caddy-in-Lambda TLS, and the auth callout |
+| [Model Pricing Operations](./MODEL-PRICING-OPERATIONS.md) | Pricing metrics, alarms, incident runbooks, credential rotation, and least-privilege boundaries |
 | [System Architecture](../SYSTEM-ARCHITECTURE.md) | The runtime architecture, queue groups, and design decisions |

@@ -49,6 +49,7 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 | [NATS Cluster](platform/deployment/NATS-CLUSTER.md) | Three-node ECS EC2 NATS cluster, EBS JetStream storage, discovery, TLS, authentication, backup, and restore |
 | [NEX Execution Engine](platform/deployment/NEX-EXECUTION-ENGINE.md) | The background-workload node — AI-models sync, file conversion/frame extraction, the NEX account and credentials, local and AWS deployment |
 | [Scaling & Operations](platform/deployment/SCALING-AND-OPERATIONS.md) | Scaling profile, capacity ceilings, failure modes, environments, observability |
+| [Model Pricing Operations](platform/deployment/MODEL-PRICING-OPERATIONS.md) | Provider-cost snapshot metrics, alarms, incident response, NKey rotation, and least-privilege boundaries |
 
 ## Canvas
 

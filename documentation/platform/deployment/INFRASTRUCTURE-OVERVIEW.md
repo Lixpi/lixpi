@@ -1,11 +1,11 @@
 ---
 title: Infrastructure Overview
-description: How Lixpi is deployed to AWS — the Pulumi program, the high-level topology, network layout, the api ECS service, Web UI hosting, and DynamoDB.
+description: How Lixpi is deployed to AWS: Pulumi, network topology, API and model-pricing ECS services, Web UI hosting, NATS, and DynamoDB.
 ---
 
 # Infrastructure Overview
 
-This page explains how Lixpi is deployed to AWS: how Pulumi provisions the infrastructure, how the topology fits together, how the network is laid out, and how each piece — the `api` service, the Web UI, and DynamoDB — lives inside AWS.
+This page explains how Pulumi provisions Lixpi, how the network fits together, and where the `api`, model-pricing, Web UI, NATS, and DynamoDB resources live in AWS.
 
 It is the entry point for the deployment domain. The NATS cluster has enough moving parts to deserve its own page; see [NATS Cluster](./NATS-CLUSTER.md). Scaling, environments, and day-to-day operations live in [Scaling & Operations](./SCALING-AND-OPERATIONS.md). For the runtime architecture and service responsibilities, see [System Architecture](../SYSTEM-ARCHITECTURE.md).
 
@@ -48,6 +48,7 @@ flowchart TB
 
         subgraph Private["Private Subnets"]
             API["api service + LLM workflow<br/>Fargate"]
+            Pricing["model-pricing<br/>Fargate"]
             CertLambda["cert-manager<br/>Lambda (Caddy)"]
             Sidecar["nats-sidecar<br/>Lambda"]
         end
@@ -91,6 +92,10 @@ flowchart TB
     API --> DDB
     API -->|verify JWT| Auth0
     API --> AIProv
+    Pricing <-->|pricing request/reply| NATS1
+    Pricing --> DDB
+    Pricing -->|official rates + actuals| AIProv
+    Pricing -->|service and actuals secrets| SM
 
     CertLambda --> SM
     NATS1 -.->|read cert| SM
@@ -106,13 +111,14 @@ flowchart TB
 | `web-ui` | S3 + CloudFront | Static SPA served from a global CDN with HTTP/3 |
 | `api` | ECS/Fargate (private subnets) | CRUD, auth callout, DynamoDB access, AND in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, vendor SDK egress) |
 | `nex` | ECS/Fargate (private subnets, 1 task) | NATS NEX node — runs background workloads (the hourly AI-models sync), writes the `AI_MODELS_LIST` table. See [NEX Execution Engine](./NEX-EXECUTION-ENGINE.md) |
+| `model-pricing` | ECS/Fargate (private subnets, 1 task) | Imports and verifies immutable provider-cost snapshots, serves billing over NATS, reconciles provider actuals, and emits CloudWatch EMF health metrics. |
 | `nats` | ECS EC2 daemon service (3 public-subnet instances, one encrypted EBS volume each) | Message bus, three-replica JetStream, and Blob Object Store; clients connect directly |
 | `cert-manager` | Lambda (Caddy + ACME) | Issues real TLS certs for the NATS domain |
 | `nats-sidecar` | Lambda | Watches ECS task IPs and updates Route53 A records |
 | `DynamoDB` | On-demand application tables | Application data, with streams on selected tables |
 | `Route53` | Hosted zone | DNS for web UI, API, NATS |
 | `ACM` | Certificate | TLS for CloudFront (web UI) |
-| `Secrets Manager` | Secrets | Stores NATS TLS certs issued by cert-manager |
+| `Secrets Manager` | Secrets | Stores NATS TLS certs, the model-pricing service NKey, and the optional OpenAI reconciliation admin key. |
 | `SSM` | Parameter Store | Cross-stack parameters and config |
 | `CloudMap` | Private namespace | Internal NATS cluster discovery |
 
@@ -134,6 +140,7 @@ infrastructure/pulumi/src/
     ECS-cluster.ts        # Shared Fargate cluster
     NATS-cluster/         # 3-node NATS cluster + service discovery sidecar
     main-api-service.ts   # api service (ECS task) — also hosts the LLM workflow in-process
+    model-pricing-service.ts # provider-cost ECS task, secrets, telemetry alarms
     web-ui.ts             # S3 + CloudFront distribution
     db/DynamoDB-tables.ts # DynamoDB table definitions
     dns-records.ts        # Route53 records + hosted zone
@@ -205,6 +212,7 @@ flowchart TB
     CERTMGR[Lambda cert-manager<br/>issues NATS TLS cert]
     NATS[NATS cluster 3x ECS EC2 + EBS]
     API[api service + LLM workflow]
+    PRICING[model-pricing service]
     WEB[Web UI — S3 + CloudFront]
     DNS[Web + www A records]
 
@@ -220,6 +228,9 @@ flowchart TB
     ECS --> NATS
     ECS --> API
     DDB --> API
+    ECS --> PRICING
+    DDB --> PRICING
+    NATS --> PRICING
     CERT --> WEB
     WEB --> DNS
 ```
@@ -269,13 +280,16 @@ flowchart LR
 
 The API process also defines HTTP routes for media bytes, Capability resources, workspace export/import, and health checks. Local development calls those routes directly through `VITE_API_URL`. The current AWS topology shown here does not create a public `api.*` route or a CloudFront API origin, so any production feature that depends on those HTTP routes needs an explicit front door before it can work from the hosted SPA.
 
-## ECS Services: api
+## ECS Services
+
+### api
 
 The `api` service follows the standard pattern: a Docker image pushed to ECR, a Fargate task definition, an IAM role scoped to the resources it needs, CloudWatch logs, and a security group with no public ingress in the current Pulumi topology. It is defined in [`main-api-service.ts`](../../../infrastructure/pulumi/src/resources/main-api-service.ts).
 
 | Service | CPU | Memory | Subnets | Public IP | Inbound | Scale |
 |---------|-----|--------|---------|-----------|---------|-------|
 | `api` | 512 | 1024 MB | Private | no | none in current AWS topology | configurable |
+| `model-pricing` | 256 | 512 MB | Private | no | none | one task |
 
 The CPU/memory baseline is sized to accommodate the in-process LangGraph LLM workflow (live pipeline events, ProseMirror step assembly, image generation, and vendor SDK egress) that previously ran in the separate `llm-api` Fargate task.
 
@@ -301,11 +315,18 @@ The service uses standard rolling deploy settings:
 Each service gets a `taskRole` with only the permissions it actually needs:
 
 - `api` — DynamoDB point, batch, query/scan, and `TransactWriteItems` access on its bound tables and indexes; SSM read; CloudWatch Logs write. AI provider keys (OpenAI, Anthropic, Google, Stability) are passed via env vars; egress to vendor APIs flows through the NAT Gateway.
+- `model-pricing`: read/scan access to `AI_MODELS_LIST`; read/write/query/scan/batch/transaction access only to the pricing snapshot, record, audit, and reconciliation tables. Its execution role reads only the service NKey secret and the optional OpenAI admin-key secret. CloudWatch extracts metrics from stdout, so the task role has no `cloudwatch:PutMetricData` permission.
 - `nats` — CloudWatch Logs + Secrets Manager read (for the TLS cert). Nothing else.
 
 {% callout type="note" %}
 **Historical note.** The previous architecture split AI orchestration into a separate `llm-api` Fargate task with its own narrower IAM role (no DynamoDB) so a compromise of the LLM container couldn't touch user data. After the migration to in-process LangGraph TS, the API container is the trust boundary for both. If that trade-off becomes a concern, the LLM module can be split into a separate `llm-workers` ECS service, but the worker subscriptions and internal-service auth registration still need to be implemented. See [`services/api/src/llm/README.md`](../../../services/api/src/llm/README.md).
 {% /callout %}
+
+### model-pricing
+
+[`model-pricing-service.ts`](../../../infrastructure/pulumi/src/resources/model-pricing-service.ts) deploys a single egress-only task. It has no load balancer or inbound security-group rule; NATS carries its read, admin, change-event, and reconciliation subjects. The task shares the application DynamoDB deployment but receives a role scoped to the pricing tables and read-only catalog access.
+
+The task emits one-minute CloudWatch Embedded Metric Format health events through its ordinary `awslogs` stream. Pulumi creates alarms for missing or stale snapshots, held or missing routes, parser failures, stale billing refresh, maintenance failures, and material reconciliation incidents. `MODEL_PRICING_ALARM_SNS_TOPIC_ARN` attaches an existing SNS topic to both `ALARM` and `OK` transitions. See [Model Pricing Operations](./MODEL-PRICING-OPERATIONS.md) for thresholds and runbooks.
 
 ## Web UI Deployment
 
@@ -378,6 +399,10 @@ Highlights:
 | `AI_TOKENS_USAGE_TRANSACTIONS` | `userId / transactionProcessedAt` | LSI x4 (document, model, org, formatted date) | Usage ledger |
 | `FINANCIAL_TRANSACTIONS` | `userId / transactionId` | LSI on status, createdAt, provider | Billing |
 | `AI_MODELS_LIST` | `provider / model` | — | Provider/model registry |
+| `MODEL_PRICING_SNAPSHOTS` | `recordKey / sortKey` | None | Active pointer, immutable manifests, activation history, and live hold projections. |
+| `MODEL_PRICING_RECORDS` | `snapshotId / pricingKey` | None | Immutable verified provider-cost records. |
+| `MODEL_PRICING_AUDIT` | `recordKey / sortKey` | None | Import and signed override audit events. |
+| `MODEL_PRICING_RECONCILIATION` | `recordKey / sortKey` | None | Billing predictions, provider actuals, watermarks, and incidents. |
 
 The six Asset/Blob tables have no GSIs; `ASSETS_META.updatedAt` is their only secondary index. Capability tables use their primary keys without GSIs. All real-AWS stacks enable DynamoDB **streams** with `NEW_AND_OLD_IMAGES` (skipped only for local DynamoDB). **Deletion protection** is additionally enabled on production stacks only. Retired document/thread/media-library table definitions exist only inside the explicit staged-removal helper and are excluded from the normal resource set.
 

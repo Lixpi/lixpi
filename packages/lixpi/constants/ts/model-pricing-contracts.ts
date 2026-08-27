@@ -156,6 +156,14 @@ export type PricingTableResponse = {
     records: ModelPriceRecord[]
 }
 
+export type PricingConsumerRefreshAcknowledgement = {
+    snapshotId: string
+}
+
+export type PricingConsumerRefreshAcknowledgementResponse = {
+    acknowledgedSnapshotId: string
+}
+
 export type PricingOverrideCommand = {
     commandId: string
     action: 'propose' | 'approve' | 'reject'

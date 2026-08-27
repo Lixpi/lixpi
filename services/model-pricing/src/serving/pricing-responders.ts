@@ -15,12 +15,22 @@ const requiredPricingKey = (value: unknown): string => {
     return pricingKey
 }
 
+const requiredSnapshotId = (value: unknown): string => {
+    if (!value || typeof value !== 'object' || typeof (value as { snapshotId?: unknown }).snapshotId !== 'string') {
+        throw new Error('snapshotId must be provided')
+    }
+    const snapshotId = (value as { snapshotId: string }).snapshotId.trim()
+    if (!snapshotId) throw new Error('snapshotId must not be empty')
+    return snapshotId
+}
+
 export class PricingResponders {
     constructor(
         private readonly nats: NatsService,
         private readonly storage: PricingStorage,
         private readonly overrides: PricingOverrideService,
         private readonly reconciliation: PricingReconciliationService,
+        private readonly onConsumerRefreshAcknowledged?: (snapshotId: string) => void,
     ) {}
 
     register(): void {
@@ -33,6 +43,15 @@ export class PricingResponders {
             return { manifest: table.manifest, record }
         })
         this.nats.reply(NATS_SUBJECTS.PRICING_SUBJECTS.TABLE_GET, async () => await this.requireActiveTable())
+        this.nats.reply(NATS_SUBJECTS.PRICING_SUBJECTS.CONSUMER_REFRESH_ACK, async request => {
+            const snapshotId = requiredSnapshotId(request)
+            const active = await this.storage.getActivePointer()
+            if (!active || active.snapshotId !== snapshotId) {
+                throw new Error(`Cannot acknowledge inactive pricing snapshot ${snapshotId}`)
+            }
+            this.onConsumerRefreshAcknowledged?.(snapshotId)
+            return { acknowledgedSnapshotId: snapshotId }
+        })
         this.nats.reply(NATS_SUBJECTS.PRICING_SUBJECTS.ADMIN_STATUS_GET, async () => {
             const active = await this.storage.getActivePointer()
             const holds = await this.storage.getCurrentHolds()

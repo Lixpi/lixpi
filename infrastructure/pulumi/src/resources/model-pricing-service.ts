@@ -12,6 +12,7 @@ import {
 import { LOG_RETENTION_DAYS } from '../constants/logging.ts'
 
 const { ORG_NAME, STAGE } = process.env
+const MODEL_PRICING_METRIC_NAMESPACE = 'Lixpi/ModelPricing'
 
 export type ModelPricingServiceArgs = {
     ecsCluster: {
@@ -28,6 +29,7 @@ export type ModelPricingServiceArgs = {
     openAiAdminApiKey?: pulumi.Input<string>
     dockerBuildContext: string
     dockerfilePath: string
+    alarmActions?: pulumi.Input<string>[]
     dependencies?: pulumi.Resource[]
 }
 
@@ -43,6 +45,7 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         openAiAdminApiKey,
         dockerBuildContext,
         dockerfilePath,
+        alarmActions = [],
         dependencies = [],
     } = args
     const serviceName = 'model-pricing'
@@ -153,6 +156,113 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         name: `/aws/ecs/${serviceName}`,
         retentionInDays: LOG_RETENTION_DAYS,
     })
+
+    const metricDimensions = {
+        Service: serviceName,
+        Stage: STAGE!,
+    }
+    const createMetricAlarm = (
+        resourceName: string,
+        args: Omit<aws.cloudwatch.MetricAlarmArgs, 'actionsEnabled' | 'alarmActions' | 'dimensions' | 'namespace' | 'okActions'>,
+    ): aws.cloudwatch.MetricAlarm => new aws.cloudwatch.MetricAlarm(`${serviceName}-${resourceName}`, {
+        ...args,
+        actionsEnabled: alarmActions.length > 0,
+        alarmActions,
+        okActions: alarmActions,
+        dimensions: metricDimensions,
+        namespace: MODEL_PRICING_METRIC_NAMESPACE,
+    })
+
+    const alarms = {
+        activeSnapshotMissing: createMetricAlarm('active-snapshot-missing-alarm', {
+            alarmDescription: 'Model pricing has no active verified snapshot or stopped publishing health telemetry. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'LessThanThreshold',
+            datapointsToAlarm: 2,
+            evaluationPeriods: 2,
+            metricName: 'ActiveSnapshotPresent',
+            period: 300,
+            statistic: 'Minimum',
+            threshold: 1,
+            treatMissingData: 'breaching',
+        }),
+        activeSnapshotStale: createMetricAlarm('active-snapshot-stale-alarm', {
+            alarmDescription: 'No model-pricing import has successfully reverified provider evidence for 36 hours. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 3,
+            evaluationPeriods: 3,
+            metricName: 'LastSuccessfulImportAgeSeconds',
+            period: 300,
+            statistic: 'Maximum',
+            threshold: 36 * 60 * 60,
+            treatMissingData: 'notBreaching',
+        }),
+        consumerRefreshStale: createMetricAlarm('consumer-refresh-stale-alarm', {
+            alarmDescription: 'No pricing-table consumer fetched the active snapshot within the alarm window. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 3,
+            evaluationPeriods: 3,
+            metricName: 'ConsumerRefreshPending',
+            period: 300,
+            statistic: 'Maximum',
+            threshold: 1,
+            treatMissingData: 'notBreaching',
+        }),
+        missingRoute: createMetricAlarm('missing-route-alarm', {
+            alarmDescription: 'At least one catalog pricing route has no active verified price record. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 1,
+            evaluationPeriods: 1,
+            metricName: 'MissingRouteCount',
+            period: 300,
+            statistic: 'Maximum',
+            threshold: 1,
+            treatMissingData: 'notBreaching',
+        }),
+        heldRoute: createMetricAlarm('held-route-alarm', {
+            alarmDescription: 'At least one catalog pricing candidate is held while the last verified record remains active. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 1,
+            evaluationPeriods: 1,
+            metricName: 'HeldRouteCount',
+            period: 300,
+            statistic: 'Maximum',
+            threshold: 1,
+            treatMissingData: 'notBreaching',
+        }),
+        parserFailure: createMetricAlarm('parser-failure-alarm', {
+            alarmDescription: 'An official provider source could not be parsed or verified for at least one catalog route. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 1,
+            evaluationPeriods: 1,
+            metricName: 'ParserFailureHoldCount',
+            period: 300,
+            statistic: 'Maximum',
+            threshold: 1,
+            treatMissingData: 'notBreaching',
+        }),
+        maintenanceFailure: createMetricAlarm('maintenance-failure-alarm', {
+            alarmDescription: 'A model-pricing import, reconciliation, pruning, or health task failed. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 1,
+            evaluationPeriods: 1,
+            metricName: 'MaintenanceFailureCount',
+            period: 300,
+            statistic: 'Sum',
+            threshold: 1,
+            treatMissingData: 'notBreaching',
+        }),
+        reconciliationIncident: createMetricAlarm('reconciliation-incident-alarm', {
+            alarmDescription: 'Provider actuals reconciliation has an open material incident. Follow documentation/platform/deployment/MODEL-PRICING-OPERATIONS.md.',
+            comparisonOperator: 'GreaterThanOrEqualToThreshold',
+            datapointsToAlarm: 1,
+            evaluationPeriods: 1,
+            metricName: 'ReconciliationMaterialIncidentCount',
+            period: 300,
+            statistic: 'Maximum',
+            threshold: 1,
+            treatMissingData: 'notBreaching',
+        }),
+    }
 
     const pricingServiceSecret = new aws.secretsmanager.Secret(`${serviceName}-nkey`, {
         name: `${formatStageResourceName(serviceName, ORG_NAME!, STAGE!)}/nats-service-nkey`,
@@ -279,5 +389,15 @@ export const createModelPricingService = (args: ModelPricingServiceArgs) => {
         dependsOn: [pricingServiceSecretVersion, ...(openAiAdminSecretVersion ? [openAiAdminSecretVersion] : []), ...dependencies],
     })
 
-    return { repository, image, executionRole, taskRole, taskDefinition, ecsService, pricingServiceSecret, openAiAdminSecret }
+    return {
+        repository,
+        image,
+        executionRole,
+        taskRole,
+        taskDefinition,
+        ecsService,
+        pricingServiceSecret,
+        openAiAdminSecret,
+        alarms,
+    }
 }

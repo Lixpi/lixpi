@@ -9,12 +9,14 @@ A Lixpi-owned [NATS NEX](https://github.com/synadia-io/nex) **node**: a process 
 
 | Workload | Type / lifecycle | What it does |
 |---|---|---|
-| `ai-models-sync` | `native` / `service` | Runs `AiModelsSync.synchronizeModels()` at boot and **every hour**, writing the `AI_MODELS_LIST` DynamoDB table. ([`workloads/ai-models-synchronization`](./workloads/ai-models-synchronization)) |
+| `ai-models-sync` | `native` / `service` | Runs `AiModelsSync.synchronizeModels()` at boot and **every hour**, writing route-aware catalog records to `AI_MODELS_LIST`, then publishing the completion hint consumed by model-pricing. ([`workloads/ai-models-synchronization`](./workloads/ai-models-synchronization)) |
 | `file-conversion` | `native` / `service` | Active responder on `blob.processing.generateRenditions`. It runs heavy image/video/audio/document transcoding and probing (sharp/ffmpeg/libreoffice/poppler) off the API. Jobs read content-addressed originals from the organization Blob bucket and write immutable canonical, preview, thumbnail, poster, and representative-frame outputs without DynamoDB access. Connects as the AUTH-account `regular_user` to reach Object Store. ([`workloads/file-conversion`](./workloads/file-conversion)) |
 | `character-fidelity` | `native` / `service` | Active responder for photographic Character Creator panel checks. It runs pinned OpenCV Zoo YuNet and SFace ONNX artifacts through single-threaded WASM, reads only validated organization-scoped transient objects, and returns detections plus scalar cosine similarity without embeddings. ([`workloads/character-fidelity`](./workloads/character-fidelity)) |
 | `system-reporter` | `native` / `service` | Trivial smoke-test workload (echoes uptime every 30 s). Deployed **manually** to prove the substrate. ([`workloads/system-reporter`](./workloads/system-reporter)) |
 
 `ai-models-sync` defines model-specific inference and media behavior. Every model record carries `inferenceCapabilities`, including temperature support, provider-native thinking mode, system-prompt support, structured-schema requirements, and accepted input kinds. Image-generation records also declare `imageReferenceCapabilities`: total and identity-reference limits, conditioning modes, fidelity behavior, iterative-edit and control support, maximum output pixels, and aspect ratios. Synchronization rejects missing or inconsistent profiles. API routing and provider adapters consume these fields without matching model names. Anthropic models sourced from Bedrock retain dated vendor snapshot IDs and accept pinned, dateless catalog IDs such as `claude-sonnet-5`, so synchronized selections use the exact model identifiers Bedrock exposes.
+
+Each catalog row also carries `pricingReference`, resolved from the same direct-versus-Bedrock deployment flags and billed region used by provider routing. The workload does not contain provider-cost or resale-margin values. After every successful catalog write set, it publishes `aiModels.syncCompleted`; model-pricing treats that event as a wake-up hint and reads the completed catalog itself.
 
 ## How it works
 

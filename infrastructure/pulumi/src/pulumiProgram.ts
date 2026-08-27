@@ -32,6 +32,7 @@ const {
     OPENAI_RECONCILIATION_ACCOUNT_REF,
     OPENAI_RECONCILIATION_PROJECT_IDS,
     OPENAI_RECONCILIATION_API_KEY_IDS,
+    MODEL_PRICING_ALARM_SNS_TOPIC_ARN,
     ANTHROPIC_API_KEY,
     ANTHROPIC_USE_AWS_BEDROCK_INFERENCE,
     STAGE,
@@ -461,6 +462,7 @@ export const createInfrastructure = async () => {
         },
         aiModelsListTable: dynamoDBtables.aiModelsListTable,
         environment: {
+            STAGE: STAGE!,
             NATS_SERVERS: natsClusterService.outputs.natsUrl,
             NATS_PRICING_OPERATOR_NKEY_PUBLIC: NATS_PRICING_OPERATOR_NKEY_PUBLIC!,
             MODEL_PRICING_SNAPSHOTS_TABLE: dynamoDBtables.modelPricingSnapshotsTable.name,
@@ -472,6 +474,7 @@ export const createInfrastructure = async () => {
             MODEL_PRICING_RECONCILIATION_MATERIAL_USD: '1',
             MODEL_PRICING_RECONCILIATION_USAGE_TOLERANCE_BPS: '100',
             MODEL_PRICING_RECONCILIATION_RETENTION_MS: '7776000000',
+            MODEL_PRICING_METRICS_INTERVAL_MS: '60000',
             ...(OPENAI_RECONCILIATION_ACCOUNT_REF && { OPENAI_RECONCILIATION_ACCOUNT_REF }),
             ...(OPENAI_RECONCILIATION_PROJECT_IDS && { OPENAI_RECONCILIATION_PROJECT_IDS }),
             ...(OPENAI_RECONCILIATION_API_KEY_IDS && { OPENAI_RECONCILIATION_API_KEY_IDS }),
@@ -482,6 +485,7 @@ export const createInfrastructure = async () => {
         openAiAdminApiKey: OPENAI_ADMIN_API_KEY,
         dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/model-pricing/Dockerfile',
+        alarmActions: MODEL_PRICING_ALARM_SNS_TOPIC_ARN ? [MODEL_PRICING_ALARM_SNS_TOPIC_ARN] : [],
         dependencies: [natsClusterService.ecsService],
     })
 

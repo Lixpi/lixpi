@@ -26,7 +26,8 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, organization Blob Object Store, and JetStream replay logs for pipeline/Asset-document events |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
 | **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
-| **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
+| **model-pricing** | Node.js / TypeScript | `services/model-pricing/` | Dedicated provider-cost authority. Imports and verifies immutable route-aware snapshots, serves billing over the private `PRICING` NATS account, and reconciles predicted cost against provider actuals. |
+| **DynamoDB** | AWS (local via Docker) | n/a | Asset/Blob metadata and references, Workspaces, Capabilities, Capability Runs, users, AI model metadata, and model-pricing snapshots/audit/reconciliation records. |
 
 {% callout type="note" %}
 **Historical note.** LLM orchestration used to live in a separate Python `services/llm-api/` Fargate task using the Python LangGraph package. It was absorbed into `services/api` once the TypeScript LangGraph package covered Lixpi's workflow needs. The in-process LangGraph workflow now runs alongside the gateway logic in the `api` container. For the internal-service NATS auth pattern that the former Python service used — and that a future split would reuse — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
@@ -50,6 +51,7 @@ graph TB
     subgraph Backend["API Tier"]
         API["api service<br/>Auth · CRUD · NATS Bridge"]
         LLM["In-process LangGraph workflow<br/>pipeline events · ProseMirror steps · media"]
+        Pricing["model-pricing<br/>verified snapshots · serving · reconciliation"]
     end
 
     subgraph Workers["NEX Workloads"]
@@ -61,17 +63,20 @@ graph TB
     end
 
     subgraph Storage["Storage & Providers"]
-        DDB[("DynamoDB<br/>Assets · Blobs · Workspaces · Capabilities · Users")]
+        DDB[("DynamoDB<br/>application data · pricing snapshots")]
         Provider(("AI Providers<br/>OpenAI · Anthropic · Google"))
     end
 
     UI <-->|WebSocket app commands + live/replayable AI events| NATS
     UI -->|HTTPS media bytes + workspace export/import| API
     NATS <-->|Publish / Subscribe| API
+    NATS <-->|Private pricing request/reply| Pricing
     API --> LLM
     API --> DDB
     API <-->|Object Store + JetStream stream API| NATS
     NEX <-->|NATS request/reply + Object Store| NATS
+    Pricing --> DDB
+    Pricing <-->|Official rates + actuals| Provider
     LLM -->|Pipeline events + ProseMirror steps| NATS
     LLM <-->|Vendor SDK calls| Provider
     API -.->|JWT verify| Auth
@@ -83,9 +88,10 @@ graph TB
 | Broker | NATS Cluster | Carries app commands, auth callouts, CRUD requests, AI pipeline events, replay logs, Asset-role ProseMirror steps, and rendition requests; stores immutable Blob objects in organization Object Store buckets |
 | API | api service | Validates tokens, performs CRUD against DynamoDB, hosts byte-oriented HTTP routes, and bridges browser requests to the in-process workflow |
 | API | LangGraph workflow | Resolves sealed Capabilities, streams the text model, routes image/video Tool calls, and publishes pipeline events plus ProseMirror transcript steps to NATS |
+| Backend | model-pricing | Produces immutable provider-evidenced rate snapshots, serves the active table to billing, records signed overrides, and reconciles billing predictions with provider actuals. |
 | Workers | NEX workloads | Run long-lived background services on NATS, including file conversion/probing and AI-model catalog synchronization |
 | Identity | Auth0 / LocalAuth0 | Issues RS256 user JWTs and exposes a JWKS endpoint for verification |
-| Storage | DynamoDB | Persists Asset/Blob registries and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
+| Storage | DynamoDB | Persists application records and the model-pricing service's immutable snapshots, audit events, and reconciliation evidence. |
 | Storage | AI Providers | External text, image, and video models invoked through vendor SDKs |
 
 ## NATS as the Backbone
@@ -140,7 +146,7 @@ These decisions define the shape of the system and keep subsystem changes from s
 
 ### NATS-First
 
-App commands, auth callouts, Workspace and Asset mutations, canvas-state saves, Blob storage, AI pipeline events, and Asset-role ProseMirror transport all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes live pipeline events directly onto the conversation Asset subjects the browser is already subscribed to, there is no extra HTTP hop between provider output and browser updates. JetStream sits beside that live path for replay and storage, not as a polling layer.
+App commands, auth callouts, Workspace and Asset mutations, canvas-state saves, Blob storage, AI pipeline events, Asset-role ProseMirror transport, and private pricing request/reply all center on NATS. The browser connects to NATS via WebSocket. Because the LLM workflow publishes live pipeline events directly onto the conversation Asset subjects the browser is already subscribed to, there is no extra HTTP hop between provider output and browser updates. JetStream sits beside that live path for replay and storage, not as a polling layer.
 
 The exception is byte transport: media upload/download, video range reads, authenticated previews, and workspace import/export use HTTP because browsers and archives already speak HTTP well.
 
@@ -157,6 +163,8 @@ Application services provide infrastructure through typed ports defined by the m
 ### Provider-Agnostic AI
 
 Every AI request sends the full conversation history; no provider-specific session IDs are stored. A user can start a conversation with Claude, switch to GPT, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`. The shared LangGraph workflow resolves sealed Tools and Skills plus branch candidates, executes explicitly required Tools, streams the text model with `search_capabilities` and `use_capability`, then conditionally routes `generate_image` and `generate_video` calls through transient media providers before calculating usage and cleaning up. See [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md).
+
+Provider selection and provider cost remain separate. Each catalog model carries an opaque route-aware `pricingReference`; metering sends that reference plus units and selectors, never money or a bare model string. Billing resolves the active verified provider rate and applies its own commercial policy.
 
 ### Explicit Context Extraction
 
@@ -203,7 +211,7 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 
 | Package | Purpose |
 |---------|---------|
-| `@lixpi/constants` | Shared NATS subjects, shared types, AI model metadata with pricing |
+| `@lixpi/constants` | Shared NATS subjects and types, including route-aware pricing references and usage-metering contracts without provider-cost literals. |
 | `@lixpi/capability-system` | Self-contained concrete Capability modules plus cross-runtime validation, backend resolution, action registration, workflow execution, dispatch, module composition, and provider-neutral model Tool definitions |
 | `@lixpi/canvas-engine` | Shared canvas geometry, collision, lineage layout, connector, animation, and rendering modules split by runtime boundary |
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream stream/direct-message helpers, JetStream Object Store helpers, NKey auth |

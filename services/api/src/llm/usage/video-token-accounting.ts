@@ -56,17 +56,13 @@ export type VideoFrameSize = {
 // that the balance cannot cover, which is the exact failure this path exists to
 // remove. Round real values up rather than reproducing them exactly if in doubt.
 //
-// Calibration against first-party prices, 16:9 only. BytePlus publishes per-video
-// prices for 5s 16:9 clips. Inverting price / token-rate back through the formula
-// above yields the true pixel area, and every placeholder lands just above it:
-//
-//   480p   $0.35 at $7.0/M  ->   426,667 px;   864x496 =   428,544 px  (+0.4%)
-//   720p   $0.76 at $7.0/M  ->  ~926,476 px;  1280x720 =   921,600 px  (agrees
-//          within the rounding of a 2-decimal price: 1280x720 prices at $0.756)
-//   1080p  $1.87 at $7.7/M  -> 2,072,381 px; 1920x1088 = 2,088,960 px  (+0.8%)
+// A one-time comparison with first-party 5-second 16:9 examples put these
+// provisional areas within the provider's published rounding tolerance. The
+// comparison is evidence for the usage estimate only; provider-cost values stay
+// behind the pricing service and are intentionally not copied here.
 //
 // This is why the bias rule is not merely cautious: source A's 480p 16:9 864x480
-// would have come in 2.8% LOW, undercharging the gate. Still unvalidated: every
+// would have come in 2.8% low, understating the gate. Still unvalidated: every
 // non-16:9 ratio, and 720p/1080p on anything but the single published sample.
 // No cell is promoted out of provisional status on this evidence, and the
 // PROVISIONAL_ naming stays until the vendor's own table replaces it.

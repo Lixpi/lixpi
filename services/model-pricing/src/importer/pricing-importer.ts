@@ -128,6 +128,10 @@ export class PricingImporter {
         return { snapshotId, records: stagedRecords.length, holds: holds.length }
     }
 
+    async getCatalogPricingKeys(): Promise<string[]> {
+        return [...new Set((await this.loadCatalogModels()).map(model => model.pricingKey))]
+    }
+
     private async loadCatalogModels(): Promise<CatalogPricingModel[]> {
         const response = await this.dynamo.scanItems({ tableName: this.catalogTable, fetchAllItems: true, origin: 'model-pricing.catalog-scan' })
         const items = (response?.items ?? []) as Record<string, unknown>[]

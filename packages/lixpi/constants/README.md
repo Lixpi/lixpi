@@ -18,7 +18,9 @@ Capability data contracts remain in `ts/types.ts`. Manifest, workflow, resource,
 
 `ts/metrics-contracts.ts` defines the route-aware usage-metering check/confirm request/response shapes served by the hosted metering backend over the `METRICS_SUBJECTS` subjects. Each request carries a `PricingLookup` and dimensioned usage, never a bare model string or money. Together with `METRICS_SUBJECTS` in `nats-subjects.json`, it is a cross-repo wire contract — do not change it without mirroring the metering backend in the same change.
 
-`ts/model-pricing-contracts.ts` defines the pricing-service lookup, dimensions, and opaque route-aware key primitives. `ts/provider-route-config.ts` is the single catalog-side resolver for direct versus Bedrock pricing and produces the staged `AiModel.pricingReference`. `PRICING_SUBJECTS` reserves the dedicated pricing service/admin/reconciliation NATS contract; callers must never infer a pricing key from a bare model name.
+`ts/model-pricing-contracts.ts` defines the pricing-service lookup, exact selector dimensions, immutable snapshot/record shapes, post-install consumer acknowledgement, signed override commands, and reconciliation facts. `ts/provider-route-config.ts` is the catalog-side resolver for direct versus Bedrock routing and produces each required `AiModel.pricingReference`. `PRICING_SUBJECTS` defines the dedicated pricing read, change-event, consumer-acknowledgement, admin, and reconciliation NATS contract. Callers treat `pricingKey` as opaque and never infer it from a bare model name.
+
+These contracts carry provider cost only. They contain no resale margin, customer charge, discount, tax, credit, or balance policy. Lixpi sends `PricingLookup` plus measured integer usage to the metering boundary; billing validates a complete active snapshot, pins the selected snapshot and rate variant for an operation, and applies its private commercial policy.
 
 ## Main files
 
@@ -53,4 +55,4 @@ const createAssetSubject = NATS_SUBJECTS.ASSET_SUBJECTS.CREATE
 const renditionSubject = NATS_SUBJECTS.BLOB_PROCESSING_SUBJECTS.GENERATE_RENDITIONS
 ```
 
-Edit `nats-subjects.json` once; TypeScript wrappers consume it directly. The preserved Python wrapper is for non-runtime legacy tooling and future service splits, not an alternate active storage contract.
+Edit `nats-subjects.json` once; TypeScript wrappers consume it directly. The Python wrapper supports non-runtime tooling and possible service splits; it is not an alternate active storage contract.

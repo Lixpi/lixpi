@@ -145,6 +145,7 @@
 		"MODEL_GET": "pricing.model.get",
 		"TABLE_GET": "pricing.table.get",
 		"CHANGED": "pricing.changed",
+		"CONSUMER_REFRESH_ACK": "pricing.consumer.refresh.ack",
 		"ADMIN_STATUS_GET": "pricing.admin.status.get",
 		"ADMIN_OVERRIDE_COMMAND": "pricing.admin.override.command",
 		"RECONCILIATION_PREDICTED_DAILY": "pricing.reconciliation.predicted.daily"

@@ -92,9 +92,11 @@ export class PricingStorage {
         }
 
         const heldPricingKeys = new Set(holds.map(hold => hold.pricingKey))
-        const resolvedPricingKeys = records
-            .map(record => record.pricingKey)
-            .filter(pricingKey => !heldPricingKeys.has(pricingKey))
+        const currentHolds = await this.getCurrentHolds()
+        const resolvedPricingKeys = [...new Set([
+            ...records.map(record => record.pricingKey),
+            ...currentHolds.map(hold => hold.pricingKey),
+        ])].filter(pricingKey => !heldPricingKeys.has(pricingKey))
         if (resolvedPricingKeys.length > 0) {
             await this.batchWriteOrThrow({
                 tableName: this.tables.snapshots,
@@ -207,7 +209,8 @@ export class PricingStorage {
             consistentRead: true,
             origin: 'model-pricing.current-holds',
         })
-        return ((response?.items ?? []) as CandidateHold[]).filter(hold => typeof hold.candidateHash === 'string')
+        return ((response?.items ?? []) as Array<CandidateHold & { resolvedAt?: string }>)
+            .filter(hold => !hold.resolvedAt && typeof hold.reason === 'string')
     }
 
     async getApprovedOverride(pricingKey: string, candidateHash: string): Promise<ApprovedOverride | undefined> {

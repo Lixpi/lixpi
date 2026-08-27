@@ -12,8 +12,8 @@ import { estimateVideoTokens } from './video-token-accounting.ts'
 // bound for the selected model's billable usage.
 //
 // Over-estimating only makes the admission gate stricter. Under-estimating lets a
-// run past a balance that cannot cover it, and a zero here prices the whole check
-// at $0.00, which approves everything and defeats the gate entirely.
+// run past a balance that cannot cover it, and a zero usage estimate can approve
+// work without reserving for its provider cost.
 //
 // CheckRequest names one pricing key and one modality. resolveCheckModality
 // derives the modality from the selected model itself, never from what the run

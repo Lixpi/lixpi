@@ -25,6 +25,8 @@ Both paths converge on `@lixpi/auth-service`, the shared verifier described belo
 
 NEX is the current NATS-native internal tool. Its seed, `NATS_NEX_NODE_NKEY_SEED`, belongs only in the NEX runtime. Its public key, `NATS_NEX_NODE_NKEY_PUBLIC`, is used in three places: NEX passes it to the NATS client as the public half of the native NKey credential, the NATS server config lists it so the server advertises a nonce for native NKey challenge signing, and the API auth callout uses it to verify the raw NKey signature. The NATS config entry is protocol support, not the final authorization decision; centralized auth callout still returns the user JWT that lands NEX in the `NEX` account.
 
+The model-pricing service, pricing operators, and billing's pricing client also use native NKey challenge-response. The auth callout places their registered public keys in the private `PRICING` account with separate subject allowlists for serving, signed administration, and billing refresh/reconciliation. Each public-key variable accepts a comma-separated overlap during rotation; seeds remain only in the owning runtime.
+
 ## Authentication Flow
 
 The end-to-end flow for a browser user is: obtain a token from the identity provider, connect to NATS presenting that token, let the auth callout verify the connection and subject permissions, then include the current JWT in each request payload so the API handler can verify the user again before touching data.
@@ -227,9 +229,7 @@ For internal services that need to publish/subscribe on NATS without depending o
 - **No external dependency** — a service can authenticate even if Auth0 is unreachable, which is essential for backend-to-backend traffic.
 - Each service is registered with scoped permissions for exactly the subjects it needs.
 
-{% callout type="note" %}
-The `serviceAuthConfigs` array in `services/api/src/server.ts` is currently **empty** (`serviceAuthConfigs: []`) — no internal service is registered today, because the LLM workflow runs in-process within the API rather than as a separate NATS client. Registering a new entry per service is what would light up Mode 2, for example when splitting out an `llm-workers` service (see [System Architecture](./SYSTEM-ARCHITECTURE.md)). For the full recipe — keypair generation, JWT signing, registration, and permission scoping — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
-{% /callout %}
+`services/api/src/server.ts` registers the NEX identity and the three pricing identities with exact subject permissions. The in-process LLM workflow needs no internal-service identity. A future `llm-workers` split would add another reviewed entry. See [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md) for the registration recipe and [Model Pricing Operations](./deployment/MODEL-PRICING-OPERATIONS.md) for pricing-key rotation.
 
 ## LocalAuth0: Zero-Config Offline Development
 
