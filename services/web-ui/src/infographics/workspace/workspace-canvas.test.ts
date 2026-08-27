@@ -1989,7 +1989,9 @@ describe('Right side panel — TS infrastructure', () => {
 			scss,
 			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover'
 		)
-		const rightRailStart = svelte.indexOf('<div class="workspace-canvas-right-control-rail">')
+		const rightRailStart = svelte.indexOf(
+			'<div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">'
+		)
 		const rightRailEnd = svelte.indexOf('\n    </div>\n\n    <input', rightRailStart)
 		const rightRailMarkup = svelte.slice(rightRailStart, rightRailEnd)
 		const screenGlassTargets = extractFunctionBody(pixiMediaLayer, 'getScreenGlassBorderTargets')
@@ -2000,7 +2002,8 @@ describe('Right side panel — TS infrastructure', () => {
 		)
 		expectSourceToContain(svelte, 'workspace-canvas-right-control-rail')
 		expectSourceToContain(svelte, 'class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}')
-		expectSourceToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
+		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-panel"')
+		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
 		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
 		expectSourceNotToContain(svelte, 'workspace-canvas-media-mode-panel-right')
 		expect(rightRailStart).toBeGreaterThan(-1)
@@ -2016,6 +2019,8 @@ describe('Right side panel — TS infrastructure', () => {
 		expectExcerptToContain(leftRailItems, 'right: auto;', 'left control rail')
 		expectExcerptToContain(rightRail, 'left: calc(', 'right control rail')
 		expectExcerptToContain(rightRail, 'display: flex;', 'right control rail')
+		expectExcerptToContain(rightRail, 'gap: 2px;', 'right control rail')
+		expectExcerptToContain(rightRail, 'border-radius: 9999px;', 'right control rail')
 		expectSourceToContain(scss, '--workspace-canvas-media-mode-panel-width: 76px;')
 		expectExcerptToContain(modelMenuPanel, 'padding: 0;', 'model menu panel')
 		expectExcerptToContain(modelMenuTrigger, 'width: 100%;', 'model menu trigger')
@@ -2027,6 +2032,9 @@ describe('Right side panel — TS infrastructure', () => {
 			'background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);',
 			'model menu trigger active state'
 		)
+		expectSourceToContain(screenGlassTargets, "id: 'workspace-right-control-rail'")
+		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-media-mode-panel'")
+		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-model-menu-panel'")
 
 		expectSourceToContain(ts, 'modelMenuControlMountEl: HTMLDivElement')
 		expectSourceToContain(
@@ -2038,8 +2046,6 @@ describe('Right side panel — TS infrastructure', () => {
 			'mountModelMenuControl: controlElement => options.modelMenuControlMountEl.replaceChildren(controlElement),'
 		)
 		expectSourceToContain(screenGlassTargets, "id: 'workspace-media-library-panel'")
-		expectSourceToContain(screenGlassTargets, "id: 'workspace-media-mode-panel'")
-		expectSourceToContain(screenGlassTargets, "id: 'workspace-model-menu-panel'")
 		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-action-panel-right'")
 	})
 

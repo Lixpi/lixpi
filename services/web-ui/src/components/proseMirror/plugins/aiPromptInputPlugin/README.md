@@ -89,7 +89,7 @@ The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels
 
 `createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` and `mountModelMenuControl()` to portal those controls into adjacent layout chrome; otherwise they remain children of the node view.
 
-The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
+The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. The instance receives its restrained blue track and stronger light-blue selected circle from `settings.slidingSwitch.styles`. The inactive icon uses a translucent `colorPalette.nightBlue`, reaches the solid color on hover, and renders black when selected. It omits the shared indicator inset shadow so no highlight crescent is drawn. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
 
 ```text
 div.ai-prompt-input-wrapper[data-empty]
@@ -124,7 +124,7 @@ Model selectors use the ui-kit sliding dropdown. Every option renders its provid
 
 ## Model Settings Menu
 
-The model settings button is created by `createModelMenuTrigger()` and opens a shared `BubbleMenu` anchored to the trigger. Its visible summary contains only the selected model and configuration values because the adjacent Image / Video switch already shows the active media mode. Hosts may mount the button outside the prompt wrapper while the menu remains owned and positioned by the NodeView. In the workspace right control rail, the button fills its outer pill and uses that full surface for hover and active states.
+The model settings button is created by `createModelMenuTrigger()` and opens a shared `BubbleMenu` anchored to the trigger. Its visible summary subscribes to the AI model catalog so asynchronously loaded model metadata and matrix defaults replace temporary raw ids. The summary contains the selected model's provider icon and configuration values because the adjacent Image / Video switch already shows the active media mode. Aspect ratios use the same proportional rectangle glyph as the matrix control, durations use `clockIcon`, the model boundary uses the fading vertical separator from the canvas node footer, and configuration values use dot separators. Hosts may mount the button outside the prompt wrapper while the menu remains owned and positioned by the NodeView. In the workspace right control rail, the mode switch and model settings button share one pill. The button keeps its own full-height oval hover and active surface inside that pill.
 
 The menu content is built from three `ai-prompt-model-menu-section` blocks:
 
@@ -180,7 +180,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## Workspace Surfaces
 
-`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. The right control rail contains the Image / Video switch followed by the current model-configuration control. The Media Library and upload/image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
+`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. One pill in the right control rail contains the Image / Video switch followed by the current model-configuration control. The Media Library and upload/image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
 
 ## Styling
 

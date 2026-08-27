@@ -778,10 +778,10 @@
         </div>
     </div>
 
-    <div class="workspace-canvas-right-control-rail">
+    <div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">
         <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
         <div
-            class="workspace-canvas-action-panel workspace-canvas-model-menu-panel"
+            class="workspace-canvas-model-menu-panel"
             bind:this={modelMenuControlMountEl}
         ></div>
     </div>

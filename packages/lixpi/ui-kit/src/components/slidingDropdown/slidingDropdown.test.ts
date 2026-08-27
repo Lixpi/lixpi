@@ -234,6 +234,46 @@ describe('createSlidingDropdown — pointer selection', () => {
         expect(slidingDropdown.getValue()).toBe('portrait')
         expect(onChange).toHaveBeenCalledExactlyOnceWith('portrait', 'dimensions')
     })
+
+    it('passes selected, hovered, and disabled colors to custom renderers', () => {
+        const renderedColors = new Map<Value, string>()
+        uiKitSettings.slidingDropdown.styles.option.textColor = '#102030'
+        uiKitSettings.slidingDropdown.styles.option.activeTextColor = '#405060'
+        uiKitSettings.slidingDropdown.styles.option.disabledTextColor = '#708090'
+
+        const host = document.createElement('div')
+        const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
+        host.appendChild(svg)
+        document.body.appendChild(host)
+        setRect(host, { width: WIDTH * 2, height: HEIGHT * 2 })
+        const slidingDropdown = createSlidingDropdown<Value>(select(svg), {
+            id: 'custom-colors',
+            x: 0,
+            y: 0,
+            width: WIDTH,
+            height: HEIGHT,
+            options: OPTIONS.map(option => ({
+                ...option,
+                ...(option.value === 'portrait' ? { disabled: true } : {}),
+            })),
+            selectedValue: 'square',
+            observeParentResize: false,
+            transition: IMMEDIATE_TRANSITION,
+            renderOption: (_parent, state) => ({
+                render: nextState => renderedColors.set(nextState.option.value, nextState.color),
+            }),
+        })
+
+        expect(renderedColors.get('square')).toBe('#405060')
+        expect(renderedColors.get('landscape')).toBe('#102030')
+        expect(renderedColors.get('portrait')).toBe('#708090')
+
+        slidingDropdown.setOpen(true)
+        svg.querySelector('.sliding-dropdown-option-group[data-value="landscape"]')
+            ?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+
+        expect(renderedColors.get('landscape')).toBe('#405060')
+    })
 })
 
 // =============================================================================

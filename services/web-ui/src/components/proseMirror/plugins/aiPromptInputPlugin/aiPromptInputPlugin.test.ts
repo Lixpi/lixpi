@@ -366,10 +366,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(track.getAttribute('width')).toBe('76')
         expect(track.getAttribute('height')).toBe('40')
         expect(track.getAttribute('rx')).toBe('20')
+        expect(track.getAttribute('fill')).toBe(settings.slidingSwitch.styles.trackBackgroundColor)
         expect(indicator.getAttribute('width')).toBe('36')
         expect(indicator.getAttribute('height')).toBe('36')
         expect(indicator.getAttribute('rx')).toBe('18')
-        expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['image', 'video'])
+        expect(indicator.getAttribute('fill')).toBe(settings.slidingSwitch.styles.indicatorBackgroundColor)
+        expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['video', 'image'])
         expect(hits.map(hit => [hit.getAttribute('x'), hit.getAttribute('width'), hit.getAttribute('height')])).toEqual([
             ['2', '36', '36'],
             ['38', '36', '36'],
@@ -378,11 +380,22 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(iconGroups.every(group => group.querySelector('path') !== null)).toBe(true)
         expect(svg.querySelectorAll('text')).toHaveLength(0)
 
-        optionGroups[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+        const imageOption = svg.querySelector('.sliding-switch-option-group[data-value="image"]')!
+        const videoOption = svg.querySelector('.sliding-switch-option-group[data-value="video"]')!
+        const imageIconPath = imageOption.querySelector('path')
+        const videoIconPath = videoOption.querySelector('path')
+        expect(imageIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.selectedOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.unselectedOptionColor)
+
+        videoOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }))
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.hoveredOptionColor)
+
+        videoOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
         expect(mockView.state.doc.firstChild!.attrs.mediaGenerationMode).toBe('video')
-        expect(optionGroups[0]!.getAttribute('aria-checked')).toBe('false')
-        expect(optionGroups[1]!.getAttribute('aria-checked')).toBe('true')
+        expect(imageOption.getAttribute('aria-checked')).toBe('false')
+        expect(videoOption.getAttribute('aria-checked')).toBe('true')
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.selectedOptionColor)
     })
 
     it('mounts the icon switch outside the input wrapper when requested and removes it on destroy', () => {
@@ -555,7 +568,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         modelMenuControlMountEl.remove()
     })
 
-    it('summarizes the selected model and its configuration without repeating the media type', () => {
+    it('summarizes the selected model and image configuration with their icons', () => {
         aiModelsStore.setAiModelsCatalog({
             models: [
                 {
@@ -605,10 +618,134 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             })
 
             const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
-            expect(summary?.textContent).toBe('Imagen 4 · Square')
+            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                .map(label => label.textContent)).toEqual(['Imagen 4', 'Square'])
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-icon svg')).not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-separator')).not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon'))
+                .not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-dot-separator')).toBeNull()
 
             nv.destroy!()
         } finally {
+            aiModelsStore.resetStore()
+        }
+    })
+
+    it('summarizes video settings with an aspect glyph, clock, and dot separators', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [
+                {
+                    provider: 'OpenAI',
+                    model: 'sora-2',
+                    shortTitle: 'Sora 2',
+                    iconName: 'gptAvatarIcon',
+                    modalities: [{ modality: 'video_generation' }],
+                },
+            ],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [
+                    {
+                        groupId: 'video:openai',
+                        mediaType: 'video',
+                        provider: 'OpenAI',
+                        title: 'OpenAI video models',
+                        modelIds: ['OpenAI:sora-2'],
+                        controls: [
+                            {
+                                key: 'aspectRatio',
+                                label: 'Aspect ratio',
+                                kind: 'segmented',
+                                options: [{ value: '16:9', label: 'Widescreen' }],
+                                defaultValue: '16:9',
+                            },
+                            {
+                                key: 'resolution',
+                                label: 'Resolution',
+                                kind: 'segmented',
+                                options: [{ value: '1080p', label: '1080p' }],
+                                defaultValue: '1080p',
+                            },
+                            {
+                                key: 'duration',
+                                label: 'Duration',
+                                kind: 'segmented',
+                                options: [{ value: '-1', label: 'Automatic' }],
+                                defaultValue: '-1',
+                            },
+                        ],
+                    },
+                ],
+            },
+        } as any)
+
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            const { nv } = createNodeView('Hello', {
+                mediaGenerationMode: 'video',
+                aiVideoModels: JSON.stringify(['OpenAI:sora-2']),
+                videoGenerationConfigGroups: JSON.stringify([
+                    {
+                        groupId: 'video:openai',
+                        modelIds: ['OpenAI:sora-2'],
+                        values: { aspectRatio: '16:9', resolution: '1080p', duration: '-1' },
+                    },
+                ]),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            })
+
+            const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
+            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                .map(label => label.textContent)).toEqual(['Sora 2', 'Widescreen', '1080p', 'Smart length'])
+            expect(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-separator')).toHaveLength(1)
+            expect(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-dot-separator')).toHaveLength(2)
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon')).not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-clock-icon svg')).not.toBeNull()
+
+            nv.destroy!()
+        } finally {
+            aiModelsStore.resetStore()
+        }
+    })
+
+    it('refreshes the summary after the AI model catalog loads', () => {
+        aiModelsStore.resetStore()
+        let nv: ReturnType<typeof createNodeView>['nv'] | null = null
+
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            nv = createNodeView('Hello', {
+                aiImageModels: JSON.stringify(['OpenAI:gpt-image-2']),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            }).nv
+
+            const getModelLabel = () => modelMenuControlMountEl.querySelector(
+                '.ai-prompt-model-menu-trigger-summary-label',
+            )?.textContent
+            expect(getModelLabel()).toBe('gpt-image-2')
+
+            aiModelsStore.setAiModelsCatalog({
+                models: [
+                    {
+                        provider: 'OpenAI',
+                        model: 'gpt-image-2',
+                        shortTitle: 'GPT Image 2',
+                        iconName: 'gptAvatarIcon',
+                        modalities: [{ modality: 'image_generation' }],
+                    },
+                ],
+                mediaGenerationConfigMatrix: {
+                    version: 'media-generation-config-matrix-v1',
+                    groups: [],
+                },
+            } as any)
+
+            expect(getModelLabel()).toBe('GPT Image 2')
+        } finally {
+            if (nv?.destroy) nv.destroy()
             aiModelsStore.resetStore()
         }
     })

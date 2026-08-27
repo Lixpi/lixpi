@@ -908,7 +908,12 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         sourceIndex: number,
     ): SlidingDropdownOptionRenderState<Value> {
         const selectedValue = this.pendingValue ?? this.currentValue
+        const selected = option.value === selectedValue
+        const hovered = this.hoveredValue === option.value
         const disabled = option.disabled ?? false
+        const color = disabled
+            ? this.styles.option.disabledTextColor
+            : selected || hovered ? this.styles.option.activeTextColor : this.styles.option.textColor
         return {
             id: `${this.id}:${option.value}`,
             option,
@@ -917,10 +922,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             y: sourceIndex * this.height + PADDING,
             width: this.width - PADDING * 2,
             height: this.height - PADDING * 2,
-            selected: option.value === selectedValue,
-            hovered: this.hoveredValue === option.value,
+            selected,
+            hovered,
             disabled,
             closable: false,
+            color,
             onClose: () => undefined,
         }
     }
@@ -1073,11 +1079,6 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const state = this.createOptionState(view.option, view.sourceIndex)
         const layoutState = this.createOptionLayoutState(state)
         const visible = this.open || this.animating || state.selected
-        const textColor = state.disabled
-            ? this.styles.option.disabledTextColor
-            : state.selected || state.hovered
-                ? this.styles.option.activeTextColor
-                : this.styles.option.textColor
 
         view.group
             .attr('display', visible ? null : 'none')
@@ -1111,7 +1112,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         view.label
             ?.attr('x', layoutState.x + this.optionHorizontalPadding)
             .attr('y', layoutState.y + layoutState.height / 2)
-            .attr('fill', textColor)
+            .attr('fill', state.color)
             .attr(
                 'font-weight',
                 state.selected ? this.styles.option.selectedFontWeight : this.styles.option.fontWeight,

@@ -11,6 +11,7 @@ import {
 } from '@lixpi/ui-kit/components/sliding-switch'
 import {
     appendSvgPathIcon,
+    clockIcon,
     imageIcon,
     plusIcon,
     videoIcon,
@@ -153,9 +154,58 @@ const mediaModeIconSize = 20
 
 type MediaGenerationMode = 'image' | 'video'
 
+type ModelMenuTriggerSummaryItem = {
+    label: string
+    icon?: string
+    iconVariant?: 'clock'
+    aspectRatio?: string
+}
+
 const mediaModeIcons: Record<MediaGenerationMode, string> = {
     image: imageIcon,
     video: videoIcon,
+}
+
+function createModelMenuTriggerSummaryAspectRatioIcon(value: string): HTMLElement | null {
+    const [widthValue, heightValue] = value.split(':').map(Number)
+    if (!widthValue || !heightValue) return null
+
+    const glyphStyles = settings.aiModelControls.styles.dimensionsGlyph
+    const summaryScale = 0.85
+    const ratio = widthValue / heightValue
+    const width = Math.sqrt(glyphStyles.targetArea * ratio)
+    const height = width / ratio
+    const scale = Math.min(1, glyphStyles.maxDimension / Math.max(width, height))
+    const aspectRatioIconStyle = {
+        width: `${width * scale * summaryScale}px`,
+        height: `${height * scale * summaryScale}px`,
+        borderRadius: `${glyphStyles.cornerRadius * summaryScale}px`,
+        borderWidth: `${glyphStyles.strokeWidth * summaryScale}px`,
+    }
+
+    return html`
+        <span
+            className="ai-prompt-model-menu-trigger-summary-aspect-ratio-icon"
+            style=${aspectRatioIconStyle}
+            aria-hidden="true"
+        ></span>
+    ` as HTMLSpanElement
+}
+
+function createModelMenuTriggerSummaryItem(item: ModelMenuTriggerSummaryItem): HTMLElement {
+    return html`
+        <span className="ai-prompt-model-menu-trigger-summary-item">
+            ${item.icon ? html`
+                <span
+                    className=${`ai-prompt-model-menu-trigger-summary-icon${item.iconVariant === 'clock' ? ' ai-prompt-model-menu-trigger-summary-clock-icon' : ''}`}
+                    innerHTML=${item.icon}
+                    aria-hidden="true"
+                ></span>
+            ` : null}
+            ${item.aspectRatio ? createModelMenuTriggerSummaryAspectRatioIcon(item.aspectRatio) : null}
+            <span className="ai-prompt-model-menu-trigger-summary-label">${item.label}</span>
+        </span>
+    ` as HTMLSpanElement
 }
 
 class MediaModeSwitchOptionView implements SlidingSwitchOptionRenderInstance<MediaGenerationMode> {
@@ -171,7 +221,7 @@ class MediaModeSwitchOptionView implements SlidingSwitchOptionRenderInstance<Med
             x: 0,
             y: 0,
             size: mediaModeIconSize,
-            fill: settings.slidingDropdown.styles.option.textColor,
+            fill: state.color,
         })
         this.render(state)
     }
@@ -185,11 +235,7 @@ class MediaModeSwitchOptionView implements SlidingSwitchOptionRenderInstance<Med
     }
 
     render(state: SlidingSwitchOptionRenderState<MediaGenerationMode>): void {
-        const optionStyles = settings.slidingDropdown.styles.option
-        const iconColor = state.disabled
-            ? optionStyles.disabledTextColor
-            : state.selected || state.hovered ? optionStyles.activeTextColor : optionStyles.textColor
-        this.iconGroup.selectAll('path').attr('fill', iconColor)
+        this.iconGroup.selectAll('path').attr('fill', state.color)
         this.resize(state.x, state.y, state.width, state.height)
     }
 
@@ -546,8 +592,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 bottom: 0,
                 left: 0,
             },
+            trackBackgroundColor: settings.slidingSwitch.styles.trackBackgroundColor,
+            indicatorBackgroundColor: settings.slidingSwitch.styles.indicatorBackgroundColor,
+            unselectedOptionColor: settings.slidingSwitch.styles.unselectedOptionColor,
+            hoveredOptionColor: settings.slidingSwitch.styles.hoveredOptionColor,
+            selectedOptionColor: settings.slidingSwitch.styles.selectedOptionColor,
             indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
-            indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
             reshuffleItemsOnValueChange: {
                 enable: true,
                 selectedElementPosition: 'right',
@@ -599,9 +649,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         let modelMenu: BubbleMenu | null = null
         let modelMenuTrigger: HTMLButtonElement | null = null
         let modelMenuContent: AiModelMenuContentView
+        const getModelOption = (modelId: string) => transformModelsToOptions(aiModelsStore.getData())
+            .find(option => option.aiModel === modelId)
         const getModelTitle = (modelId: string): string => {
-            const model = transformModelsToOptions(aiModelsStore.getData())
-                .find(option => option.aiModel === modelId)
+            const model = getModelOption(modelId)
             return model?.title ?? modelId.split(':').at(-1) ?? modelId
         }
         const formatSummaryValue = (key: string, value: string, label: string): string => {
@@ -612,6 +663,8 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             if (!modelMenuTrigger) return
             const mediaMode = getMediaGenerationMode()
             const selectedModelIds = getSelectedModelIds(mediaMode === 'image' ? 'aiImageModels' : 'aiVideoModels')
+            const primaryModelId = selectedModelIds[0]
+            const primaryModelOption = primaryModelId ? getModelOption(primaryModelId) : undefined
             const modelSummary = selectedModelIds.length > 1
                 ? `${getModelTitle(selectedModelIds[0] ?? '')} +${selectedModelIds.length - 1}`
                 : selectedModelIds[0] ? getModelTitle(selectedModelIds[0]) : 'Select model'
@@ -619,7 +672,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             const configGroups = getConfigSelectionGroups(
                 mediaMode === 'image' ? 'imageGenerationConfigGroups' : 'videoGenerationConfigGroups',
             )
-            const primaryModelId = selectedModelIds[0]
             const matrixGroup = matrix.groups.find(group => (
                 group.mediaType === mediaMode && primaryModelId && group.modelIds.includes(primaryModelId)
             ))
@@ -631,16 +683,49 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             const summaryControlOrder = mediaMode === 'image'
                 ? ['imageSize']
                 : ['aspectRatio', 'resolution', 'duration']
-            const controlSummary = summaryControlOrder.flatMap((controlKey): string[] => {
+            const controlSummary = summaryControlOrder.flatMap((controlKey): ModelMenuTriggerSummaryItem[] => {
                 const control = matrixGroup?.controls.find(candidate => candidate.key === controlKey)
                 if (!control) return []
                 const value = selectionGroup?.values[control.key] ?? control.defaultValue ?? control.options[0]?.value
                 if (!value) return []
                 const label = control.options.find(option => option.value === value)?.label ?? value
-                return [formatSummaryValue(control.key, value, label)]
+                return [{
+                    label: formatSummaryValue(control.key, value, label),
+                    icon: control.key === 'duration' ? clockIcon : undefined,
+                    iconVariant: control.key === 'duration' ? 'clock' : undefined,
+                    aspectRatio: (control.key === 'aspectRatio' || control.key === 'imageSize')
+                        && /^\d+:\d+$/.test(value)
+                        ? value
+                        : undefined,
+                }]
             })
             const summaryEl = modelMenuTrigger.querySelector('.ai-prompt-model-menu-trigger-summary')
-            if (summaryEl) summaryEl.textContent = [modelSummary, ...controlSummary].join(' · ')
+            if (!summaryEl) return
+
+            const summaryItems: ModelMenuTriggerSummaryItem[] = [
+                { label: modelSummary, icon: primaryModelOption?.icon },
+                ...controlSummary,
+            ]
+            const summaryNodes: HTMLElement[] = []
+            for (const [index, item] of summaryItems.entries()) {
+                if (index === 1) {
+                    summaryNodes.push(html`
+                        <span
+                            className="canvas-node-footer-separator ai-prompt-model-menu-trigger-summary-separator"
+                            aria-hidden="true"
+                        ></span>
+                    ` as HTMLSpanElement)
+                } else if (index > 1) {
+                    summaryNodes.push(html`
+                        <span
+                            className="ai-prompt-model-menu-trigger-summary-dot-separator"
+                            aria-hidden="true"
+                        >·</span>
+                    ` as HTMLSpanElement)
+                }
+                summaryNodes.push(createModelMenuTriggerSummaryItem(item))
+            }
+            summaryEl.replaceChildren(...summaryNodes)
         }
         const getModelMenuPosition = () => {
             if (!modelMenuTrigger) return null
@@ -758,7 +843,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         modelMenuTrigger = createModelMenuTrigger(toggleModelMenu)
         applyAiModelMenuStyleSettings(modelMenuTrigger)
-        updateModelMenuTriggerSummary()
+        const unsubscribeModelMenuTriggerSummary = aiModelsStore.subscribe(() => {
+            updateModelMenuTriggerSummary()
+            scheduleModelMenuReposition()
+        })
 
         if (options.mountModelMenuControl) options.mountModelMenuControl(modelMenuTrigger)
         else controlsEl.appendChild(modelMenuTrigger)
@@ -857,6 +945,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 reasoningModelRows.destroy()
                 imageConfigMatrix.destroy?.()
                 videoConfigMatrix.destroy?.()
+                unsubscribeModelMenuTriggerSummary()
                 mediaModeSwitch.destroy()
                 mediaModeSwitchHost.remove()
                 modelMenuTrigger?.remove()

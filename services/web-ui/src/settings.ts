@@ -95,6 +95,11 @@ export type AiModelControlsSettings = {
 
 export type SlidingSwitchSettings = {
     styles: {
+        trackBackgroundColor: string
+        indicatorBackgroundColor: string
+        unselectedOptionColor: string
+        hoveredOptionColor: string
+        selectedOptionColor: string
         indicatorBoxShadow: string
         indicatorInsetShadow: {
             topColor: string
@@ -664,6 +669,12 @@ export type Settings = {
 }
 
 const settingsSlidingSwitchStyles: SlidingSwitchSettings['styles'] = {
+    // Match the soft-blue selection treatment used by block card tiles.
+    trackBackgroundColor: 'rgba(95, 143, 207, 0.14)',
+    indicatorBackgroundColor: 'rgba(95, 143, 207, 0.24)',
+    unselectedOptionColor: 'rgba(66, 73, 79, 0.62)',
+    hoveredOptionColor: colorPalette.nightBlue,
+    selectedOptionColor: '#000000',
     indicatorBoxShadow: 'none',
     indicatorInsetShadow: {
         topColor: 'rgba(255, 255, 255, 0.86)',

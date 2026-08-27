@@ -126,6 +126,46 @@ describe('createSlidingSwitch', () => {
         expect(labels(svg)[1]!.getAttribute('fill')).not.toBe('#1a2744')
     })
 
+    it('uses caller-provided track, indicator, and default option colors', () => {
+        const { svg } = mount('list', vi.fn(), {
+            trackBackgroundColor: '#123456',
+            indicatorBackgroundColor: '#abcdef',
+            unselectedOptionColor: '#456789',
+            hoveredOptionColor: '#789abc',
+            selectedOptionColor: '#def012',
+        })
+
+        expect(svg.querySelector('.sliding-switch-track')?.getAttribute('fill')).toBe('#123456')
+        expect(svg.querySelector('.sliding-switch-indicator')?.getAttribute('fill')).toBe('#abcdef')
+        expect(labels(svg)[0]!.getAttribute('fill')).toBe('#def012')
+        expect(labels(svg)[1]!.getAttribute('fill')).toBe('#456789')
+
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+
+        expect(labels(svg)[1]!.getAttribute('fill')).toBe('#789abc')
+    })
+
+    it('passes the resolved option color to custom renderers', () => {
+        const renderedColors = new Map<View, string>()
+        const { svg, slidingSwitch } = mount('list', vi.fn(), {
+            unselectedOptionColor: '#456789',
+            hoveredOptionColor: '#789abc',
+            selectedOptionColor: '#def012',
+            renderOption: (_parent, state) => ({
+                render: nextState => renderedColors.set(nextState.option.value, nextState.color),
+            }),
+        })
+
+        expect(renderedColors.get('list')).toBe('#def012')
+        expect(renderedColors.get('grid')).toBe('#456789')
+
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+        expect(renderedColors.get('grid')).toBe('#789abc')
+
+        slidingSwitch.setValue('grid')
+        expect(renderedColors.get('grid')).toBe('#def012')
+    })
+
     it('setValue selects without firing onChange', () => {
         const { svg, slidingSwitch, onChange } = mount('list')
         slidingSwitch.setValue('timeline')

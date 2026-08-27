@@ -7,6 +7,7 @@
 // =============================================================================
 
 @use '@lixpi/ui-kit/styles/help-tooltip';
+@use '@lixpi/ui-kit/styles/canvas-node-footer';
 @import '$src/sass/_variables.scss';
 @import '$src/sass/_transitions.scss';
 
@@ -291,13 +292,74 @@
 }
 
 .ai-prompt-model-menu-trigger-summary {
+    display: inline-flex;
+    align-items: center;
     min-width: 0;
     overflow: hidden;
     color: rgba(49, 59, 78, 0.68);
     font-size: 12px;
     font-weight: 500;
-    text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.ai-prompt-model-menu-trigger-summary-item {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 5px;
+}
+
+.ai-prompt-model-menu-trigger-summary-icon {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    color: currentColor;
+}
+
+.ai-prompt-model-menu-trigger-summary-clock-icon {
+    width: 12px;
+    height: 12px;
+    flex-basis: 12px;
+}
+
+.ai-prompt-model-menu-trigger-summary-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.ai-prompt-model-menu-trigger-summary-icon svg path {
+    fill: currentColor;
+}
+
+.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon {
+    display: inline-block;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    border-style: solid;
+    border-color: currentColor;
+}
+
+.ai-prompt-model-menu-trigger-summary-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-prompt-model-menu-trigger-summary-separator {
+    --workspace-generated-media-chrome-icon-size: 34px;
+
+    height: 34px;
+    margin-right: 7px;
+    margin-left: 7px;
+}
+
+.ai-prompt-model-menu-trigger-summary-dot-separator {
+    flex: 0 0 auto;
+    margin-right: 5px;
+    margin-left: 5px;
 }
 
 .ai-prompt-media-mode-switch {

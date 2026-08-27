@@ -27,6 +27,7 @@ export type SlidingSwitchOptionRenderState<Value extends string = string> = {
     hovered: boolean
     disabled: boolean
     closable: boolean
+    color: string
     onClose: (event: Event) => void
 }
 
@@ -79,6 +80,11 @@ export type SlidingSwitchConfig<Value extends string = string> = {
     minOptionWidth?: number
     observeParentResize?: boolean
     visualOverflowPadding?: Partial<SlidingSwitchVisualOverflowPadding>
+    trackBackgroundColor?: string
+    indicatorBackgroundColor?: string
+    unselectedOptionColor?: string
+    hoveredOptionColor?: string
+    selectedOptionColor?: string
     indicatorBoxShadow?: string
     indicatorInsetShadow?: SlidingSwitchIndicatorInsetShadow
     transition?: Partial<SlidingSwitchTransitionConfig>
@@ -147,6 +153,11 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     private readonly minOptionWidth: number | null
     private readonly observeParentResize: boolean
     private readonly visualOverflowPadding: SlidingSwitchVisualOverflowPadding
+    private readonly trackBackgroundColor: string
+    private readonly indicatorBackgroundColor: string
+    private readonly unselectedOptionColor: string
+    private readonly hoveredOptionColor: string
+    private readonly selectedOptionColor: string
     private readonly indicatorBoxShadow: string
     private readonly indicatorInsetShadow: SlidingSwitchIndicatorInsetShadow | null
     private readonly indicatorInsetGradientId: string
@@ -195,6 +206,11 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         this.selectedAriaAttribute = config.selectedAriaAttribute ?? 'aria-checked'
         this.minOptionWidth = config.minOptionWidth ?? null
         this.observeParentResize = config.observeParentResize ?? config.minOptionWidth !== undefined
+        this.trackBackgroundColor = config.trackBackgroundColor ?? COLORS.track
+        this.indicatorBackgroundColor = config.indicatorBackgroundColor ?? COLORS.indicator
+        this.unselectedOptionColor = config.unselectedOptionColor ?? COLORS.optionText
+        this.hoveredOptionColor = config.hoveredOptionColor ?? COLORS.optionTextActive
+        this.selectedOptionColor = config.selectedOptionColor ?? COLORS.optionTextActive
         this.indicatorBoxShadow = config.indicatorBoxShadow ?? 'none'
         this.indicatorInsetShadow = config.indicatorInsetShadow ?? null
         this.transitionConfig = this.createTransitionConfig(config.transition)
@@ -553,7 +569,11 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
     private createOptionState(option: SlidingSwitchOption<Value>, index: number): SlidingSwitchOptionRenderState<Value> {
         const selected = option.value === this.currentValue
+        const hovered = this.hoveredValue === option.value
         const disabled = option.disabled ?? false
+        const color = disabled
+            ? COLORS.optionTextDisabled
+            : selected ? this.selectedOptionColor : hovered ? this.hoveredOptionColor : this.unselectedOptionColor
         return {
             id: `${this.id}:${option.value}`,
             option,
@@ -563,9 +583,10 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             width: this.segmentWidth(),
             height: this.height - PADDING * 2,
             selected,
-            hovered: this.hoveredValue === option.value,
+            hovered,
             disabled,
             closable: Boolean(option.closable && this.onClose && !disabled),
+            color,
             onClose: (event: Event) => this.closeOption(option, event),
         }
     }
@@ -715,9 +736,6 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     }
 
     private renderDefaultOptionContent(view: SlidingSwitchOptionView<Value>, state: SlidingSwitchOptionRenderState<Value>): void {
-        const textColor = state.disabled
-            ? COLORS.optionTextDisabled
-            : state.selected || state.hovered ? COLORS.optionTextActive : COLORS.optionText
         const closeVisible = state.closable && state.hovered
         const closeReserve = state.closable ? CLOSE_SIZE + CLOSE_GAP : 0
         const textCenterX = state.x + closeReserve + (state.width - closeReserve) / 2
@@ -727,7 +745,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         view.label
             ?.attr('x', textCenterX)
             .attr('y', state.y + state.height / 2)
-            .attr('fill', textColor)
+            .attr('fill', state.color)
             .text(state.option.label)
 
         view.closeGroup
@@ -748,7 +766,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
                 x: -CLOSE_ICON_SIZE / 2,
                 y: -CLOSE_ICON_SIZE / 2,
                 size: CLOSE_ICON_SIZE,
-                fill: state.disabled ? COLORS.optionTextDisabled : COLORS.optionTextActive,
+                fill: state.color,
             })
         }
     }
@@ -811,7 +829,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             .attr('height', this.height)
             .attr('rx', this.height / 2)
             .attr('ry', this.height / 2)
-            .attr('fill', COLORS.track)
+            .attr('fill', this.trackBackgroundColor)
 
         this.indicator
             .attr('y', PADDING)
@@ -819,7 +837,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             .attr('height', indicatorHeight)
             .attr('rx', indicatorHeight / 2)
             .attr('ry', indicatorHeight / 2)
-            .attr('fill', COLORS.indicator)
+            .attr('fill', this.indicatorBackgroundColor)
             .attr('stroke', 'none')
             .attr('stroke-width', 0)
             .style('filter', this.indicatorBoxShadow === 'none' ? null : `drop-shadow(${this.indicatorBoxShadow})`)
