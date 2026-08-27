@@ -40,10 +40,14 @@ Always write each Lixpi-owned class selector in full at the declaration site. Th
 ```scss
 .workspace-floating-toolbar { ... }
 .workspace-floating-toolbar-button { ... }
-.workspace-floating-toolbar-tooltip { ... }
+.workspace-floating-toolbar-image-wrapper { ... }
 ```
 
 This applies to every application-owned class declaration, including child elements and state classes. While editing a styling contract, leave each class visible in its complete, searchable form.
+
+## Tooltips
+
+Do not create feature-local hover labels, arrows, positioning rules, or tooltip CSS. Native `title` tooltips are forbidden, and every visible hover or focus tooltip must use the shared custom tooltip component and its owned stylesheet. Follow the complete rule in [`UI-COMPONENTS.md`](./UI-COMPONENTS.md#tooltips).
 
 ## External Class Contracts
 

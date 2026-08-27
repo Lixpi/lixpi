@@ -117,10 +117,9 @@ export const nodes = {
             },
         ],
         toDOM(node) {
-            const { src, alt, title, assetId, width, alignment, textWrap } = node.attrs
+            const { src, alt, assetId, width, alignment, textWrap } = node.attrs
             const imgAttrs: Record<string, string> = { src }
             if (alt) imgAttrs.alt = alt
-            if (title) imgAttrs.title = title
             if (assetId) imgAttrs['data-asset-id'] = assetId
 
             const figureAttrs: Record<string, string> = {
@@ -252,8 +251,8 @@ export const marks = {
             },
         }],
         toDOM(node) {
-            const { href, title } = node.attrs
-            return ['a', { href, title }, 0]
+            const { href } = node.attrs
+            return ['a', { href }, 0]
         },
     } as MarkSpec,
 

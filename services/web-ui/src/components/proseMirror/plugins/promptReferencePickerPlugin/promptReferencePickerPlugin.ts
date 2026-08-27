@@ -9,6 +9,7 @@ import type { EditorView } from 'prosemirror-view'
 
 import { createSlidingSwitch, type SlidingSwitchInstance } from '@lixpi/ui-kit/components/sliding-switch'
 import AuthService from '$src/services/auth-service.ts'
+import { settings } from '$src/settings.ts'
 import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
 import {
     type FloatingMenuPlacement,
@@ -162,6 +163,8 @@ class PromptReferencePickerMenu {
                 role: 'radiogroup',
                 optionRole: 'radio',
                 selectedAriaAttribute: 'aria-checked',
+                indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
+                indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
                 onChange: category => this.changeCategory(category),
             })
             : null
@@ -388,7 +391,8 @@ class PromptReferencePickerMenu {
                 className="prompt-reference-picker-item"
                 role="option"
                 aria-selected="false"
-                title=${`${label} — ${summary}`}
+                data-help-tooltip="aria-label"
+                aria-label=${`${label}: ${summary}`}
                 onmousedown=${(event: MouseEvent) => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -425,7 +429,8 @@ class PromptReferencePickerMenu {
             className="prompt-reference-picker-item prompt-reference-picker-item-capability-artifact"
             role="option"
             aria-selected="false"
-            title=${item.title}
+            data-help-tooltip="aria-label"
+            aria-label=${item.title}
             onmousedown=${(event: MouseEvent) => {
                 event.preventDefault()
                 event.stopPropagation()

@@ -10,6 +10,8 @@ import type {
     ImageGenerationSize,
     MediaBranchLineagePlan,
     MediaGenerationConfigSelectionGroup,
+    MediaGenerationConfigControl,
+    MediaGenerationConfigControlKey,
     MediaRunLineageAssignment,
     ProviderName,
 } from '@lixpi/constants'
@@ -96,9 +98,12 @@ type ResolvedMatrixRequest = NormalizedMatrixRequest & {
     reasoningModels: ResolvedAiModel[]
     imageModels: ResolvedAiModel[]
     videoModels: ResolvedAiModel[]
+    videoFanoutModels: ResolvedAiModel[]
     imageModelOptions: Record<AiModelId, { imageSize?: string }>
-    videoModelOptions: Record<AiModelId, { aspectRatio?: string; resolution?: string; duration?: string | number }>
+    videoModelOptions: Record<AiModelId, VideoModelOptions>
 }
+
+type VideoModelOptions = Partial<Record<MediaGenerationConfigControlKey, string>>
 
 type StopMatrixRequestParams = {
     workspaceId: string
@@ -199,11 +204,29 @@ const normalizeModelOption = (
 const findConfigGroupValue = (
     configGroups: MediaGenerationConfigSelectionGroup[],
     modelId: AiModelId,
-    key: 'imageSize' | 'aspectRatio' | 'resolution' | 'duration',
+    key: MediaGenerationConfigControlKey,
 ): string | undefined => {
     const group = configGroups.find(configGroup => configGroup.modelIds.includes(modelId))
     const value = group?.values?.[key]
     return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+const normalizeVideoControlValue = (
+    control: MediaGenerationConfigControl,
+    requested: string | number | undefined,
+): string | undefined => {
+    const requestedValue = requested == null ? '' : String(requested).trim()
+    if (control.kind === 'text') return requestedValue || control.defaultValue
+    if (control.kind === 'number') {
+        if (!requestedValue) return control.defaultValue
+        const numericValue = Number(requestedValue)
+        if (!Number.isFinite(numericValue)) return control.defaultValue
+        if (control.min !== undefined && numericValue < control.min) return control.defaultValue
+        if (control.max !== undefined && numericValue > control.max) return control.defaultValue
+        if (control.step === 1 && !Number.isInteger(numericValue)) return control.defaultValue
+        return requestedValue
+    }
+    return normalizeModelOption(requestedValue || control.defaultValue, control.options)
 }
 
 export const buildMediaGenerationRequestGroupKey = (
@@ -364,12 +387,13 @@ export class MediaGenerationMatrixOrchestrator {
                     videoAspectRatio: primaryVideoOptions?.aspectRatio,
                     videoResolution: primaryVideoOptions?.resolution,
                     videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
+                    videoGenerationConfig: primaryVideoOptions,
                     videoSourceForExtension: normalized.videoSourceForExtension,
                     preflightResolved: true,
                     mediaFanoutPlan: {
                         generationRequestId: normalized.generationRequestId,
                         imageModels: normalized.imageModels.map((model) => model.meta),
-                        videoModels: normalized.videoModels.map((model) => model.meta),
+                        videoModels: normalized.videoFanoutModels.map((model) => model.meta),
                         imageSize: normalized.imageSize,
                         imageModelOptions: normalized.imageModelOptions,
                         ...(normalized.videoAspectRatio ? { videoAspectRatio: normalized.videoAspectRatio } : {}),
@@ -393,6 +417,9 @@ export class MediaGenerationMatrixOrchestrator {
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: normalized.generationRequestId,
+                        ...(requestData.mediaGenerationRequest?.mediaGenerationMode
+                            ? { mediaGenerationMode: requestData.mediaGenerationRequest.mediaGenerationMode }
+                            : {}),
                         outputMediaTypes: normalized.outputMediaTypes,
                         useMultipleReasoningModels: normalized.useMultipleReasoningModels,
                         useMultipleImageModels: normalized.useMultipleImageModels,
@@ -529,20 +556,23 @@ export class MediaGenerationMatrixOrchestrator {
         const hasExplicitVideoSource = Boolean(request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension)
         const useMultipleVideoModels = request?.useMultipleVideoModels ?? ((request?.videoModelIds?.length ?? 0) > 1)
         const hasExplicitMediaFanout = useMultipleImageModels || useMultipleVideoModels
-        const outputMediaTypes = request?.outputMediaTypes?.length
-            ? Array.from(new Set(request.outputMediaTypes))
-            : [
-                ...((hasExplicitMediaFanout
-                    ? useMultipleImageModels
-                    : (request?.imageModelIds?.length ?? requestData.aiImageModels?.length ?? 0) > 0
-                ) ? ['image' as const] : []),
-                ...((hasExplicitMediaFanout
-                    ? useMultipleVideoModels || hasExplicitVideoSource
-                    : (request?.videoModelIds?.length ?? requestData.aiVideoModels?.length ?? 0) > 0 || hasExplicitVideoSource
-                )
-                    ? ['video' as const]
-                    : []),
-            ]
+        const inferredOutputMediaTypes: Array<'image' | 'video'> = [
+            ...((hasExplicitMediaFanout
+                ? useMultipleImageModels
+                : (request?.imageModelIds?.length ?? requestData.aiImageModels?.length ?? 0) > 0
+            ) ? ['image' as const] : []),
+            ...((hasExplicitMediaFanout
+                ? useMultipleVideoModels || hasExplicitVideoSource
+                : (request?.videoModelIds?.length ?? requestData.aiVideoModels?.length ?? 0) > 0 || hasExplicitVideoSource
+            )
+                ? ['video' as const]
+                : []),
+        ]
+        const outputMediaTypes = request?.mediaGenerationMode
+            ? [request.mediaGenerationMode]
+            : request?.outputMediaTypes?.length
+                ? [request.outputMediaTypes[0]!]
+                : inferredOutputMediaTypes.slice(0, 1)
         const includeVideoModels = request
             ? outputMediaTypes.includes('video') && ((request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource)
             : (requestData.aiVideoModels?.length ?? 0) > 0
@@ -579,16 +609,12 @@ export class MediaGenerationMatrixOrchestrator {
             imageModelIds,
             videoModelIds,
             imageSize: (request?.imageOptions?.imageSize ?? requestData.imageSize ?? 'auto') as ImageGenerationSize,
-            imageConfigGroups: useMultipleImageModels
-                ? normalizeConfigGroupsForModels(request?.imageOptions?.configGroups, imageModelIds)
-                : [],
+            imageConfigGroups: normalizeConfigGroupsForModels(request?.imageOptions?.configGroups, imageModelIds),
             videoAspectRatio: request?.videoOptions?.aspectRatio ?? requestData.videoAspectRatio,
             videoResolution: request?.videoOptions?.resolution ?? requestData.videoResolution,
             videoDuration: request?.videoOptions?.duration ?? requestData.videoDuration,
             videoSourceForExtension: request?.videoOptions?.sourceForExtension ?? requestData.videoSourceForExtension,
-            videoConfigGroups: useMultipleVideoModels
-                ? normalizeConfigGroupsForModels(request?.videoOptions?.configGroups, videoModelIds)
-                : [],
+            videoConfigGroups: normalizeConfigGroupsForModels(request?.videoOptions?.configGroups, videoModelIds),
             regeneration: request?.regeneration,
         }
     }
@@ -604,13 +630,21 @@ export class MediaGenerationMatrixOrchestrator {
         imageModels.forEach(assertImageModel)
         videoModels.forEach(assertVideoModel)
 
+        const videoModelOptions = this.resolveVideoModelOptions(normalized, videoModels)
+        const videoFanoutModels = videoModels.flatMap((videoModel) => {
+            const rawOutputCount = videoModelOptions[videoModel.modelId]?.outputCount ?? '1'
+            const outputCount = Math.max(1, Number.parseInt(rawOutputCount, 10) || 1)
+            return Array.from({ length: outputCount }, () => videoModel)
+        })
+
         return {
             ...normalized,
             reasoningModels,
             imageModels,
             videoModels,
+            videoFanoutModels,
             imageModelOptions: this.resolveImageModelOptions(normalized, imageModels),
-            videoModelOptions: this.resolveVideoModelOptions(normalized, videoModels),
+            videoModelOptions,
         }
     }
 
@@ -635,34 +669,29 @@ export class MediaGenerationMatrixOrchestrator {
     private resolveVideoModelOptions(
         normalized: NormalizedMatrixRequest,
         videoModels: ResolvedAiModel[],
-    ): Record<AiModelId, { aspectRatio?: string; resolution?: string; duration?: string | number }> {
-        const optionsByModelId: Record<AiModelId, { aspectRatio?: string; resolution?: string; duration?: string | number }> = {}
+    ): Record<AiModelId, VideoModelOptions> {
+        const optionsByModelId: Record<AiModelId, VideoModelOptions> = {}
         for (const videoModel of videoModels) {
-            const requestedAspectRatio = findConfigGroupValue(
-                normalized.videoConfigGroups,
-                videoModel.modelId,
-                'aspectRatio',
-            ) ?? normalized.videoAspectRatio
-            const requestedResolution = findConfigGroupValue(
-                normalized.videoConfigGroups,
-                videoModel.modelId,
-                'resolution',
-            ) ?? normalized.videoResolution
-            const requestedDuration = findConfigGroupValue(
-                normalized.videoConfigGroups,
-                videoModel.modelId,
-                'duration',
-            ) ?? normalized.videoDuration
-
-            const aspectRatio = normalizeModelOption(requestedAspectRatio, videoModel.meta.videoAspectRatios)
-            const resolution = normalizeModelOption(requestedResolution, videoModel.meta.videoResolutions)
-            const duration = normalizeModelOption(requestedDuration, videoModel.meta.videoDurations)
-
-            optionsByModelId[videoModel.modelId] = {
-                ...(aspectRatio ? { aspectRatio } : {}),
-                ...(resolution ? { resolution } : {}),
-                ...(duration ? { duration } : {}),
+            if (!videoModel.meta.videoGenerationControls?.length) {
+                throw new Error(`VIDEO_GENERATION_CONTROLS_MISSING:${videoModel.modelId}`)
             }
+            optionsByModelId[videoModel.modelId] = Object.fromEntries(
+                videoModel.meta.videoGenerationControls.flatMap((control): Array<[MediaGenerationConfigControlKey, string]> => {
+                    const requestedValue = findConfigGroupValue(
+                        normalized.videoConfigGroups,
+                        videoModel.modelId,
+                        control.key,
+                    ) ?? (control.key === 'aspectRatio'
+                        ? normalized.videoAspectRatio
+                        : control.key === 'resolution'
+                            ? normalized.videoResolution
+                            : control.key === 'duration'
+                                ? normalized.videoDuration
+                                : undefined)
+                    const value = normalizeVideoControlValue(control, requestedValue)
+                    return value ? [[control.key, value]] : []
+                }),
+            )
         }
         return optionsByModelId
     }
@@ -700,7 +729,7 @@ export class MediaGenerationMatrixOrchestrator {
         primaryImageModel?: ResolvedAiModel
         primaryVideoModel?: ResolvedAiModel
         primaryImageOptions?: { imageSize?: string }
-        primaryVideoOptions?: { aspectRatio?: string; resolution?: string; duration?: string | number }
+        primaryVideoOptions?: VideoModelOptions
     }): Promise<SharedPreflightResult> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
@@ -766,6 +795,7 @@ export class MediaGenerationMatrixOrchestrator {
             videoAspectRatio: primaryVideoOptions?.aspectRatio,
             videoResolution: primaryVideoOptions?.resolution,
             videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
+            videoGenerationConfig: primaryVideoOptions,
             videoSourceForExtension: normalized.videoSourceForExtension,
             generationRun,
             durableGenerationRequestId: requestData.durableGenerationRequestId,
@@ -855,7 +885,7 @@ export class MediaGenerationMatrixOrchestrator {
                     imageModelIds: normalized.imageModelIds,
                     videoModelIds: state.capabilityUsageMode === 'character-creator'
                         ? []
-                        : normalized.videoModelIds,
+                        : normalized.videoFanoutModels.map(model => model.modelId),
                 }),
             mediaBranchCandidateSnapshot: state.mediaBranchCandidateSnapshot,
             mediaBranchResolution: state.mediaBranchResolution,

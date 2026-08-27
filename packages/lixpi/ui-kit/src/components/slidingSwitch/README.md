@@ -37,15 +37,24 @@ Appends an SVG group to a d3 selection of an SVG element.
         bottom?: number
         left?: number
     }
+    trackBackgroundColor?: string        // fill behind every option
+    indicatorBackgroundColor?: string    // fill of the active segment
+    unselectedOptionColor?: string       // text or custom-renderer color for inactive options
+    hoveredOptionColor?: string          // text or custom-renderer color for a hovered inactive option
+    selectedOptionColor?: string         // text or custom-renderer color for the active option
     indicatorBoxShadow?: string         // applied as an SVG drop-shadow filter to the active segment
     indicatorInsetShadow?: {
         topColor: string
         bottomColor: string
     }
     transition?: {
-        durationMs?: number             // base slide duration
+        durationMs?: number             // base slide duration; total timeline when reshuffling
         minDurationMs?: number          // lower bound for distant jumps
         distanceSpeedupFactor?: number  // per-segment speedup for distant jumps
+    }
+    reshuffleItemsOnValueChange?: {
+        enable: boolean
+        selectedElementPosition: 'left' | 'right'
     }
     renderOption?: (parent, state) => SlidingSwitchOptionRenderInstance | void
     onChange?: (value: Value, id: string) => void
@@ -85,7 +94,7 @@ slidingSwitch.destroy()
 
 ### Custom option rendering
 
-`renderOption` lets a host render each segment with another D3 SVG primitive while `slidingSwitch` keeps ownership of selection, keyboard navigation, the sliding indicator, and close callbacks. The callback receives the option geometry and state plus an `onClose(event)` helper. A custom renderer should append inside the provided segment group and return an object with optional `resize(x, y, width, height)`, `render(state)`, and `destroy()` methods. `resize` receives updated segment geometry whenever the switch recalculates width.
+`renderOption` lets a host render each segment with another D3 SVG primitive while `slidingSwitch` keeps ownership of selection, keyboard navigation, the sliding indicator, and close callbacks. The callback receives the option geometry, resolved `color`, and state plus an `onClose(event)` helper. A custom renderer should append inside the provided segment group and return an object with optional `resize(x, y, width, height)`, `render(state)`, and `destroy()` methods. `resize` receives updated segment geometry whenever the switch recalculates width.
 
 ```typescript
 import { createTagPill } from '@lixpi/ui-kit/components/tag-pill'
@@ -123,7 +132,8 @@ createSlidingSwitch(svg, {
 - Renders an SVG track, a sliding indicator, and one centered text label + transparent hit area per option by default.
 - The indicator slides to the active option via a d3 transition on its `x` attribute (numeric — no CSS, no transform parsing).
 - Slide timing is configurable; distant jumps divide the base duration by `1 + (distance - 1) * distanceSpeedupFactor`, clamped by `minDurationMs`.
-- The indicator does not render a stroke; callers can add elevation with `indicatorBoxShadow` and an inset highlight/shade with `indicatorInsetShadow`.
+- `reshuffleItemsOnValueChange` keeps the selected option at the configured edge. A value change runs the normal indicator slide toward the clicked option, then begins the sequential adjacent swaps during the final 30% of that slide. The configured transition duration is the total budget for the complete slide-and-reshuffle timeline and is divided across its phases. Switches without reshuffling keep the regular slide-duration behavior.
+- The track and indicator use their default fills unless the caller sets `trackBackgroundColor` or `indicatorBackgroundColor`. Option colors can be set with `unselectedOptionColor`, `hoveredOptionColor`, and `selectedOptionColor`; custom option renderers receive the resolved value as `state.color`. The indicator does not render a stroke; callers can add elevation with `indicatorBoxShadow` and an inset highlight/shade with `indicatorInsetShadow`.
 - When `indicatorBoxShadow` is set, the component adds top and side SVG padding for the active indicator shadow while clipping bottom overflow.
 - `resize(x, y, width, height)` treats `width` as the visible viewport width. If `minOptionWidth` is set, the switch computes a larger scrollable content width internally.
 - When mounted directly into an `<svg>`, the switch updates that SVG's `width`, `height`, `viewBox`, and visible overflow on initial render and resize.
@@ -132,3 +142,5 @@ createSlidingSwitch(svg, {
 - Closable options render the close button on the left on hover and call `onClose(value, id, option)` without changing selection.
 - Custom renderers inherit selection, hover, disabled, geometry, and close state through their `render(state)` method.
 - The consumer owns the meaning of each value. If the parent selection is not an `<svg>` root, the consumer remains responsible for sizing the outer SVG.
+
+Lixpi application surfaces must use the single shared sliding-switch appearance from `settings.slidingSwitch.styles`; feature-specific active-indicator shadows are not allowed.

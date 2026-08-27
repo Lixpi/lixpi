@@ -41,6 +41,7 @@ vi.mock('./asset-maintenance-queue.ts', () => ({ enqueueRenditionRetry: vi.fn() 
 import {
     attachGeneratedAssetNode,
     collectGeneratedAssetSourceIds,
+    resolveInheritedGenerationSeed,
     settleGeneratedAssetComposition,
 } from './generated-asset-storage.ts'
 
@@ -171,6 +172,75 @@ beforeEach(() => {
         layoutRevision: params.layoutRevision,
         nodes: params.geometryNodes,
     }))
+})
+
+// =============================================================================
+// INHERITED GENERATION SEED
+// =============================================================================
+
+describe('resolveInheritedGenerationSeed', () => {
+    const seededAsset = (assetId: string, lineage: Asset['lineage']): Asset => ({
+        ...asset(true),
+        assetId,
+        ...(lineage ? { lineage } : {}),
+    })
+
+    beforeEach(() => {
+        mocks.getAssetRecord.mockReset()
+    })
+
+    it('reuses the parent Asset seed when a branch continues an earlier generation', async () => {
+        mocks.getAssetRecord.mockImplementation(async (assetId: string) => ({
+            'pending-asset': seededAsset('pending-asset', {
+                parentAssetId: 'parent-asset',
+                sourceAssetIds: ['reference-asset'],
+            }),
+            'parent-asset': seededAsset('parent-asset', { sourceAssetIds: [], generationSeed: 777 }),
+            'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [], generationSeed: 999 }),
+        }[assetId]))
+
+        expect(await resolveInheritedGenerationSeed({
+            assetId: 'pending-asset',
+            maxValue: 2147483647,
+        })).toBe(777)
+    })
+
+    it('falls back to a referenced generated Asset when there is no parent', async () => {
+        mocks.getAssetRecord.mockImplementation(async (assetId: string) => ({
+            'pending-asset': seededAsset('pending-asset', { sourceAssetIds: ['uploaded-asset', 'reference-asset'] }),
+            'uploaded-asset': seededAsset('uploaded-asset', { sourceAssetIds: [] }),
+            'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [], generationSeed: 999 }),
+        }[assetId]))
+
+        expect(await resolveInheritedGenerationSeed({
+            assetId: 'pending-asset',
+            maxValue: 2147483647,
+        })).toBe(999)
+    })
+
+    it('skips a seed the target provider would reject and reports none', async () => {
+        mocks.getAssetRecord.mockImplementation(async (assetId: string) => ({
+            'pending-asset': seededAsset('pending-asset', { sourceAssetIds: ['reference-asset'] }),
+            'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [], generationSeed: 4294967000 }),
+        }[assetId]))
+
+        expect(await resolveInheritedGenerationSeed({
+            assetId: 'pending-asset',
+            maxValue: 2147483647,
+        })).toBeUndefined()
+    })
+
+    it('reports none when nothing in the lineage carries a seed', async () => {
+        mocks.getAssetRecord.mockImplementation(async (assetId: string) => ({
+            'pending-asset': seededAsset('pending-asset', { sourceAssetIds: ['reference-asset'] }),
+            'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [] }),
+        }[assetId]))
+
+        expect(await resolveInheritedGenerationSeed({
+            assetId: 'pending-asset',
+            maxValue: 2147483647,
+        })).toBeUndefined()
+    })
 })
 
 describe('settleGeneratedAssetComposition', () => {

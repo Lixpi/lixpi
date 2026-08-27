@@ -31,7 +31,7 @@ export const aiModelSubjects = [
         type: 'subscribe',
         payloadType: 'json',
         permissions: {
-            sub: { allow: [] }
+            sub: { allow: [AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED] }
         },
         handler: async (data, msg) => {
             info(`AI models sync completed -> new=${data?.totalNew ?? 0} updated=${data?.totalUpdated ?? 0} deleted=${data?.totalDeleted ?? 0} ranAt=${data?.ranAt ?? 'n/a'}`)

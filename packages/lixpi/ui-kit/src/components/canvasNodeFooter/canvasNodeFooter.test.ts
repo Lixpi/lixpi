@@ -32,6 +32,10 @@ describe('canvas node footer', () => {
             'test-review',
         ])
         expect(footer.element.querySelector('.progress-ripple-icon-svg')).not.toBeNull()
+        expect(footer.element.querySelector('.canvas-node-footer-info-button')?.getAttribute('data-help-tooltip'))
+            .toBe('aria-label')
+        expect(footer.element.querySelector('.canvas-node-footer-progress-button')?.getAttribute('data-help-tooltip'))
+            .toBe('Generation details')
         expect(vi.getTimerCount()).toBeGreaterThan(0)
         footer.destroy()
     })

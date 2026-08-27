@@ -8,7 +8,17 @@ import {
     restrictMediaRequestToExplicitVideoOutput,
 } from './scalar-media-output-routing.ts'
 
-describe('matrix media output routing', () => {
+// ===== hasExplicitVideoOutputRequest =====
+describe('hasExplicitVideoOutputRequest', () => {
+    it('always returns false regardless of prompt wording, as a compatibility no-op', () => {
+        expect(hasExplicitVideoOutputRequest('Generate a video of this.')).toBe(false)
+        expect(hasExplicitVideoOutputRequest('Animate this character.')).toBe(false)
+        expect(hasExplicitVideoOutputRequest('')).toBe(false)
+    })
+})
+
+// ===== restrictMediaRequestToExplicitVideoOutput =====
+describe('restrictMediaRequestToExplicitVideoOutput', () => {
     const request = {
         imageModelIds: ['OpenAI:gpt-image-2'],
         videoModelIds: ['Google:veo-3.1-generate-preview', 'BytePlus:dreamina-seedance-2-0-260128'],
@@ -17,28 +27,26 @@ describe('matrix media output routing', () => {
         outputMediaTypes: ['image' as const, 'video' as const],
     }
 
-    it('drops the image axis when the prompt explicitly asks for a video', () => {
-        expect(restrictMediaRequestToExplicitVideoOutput({
+    it('returns the request unchanged (identity) for an explicit video prompt', () => {
+        const result = restrictMediaRequestToExplicitVideoOutput({
             request,
             prompt: 'Generate a video following ',
             hasVideoSource: false,
-        })).toEqual({
-            ...request,
-            imageModelIds: [],
-            useMultipleImageModels: false,
-            outputMediaTypes: ['video'],
         })
+
+        expect(result).toBe(request)
+        expect(result).toEqual(request)
     })
 
-    it('drops the image axis when an authorized extension source decides the output', () => {
+    it('returns the request unchanged when an authorized extension source decides the output', () => {
         expect(restrictMediaRequestToExplicitVideoOutput({
             request,
             prompt: 'Keep going.',
             hasVideoSource: true,
-        }).imageModelIds).toEqual([])
+        })).toBe(request)
     })
 
-    it('keeps both axes when the prompt does not name a moving-media output', () => {
+    it('returns the request unchanged when the prompt does not name a moving-media output', () => {
         expect(restrictMediaRequestToExplicitVideoOutput({
             request,
             prompt: 'Show the alley encounter.',
@@ -46,7 +54,7 @@ describe('matrix media output routing', () => {
         })).toBe(request)
     })
 
-    it('keeps an image-only request untouched even for an explicit video prompt', () => {
+    it('returns an image-only request unchanged even for an explicit video prompt', () => {
         const imageOnly = { imageModelIds: ['OpenAI:gpt-image-2'], videoModelIds: [] }
 
         expect(restrictMediaRequestToExplicitVideoOutput({
@@ -57,11 +65,11 @@ describe('matrix media output routing', () => {
     })
 })
 
-describe('scalar media output routing', () => {
-    it('keeps action-heavy scene descriptions on the image model without an explicit video request', () => {
+// ===== resolveScalarMediaModelSelection =====
+describe('resolveScalarMediaModelSelection', () => {
+    it('collapses to the image model when both are configured, regardless of prompt wording', () => {
         const prompt = 'Create a cinematic show where Robert walks along the alley and notices Jarrod eating trash.'
 
-        expect(hasExplicitVideoOutputRequest(prompt)).toBe(false)
         expect(resolveScalarMediaModelSelection({
             prompt,
             imageModelId: 'OpenAI:gpt-image-2',
@@ -76,26 +84,25 @@ describe('scalar media output routing', () => {
         'Turn this image into a short clip.',
         'Continue the source video for another five seconds.',
         'Film this scene from across the street.',
-    ])('selects video for an explicit moving-media request: %s', (prompt) => {
-        expect(hasExplicitVideoOutputRequest(prompt)).toBe(true)
+    ])('still collapses to the image model for explicit moving-media wording: %s', (prompt) => {
         expect(resolveScalarMediaModelSelection({
             prompt,
             imageModelId: 'OpenAI:gpt-image-2',
             videoModelId: 'Google:veo-3.1-lite-generate-preview',
             hasVideoSource: false,
-        })).toEqual({ videoModelId: 'Google:veo-3.1-lite-generate-preview' })
+        })).toEqual({ imageModelId: 'OpenAI:gpt-image-2' })
     })
 
-    it('selects video for an authorized extension source without relying on prompt wording', () => {
+    it('collapses to the image model even when an authorized extension source is present', () => {
         expect(resolveScalarMediaModelSelection({
             prompt: 'Keep going.',
             imageModelId: 'OpenAI:gpt-image-2',
             videoModelId: 'Google:veo-3.1-lite-generate-preview',
             hasVideoSource: true,
-        })).toEqual({ videoModelId: 'Google:veo-3.1-lite-generate-preview' })
+        })).toEqual({ imageModelId: 'OpenAI:gpt-image-2' })
     })
 
-    it('preserves the only configured scalar media model', () => {
+    it('preserves the only configured scalar media model when the other is absent', () => {
         expect(resolveScalarMediaModelSelection({
             prompt: 'Create it.',
             imageModelId: 'OpenAI:gpt-image-2',
@@ -106,5 +113,12 @@ describe('scalar media output routing', () => {
             videoModelId: 'Google:veo-3.1-lite-generate-preview',
             hasVideoSource: false,
         })).toEqual({ videoModelId: 'Google:veo-3.1-lite-generate-preview' })
+    })
+
+    it('returns an empty object when neither model id is configured', () => {
+        expect(resolveScalarMediaModelSelection({
+            prompt: 'Create it.',
+            hasVideoSource: false,
+        })).toEqual({})
     })
 })

@@ -2,9 +2,24 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PROVIDER_NAMES } from '@lixpi/constants'
+import {
+    GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
+    MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT,
+    PROVIDER_NAMES,
+} from '@lixpi/constants'
 
-import { AiModelsSync } from './ai-models-synchronization.ts'
+vi.mock('@lixpi/debug-tools', () => ({
+    log: vi.fn(),
+    info: vi.fn(),
+    infoStr: vi.fn(),
+    warn: vi.fn(),
+    err: vi.fn(),
+}))
+
+import {
+    AiModelsSync,
+    mapResolutionOptionsToAspectRatioLabels,
+} from './ai-models-synchronization.ts'
 
 // =============================================================================
 // IMAGE GENERATION OPTION METADATA — resolution vs aspect ratio
@@ -24,12 +39,52 @@ describe('AiModelsSync — image generation option metadata', () => {
         })
     })
 
-    it('marks OpenAI image options as resolutions and labels them with pixel values', () => {
+    it('stores OpenAI provider dimensions as values while exposing them as aspect-ratio choices', () => {
         const model = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 1)
 
-        expect(model.imageSizeMode).toBe('resolution')
+        expect(model.imageSizeMode).toBe('aspectRatio')
         expect(model.imageSizes?.map((o: any) => o.value)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'auto'])
-        expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'Auto'])
+        expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1:1', '3:2', '2:3', 'Auto'])
+    })
+
+    it('maps only pixel-dimension labels and leaves real resolution tiers unchanged', () => {
+        const options = mapResolutionOptionsToAspectRatioLabels([
+            { value: '1920x1080', label: '1920x1080' },
+            { value: '0x1080', label: 'Invalid dimensions' },
+            { value: '720p', label: '720p' },
+            { value: '4k', label: '4K' },
+            { value: 'adaptive', label: 'Auto' },
+        ])
+
+        expect(options).toEqual([
+            { value: '1920x1080', label: '16:9' },
+            { value: '0x1080', label: 'Invalid dimensions' },
+            { value: '720p', label: '720p' },
+            { value: '4k', label: '4K' },
+            { value: 'adaptive', label: 'Auto' },
+        ])
+    })
+
+    it('persists the provider value and presentation label together', async () => {
+        const putItem = vi.fn(async () => undefined)
+        const persistenceSync: any = new AiModelsSync({
+            dynamoDBService: { putItem } as any,
+            openaiApiKey: 'test-key',
+            anthropicApiKey: 'test-key',
+            googleApiKey: 'test-key',
+        })
+        const model = persistenceSync.mapOpenAIModelToAiModel({ id: 'gpt-image-1.5' }, 1)
+
+        await persistenceSync.updateModelsSequentially([model], 'ai-models-test', 'test')
+
+        expect(putItem).toHaveBeenCalledWith(expect.objectContaining({
+            tableName: 'ai-models-test',
+            item: expect.objectContaining({
+                imageSizes: expect.arrayContaining([
+                    { value: '1536x1024', label: '3:2' },
+                ]),
+            }),
+        }))
     })
 
     it('marks Gemini image options as aspect ratios because Google receives imageConfig.aspectRatio', () => {
@@ -215,19 +270,31 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(v31.title).toBe('Veo 3.1')
         expect(v31.pricing.video?.price).toBe('0.40')
         expect(v31.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
-        expect(v31.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+        expect(v31.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
 
         const lite = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-lite-generate-preview' }, 4)
         expect(lite.title).toBe('Veo 3.1 Lite')
         expect(lite.pricing.video?.price).toBe('0.10')
         expect(lite.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
-        expect(lite.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+        expect(lite.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
 
         const fast = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-fast-generate-preview' }, 5)
         expect(fast.title).toBe('Veo 3.1 Fast')
         expect(fast.pricing.video?.price).toBe('0.15')
         expect(fast.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p', '4k'])
-        expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
+        expect(fast.videoDurations?.map((o: any) => o.value)).toEqual(['4', '6', '8'])
+
+        const controlsByKey = new Map(v31.videoGenerationControls.map((control: any) => [control.key, control]))
+        expect(controlsByKey.get('resolution').options.find((option: any) => option.value === '1080p')).toMatchObject({
+            description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.resolution?.['1080p'],
+        })
+        expect(controlsByKey.get('resolution').options.find((option: any) => option.value === '4k')).toMatchObject({
+            description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.resolution?.['4k'],
+        })
+        expect(controlsByKey.get('duration')).toMatchObject({ kind: 'duration' })
+        expect(controlsByKey.get('duration').options.find((option: any) => option.value === '8')).toMatchObject({
+            description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.duration?.['8'],
+        })
     })
 
     it('does NOT give gemini text models any video modality, options, or pricing (regression)', () => {
@@ -302,12 +369,30 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
 
         expect(model.pricing.video?.measuringUnit).toBe('tokens')
         expect(model.pricing.video?.pricePer).toBe('1000000')
-        expect(model.pricing.video?.price).toBe('4.30')
+        expect(model.pricing.video?.price).toBe('7.7')
 
-        expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
-        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p'])
-        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
+        expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'])
+        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['480p', '720p', '1080p', '4k'])
+        expect(model.videoResolutions?.map((o: any) => o.label)).toEqual(['480p', '720p', '1080p', '4K'])
+        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'])
         expect(model.videoMaxReferenceImages).toBe(9)
+
+        const controlsByKey = new Map(model.videoGenerationControls.map((control: any) => [control.key, control]))
+        expect([...controlsByKey.keys()]).not.toContain('serviceTier')
+        expect([...controlsByKey.keys()]).not.toContain('priority')
+        expect(controlsByKey.get('duration')).toMatchObject({ kind: 'duration' })
+        expect(controlsByKey.get('duration').options.find((option: any) => option.value === '-1')).toMatchObject({
+            description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
+        })
+        expect(controlsByKey.get('cameraFixed')).toMatchObject({
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.cameraFixed,
+        })
+        expect(controlsByKey.get('watermark')).toMatchObject({
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.watermark,
+        })
+        expect(controlsByKey.get('returnLastFrame')).toMatchObject({
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.returnLastFrame,
+        })
 
         expect(model.title).toBe('Seedance 2.0')
         expect(model.shortTitle).toBe('Seedance 2.0')
@@ -316,7 +401,7 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
     it('maps the fast variant to the cheaper per-1M-token price and a Fast title', () => {
         const model = sync.mapBytePlusModelToAiModel({ id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' }, 2)
         expect(model.pricing.video?.measuringUnit).toBe('tokens')
-        expect(model.pricing.video?.price).toBe('3.30')
+        expect(model.pricing.video?.price).toBe('5.6')
         expect(model.videoMaxReferenceImages).toBe(9)
         expect(model.title).toBe('Seedance 2.0 Fast')
         expect(model.shortTitle).toBe('Seedance 2.0 Fast')

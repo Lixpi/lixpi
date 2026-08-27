@@ -88,8 +88,18 @@ export class VideoPublisher {
         responseId: string
         revisedPrompt: string
         videoModelId: string
+        generationSeed?: number
     }): Promise<void> {
-        const { videoBuffer, durationSeconds, aspectRatio, hasAudio, responseId, revisedPrompt, videoModelId } = args
+        const {
+            videoBuffer,
+            durationSeconds,
+            aspectRatio,
+            hasAudio,
+            responseId,
+            revisedPrompt,
+            videoModelId,
+            generationSeed,
+        } = args
 
         if (!videoBuffer || videoBuffer.length === 0) {
             throw new Error('Video completion failed: provider returned no video bytes')
@@ -112,6 +122,7 @@ export class VideoPublisher {
             originalName: 'generated-video.mp4',
             mimeType: 'video/mp4',
             kind: 'video',
+            ...(generationSeed !== undefined ? { generationSeed } : {}),
         })
         const parsedAspectRatio = aspectRatio.includes(':')
             ? Number(aspectRatio.split(':')[0]) / Number(aspectRatio.split(':')[1])

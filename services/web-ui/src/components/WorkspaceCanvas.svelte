@@ -34,7 +34,6 @@
     import AuthService from '$src/services/auth-service.ts'
     import { settings } from '$src/settings.ts'
     import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '@lixpi/ui-kit/svg'
-    import '@lixpi/ui-kit/styles/side-panel'
     import '$src/infographics/workspace/workspace-canvas.scss'
     import '$src/infographics/workspace/media-library-panel.scss'
 
@@ -100,6 +99,8 @@
     let imageSubmenuMode: 'menu' | 'url' = $state('menu')
     let imageUrlValue = $state('')
     let imageWrapperEl: HTMLDivElement
+    let mediaModeSwitchMountEl: HTMLDivElement
+    let modelMenuControlMountEl: HTMLDivElement
     let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     let transientCanvasMutationInProgress = false
@@ -108,6 +109,7 @@
     const assetService = new AssetService()
     const DEFAULT_DOCUMENT_NODE_DIMENSIONS = { width: 400, height: 350 }
     const rightSidePanelSettings = settings.rightSidePanel
+    const modelMenuHoverBackgroundStyle = `--ai-prompt-model-menu-trigger-active-background: ${settings.aiPromptInput.modelMenu.styles.triggerActiveBackground}`
     const rightSidePanelStyle = [
         `--workspace-right-side-panel-width: min(${rightSidePanelSettings.defaultDimensions.width}px, calc(100vw - ${rightSidePanelSettings.dimensions.maxPaneMargin}px))`,
         '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)',
@@ -586,6 +588,8 @@
         renderer = createWorkspaceCanvas({
             paneEl,
             viewportEl,
+            mediaModeSwitchMountEl,
+            modelMenuControlMountEl,
             workspaceId,
             canvasState,
             documents,
@@ -715,63 +719,82 @@
     class:workspace-canvas-right-side-panel-open={isRightSidePanelOpen}
     style={rightSidePanelStyle}
 >
-    <!-- Left action panel — flanks the composer. Two icons render it as an oval. -->
-    <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
-        <button class="workspace-floating-toolbar-button" onclick={handleCreateDocument} aria-label="New Document">
-            {@html createNewFileIcon}
-            <span class="workspace-floating-toolbar-tooltip">New Document</span>
-        </button>
-        <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
+    <!-- The in-flow rail keeps the Media Library between the composer and upload panel. -->
+    <div class="workspace-canvas-left-control-rail">
+        <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
             <button
                 class="workspace-floating-toolbar-button"
-                class:active={imageSubmenuOpen}
-                onclick={toggleImageSubmenu}
-                aria-label="Add Image"
+                onclick={handleCreateDocument}
+                aria-label="New Document"
+                data-help-tooltip="aria-label"
             >
-                {@html imageIcon}
-                {#if !imageSubmenuOpen}
-                    <span class="workspace-floating-toolbar-tooltip">Add Image</span>
-                {/if}
+                {@html createNewFileIcon}
             </button>
-            {#if imageSubmenuOpen}
-                <div class="workspace-image-submenu">
-                    {#if imageSubmenuMode === 'menu'}
-                        <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
-                            Upload from Device
-                        </button>
-                        <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
-                            Paste Image URL
-                        </button>
-                    {:else}
-                        <div class="workspace-image-submenu-url-form">
-                            <input
-                                type="url"
-                                class="workspace-image-submenu-url-input"
-                                placeholder="https://example.com/image.jpg"
-                                bind:value={imageUrlValue}
-                                onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
-                            />
-                            <div class="workspace-image-submenu-url-actions">
-                                <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
-                                    Back
-                                </button>
-                                <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
-                                    Add
-                                </button>
+            <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
+                <button
+                    class="workspace-floating-toolbar-button"
+                    class:active={imageSubmenuOpen}
+                    onclick={toggleImageSubmenu}
+                    aria-label="Add Image"
+                    data-help-tooltip="aria-label"
+                >
+                    {@html imageIcon}
+                </button>
+                {#if imageSubmenuOpen}
+                    <div class="workspace-image-submenu">
+                        {#if imageSubmenuMode === 'menu'}
+                            <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
+                                Upload from Device
+                            </button>
+                            <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
+                                Paste Image URL
+                            </button>
+                        {:else}
+                            <div class="workspace-image-submenu-url-form">
+                                <input
+                                    type="url"
+                                    class="workspace-image-submenu-url-input"
+                                    placeholder="https://example.com/image.jpg"
+                                    bind:value={imageUrlValue}
+                                    onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
+                                />
+                                <div class="workspace-image-submenu-url-actions">
+                                    <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
+                                        Back
+                                    </button>
+                                    <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
+                                        Add
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    {/if}
-                </div>
-            {/if}
+                        {/if}
+                    </div>
+                {/if}
+            </div>
+        </div>
+        <div class="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
+            <button
+                class="workspace-floating-toolbar-button"
+                onclick={handleToggleMediaLibrary}
+                aria-label="Media Library"
+                data-help-tooltip="aria-label"
+            >
+                {@html mediaFoloderIcon}
+            </button>
         </div>
     </div>
 
-    <!-- Right action panel — a single icon renders it as a circle. -->
-    <div class="workspace-canvas-action-panel workspace-canvas-action-panel-right workspace-canvas-action-panel-single">
-        <button class="workspace-floating-toolbar-button" onclick={handleToggleMediaLibrary} aria-label="Media Library">
-            {@html mediaFoloderIcon}
-            <span class="workspace-floating-toolbar-tooltip">Media Library</span>
-        </button>
+    <div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">
+        <div
+            class="workspace-canvas-model-menu-hover-background"
+            aria-hidden="true"
+            style={modelMenuHoverBackgroundStyle}
+        ></div>
+        <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
+        <div
+            class="workspace-canvas-model-menu-panel"
+            bind:this={modelMenuControlMountEl}
+        ></div>
     </div>
 
     <input

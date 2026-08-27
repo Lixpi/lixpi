@@ -318,6 +318,26 @@ appendSvgPathIcon(iconGroup, xIcon, { x: 0, y: 0, size: 14, fill: '#1a2744' })
 
 Cache parsed path data if an icon is large or updated frequently.
 
+## Tooltips
+
+Native browser tooltips are forbidden. Never use an HTML or SVG `title` attribute, assign `element.title`, call `setAttribute('title', ...)`, or add an SVG `<title>` element to provide hover help.
+
+All visible hover or focus help must use `@lixpi/ui-kit/components/help-tooltip`. Do not build one-off tooltip markup or CSS inside a feature component.
+
+For simple icon-control help, keep the accessible name or description on the control and opt it into the application-level tooltip provider:
+
+```html
+<button aria-label="Add to library" data-help-tooltip="aria-label">...</button>
+```
+
+Use `data-help-tooltip="aria-description"` for a changing supplemental description. A literal attribute value is allowed when the visible help must differ from the accessible name. Use `data-help-tooltip-placement` only when a fixed `top`, `bottom`, `left`, or `right` placement is part of the surface contract.
+
+Use `createHelpTooltip()` directly for rich content, interactive tooltip content, or a tooltip-owned trigger. The shared component owns the portal, viewport clamping, arrow, positioning, and cleanup in both modes. Do not add feature-local arrow markup or positioning CSS.
+
+Do not opt in semantic regions, visible text labels, or every element with an ARIA attribute by default. If a control does not need visible help, give it the appropriate `aria-label`, `aria-labelledby`, `aria-description`, or `aria-describedby` without `data-help-tooltip`.
+
+This rule does not apply to the document `<title>` element used for page metadata or to application data fields named `title`; those are not browser hover tooltips.
+
 ## Accessibility
 
 UI components must expose accessible behavior appropriate to their renderer.

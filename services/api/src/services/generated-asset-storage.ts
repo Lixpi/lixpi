@@ -60,6 +60,36 @@ export function collectGeneratedAssetSourceIds(
     ])]
 }
 
+// A generation that continues an existing Asset, or that references one, reuses
+// the seed the referenced Asset was generated with so the new output stays close
+// to it. The pending Asset already records the resolved parent and sources, so
+// this walks that lineage rather than re-deriving node-to-Asset mappings.
+//
+// Order is parent first, then sources in the order the lineage recorded them,
+// and the first Asset carrying a seed wins. A seed outside the target provider's
+// accepted range is skipped, so a value inherited across providers can never be
+// rejected by the request.
+export const resolveInheritedGenerationSeed = async ({
+    assetId,
+    maxValue,
+}: {
+    assetId: string
+    maxValue: number
+}): Promise<number | undefined> => {
+    const asset = await getAssetRecord(assetId)
+    if (!asset?.lineage) return undefined
+    const candidateAssetIds = [
+        asset.lineage.parentAssetId,
+        ...(asset.lineage.sourceAssetIds ?? []),
+    ].filter((candidateId): candidateId is string => Boolean(candidateId))
+    for (const candidateAssetId of candidateAssetIds) {
+        const candidate = await getAssetRecord(candidateAssetId)
+        const seed = candidate?.lineage?.generationSeed
+        if (seed !== undefined && seed > 0 && seed <= maxValue) return seed
+    }
+    return undefined
+}
+
 export const ensurePendingGeneratedAssets = async ({
     lineagePlan,
     workspaceId,
@@ -174,6 +204,7 @@ export const settleGeneratedAssetOriginal = async ({
     kind,
     width,
     height,
+    generationSeed,
 }: {
     generationRun: MediaGenerationRunMeta
     workspaceId: string
@@ -183,6 +214,7 @@ export const settleGeneratedAssetOriginal = async ({
     kind: 'image' | 'video'
     width?: number
     height?: number
+    generationSeed?: number
 }): Promise<{ assetId: string; organizationId: string; url: string }> => {
     const assetId = generationRun.lineageAssignment?.assetId
     if (!assetId) throw new Error('Generated media run is missing assetId')
@@ -222,9 +254,15 @@ export const settleGeneratedAssetOriginal = async ({
             },
         },
     }
+    // The seed only exists once the provider has run, so it lands on the lineage
+    // written when the pending Asset was created rather than at creation time.
+    const lineage = generationSeed !== undefined && asset.lineage
+        ? { ...asset.lineage, generationSeed }
+        : asset.lineage
     const next: Asset = {
         ...asset,
         media,
+        ...(lineage ? { lineage } : {}),
         states: { ...asset.states, media: 'processing' },
         revision: asset.revision + 1,
         updatedAt: now,
@@ -250,7 +288,13 @@ export const settleGeneratedAssetOriginal = async ({
                     type: 'update',
                     tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
                     key: { assetId },
-                    updates: { media, states: next.states, revision: next.revision, updatedAt: now },
+                    updates: {
+                        media,
+                        ...(lineage ? { lineage } : {}),
+                        states: next.states,
+                        revision: next.revision,
+                        updatedAt: now,
+                    },
                     conditionExpression: '#revision = :expectedRevision AND attribute_not_exists(#media) AND #states.#lifecycle = :creating',
                     expressionAttributeNames: {
                         '#revision': 'revision',

@@ -128,6 +128,8 @@ The unresolved relationships live in the `imageGenerationReferences` LangGraph s
 - Google interleaves the same provider-neutral role labels with image parts.
 - Stability uses only the image, style, and structure inputs exposed by the selected endpoint. Style transfer does not satisfy identity conditioning.
 
+Stability is the only image provider that accepts a seed. It sends one on every request across both the REST and Bedrock transports, reads back the seed the response reports, and stores it on the generated Asset as `lineage.generationSeed`. OpenAI's image API and Google's Gemini image models expose no seed, so their Assets carry none. Seeds are never a composer control, and seed selection follows the shared rule in [Seed inheritance](./VIDEO-GENERATION.md#seed-inheritance).
+
 A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. Reference authority, ordering, and omission are determined from the shared graph state and declared model capabilities; the Character graph contains no provider-name branches.
 
 ## Character Creator panel execution

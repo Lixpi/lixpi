@@ -11,6 +11,7 @@ export type AiModelMenuControlItem = {
 export type AiModelMenuSectionConfig = {
     title: string
     helpText: string
+    getVisible?: () => boolean
     headingControl?: HTMLElement
     selectedModelTags?: HTMLElement
     controls: AiModelMenuControlItem[]
@@ -45,6 +46,7 @@ const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSet
     ['--ai-prompt-model-menu-section-divider-border-radius', 'sectionDividerBorderRadius'],
     ['--ai-prompt-model-menu-section-title-color', 'sectionTitleColor'],
     ['--ai-prompt-model-menu-control-label-color', 'controlLabelColor'],
+    ['--ai-prompt-model-menu-control-label-font-size', 'controlLabelFontSize'],
     ['--help-tooltip-trigger-border', 'helpTooltipTriggerBorder'],
     ['--help-tooltip-trigger-background', 'helpTooltipTriggerBackground'],
     ['--help-tooltip-trigger-color', 'helpTooltipTriggerColor'],
@@ -76,7 +78,7 @@ class AiModelMenuSection implements AiModelMenuSectionView {
     private readonly controlViews: AiModelMenuControlView[]
     private readonly helpTooltip: HelpTooltipInstance
 
-    constructor(section: AiModelMenuSectionConfig) {
+    constructor(private readonly section: AiModelMenuSectionConfig) {
         this.controlViews = section.controls.map(this.createControl)
         this.helpTooltip = createHelpTooltip({
             label: `${section.title} help`,
@@ -99,9 +101,11 @@ class AiModelMenuSection implements AiModelMenuSectionView {
                 ${section.selectedModelTags ?? null}
             </section>
         ` as HTMLElement
+        this.dom.dataset.visible = String(section.getVisible?.() ?? true)
     }
 
     update(): void {
+        this.dom.dataset.visible = String(this.section.getVisible?.() ?? true)
         for (const controlView of this.controlViews) {
             controlView.update()
         }
@@ -124,7 +128,6 @@ class AiModelMenuSection implements AiModelMenuSectionView {
                 <span className="ai-prompt-model-menu-control-field">${item.control}</span>
             </div>
         ` as HTMLElement
-
         const update = (): void => {
             const nextVisible = String(item.getVisible?.() ?? true)
             if (dom.dataset.visible === nextVisible) return

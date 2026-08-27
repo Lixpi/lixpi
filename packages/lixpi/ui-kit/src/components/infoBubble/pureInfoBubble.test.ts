@@ -149,6 +149,44 @@ describe('createInfoBubble', () => {
         expect(bubbleWrapper.classList).not.toContain('visible')
     })
 
+    it('places a static bubble above its anchor when the visible space below is insufficient', () => {
+        const originalInnerHeight = window.innerHeight
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 500 })
+
+        try {
+            const anchor = document.createElement('button')
+            const body = document.createElement('div')
+            const infoBubble = createInfoBubble({
+                id: 'static-placement-bubble',
+                anchor,
+                positioningAnchor: anchor,
+                bodyContent: body,
+                disableAutoPositioning: true,
+            })
+            const bubbleWrapper = infoBubble.dom.querySelector('.bubble-wrapper') as HTMLElement
+
+            anchor.getBoundingClientRect = vi.fn(() => createRect({
+                top: 400,
+                bottom: 424,
+                y: 400,
+            }))
+            bubbleWrapper.getBoundingClientRect = vi.fn(() => createRect({
+                width: 160,
+                height: 180,
+                right: 160,
+                bottom: 180,
+            }))
+
+            infoBubble.open()
+
+            expect(infoBubble.dom.getAttribute('data-static-placement')).toBe('top')
+            expect(infoBubble.dom.style.getPropertyValue('--static-bubble-max-height')).toBe('377px')
+            infoBubble.destroy()
+        } finally {
+            Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight })
+        }
+    })
+
     it('closes when document receives outside click and ignores self/anchor clicks', () => {
         const { anchor, infoBubble } = createBubble('outside-click')
         const bubbleRoot = infoBubble.dom

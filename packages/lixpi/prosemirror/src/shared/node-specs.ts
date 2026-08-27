@@ -87,6 +87,7 @@ export const aiChatThreadNodeSpec = {
     attrs: {
         threadId: { default: null },
         status: { default: 'active' },
+        mediaGenerationMode: { default: 'image' },
         aiReasoningModels: { default: '' },
         useMultipleReasoningModels: { default: false },
         useMultipleImageModels: { default: false },
@@ -111,6 +112,7 @@ export const aiChatThreadNodeSpec = {
                 return {
                     threadId: dom.getAttribute('data-thread-id'),
                     status: dom.getAttribute('data-status') || 'active',
+                    mediaGenerationMode: dom.getAttribute('data-media-generation-mode') === 'video' ? 'video' : 'image',
                     aiReasoningModels: dom.getAttribute('data-ai-reasoning-models') || '',
                     useMultipleReasoningModels: dom.getAttribute('data-use-multiple-reasoning-models') === 'true',
                     useMultipleImageModels: dom.getAttribute('data-use-multiple-image-models') === 'true',
@@ -141,6 +143,7 @@ export const aiChatThreadNodeSpec = {
                 class: 'ai-chat-thread-wrapper',
                 'data-thread-id': node.attrs.threadId,
                 'data-status': node.attrs.status,
+                'data-media-generation-mode': node.attrs.mediaGenerationMode === 'video' ? 'video' : 'image',
                 'data-ai-reasoning-models': node.attrs.aiReasoningModels,
                 'data-use-multiple-reasoning-models': String(useMultipleReasoningModels),
                 'data-use-multiple-image-models': String(useMultipleImageModels),
@@ -288,6 +291,7 @@ export const aiPromptInputNodeSpec = {
     selectable: false,
     isolating: true,
     attrs: {
+        mediaGenerationMode: { default: 'image' },
         aiReasoningModels: { default: '' },
         useMultipleReasoningModels: { default: false },
         useMultipleImageModels: { default: false },
@@ -310,22 +314,19 @@ export const aiPromptInputNodeSpec = {
                 const useMultipleImageModels = dom.getAttribute('data-use-multiple-image-models') === 'true'
                 const useMultipleVideoModels = dom.getAttribute('data-use-multiple-video-models') === 'true'
                 return {
+                    mediaGenerationMode: dom.getAttribute('data-media-generation-mode') === 'video' ? 'video' : 'image',
                     aiReasoningModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-reasoning-models')),
                     useMultipleReasoningModels,
                     useMultipleImageModels,
                     useMultipleVideoModels,
                     aiImageModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-image-models')),
                     imageGenerationSize: dom.getAttribute('data-image-generation-size') || 'auto',
-                    imageGenerationConfigGroups: useMultipleImageModels
-                        ? normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups'))
-                        : '',
+                    imageGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-image-generation-config-groups')),
                     aiVideoModels: normalizeAiModelSelectionAttr(dom.getAttribute('data-ai-video-models')),
                     videoAspectRatio: dom.getAttribute('data-video-aspect-ratio') || '',
                     videoResolution: dom.getAttribute('data-video-resolution') || '',
                     videoDuration: dom.getAttribute('data-video-duration') || '',
-                    videoGenerationConfigGroups: useMultipleVideoModels
-                        ? normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups'))
-                        : '',
+                    videoGenerationConfigGroups: normalizeMediaGenerationConfigSelectionAttr(dom.getAttribute('data-video-generation-config-groups')),
                     capabilityInputs: normalizeCapabilityInputsAttr(dom.getAttribute('data-capability-inputs')),
                 }
             },
@@ -339,22 +340,19 @@ export const aiPromptInputNodeSpec = {
             'div',
             {
                 class: 'ai-prompt-input-wrapper',
+                'data-media-generation-mode': node.attrs.mediaGenerationMode === 'video' ? 'video' : 'image',
                 'data-ai-reasoning-models': normalizeAiModelSelectionAttr(node.attrs.aiReasoningModels),
                 'data-use-multiple-reasoning-models': String(useMultipleReasoningModels),
                 'data-use-multiple-image-models': String(useMultipleImageModels),
                 'data-use-multiple-video-models': String(useMultipleVideoModels),
                 'data-ai-image-models': normalizeAiModelSelectionAttr(node.attrs.aiImageModels),
                 'data-image-generation-size': node.attrs.imageGenerationSize,
-                'data-image-generation-config-groups': useMultipleImageModels
-                    ? normalizeMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups)
-                    : '',
+                'data-image-generation-config-groups': normalizeMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups),
                 'data-ai-video-models': normalizeAiModelSelectionAttr(node.attrs.aiVideoModels),
                 'data-video-aspect-ratio': node.attrs.videoAspectRatio,
                 'data-video-resolution': node.attrs.videoResolution,
                 'data-video-duration': node.attrs.videoDuration,
-                'data-video-generation-config-groups': useMultipleVideoModels
-                    ? normalizeMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups)
-                    : '',
+                'data-video-generation-config-groups': normalizeMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups),
                 'data-capability-inputs': normalizeCapabilityInputsAttr(node.attrs.capabilityInputs),
             },
             0,
@@ -702,8 +700,8 @@ export const aiLineageEventNodeSpec = {
             'div',
             {
                 class: `ai-lineage-event ai-lineage-event-${kind}`,
-                title: getAiLineageEventLabel(kind),
                 'aria-label': getAiLineageEventLabel(kind),
+                'data-help-tooltip': 'aria-label',
                 'data-lineage-event-kind': kind,
                 'data-branch-origin-node-id': node.attrs.branchOriginNodeId,
                 'data-branch-fork-node-id': node.attrs.branchForkNodeId,

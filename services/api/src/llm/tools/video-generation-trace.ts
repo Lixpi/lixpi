@@ -55,13 +55,13 @@ export type VideoModelProfile = {
 
 export const VIDEO_MODEL_PROFILES: Record<VideoModelProfileName, VideoModelProfile> = {
     veo: {
-        qualityDirection: 'VEO QUALITY DIRECTION: produce one coherent continuous shot for a short clip, with stable identity, physically plausible motion, consistent scale, clean temporal continuity, and synchronized audio. Keep the subject sharp and materially consistent through the entire motion.',
+        qualityDirection: 'VEO QUALITY DIRECTION: produce one coherent continuous shot for a short clip, with stable identity, physically plausible motion, consistent scale, and clean temporal continuity. Keep the subject sharp and materially consistent through the entire motion.',
         referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached VEO reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
         imageConditioningSafetyDirection: null,
         negativePrompt: VEO_NEGATIVE_PROMPT,
     },
     seedance: {
-        qualityDirection: 'SEEDANCE QUALITY DIRECTION: produce one cohesive cinematic shot with a clear subject, physically natural motion, stable identity, consistent scale, smooth temporal continuity, deliberate camera movement, filmic lighting, and synchronized audio. Keep the subject crisp and materially consistent throughout the motion, and render every described element affirmatively.',
+        qualityDirection: 'SEEDANCE QUALITY DIRECTION: produce one cohesive cinematic shot with a clear subject, physically natural motion, stable identity, consistent scale, smooth temporal continuity, and filmic lighting. Keep the subject crisp and materially consistent throughout the motion, and render every described element affirmatively.',
         referenceImageDirection: 'REFERENCE-IMAGE DIRECTION: use the attached reference images as asset/content references for the subject, product, character, material, or visual ingredient they show. Preserve the useful visual evidence without blending unrelated identities.',
         imageConditioningSafetyDirection: 'SEEDANCE REFERENCE CONTINUITY: preserve the supplied reference evidence as closely as possible: composition, silhouette, proportions, pose, expression, hairstyle, wardrobe, props, palette, lighting, material behavior, rendering style, and medium-specific texture should remain visibly continuous through motion. Do not infer whether a depicted subject is fictional or real from visual style.',
         negativePrompt: null,
@@ -80,23 +80,35 @@ export const getVideoModelProfile = (state: ProviderState): VideoModelProfile =>
 
 const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfile): string => {
     if (state.videoSourceForExtension) {
-        return 'EXTENSION CONTINUITY: continue from the final second of the source video. Preserve the existing motion direction, camera momentum, subject identity, lighting, spatial layout, and audio bed. Do not restart the scene or return to the opening composition.'
+        return 'EXTENSION CONTINUITY: continue from the final second of the source video. Preserve the existing motion direction, camera continuity, subject identity, lighting, and spatial layout. Do not restart the scene or return to the opening composition.'
     }
 
     if (state.videoFirstFrameImage) {
         const hasStopFrame = !!(state.videoReferenceImages && state.videoReferenceImages.length > 0)
         if (hasStopFrame) {
-            return 'FIRST-LAST-FRAME DIRECTION: the first attached image is the start frame and the second is the end frame; both define the subject, composition, scene, color palette, and visual style. Generate a smooth, physically coherent transition from the start frame to the end frame, focusing the prompt on the motion, camera movement, environmental animation, lighting changes, and synchronized audio that bridge the two frames.'
+            return 'FIRST-LAST-FRAME DIRECTION: the first attached image is the start frame and the second is the end frame; both define the subject, composition, scene, color palette, and visual style. Generate a smooth, physically coherent transition from the start frame to the end frame, focusing on the motion, environmental animation, and lighting changes that bridge the two frames.'
         }
-        return 'IMAGE-TO-VIDEO DIRECTION: the attached image is the first frame and already defines the subject, composition, scene, color palette, and visual style. Preserve that starting frame and focus the prompt on motion, camera movement, environmental animation, lighting changes, and synchronized audio.'
+        return 'IMAGE-TO-VIDEO DIRECTION: the attached image is the first frame and already defines the subject, composition, scene, color palette, and visual style. Preserve that starting frame and focus on motion, environmental animation, and lighting changes.'
     }
 
     if (state.videoReferenceImages && state.videoReferenceImages.length > 0) {
         return profile.referenceImageDirection
     }
 
-    return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, deliberate camera movement, consistent lighting, and synchronized audio.'
+    return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, and consistent lighting.'
 }
+
+const buildAudioDirection = (state: ProviderState): string => (
+    state.videoGenerationConfig?.generateAudio === 'false'
+        ? 'AUDIO DIRECTION: generate a silent video with no dialogue, soundtrack, or sound effects.'
+        : 'AUDIO DIRECTION: generate synchronized audio that follows the described action and environment.'
+)
+
+const buildCameraDirection = (state: ProviderState): string => (
+    state.videoGenerationConfig?.cameraFixed === 'true'
+        ? 'CAMERA DIRECTION: keep the camera completely fixed; all motion occurs within the locked frame.'
+        : 'CAMERA DIRECTION: follow any camera instructions in the user request while maintaining smooth, coherent motion.'
+)
 
 const buildImageConditioningSafetyDirection = (state: ProviderState, profile: VideoModelProfile): string | undefined => {
     if (!profile.imageConditioningSafetyDirection) return undefined
@@ -119,6 +131,8 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
             profile.qualityDirection,
             buildImageConditioningSafetyDirection(state, profile),
             buildInputModeDirection(state, profile),
+            buildCameraDirection(state),
+            buildAudioDirection(state),
             'MANDATORY CHARACTER CREATOR GENERATION: preserve one consistent character identity, anatomy, clothing, materials, colors, and distinguishing details from the request and attached source images. The capability sample is a layout reference, not a subject to copy.',
             capabilityUsagePrompt ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}` : undefined,
             'USER VIDEO REQUEST:',
@@ -131,6 +145,8 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
         profile.qualityDirection,
         buildImageConditioningSafetyDirection(state, profile),
         buildInputModeDirection(state, profile),
+        buildCameraDirection(state),
+        buildAudioDirection(state),
         hasCapabilityReferences || capabilityUsagePrompt
             ? 'MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO: the capability reference image(s) and capability brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the capability sample subject, pose, composition, or layout.'
             : undefined,

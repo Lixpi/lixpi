@@ -32,6 +32,7 @@ import { createInstalledCapabilityControls } from '$src/installed-capabilities.t
 // SubmitHandler shape in aiPromptInputPlugin.ts so every host consumes one type.
 export type AiPromptComposerSubmitData = {
     contentJSON: any[]
+    mediaGenerationMode: 'image' | 'video'
     aiReasoningModels: string[]
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
@@ -56,6 +57,8 @@ export type AiPromptComposerSubmitData = {
 type NodeViewOptions = Parameters<typeof createAiPromptInputNodeView>[0]
 export type PromptControlFactories = {
     createContextTray?: NodeViewOptions['createContextTray']
+    mountMediaModeSwitch?: NodeViewOptions['mountMediaModeSwitch']
+    mountModelMenuControl?: NodeViewOptions['mountModelMenuControl']
     createModelDropdown: NodeViewOptions['createModelDropdown']
     createModelMultiSelect?: NodeViewOptions['createModelMultiSelect']
     createImageModelDropdown: NodeViewOptions['createImageModelDropdown']

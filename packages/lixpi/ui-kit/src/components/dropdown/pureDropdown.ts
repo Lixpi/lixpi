@@ -40,6 +40,7 @@ export type PureDropdownConfig<Option extends DropdownOption = DropdownOption> =
     availableTags?: string[]
     mountToBody?: boolean
     disableAutoPositioning?: boolean
+    popoverClassName?: string
     disableTriggerHover?: boolean
     errorState?: DropdownErrorState
     onSelect: (option: Option) => void
@@ -75,6 +76,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         enableTagFilter = false,
         mountToBody = false,
         disableAutoPositioning = false,
+        popoverClassName = '',
         disableTriggerHover = false,
         errorState,
         onSelect
@@ -180,13 +182,13 @@ export function createPureDropdown<Option extends DropdownOption>(
 
             const li = html`
                 <li
-                    class="flex justify-start items-center"
+                    class="dropdown-option-item"
                     role="button"
                     tabindex="0"
                     data-selected=${isSelected ? 'true' : 'false'}
                     onclick=${(e: Event) => optionClickHandler(e, option)}
                 >
-                    ${renderIconForOptions && option.icon ? html`<span innerHTML=${ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}></span>` : ''}
+                    ${renderIconForOptions && option.icon ? html`<span class="dropdown-option-icon" innerHTML=${ignoreColorValuesForOptions ? option.icon : injectFillColor(option.icon, option.color)}></span>` : ''}
                     ${option.title}
                 </li>
             ` as HTMLElement
@@ -258,13 +260,13 @@ export function createPureDropdown<Option extends DropdownOption>(
         <div class="dropdown-menu-tag-pill-wrapper theme-${theme}${disableTriggerHover ? ' no-trigger-hover' : ''}" data-dropdown-id="${id}" data-arrow-side="top" data-side-panel-no-drag="true" contenteditable="false">
             <span class="dots-dropdown-menu">
                 <button
-                    class="flex justify-between items-center"
+                    class="dropdown-trigger-button"
                     onmousedown=${preventProseMirrorEdit}
                     contenteditable="false"
                 >
-                    <span class="selected-option-icon flex items-center"></span>
+                    <span class="selected-option-icon dropdown-trigger-selected-icon"></span>
                     <span class="title"></span>
-                    <span class="state-indicator flex items-center" innerHTML=${buttonIcon}></span>
+                    <span class="state-indicator dropdown-trigger-state-indicator" innerHTML=${buttonIcon}></span>
                 </button>
             </span>
         </div>
@@ -284,7 +286,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         headerContent,
         bodyContent,
         visible: false,
-        className: 'dropdown-menu-popover',
+        className: `dropdown-menu-popover${popoverClassName ? ` ${popoverClassName}` : ''}`,
         disableAutoPositioning,
         onOpen: () => {
             dom.classList.add('dropdown-open')

@@ -83,6 +83,7 @@ Attrs declared in `aiChatThreadNode.ts`:
 
 - `threadId`
 - `status`
+- `mediaGenerationMode` (`image` or `video`; copied from the explicit composer switch)
 - `aiReasoningModels` (JSON-serialized ordered model-id array; length 1 = singular selection)
 - `useMultipleReasoningModels`
 - `useMultipleImageModels`
@@ -140,6 +141,7 @@ Atom block for a materialized workflow event in chat history or a projected chat
 - Marker CSS mirrors the canvas branch-marker glyph ratio and per-shape SVG offsets so the same icon family stays optically centered at chat size. The compact history icon is intentionally shadow-free; the full canvas node shadow becomes a blurred smear when scaled down to this glyph.
 - Attrs: `kind`, `branchOriginNodeId`, `branchForkNodeId`, `branchLineNodeId`
 - `kind: 'branch-origin'` renders `Branch started`; `kind: 'branch-fork'` renders `Branch fork created`; `kind: 'branch-line'` renders `Branch continued`.
+- The marker keeps its event label in `aria-label` and opts into the application-level ui-kit help-tooltip provider. It does not create a native `title` tooltip.
 - Materialized events are keyed by their kind-specific lineage id. The live editor removes duplicate materialized events inside each response message on mount, then persists the normalized document through the regular editor change path.
 - Live streamed responses materialize these nodes directly from API `generationRun.lineageAssignment` when the response is not split into `aiReasoningSection` nodes. Matrix responses keep lineage ids on each `aiReasoningSection`; read-only projections materialize scoped copies as standalone events near the resolver audit.
 
@@ -185,7 +187,7 @@ Inline generation trace block.
 - Attrs include `title`, `isOpen`, `isStreaming`, `imageGenerationTrace`, `imageGenerationTraceId`, `videoGenerationTrace`, and run metadata.
 - Used for image and video generation details.
 - Renders generation details as one continuous response block. Prompt, final prompt, references, and resolver audit are separated by subsection titles instead of collapsible chrome.
-- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated Asset rendition URLs, collapse historical duplicate candidate IDs by Asset identity while retaining the strongest reference role, and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded.
+- Trace rendering is shared through `imageGenerationTraceDetails.ts`; reference thumbnails resolve authenticated Asset rendition URLs, collapse historical duplicate candidate IDs by Asset identity while retaining the strongest reference role, and render an unavailable state instead of browser broken-image chrome when a rendition cannot be loaded. Reference labels use ARIA and the application-level ui-kit help-tooltip provider instead of native `title` tooltips.
 - Generated prompt text uses the same left-border output treatment as extraction-stage model output.
 - The NodeView accepts `traceDetailsOptions` from `renderContext`, which lets generated-media provenance previews resolve canvas-only reference sources while still rendering the real `aiCollapsibleBlock` node.
 
@@ -196,17 +198,18 @@ Inline generation trace block.
 The request payload includes:
 
 - `messages`
+- `mediaGenerationMode`
 - `aiReasoningModels` (ordered model-id array; collapsed to the first entry when `useMultipleReasoningModels` is off)
 - `useMultipleReasoningModels` / `useMultipleImageModels` / `useMultipleVideoModels`
 - `conversationAssetId`
-- `imageOptions` (carries `aiImageModels`)
-- `videoOptions` (carries `aiVideoModels`)
+- `imageOptions` (carries `aiImageModels` only in image mode)
+- `videoOptions` (carries `aiVideoModels` only in video mode)
 
 Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
-When a media section enters multi-model mode, it is an explicit output fanout section. A video-only multi-model request sends only its video models in `mediaGenerationRequest.outputMediaTypes`; the default singular image selection remains available to ordinary reasoning requests but does not create an extra image lineage assignment or pending output.
+`mediaGenerationMode` is authoritative. Prompt text cannot switch image/video routing. The handler validates that the active mode has a selected model, removes inactive media model ids from the request, and sets the matching single output media type. A multi-model selection fans out only within that explicit mode.
 
-Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded to `mediaGenerationRequest.imageOptions.configGroups` / `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
+Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded for singular and multi-model requests to the active `mediaGenerationRequest.imageOptions.configGroups` or `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
 
 `ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and
 `aiResponseMessage` blocks. It preserves code blocks with triple backticks,

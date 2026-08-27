@@ -99,6 +99,8 @@ aiGeneratedImage: {
 }
 ```
 
+The legacy schema `title` field remains parseable for document compatibility, but rendering never projects it to an HTML `title` attribute. Visible hover help must use the shared tooltip component.
+
 ## Usage
 
 The plugin is automatically registered in the editor. To use:

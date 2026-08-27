@@ -15,6 +15,7 @@ A factory function that creates dropdown UI controls. Used by AI Chat Thread for
 - Leading icon support (20dp) with on-surface-variant color
 - No arrow on dropdown popover (M3 menus are borderless elevated surfaces)
 - Chevron rotates 180° when open (smooth cubic-bezier transition)
+- Trigger, option row, and icon alignment is owned by the component stylesheet and does not depend on application utility classes
 - Hover + selected states use a simple two-color CSS gradient based on the shifting gradient palette; its relationship to the animated gradient system is documented in [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md)
 - Chevron color is CSS-driven (not auto-recolored on open/hover)
 
@@ -95,6 +96,7 @@ createPureDropdown({
   availableTags?: ['tag1', 'tag2'],
   mountToBody?: boolean,
   disableAutoPositioning?: boolean,
+  popoverClassName?: string,
   errorState?: {
     enabled?: boolean,
     title?: string,
@@ -116,8 +118,11 @@ createPureDropdown({
 - `availableTags`: Tags for filtering options
 - `mountToBody`: Appends bubble to `document.body` when `true`, otherwise nests it under the trigger container
 - `disableAutoPositioning`: Disables viewport `top/left` placement and relies on CSS placement while keeping arrow-to-anchor alignment
+- `popoverClassName`: Adds a caller-specific class to the popover wrapper
 - `errorState`: Enables red error text for the selected-value label unless `enabled` is `false`. Missing `title` falls back to `Error state`; missing `textColor` uses `settings.dropdown.errorState.textColor`
 - Various rendering flags for icons, colors, titles
+
+The option list is capped at 280px and scrolls internally when its content exceeds that height.
 
 The dropdown marks both its trigger and popover with `data-side-panel-no-drag`, so body-mounted menus inside side panels remain interactive and do not trigger side-panel drag or overlay-close behavior before option clicks run.
 

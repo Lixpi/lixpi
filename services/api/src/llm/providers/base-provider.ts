@@ -39,7 +39,11 @@ import {
     resolveCapabilityOutputMediaRuns,
     resolveDurableMediaRuns,
 } from '../lineage/capability-output-media-runs.ts'
-import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
+import {
+    ensurePendingGeneratedAssets,
+    resolveInheritedGenerationSeed,
+} from '../../services/generated-asset-storage.ts'
+import { generateMediaGenerationSeed } from './media-generation-seed.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import type { CapabilityDispatcher } from '@lixpi/capability-system/backend'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
@@ -405,6 +409,7 @@ export abstract class BaseProvider {
             mediaBranchCandidateSnapshot: requestData.mediaBranchCandidateSnapshot,
             mediaBranchResolution: requestData.mediaBranchResolution,
             mediaBranchLineagePlan: requestData.mediaBranchLineagePlan,
+            isMediaRegenerationRun: requestData.isMediaRegenerationRun,
             promptReferenceAssetIds: requestData.promptReferenceAssetIds,
             canvasVisibleArea: requestData.canvasVisibleArea,
             capabilityReferences: requestData.capabilityReferences,
@@ -1155,6 +1160,7 @@ export abstract class BaseProvider {
             const durableRun = state.durableMediaRuns?.find(run => (
                 run.reasoningIndex === state.generationRun?.reasoningIndex
                 && run.modelId === catalogModelIdFor(videoModelMetaInfo)
+                && run.mediaIndex === videoIndex
             ))
             if (durableRun && ['completed', 'failed', 'cancelled'].includes(durableRun.status)) {
                 return { generatedVideos: [] }
@@ -1186,6 +1192,7 @@ export abstract class BaseProvider {
                 videoAspectRatio: normalizedVideoAspectRatio,
                 videoResolution: normalizedVideoResolution,
                 videoDurationSeconds: normalizedVideoDuration ? Number(normalizedVideoDuration) : undefined,
+                videoGenerationConfig: videoModelOptions,
                 videoSourceForExtension: state.mediaFanoutPlan?.videoSourceForExtension ?? state.videoSourceForExtension,
                 videoSourceDurationSeconds: state.videoSourceDurationSeconds,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
@@ -1369,6 +1376,36 @@ export abstract class BaseProvider {
     protected get videoPub(): VideoPublisher {
         if (!this.videoPublisher) throw new Error('VideoPublisher not initialized')
         return this.videoPublisher
+    }
+
+    // Seed for a provider that accepts one. A generation continuing or
+    // referencing an earlier generated Asset reuses that Asset's seed; everything
+    // else gets a fresh one. `maxValue` is the calling provider's accepted range.
+    //
+    // Regenerating an output is the exception: the user is asking for a different
+    // take, and reusing the source seed would return what they already rejected.
+    protected async resolveGenerationSeed(state: ProviderState, maxValue: number): Promise<number> {
+        const assetId = state.generationRun?.lineageAssignment?.assetId
+        const isRegeneration = state.isMediaRegenerationRun
+            || Boolean(state.mediaBranchLineagePlan?.regenerationTarget)
+        if (!assetId || isRegeneration) {
+            return generateMediaGenerationSeed(maxValue)
+        }
+        try {
+            const inheritedSeed = await resolveInheritedGenerationSeed({ assetId, maxValue })
+            if (inheritedSeed !== undefined) {
+                info(`[BaseProvider] reusing inherited generation seed ${JSON.stringify({
+                    assetId,
+                    inheritedSeed,
+                }, null, 0)}`)
+                return inheritedSeed
+            }
+        } catch (error) {
+            // A lineage read failure must not block generation; a fresh seed is
+            // always a valid request.
+            warn(`[BaseProvider] inherited seed lookup failed: ${this.getErrorMessage(error)}`)
+        }
+        return generateMediaGenerationSeed(maxValue)
     }
 
     protected get signal(): AbortSignal {

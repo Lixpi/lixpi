@@ -207,7 +207,13 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const state = EditorState.create({
             doc: doc(
                 makeThread(
-                    { threadId: 'thread-featured', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
+                    {
+                        threadId: 'thread-featured',
+                        aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        // mediaGenerationMode defaults to 'image', which now requires at
+                        // least one selected image model for handleChatRequest to submit.
+                        aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
+                    },
                     [userMessage, responseMessageWithFeature]
                 )
             ),
@@ -319,6 +325,9 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                     {
                         threadId: 'thread-video-config',
                         aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        // videoModelIds is only populated when mediaGenerationMode is
+                        // 'video' — it defaults to 'image' otherwise.
+                        mediaGenerationMode: 'video',
                         useMultipleVideoModels: true,
                         aiVideoModels: JSON.stringify(['OpenAI:o4-mini']),
                         videoGenerationConfigGroups,
@@ -361,7 +370,10 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const state = EditorState.create({
             doc: doc(
                 makeThread(
-                    { threadId: 'thread-merge' },
+                    {
+                        threadId: 'thread-merge',
+                        aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
+                    },
                     [
                         makeUserMessage('First line'),
                         makeUserMessage('Second line'),
@@ -394,7 +406,11 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const plugin = createPlugin(sendAiRequestHandler)
 
         const threadOne = makeThread(
-            { threadId: 'thread-a', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
+            {
+                threadId: 'thread-a',
+                aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
+            },
             [makeUserMessage('Thread one prompt')]
         )
         const threadTwo = makeThread(
@@ -449,6 +465,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                     {
                         threadId: 'thread-current',
                         aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
                         threadContext: 'Workspace',
                         workspaceSelected: false,
                     },
@@ -620,7 +637,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(AI_CHAT_THREAD_PLUGIN_KEY.getState(nextState)?.receivingThreadIds.size).toBe(0)
     })
 
-    it('parses string-based boolean toggles for multi-model settings', async () => {
+    it('parses string-based boolean toggles for multi-model settings (image mode)', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -634,13 +651,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         ]),
                         useMultipleReasoningModels: 'true',
                         useMultipleImageModels: 'true',
-                        useMultipleVideoModels: 'false',
                         aiImageModels: JSON.stringify([
                             'Google:gemini-2.5-flash-image',
-                            'OpenAI:o4-mini',
-                        ]),
-                        aiVideoModels: JSON.stringify([
-                            'Anthropic:claude-4',
                             'OpenAI:o4-mini',
                         ]),
                     },
@@ -662,11 +674,50 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
         expect(payload.useMultipleReasoningModels).toBe(true)
         expect(payload.useMultipleImageModels).toBe(true)
-        expect(payload.useMultipleVideoModels).toBe(false)
         expect(payload.imageOptions).toMatchObject({
             aiImageModels: ['Google:gemini-2.5-flash-image', 'OpenAI:o4-mini'],
             imageGenerationSize: 'auto',
         })
+    })
+
+    it('parses string-based boolean toggles for multi-model settings (video mode) and collapses to the first model when disabled', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-string-flags-video',
+                        aiReasoningModels: JSON.stringify([
+                            'Anthropic:claude-sonnet-4-6',
+                        ]),
+                        // videoModelIds is only populated when mediaGenerationMode is
+                        // explicitly 'video'.
+                        mediaGenerationMode: 'video',
+                        useMultipleVideoModels: 'false',
+                        aiVideoModels: JSON.stringify([
+                            'Anthropic:claude-4',
+                            'OpenAI:o4-mini',
+                        ]),
+                    },
+                    [makeUserMessage('String flag parsing')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-string-flags-video',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.useMultipleVideoModels).toBe(false)
         expect(payload.videoOptions?.aiVideoModels).toEqual(['Anthropic:claude-4'])
     })
 
@@ -756,7 +807,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(outsidePaste).toBe(false)
     })
 
-    it('passes section multi-model settings into image/video request options', async () => {
+    it('passes section multi-model settings into image request options (image mode)', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
 
@@ -764,25 +815,17 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             doc: doc(
                 makeThread(
                     {
-                        threadId: 'thread-legacy',
+                        threadId: 'thread-legacy-image',
                         aiReasoningModels: JSON.stringify([
                             'Anthropic:claude-sonnet-4-6',
                             'OpenAI:gpt-4.1',
                         ]),
                         useMultipleReasoningModels: true,
                         useMultipleImageModels: true,
-                        useMultipleVideoModels: true,
                         aiImageModels: JSON.stringify([
                             'Google:gemini-2.5-flash-image',
                         ]),
-                        aiVideoModels: JSON.stringify([
-                            'OpenAI:o4-mini',
-                        ]),
                         imageGenerationSize: '1024x1024',
-                        videoAspectRatio: '16:9',
-                        videoResolution: '1080p',
-                        videoDuration: '8',
-                        sourceVideoNodeId: 'video-source-node',
                     },
                     [makeUserMessage('Legacy multi-model payload')]
                 )
@@ -792,7 +835,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         })
 
         const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
-            threadId: 'thread-legacy',
+            threadId: 'thread-legacy-image',
             nodePos: findNodePosition(state.doc, 'aiChatThread'),
         })
         state.applyTransaction(trigger)
@@ -808,6 +851,54 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             aiImageModels: ['Google:gemini-2.5-flash-image'],
             imageGenerationSize: '1024x1024',
         })
+        expect(payload.videoOptions).toBeUndefined()
+    })
+
+    it('passes section multi-model settings into video request options (video mode)', async () => {
+        const sendAiRequestHandler = vi.fn()
+        const plugin = createPlugin(sendAiRequestHandler)
+
+        const state = EditorState.create({
+            doc: doc(
+                makeThread(
+                    {
+                        threadId: 'thread-legacy-video',
+                        aiReasoningModels: JSON.stringify([
+                            'Anthropic:claude-sonnet-4-6',
+                            'OpenAI:gpt-4.1',
+                        ]),
+                        useMultipleReasoningModels: true,
+                        mediaGenerationMode: 'video',
+                        useMultipleVideoModels: true,
+                        aiVideoModels: JSON.stringify([
+                            'OpenAI:o4-mini',
+                        ]),
+                        videoAspectRatio: '16:9',
+                        videoResolution: '1080p',
+                        videoDuration: '8',
+                        sourceVideoNodeId: 'video-source-node',
+                    },
+                    [makeUserMessage('Legacy multi-model payload')]
+                )
+            ),
+            schema,
+            plugins: [plugin],
+        })
+
+        const trigger = state.tr.setMeta(USE_AI_CHAT_META, {
+            threadId: 'thread-legacy-video',
+            nodePos: findNodePosition(state.doc, 'aiChatThread'),
+        })
+        state.applyTransaction(trigger)
+
+        await Promise.resolve()
+
+        const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.aiReasoningModels).toEqual([
+            'Anthropic:claude-sonnet-4-6',
+            'OpenAI:gpt-4.1',
+        ])
+        expect(payload.imageOptions).toBeUndefined()
         expect(payload.videoOptions).toMatchObject({
             aiVideoModels: ['OpenAI:o4-mini'],
             videoAspectRatio: '16:9',
@@ -895,6 +986,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                     {
                         threadId: 'thread-invalid-video-models',
                         aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        mediaGenerationMode: 'video',
                         useMultipleVideoModels: true,
                         aiVideoModels: 'not-json',
                     },

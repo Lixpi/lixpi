@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import { uiKitSettings } from '../../runtime-settings.ts'
@@ -7,6 +9,18 @@ const defaultOptions = [
     { title: 'Model A', value: 'a' },
     { title: 'Model B', value: 'b' },
 ]
+
+const dropdownMixinsSource = readFileSync(
+    resolve(process.cwd(), 'src/components/dropdown/_dropdown-mixins.scss'),
+    'utf8',
+)
+
+function expectSourceToContain(source: string, snippet: string, label: string): void {
+    expect(
+        source.includes(snippet),
+        `${label} should contain:\n${snippet}`,
+    ).toBe(true)
+}
 
 function createTestDropdown() {
     const onSelect = vi.fn()
@@ -47,6 +61,71 @@ function createModalityDropdown() {
 
     return { dropdown, onSelect, options }
 }
+
+describe('pureDropdown — trigger alignment', () => {
+    it('uses component-owned trigger alignment classes', () => {
+        const { dropdown, button } = createTestDropdown()
+        const selectedIcon = dropdown.dom.querySelector('.selected-option-icon')!
+        const stateIndicator = dropdown.dom.querySelector('.state-indicator')!
+
+        expect(button.classList.contains('dropdown-trigger-button')).toBe(true)
+        expect(selectedIcon.classList.contains('dropdown-trigger-selected-icon')).toBe(true)
+        expect(stateIndicator.classList.contains('dropdown-trigger-state-indicator')).toBe(true)
+    })
+
+    it('keeps button content and icons vertically centered without utility CSS', () => {
+        expectSourceToContain(
+            dropdownMixinsSource,
+            `.dropdown-trigger-button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }`,
+            'dropdown trigger structure',
+        )
+        expectSourceToContain(
+            dropdownMixinsSource,
+            `.dropdown-trigger-selected-icon,
+    .dropdown-trigger-state-indicator {
+        display: flex;
+        align-items: center;
+    }`,
+            'dropdown icon structure',
+        )
+    })
+})
+
+describe('pureDropdown — portaled popovers', () => {
+    beforeEach(() => {
+        document.body.innerHTML = ''
+    })
+
+    afterEach(() => {
+        document.body.innerHTML = ''
+    })
+
+    it('mounts a caller-classified popover on the document body with viewport positioning enabled', () => {
+        const dropdown = createPureDropdown({
+            id: 'portaled-dropdown',
+            selectedValue: defaultOptions[0],
+            options: defaultOptions,
+            mountToBody: true,
+            disableAutoPositioning: false,
+            popoverClassName: 'ai-prompt-model-selector-popover',
+            onSelect: vi.fn(),
+        })
+
+        const popover = document.body.querySelector('.dropdown-menu-popover') as HTMLElement
+
+        expect(popover).not.toBeNull()
+        expect(popover.classList.contains('ai-prompt-model-selector-popover')).toBe(true)
+        expect(popover.classList.contains('static-position')).toBe(false)
+        expect(dropdown.dom.contains(popover)).toBe(false)
+
+        dropdown.destroy()
+        expect(document.body.querySelector('.ai-prompt-model-selector-popover')).toBeNull()
+    })
+})
 
 describe('pureDropdown — outside click behavior', () => {
     let addEventListenerSpy: ReturnType<typeof vi.spyOn>
@@ -303,6 +382,130 @@ describe('pureDropdown — wheel behavior', () => {
         list.dispatchEvent(wheelEvent)
 
         expect(preventSpy).toHaveBeenCalled()
+    })
+
+})
+
+describe('pureDropdown — error state', () => {
+    it('shows fallback error title and color, then restores selected value when cleared', () => {
+        const { dropdown } = createTestDropdown()
+        const title = dropdown.dom.querySelector('.title') as HTMLElement
+
+        dropdown.setErrorState({ enabled: true })
+
+        expect(dropdown.dom.classList.contains('dropdown-error-state')).toBe(true)
+        expect(title.textContent).toBe(uiKitSettings.dropdown.errorState.fallbackTitle)
+        expect(title.style.color).toBe(uiKitSettings.dropdown.errorState.textColor)
+
+        dropdown.setErrorState(undefined)
+
+        expect(dropdown.dom.classList.contains('dropdown-error-state')).toBe(false)
+        expect(title.textContent).toBe('Model A')
+    })
+
+    it('uses custom title and text color when provided', () => {
+        const { dropdown } = createTestDropdown()
+        const title = dropdown.dom.querySelector('.title') as HTMLElement
+
+        dropdown.setErrorState({ enabled: true, title: 'Custom error', textColor: 'rgb(1, 2, 3)' })
+
+        expect(title.textContent).toBe('Custom error')
+        expect(title.style.color).toBe('rgb(1, 2, 3)')
+    })
+
+    it('treats enabled: false as inactive and keeps showing the selected value', () => {
+        const { dropdown } = createTestDropdown()
+        const title = dropdown.dom.querySelector('.title') as HTMLElement
+
+        dropdown.setErrorState({ enabled: false, title: 'Should not show' })
+
+        expect(dropdown.dom.classList.contains('dropdown-error-state')).toBe(false)
+        expect(title.textContent).toBe('Model A')
+    })
+})
+
+describe('pureDropdown — icon rendering', () => {
+    const iconOptions = [
+        { title: 'Red', value: 'red', icon: '<svg></svg>', color: 'red' },
+        { title: 'Blue', value: 'blue', icon: '<svg></svg>', color: 'blue' },
+    ]
+
+    it('injects the option color into selected and list icons by default', () => {
+        const onSelect = vi.fn()
+        const dropdown = createPureDropdown({
+            id: 'icon-dropdown',
+            selectedValue: iconOptions[0],
+            options: iconOptions,
+            onSelect,
+        })
+
+        const selectedIcon = dropdown.dom.querySelector('.selected-option-icon')!
+        expect(selectedIcon.innerHTML).toContain('style="fill: red"')
+
+        const optionIconSpan = dropdown.dom.querySelector('.submenu li span')!
+        expect(optionIconSpan.innerHTML).toContain('style="fill: red"')
+    })
+
+    it('skips color injection when ignoreColorValues flags are set', () => {
+        const onSelect = vi.fn()
+        const dropdown = createPureDropdown({
+            id: 'icon-dropdown-no-color',
+            selectedValue: iconOptions[0],
+            options: iconOptions,
+            ignoreColorValuesForSelectedValue: true,
+            ignoreColorValuesForOptions: true,
+            onSelect,
+        })
+
+        const selectedIcon = dropdown.dom.querySelector('.selected-option-icon')!
+        expect(selectedIcon.innerHTML).not.toContain('style=')
+
+        const optionIconSpan = dropdown.dom.querySelector('.submenu li span')!
+        expect(optionIconSpan.innerHTML).not.toContain('style=')
+    })
+
+    it('omits selected-value icon and title rendering when disabled', () => {
+        const onSelect = vi.fn()
+        const dropdown = createPureDropdown({
+            id: 'icon-dropdown-disabled',
+            selectedValue: iconOptions[0],
+            options: iconOptions,
+            renderIconForSelectedValue: false,
+            renderTitleForSelectedValue: false,
+            onSelect,
+        })
+
+        const selectedIcon = dropdown.dom.querySelector('.selected-option-icon')!
+        const title = dropdown.dom.querySelector('.title')!
+        expect(selectedIcon.innerHTML).toBe('')
+        expect(title.textContent).toBe('')
+    })
+
+    it('omits option icons in the list when renderIconForOptions is disabled', () => {
+        const onSelect = vi.fn()
+        const dropdown = createPureDropdown({
+            id: 'icon-dropdown-no-option-icons',
+            selectedValue: iconOptions[0],
+            options: iconOptions,
+            renderIconForOptions: false,
+            onSelect,
+        })
+
+        expect(dropdown.dom.querySelector('.submenu li span')).toBeNull()
+    })
+})
+
+describe('pureDropdown — rerender', () => {
+    it('re-renders options list and selected display on demand', () => {
+        const { dropdown } = createTestDropdown()
+
+        dropdown.setOptions({ options: [{ title: 'Only', value: 'only' }] })
+        expect(dropdown.dom.querySelectorAll('.submenu li')).toHaveLength(1)
+
+        dropdown.rerender()
+
+        expect(dropdown.dom.querySelectorAll('.submenu li')).toHaveLength(1)
+        expect(dropdown.dom.querySelector('.title')!.textContent).toBe('Model A')
     })
 })
 

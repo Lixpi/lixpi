@@ -9,6 +9,7 @@ import {
     type WorkspacePersistenceSettings,
 } from '@lixpi/constants'
 import type { CircularGlassMaterialStyle } from '@lixpi/canvas-engine'
+import type { UiKitSlidingDropdownStyles } from '@lixpi/ui-kit'
 
 export const colorPalette = {
     nightBlue: '#42494f',
@@ -57,6 +58,56 @@ export type DropdownSettings = {
     }
 }
 
+export type SlidingDropdownSettings = {
+    styles: UiKitSlidingDropdownStyles
+}
+
+export type AiModelControlsSettings = {
+    styles: {
+        modelDropdown: {
+            width: number
+            height: number
+            valueFontSize: number
+            horizontalPadding: number
+            iconSize: number
+            iconLabelGap: number
+        }
+        dimensionsDropdown: {
+            width: number
+            height: number
+            valueFontSize: number
+            horizontalPadding: number
+            glyphColumnWidth: number
+            glyphValueGap: number
+            contentCenterYRatio: number
+        }
+        dimensionsGlyph: {
+            targetArea: number
+            maxDimension: number
+            adaptiveSize: number
+            cornerRadius: number
+            strokeWidth: number
+            adaptiveLabelFontSize: number
+            adaptiveLabelFontWeight: number
+        }
+    }
+}
+
+export type SlidingSwitchSettings = {
+    styles: {
+        trackBackgroundColor: string
+        indicatorBackgroundColor: string
+        unselectedOptionColor: string
+        hoveredOptionColor: string
+        selectedOptionColor: string
+        indicatorBoxShadow: string
+        indicatorInsetShadow: {
+            topColor: string
+            bottomColor: string
+        }
+    }
+}
+
 export type GradientSettings = {
     styles: {
         shiftingColors: [string, string, string, string]
@@ -65,6 +116,7 @@ export type GradientSettings = {
 
 export type HelpTooltipSettings = {
     interactiveHideDelayMs: number
+    providerShowDelayMs: number
 }
 
 export type HoverSettings = {
@@ -152,13 +204,7 @@ export type RightPanelModeSwitchSettings = {
     transitionDurationMs: number
     transitionMinDurationMs: number
     transitionDistanceSpeedupFactor: number
-    styles: {
-        activeTabBoxShadow: string
-        activeTabInsetShadow: {
-            topColor: string
-            bottomColor: string
-        }
-    }
+    styles: SlidingSwitchSettings['styles']
 }
 
 export type AiChatThreadContextPreviewSettings = {
@@ -214,6 +260,7 @@ export type AiPromptInputModelMenuSettings = {
         sectionDividerBorderRadius: string
         sectionTitleColor: string
         controlLabelColor: string
+        controlLabelFontSize: string
         selectedModelTagTextColor: string
         selectedModelTagIconColor: string
         helpTooltipTriggerBorder: string
@@ -577,6 +624,12 @@ export type Settings = {
 
     dropdown: DropdownSettings
 
+    slidingDropdown: SlidingDropdownSettings
+
+    aiModelControls: AiModelControlsSettings
+
+    slidingSwitch: SlidingSwitchSettings
+
     gradient: GradientSettings
 
     helpTooltip: HelpTooltipSettings
@@ -616,6 +669,20 @@ export type Settings = {
     contentDescriptor: ContentDescriptorSettings
 }
 
+const settingsSlidingSwitchStyles: SlidingSwitchSettings['styles'] = {
+    // Match the soft-blue selection treatment used by block card tiles.
+    trackBackgroundColor: 'rgba(95, 143, 207, 0.14)',
+    indicatorBackgroundColor: 'rgba(95, 143, 207, 0.24)',
+    unselectedOptionColor: 'rgba(66, 73, 79, 0.62)',
+    hoveredOptionColor: colorPalette.nightBlue,
+    selectedOptionColor: '#000000',
+    indicatorBoxShadow: 'none',
+    indicatorInsetShadow: {
+        topColor: 'rgba(255, 255, 255, 0.86)',
+        bottomColor: 'rgba(0, 0, 0, 0)',
+    },
+}
+
 export const settings: Settings = {
     // Model selector dropdown behavior settings.
     modelSelectorDropdown: {
@@ -635,6 +702,123 @@ export const settings: Settings = {
         },
     },
 
+    // Expanded sliding-dropdown surface settings.
+    slidingDropdown: {
+        styles: {
+            surface: {
+                // Background behind the selected row while collapsed. Keep this transparent to remove the outer ring created by the indicator inset.
+                closedBackgroundColor: 'transparent',
+                // Background of the full option tape while expanded.
+                openBackgroundColor: 'rgb(241, 242, 244)',
+            },
+            indicator: {
+                // Fill of the selected row in both collapsed and expanded states.
+                backgroundColor: 'rgba(255, 255, 255, 0.72)',
+                // SVG drop-shadow parameters for the selected row. Use `none` to disable its independent shadow.
+                boxShadow: 'none',
+                insetShadow: {
+                    // Highlight color along the selected row's upper edge.
+                    topColor: 'rgba(255, 255, 255, 0.86)',
+                    // Shadow color along the selected row's lower edge. Use a transparent color to disable the lower inset shadow.
+                    bottomColor: 'rgba(0, 0, 0, 0)',
+                },
+                // Border color around the selected row while collapsed. This is ignored visually when `closedBorderWidth` is zero.
+                closedBorderColor: 'rgba(105, 115, 133, 0.1)',
+                // Border width around the selected row while collapsed. Zero removes the closed-state border.
+                closedBorderWidth: 0,
+                // Border color around the selected row while the option tape is expanded.
+                openBorderColor: 'rgba(105, 115, 133, 0.07)',
+                // Border width around the selected row while the option tape is expanded.
+                openBorderWidth: 1,
+            },
+            option: {
+                // Text and glyph color for unselected options.
+                textColor: 'rgba(49, 59, 78, 0.68)',
+                // Text and glyph color for the selected or hovered option.
+                activeTextColor: '#1a2744',
+                // Text and glyph color for disabled options.
+                disabledTextColor: 'rgba(49, 59, 78, 0.32)',
+                // Option-label font size in SVG user units.
+                fontSize: 12,
+                // Font weight for unselected option labels.
+                fontWeight: 400,
+                // Font weight for the selected option label.
+                selectedFontWeight: 400,
+            },
+            openShadow: {
+                // Color of the separate shadow behind the expanded tape.
+                color: '#000000',
+                // Shadow opacity from zero (invisible) to one (fully opaque).
+                opacity: 0.09,
+                // Horizontal shadow offset in SVG user units. Positive values move it right.
+                offsetX: 0,
+                // Vertical shadow offset in SVG user units. Positive values move it down.
+                offsetY: 2,
+                // CSS-style blur radius. Larger values make the shadow softer and extend it farther.
+                blurRadius: 6,
+                // Distance the shadow shape expands before blurring. Larger values increase its footprint without increasing density.
+                spreadRadius: 3,
+            },
+        },
+    },
+
+    // Model-specific controls rendered inside the shared dropdown primitives.
+    aiModelControls: {
+        styles: {
+            modelDropdown: {
+                // Initial width before the sliding dropdown measures the selected model name.
+                width: 190,
+                // Height of each model selector row in SVG user units.
+                height: 38,
+                // Font size of model names in SVG user units.
+                valueFontSize: 12,
+                // Minimum visible gap between the indicator border and model content.
+                horizontalPadding: 7,
+                // Size of provider icons in SVG user units.
+                iconSize: 14,
+                // Gap between the provider icon and model name.
+                iconLabelGap: 7,
+            },
+            dimensionsDropdown: {
+                // Initial layout width used before a media configuration dropdown can measure its option content.
+                width: 68,
+                // Height of a closed media configuration dropdown in SVG user units.
+                height: 38,
+                // Font size of the media configuration value in SVG user units.
+                valueFontSize: 12,
+                // Minimum visible gap between the indicator border and option content.
+                horizontalPadding: 5,
+                // Width of the first layout column. Every glyph is centered in this column so values share one left edge.
+                glyphColumnWidth: 20,
+                // Gap between the glyph and value, matching the model tag pill's icon gap.
+                glyphValueGap: 3,
+                // Shared vertical center of the glyph and value, as a fraction of the option height.
+                contentCenterYRatio: 0.5,
+            },
+            dimensionsGlyph: {
+                // Target rectangle area in square SVG user units. Equal area keeps image sizes and aspect ratios at comparable visual weight.
+                targetArea: 169,
+                // Maximum width or height in SVG user units. This prevents extreme ratios from overflowing their option row.
+                maxDimension: 20,
+                // Width and height of the dashed Auto glyph in SVG user units.
+                adaptiveSize: 12,
+                // Corner radius of image-size and aspect-ratio rectangles in SVG user units.
+                cornerRadius: 2,
+                // Outline width of image-size and aspect-ratio rectangles in SVG user units.
+                strokeWidth: 1.5,
+                // Font size of the A inside the dashed Auto glyph in SVG user units.
+                adaptiveLabelFontSize: 7,
+                // Font weight of the A inside the dashed Auto glyph.
+                adaptiveLabelFontWeight: 700,
+            },
+        },
+    },
+
+    // One active-indicator appearance shared by every sliding switch in the app.
+    slidingSwitch: {
+        styles: settingsSlidingSwitchStyles,
+    },
+
     // Shared generated-gradient settings.
     gradient: {
         styles: {
@@ -647,6 +831,8 @@ export const settings: Settings = {
     helpTooltip: {
         // Delay before an interactive tooltip closes after the pointer leaves its trigger/content.
         interactiveHideDelayMs: 80,
+        // Delay before the delegated provider shows simple ARIA-backed tooltips.
+        providerShowDelayMs: 1000,
     },
 
     // Shared hover-state motion used by interactive Web UI controls.
@@ -927,15 +1113,7 @@ export const settings: Settings = {
             transitionMinDurationMs: 100,
             // Per-mode distance speedup. Higher values compress long jumps more.
             transitionDistanceSpeedupFactor: 0.28,
-            styles: {
-                // Active mode outer shadow. Keep this setting isolated from dropdown shadows.
-                activeTabBoxShadow: 'none',
-                // Active mode inset shadow overlay. Keep this setting isolated from dropdown shadows.
-                activeTabInsetShadow: {
-                    topColor: 'rgba(255, 255, 255, 0.86)',
-                    bottomColor: 'rgba(0, 0, 0, 0)',
-                },
-            },
+            styles: settingsSlidingSwitchStyles,
         },
 
         // Theming for the AI Chat panel's context-preview tray chips and hover popover. Verified single-use: these tokens only feed the `--workspace-ai-chat-panel-context-*` CSS variables, applied to the panel element in WorkspaceCanvas.applyAiChatPanelContextPreviewSettings. The shared components/contextPreview tile renderer is reused by generated-output details but does not read these tokens, so the settings stay panel-scoped here rather than in a standalone section.
@@ -996,6 +1174,7 @@ export const settings: Settings = {
                 triggerActiveColor: colorPalette.nightBlue,
                 triggerActiveBackground: '#eef0f4',
                 triggerFocusOutline: '2px solid #b8bec8',
+                // Minimum width of the model-settings surface. Its content can expand the surface up to the viewport-aware CSS cap.
                 infoBubbleWidth: '410px',
                 infoBubbleBorderRadius: '12px',
                 infoBubbleBackground: '#fff',
@@ -1006,6 +1185,8 @@ export const settings: Settings = {
                 sectionDividerBorderRadius: '999px',
                 sectionTitleColor: '#59626b',
                 controlLabelColor: '#9299a1',
+                // Font size used by Model, Models, Aspect ratio, Resolution, and other control labels.
+                controlLabelFontSize: '12px',
                 // Text and icon share one color, matching the dropdown value text (the menu panel foreground).
                 selectedModelTagTextColor: colorPalette.nightBlue,
                 selectedModelTagIconColor: colorPalette.nightBlue,
@@ -1018,9 +1199,8 @@ export const settings: Settings = {
                 helpTooltipBackground: colorPalette.steelBlue,
                 helpTooltipBorder: 'none',
                 helpTooltipBorderRadius: '8px',
-                // Outer shadow value intentionally duplicates dropdown.popoverBoxShadow; keep this setting separate.
-                helpTooltipBoxShadow: `0 2px 12px rgba(0, 0, 0, 0.1), 0 10px 26px rgba(35, 41, 45, 0.22), inset 0 0 1px 1px rgba(0, 0, 0, 0.1)`,
-                helpTooltipColor: colorPalette.offWhite,
+                helpTooltipBoxShadow: '0 6px 18px rgba(0, 0, 0, 0.18)',
+                helpTooltipColor: '#fff',
             },
         },
     },

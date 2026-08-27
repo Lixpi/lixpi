@@ -7,17 +7,24 @@ import {
     createGenericImageModelMultiSelect,
     createGenericVideoModelMultiSelect,
 } from '$src/components/aiModelControls/modelMultiSelect.ts'
+import { createInfoBubble } from '@lixpi/ui-kit/components/info-bubble'
 
 vi.mock('@lixpi/ui-kit/components/info-bubble', () => ({
-    createInfoBubble: vi.fn(() => ({
-        dom: document.createElement('div'),
-        open: vi.fn(),
-        close: vi.fn(),
-        toggle: vi.fn(),
-        isOpen: vi.fn(() => false),
-        destroy: vi.fn(),
-    })),
+    createInfoBubble: vi.fn((config: any) => {
+        const dom = document.createElement('div')
+        dom.appendChild(config.bodyContent)
+        return {
+            dom,
+            open: vi.fn(),
+            close: vi.fn(),
+            toggle: vi.fn(),
+            isOpen: vi.fn(() => false),
+            destroy: vi.fn(),
+        }
+    }),
 }))
+
+const createInfoBubbleMock = vi.mocked(createInfoBubble)
 
 const reasoningModels = [
     {
@@ -94,6 +101,7 @@ describe('createGenericAiModelMultiSelect', () => {
     let removeListenerSpy: ReturnType<typeof vi.spyOn>
 
     beforeEach(() => {
+        createInfoBubbleMock.mockClear()
         aiModelsStore.setAiModelsCatalog({
             models: [...reasoningModels, ...imageModels, ...videoModels],
             defaultModels: {
@@ -111,6 +119,45 @@ describe('createGenericAiModelMultiSelect', () => {
         vi.useRealTimers()
         vi.restoreAllMocks()
         aiModelsStore.resetStore()
+    })
+
+    it('uses the shared dropdown trigger alignment classes', () => {
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-alignment')
+        const button = control.dom.querySelector('button')!
+        const stateIndicator = control.dom.querySelector('.state-indicator')!
+
+        expect(button.classList.contains('dropdown-trigger-button')).toBe(true)
+        expect(stateIndicator.classList.contains('dropdown-trigger-state-indicator')).toBe(true)
+
+        control.destroy()
+    })
+
+    it('portals the regular menu without disabling viewport positioning and lets overflowing options scroll internally', () => {
+        const controls = createAiModelControls()
+        const control = createGenericAiModelMultiSelect(controls, 'reasoning-multi-select-placement')
+        const infoBubbleConfig = createInfoBubbleMock.mock.calls.at(-1)?.[0]
+        const infoBubble = createInfoBubbleMock.mock.results.at(-1)?.value
+        const optionList = infoBubble?.dom.querySelector('.ai-model-multi-select-list') as HTMLUListElement
+        const wheelEvent = new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            deltaY: 120,
+        })
+        const stopSpy = vi.spyOn(wheelEvent, 'stopPropagation')
+
+        Object.defineProperty(optionList, 'clientHeight', { configurable: true, value: 100 })
+        Object.defineProperty(optionList, 'scrollHeight', { configurable: true, value: 400 })
+
+        optionList.dispatchEvent(wheelEvent)
+
+        expect(infoBubbleConfig?.disableAutoPositioning).toBe(false)
+        expect(infoBubbleConfig?.className).toContain('ai-prompt-model-selector-popover')
+        expect(infoBubble?.dom.parentElement).toBe(document.body)
+        expect(wheelEvent.defaultPrevented).toBe(false)
+        expect(stopSpy).toHaveBeenCalledOnce()
+
+        control.destroy()
     })
 
     it('auto-selects configured default reasoning model and updates title on multi-selection changes', () => {

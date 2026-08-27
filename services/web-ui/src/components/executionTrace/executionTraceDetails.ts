@@ -555,7 +555,11 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
         const selectedFill = colors.fillActive ?? colors.fill ?? 'transparent'
         const selectedStroke = colors.strokeActive ?? colors.stroke ?? 'transparent'
         const tag = html`
-            <svg className="execution-trace-value-tag" title=${displayLabel}></svg>
+            <svg
+                className="execution-trace-value-tag"
+                aria-label=${displayLabel}
+                data-help-tooltip="aria-label"
+            ></svg>
         ` as unknown as SVGSVGElement
         const tagPill = createTagPill(select(tag), {
             id: `execution-trace-value-tag-${this.valueTagSequence++}`,

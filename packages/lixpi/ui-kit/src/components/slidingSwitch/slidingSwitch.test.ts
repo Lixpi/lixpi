@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { select, selection } from 'd3-selection'
 import { createTagPill } from '../tagPill/tagPill.ts'
-import { createSlidingSwitch } from './slidingSwitch.ts'
+import {
+    createSlidingSwitch,
+    SLIDING_SWITCH_TRANSITION_DURATION_MS,
+} from './slidingSwitch.ts'
+import type { SlidingSwitchReshuffleItemsOnValueChange } from './index.ts'
 
 // The indicator slide uses a d3 transition on the rect's `x`. happy-dom drives d3
 // timers awkwardly, so stub transitions with a chainable no-op: state (value/onChange)
@@ -49,10 +53,20 @@ const labels = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding
 const optionGroups = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding-switch-option-group'))
 const closeGroups = (svg: SVGSVGElement) => Array.from(svg.querySelectorAll('.sliding-switch-option-close'))
 const indicatorX = (svg: SVGSVGElement) => svg.querySelector('.sliding-switch-indicator')!.getAttribute('x')
+const optionValues = (svg: SVGSVGElement) => optionGroups(svg).map((group) => group.getAttribute('data-value'))
+
+const reshuffleToRight = {
+    enable: true,
+    selectedElementPosition: 'right',
+} satisfies SlidingSwitchReshuffleItemsOnValueChange
 
 describe('createSlidingSwitch', () => {
     beforeEach(() => {
         document.body.innerHTML = ''
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     it('appends an SVG group with a track, indicator, and one label + hit area per option', () => {
@@ -110,6 +124,46 @@ describe('createSlidingSwitch', () => {
 
         grid.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }))
         expect(labels(svg)[1]!.getAttribute('fill')).not.toBe('#1a2744')
+    })
+
+    it('uses caller-provided track, indicator, and default option colors', () => {
+        const { svg } = mount('list', vi.fn(), {
+            trackBackgroundColor: '#123456',
+            indicatorBackgroundColor: '#abcdef',
+            unselectedOptionColor: '#456789',
+            hoveredOptionColor: '#789abc',
+            selectedOptionColor: '#def012',
+        })
+
+        expect(svg.querySelector('.sliding-switch-track')?.getAttribute('fill')).toBe('#123456')
+        expect(svg.querySelector('.sliding-switch-indicator')?.getAttribute('fill')).toBe('#abcdef')
+        expect(labels(svg)[0]!.getAttribute('fill')).toBe('#def012')
+        expect(labels(svg)[1]!.getAttribute('fill')).toBe('#456789')
+
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+
+        expect(labels(svg)[1]!.getAttribute('fill')).toBe('#789abc')
+    })
+
+    it('passes the resolved option color to custom renderers', () => {
+        const renderedColors = new Map<View, string>()
+        const { svg, slidingSwitch } = mount('list', vi.fn(), {
+            unselectedOptionColor: '#456789',
+            hoveredOptionColor: '#789abc',
+            selectedOptionColor: '#def012',
+            renderOption: (_parent, state) => ({
+                render: nextState => renderedColors.set(nextState.option.value, nextState.color),
+            }),
+        })
+
+        expect(renderedColors.get('list')).toBe('#def012')
+        expect(renderedColors.get('grid')).toBe('#456789')
+
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+        expect(renderedColors.get('grid')).toBe('#789abc')
+
+        slidingSwitch.setValue('grid')
+        expect(renderedColors.get('grid')).toBe('#def012')
     })
 
     it('setValue selects without firing onChange', () => {
@@ -318,6 +372,122 @@ describe('createSlidingSwitch', () => {
 
         svg.querySelectorAll('.tag-pill-close')[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         expect(onClose).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode', expect.objectContaining({ value: 'grid' }))
+    })
+
+    // =============================================================================
+    // RESHUFFLE BEHAVIOR
+    // =============================================================================
+
+    it('moves the initial selected option to the configured right edge', () => {
+        const { svg, slidingSwitch } = mount('list', vi.fn(), {
+            reshuffleItemsOnValueChange: reshuffleToRight,
+        })
+
+        expect(slidingSwitch.getValue()).toBe('list')
+        expect(optionValues(svg)).toEqual(['grid', 'timeline', 'list'])
+        expect(indicatorX(svg)).toBe(String(segmentX(2)))
+    })
+
+    it('moves the initial selected option to the configured left edge', () => {
+        const { svg, slidingSwitch } = mount('timeline', vi.fn(), {
+            reshuffleItemsOnValueChange: {
+                enable: true,
+                selectedElementPosition: 'left',
+            },
+        })
+
+        expect(slidingSwitch.getValue()).toBe('timeline')
+        expect(optionValues(svg)).toEqual(['timeline', 'list', 'grid'])
+        expect(indicatorX(svg)).toBe(String(segmentX(0)))
+    })
+
+    it('sequentially reshuffles the newly selected option to the configured edge', () => {
+        vi.useFakeTimers()
+        const { svg, slidingSwitch, onChange } = mount('list', vi.fn(), {
+            reshuffleItemsOnValueChange: reshuffleToRight,
+        })
+
+        hitRects(svg)[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        vi.runAllTimers()
+
+        expect(slidingSwitch.getValue()).toBe('grid')
+        expect(optionValues(svg)).toEqual(['timeline', 'list', 'grid'])
+        expect(indicatorX(svg)).toBe(String(segmentX(2)))
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode')
+    })
+
+    it('uses the full 150 ms transition budget for a two-option reshuffle', () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+        const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
+        document.body.appendChild(svg)
+        const onChange = vi.fn()
+        const mediaModeSwitch = createSlidingSwitch(select(svg), {
+            id: 'media-mode',
+            x: 0,
+            y: 0,
+            width: 204,
+            options: [
+                { label: 'Image', value: 'image' },
+                { label: 'Video', value: 'video' },
+            ],
+            selectedValue: 'image',
+            onChange,
+            reshuffleItemsOnValueChange: reshuffleToRight,
+        })
+
+        hitRects(svg)[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        vi.advanceTimersByTime(62)
+
+        const reshuffleTimers = setTimeoutSpy.mock.calls.slice(-2)
+        const reshuffleDelay = Number(setTimeoutSpy.mock.calls[1]![1])
+        const finalStepDuration = Number(reshuffleTimers[0]![1])
+
+        expect(reshuffleDelay + finalStepDuration).toBe(SLIDING_SWITCH_TRANSITION_DURATION_MS)
+        expect(Number(reshuffleTimers[1]![1])).toBe(finalStepDuration)
+        setTimeoutSpy.mockRestore()
+
+        vi.runAllTimers()
+
+        expect(mediaModeSwitch.getValue()).toBe('video')
+        expect(optionValues(svg)).toEqual(['image', 'video'])
+        expect(indicatorX(svg)).toBe(String(102))
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('video', 'media-mode')
+    })
+
+    it('preserves the standard switch behavior when reshuffling is disabled', () => {
+        vi.useFakeTimers()
+        const { svg, slidingSwitch, onChange } = mount('list', vi.fn(), {
+            reshuffleItemsOnValueChange: {
+                enable: false,
+                selectedElementPosition: 'right',
+            },
+        })
+
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        vi.runAllTimers()
+
+        expect(slidingSwitch.getValue()).toBe('grid')
+        expect(optionValues(svg)).toEqual(['list', 'grid', 'timeline'])
+        expect(indicatorX(svg)).toBe(String(segmentX(1)))
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('grid', 'view-mode')
+    })
+
+    it('cancels an in-flight reshuffle before applying the next selection', () => {
+        vi.useFakeTimers()
+        const { svg, slidingSwitch, onChange } = mount('list', vi.fn(), {
+            reshuffleItemsOnValueChange: reshuffleToRight,
+        })
+
+        hitRects(svg)[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        vi.advanceTimersByTime(10)
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        vi.runAllTimers()
+
+        expect(slidingSwitch.getValue()).toBe('timeline')
+        expect(optionValues(svg)).toEqual(['grid', 'list', 'timeline'])
+        expect(onChange).toHaveBeenNthCalledWith(1, 'grid', 'view-mode')
+        expect(onChange).toHaveBeenNthCalledWith(2, 'timeline', 'view-mode')
     })
 
     it('keeps render safe after destroy', () => {

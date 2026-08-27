@@ -68,7 +68,7 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         expect(items[4].context).toEqual([CANVAS_IMAGE_CONTEXT])
         expect(items[5].context).toEqual([CANVAS_VIDEO_CONTEXT])
         expect(items[6].context).toEqual([CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT])
-        expect(items[6].element.getAttribute('title')).toBe('Delete file')
+        expect(items[6].element.getAttribute('aria-label')).toBe('Delete file')
     })
 
     it('the last 2 items are edge-context only', () => {
@@ -79,42 +79,42 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
 
     it('first item is Replace media button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[0].element.getAttribute('title')).toBe('Replace media')
+        expect(items[0].element.getAttribute('aria-label')).toBe('Replace media')
     })
 
     it('second item is Download media button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[1].element.getAttribute('title')).toBe('Download media')
+        expect(items[1].element.getAttribute('aria-label')).toBe('Download media')
     })
 
     it('third item is Open Asset details button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[2].element.getAttribute('title')).toBe('Open Asset details')
+        expect(items[2].element.getAttribute('aria-label')).toBe('Open Asset details')
     })
 
     it('fifth item is Connect button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[3].element.getAttribute('title')).toBe('Connect to node')
+        expect(items[3].element.getAttribute('aria-label')).toBe('Connect to node')
     })
 
     it('sixth item is Delete button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[4].element.getAttribute('title')).toBe('Delete image')
+        expect(items[4].element.getAttribute('aria-label')).toBe('Delete image')
     })
 
     it('seventh item is Delete video button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[5].element.getAttribute('title')).toBe('Delete video')
+        expect(items[5].element.getAttribute('aria-label')).toBe('Delete video')
     })
 
     it('ninth item is Change connector curve button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[7].element.getAttribute('title')).toBe('Change connector curve')
+        expect(items[7].element.getAttribute('aria-label')).toBe('Change connector curve')
     })
 
     it('tenth item is Delete connection button', () => {
         const { items } = buildCanvasBubbleMenuItems(callbacks)
-        expect(items[8].element.getAttribute('title')).toBe('Delete connection')
+        expect(items[8].element.getAttribute('aria-label')).toBe('Delete connection')
     })
 
     it('items are HTMLButtonElement instances with bubble-menu-button class', () => {
@@ -122,6 +122,8 @@ describe('buildCanvasBubbleMenuItems — structure', () => {
         for (const item of items) {
             expect(item.element.tagName).toBe('BUTTON')
             expect(item.element.classList.contains('bubble-menu-button')).toBe(true)
+            expect(item.element.getAttribute('data-help-tooltip')).toBe('aria-label')
+            expect(item.element.getAttribute('title')).toBeNull()
         }
     })
 })
@@ -194,10 +196,10 @@ describe('buildCanvasBubbleMenuItems — click behavior', () => {
         const callbacks = createCallbacks()
         const { items } = buildCanvasBubbleMenuItems(callbacks)
         const videoItems = items.filter((item) => item.context.includes(CANVAS_VIDEO_CONTEXT))
-        const titles = videoItems.map((item) => item.element.getAttribute('title'))
+        const labels = videoItems.map((item) => item.element.getAttribute('aria-label'))
 
-        expect(titles).toContain('Replace media')
-        expect(titles).toContain('Download media')
+        expect(labels).toContain('Replace media')
+        expect(labels).toContain('Download media')
     })
 
     it('Connect fires onTriggerConnection + onHide on click with active node', () => {

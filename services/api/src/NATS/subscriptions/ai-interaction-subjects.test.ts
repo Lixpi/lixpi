@@ -376,6 +376,10 @@ describe('AI interaction message routing', () => {
     })
 
     it('generates video from a referenced Action Timeline Artifact instead of routing to timeline creation', async () => {
+        // restrictMediaRequestToExplicitVideoOutput() is now a compatibility
+        // no-op — prompt wording no longer strips the image axis from a
+        // structured mediaGenerationRequest — so both axes the caller sent
+        // survive untouched into the matrix request.
         useReferencedActionTimelineConversation('Generate a video following ')
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
@@ -394,7 +398,7 @@ describe('AI interaction message routing', () => {
             capabilityInputs: {},
             capabilityReferences: [],
             mediaGenerationRequest: expect.objectContaining({
-                imageModelIds: [],
+                imageModelIds: ['google:imagen3'],
                 videoModelIds: ['openai:gpt-4o-video'],
             }),
             mediaReferenceBindings: expect.arrayContaining([
@@ -503,7 +507,11 @@ describe('AI interaction message routing', () => {
         )
     })
 
-    it('reserves only the video scalar slot when the requested output is explicitly a video', async () => {
+    it('reserves only the video scalar slot when no image model is configured for the request', async () => {
+        // Scalar routing no longer inspects prompt wording (see
+        // resolveScalarMediaModelSelection) — it collapses to the image model
+        // whenever both an image and video model are configured, so the video
+        // slot is only reserved when the image model is absent.
         mocks.assetDocumentService.loadCurrentSnapshot.mockResolvedValue({
             doc: {
                 ...conversationDoc,
@@ -523,6 +531,7 @@ describe('AI interaction message routing', () => {
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
+            aiImageModels: [],
             mediaGenerationRequest: undefined,
         })
         await flushPromises()
@@ -1078,6 +1087,10 @@ describe('AI interaction message routing', () => {
             version: 5,
         })
         mocks.aiModel.getAiModel
+            // First call is expandVideoModelIdsForOutputCount()'s output-count
+            // probe (omitPricing: true) — it has no outputCount control here, so
+            // an empty response is enough to keep the video model id singular.
+            .mockResolvedValueOnce({ modelVersion: '1' })
             .mockResolvedValueOnce({ modelVersion: '1' })
             .mockResolvedValueOnce({
                 model: 'gpt-4o-video',
@@ -1089,6 +1102,10 @@ describe('AI interaction message routing', () => {
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
+            // Scalar routing collapses to the image model whenever both an image
+            // and video model are present (see resolveScalarMediaModelSelection),
+            // so an image model must be absent for video routing to apply.
+            aiImageModels: [],
             mediaGenerationRequest: undefined,
             videoAspectRatio: '3:2',
             videoResolution: '2k',
@@ -1136,6 +1153,7 @@ describe('AI interaction message routing', () => {
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
+            aiImageModels: [],
             mediaGenerationRequest: undefined,
             videoDuration: 30 as unknown as string,
             videoAspectRatio: undefined,

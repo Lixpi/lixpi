@@ -27,6 +27,7 @@ export type SlidingSwitchOptionRenderState<Value extends string = string> = {
     hovered: boolean
     disabled: boolean
     closable: boolean
+    color: string
     onClose: (event: Event) => void
 }
 
@@ -59,6 +60,11 @@ export type SlidingSwitchTransitionConfig = {
     distanceSpeedupFactor: number
 }
 
+export type SlidingSwitchReshuffleItemsOnValueChange = {
+    enable: boolean
+    selectedElementPosition: 'left' | 'right'
+}
+
 export type SlidingSwitchConfig<Value extends string = string> = {
     id: string
     x: number
@@ -74,9 +80,15 @@ export type SlidingSwitchConfig<Value extends string = string> = {
     minOptionWidth?: number
     observeParentResize?: boolean
     visualOverflowPadding?: Partial<SlidingSwitchVisualOverflowPadding>
+    trackBackgroundColor?: string
+    indicatorBackgroundColor?: string
+    unselectedOptionColor?: string
+    hoveredOptionColor?: string
+    selectedOptionColor?: string
     indicatorBoxShadow?: string
     indicatorInsetShadow?: SlidingSwitchIndicatorInsetShadow
     transition?: Partial<SlidingSwitchTransitionConfig>
+    reshuffleItemsOnValueChange?: SlidingSwitchReshuffleItemsOnValueChange
     renderOption?: SlidingSwitchOptionRenderer<Value>
     onChange?: (value: Value, id: string) => void
     onClose?: (value: Value, id: string, option: SlidingSwitchOption<Value>) => void
@@ -109,6 +121,7 @@ const DEFAULT_SLIDING_SWITCH_TRANSITION_DURATION_MS = 150
 export const SLIDING_SWITCH_TRANSITION_DURATION_MS = DEFAULT_SLIDING_SWITCH_TRANSITION_DURATION_MS
 const DEFAULT_MIN_SLIDING_SWITCH_TRANSITION_DURATION_MS = 70
 const DEFAULT_DISTANCE_SPEEDUP_FACTOR = 0.28
+const RESHUFFLE_INITIAL_SLIDE_OVERLAP_RATIO = 0.3
 const DEFAULT_HEIGHT = 26
 const FONT_SIZE = 12
 const FONT_WEIGHT = 400
@@ -140,10 +153,16 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     private readonly minOptionWidth: number | null
     private readonly observeParentResize: boolean
     private readonly visualOverflowPadding: SlidingSwitchVisualOverflowPadding
+    private readonly trackBackgroundColor: string
+    private readonly indicatorBackgroundColor: string
+    private readonly unselectedOptionColor: string
+    private readonly hoveredOptionColor: string
+    private readonly selectedOptionColor: string
     private readonly indicatorBoxShadow: string
     private readonly indicatorInsetShadow: SlidingSwitchIndicatorInsetShadow | null
     private readonly indicatorInsetGradientId: string
     private readonly transitionConfig: SlidingSwitchTransitionConfig
+    private readonly reshuffleItemsOnValueChange: SlidingSwitchReshuffleItemsOnValueChange | null
     private readonly onChange?: (value: Value, id: string) => void
     private readonly onClose?: (value: Value, id: string, option: SlidingSwitchOption<Value>) => void
     private readonly renderOption?: SlidingSwitchOptionRenderer<Value>
@@ -169,6 +188,9 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     private resizeAnimationFrame: number | null = null
     private indicatorAnimationTargetX: number | null = null
     private indicatorAnimationTimer: ReturnType<typeof setTimeout> | null = null
+    private reshuffleAnimationTimer: ReturnType<typeof setTimeout> | null = null
+    private reshuffleRemainingDuration: number | null = null
+    private reshuffleAnimationActive = false
 
     constructor(parent: any, config: SlidingSwitchConfig<Value>) {
         if (config.options.length === 0) {
@@ -177,16 +199,24 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
         this.parent = parent
         this.id = config.id
-        this.options = config.options
+        this.options = [...config.options]
         this.className = config.className ?? ''
         this.role = config.role ?? 'radiogroup'
         this.optionRole = config.optionRole ?? 'radio'
         this.selectedAriaAttribute = config.selectedAriaAttribute ?? 'aria-checked'
         this.minOptionWidth = config.minOptionWidth ?? null
         this.observeParentResize = config.observeParentResize ?? config.minOptionWidth !== undefined
+        this.trackBackgroundColor = config.trackBackgroundColor ?? COLORS.track
+        this.indicatorBackgroundColor = config.indicatorBackgroundColor ?? COLORS.indicator
+        this.unselectedOptionColor = config.unselectedOptionColor ?? COLORS.optionText
+        this.hoveredOptionColor = config.hoveredOptionColor ?? COLORS.optionTextActive
+        this.selectedOptionColor = config.selectedOptionColor ?? COLORS.optionTextActive
         this.indicatorBoxShadow = config.indicatorBoxShadow ?? 'none'
         this.indicatorInsetShadow = config.indicatorInsetShadow ?? null
         this.transitionConfig = this.createTransitionConfig(config.transition)
+        this.reshuffleItemsOnValueChange = config.reshuffleItemsOnValueChange?.enable
+            ? config.reshuffleItemsOnValueChange
+            : null
         this.visualOverflowPadding = this.createVisualOverflowPadding(config.visualOverflowPadding)
         slidingSwitchInstanceCounter += 1
         this.indicatorInsetGradientId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingSwitchInstanceCounter}-indicator-inset`
@@ -201,6 +231,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         this.currentValue = config.selectedValue !== undefined && this.indexOf(config.selectedValue) >= 0
             ? config.selectedValue
             : this.options[0]!.value
+        this.moveSelectedOptionToConfiguredPosition(this.currentValue)
 
         this.group = parent.append('g')
             .attr('class', `sliding-switch-group ${this.className}`)
@@ -272,6 +303,26 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         if (this.indicatorAnimationTimer === null) return
         clearTimeout(this.indicatorAnimationTimer)
         this.indicatorAnimationTimer = null
+    }
+
+    private clearReshuffleAnimationTimer(): void {
+        if (this.reshuffleAnimationTimer === null) return
+        clearTimeout(this.reshuffleAnimationTimer)
+        this.reshuffleAnimationTimer = null
+    }
+
+    private stopAnimations(): void {
+        this.clearIndicatorAnimationTimer()
+        this.clearReshuffleAnimationTimer()
+        this.indicatorAnimationTargetX = null
+        this.reshuffleRemainingDuration = null
+        this.reshuffleAnimationActive = false
+        this.indicator.interrupt()
+        this.indicatorInset.interrupt()
+        for (const view of this.optionViews) {
+            view.group.interrupt().attr('transform', 'translate(0, 0)')
+        }
+        this.synchronizeOptionDomOrder()
     }
 
     private animateIndicatorTo(targetX: number, duration: number): void {
@@ -389,6 +440,125 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         return this.options.findIndex((option) => option.value === value)
     }
 
+    private selectedPositionIndex(): number {
+        return this.reshuffleItemsOnValueChange?.selectedElementPosition === 'left'
+            ? 0
+            : this.options.length - 1
+    }
+
+    private reshuffleStepCount(value: Value): number {
+        if (!this.reshuffleItemsOnValueChange) return 0
+        return Math.abs(this.indexOf(value) - this.selectedPositionIndex())
+    }
+
+    private reshufflePhaseDuration(totalDuration: number, stepCount: number): number {
+        if (stepCount === 0) return totalDuration
+        return totalDuration / (stepCount + 1 - RESHUFFLE_INITIAL_SLIDE_OVERLAP_RATIO)
+    }
+
+    private moveSelectedOptionToConfiguredPosition(value: Value): void {
+        if (!this.reshuffleItemsOnValueChange) return
+        const currentIndex = this.indexOf(value)
+        const targetIndex = this.selectedPositionIndex()
+        if (currentIndex < 0 || currentIndex === targetIndex) return
+
+        const [selectedOption] = this.options.splice(currentIndex, 1)
+        if (selectedOption) this.options.splice(targetIndex, 0, selectedOption)
+    }
+
+    private swapOptionPositions(firstIndex: number, secondIndex: number): void {
+        const firstOption = this.options[firstIndex]!
+        this.options[firstIndex] = this.options[secondIndex]!
+        this.options[secondIndex] = firstOption
+
+        const firstView = this.optionViews[firstIndex]!
+        const secondView = this.optionViews[secondIndex]!
+        this.optionViews[firstIndex] = secondView
+        this.optionViews[secondIndex] = firstView
+        firstView.index = secondIndex
+        secondView.index = firstIndex
+    }
+
+    private synchronizeOptionDomOrder(): void {
+        for (const view of this.optionViews) view.group.raise()
+    }
+
+    private completeReshuffleAnimation(): void {
+        this.clearIndicatorAnimationTimer()
+        this.indicatorAnimationTargetX = null
+        this.reshuffleRemainingDuration = null
+        this.reshuffleAnimationActive = false
+        this.indicator.interrupt()
+        this.indicatorInset.interrupt()
+        this.synchronizeOptionDomOrder()
+        this.renderInternal(false)
+    }
+
+    private animateNextReshuffleStep(value: Value): void {
+        if (this.destroyed || !this.reshuffleItemsOnValueChange) return
+
+        const currentIndex = this.indexOf(value)
+        const targetIndex = this.selectedPositionIndex()
+        if (currentIndex < 0 || currentIndex === targetIndex) {
+            this.completeReshuffleAnimation()
+            return
+        }
+
+        const direction = targetIndex > currentIndex ? 1 : -1
+        const nextIndex = currentIndex + direction
+        const selectedView = this.optionViews[currentIndex]!
+        const displacedView = this.optionViews[nextIndex]!
+        const movement = direction * this.segmentWidth()
+        const remainingStepCount = this.reshuffleStepCount(value)
+        const remainingDuration = this.reshuffleRemainingDuration ?? 0
+        const stepDuration = remainingStepCount > 0
+            ? Math.round(remainingDuration / remainingStepCount)
+            : 0
+
+        this.swapOptionPositions(currentIndex, nextIndex)
+        selectedView.group.raise()
+        selectedView.group
+            .interrupt()
+            .attr('transform', 'translate(0, 0)')
+            .transition()
+            .duration(stepDuration)
+            .ease(easeCubicOut)
+            .attr('transform', `translate(${movement}, 0)`)
+        displacedView.group
+            .interrupt()
+            .attr('transform', 'translate(0, 0)')
+            .transition()
+            .duration(stepDuration)
+            .ease(easeCubicOut)
+            .attr('transform', `translate(${-movement}, 0)`)
+        this.animateIndicatorTo(this.segmentX(nextIndex), stepDuration)
+
+        this.reshuffleAnimationTimer = setTimeout(() => {
+            this.reshuffleAnimationTimer = null
+            if (this.destroyed) return
+            selectedView.group.interrupt().attr('transform', 'translate(0, 0)')
+            displacedView.group.interrupt().attr('transform', 'translate(0, 0)')
+            if (this.reshuffleRemainingDuration !== null) {
+                this.reshuffleRemainingDuration = Math.max(0, this.reshuffleRemainingDuration - stepDuration)
+            }
+            this.renderOptionView(selectedView)
+            this.renderOptionView(displacedView)
+            this.synchronizeOptionDomOrder()
+            this.animateNextReshuffleStep(value)
+        }, stepDuration)
+    }
+
+    private scheduleReshuffleAnimation(value: Value, phaseDuration: number, totalDuration: number): void {
+        if (!this.reshuffleItemsOnValueChange || this.indexOf(value) === this.selectedPositionIndex()) return
+        const reshuffleDelay = Math.ceil(phaseDuration * (1 - RESHUFFLE_INITIAL_SLIDE_OVERLAP_RATIO))
+        this.reshuffleRemainingDuration = Math.max(0, totalDuration - reshuffleDelay)
+        this.reshuffleAnimationActive = true
+        this.reshuffleAnimationTimer = setTimeout(() => {
+            this.reshuffleAnimationTimer = null
+            this.animateNextReshuffleStep(value)
+        }, reshuffleDelay)
+    }
+
     private segmentWidth(): number {
         return (this.width - PADDING * 2) / this.options.length
     }
@@ -399,7 +569,11 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
     private createOptionState(option: SlidingSwitchOption<Value>, index: number): SlidingSwitchOptionRenderState<Value> {
         const selected = option.value === this.currentValue
+        const hovered = this.hoveredValue === option.value
         const disabled = option.disabled ?? false
+        const color = disabled
+            ? COLORS.optionTextDisabled
+            : selected ? this.selectedOptionColor : hovered ? this.hoveredOptionColor : this.unselectedOptionColor
         return {
             id: `${this.id}:${option.value}`,
             option,
@@ -409,9 +583,10 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             width: this.segmentWidth(),
             height: this.height - PADDING * 2,
             selected,
-            hovered: this.hoveredValue === option.value,
+            hovered,
             disabled,
             closable: Boolean(option.closable && this.onClose && !disabled),
+            color,
             onClose: (event: Event) => this.closeOption(option, event),
         }
     }
@@ -561,9 +736,6 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     }
 
     private renderDefaultOptionContent(view: SlidingSwitchOptionView<Value>, state: SlidingSwitchOptionRenderState<Value>): void {
-        const textColor = state.disabled
-            ? COLORS.optionTextDisabled
-            : state.selected || state.hovered ? COLORS.optionTextActive : COLORS.optionText
         const closeVisible = state.closable && state.hovered
         const closeReserve = state.closable ? CLOSE_SIZE + CLOSE_GAP : 0
         const textCenterX = state.x + closeReserve + (state.width - closeReserve) / 2
@@ -573,7 +745,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         view.label
             ?.attr('x', textCenterX)
             .attr('y', state.y + state.height / 2)
-            .attr('fill', textColor)
+            .attr('fill', state.color)
             .text(state.option.label)
 
         view.closeGroup
@@ -594,7 +766,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
                 x: -CLOSE_ICON_SIZE / 2,
                 y: -CLOSE_ICON_SIZE / 2,
                 size: CLOSE_ICON_SIZE,
-                fill: state.disabled ? COLORS.optionTextDisabled : COLORS.optionTextActive,
+                fill: state.color,
             })
         }
     }
@@ -631,7 +803,11 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         this.renderDefaultOptionContent(view, state)
     }
 
-    private renderInternal(animate: boolean, fromIndex: number | null = null): void {
+    private renderInternal(
+        animate: boolean,
+        fromIndex: number | null = null,
+        animationDuration?: number,
+    ): void {
         if (this.destroyed) return
 
         const selectedIndex = this.indexOf(this.currentValue)
@@ -653,7 +829,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             .attr('height', this.height)
             .attr('rx', this.height / 2)
             .attr('ry', this.height / 2)
-            .attr('fill', COLORS.track)
+            .attr('fill', this.trackBackgroundColor)
 
         this.indicator
             .attr('y', PADDING)
@@ -661,7 +837,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             .attr('height', indicatorHeight)
             .attr('rx', indicatorHeight / 2)
             .attr('ry', indicatorHeight / 2)
-            .attr('fill', COLORS.indicator)
+            .attr('fill', this.indicatorBackgroundColor)
             .attr('stroke', 'none')
             .attr('stroke-width', 0)
             .style('filter', this.indicatorBoxShadow === 'none' ? null : `drop-shadow(${this.indicatorBoxShadow})`)
@@ -693,7 +869,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             .attr('stroke-width', 0)
 
         if (animate) {
-            const duration = this.transitionDuration(fromIndex, selectedIndex)
+            const duration = animationDuration ?? this.transitionDuration(fromIndex, selectedIndex)
             this.animateIndicatorTo(targetX, duration)
         } else if (this.indicatorAnimationTargetX === null) {
             this.indicator.interrupt()
@@ -706,28 +882,53 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             this.indicatorAnimationTargetX = targetX
         }
 
-        for (const view of this.optionViews) this.renderOptionView(view)
+        if (!this.reshuffleAnimationActive) {
+            for (const view of this.optionViews) this.renderOptionView(view)
+        }
     }
 
     private applyValue(value: Value, notify: boolean): void {
         const nextIndex = this.indexOf(value)
         if (nextIndex < 0 || this.options[nextIndex]?.disabled) return
-        const previousIndex = this.indexOf(this.currentValue)
         const changed = value !== this.currentValue
+        if (!changed) {
+            this.renderInternal(false)
+            return
+        }
+
+        if (this.reshuffleAnimationActive) {
+            this.stopAnimations()
+            this.renderInternal(false)
+        }
+        const previousIndex = this.indexOf(this.currentValue)
+        const selectedIndex = this.indexOf(value)
+        const totalAnimationDuration = this.transitionDuration(previousIndex, selectedIndex)
+        const stepCount = this.reshuffleStepCount(value)
+        const phaseDuration = this.reshufflePhaseDuration(totalAnimationDuration, stepCount)
         this.currentValue = value
-        this.renderInternal(changed, previousIndex)
-        if (changed && notify) this.onChange?.(value, this.id)
+        this.renderInternal(true, previousIndex, phaseDuration)
+        this.scheduleReshuffleAnimation(value, phaseDuration, totalAnimationDuration)
+        if (notify) this.onChange?.(value, this.id)
     }
 
-    render = (): void => this.renderInternal(false)
+    render = (): void => {
+        if (!this.reshuffleAnimationActive) {
+            this.renderInternal(false)
+            return
+        }
+        this.stopAnimations()
+        this.renderInternal(false)
+    }
 
     resize(x: number, y: number, width: number, height: number = this.height): void {
+        const animateIndicator = this.indicatorAnimationTargetX !== null && !this.reshuffleAnimationActive
+        if (this.reshuffleAnimationActive) this.stopAnimations()
         this.x = x
         this.y = y
         this.requestedWidth = width
         this.width = this.resolveContentWidth(width)
         this.height = height
-        this.renderInternal(this.indicatorAnimationTargetX !== null)
+        this.renderInternal(animateIndicator)
     }
 
     setValue(value: Value): void {
@@ -753,7 +954,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             cancelAnimationFrame(this.resizeAnimationFrame)
             this.resizeAnimationFrame = null
         }
-        this.clearIndicatorAnimationTimer()
+        this.stopAnimations()
         this.resizeObserver?.disconnect()
         this.observedResizeTargets.clear()
         for (const view of this.optionViews) view.customRenderer?.destroy?.()

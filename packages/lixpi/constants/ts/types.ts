@@ -173,6 +173,7 @@ export type ImageGenerationSize =
 export type ImageSizeOption = {
     value: string
     label: string
+    description?: string
 }
 
 export type ImageSizeMode = 'resolution' | 'aspectRatio'
@@ -250,12 +251,46 @@ export type MediaGenerationConfigControlKey =
     | 'aspectRatio'
     | 'resolution'
     | 'duration'
+    | 'outputFormat'
+    | 'outputCount'
+    | 'generateAudio'
+    | 'negativePrompt'
+    | 'personGeneration'
+    | 'cameraFixed'
+    | 'watermark'
+    | 'returnLastFrame'
+
+export const MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT: Readonly<Partial<Record<MediaGenerationConfigControlKey, string>>> = {
+    cameraFixed: 'Keeps the camera stationary instead of allowing generated camera movement.',
+    watermark: 'Adds an AI-generated watermark to the lower-right corner of the output video.',
+    returnLastFrame: 'Returns the final video frame as a separate image that can continue a video sequence.',
+}
+
+export const GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT: Readonly<Partial<Record<MediaGenerationConfigControlKey, Readonly<Record<string, string>>>>> = {
+    resolution: {
+        '1080p': '1080p requires an 8 second duration.',
+        '4k': '4K requires an 8 second duration.',
+    },
+    duration: {
+        '8': 'Required for reference-image, extension, and high-resolution requests.',
+    },
+}
+
+export type MediaGenerationConfigControlKind =
+    | 'aspect-ratio'
+    | 'segmented'
+    | 'duration'
+    | 'toggle'
+    | 'fixed'
 
 export type MediaGenerationConfigControl = {
     key: MediaGenerationConfigControlKey
     label: string
+    kind: MediaGenerationConfigControlKind
     options: ImageSizeOption[]
     defaultValue?: string
+    description?: string
+    readOnly?: boolean
 }
 
 export type MediaGenerationConfigGroup = {
@@ -1989,6 +2024,7 @@ export type AiInteractionChatSubmitPayload = AiInteractionChatSendMessagePayload
 export type AiInteractionMediaGenerationRequest = {
     requestVersion: 'media-generation-matrix-v1'
     generationRequestId: string
+    mediaGenerationMode?: 'image' | 'video'
     outputMediaTypes?: Array<'image' | 'video'>
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
@@ -2090,11 +2126,15 @@ export type AiModel = {
     // Required for image-generation models. Describes reference budgets and
     // conditioning controls without leaking provider request syntax upstream.
     imageReferenceCapabilities?: ImageReferenceCapabilities
-    // Video generation option lists (VEO and future video providers). Reuse the
-    // ImageSizeOption { value, label } shape the size dropdown already consumes.
+    // Legacy normalized video axes retained for routing, usage, and trace fields.
+    // Interactive provider/model controls are authored in videoGenerationControls.
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
     videoDurations?: ImageSizeOption[]
+    // Provider/model-specific video controls authored by ai-models-synchronization.
+    // Catalog, UI, orchestration, and provider adapters consume this profile
+    // without reconstructing vendor capabilities elsewhere.
+    videoGenerationControls?: MediaGenerationConfigControl[]
     // Max reference images this video model accepts (VEO 3, Seedance 9). Absent => 3.
     videoMaxReferenceImages?: number
     // Capabilities for which this model is the catalog default, set by

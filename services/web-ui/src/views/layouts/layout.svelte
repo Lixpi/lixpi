@@ -6,7 +6,6 @@
     import { PaymentProcessingStatus } from '@lixpi/constants'
 
     import { createNavigationSidePanel } from '$src/components/navigationSidePanel/index.ts'
-    import '@lixpi/ui-kit/styles/side-panel'
     import '$src/components/navigationSidePanel/navigation-side-panel.scss'
     import IntroPage from '$src/components/intro-page.svelte'
     import WorkspaceCanvas from '$src/components/WorkspaceCanvas.svelte'

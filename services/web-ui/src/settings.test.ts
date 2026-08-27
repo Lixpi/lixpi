@@ -79,6 +79,8 @@ describe('settings - grouped configuration', () => {
 		const topLevelSettingsSections = [
 			'modelSelectorDropdown',
 			'dropdown',
+			'slidingDropdown',
+			'aiModelControls',
 			'gradient',
 			'helpTooltip',
 			'canvasBubbleMenu',
@@ -119,6 +121,7 @@ describe('settings - grouped configuration', () => {
 		expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
 		expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
 		expectFiniteNumber(settings.helpTooltip.interactiveHideDelayMs, 'settings.helpTooltip.interactiveHideDelayMs')
+		expectFiniteNumber(settings.helpTooltip.providerShowDelayMs, 'settings.helpTooltip.providerShowDelayMs')
 		expectFiniteNumber(settings.connector.proximityConnectThreshold, 'settings.connector.proximityConnectThreshold')
 		expectFiniteNumber(settings.connector.menuConnectionSnapRadius, 'settings.connector.menuConnectionSnapRadius')
 		expectFiniteNumber(settings.connector.scaling.strokeWidth, 'settings.connector.scaling.strokeWidth')
@@ -229,6 +232,8 @@ describe('settings - grouped configuration', () => {
 
 		const styleGroups = {
 			'settings.dropdown.styles': settings.dropdown.styles,
+			'settings.slidingDropdown.styles': settings.slidingDropdown.styles,
+			'settings.aiModelControls.styles': settings.aiModelControls.styles,
 			'settings.aiChatThread.styles': settings.aiChatThread.styles,
 			'settings.aiPromptInput.modelMenu.styles': settings.aiPromptInput.modelMenu.styles,
 			'settings.aiChatThread.panelSwitch.styles': settings.aiChatThread.panelSwitch.styles,
@@ -245,6 +250,23 @@ describe('settings - grouped configuration', () => {
 			expect(typeof group, `${path} should be object`).toBe('object')
 			expectLeafValuePaths(group, path)
 		}
+	})
+
+	it('keeps the model menu compact and readable', () => {
+		expect(settings.aiPromptInput.modelMenu.styles.infoBubbleWidth).toBe('410px')
+		expect(settings.aiPromptInput.modelMenu.styles.controlLabelFontSize).toBe('12px')
+	})
+
+	it('keeps model selector sizing separate from media configuration dropdown sizing', () => {
+		const modelDropdown = settings.aiModelControls.styles.modelDropdown
+		const mediaDropdown = settings.aiModelControls.styles.dimensionsDropdown
+
+		for (const [name, value] of Object.entries(modelDropdown)) {
+			expectFiniteNumber(value, `settings.aiModelControls.styles.modelDropdown.${name}`)
+		}
+		expect(modelDropdown.width).toBeGreaterThan(mediaDropdown.width)
+		expect(modelDropdown.iconSize).toBeGreaterThan(0)
+		expect(modelDropdown.iconLabelGap).toBeGreaterThan(0)
 	})
 
 	it('keeps video controls scalar values numerically valid', () => {

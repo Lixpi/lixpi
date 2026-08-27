@@ -18,6 +18,7 @@ import {
     type BytePlusClientConfig,
     type CreateVideoGenerationTaskPayload,
 } from './byteplus-video-types.ts'
+import { SEEDANCE_SEED_MAX, resolveReportedSeed } from './media-generation-seed.ts'
 
 // First-party video provider for BytePlus ModelArk's official Seedance 2.0 API.
 // A clean peer of GoogleProvider: it is invoked as a transient provider by the
@@ -106,6 +107,10 @@ export class BytePlusProvider extends BaseProvider {
             videoReferenceImages: providerFrames.slice(1, 2),
         })
         const duration = Number(state.videoDurationSeconds) || undefined
+        const generationConfig = state.videoGenerationConfig ?? {}
+        // Seedance accepts a seed and echoes it back on the finished task, so we
+        // always send one and store whichever value the task reports.
+        const requestedSeed = await this.resolveGenerationSeed(state, SEEDANCE_SEED_MAX)
 
         const payload: CreateVideoGenerationTaskPayload = {
             model: modelVersion,
@@ -113,8 +118,11 @@ export class BytePlusProvider extends BaseProvider {
             ...(state.videoResolution ? { resolution: state.videoResolution } : {}),
             ...(state.videoAspectRatio ? { ratio: state.videoAspectRatio } : {}),
             ...(duration ? { duration } : {}),
-            generate_audio: true,
-            watermark: false,
+            generate_audio: generationConfig.generateAudio !== 'false',
+            watermark: generationConfig.watermark === 'true',
+            seed: requestedSeed,
+            camera_fixed: generationConfig.cameraFixed === 'true',
+            return_last_frame: generationConfig.returnLastFrame === 'true',
         }
 
         const hasFirstFrame = content.some((c) => c.type === 'image_url' && c.role === 'first_frame')
@@ -124,6 +132,8 @@ export class BytePlusProvider extends BaseProvider {
             ratio: payload.ratio,
             resolution: payload.resolution,
             duration: payload.duration,
+            generateAudio: payload.generate_audio,
+            cameraFixed: payload.camera_fixed,
             promptLen: providerPrompt.length,
             hasFirstFrame,
             hasLastFrame,
@@ -176,6 +186,7 @@ export class BytePlusProvider extends BaseProvider {
             const aspectRatio = task.ratio ?? state.videoAspectRatio ?? ''
             const resolution = task.resolution ?? state.videoResolution ?? ''
             const hasAudio = payload.generate_audio ?? true
+            const generationSeed = resolveReportedSeed(task.seed, requestedSeed)
 
             await this.videoPub.complete({
                 videoBuffer,
@@ -187,11 +198,13 @@ export class BytePlusProvider extends BaseProvider {
                 responseId: taskId,
                 revisedPrompt: providerPrompt,
                 videoModelId: modelVersion,
+                generationSeed,
             })
 
             info(`[BytePlus:${this.instanceKey}] Seedance complete ${JSON.stringify({
                 taskId,
                 durationSeconds,
+                generationSeed,
                 totalTokens: task.usage?.total_tokens,
             }, null, 0)}`)
 

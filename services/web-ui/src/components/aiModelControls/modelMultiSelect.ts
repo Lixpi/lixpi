@@ -134,8 +134,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             arrowSide: 'top',
             bodyContent: this.optionsList,
             visible: false,
-            className: 'dropdown-menu-popover ai-model-multi-select-popover',
-            disableAutoPositioning: true,
+            className: 'dropdown-menu-popover ai-model-multi-select-popover ai-prompt-model-selector-popover',
+            disableAutoPositioning: false,
             onOpen: () => {
                 this.dom.classList.add('dropdown-open')
                 this.dotsMenu.classList.add('is-active')
@@ -146,7 +146,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
             },
         })
         this.infoBubble.dom.style.setProperty('--dropdown-popover-box-shadow', settings.dropdown.styles.popoverBoxShadow)
-        this.dotsMenu.appendChild(this.infoBubble.dom)
+        document.body.appendChild(this.infoBubble.dom)
         this.handleDocumentMouseDown = (event: MouseEvent): void => {
             if (!this.infoBubble.isOpen?.()) return
 
@@ -182,12 +182,12 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
                 <span className="dots-dropdown-menu">
                     <button
                         type="button"
-                        className="flex justify-between items-center"
+                        className="dropdown-trigger-button"
                         onmousedown=${this.preventProseMirrorEdit}
                         contenteditable="false"
                     >
                         <span className="title"></span>
-                        <span className="state-indicator flex items-center" innerHTML=${chevronDownIcon}></span>
+                        <span className="state-indicator dropdown-trigger-state-indicator" innerHTML=${chevronDownIcon}></span>
                     </button>
                 </span>
             </div>
@@ -341,16 +341,16 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
 
             return html`
                 <li
-                    className="ai-model-multi-select-option flex justify-start items-center"
+                    className="dropdown-option-item ai-model-multi-select-option"
                     role="button"
                     tabindex="0"
                     data-selected=${isSelected ? 'true' : 'false'}
                     data-model-id=${option.aiModel}
                     onclick=${handleClick}
                 >
-                    ${option.icon ? html`<span className="ai-model-multi-select-icon" innerHTML=${option.icon}></span>` : null}
+                    ${option.icon ? html`<span className="dropdown-option-icon ai-model-multi-select-icon" innerHTML=${option.icon}></span>` : null}
                     <span className="ai-model-multi-select-title">${option.title}</span>
-                    <span className="ai-model-multi-select-check" innerHTML=${isSelected ? checkMarkIcon : ''}></span>
+                    <span className="dropdown-option-icon ai-model-multi-select-check" innerHTML=${isSelected ? checkMarkIcon : ''}></span>
                 </li>
             ` as HTMLLIElement
         })

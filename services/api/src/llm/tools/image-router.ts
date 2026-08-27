@@ -298,6 +298,7 @@ export class ImageRouter {
                     imageSize,
                     imageGenerationReferences: args.passReferences,
                     generationRun,
+                    isMediaRegenerationRun: Boolean(state.mediaBranchLineagePlan?.regenerationTarget),
                     eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
                     proseMirrorContentHandler: options.onProseMirrorContent,
                     proseMirrorSnapshotProvider: options.getProseMirrorSnapshot,

@@ -395,6 +395,10 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     let visibilityRaf: number | null = null
     let prefetchScheduled = false
     let screenGlassBorderTargets: ScreenGlassBorderTarget[] | null = null
+    const observedScreenGlassBorderElements = new Set<HTMLElement>()
+    const screenGlassBorderResizeObserver = typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => scheduleRender())
+        : null
     let screenGlassBorderRects: PixiGlassBorderDatum[] = []
     let stageCaptureDirty = true
     let lastCaptureTexture: RenderTexture | null = null
@@ -1244,9 +1248,9 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
         }
     }
 
-    // Build one screen-space datum per glass target. The left/right action
-    // panels are searched from the workspace root because they are siblings of
-    // the pane, while the global composer is inside the pane.
+    // Build one screen-space datum per glass target. The action panels are
+    // searched from the workspace root because they are siblings of the pane,
+    // while the global composer is inside the pane.
     function getScreenGlassBorderDatums(): PixiGlassBorderDatum[] {
         const glassBorder = settings.canvasChrome.glassBorder
         if (!glassBorder.enabled) return []
@@ -1257,6 +1261,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
 
         for (const target of targets) {
             if (!target.element.isConnected) {
+                screenGlassBorderResizeObserver?.unobserve(target.element)
+                observedScreenGlassBorderElements.delete(target.element)
                 screenGlassBorderTargets = null
                 continue
             }
@@ -1279,8 +1285,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
     }
 
     // Chrome elements are stable for the life of the pane, so the selector walk
-    // is cached. Resolving three selectors on every rendered frame showed up as
-    // steady main-thread cost while the traveling outline animated.
+    // is cached. Repeating the selector walk on every rendered frame adds steady
+    // main-thread cost while the traveling outline animates.
     function getScreenGlassBorderTargets(): ScreenGlassBorderTarget[] {
         if (screenGlassBorderTargets) return screenGlassBorderTargets
 
@@ -1291,17 +1297,25 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
                 element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-left'),
             },
             {
+                id: 'workspace-media-library-panel',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-media-library-panel'),
+            },
+            {
                 id: 'workspace-global-composer',
                 element: paneEl.querySelector<HTMLElement>('.workspace-canvas-global-composer'),
             },
             {
-                id: 'workspace-action-panel-right',
-                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-action-panel-right'),
+                id: 'workspace-right-control-rail',
+                element: rootEl?.querySelector<HTMLElement>('.workspace-canvas-right-control-rail'),
             },
         ]
         const targets: ScreenGlassBorderTarget[] = []
         for (const candidate of candidates) {
             if (!candidate.element) continue
+            if (!observedScreenGlassBorderElements.has(candidate.element)) {
+                screenGlassBorderResizeObserver?.observe(candidate.element)
+                observedScreenGlassBorderElements.add(candidate.element)
+            }
             targets.push({ id: candidate.id, element: candidate.element, radiusKey: '', radius: 0 })
         }
         // Only cache once the chrome has actually mounted, otherwise an early
@@ -2663,6 +2677,8 @@ export function createPixiMediaLayer(options: PixiMediaLayerOptions): PixiMediaL
             cancelAnimationFrame(visibilityRaf)
             visibilityRaf = null
         }
+        screenGlassBorderResizeObserver?.disconnect()
+        observedScreenGlassBorderElements.clear()
         generatingBorderRenderer.destroy()
         glassBorderRenderer.destroy()
         generatingImageNodeOutlines.clear()

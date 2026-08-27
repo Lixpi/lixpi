@@ -11,6 +11,7 @@ import {
 import { select } from 'd3-selection'
 import { v4 as uuidv4 } from 'uuid'
 import {
+    ASSET_GENERATION_SEED_HELP_TEXT,
     NATS_SUBJECTS,
     LoadingStatus,
     type CanvasState,
@@ -838,6 +839,8 @@ type WorkspaceCanvasInsertionStatePatch = Omit<Partial<CanvasState>, 'nodes' | '
 type WorkspaceCanvasOptions = {
     paneEl: HTMLDivElement
     viewportEl: HTMLDivElement
+    mediaModeSwitchMountEl: HTMLDivElement
+    modelMenuControlMountEl: HTMLDivElement
     workspaceId: string
     canvasState: CanvasState | null
     documents: Document[]
@@ -1041,9 +1044,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     const generatedMediaAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedMediaAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedMediaIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
+    const generatedMediaSeedTooltips: Map<string, HelpTooltipInstance> = new Map()
     const generatedOutputDetailsAssetEditors: Map<string, ProseMirrorEditor> = new Map()
     const generatedOutputDetailsAssetDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const generatedOutputDetailsIdentityControls: Map<string, AssetSubjectIdentityControlInstance> = new Map()
+    const generatedOutputDetailsSeedTooltips: Map<string, HelpTooltipInstance> = new Map()
     const branchMarkerReviewDropdowns: Map<string, ReturnType<typeof createPureDropdown>> = new Map()
     const mediaGenerationProgressInstances = new Map<string, MediaGenerationProgressInstance>()
     const generatedOutputNodeFooters = new Map<string, CanvasNodeFooterInstance>()
@@ -2415,12 +2420,19 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         <span className="canvas-asset-diagnostics-label">Lineage</span>
                         <div className="canvas-asset-lineage"></div>
                     </div>
+                    <div className="canvas-asset-detail-row canvas-asset-seed-row">
+                        <span className="canvas-asset-diagnostics-label canvas-asset-seed-label"></span>
+                        <div className="canvas-asset-seed"></div>
+                    </div>
                 </div>
             </section>
         ` as HTMLElement
         const statusEl = section.querySelector('.canvas-asset-details-status') as HTMLElement
         const renditionsEl = section.querySelector('.canvas-asset-renditions') as HTMLElement
         const lineageEl = section.querySelector('.canvas-asset-lineage') as HTMLElement
+        const seedRow = section.querySelector('.canvas-asset-seed-row') as HTMLElement
+        const seedLabel = section.querySelector('.canvas-asset-seed-label') as HTMLElement
+        const seedEl = section.querySelector('.canvas-asset-seed') as HTMLElement
         const storageLabel = section.querySelector('.canvas-asset-storage-label') as HTMLElement
         const identityControlMount = section.querySelector('.canvas-asset-subject-identity-control') as HTMLElement
         const identityError = (message: string): void => {
@@ -2457,6 +2469,28 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ...(asset.lineage?.sourceAssetIds ?? []).map((assetId) => `source ${assetId}`),
         ].filter(Boolean)
         lineageEl.textContent = lineageParts.length > 0 ? lineageParts.join('\n') : 'No lineage'
+
+        // Only models that accept a seed record one, so the row stays hidden for
+        // the rest instead of showing an empty value.
+        const seedTooltips = owner === 'sidebar'
+            ? generatedOutputDetailsSeedTooltips
+            : generatedMediaSeedTooltips
+        seedTooltips.get(node.nodeId)?.destroy()
+        seedTooltips.delete(node.nodeId)
+        const generationSeed = asset.lineage?.generationSeed
+        if (generationSeed === undefined) {
+            seedRow.remove()
+        } else {
+            const seedTooltip = createHelpTooltip({
+                label: 'Seed details',
+                text: ASSET_GENERATION_SEED_HELP_TEXT,
+                className: 'canvas-asset-seed-help',
+            })
+            seedTooltips.set(node.nodeId, seedTooltip)
+            seedLabel.textContent = 'Seed'
+            seedLabel.append(seedTooltip.dom)
+            seedEl.textContent = String(generationSeed)
+        }
 
         const scopeOptions: Array<{ title: string; scope: Asset['scope'] }> = [
             { title: 'Workspace', scope: 'workspace' },
@@ -2506,7 +2540,12 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
         const contentSnapshot = assetDocumentsStore.get(asset.assetId, 'content')
         if (asset.documents.content && contentSnapshot) {
-            const contentMount = html`<div className="canvas-asset-content-editor nopan"></div>` as HTMLElement
+            const contentMount = html`
+                <div
+                    className="canvas-asset-content-editor nopan"
+                    data-help-tooltip="aria-description"
+                ></div>
+            ` as HTMLElement
             section.appendChild(contentMount)
             const editor = new ProseMirrorEditor({
                 editorMountElement: contentMount,
@@ -2522,9 +2561,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     baseVersion: contentSnapshot.version,
                     onLeaseStateChange: (state: { readOnly: boolean; holderWorkspaceId?: string; expiresAt?: number }) => {
                         contentMount.classList.toggle('is-read-only', state.readOnly)
-                        contentMount.title = state.readOnly
+                        const readOnlyDescription = state.readOnly
                             ? `Read-only${state.holderWorkspaceId ? `; lease held by ${state.holderWorkspaceId}` : ''}`
                             : ''
+                        if (readOnlyDescription) contentMount.setAttribute('aria-description', readOnlyDescription)
+                        else contentMount.removeAttribute('aria-description')
                     },
                 },
                 onEditorChange: () => {},
@@ -2877,6 +2918,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const firstVideo = videoDescriptors[0]
         return {
             contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: promptText }] }],
+            mediaGenerationMode: firstVideo && !firstImage ? 'video' : 'image',
             aiReasoningModels: reasoningModels,
             useMultipleReasoningModels: reasoningModels.length > 1,
             useMultipleImageModels: imageModels.length > 1,
@@ -3063,8 +3105,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <button
                 className="media-review-action media-review-accept nopan"
                 type="button"
-                aria-label="Accept generated output"
-                title=${disabled ? 'Generation history is still being sealed' : 'Accept generated output'}
+                aria-label=${disabled ? 'Generation history is still being sealed' : 'Accept generated output'}
+                data-help-tooltip="aria-label"
                 onclick=${handleClick}
             >
                 <span className="media-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span>
@@ -3092,10 +3134,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             <button
                 className="media-review-action media-review-reject nopan"
                 type="button"
-                aria-label="Reject and delete generated output"
-                title=${generationStillActive
+                aria-label=${generationStillActive
                     ? 'Cancel generation and delete output'
                     : 'Reject and delete generated output'}
+                data-help-tooltip="aria-label"
                 onclick=${reject}
             >
                 <span className="media-review-action-icon" innerHTML=${trashBinIcon} aria-hidden="true"></span>
@@ -3124,8 +3166,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 <button
                     className="media-review-action media-review-regenerate"
                     type="button"
-                    title="Generate another result with the existing media prompt"
                     aria-label="Regenerate with existing media prompt"
+                    data-help-tooltip="aria-label"
                     onclick=${regenerate}
                 >
                     <span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span>
@@ -3168,7 +3210,6 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const title = getGeneratedOutputInfoTitle(node)
         const footer = createCanvasNodeFooter({
             infoLabel: title,
-            infoTitle: title,
             infoButtonClassName: node.type !== 'capabilityArtifact'
                 && getAssetDescriptor(node)?.status === 'analyzing'
                 ? 'is-analyzing'
@@ -3284,8 +3325,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const button = html`<button
             className="media-review-action media-review-accept nopan"
             type="button"
-            aria-label="Accept generated Artifact"
-            title=${disabled ? 'Generation history is still being sealed' : 'Accept generated Artifact'}
+            aria-label=${disabled ? 'Generation history is still being sealed' : 'Accept generated Artifact'}
+            data-help-tooltip="aria-label"
         ><span className="media-review-action-icon" innerHTML=${checkMarkIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
         button.disabled = disabled
         button.addEventListener('click', (event) => {
@@ -3303,8 +3344,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const button = html`<button
             className="media-review-action media-review-regenerate"
             type="button"
-            title="Generate another Artifact from the sealed request"
             aria-label="Regenerate Artifact"
+            data-help-tooltip="aria-label"
         ><span className="media-review-action-icon" innerHTML=${refreshIcon} aria-hidden="true"></span></button>` as HTMLButtonElement
         button.disabled = !isGeneratedOutputReviewReady(node)
         button.addEventListener('click', (event) => {
@@ -3558,6 +3599,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedMediaAssetDropdowns.clear()
         for (const control of generatedMediaIdentityControls.values()) control.destroy()
         generatedMediaIdentityControls.clear()
+        for (const tooltip of generatedMediaSeedTooltips.values()) tooltip.destroy()
+        generatedMediaSeedTooltips.clear()
     }
 
     function destroyGeneratedOutputDetailsControls(): void {
@@ -3567,6 +3610,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         generatedOutputDetailsAssetDropdowns.clear()
         for (const control of generatedOutputDetailsIdentityControls.values()) control.destroy()
         generatedOutputDetailsIdentityControls.clear()
+        for (const tooltip of generatedOutputDetailsSeedTooltips.values()) tooltip.destroy()
+        generatedOutputDetailsSeedTooltips.clear()
     }
 
     function destroyGeneratedOutputNodeFooters(): void {
@@ -6008,8 +6053,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     minDurationMs: settings.aiChatThread.panelSwitch.transitionMinDurationMs,
                     distanceSpeedupFactor: settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor,
                 },
-                indicatorBoxShadow: settings.aiChatThread.panelSwitch.styles.activeTabBoxShadow,
-                indicatorInsetShadow: settings.aiChatThread.panelSwitch.styles.activeTabInsetShadow,
+                indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
+                indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
                 onChange: (nextMode) => {
                     const previousSwitchMode = aiChatPanelState.topLevelMode
                     if (nextMode === previousSwitchMode) return
@@ -6114,7 +6159,11 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const contextTrayEl = createCanvasGlobalContextTrayElement()
         globalCanvasComposer = createAiPromptComposer({
             className: 'workspace-canvas-global-composer',
-            controlFactories: createDefaultPromptControlFactories(),
+            controlFactories: {
+                ...createDefaultPromptControlFactories(),
+                mountMediaModeSwitch: switchElement => options.mediaModeSwitchMountEl.replaceChildren(switchElement),
+                mountModelMenuControl: controlElement => options.modelMenuControlMountEl.replaceChildren(controlElement),
+            },
             initialContent: readGlobalComposerDraft(),
             promptReferenceCatalog: getPromptReferenceCatalogClient(),
             promptReferencePreviewRenderer: getPromptReferencePreviewRenderer(),
@@ -6281,6 +6330,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
+                mediaGenerationMode,
                 imageOptions,
                 videoOptions,
                 referenceNodeIds: submittedReferenceNodeIds = [],
@@ -6382,6 +6432,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     await getAiService().sendChatMessage({
                         ...(generationRequestId ? { generationRequestId } : {}),
                         aiReasoningModels: aiReasoningModels ?? [],
+                        mediaGenerationMode,
                         useMultipleReasoningModels,
                         useMultipleImageModels,
                         useMultipleVideoModels,
@@ -6549,10 +6600,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
             ? serializeAiModelSelectionAttr(collapseForMode(data.videoOptions.aiVideoModels, useMultipleVideoModels))
             : ''
         const imageGenerationConfigGroups = data.imageOptions
-            ? serializeMediaGenerationConfigSelectionAttr(useMultipleImageModels ? data.imageOptions.configGroups ?? [] : [])
+            ? serializeMediaGenerationConfigSelectionAttr(data.imageOptions.configGroups ?? [])
             : ''
         const videoGenerationConfigGroups = data.videoOptions
-            ? serializeMediaGenerationConfigSelectionAttr(useMultipleVideoModels ? data.videoOptions.configGroups ?? [] : [])
+            ? serializeMediaGenerationConfigSelectionAttr(data.videoOptions.configGroups ?? [])
             : ''
         const initialContent = {
             type: 'doc',
@@ -6561,6 +6612,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     type: 'aiChatThread',
                     attrs: {
                         threadId,
+                        mediaGenerationMode: data.mediaGenerationMode,
                         aiReasoningModels,
                         useMultipleReasoningModels,
                         useMultipleImageModels,
@@ -7018,13 +7070,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const selectedVideoModelIds = data.useMultipleVideoModels
             ? uniqueAiModelIds(data.videoOptions?.aiVideoModels ?? [])
             : uniqueAiModelIds((data.videoOptions?.aiVideoModels ?? []).slice(0, 1))
-        const hasExplicitMediaFanout = data.useMultipleImageModels || data.useMultipleVideoModels
-        const imageModelIds = hasExplicitMediaFanout && !data.useMultipleImageModels
-            ? []
-            : selectedImageModelIds
-        const videoModelIds = hasExplicitMediaFanout && !data.useMultipleVideoModels
-            ? []
-            : selectedVideoModelIds
+        const imageModelIds = data.mediaGenerationMode === 'image' ? selectedImageModelIds : []
+        const videoModelIds = data.mediaGenerationMode === 'video' ? selectedVideoModelIds : []
         return {
             phase: 'preflight',
             promptText,
@@ -12454,6 +12501,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
     ): void {
         try {
             editorContainer.replaceChildren()
+            editorContainer.dataset.helpTooltip = 'aria-description'
             const editor = new ProseMirrorEditor({
                 editorMountElement: editorContainer,
                 content: html`<div></div>` as HTMLDivElement,
@@ -12469,13 +12517,13 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     baseVersion: getStoredProseMirrorVersion(doc),
                     onLeaseStateChange: (state: { readOnly: boolean; holderWorkspaceId?: string; expiresAt?: number }) => {
                         nodeEl.classList.toggle('is-asset-lease-read-only', state.readOnly)
-                        if (state.readOnly) {
-                            const holder = state.holderWorkspaceId ? ` by workspace ${state.holderWorkspaceId}` : ''
-                            const expiry = state.expiresAt ? ` until ${new Date(state.expiresAt).toLocaleTimeString()}` : ''
-                            editorContainer.title = `Read-only: Asset edit lease is held${holder}${expiry}`
-                        } else {
-                            editorContainer.removeAttribute('title')
-                        }
+                        const holder = state.holderWorkspaceId ? ` by workspace ${state.holderWorkspaceId}` : ''
+                        const expiry = state.expiresAt ? ` until ${new Date(state.expiresAt).toLocaleTimeString()}` : ''
+                        const readOnlyDescription = state.readOnly
+                            ? `Read-only: Asset edit lease is held${holder}${expiry}`
+                            : ''
+                        if (readOnlyDescription) editorContainer.setAttribute('aria-description', readOnlyDescription)
+                        else editorContainer.removeAttribute('aria-description')
                     },
                 },
                 onEditorChange: (value: any) => {
@@ -13049,6 +13097,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                     content: [{
                         type: 'aiPromptInput',
                         attrs: {
+                            mediaGenerationMode: generation?.mediaGenerationMode
+                                ?? (generation?.outputMediaTypes?.includes('video') ? 'video' : 'image'),
                             aiReasoningModels: serializeAiModelSelectionAttr(selection.reasoningModelIds ?? []),
                             useMultipleReasoningModels: (selection.reasoningModelIds?.length ?? 0) > 1,
                             useMultipleImageModels: imageModelIds.length > 1,
@@ -13508,7 +13558,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 className="workspace-branch-marker-stop-control nopan"
                 data=${{ branchStopKey: getBranchMarkerStopControlKey(node) }}
                 aria-label="Stop all branch generations"
-                title="Stop all branch generations"
+                data-help-tooltip="aria-label"
                 onpointerdown=${handlePointerDown}
                 onpointerup=${handlePointerDown}
                 onmousedown=${handleMouseEvent}
@@ -13566,8 +13616,8 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                 <button
                     type="button"
                     className="workspace-branch-marker-review-action is-accept"
-                    aria-label="Accept all generated variants"
-                    title=${canAcceptAll ? 'Accept all generated variants' : 'Wait for every variant history to finish sealing'}
+                    aria-label=${canAcceptAll ? 'Accept all generated variants' : 'Wait for every variant history to finish sealing'}
+                    data-help-tooltip="aria-label"
                     onpointerdown=${stopPointerEvent}
                     onclick=${handleAcceptAll}
                 >
@@ -13609,10 +13659,10 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         regenerationDropdown.dom.classList.add('workspace-branch-marker-regeneration-dropdown')
         const regenerationButton = regenerationDropdown.dom.querySelector('button') as HTMLButtonElement
         regenerationButton.disabled = !canAcceptAll
-        regenerationButton.setAttribute('aria-label', 'Regenerate branch outputs')
-        regenerationButton.title = canAcceptAll
+        regenerationButton.ariaLabel = canAcceptAll
             ? 'Choose how to regenerate branch outputs'
             : 'Wait for every variant history to finish sealing'
+        regenerationButton.dataset.helpTooltip = 'aria-label'
         controls.appendChild(regenerationDropdown.dom)
         applyBranchMarkerReviewControlsZoom(controls, getCurrentViewportZoom())
         branchMarkerReviewDropdowns.set(node.nodeId, regenerationDropdown)

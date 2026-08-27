@@ -153,8 +153,9 @@ export class ImagePublisher {
         responseId: string
         revisedPrompt: string
         imageModelId: string
+        generationSeed?: number
     }): Promise<void> {
-        const { imageBase64, responseId, revisedPrompt, imageModelId } = args
+        const { imageBase64, responseId, revisedPrompt, imageModelId, generationSeed } = args
         if (!imageBase64) {
             throw new Error('Image completion failed: provider returned no final image bytes')
         }
@@ -181,6 +182,7 @@ export class ImagePublisher {
             mimeType: isPng ? 'image/png' : 'image/jpeg',
             kind: 'image',
             ...(readImageIntrinsicSize(buffer) ?? {}),
+            ...(generationSeed !== undefined ? { generationSeed } : {}),
         })
 
         const intrinsicSize = readImageIntrinsicSize(buffer)

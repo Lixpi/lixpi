@@ -79,6 +79,25 @@ const pixiGraphicsInstances: Array<{
     destroy: ReturnType<typeof vi.fn>
 }> = []
 let glassCaptureTexture: unknown = null
+const screenGlassResizeObserverInstances: FakeResizeObserver[] = []
+
+class FakeResizeObserver {
+    readonly observedElements = new Set<Element>()
+    readonly observe = vi.fn((element: Element) => this.observedElements.add(element))
+    readonly unobserve = vi.fn((element: Element) => this.observedElements.delete(element))
+    readonly disconnect = vi.fn(() => this.observedElements.clear())
+
+    constructor(readonly callback: ResizeObserverCallback) {
+        screenGlassResizeObserverInstances.push(this)
+    }
+}
+
+function notifyScreenGlassTargetResize(element: Element): void {
+    for (const observer of screenGlassResizeObserverInstances) {
+        if (!observer.observedElements.has(element)) continue
+        observer.callback([] as ResizeObserverEntry[], observer as unknown as ResizeObserver)
+    }
+}
 
 vi.mock('pixi.js', () => {
     const fakeFrameRequest = { x: 0, y: 0 }
@@ -465,7 +484,13 @@ function setElementRect(
     })
 }
 
-function createLayerWithScreenGlassTargets(): ReturnType<typeof createPixiMediaLayer> {
+type ScreenGlassTargetLayerFixture = {
+    layer: ReturnType<typeof createPixiMediaLayer>
+    rightControlRail: HTMLElement
+    rightControlRailRect: { left: number; top: number; width: number; height: number }
+}
+
+function createLayerWithScreenGlassTargets(): ScreenGlassTargetLayerFixture {
     const rootEl = document.createElement('div')
     rootEl.className = 'workspace-canvas'
     const leftPanel = document.createElement('div')
@@ -484,37 +509,51 @@ function createLayerWithScreenGlassTargets(): ReturnType<typeof createPixiMediaL
     composerEl.style.borderTopRightRadius = '999px'
     composerEl.style.borderBottomRightRadius = '999px'
     composerEl.style.borderBottomLeftRadius = '999px'
-    const rightPanel = document.createElement('div')
-    rightPanel.className = 'workspace-canvas-action-panel-right'
-    rightPanel.style.borderRadius = '22px'
-    rightPanel.style.borderTopLeftRadius = '22px'
-    rightPanel.style.borderTopRightRadius = '22px'
-    rightPanel.style.borderBottomRightRadius = '22px'
-    rightPanel.style.borderBottomLeftRadius = '22px'
+    const mediaLibraryPanel = document.createElement('div')
+    mediaLibraryPanel.className = 'workspace-canvas-media-library-panel'
+    mediaLibraryPanel.style.borderRadius = '50%'
+    mediaLibraryPanel.style.borderTopLeftRadius = '50%'
+    mediaLibraryPanel.style.borderTopRightRadius = '50%'
+    mediaLibraryPanel.style.borderBottomRightRadius = '50%'
+    mediaLibraryPanel.style.borderBottomLeftRadius = '50%'
+    const rightControlRail = document.createElement('div')
+    rightControlRail.className = 'workspace-canvas-right-control-rail'
+    rightControlRail.style.borderRadius = '999px'
+    rightControlRail.style.borderTopLeftRadius = '999px'
+    rightControlRail.style.borderTopRightRadius = '999px'
+    rightControlRail.style.borderBottomRightRadius = '999px'
+    rightControlRail.style.borderBottomLeftRadius = '999px'
+    const rightControlRailRect = { left: 510, top: 268, width: 298, height: 40 }
 
-    setElementRect(paneEl, { left: 10, top: 20, width: 500, height: 300 })
+    setElementRect(paneEl, { left: 10, top: 20, width: 900, height: 300 })
     setElementRect(leftPanel, { left: 30, top: 260, width: 80, height: 56 })
-    setElementRect(composerEl, { left: 140, top: 250, width: 300, height: 64 })
-    setElementRect(rightPanel, { left: 460, top: 260, width: 56, height: 56 })
+    setElementRect(mediaLibraryPanel, { left: 130, top: 268, width: 40, height: 40 })
+    setElementRect(composerEl, { left: 190, top: 250, width: 300, height: 64 })
+    setElementRect(rightControlRail, rightControlRailRect)
 
     paneEl.appendChild(composerEl)
     paneEl.appendChild(viewportEl)
     rootEl.appendChild(leftPanel)
+    rootEl.appendChild(mediaLibraryPanel)
     rootEl.appendChild(paneEl)
-    rootEl.appendChild(rightPanel)
+    rootEl.appendChild(rightControlRail)
     document.body.appendChild(rootEl)
 
-    return createPixiMediaLayer({
-        paneEl,
-        viewportEl,
-        getWorkspaceId: () => 'workspace-1',
-        selectionColors: {
-            marqueeStroke: '#000',
-            marqueeFill: '#000',
-            groupOverlayStroke: '#000',
-            groupOverlayFill: '#000',
-        },
-    })
+    return {
+        layer: createPixiMediaLayer({
+            paneEl,
+            viewportEl,
+            getWorkspaceId: () => 'workspace-1',
+            selectionColors: {
+                marqueeStroke: '#000',
+                marqueeFill: '#000',
+                groupOverlayStroke: '#000',
+                groupOverlayFill: '#000',
+            },
+        }),
+        rightControlRail,
+        rightControlRailRect,
+    }
 }
 
 function getDebugDump(): {
@@ -550,6 +589,7 @@ function clearMocks(): void {
     outlineRendererInstances.length = 0
     glassBorderRendererInstances.length = 0
     glassCaptureTexture = null
+    screenGlassResizeObserverInstances.length = 0
     pixiSpriteInstances.length = 0
     pixiGraphicsInstances.length = 0
     window.localStorage.removeItem('lixpi.debug.pixiMedia')
@@ -585,6 +625,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
     beforeEach(() => {
         clearMocks()
         mediaNodeRegistryCalls.dispatchSync.mockReturnValue(true)
+        vi.stubGlobal('ResizeObserver', FakeResizeObserver)
         ;(globalThis as any).requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
             cb(0)
             return 1
@@ -593,6 +634,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
     })
 
     afterEach(() => {
+        vi.unstubAllGlobals()
         vi.restoreAllMocks()
         document.body.innerHTML = ''
     })
@@ -972,8 +1014,8 @@ describe('createPixiMediaLayer runtime behavior', () => {
         expect(generated?.snakeLengthFraction).toBeGreaterThan(0)
     })
 
-    it('syncs screen-glass border geometry from pane-local composer and action-panel targets', async () => {
-        const layer = createLayerWithScreenGlassTargets()
+    it('syncs screen-glass border geometry from the composer and its left and right control rails', async () => {
+        const { layer } = createLayerWithScreenGlassTargets()
         await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
 
         const glassRenderer = glassBorderRendererInstances.at(-1)
@@ -984,7 +1026,7 @@ describe('createPixiMediaLayer runtime behavior', () => {
 
         const syncCall = glassRenderer!.sync.mock.calls.at(-1)
         expect(syncCall).toBeTruthy()
-        expect(syncCall?.[1]).toEqual({ width: 500, height: 300 })
+        expect(syncCall?.[1]).toEqual({ width: 900, height: 300 })
         expect(syncCall?.[0]).toEqual([
             {
                 id: 'workspace-action-panel-left',
@@ -996,8 +1038,17 @@ describe('createPixiMediaLayer runtime behavior', () => {
                 visible: true,
             },
             {
+                id: 'workspace-media-library-panel',
+                x: 120,
+                y: 248,
+                width: 40,
+                height: 40,
+                radius: 20,
+                visible: true,
+            },
+            {
                 id: 'workspace-global-composer',
-                x: 130,
+                x: 180,
                 y: 230,
                 width: 300,
                 height: 64,
@@ -1005,15 +1056,38 @@ describe('createPixiMediaLayer runtime behavior', () => {
                 visible: true,
             },
             {
-                id: 'workspace-action-panel-right',
-                x: 450,
-                y: 240,
-                width: 56,
-                height: 56,
-                radius: 22,
+                id: 'workspace-right-control-rail',
+                x: 500,
+                y: 248,
+                width: 298,
+                height: 40,
+                radius: 20,
                 visible: true,
             },
         ])
+    })
+
+    it('refreshes the glass border after the combined right rail changes width', async () => {
+        const { layer, rightControlRail, rightControlRailRect } = createLayerWithScreenGlassTargets()
+        await vi.waitFor(() => expect(layer.getHealth()).toBe('ready'))
+
+        const glassRenderer = glassBorderRendererInstances.at(-1)!
+        layer.renderNow()
+        glassRenderer.sync.mockClear()
+        rightControlRailRect.width = 420
+
+        notifyScreenGlassTargetResize(rightControlRail)
+
+        expect(glassRenderer.sync).toHaveBeenCalled()
+        expect(glassRenderer.sync.mock.calls.at(-1)?.[0]).toContainEqual({
+            id: 'workspace-right-control-rail',
+            x: 500,
+            y: 248,
+            width: 420,
+            height: 40,
+            radius: 20,
+            visible: true,
+        })
     })
 
     it('captures the Pixi stage with screen glass hidden, restores it, then renders the final stage', async () => {

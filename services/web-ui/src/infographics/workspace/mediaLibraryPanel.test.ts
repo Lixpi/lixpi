@@ -92,15 +92,23 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(canvasSource, 'ensureCapabilityLibraryPanel()')
     })
 
-    it('keeps the Media Library trigger in the right-side circular action panel', () => {
-        expectSourceToContain(workspaceSvelteSource, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
+    it('keeps the Media Library trigger in the left-side circular action panel', () => {
+        expectSourceToContain(
+            workspaceSvelteSource,
+            'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single',
+        )
         expectSourceToContain(workspaceSvelteSource, 'workspace-zoom-indicator')
         expectSourceNotToContain(workspaceSvelteSource, 'workspace-canvas-utility-capsule')
-        const leftPanel = workspaceSvelteSource.slice(
-            workspaceSvelteSource.indexOf('workspace-canvas-action-panel-left'),
-            workspaceSvelteSource.indexOf('workspace-canvas-action-panel-right'),
+        const leftRail = workspaceSvelteSource.slice(
+            workspaceSvelteSource.indexOf('workspace-canvas-left-control-rail'),
+            workspaceSvelteSource.indexOf('workspace-canvas-right-control-rail'),
         )
-        expectSourceNotToContain(leftPanel, 'handleToggleMediaLibrary')
+        const rightRail = workspaceSvelteSource.slice(
+            workspaceSvelteSource.indexOf('workspace-canvas-right-control-rail'),
+            workspaceSvelteSource.indexOf('<input'),
+        )
+        expectSourceToContain(leftRail, 'handleToggleMediaLibrary')
+        expectSourceNotToContain(rightRail, 'handleToggleMediaLibrary')
     })
 
     it('inserts catalog Assets through the existing centered insertion path', () => {

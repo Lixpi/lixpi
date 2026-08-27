@@ -504,9 +504,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 model: 'veo-3.1-generate-preview',
                 modelVersion: 'veo-3.1-generate-preview',
                 modalities: [{ modality: 'video_generation' }],
-                videoAspectRatios: [{ value: '16:9' }],
-                videoResolutions: [{ value: '720p' }],
-                videoDurations: [{ value: '8' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }], defaultValue: '8' },
+                ],
             } as any
         })
 
@@ -574,9 +576,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 model: 'veo-3.1-generate-preview',
                 modelVersion: 'veo-3.1-generate-preview',
                 modalities: [{ modality: 'video_generation' }],
-                videoAspectRatios: [{ value: '16:9' }],
-                videoResolutions: [{ value: '720p' }],
-                videoDurations: [{ value: '8' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }], defaultValue: '8' },
+                ],
             } as any
         })
 
@@ -635,9 +639,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 model: 'veo-3.1-generate-preview',
                 modelVersion: 'veo-3.1-generate-preview',
                 modalities: [{ modality: 'video_generation' }],
-                videoAspectRatios: [{ value: '16:9' }],
-                videoResolutions: [{ value: '720p' }],
-                videoDurations: [{ value: '8' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }], defaultValue: '8' },
+                ],
             } as any
         })
 
@@ -694,9 +700,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 model,
                 modelVersion: model,
                 modalities: [{ modality: 'video_generation' }],
-                videoAspectRatios: [{ value: '16:9' }],
-                videoResolutions: [{ value: '720p' }],
-                videoDurations: [{ value: '8' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }], defaultValue: '8' },
+                ],
             } as any
         })
 
@@ -777,9 +785,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 model: 'veo-3.1-generate-preview',
                 modelVersion: 'veo-3.1-generate-preview',
                 modalities: [{ modality: 'video_generation' }],
-                videoAspectRatios: [{ value: '16:9' }],
-                videoResolutions: [{ value: '720p' }],
-                videoDurations: [{ value: '8' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }], defaultValue: '8' },
+                ],
             } as any
         })
 
@@ -810,7 +820,17 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             if (model === 'gemini-2.5-flash-image') {
                 return { provider: 'Google', model, modelVersion: model, modalities: [{ modality: 'image_generation' }] } as any
             }
-            return { provider: 'Google', model, modelVersion: model, modalities: [{ modality: 'video_generation' }] } as any
+            return {
+                provider: 'Google',
+                model,
+                modelVersion: model,
+                modalities: [{ modality: 'video_generation' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }], defaultValue: '8' },
+                ],
+            } as any
         })
         registry.preflightAdmission.mockRejectedValueOnce(new Error('Metrics: balance does not cover this workflow'))
 
@@ -952,7 +972,11 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         ])
     })
 
-    it('applies model-specific config groups and normalizes invalid option values', async () => {
+    it('applies model-specific image config groups and normalizes invalid option values', async () => {
+        // Note: outputMediaTypes collapses to a single scalar media type per
+        // request (see normalizeRequest()'s `.slice(0, 1)`), so image and video
+        // config-group fanout cannot be exercised in the same process() call —
+        // this test covers the image axis, the next covers the video axis.
         const registry = createRegistry()
         const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
         const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
@@ -975,23 +999,12 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                     imageSizes: [{ value: '256x256' }, { value: '512x512' }],
                 } as any
             }
-            if (model === 'gemini-image-b') {
-                return {
-                    provider: 'Google',
-                    model: 'gemini-image-b',
-                    modelVersion: 'gemini-image-b',
-                    modalities: [{ modality: 'image_generation' }],
-                    imageSizes: [{ value: '1024x1024' }, { value: '2048x2048' }],
-                } as any
-            }
             return {
                 provider: 'Google',
-                model: 'veo-3.1-generate-preview',
-                modelVersion: 'veo-3.1-generate-preview',
-                modalities: [{ modality: 'video_generation' }],
-                videoAspectRatios: [{ value: '16:9' }, { value: '4:3' }],
-                videoResolutions: [{ value: '720p' }, { value: '1080p' }],
-                videoDurations: [{ value: '8' }, { value: '12' }],
+                model: 'gemini-image-b',
+                modelVersion: 'gemini-image-b',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [{ value: '1024x1024' }, { value: '2048x2048' }],
             } as any
         })
 
@@ -1008,9 +1021,9 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 generationRequestId: 'request-options',
                 reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
                 imageModelIds: ['Google:gemini-image-a', 'Google:gemini-image-b'],
-                videoModelIds: ['Google:veo-3.1-generate-preview'],
+                videoModelIds: [],
                 useMultipleImageModels: true,
-                useMultipleVideoModels: true,
+                useMultipleVideoModels: false,
                 imageOptions: {
                     imageSize: '1024x1024',
                     configGroups: [
@@ -1031,6 +1044,68 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                         },
                     ],
                 },
+                videoOptions: {},
+            },
+        }))
+
+        const state = registry.process.mock.calls[0]?.[2] as any
+        expect(state.mediaFanoutPlan.imageConfigGroups).toHaveLength(2)
+        expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-a')).toBe(true)
+        expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-b')).toBe(true)
+        // 'invalid-size' is not one of gemini-image-a's imageSizes, so it falls
+        // back to the model's first available option.
+        expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-a']).toMatchObject({
+            imageSize: '256x256',
+        })
+        expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-b']).toMatchObject({
+            imageSize: '1024x1024',
+        })
+    })
+
+    it('applies model-specific video config groups and normalizes invalid option values', async () => {
+        const registry = createRegistry()
+        const orchestrator = new MediaGenerationMatrixOrchestrator(registry.asRegistry as any, natsService)
+        const getAiModel = vi.spyOn(AiModelModelModule.default, 'getAiModel')
+
+        getAiModel.mockImplementation(async ({ model }: { provider: string; model: string }) => {
+            if (model === 'claude-sonnet-4-6') {
+                return {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    modalities: [{ modality: 'text' }],
+                } as any
+            }
+            return {
+                provider: 'Google',
+                model: 'veo-3.1-generate-preview',
+                modelVersion: 'veo-3.1-generate-preview',
+                modalities: [{ modality: 'video_generation' }],
+                videoGenerationControls: [
+                    { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }, { value: '4:3' }], defaultValue: '16:9' },
+                    { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }, { value: '1080p' }], defaultValue: '720p' },
+                    { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }, { value: '12' }], defaultValue: '8' },
+                ],
+            } as any
+        })
+
+        vi.spyOn(workspaceContextResolver, 'resolveWorkspaceContext').mockResolvedValue({})
+        vi.spyOn(capabilityStateResolver, 'executeRequiredCapabilitiesForState').mockResolvedValue({})
+        vi.spyOn(mediaBranchResolver, 'resolveMediaBranch').mockResolvedValue({})
+
+        await orchestrator.process(createRequest({
+            aiReasoningModels: undefined,
+            aiImageModels: undefined,
+            aiVideoModels: undefined,
+            mediaGenerationRequest: {
+                requestVersion: 'media-generation-matrix-v1',
+                generationRequestId: 'request-video-options',
+                reasoningModelIds: ['Anthropic:claude-sonnet-4-6'],
+                imageModelIds: [],
+                videoModelIds: ['Google:veo-3.1-generate-preview'],
+                useMultipleImageModels: false,
+                useMultipleVideoModels: true,
+                imageOptions: {},
                 videoOptions: {
                     aspectRatio: '16:9',
                     configGroups: [
@@ -1045,15 +1120,6 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         }))
 
         const state = registry.process.mock.calls[0]?.[2] as any
-        expect(state.mediaFanoutPlan.imageConfigGroups).toHaveLength(2)
-        expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-a')).toBe(true)
-        expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-b')).toBe(true)
-        expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-a']).toMatchObject({
-            imageSize: '256x256',
-        })
-        expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-b']).toMatchObject({
-            imageSize: '1024x1024',
-        })
         expect(state.mediaFanoutPlan.videoModelOptions?.['Google:veo-3.1-generate-preview']).toMatchObject({
             aspectRatio: '4:3',
             resolution: '1080p',

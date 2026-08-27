@@ -126,10 +126,17 @@
 
 .media-library-detail-state,
 .media-library-detail-descriptor,
-.media-library-detail-lineage {
+.media-library-detail-lineage,
+.media-library-detail-seed {
     margin: 0;
     color: rgb(255 255 255 / 62%);
     font-size: 12px;
+}
+
+.media-library-detail-seed {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
 }
 
 .media-library-detail-content,

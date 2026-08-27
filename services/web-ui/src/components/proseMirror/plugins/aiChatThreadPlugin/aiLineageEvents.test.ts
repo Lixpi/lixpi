@@ -110,8 +110,9 @@ describe('createAiLineageEventMarker', () => {
 
         expect(marker.classList.contains('ai-lineage-event')).toBe(true)
         expect(marker.classList.contains('ai-lineage-event-branch-origin')).toBe(true)
-        expect(marker.getAttribute('title')).toBe(getAiLineageEventLabel('branch-origin'))
         expect(marker.getAttribute('aria-label')).toBe(getAiLineageEventLabel('branch-origin'))
+        expect(marker.dataset.helpTooltip).toBe('aria-label')
+        expect(marker.getAttribute('title')).toBeNull()
         expect(marker.dataset.lineageEventKind).toBe('branch-origin')
         expect(marker.dataset.branchOriginNodeId).toBe('origin-id')
         expect(marker.dataset.branchForkNodeId).toBe('fork-id')

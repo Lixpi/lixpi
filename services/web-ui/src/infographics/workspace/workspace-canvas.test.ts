@@ -1970,6 +1970,91 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceNotToContain(ts, "zIndex: '9990',")
 	})
 
+	it('places the media library on the left and the icon switch plus model control on the composer’s right', () => {
+		const ts = loadTs()
+		const scss = loadScss()
+		const svelte = loadWorkspaceCanvasSvelte()
+		const pixiMediaLayer = loadPixiMediaLayer()
+		const leftRailItems = extractBlockContainingSelector(
+			scss,
+			'.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel'
+		)
+		const rightRail = extractBlock(scss, '.workspace-canvas-right-control-rail')
+		const modelMenuHoverBackground = extractBlock(scss, '.workspace-canvas-model-menu-hover-background')
+		const modelMenuPanel = extractBlock(scss, '.workspace-canvas-model-menu-panel')
+		const modelMenuTrigger = extractBlock(
+			scss,
+			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger'
+		)
+		const modelMenuHoverBackgroundActive = extractBlockContainingSelector(
+			scss,
+			'.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background'
+		)
+		const rightRailStart = svelte.indexOf(
+			'<div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">'
+		)
+		const rightRailEnd = svelte.indexOf('\n    </div>\n\n    <input', rightRailStart)
+		const rightRailMarkup = svelte.slice(rightRailStart, rightRailEnd)
+		const screenGlassTargets = extractFunctionBody(pixiMediaLayer, 'getScreenGlassBorderTargets')
+
+		expectSourceToContain(
+			svelte,
+			'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single'
+		)
+		expectSourceToContain(svelte, 'workspace-canvas-right-control-rail')
+		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-hover-background"')
+		expectSourceToContain(svelte, 'class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}')
+		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-panel"')
+		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
+		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
+		expectSourceNotToContain(svelte, 'workspace-canvas-media-mode-panel-right')
+		expect(rightRailStart).toBeGreaterThan(-1)
+		expect(rightRailEnd).toBeGreaterThan(rightRailStart)
+		expect(rightRailMarkup.indexOf('workspace-canvas-media-mode-panel')).toBeLessThan(
+			rightRailMarkup.indexOf('workspace-canvas-model-menu-panel')
+		)
+
+		expectSourceToContain(
+			scss,
+			'.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel'
+		)
+		expectExcerptToContain(leftRailItems, 'right: auto;', 'left control rail')
+		expectExcerptToContain(rightRail, 'left: calc(', 'right control rail')
+		expectExcerptToContain(rightRail, 'display: flex;', 'right control rail')
+		expectExcerptToContain(rightRail, 'gap: 2px;', 'right control rail')
+		expectExcerptToContain(rightRail, 'border-radius: 9999px;', 'right control rail')
+		expectExcerptToContain(modelMenuHoverBackground, 'position: absolute;', 'model menu hover background')
+		expectExcerptToContain(modelMenuHoverBackground, 'inset: 0;', 'model menu hover background')
+		expectExcerptToContain(modelMenuHoverBackground, 'pointer-events: none;', 'model menu hover background')
+		expectExcerptToContain(modelMenuHoverBackgroundActive, 'background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);', 'model menu hover state')
+		expectSourceToContain(scss, '--workspace-canvas-media-mode-panel-width: 76px;')
+		expectExcerptToContain(modelMenuPanel, 'padding: 0;', 'model menu panel')
+		expectExcerptToContain(modelMenuTrigger, 'width: 100%;', 'model menu trigger')
+		expectExcerptToContain(modelMenuTrigger, 'height: 100%;', 'model menu trigger')
+		expectExcerptToContain(modelMenuTrigger, 'border-radius: inherit;', 'model menu trigger')
+		expectExcerptToContain(modelMenuTrigger, 'background: transparent;', 'model menu trigger')
+		expectSourceToContain(
+			scss,
+			'.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,\n.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {\n    background: transparent;\n}'
+		)
+		expectSourceNotToContain(scss, '.workspace-floating-toolbar-tooltip')
+		expectSourceToContain(screenGlassTargets, "id: 'workspace-right-control-rail'")
+		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-media-mode-panel'")
+		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-model-menu-panel'")
+
+		expectSourceToContain(ts, 'modelMenuControlMountEl: HTMLDivElement')
+		expectSourceToContain(
+			ts,
+			'mountMediaModeSwitch: switchElement => options.mediaModeSwitchMountEl.replaceChildren(switchElement),'
+		)
+		expectSourceToContain(
+			ts,
+			'mountModelMenuControl: controlElement => options.modelMenuControlMountEl.replaceChildren(controlElement),'
+		)
+		expectSourceToContain(screenGlassTargets, "id: 'workspace-media-library-panel'")
+		expectSourceNotToContain(screenGlassTargets, "id: 'workspace-action-panel-right'")
+	})
+
 	it('opens the panel without requiring an existing thread and creates standalone history on submit', () => {
 		expectSourceToContain(ts, 'function openAiChatPanel(): void')
 		expectSourceToContain(ts, 'aiChatPanelState = { ...aiChatPanelState, isOpen: true }')
@@ -2186,7 +2271,8 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
-		expectSourceToContain(svelte, 'workspace-canvas-action-panel-right workspace-canvas-action-panel-single')
+		expectSourceToContain(svelte, 'workspace-canvas-media-library-panel workspace-canvas-action-panel-single')
+		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
 		expectSourceToContain(svelte, 'mediaFoloderIcon')
 		expectSourceToContain(svelte, 'workspace-zoom-indicator')
 		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
@@ -3260,7 +3346,8 @@ describe('canvas node deletion', () => {
 		expectSourceToContain(ts, 'async function deleteCanvasNodes(nodeIds: ReadonlySet<string>): Promise<void>')
 		expectSourceToContain(ts, 'return isGeneratedOutputRejectableForCanvas({')
 		expectSourceToContain(ts, "action: 'reject'")
-		expectSourceToContain(ts, 'aria-label="Reject and delete generated output"')
+		expectSourceToContain(ts, 'aria-label=${generationStillActive')
+		expectSourceToContain(ts, 'data-help-tooltip="aria-label"')
 		expectSourceToContain(ts, 'innerHTML=${trashBinIcon}')
 	})
 

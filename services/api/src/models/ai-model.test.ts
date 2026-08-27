@@ -50,9 +50,11 @@ describe('AiModel.getAvailableAiModels', () => {
                     providerTitle: 'Google',
                     sortingPosition: 3,
                     modalities: [{ modality: 'video_generation' }],
-                    videoAspectRatios: [{ value: '16:9' }],
-                    videoResolutions: [{ value: '720p' }],
-                    videoDurations: [{ value: '8' }],
+                    videoGenerationControls: [
+                        { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9', label: '16:9' }], defaultValue: '16:9' },
+                        { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p', label: '720p' }], defaultValue: '720p' },
+                        { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8', label: '8' }], defaultValue: '8' },
+                    ],
                     pricing: { input: 2 },
                 },
             ],
@@ -77,10 +79,12 @@ describe('AiModel.getAvailableAiModels', () => {
         const imageGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'image')
         const videoGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'video')
 
-        expect(imageGroup?.groupId).toBe('image:Google')
+        expect(imageGroup?.groupId).toMatch(/^image:Google:[a-f0-9]{64}$/)
+        expect(imageGroup?.title).toBe('Google')
         expect(imageGroup?.controls).toEqual([{
             key: 'imageSize',
             label: 'Resolution',
+            kind: 'segmented',
             options: [{ value: '768x768', label: '768x768' }],
             defaultValue: '768x768',
         }])
@@ -92,7 +96,8 @@ describe('AiModel.getAvailableAiModels', () => {
             video: 'Google:veo-3.1-generate-preview',
         })
 
-        expect(videoGroup?.groupId).toBe('video:Google')
+        expect(videoGroup?.groupId).toMatch(/^video:Google:[a-f0-9]{64}$/)
+        expect(videoGroup?.title).toBe('Google')
         expect(videoGroup?.controls).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 key: 'aspectRatio',
@@ -113,6 +118,133 @@ describe('AiModel.getAvailableAiModels', () => {
                 options: [{ value: '8', label: '8' }],
             }),
         ]))
+    })
+
+    it('groups provider models with matching options and splits different option sets', async () => {
+        const matchingImageSizes = [
+            { value: '1024x1024', label: '1:1' },
+            { value: '1536x1024', label: '3:2' },
+        ]
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                {
+                    provider: 'OpenAI',
+                    providerTitle: 'OpenAI',
+                    model: 'gpt-image-1.5',
+                    modelVersion: 'gpt-image-1.5',
+                    sortingPosition: 1,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: matchingImageSizes,
+                    pricing: {},
+                },
+                {
+                    provider: 'OpenAI',
+                    providerTitle: 'OpenAI',
+                    model: 'gpt-image-2',
+                    modelVersion: 'gpt-image-2',
+                    sortingPosition: 2,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: matchingImageSizes,
+                    pricing: {},
+                },
+                {
+                    provider: 'OpenAI',
+                    providerTitle: 'OpenAI',
+                    model: 'gpt-image-mini',
+                    modelVersion: 'gpt-image-mini',
+                    sortingPosition: 3,
+                    modalities: [{ modality: 'image_generation' }],
+                    imageSizeMode: 'resolution',
+                    imageSizes: [{ value: '1024x1024', label: '1:1' }],
+                    pricing: {},
+                },
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+        const imageGroups = result.mediaGenerationConfigMatrix.groups.filter(group => group.mediaType === 'image')
+        const sharedOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-1.5'))
+        const differentOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-mini'))
+
+        expect(imageGroups).toHaveLength(2)
+        expect(sharedOptionsGroup?.title).toBe('OpenAI')
+        expect(sharedOptionsGroup?.modelIds).toEqual([
+            'OpenAI:gpt-image-1.5',
+            'OpenAI:gpt-image-2',
+        ])
+        expect(differentOptionsGroup?.title).toBe('OpenAI')
+        expect(differentOptionsGroup?.modelIds).toEqual(['OpenAI:gpt-image-mini'])
+        expect(differentOptionsGroup?.groupId).not.toBe(sharedOptionsGroup?.groupId)
+    })
+
+    it('keeps option help in the catalog, filters removed video controls, and splits groups with different help text', async () => {
+        const videoModel = (model: string, optionDescription: string) => ({
+            provider: 'Google',
+            providerTitle: 'Google',
+            model,
+            modelVersion: model,
+            sortingPosition: 1,
+            modalities: [{ modality: 'video_generation' }],
+            videoGenerationControls: [
+                {
+                    key: 'resolution',
+                    label: 'Resolution',
+                    kind: 'segmented',
+                    defaultValue: '1080p',
+                    options: [{ value: '1080p', label: '1080p', description: optionDescription }],
+                },
+                {
+                    key: 'serviceTier',
+                    label: 'Service tier',
+                    kind: 'segmented',
+                    options: [{ value: 'default', label: 'Default' }],
+                },
+                {
+                    key: 'priority',
+                    label: 'Task priority',
+                    kind: 'segmented',
+                    options: [],
+                },
+            ],
+            pricing: {},
+        })
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                videoModel('veo-a', '1080p requires an 8 second duration.'),
+                videoModel('veo-b', 'This model has a different 1080p constraint.'),
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+        const videoGroups = result.mediaGenerationConfigMatrix.groups.filter(group => group.mediaType === 'video')
+
+        expect(videoGroups).toHaveLength(2)
+        expect(videoGroups.map(group => group.controls)).toEqual([
+            [{
+                key: 'resolution',
+                label: 'Resolution',
+                kind: 'segmented',
+                defaultValue: '1080p',
+                options: [{
+                    value: '1080p',
+                    label: '1080p',
+                    description: '1080p requires an 8 second duration.',
+                }],
+            }],
+            [{
+                key: 'resolution',
+                label: 'Resolution',
+                kind: 'segmented',
+                defaultValue: '1080p',
+                options: [{
+                    value: '1080p',
+                    label: '1080p',
+                    description: 'This model has a different 1080p constraint.',
+                }],
+            }],
+        ])
     })
 
     it('derives defaultModels from the isDefaultFor flag regardless of sort order', async () => {

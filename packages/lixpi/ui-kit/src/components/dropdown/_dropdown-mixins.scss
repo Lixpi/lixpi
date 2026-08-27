@@ -37,6 +37,18 @@
     );
     $s: map.merge($defaults, $config);
 
+    .dropdown-trigger-button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .dropdown-trigger-selected-icon,
+    .dropdown-trigger-state-indicator {
+        display: flex;
+        align-items: center;
+    }
+
     .dots-dropdown-menu {
         position: relative;
         display: block;
@@ -170,6 +182,18 @@
             list-style: none;
             padding: 4px 0;
             margin: 0;
+
+            .dropdown-option-item {
+                display: flex;
+                align-items: center;
+            }
+
+            .dropdown-option-icon {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
 
             li {
                 // Two-color highlight pulled from the shifting gradient palette.

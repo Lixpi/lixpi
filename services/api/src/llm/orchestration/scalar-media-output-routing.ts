@@ -1,26 +1,11 @@
 'use strict'
 
-const EXPLICIT_VIDEO_CREATION_PATTERN =
-    /\b(?:generate|create|make|produce|render)\s+(?:an?\s+|the\s+)?(?:(?:short|cinematic|animated)\s+)*(?:video|clip|animation)\b/iu
-const EXPLICIT_VIDEO_TRANSFORM_PATTERN =
-    /\b(?:turn|convert|transform)\b[^.!?\n]{0,120}\binto\s+(?:an?\s+)?(?:(?:short|cinematic|animated)\s+)*(?:video|clip|animation)\b/iu
-const EXPLICIT_VIDEO_CONTINUATION_PATTERN =
-    /\b(?:extend|continue)\b[^.!?\n]{0,80}\b(?:video|clip)\b/iu
-const EXPLICIT_ANIMATION_VERB_PATTERN = /\banimate\b/iu
-const EXPLICIT_FILM_VERB_PATTERN = /\bfilm\s+(?:this|that|the|an?|my|our|these|those)\b/iu
+// Compatibility export for older imports. Prompt text is intentionally never
+// interpreted as media-mode state.
+export const hasExplicitVideoOutputRequest = (_prompt: string): boolean => false
 
-export const hasExplicitVideoOutputRequest = (prompt: string): boolean => (
-    EXPLICIT_VIDEO_CREATION_PATTERN.test(prompt)
-    || EXPLICIT_VIDEO_TRANSFORM_PATTERN.test(prompt)
-    || EXPLICIT_VIDEO_CONTINUATION_PATTERN.test(prompt)
-    || EXPLICIT_ANIMATION_VERB_PATTERN.test(prompt)
-    || EXPLICIT_FILM_VERB_PATTERN.test(prompt)
-)
-
-// Matrix counterpart of the scalar rule below: a prompt that explicitly asks for
-// moving media gets moving media only. The model picker keeps an image model
-// selected across turns, so without this a "generate a video" turn fans out an
-// extra image run the user never asked for and pays for.
+// Kept as a compatibility export for older callers. Media selection is now
+// authoritative request state from the UI and prompt text does not alter it.
 export const restrictMediaRequestToExplicitVideoOutput = <T extends {
     imageModelIds?: string[]
     useMultipleImageModels?: boolean
@@ -35,16 +20,9 @@ export const restrictMediaRequestToExplicitVideoOutput = <T extends {
     prompt: string
     hasVideoSource: boolean
 }): T => {
-    if (!(request.imageModelIds?.length && request.videoModelIds?.length)) return request
-    if (!hasVideoSource && !hasExplicitVideoOutputRequest(prompt)) return request
-    return {
-        ...request,
-        imageModelIds: [],
-        useMultipleImageModels: false,
-        ...(request.outputMediaTypes ? {
-            outputMediaTypes: request.outputMediaTypes.filter(mediaType => mediaType !== 'image'),
-        } : {}),
-    }
+    void prompt
+    void hasVideoSource
+    return request
 }
 
 export type ScalarMediaModelSelection = {
@@ -70,9 +48,7 @@ export const resolveScalarMediaModelSelection = ({
         }
     }
 
-    if (hasVideoSource || hasExplicitVideoOutputRequest(prompt)) {
-        return { videoModelId }
-    }
-
+    void prompt
+    void hasVideoSource
     return { imageModelId }
 }

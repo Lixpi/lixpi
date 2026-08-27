@@ -1,4 +1,5 @@
 import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
+import { select } from 'd3-selection'
 
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
@@ -6,7 +7,21 @@ vi.mock('@lixpi/ui-kit/components/dropdown', () => ({
     createPureDropdown: vi.fn(),
 }))
 
+const slidingDropdownConfigs = vi.hoisted(() => [] as any[])
+
+vi.mock('@lixpi/ui-kit/components/sliding-dropdown', () => ({
+    createSlidingDropdown: vi.fn((_parent: any, config: any) => {
+        slidingDropdownConfigs.push(config)
+        return {
+            render: vi.fn(),
+            setValue: vi.fn(),
+            destroy: vi.fn(),
+        }
+    }),
+}))
+
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
+import { createSlidingDropdown } from '@lixpi/ui-kit/components/sliding-dropdown'
 import {
     transformModelsToOptions,
     createGenericAiModelDropdown,
@@ -23,7 +38,12 @@ type DropdownInstance = {
 }
 
 const createPureDropdownMock = vi.mocked(createPureDropdown)
+const createSlidingDropdownMock = vi.mocked(createSlidingDropdown)
 let lastConfig: Parameters<typeof createPureDropdown>[0] | null = null
+
+function lastModelConfig(): any {
+    return slidingDropdownConfigs.at(-1)
+}
 
 function resetMockDropdown() {
     createPureDropdownMock.mockReset()
@@ -31,6 +51,8 @@ function resetMockDropdown() {
         lastConfig = config
         return createMockDropdown()
     })
+    slidingDropdownConfigs.length = 0
+    createSlidingDropdownMock.mockClear()
 }
 
 function createMockDropdown(): DropdownInstance {
@@ -96,9 +118,31 @@ describe('createGenericAiModelDropdown', () => {
         currentModel = ''
         controls.setAiModel.mockClear()
         dropdown.update()
+        vi.runAllTimers()
 
         expect(controls.setAiModel).toHaveBeenCalledWith('anthropic:haiku-4-5')
         expect(currentModel).toBe('anthropic:haiku-4-5')
+        dropdown.destroy()
+    })
+
+    it('uses sliding dropdown options that join provider and model names with a colon', () => {
+        const controls = {
+            getCurrentAiModel: vi.fn(() => 'anthropic:haiku-4-5'),
+            setAiModel: vi.fn(),
+        }
+
+        const dropdown = createGenericAiModelDropdown(controls, 'reasoning-model-placement')
+
+        expect(lastModelConfig()).toMatchObject({
+            id: 'reasoning-model-placement',
+            selectedValue: 'anthropic:haiku-4-5',
+            options: [{
+                label: 'anthropic: Haiku 4.5',
+                value: 'anthropic:haiku-4-5',
+                ariaLabel: 'anthropic: Haiku 4.5',
+            }],
+            renderOption: expect.any(Function),
+        })
         dropdown.destroy()
     })
 
@@ -110,11 +154,57 @@ describe('createGenericAiModelDropdown', () => {
 
         const dropdown = createGenericAiModelDropdown(controls, 'reasoning-model')
 
-        expect(lastConfig?.selectedValue).toMatchObject({
-            title: 'Select Model',
-            aiModel: '',
+        expect(lastModelConfig()?.selectedValue).toBe('')
+        expect(lastModelConfig()?.options[0]).toMatchObject({
+            label: 'Select model',
+            value: '',
         })
         expect(controls.setAiModel).not.toHaveBeenCalled()
+        dropdown.destroy()
+    })
+
+    it('renders a provider icon and separate provider and model text in every model option', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
+                provider: 'openai',
+                providerTitle: 'OpenAI',
+                model: 'gpt-5-4',
+                shortTitle: 'GPT 5.4',
+                iconName: 'gptAvatarIcon',
+                modalities: [{ modality: 'text_generation' }],
+            } as any],
+            defaultModels: {
+                reasoning: 'openai:gpt-5-4',
+                image: '',
+                video: '',
+            } as any,
+        })
+        const dropdown = createGenericAiModelDropdown({
+            getCurrentAiModel: () => 'openai:gpt-5-4',
+            setAiModel: vi.fn(),
+        }, 'reasoning-model-icon')
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        const config = lastModelConfig()
+
+        config.renderOption(select(svg).append('g'), {
+            id: 'openai-option',
+            option: config.options[0],
+            index: 0,
+            x: 0,
+            y: 0,
+            width: 190,
+            height: 38,
+            selected: true,
+            hovered: false,
+            disabled: false,
+            closable: false,
+            onClose: () => undefined,
+        })
+
+        expect(svg.querySelector('.ai-model-sliding-dropdown-option-icon path')).not.toBeNull()
+        expect(svg.querySelector('.ai-model-sliding-dropdown-option-provider')?.textContent).toBe('OpenAI:')
+        expect(svg.querySelector('.ai-model-sliding-dropdown-option-model')?.textContent).toBe(' GPT 5.4')
+
         dropdown.destroy()
     })
 })
@@ -408,6 +498,35 @@ describe('createGenericImageModelDropdown', () => {
         dropdown.destroy()
     })
 
+    it('uses the model sliding dropdown for image models', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [{
+                provider: 'google',
+                model: 'imagen-3',
+                iconName: 'gpt',
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [],
+            } as any],
+            defaultModels: {
+                reasoning: '',
+                image: 'google:imagen-3',
+                video: '',
+            } as any,
+        } as any)
+
+        const dropdown = createGenericImageModelDropdown({
+            getCurrentImageModel: vi.fn(() => 'google:imagen-3'),
+            setImageModel: vi.fn(),
+        }, 'image-model-placement')
+
+        expect(lastModelConfig()).toMatchObject({
+            id: 'image-model-placement',
+            selectedValue: 'google:imagen-3',
+            renderOption: expect.any(Function),
+        })
+        dropdown.destroy()
+    })
+
     it('does not auto-select when default image model is unavailable', () => {
         aiModelsStore.setAiModelsCatalog({
             models: [{
@@ -470,16 +589,39 @@ describe('createGenericVideoModelDropdown', () => {
         }
 
         const dropdown = createGenericVideoModelDropdown(controls, 'video-model')
-        expect(lastConfig?.options).toEqual([
+        expect(lastModelConfig()?.options).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                title: 'Veo',
-                aiModel: 'google:veo',
-                provider: 'google',
-                model: 'veo',
+                label: 'google: Veo',
+                value: 'google:veo',
             }),
-        ])
+        ]))
 
         dropdown.update()
+        dropdown.destroy()
+    })
+
+    it('uses the model sliding dropdown for video models', () => {
+        aiModelsStore.setAiModels([{
+            provider: 'google',
+            model: 'veo',
+            iconName: 'gpt',
+            shortTitle: 'Veo',
+            modalities: [{ modality: 'video_generation' }],
+            videoAspectRatios: [{ value: '16:9', label: '16:9' }],
+            videoResolutions: [{ value: '1080p', label: '1080p' }],
+            videoDurations: [{ value: '30s', label: '30s' }],
+        }] as any)
+
+        const dropdown = createGenericVideoModelDropdown({
+            getCurrentVideoModel: vi.fn(() => 'google:veo'),
+            setVideoModel: vi.fn(),
+        }, 'video-model-placement')
+
+        expect(lastModelConfig()).toMatchObject({
+            id: 'video-model-placement',
+            selectedValue: 'google:veo',
+            renderOption: expect.any(Function),
+        })
         dropdown.destroy()
     })
 })

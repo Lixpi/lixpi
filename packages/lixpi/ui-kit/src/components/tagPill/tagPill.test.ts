@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { select } from 'd3-selection'
-import { xIcon } from '../../svg/svgIcons.ts'
+import { stabilityIcon, xIcon } from '../../svg/svgIcons.ts'
 import { createTagPill } from './tagPill.ts'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -304,6 +304,15 @@ describe('createTagPill', () => {
 
         expect(iconGroup.getAttribute('display')).toBe('none')
         expect(iconGroup.querySelector('path')).toBeNull()
+    })
+
+    it('renders the Stability model icon', () => {
+        const { svg } = mountWithConfig({
+            label: 'SD 3.5 Large',
+            icon: stabilityIcon,
+        })
+
+        expect(svg.querySelector('.tag-pill-icon path')).not.toBeNull()
     })
 
     it('recomputes auto width when label changes without explicit width', () => {

@@ -1,8 +1,3 @@
-@use '@lixpi/ui-kit/styles/bubble-menu';
-@use '@lixpi/ui-kit/styles/canvas-node-footer';
-@use '@lixpi/ui-kit/styles/dropdown';
-@use '@lixpi/ui-kit/styles/media-model-badge';
-@use '@lixpi/ui-kit/styles/progress-timeline';
 @import '$src/sass/_transitions.scss';
 @import '$src/sass/_variables.scss';
 @import '$src/sass/components/animations';
@@ -20,6 +15,8 @@
     --workspace-canvas-action-panel-size: 40px;
     // Horizontal gap between an action panel and the composer pill.
     --workspace-canvas-action-panel-gap: 20.28px;
+    // Two 36px circular values plus the sliding switch's 2px outer inset.
+    --workspace-canvas-media-mode-panel-width: 76px;
     // Distance of the composer pill from the canvas bottom edge.
     --workspace-canvas-action-panel-bottom: 24px;
 }
@@ -70,12 +67,101 @@
     padding: 0;
 }
 
-.workspace-canvas-action-panel-left {
+.workspace-canvas-left-control-rail {
+    position: absolute;
     right: calc(50% + min(380px, (100% - 48px) / 2) + var(--workspace-canvas-action-panel-gap));
+    bottom: calc(var(--workspace-canvas-action-panel-bottom) + (var(--workspace-canvas-composer-pill-height) - var(--workspace-canvas-action-panel-size)) / 2);
+    z-index: 9991;
+    display: flex;
+    align-items: center;
+    gap: var(--workspace-canvas-action-panel-gap);
+    height: var(--workspace-canvas-action-panel-size);
+    pointer-events: auto;
 }
 
-.workspace-canvas-action-panel-right {
+.workspace-canvas-left-control-rail .workspace-canvas-action-panel-left,
+.workspace-canvas-left-control-rail .workspace-canvas-media-library-panel {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+}
+
+.workspace-canvas-media-mode-panel {
+    position: relative;
+    z-index: 1;
+    width: var(--workspace-canvas-media-mode-panel-width);
+    height: var(--workspace-canvas-action-panel-size);
+    flex: 0 0 var(--workspace-canvas-media-mode-panel-width);
+    border-radius: 9999px;
+    background: #fff;
+}
+
+.workspace-canvas-media-mode-panel > .ai-prompt-media-mode-switch {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+.workspace-canvas-right-control-rail {
+    position: absolute;
     left: calc(50% + min(380px, (100% - 48px) / 2) + var(--workspace-canvas-action-panel-gap));
+    bottom: calc(var(--workspace-canvas-action-panel-bottom) + (var(--workspace-canvas-composer-pill-height) - var(--workspace-canvas-action-panel-size)) / 2);
+    z-index: 9991;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: var(--workspace-canvas-action-panel-size);
+    padding: 0;
+    border-radius: 9999px;
+    pointer-events: auto;
+    isolation: isolate;
+}
+
+.workspace-canvas-model-menu-hover-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    transition: hoverTransition(background-color);
+}
+
+.workspace-canvas-model-menu-panel {
+    position: relative;
+    bottom: auto;
+    z-index: 1;
+    display: flex;
+    min-width: 0;
+    height: 100%;
+    flex: 0 1 auto;
+    padding: 0;
+    border-radius: 9999px;
+}
+
+.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    flex: 0 1 auto;
+    border-radius: inherit;
+    background: transparent;
+}
+
+.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background,
+.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active) > .workspace-canvas-model-menu-hover-background {
+    background: var(--ai-prompt-model-menu-trigger-active-background, #eef0f4);
+}
+
+.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover,
+.workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger.is-active {
+    background: transparent;
 }
 
 .workspace-floating-toolbar-button {
@@ -108,36 +194,6 @@
             fill: $nightBlue;
         }
     }
-
-    // Tooltip — appears above the button on hover
-    &:hover .workspace-floating-toolbar-tooltip {
-        opacity: 1;
-        visibility: visible;
-        transform: translateX(-50%) translateY(0);
-    }
-}
-
-.workspace-floating-toolbar-tooltip {
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 10px);
-    transform: translateX(-50%) translateY(4px);
-    white-space: nowrap;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: $nightBlue;
-    color: $offWhite;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1;
-    pointer-events: none;
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        hoverTransition(opacity, $defaultHoverTransitionDuration),
-        hoverTransition(transform, $defaultHoverTransitionDuration),
-        hoverTransition(visibility, $defaultHoverTransitionDuration);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .workspace-floating-toolbar-image-wrapper {
@@ -808,14 +864,25 @@
         width: 100%;
     }
 
+    .canvas-asset-seed-label {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
     .canvas-asset-details-status,
     .canvas-asset-renditions,
-    .canvas-asset-lineage {
+    .canvas-asset-lineage,
+    .canvas-asset-seed {
         color: #59656f;
         font-size: 0.72rem;
         line-height: 1.4;
         overflow-wrap: anywhere;
         white-space: pre-wrap;
+    }
+
+    .canvas-asset-seed {
+        font-variant-numeric: tabular-nums;
     }
 
     .canvas-asset-details-status.is-error {

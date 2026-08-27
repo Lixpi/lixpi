@@ -10,6 +10,7 @@ import type {
     MediaBranchVlmResolution,
     MediaBranchLineagePlan,
     MediaGenerationConfigSelectionGroup,
+    MediaGenerationConfigControlKey,
     MediaGenerationRunMeta,
     MediaGenerationRun,
     MediaReferenceBinding,
@@ -88,7 +89,7 @@ export type MediaFanoutPlan = {
     videoResolution?: string
     videoDuration?: string | number
     videoDurationSeconds?: number
-    videoModelOptions?: Record<string, { aspectRatio?: string; resolution?: string; duration?: string | number }>
+    videoModelOptions?: Record<string, Partial<Record<MediaGenerationConfigControlKey, string>>>
     videoSourceForExtension?: string
     imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
     videoConfigGroups?: MediaGenerationConfigSelectionGroup[]
@@ -181,6 +182,10 @@ export type ProviderState = {
     mediaBranchCandidateSnapshot?: MediaBranchCandidateSnapshot | undefined
     mediaBranchResolution?: MediaBranchVlmResolution | undefined
     mediaBranchLineagePlan?: MediaBranchLineagePlan | undefined
+    // Set by the media routers on the transient provider run so the provider can
+    // tell a regeneration from an edit or a reference-driven generation without
+    // carrying the whole lineage plan across the boundary.
+    isMediaRegenerationRun?: boolean | undefined
     promptReferenceAssetIds?: string[] | undefined
     canvasVisibleArea?: { width: number; height: number } | undefined
 
@@ -194,6 +199,7 @@ export type ProviderState = {
     videoAspectRatio?: string | undefined
     videoResolution?: string | undefined
     videoDurationSeconds?: number | undefined
+    videoGenerationConfig?: Partial<Record<MediaGenerationConfigControlKey, string>> | undefined
     generatedVideoPrompt?: string | undefined
     videoFirstFrameImage?: string | undefined
     videoReferenceImages?: string[] | undefined
@@ -295,6 +301,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     mediaBranchCandidateSnapshot: { reducer: keep },
     mediaBranchResolution: { reducer: keep },
     mediaBranchLineagePlan: { reducer: keep },
+    isMediaRegenerationRun: { reducer: keep, default: () => false },
     promptReferenceAssetIds: { reducer: keep },
     canvasVisibleArea: { reducer: keep },
     enableVideoGeneration: { reducer: keep, default: () => false },
@@ -304,6 +311,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     videoAspectRatio: { reducer: keep },
     videoResolution: { reducer: keep },
     videoDurationSeconds: { reducer: keep },
+    videoGenerationConfig: { reducer: keep },
     generatedVideoPrompt: { reducer: keep },
     videoFirstFrameImage: { reducer: keep },
     videoReferenceImages: { reducer: keep },

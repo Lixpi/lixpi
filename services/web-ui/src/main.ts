@@ -53,12 +53,13 @@ async function initializeServicesSequentially() {
             // subsequent getToken() no longer returns the stale, cached one.
             onAuthError: () => AuthService.getTokenSilently(true),
         });
+        const aiModelService = new AiModelService(natsInstance);
 
         servicesStore.setDataValues({
             nats: natsInstance,
             userService: new UserService(),
             subscriptionService: new SubscriptionService(),
-            aiModelService: new AiModelService(),
+            aiModelService,
             assetService: new AssetService(),
             workspaceService: new WorkspaceService(),
             organizationService: new OrganizationService()
@@ -73,7 +74,7 @@ async function initializeServicesSequentially() {
         });
 
         // Fetch available AI models
-        servicesStore.getData('aiModelService')!.getAvailableAiModels();
+        aiModelService.getAvailableAiModels();
 
         // Fetch user workspaces
         servicesStore.getData('workspaceService')!.getUserWorkspaces();

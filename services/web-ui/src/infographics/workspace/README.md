@@ -34,11 +34,11 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Edit** document content directly—ProseMirror editors are embedded in document cards
 - **Chat with AI** from the bottom-center composer; each submit creates a standalone session. The right-side panel opens as a view-only transcript of past sessions
 - **Upload files** via the toolbar button; the server sniffs the bytes, stores the original, and returns or later publishes the canonical canvas-safe media object
-- **Open the Media Library** from the independent bottom-right icon to browse cataloged Assets; an open composer reference picker is temporarily stacked above that action button so its results remain unobstructed
+- **Open the Media Library** from the independent icon to the left of the composer to browse cataloged Assets; an open composer reference picker is temporarily stacked above that action button so its results remain unobstructed
 - **Open Asset details** from any Asset-backed node; every created Asset already has its initial catalog reference and survives placement removal without copying bytes
 - **Connect nodes** by dragging from a handle, then use AI Chat composer context previews and workspace relevance to decide what the next prompt sees
 - **Provide AI context** from explicit composer previews while also sending a compact workspace descriptor snapshot with each chat turn
-- **Use the bottom-center canvas composer** to send prompts with context previews and workspace relevance
+- **Use the bottom-center canvas composer** to select Image or Video explicitly and send prompts with context previews and workspace relevance. One pill in the right control rail contains the mode switch followed by the current model-configuration control, while the Media Library and upload/image controls share the in-flow left rail
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
@@ -122,8 +122,10 @@ All of this happens without the Svelte component knowing the details. It just pa
 
 ### Media Library Panel
 
+The Asset details section renders subject identity, status, renditions, lineage, and the generation seed. The seed row appears only when the media model recorded one on `asset.lineage.generationSeed`, and it carries a `createHelpTooltip` explaining what reusing a seed does.
+
 The canvas details panel and Media Library inspector mount one shared Subject identity dropdown using the same `createPureDropdown` component and configuration as the Asset scope selector. It performs the direct revisioned attestation mutation and restores the previous selection on conflict/error. Medium and identity remain separate fields; there is no modal or proof form.
-- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent bottom-right launcher above the zoom badge, and both bottom controls align to the same right side panel gap as the panel toggle when the panel is open.
+- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent launcher to the left of the composer, beside the upload/image controls.
 - The top-level `Capabilities` / `Media` / `AI Threads` switch is the shared mode control for the right side panel. Capabilities lists authorized Tools; Media hosts cataloged Assets.
 - Renders media through Asset metadata projections; save and insertion create references without copying Blob bytes.
 - Shows the authorized Assets attachable to the current canvas: its own Workspace-scoped Assets plus available user- and Organization-scoped Assets. Assets scoped to another Workspace are excluded because the API cannot attach them to the current canvas.
@@ -156,6 +158,8 @@ AI chat runs are conversation Assets whose `conversation` ProseMirror role is au
 - Generated-media provenance reads as one ordered pipeline inside every history surface. The submitted user message is first, and the pipeline starts immediately below it. Assistant preamble is represented once as the `Understand request` summary, while the reasoning-authored media prompt is one top-level pipeline step after shared lineage resolution; its expanded detail uses the same purple surface and left border as the trace prompt it replaces. Per-run trace rendering keeps references, resolver audit, Capability comparison, and output details but suppresses the duplicate standalone prompt section. The pipeline presentation is derived from `generationProgress` embedded on that Asset's generated-media provenance node and the matching stored generation trace; it is never prepended above the submitted turn or reconstructed from unrelated terminal canvas state. While the matching run is active, JetStream-replayed canvas progress temporarily updates that same mounted history timeline; as soon as the run is terminal, the renderer returns to the complete sealed provenance timeline. History opened from either media info or a branch-lineage node starts with every nested detail expanded for candidate and accepted media alike, applies no extra horizontal margin to the timeline, and aligns its root rail with the pipeline header instead of inheriting ProseMirror's list indent. On an active expanded branch marker, the stop control reserves space only in the submitted-prompt row; the separator and progress timeline retain the full inner marker width. The user can still collapse back to top-level steps plus active/problem detail while that history surface remains open.
 - Drag membership is planned by `workspaceDragPlan.ts`, so AI chat thread drags move only the thread node and real `parentId` descendants. Generated outputs remain independent branch nodes.
 - Render-state reconciliation is planned by `workspaceRenderStatePlan.ts`. When the active right side panel emits a stale metadata render while a local user-driven canvas commit is still waiting for store acknowledgement, the canvas preserves the locally committed visual node/edge state until the store catches up. Generated branch markers, partial media, and completion handoff visuals are transient and do not create a pending local visual commit that can mask the API-owned canvas projection. Active generated-media trackers are overlaid back onto incoming API canvas renders until the run completes, so a lineage-plan projection cannot erase an in-flight placeholder/progress outline.
+
+Icon-only canvas controls keep their ARIA labels and opt into the ui-kit help-tooltip provider. They never use native `title` tooltips or feature-local hover labels.
 
 ## Architecture
 
@@ -515,13 +519,13 @@ When an image node, video node, or edge is selected on the canvas, a bubble menu
 ### Image Node Actions
 - **Create Variant** — dispatches a `canvas-create-image-variant` custom event on the viewport element
 - **Download** — downloads the Asset's `original` rendition through the authenticated `/api/assets` route
-- **Open Asset details** — opens global title, scope, content, lineage, rendition state, and provenance
+- **Open Asset details** — opens global title, scope, content, lineage, rendition state, generation seed, and provenance
 - **Delete** — removes the node and its associated edges from canvas state
 
 ### Video Node Actions
 - **Replace** — uploads a new video Asset and atomically changes the placement reference while keeping node geometry
 - **Download** — downloads the Asset's `original` rendition through the authenticated `/api/assets` route
-- **Open Asset details** — opens global title, scope, content, lineage, rendition state, and provenance
+- **Open Asset details** — opens global title, scope, content, lineage, rendition state, generation seed, and provenance
 - **Connect to node** — starts the same menu-driven graph connection flow as images
 - **Delete** — removes the node and its associated edges from canvas state
 
@@ -608,6 +612,6 @@ During surface resizing, the gradient canvas keeps the existing bitmap visible w
 The thread node gradient and the bottom-center composer gradient are controlled by feature flags in `settings.ts`:
 
 - `settings.aiPromptInput.useShiftingGradientBackground` — gradient on AI prompt input surfaces, including the bottom-center canvas composer.
-- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet. The capture is a second full-stage render, so it is only re-taken when something beneath the glass actually changed. Frames driven purely by the traveling outline animation reuse the previous capture unless an animating outline overlaps a glass panel.
+- `settings.canvasChrome.glassBorder` — 10px screen-space Pixi glass border for the bottom-center composer and adjacent action panels. `pixiMediaLayer` captures the Pixi stage into a render texture and refracts that capture through a per-target liquid normal-map border, so Pixi edges, media sprites, generation outlines, and foreground overlays distort under the ring while flat background remains visually quiet. Each target uses a `ResizeObserver` to schedule a geometry and capture refresh when its DOM dimensions change, including when image/video mode changes resize the right control rail. The capture is a second full-stage render, so it is only re-taken when something beneath the glass actually changed. Frames driven purely by the traveling outline animation reuse the previous capture unless an animating outline overlaps a glass panel.
 
 For the shared freeform/SVG gradient architecture, shifting-background technical details, color customization, and the color analysis tool, see [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md).

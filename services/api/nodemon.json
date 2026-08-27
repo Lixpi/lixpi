@@ -1,12 +1,14 @@
 {
     "watch": [
         "src",
-        "../*/src"
+        "packages/lixpi/*/src/**/*",
+        "packages/lixpi/*/ts/**/*"
     ],
-    "ext": "js,ts,env",
+    "ext": "js,ts,json,env",
     "ignore": [
-        "src/**/*.spec.ts"
+        "src/**/*.spec.ts",
+        "**/node_modules/**"
     ],
-    "legacyWatch": true ,
+    "legacyWatch": true,
     "exec": "node ./src/server.ts"
 }

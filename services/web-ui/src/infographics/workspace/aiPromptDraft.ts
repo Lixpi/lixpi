@@ -6,6 +6,7 @@ import {
 import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
 
 export type AiPromptSubmitModelData = {
+    mediaGenerationMode?: 'image' | 'video'
     aiReasoningModels?: readonly string[] | string
     useMultipleReasoningModels?: boolean | string
     useMultipleImageModels?: boolean | string
@@ -39,22 +40,19 @@ export function buildAiPromptDraftAttrsFromSubmitData(data: AiPromptSubmitModelD
     const useMultipleImageModels = parseBooleanModelMode(data.useMultipleImageModels)
     const useMultipleVideoModels = parseBooleanModelMode(data.useMultipleVideoModels)
     return {
+        mediaGenerationMode: data.mediaGenerationMode === 'video' ? 'video' : 'image',
         aiReasoningModels: serializePromptModelSelection(data.aiReasoningModels, useMultipleReasoningModels),
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
         aiImageModels: serializePromptModelSelection(data.imageOptions?.aiImageModels, useMultipleImageModels),
         imageGenerationSize: data.imageOptions?.imageGenerationSize || 'auto',
-        imageGenerationConfigGroups: useMultipleImageModels
-            ? serializeMediaGenerationConfigSelectionAttr(data.imageOptions?.configGroups ?? [])
-            : '',
+        imageGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(data.imageOptions?.configGroups ?? []),
         aiVideoModels: serializePromptModelSelection(data.videoOptions?.aiVideoModels, useMultipleVideoModels),
         videoAspectRatio: data.videoOptions?.videoAspectRatio || '',
         videoResolution: data.videoOptions?.videoResolution || '',
         videoDuration: data.videoOptions?.videoDuration || '',
-        videoGenerationConfigGroups: useMultipleVideoModels
-            ? serializeMediaGenerationConfigSelectionAttr(data.videoOptions?.configGroups ?? [])
-            : '',
+        videoGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(data.videoOptions?.configGroups ?? []),
     }
 }
 
@@ -72,18 +70,19 @@ export function buildAiPromptDraftFromText(promptText: string, attrs: Record<str
             {
                 type: 'aiPromptInput',
                 attrs: {
+                    mediaGenerationMode: attrs.mediaGenerationMode === 'video' ? 'video' : 'image',
                     aiReasoningModels: serializePromptModelSelection(attrs.aiReasoningModels, useMultipleReasoningModels),
                     useMultipleReasoningModels,
                     useMultipleImageModels,
                     useMultipleVideoModels,
                     aiImageModels: serializePromptModelSelection(attrs.aiImageModels, useMultipleImageModels),
                     imageGenerationSize: attrs.imageGenerationSize || 'auto',
-                    imageGenerationConfigGroups: useMultipleImageModels ? attrs.imageGenerationConfigGroups || '' : '',
+                    imageGenerationConfigGroups: attrs.imageGenerationConfigGroups || '',
                     aiVideoModels: serializePromptModelSelection(attrs.aiVideoModels, useMultipleVideoModels),
                     videoAspectRatio: attrs.videoAspectRatio || '',
                     videoResolution: attrs.videoResolution || '',
                     videoDuration: attrs.videoDuration || '',
-                    videoGenerationConfigGroups: useMultipleVideoModels ? attrs.videoGenerationConfigGroups || '' : '',
+                    videoGenerationConfigGroups: attrs.videoGenerationConfigGroups || '',
                 },
                 content: [paragraph],
             },

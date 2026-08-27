@@ -3,8 +3,8 @@
 	import { aiRobotFaceIcon } from '@lixpi/ui-kit/svg'
 </script>
 
-<div class="intro-page flex justify-center items-center" in:fade|global="{{ duration: 250 }}">
-	<div class="intro-message-container flex justify-center items-center">
+<div class="intro-page" in:fade|global="{{ duration: 250 }}">
+	<div class="intro-message-container">
 		<div class="intro-message">
 			<h1>I am <span class="accent">AI</span><span class="masked">...</span></h1>
 			<!-- <p>Here at your service</p> -->
@@ -20,6 +20,16 @@
 
 	.intro-page {
 		height: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+
+		.intro-message-container {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+		}
+
 		h1 {
 			font-size: 3rem;
 			font-weight: 400;

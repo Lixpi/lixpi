@@ -162,6 +162,8 @@ Single-property assignments (`el.style.display = 'none'`) are still fine.
 
 For SVG icons, import them from `@lixpi/ui-kit/svg` and inject via `innerHTML` — never inline SVG markup in component code.
 
+Never create native browser hover tooltips with a `title` attribute, `element.title`, `setAttribute('title', ...)`, or SVG `<title>`. Visible hover or focus help must go through `@lixpi/ui-kit/components/help-tooltip`. Simple controls keep their ARIA text and opt into the shared provider with `data-help-tooltip="aria-label"` or `data-help-tooltip="aria-description"`; rich content uses `createHelpTooltip()`. Use ARIA naming or description attributes without the tooltip marker when the text is only for assistive technology. Document `<title>` metadata and semantic application fields named `title` are not covered by this prohibition.
+
 The only exception is test files (`*.test.ts`) where minimal DOM setup for mocking is acceptable.
 
 ### Prefer Modern APIs Over Legacy Alternatives

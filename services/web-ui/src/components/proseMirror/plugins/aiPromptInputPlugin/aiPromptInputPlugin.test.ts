@@ -25,6 +25,7 @@ import {
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
+import { plusIcon } from '@lixpi/ui-kit/svg'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -350,6 +351,70 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.contentDOM!.getAttribute('data-placeholder')).toBe('Talk to me...')
     })
 
+    it('renders the image and video choices as 36px circular icon values', () => {
+        const { nv, mockView } = createNodeView()
+        const svg = nv.dom.querySelector('.ai-prompt-media-mode-switch-svg') as SVGSVGElement
+        const track = svg.querySelector('.sliding-switch-track') as SVGRectElement
+        const indicator = svg.querySelector('.sliding-switch-indicator') as SVGRectElement
+        const optionGroups = Array.from(svg.querySelectorAll('.sliding-switch-option-group')) as SVGGElement[]
+        const hits = Array.from(svg.querySelectorAll('.sliding-switch-hit')) as SVGRectElement[]
+        const iconGroups = Array.from(svg.querySelectorAll('.ai-prompt-media-mode-switch-icon')) as SVGGElement[]
+
+        expect(svg.getAttribute('width')).toBe('76')
+        expect(svg.getAttribute('height')).toBe('40')
+        expect(svg.getAttribute('viewBox')).toBe('0 0 76 40')
+        expect(track.getAttribute('width')).toBe('76')
+        expect(track.getAttribute('height')).toBe('40')
+        expect(track.getAttribute('rx')).toBe('20')
+        expect(track.getAttribute('fill')).toBe(settings.slidingSwitch.styles.trackBackgroundColor)
+        expect(indicator.getAttribute('width')).toBe('36')
+        expect(indicator.getAttribute('height')).toBe('36')
+        expect(indicator.getAttribute('rx')).toBe('18')
+        expect(indicator.getAttribute('fill')).toBe(settings.slidingSwitch.styles.indicatorBackgroundColor)
+        expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['video', 'image'])
+        expect(hits.map(hit => [hit.getAttribute('x'), hit.getAttribute('width'), hit.getAttribute('height')])).toEqual([
+            ['2', '36', '36'],
+            ['38', '36', '36'],
+        ])
+        expect(iconGroups).toHaveLength(2)
+        expect(iconGroups.every(group => group.querySelector('path') !== null)).toBe(true)
+        expect(svg.querySelectorAll('text')).toHaveLength(0)
+
+        const imageOption = svg.querySelector('.sliding-switch-option-group[data-value="image"]')!
+        const videoOption = svg.querySelector('.sliding-switch-option-group[data-value="video"]')!
+        const imageIconPath = imageOption.querySelector('path')
+        const videoIconPath = videoOption.querySelector('path')
+        expect(imageIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.selectedOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.unselectedOptionColor)
+
+        videoOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }))
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.hoveredOptionColor)
+
+        videoOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        expect(mockView.state.doc.firstChild!.attrs.mediaGenerationMode).toBe('video')
+        expect(imageOption.getAttribute('aria-checked')).toBe('false')
+        expect(videoOption.getAttribute('aria-checked')).toBe('true')
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.selectedOptionColor)
+    })
+
+    it('mounts the icon switch outside the input wrapper when requested and removes it on destroy', () => {
+        const mediaModeMountEl = document.createElement('div')
+        const mountMediaModeSwitch = vi.fn((switchElement: HTMLElement) => {
+            mediaModeMountEl.appendChild(switchElement)
+        })
+        const { nv } = createNodeView('Hello', {}, { mountMediaModeSwitch })
+
+        const mediaModeSwitch = mediaModeMountEl.querySelector('.ai-prompt-media-mode-switch') as HTMLElement
+        expect(mountMediaModeSwitch).toHaveBeenCalledOnce()
+        expect(mediaModeSwitch).not.toBeNull()
+        expect(nv.dom.contains(mediaModeSwitch)).toBe(false)
+
+        nv.destroy!()
+
+        expect(mediaModeMountEl.children).toHaveLength(0)
+    })
+
     it('inserts context tray before the editable content when provided', () => {
         const contextTray = document.createElement('div')
         contextTray.className = 'provided-context-tray'
@@ -358,9 +423,14 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         })
 
         const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
-        expect(nv.dom.childNodes[0]).toBe(contextTray)
-        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
-        expect(nv.dom.childNodes[2]).toBe(controlsEl)
+        const mediaModeSwitchHost = nv.dom.querySelector('.ai-prompt-media-mode-switch')!
+        // The media generation mode switch is mounted as the wrapper's first
+        // child (unless the caller supplies mountMediaModeSwitch to render it
+        // elsewhere), followed by the context tray, then content and controls.
+        expect(nv.dom.childNodes[0]).toBe(mediaModeSwitchHost)
+        expect(nv.dom.childNodes[1]).toBe(contextTray)
+        expect(nv.dom.childNodes[2]).toBe(nv.contentDOM)
+        expect(nv.dom.childNodes[3]).toBe(controlsEl)
         expect(controlsEl).toBeDefined()
     })
 
@@ -369,9 +439,12 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const { nv } = createNodeView('Hello', {}, { createContextTray })
 
         expect(createContextTray).toHaveBeenCalledTimes(1)
-        expect(nv.dom.childNodes).toHaveLength(2)
-        expect(nv.dom.childNodes[0]).toBe(nv.contentDOM)
-        expect((nv.dom.childNodes[1] as HTMLElement).className).toBe('ai-prompt-input-controls')
+        // media mode switch host, content, controls, and the model settings
+        // bubble menu (mounted directly under the wrapper) — no context tray.
+        expect(nv.dom.childNodes).toHaveLength(4)
+        expect((nv.dom.childNodes[0] as HTMLElement).className).toBe('ai-prompt-media-mode-switch')
+        expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+        expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-controls')
     })
 
     it('applies model menu CSS variables from settings.aiPromptInput.modelMenu.styles', () => {
@@ -389,6 +462,9 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-trigger-focus-outline')).toBe(
             settings.aiPromptInput.modelMenu.styles.triggerFocusOutline,
         )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-width')).toBe(
+            settings.aiPromptInput.modelMenu.styles.infoBubbleWidth,
+        )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-border-radius')).toBe(
             settings.aiPromptInput.modelMenu.styles.infoBubbleBorderRadius,
         )
@@ -403,6 +479,9 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         )
         expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-color')).toBe(
             settings.aiPromptInput.modelMenu.styles.controlLabelColor,
+        )
+        expect(nv.dom.style.getPropertyValue('--ai-prompt-model-menu-control-label-font-size')).toBe(
+            settings.aiPromptInput.modelMenu.styles.controlLabelFontSize,
         )
         expect(nv.dom.style.getPropertyValue('--help-tooltip-trigger-border')).toBe(
             settings.aiPromptInput.modelMenu.styles.helpTooltipTriggerBorder,
@@ -451,6 +530,229 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         }
     })
 
+    it('mounts the model configuration trigger beside the composer without mode text or a leading icon', () => {
+        const modelMenuControlMountEl = document.createElement('div')
+        const mountModelMenuControl = vi.fn((controlElement: HTMLElement) => {
+            modelMenuControlMountEl.appendChild(controlElement)
+        })
+        const { nv, factories } = createNodeView('Hello', {}, { mountModelMenuControl })
+        const trigger = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger') as HTMLButtonElement
+        const summary = trigger.querySelector('.ai-prompt-model-menu-trigger-summary')
+        const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
+
+        expect(mountModelMenuControl).toHaveBeenCalledOnce()
+        expect(trigger).toBeInstanceOf(HTMLButtonElement)
+        expect(summary?.textContent).toBe('Select model')
+        expect(trigger.querySelector('svg')).toBeNull()
+        expect(trigger.querySelector('.ai-prompt-model-menu-trigger-leading')).toBeNull()
+        expect(trigger.querySelector('.ai-prompt-model-menu-trigger-mode')).toBeNull()
+        expect(nv.dom.contains(trigger)).toBe(false)
+        expect(controls.children).toHaveLength(1)
+        expect(controls.firstElementChild).toBe(factories.submitButtonDom)
+        expect(trigger.getAttribute('aria-label')).toBe('Generation settings')
+        expect(trigger.dataset.helpTooltip).toBe('aria-label')
+        expect(trigger.getAttribute('title')).toBeNull()
+        expect(trigger.style.getPropertyValue('--ai-prompt-model-menu-trigger-color')).toBe(
+            settings.aiPromptInput.modelMenu.styles.triggerColor,
+        )
+
+        document.body.append(nv.dom, modelMenuControlMountEl)
+        trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble')!
+        expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        expect(modelMenu.classList.contains('is-visible')).toBe(false)
+
+        nv.destroy!()
+        expect(modelMenuControlMountEl.children).toHaveLength(0)
+        nv.dom.remove()
+        modelMenuControlMountEl.remove()
+    })
+
+    it('summarizes the selected model and image configuration with their icons', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [
+                {
+                    provider: 'Google',
+                    model: 'imagen-4',
+                    shortTitle: 'Imagen 4',
+                    iconName: 'geminiIcon',
+                    modalities: [{ modality: 'image_generation' }],
+                },
+            ],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [
+                    {
+                        groupId: 'image:google',
+                        mediaType: 'image',
+                        provider: 'Google',
+                        title: 'Google image models',
+                        modelIds: ['Google:imagen-4'],
+                        controls: [
+                            {
+                                key: 'imageSize',
+                                label: 'Image size',
+                                kind: 'segmented',
+                                options: [{ value: '1:1', label: 'Square' }],
+                                defaultValue: '1:1',
+                            },
+                        ],
+                    },
+                ],
+            },
+        } as any)
+
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            const { nv } = createNodeView('Hello', {
+                aiImageModels: JSON.stringify(['Google:imagen-4']),
+                imageGenerationConfigGroups: JSON.stringify([
+                    {
+                        groupId: 'image:google',
+                        modelIds: ['Google:imagen-4'],
+                        values: { imageSize: '1:1' },
+                    },
+                ]),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            })
+
+            const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
+            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                .map(label => label.textContent)).toEqual(['Imagen 4', 'Square'])
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-icon svg')).not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-separator')).not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon'))
+                .not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-dot-separator')).toBeNull()
+
+            nv.destroy!()
+        } finally {
+            aiModelsStore.resetStore()
+        }
+    })
+
+    it('summarizes video settings with an aspect glyph, clock, and dot separators', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [
+                {
+                    provider: 'OpenAI',
+                    model: 'sora-2',
+                    shortTitle: 'Sora 2',
+                    iconName: 'gptAvatarIcon',
+                    modalities: [{ modality: 'video_generation' }],
+                },
+            ],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [
+                    {
+                        groupId: 'video:openai',
+                        mediaType: 'video',
+                        provider: 'OpenAI',
+                        title: 'OpenAI video models',
+                        modelIds: ['OpenAI:sora-2'],
+                        controls: [
+                            {
+                                key: 'aspectRatio',
+                                label: 'Aspect ratio',
+                                kind: 'segmented',
+                                options: [{ value: '16:9', label: 'Widescreen' }],
+                                defaultValue: '16:9',
+                            },
+                            {
+                                key: 'resolution',
+                                label: 'Resolution',
+                                kind: 'segmented',
+                                options: [{ value: '1080p', label: '1080p' }],
+                                defaultValue: '1080p',
+                            },
+                            {
+                                key: 'duration',
+                                label: 'Duration',
+                                kind: 'segmented',
+                                options: [{ value: '-1', label: 'Automatic' }],
+                                defaultValue: '-1',
+                            },
+                        ],
+                    },
+                ],
+            },
+        } as any)
+
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            const { nv } = createNodeView('Hello', {
+                mediaGenerationMode: 'video',
+                aiVideoModels: JSON.stringify(['OpenAI:sora-2']),
+                videoGenerationConfigGroups: JSON.stringify([
+                    {
+                        groupId: 'video:openai',
+                        modelIds: ['OpenAI:sora-2'],
+                        values: { aspectRatio: '16:9', resolution: '1080p', duration: '-1' },
+                    },
+                ]),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            })
+
+            const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
+            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                .map(label => label.textContent)).toEqual(['Sora 2', 'Widescreen', '1080p', 'Smart length'])
+            expect(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-separator')).toHaveLength(1)
+            expect(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-dot-separator')).toHaveLength(2)
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon')).not.toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-clock-icon svg')).not.toBeNull()
+
+            nv.destroy!()
+        } finally {
+            aiModelsStore.resetStore()
+        }
+    })
+
+    it('refreshes the summary after the AI model catalog loads', () => {
+        aiModelsStore.resetStore()
+        let nv: ReturnType<typeof createNodeView>['nv'] | null = null
+
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            nv = createNodeView('Hello', {
+                aiImageModels: JSON.stringify(['OpenAI:gpt-image-2']),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            }).nv
+
+            const getModelLabel = () => modelMenuControlMountEl.querySelector(
+                '.ai-prompt-model-menu-trigger-summary-label',
+            )?.textContent
+            expect(getModelLabel()).toBe('gpt-image-2')
+
+            aiModelsStore.setAiModelsCatalog({
+                models: [
+                    {
+                        provider: 'OpenAI',
+                        model: 'gpt-image-2',
+                        shortTitle: 'GPT Image 2',
+                        iconName: 'gptAvatarIcon',
+                        modalities: [{ modality: 'image_generation' }],
+                    },
+                ],
+                mediaGenerationConfigMatrix: {
+                    version: 'media-generation-config-matrix-v1',
+                    groups: [],
+                },
+            } as any)
+
+            expect(getModelLabel()).toBe('GPT Image 2')
+        } finally {
+            if (nv?.destroy) nv.destroy()
+            aiModelsStore.resetStore()
+        }
+    })
+
     it('lets CSS variables own model menu layering instead of hard-coded inline z-index', () => {
         const nodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
 
@@ -458,20 +760,47 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expectSourceNotToContain(nodeSource, 'settings.aiPromptInput.modelMenu.infoBubbleZIndex')
     })
 
+    it('caps the model settings surface to the viewport space above its trigger', () => {
+        const { nv } = createNodeView()
+        document.body.appendChild(nv.dom)
+
+        const trigger = nv.dom.querySelector('.ai-prompt-model-menu-trigger') as HTMLButtonElement
+        vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+            x: 800,
+            y: 600,
+            top: 600,
+            right: 960,
+            bottom: 622,
+            left: 800,
+            width: 160,
+            height: 22,
+            toJSON: () => ({}),
+        } as DOMRect)
+
+        trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+        const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble') as HTMLElement
+        expect(modelMenu.style.getPropertyValue('--ai-prompt-model-menu-info-bubble-max-height')).toBe('584px')
+
+        nv.destroy!()
+        nv.dom.remove()
+    })
+
     describe('visual hierarchy — wrapper contains content then controls', () => {
-        it('wrapper has exactly 2 children: contentDOM and controlsEl', () => {
+        it('wrapper has exactly 4 children: media mode switch, contentDOM, controlsEl, and the model menu bubble', () => {
             const { nv } = createNodeView()
-            expect(nv.dom.childNodes.length).toBe(2)
-            expect(nv.dom.childNodes[0]).toBe(nv.contentDOM)
-            expect((nv.dom.childNodes[1] as HTMLElement).className).toBe('ai-prompt-input-controls')
+            expect(nv.dom.childNodes.length).toBe(4)
+            expect((nv.dom.childNodes[0] as HTMLElement).className).toBe('ai-prompt-media-mode-switch')
+            expect(nv.dom.childNodes[1]).toBe(nv.contentDOM)
+            expect((nv.dom.childNodes[2] as HTMLElement).className).toBe('ai-prompt-input-controls')
+            expect((nv.dom.childNodes[3] as HTMLElement).classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
         })
 
         it('controls container is placed after content in DOM order', () => {
             const { nv } = createNodeView()
-            const controlsEl = nv.dom.childNodes[1] as HTMLElement
-            expect(controlsEl.className).toBe('ai-prompt-input-controls')
-            expect(nv.dom.firstChild).toBe(nv.contentDOM)
-            expect(nv.dom.lastChild).toBe(controlsEl)
+            const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls') as HTMLElement
+            const children = Array.from(nv.dom.childNodes)
+            expect(children.indexOf(nv.contentDOM as ChildNode)).toBeLessThan(children.indexOf(controlsEl))
         })
     })
 
@@ -482,16 +811,15 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             expect(modelMenu.contains(factories.modelDropdownDom)).toBe(true)
         })
 
-        it('renders image model dropdown inside model settings bubble menu', () => {
+        it('renders the media generation config matrix (not a standalone image size dropdown) inside the model settings bubble menu', () => {
+            // Image size/aspect selection now comes from the API-authored media
+            // generation config matrix, not the legacy createImageSizeDropdown
+            // factory — that factory is threaded through as an option but is no
+            // longer invoked by the node view.
             const { nv, factories } = createNodeView()
             const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
-            expect(modelMenu.contains(factories.imageModelDropdownDom)).toBe(true)
-        })
-
-        it('renders image size dropdown inside model settings bubble menu', () => {
-            const { nv, factories } = createNodeView()
-            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-content')!
-            expect(modelMenu.contains(factories.imageSizeDropdownDom)).toBe(true)
+            expect(modelMenu.querySelector('.ai-media-config-matrix[data-media-type="image"]')).not.toBeNull()
+            expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
         })
 
         it('renders submit button inside controls', () => {
@@ -505,9 +833,11 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             const controlsEl = nv.dom.querySelector('.ai-prompt-input-controls')!
             const children = Array.from(controlsEl.children)
 
+            // The model settings bubble menu is mounted directly under the
+            // wrapper (BubbleMenu's parentEl), not inside the controls element.
+            expect(children).toHaveLength(2)
             expect(children[0].classList.contains('ai-prompt-model-menu-trigger')).toBe(true)
             expect(children[1]).toBe(factories.submitButtonDom)
-            expect(children[2].classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
         })
 
         it('model settings menu is split into reasoning, image, and video sections', () => {
@@ -522,143 +852,250 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             ])
         })
 
-        it('renders each model setup section with heading help, toggle, controls row, and selected-tags row', () => {
+        it('keeps the model settings menu open for portaled model selectors and sliding dropdowns', () => {
+            const { nv } = createNodeView()
+            const trigger = nv.dom.querySelector('.ai-prompt-model-menu-trigger')!
+            const modelMenu = nv.dom.querySelector('.ai-prompt-model-menu-info-bubble')!
+            const modelSelectorPortal = document.createElement('div')
+            const dropdownScrollPortal = document.createElement('div')
+            const dropdownPortal = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+            const dropdownGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+            modelSelectorPortal.classList.add('ai-prompt-model-selector-popover')
+            dropdownScrollPortal.classList.add('sliding-dropdown-scroll-portal')
+            dropdownPortal.setAttribute('data-sliding-dropdown-open', 'true')
+            dropdownGroup.classList.add('sliding-dropdown-group')
+            dropdownPortal.appendChild(dropdownGroup)
+            dropdownScrollPortal.appendChild(dropdownPortal)
+            document.body.appendChild(modelSelectorPortal)
+            document.body.appendChild(dropdownScrollPortal)
+
+            trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            modelSelectorPortal.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            dropdownGroup.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            dropdownScrollPortal.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(true)
+
+            document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            expect(modelMenu.classList.contains('is-visible')).toBe(false)
+
+            modelSelectorPortal.remove()
+            dropdownScrollPortal.remove()
+            nv.destroy!()
+        })
+
+        it('renders heading help and an add-model action for each model section', () => {
             const { nv } = createNodeView()
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
-            const expectedSections = [
-                {
-                    title: 'Reasoning model',
-                    controlCount: 1,
-                    controlVisibility: ['true'],
-                    toggleLabel: 'Use multiple reasoning models',
-                    hasSelectedTagsRow: true,
-                },
-                {
-                    title: 'Image model',
-                    controlCount: 3,
-                    controlVisibility: ['true', 'true', 'false'],
-                    toggleLabel: 'Use multiple image models',
-                    hasSelectedTagsRow: false,
-                },
-                {
-                    title: 'Video model',
-                    controlCount: 5,
-                    controlVisibility: ['true', 'true', 'true', 'true', 'false'],
-                    toggleLabel: 'Use multiple video models',
-                    hasSelectedTagsRow: false,
-                },
-            ]
+            const titles = ['Reasoning model', 'Image model', 'Video model']
+            const expectedPlusIcon = document.createElement('span')
+            expectedPlusIcon.innerHTML = plusIcon
 
-            expect(sections).toHaveLength(expectedSections.length)
-            for (const [index, expectedSection] of expectedSections.entries()) {
+            expect(sections).toHaveLength(titles.length)
+            for (const [index, title] of titles.entries()) {
                 const section = sections[index]!
                 const heading = section.querySelector('.ai-prompt-model-menu-section-heading')!
                 const headingMain = section.querySelector('.ai-prompt-model-menu-section-heading-main')!
                 const headingAction = section.querySelector('.ai-prompt-model-menu-section-heading-action')!
-                const controlsRow = section.querySelector('.ai-prompt-model-menu-section-controls')!
-                const selectedTagsRow = section.querySelector('.ai-prompt-selected-model-tags-row')
-                const selectedTagsRows = section.querySelectorAll('.ai-prompt-selected-model-tags-row')
-                const sectionControlRows = Array.from(section.querySelectorAll('.ai-prompt-model-menu-control'))
+                const addButton = headingAction.querySelector('.ai-model-config-add') as HTMLButtonElement
+                const addLabel = addButton.querySelector('.ai-model-config-add-label') as HTMLElement
+                const addIcon = addButton.querySelector('.ai-model-config-add-icon') as HTMLElement
 
                 expect(heading.contains(headingMain)).toBe(true)
-                expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(expectedSection.title)
+                expect(headingMain.querySelector('.ai-prompt-model-menu-section-title')!.textContent).toBe(title)
                 expect(headingMain.querySelector('.help-tooltip-trigger')).not.toBeNull()
-                expect(headingAction.querySelector('.ai-prompt-model-menu-toggle')?.getAttribute('aria-label')).toBe(expectedSection.toggleLabel)
-                expect(headingAction.querySelector('.ai-prompt-model-menu-toggle-text')?.textContent).toBe('Use multiple models')
-                expect(sectionControlRows).toHaveLength(expectedSection.controlCount)
-                expect(Array.from(controlsRow.querySelectorAll('.ai-prompt-model-menu-control')).map((control) => {
-                    return control.getAttribute('data-visible')
-                })).toEqual(expectedSection.controlVisibility)
-
-                if (expectedSection.hasSelectedTagsRow) {
-                    expect(selectedTagsRow).not.toBeNull()
-                    expect(section.children[2]).toBe(selectedTagsRow)
-                    expect(selectedTagsRow?.getAttribute('data-visible')).toBe('false')
-                    expect(selectedTagsRows).toHaveLength(1)
-                } else {
-                    expect(selectedTagsRow).toBeNull()
-                    expect(selectedTagsRows).toHaveLength(0)
-                    expect(section.children).toHaveLength(2)
-                }
+                expect(addButton.getAttribute('aria-label')).toBe('Add model')
+                expect(addButton.dataset.helpTooltip).toBe('aria-label')
+                expect(addLabel.textContent).toBe('Add model')
+                expect(addButton.children[0]).toBe(addLabel)
+                expect(addButton.children[1]).toBe(addIcon)
+                expect(addIcon.innerHTML).toBe(expectedPlusIcon.innerHTML)
+                expect(section.querySelector('.ai-prompt-model-menu-toggle')).toBeNull()
+                expect(section.querySelector('.ai-prompt-selected-model-tags-row')).toBeNull()
             }
 
             nv.destroy!()
         })
 
-        it('keeps single-select dropdowns mounted until a section toggle enables multi-select mode', () => {
-            const { nv, factories, mockView } = createNodeView('Hello', {
-                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6']),
-            })
+        it('uses a compact nightBlue circle around the Add model plus icon', () => {
+            const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+            const iconRule = stylesSource.match(/\.ai-model-config-add-icon \{[\s\S]*?\n\}/)?.[0] ?? ''
 
-            expect(factories.createModelDropdown).toHaveBeenCalledTimes(1)
-            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
-            expect(nv.dom.contains(factories.modelDropdownDom)).toBe(true)
-
-            const reasoningToggle = nv.dom.querySelector(
-                '.ai-prompt-model-menu-toggle[aria-label="Use multiple reasoning models"]'
-            )!
-            reasoningToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-            nv.update!(mockView.state.doc.firstChild!)
-
-            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(true)
-            expect(mockView.state.doc.firstChild!.attrs.useMultipleImageModels).toBe(false)
-            expect(mockView.state.doc.firstChild!.attrs.useMultipleVideoModels).toBe(false)
-            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['Anthropic:sonnet-4-6']))
-            expect(factories.createModelMultiSelect).toHaveBeenCalledTimes(1)
-            expect(nv.dom.contains(factories.modelMultiSelectDom)).toBe(true)
-            expect(nv.dom.contains(factories.modelDropdownDom)).toBe(false)
-
-            nv.destroy!()
+            expectSourceToContain(iconRule, 'flex: 0 0 12px;')
+            expectSourceToContain(iconRule, 'width: 12px;')
+            expectSourceToContain(iconRule, 'height: 12px;')
+            expectSourceToContain(iconRule, 'background-color: $nightBlue;')
         })
 
-        it('renders selected model tag pills only below the enabled multi-model section and removes models from that row', () => {
+        it('uses the same row renderer and remove-button slot for reasoning, image, and video models', () => {
+            aiModelsStore.setAiModelsCatalog({
+                models: [
+                    {
+                        provider: 'Anthropic',
+                        model: 'sonnet-4-6',
+                        shortTitle: 'Sonnet 4.6',
+                        iconName: 'claudeIcon',
+                        modalities: [{ modality: 'text_generation' }],
+                    },
+                    {
+                        provider: 'OpenAI',
+                        model: 'gpt-5-4',
+                        shortTitle: 'GPT 5.4',
+                        iconName: 'gptAvatarIcon',
+                        modalities: [{ modality: 'text_generation' }],
+                    },
+                    {
+                        provider: 'Google',
+                        model: 'imagen-4',
+                        shortTitle: 'Imagen 4',
+                        iconName: 'geminiIcon',
+                        modalities: [{ modality: 'image_generation' }],
+                    },
+                    {
+                        provider: 'OpenAI',
+                        model: 'gpt-image-1',
+                        shortTitle: 'GPT Image',
+                        iconName: 'gptAvatarIcon',
+                        modalities: [{ modality: 'image_generation' }],
+                    },
+                    {
+                        provider: 'Google',
+                        model: 'veo-3',
+                        shortTitle: 'Veo 3',
+                        iconName: 'geminiIcon',
+                        modalities: [{ modality: 'video_generation' }],
+                    },
+                    {
+                        provider: 'ByteDance',
+                        model: 'seedance',
+                        shortTitle: 'Seedance',
+                        iconName: 'bytedanceIcon',
+                        modalities: [{ modality: 'video_generation' }],
+                    },
+                ],
+                mediaGenerationConfigMatrix: {
+                    version: 'media-generation-config-matrix-v1',
+                    groups: [
+                        {
+                            groupId: 'image:test',
+                            mediaType: 'image',
+                            provider: 'test',
+                            title: 'Image models',
+                            modelIds: ['Google:imagen-4', 'OpenAI:gpt-image-1'],
+                            controls: [],
+                        },
+                        {
+                            groupId: 'video:test',
+                            mediaType: 'video',
+                            provider: 'test',
+                            title: 'Video models',
+                            modelIds: ['Google:veo-3', 'ByteDance:seedance'],
+                            controls: [],
+                        },
+                    ],
+                },
+            } as any)
+            const { nv } = createNodeView('Hello', {
+                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
+                aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-1']),
+                aiVideoModels: JSON.stringify(['Google:veo-3', 'ByteDance:seedance']),
+            })
+            const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section'))
+
+            expect(sections).toHaveLength(3)
+            for (const section of sections) {
+                const rowCollection = section.querySelector('.ai-model-config-row-collection')
+                const rows = Array.from(section.querySelectorAll('.ai-model-config-row'))
+                expect(rowCollection).not.toBeNull()
+                expect(rows).toHaveLength(2)
+
+                for (const row of rows) {
+                    const primaryRow = row.querySelector('.ai-model-config-primary-row') as HTMLElement
+                    const removeButton = row.querySelector('.ai-model-config-remove') as HTMLButtonElement
+                    expect(row.querySelector('.ai-model-config-model-column')).not.toBeNull()
+                    expect(removeButton.parentElement).toBe(primaryRow)
+                    expect(primaryRow.lastElementChild).toBe(removeButton)
+                }
+            }
+
+            nv.destroy!()
+            aiModelsStore.resetStore()
+        })
+
+        it('keeps model-row markup behind one shared renderer entry point', () => {
+            const nodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
+            const modelControlsSource = readFileSync(
+                resolve(__dirname, '../../../aiModelControls/aiModelControls.ts'),
+                'utf-8',
+            )
+            const rowRendererSource = readFileSync(
+                resolve(__dirname, '../../../aiModelControls/modelConfigurationRow.ts'),
+                'utf-8',
+            )
+            const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+
+            expectSourceToContain(nodeSource, 'return createModelConfigurationRow({')
+            expectSourceToContain(modelControlsSource, 'return createModelConfigurationRow({')
+            expectSourceNotToContain(nodeSource, 'className="ai-model-config-remove"')
+            expectSourceNotToContain(modelControlsSource, 'className="ai-model-config-remove"')
+            expectSourceToContain(rowRendererSource, 'className="ai-model-config-remove"')
+            expectSourceToContain(
+                stylesSource,
+                '.ai-prompt-model-menu-control:has(.ai-model-config-row-collection)',
+            )
+        })
+
+        it('adds and removes independently configured reasoning-model rows while keeping one row required', () => {
             aiModelsStore.setAiModels([
                 {
                     provider: 'Anthropic',
                     model: 'sonnet-4-6',
                     shortTitle: 'Sonnet 4.6',
                     iconName: 'claudeIcon',
-                    color: '#1a2744',
-                    modalities: [{ modality: 'TEXT', shortTitle: 'Text' }],
+                    modalities: [{ modality: 'text_generation' }],
                 },
                 {
-                    provider: 'Anthropic',
-                    model: 'opus-4-8',
-                    shortTitle: 'Opus 4.8',
-                    iconName: 'claudeIcon',
-                    color: '#1a2744',
-                    modalities: [{ modality: 'TEXT', shortTitle: 'Text' }],
+                    provider: 'OpenAI',
+                    model: 'gpt-5-4',
+                    shortTitle: 'GPT 5.4',
+                    iconName: 'gptAvatarIcon',
+                    modalities: [{ modality: 'text_generation' }],
                 },
             ] as any)
-
-            const { nv, mockView } = createNodeView('Hello', {
-                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'Anthropic:opus-4-8']),
-                useMultipleReasoningModels: true,
-                aiImageModels: JSON.stringify(['Anthropic:sonnet-4-6']),
+            const { nv, factories, mockView } = createNodeView('Hello', {
+                aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6']),
             })
-            const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section')) as HTMLElement[]
-            const reasoningTagsRow = sections[0]!.querySelector('.ai-prompt-selected-model-tags-row')!
-            const imageTagsRow = sections[1]!.querySelector('.ai-prompt-selected-model-tags-row')
-            const reasoningLabels = () => Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-label'))
-                .map((element) => element.textContent)
+            const reasoningSection = nv.dom.querySelectorAll('.ai-prompt-model-menu-section')[0] as HTMLElement
 
-            expect(reasoningTagsRow.getAttribute('data-visible')).toBe('true')
-            expect(imageTagsRow).toBeNull()
-            expect(reasoningLabels()).toEqual(['Sonnet 4.6', 'Opus 4.8'])
-            expect(reasoningTagsRow.querySelector('.tag-pill-label')!.getAttribute('text-anchor')).toBe('middle')
-            expect(reasoningTagsRow.querySelector('.tag-pill-close')!.getAttribute('transform')).toBe('translate(11, 12)')
-            expect(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('stroke')).toBe('rgba(105, 115, 133, 0.12)')
-            const initialPillWidths = Array.from(reasoningTagsRow.querySelectorAll('.tag-pill-background'))
-                .map((element) => Number(element.getAttribute('width')))
-            expect(initialPillWidths[1]).toBeLessThan(initialPillWidths[0]!)
-            expect(initialPillWidths[1]).toBeGreaterThan(0)
+            expect(factories.createModelDropdown).toHaveBeenCalledTimes(1)
+            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
+            expect(reasoningSection.querySelectorAll('.ai-model-config-row')).toHaveLength(1)
+            expect(reasoningSection.querySelector('.ai-model-config-remove')).toBeNull()
 
-            reasoningTagsRow.querySelector('.tag-pill-close')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            const addButton = reasoningSection.querySelector('.ai-model-config-add') as HTMLButtonElement
+            addButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
             nv.update!(mockView.state.doc.firstChild!)
 
-            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['Anthropic:opus-4-8']))
-            expect(reasoningLabels()).toEqual(['Opus 4.8'])
-            expect(Number(reasoningTagsRow.querySelector('.tag-pill-background')!.getAttribute('width'))).toBe(initialPillWidths[1])
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(true)
+            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(
+                JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
+            )
+            expect(reasoningSection.querySelectorAll('.ai-model-config-row')).toHaveLength(2)
+
+            const removeButton = reasoningSection.querySelector('.ai-model-config-remove') as HTMLButtonElement
+            removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+            nv.update!(mockView.state.doc.firstChild!)
+
+            expect(mockView.state.doc.firstChild!.attrs.aiReasoningModels).toBe(JSON.stringify(['OpenAI:gpt-5-4']))
+            expect(mockView.state.doc.firstChild!.attrs.useMultipleReasoningModels).toBe(false)
+            expect(reasoningSection.querySelectorAll('.ai-model-config-row')).toHaveLength(1)
+            expect(reasoningSection.querySelector('.ai-model-config-remove')).toBeNull()
+            expect(factories.createModelMultiSelect).not.toHaveBeenCalled()
 
             nv.destroy!()
             aiModelsStore.setAiModels([])
@@ -944,12 +1381,12 @@ describe('createAiPromptInputNodeView — update', () => {
         expect(factories.createModelDropdown.mock.results[0].value.update).toHaveBeenCalled()
     })
 
-    it('calls imageSizeDropdown.update on update', () => {
+    it('never invokes createImageSizeDropdown — image size now comes from the media generation config matrix', () => {
         const { nv, factories } = createNodeViewForUpdate()
         const updatedDoc = doc(promptInput(p('Updated')))
         nv.update!(updatedDoc.firstChild!)
 
-        expect(factories.createImageSizeDropdown.mock.results[0].value.update).toHaveBeenCalled()
+        expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
     })
 })
 
@@ -982,7 +1419,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
         expect(factories.createModelDropdown.mock.results[0].value.destroy).toHaveBeenCalled()
     })
 
-    it('calls imageSizeDropdown.destroy on destroy', () => {
+    it('never invokes createImageSizeDropdown on destroy either — it is not part of the node view lifecycle', () => {
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
         const factories = createMockControlFactories()
@@ -1003,7 +1440,7 @@ describe('createAiPromptInputNodeView — destroy', () => {
 
         nv.destroy!()
 
-        expect(factories.createImageSizeDropdown.mock.results[0].value.destroy).toHaveBeenCalled()
+        expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
     })
 })
 
@@ -1035,10 +1472,10 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         const [controls, dropdownId] = factories.createModelDropdown.mock.calls[0]
         expect(controls).toHaveProperty('getCurrentAiModel')
         expect(controls).toHaveProperty('setAiModel')
-        expect(dropdownId).toBe('ai-prompt-input')
+        expect(dropdownId).toBe('ai-reasoning-model-0')
     })
 
-    it('createImageSizeDropdown receives ImageSizeControls adapter', () => {
+    it('does not call createImageSizeDropdown — the option is accepted but unused by the current node view', () => {
         const factories = createMockControlFactories()
         const testDoc = doc(promptInput(p('Hello')))
         const state = createBaseEditorState(testDoc)
@@ -1057,11 +1494,7 @@ describe('createAiPromptInputNodeView — control adapters', () => {
             createSubmitButton: factories.createSubmitButton,
         })(testDoc.firstChild!, { state, dispatch: vi.fn() } as unknown as EditorView, () => 0)
 
-        expect(factories.createImageSizeDropdown).toHaveBeenCalledTimes(1)
-        const [controls] = factories.createImageSizeDropdown.mock.calls[0]
-        expect(controls).toHaveProperty('getImageGenerationSize')
-        expect(controls).toHaveProperty('setImageGenerationSize')
-        expect(controls).toHaveProperty('getCurrentImageModel')
+        expect(factories.createImageSizeDropdown).not.toHaveBeenCalled()
     })
 
     it('createSubmitButton receives SubmitControls adapter', () => {
@@ -1148,11 +1581,15 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
         const nv = renderNodeView()
 
         // SCSS: .ai-prompt-input-wrapper uses flex-direction: column
-        // content is flex: 1 (fills space), controls are at the bottom
+        // content is flex: 1 (fills space), controls are at the bottom. The
+        // media mode switch host and the model settings bubble menu are also
+        // direct children of the wrapper.
         const children = Array.from(nv.dom.children) as HTMLElement[]
-        expect(children.length).toBe(2)
-        expect(children[0].className).toBe('ai-prompt-input-content')
-        expect(children[1].className).toBe('ai-prompt-input-controls')
+        expect(children.length).toBe(4)
+        expect(children[0].className).toBe('ai-prompt-media-mode-switch')
+        expect(children[1].className).toBe('ai-prompt-input-content')
+        expect(children[2].className).toBe('ai-prompt-input-controls')
+        expect(children[3].classList.contains('ai-prompt-model-menu-info-bubble')).toBe(true)
     })
 
     it('data-empty attribute enables placeholder pseudo-element from SCSS', () => {
@@ -1223,15 +1660,17 @@ describe('Visual proportions — SCSS sizing expectations', () => {
     it('controls has compact child elements for balanced layout', () => {
         const nv = renderNodeView()
         const controls = nv.dom.querySelector('.ai-prompt-input-controls')!
-        // SCSS expects: model settings trigger, submit button, and hidden bubble menu.
-        expect(controls.children.length).toBe(3)
+        // SCSS expects: model settings trigger and submit button. The bubble
+        // menu is mounted directly under the wrapper, not inside controls.
+        expect(controls.children.length).toBe(2)
     })
 
-    it('content area is the first child — gets flex: 1 for vertical fill', () => {
+    it('content area comes right after the media mode switch — gets flex: 1 for vertical fill', () => {
         const nv = renderNodeView()
         // SCSS: .ai-prompt-input-content { flex: 1; }
-        // Being the first child in a column flex ensures it takes available space
-        expect(nv.dom.children[0]).toBe(nv.contentDOM)
+        // The media mode switch host is the wrapper's first child; content
+        // still precedes the controls element in the column flex layout.
+        expect(nv.dom.children[1]).toBe(nv.contentDOM)
     })
 
     it('controls sit below content — no absolute positioning, natural flow', () => {
@@ -1408,6 +1847,37 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         expect(submitCall.contentJSON).toBeInstanceOf(Array)
         expect(submitCall.contentJSON.length).toBeGreaterThan(0)
         expect(submitCall.aiReasoningModels).toEqual(['gpt-4'])
+    })
+
+    it('submits every selected model and derives multiple-model flags from the selected rows', () => {
+        const { options } = createPluginOptions()
+        const plugin = createAiPromptInputPlugin(options)
+        const testDoc = doc(promptInput({
+            mediaGenerationMode: 'video',
+            aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
+            aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-1']),
+            aiVideoModels: JSON.stringify(['Google:veo-3', 'BytePlus:seedance-2']),
+            useMultipleReasoningModels: false,
+            useMultipleImageModels: false,
+            useMultipleVideoModels: false,
+        }, p('Create a clip')))
+        const state = createEditorStateWithPlugins(testDoc, [plugin])
+        const mockView = { state, dispatch: vi.fn() } as unknown as EditorView
+
+        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+        }))
+
+        expect(options.onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+            aiReasoningModels: ['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4'],
+            useMultipleReasoningModels: true,
+            useMultipleImageModels: true,
+            useMultipleVideoModels: true,
+            videoOptions: expect.objectContaining({
+                aiVideoModels: ['Google:veo-3', 'BytePlus:seedance-2'],
+            }),
+        }))
     })
 
     it('keeps the Capability module atom in the submitted message JSON', () => {

@@ -14,6 +14,7 @@ import type { ProviderState, ChatMessage } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { SMITHY_TRANSPORT_FAULT_NAMES } from '../utils/transport-retry.ts'
+import { STABILITY_SEED_MAX, resolveReportedSeed } from './media-generation-seed.ts'
 
 const MODEL_ENDPOINT_MAP: Record<string, string> = {
     'stability-ultra': '/v2beta/stable-image/generate/ultra',
@@ -47,6 +48,7 @@ const BEDROCK_IMAGE_TO_IMAGE_STRENGTH: Record<Exclude<StabilityRoutingMode, 'gen
 type StabilityGenerationResult = {
     imageBase64: string
     finishReason: string
+    generationSeed: number
 }
 
 const resizeReferenceForStability = async (
@@ -203,7 +205,10 @@ export class StabilityProvider extends BaseProvider {
         await this.imagePub.partial('', 0)
 
         const requestId = randomUUID()
-        const { imageBase64, finishReason } = this.useBedrock
+        // Stability accepts a seed on both transports and reports the one it used,
+        // so we always send a generated seed and store what comes back.
+        const requestedSeed = await this.resolveGenerationSeed(state, STABILITY_SEED_MAX)
+        const { imageBase64, finishReason, generationSeed } = this.useBedrock
             ? await this.generateViaBedrock({
                 prompt,
                 modelVersion,
@@ -212,6 +217,7 @@ export class StabilityProvider extends BaseProvider {
                 primaryRef,
                 styleRef,
                 logPrefix,
+                requestedSeed,
             })
             : await this.generateViaStabilityApi({
                 apiKey: apiKey!,
@@ -222,6 +228,7 @@ export class StabilityProvider extends BaseProvider {
                 primaryRef,
                 styleRef,
                 referenceCount: allRefs.length,
+                requestedSeed,
             })
 
         if (finishReason === 'CONTENT_FILTERED') {
@@ -236,6 +243,7 @@ export class StabilityProvider extends BaseProvider {
             responseId: requestId,
             revisedPrompt: prompt,
             imageModelId: modelVersion,
+            generationSeed,
         })
 
         return {
@@ -268,6 +276,7 @@ export class StabilityProvider extends BaseProvider {
         primaryRef,
         styleRef,
         referenceCount,
+        requestedSeed,
     }: {
         apiKey: string
         prompt: string
@@ -277,10 +286,12 @@ export class StabilityProvider extends BaseProvider {
         primaryRef?: ResolvedImageGenerationReference
         styleRef?: ResolvedImageGenerationReference
         referenceCount: number
+        requestedSeed: number
     }): Promise<StabilityGenerationResult> {
         const formData = new FormData()
         formData.set('prompt', prompt)
         formData.set('output_format', 'png')
+        formData.set('seed', String(requestedSeed))
 
         let endpoint: string
         if (routingMode === 'style-transfer' && primaryRef && styleRef) {
@@ -351,13 +362,14 @@ export class StabilityProvider extends BaseProvider {
         const result: any = await response.json()
         const imageBase64: string = result.image ?? ''
         const finishReason: string = result.finish_reason ?? ''
+        const generationSeed = resolveReportedSeed(result.seed, requestedSeed)
 
         info(
             `[Stability:${this.instanceKey}] Generation complete finishReason=${finishReason} ` +
-            `imageLen=${imageBase64.length}`,
+            `seed=${generationSeed} imageLen=${imageBase64.length}`,
         )
 
-        return { imageBase64, finishReason }
+        return { imageBase64, finishReason, generationSeed }
     }
 
     // AWS Bedrock InvokeModel. Bedrock exposes only Stability's text-to-image and
@@ -371,6 +383,7 @@ export class StabilityProvider extends BaseProvider {
         primaryRef,
         styleRef,
         logPrefix,
+        requestedSeed,
     }: {
         prompt: string
         modelVersion: string
@@ -379,6 +392,7 @@ export class StabilityProvider extends BaseProvider {
         primaryRef?: ResolvedImageGenerationReference
         styleRef?: ResolvedImageGenerationReference
         logPrefix: string
+        requestedSeed: number
     }): Promise<StabilityGenerationResult> {
         const modelId = await bedrockInference.resolveModelId('stability', modelVersion)
         this.bedrockClient ??= new BedrockRuntimeClient({
@@ -390,6 +404,7 @@ export class StabilityProvider extends BaseProvider {
         const body: Record<string, any> = {
             prompt,
             output_format: 'png',
+            seed: requestedSeed,
         }
         if (useImageToImage) {
             const strength = BEDROCK_IMAGE_TO_IMAGE_STRENGTH[routingMode as Exclude<StabilityRoutingMode, 'generate'>]
@@ -435,12 +450,16 @@ export class StabilityProvider extends BaseProvider {
         // message otherwise. Normalize to the direct-API sentinel the caller checks.
         const rawFinishReason = payload.finish_reasons?.[0] ?? null
         const finishReason = rawFinishReason ? 'CONTENT_FILTERED' : ''
+        const generationSeed = resolveReportedSeed(payload.seeds?.[0], requestedSeed)
         if (rawFinishReason) {
             err(`${logPrefix} Bedrock finish reason: ${rawFinishReason}`)
         }
 
-        info(`${logPrefix} Bedrock generation complete filtered=${!!rawFinishReason} imageLen=${imageBase64.length}`)
+        info(
+            `${logPrefix} Bedrock generation complete filtered=${!!rawFinishReason} ` +
+            `seed=${generationSeed} imageLen=${imageBase64.length}`,
+        )
 
-        return { imageBase64, finishReason }
+        return { imageBase64, finishReason, generationSeed }
     }
 }

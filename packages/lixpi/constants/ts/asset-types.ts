@@ -96,7 +96,16 @@ export type AssetLineage = {
     reasoningModelId?: string
     mediaModelId?: string
     promptFingerprint?: string
+    // Seed the media model generated this output with, recorded whenever the
+    // model accepts one. Reusing it steers a later generation toward the same
+    // result; no provider guarantees an identical output.
+    generationSeed?: number
 }
+
+// Shown beside the seed in every Asset details surface.
+export const ASSET_GENERATION_SEED_HELP_TEXT = 'The random starting point the model generated this media from. '
+    + 'Reusing the same seed with the same prompt and settings steers a new generation toward this result, '
+    + 'though no provider guarantees an identical output.'
 
 export const DEPICTION_MEDIA = [
     'photograph',

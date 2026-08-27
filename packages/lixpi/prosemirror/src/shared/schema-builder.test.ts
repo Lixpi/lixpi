@@ -33,6 +33,23 @@ describe('createProseMirrorSchema', () => {
     it('rejects unknown document types', () => {
         expect(() => createProseMirrorSchema('other')).toThrow('Unsupported ProseMirror document type: other')
     })
+
+    it('does not serialize native hover-title attributes for images or links', () => {
+        const schema = createProseMirrorSchema()
+        const image = schema.nodes.image.create({
+            src: 'https://example.com/image.png',
+            title: 'Native image hover text',
+        })
+        const link = schema.marks.link.create({
+            href: 'https://example.com',
+            title: 'Native link hover text',
+        })
+        const imageDom = schema.nodes.image.spec.toDOM!(image) as [string, Record<string, string>]
+        const linkDom = schema.marks.link.spec.toDOM!(link, false) as [string, Record<string, string>]
+
+        expect(imageDom[1].title).toBeUndefined()
+        expect(linkDom[1].title).toBeUndefined()
+    })
 })
 
 describe('getSupportedNodes', () => {

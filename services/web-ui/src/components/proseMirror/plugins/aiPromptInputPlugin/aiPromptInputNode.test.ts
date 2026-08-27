@@ -1,5 +1,7 @@
 'use strict'
 
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { describe, it, expect } from 'vitest'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import {
@@ -7,6 +9,16 @@ import {
     serializeAiModelSelectionAttr,
     aiPromptInputNodeSpec,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+
+function expectSourceToContain(source: string, snippet: string): void {
+    expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+}
+
+function expectSourceNotToContain(source: string, snippet: string): void {
+    expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
+}
+
+const aiPromptInputNodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
 
 describe('ai model selection parsing and serialization', () => {
     it('parses string JSON arrays and filters empty entries', () => {
@@ -86,5 +98,28 @@ describe('aiPromptInputNodeSpec', () => {
         expect(attrs.useMultipleReasoningModels).toBe(true)
         expect(attrs.useMultipleImageModels).toBe(true)
         expect(attrs.useMultipleVideoModels).toBe(true)
+    })
+})
+
+describe('media generation mode switch', () => {
+    it('reshuffles the selected mode to the right using the shared default duration', () => {
+        const switchStart = aiPromptInputNodeSource.indexOf("id: 'ai-prompt-media-generation-mode'")
+        const switchEnd = aiPromptInputNodeSource.indexOf('onChange: value => setNodeAttrs', switchStart)
+        const mediaModeSwitchSource = aiPromptInputNodeSource.slice(switchStart, switchEnd)
+
+        expect(switchStart, 'media mode switch should be configured').toBeGreaterThan(-1)
+        expect(switchEnd, 'media mode switch should notify its node view').toBeGreaterThan(switchStart)
+        expectSourceToContain(mediaModeSwitchSource, 'reshuffleItemsOnValueChange: {\n                enable: true,\n                selectedElementPosition: \'right\',\n            },')
+        expectSourceNotToContain(mediaModeSwitchSource, 'transition:')
+    })
+})
+
+describe('simple tooltip wiring', () => {
+    it('uses ARIA-backed delegated tooltips for model and submit controls', () => {
+        expectSourceToContain(aiPromptInputNodeSource, 'aria-label="Generation settings"')
+        expectSourceToContain(aiPromptInputNodeSource, 'data-help-tooltip="aria-label"')
+        expectSourceToContain(aiPromptInputNodeSource, "submitButton.dataset.helpTooltip = 'aria-description'")
+        expectSourceToContain(aiPromptInputNodeSource, "submitButton.setAttribute('aria-description', invalid.message)")
+        expectSourceNotToContain(aiPromptInputNodeSource, "submitButton.setAttribute('title'")
     })
 })

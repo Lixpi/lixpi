@@ -33,7 +33,10 @@ describe('createGeneratedOutputDetailsSidebar', () => {
         })
         document.body.appendChild(panel.element)
 
-        panel.element.querySelector<HTMLButtonElement>('[aria-label="Close item details"]')?.click()
+        const closeButton = panel.element.querySelector<HTMLButtonElement>('[aria-label="Close item details"]')!
+        expect(closeButton.dataset.helpTooltip).toBe('aria-label')
+        expect(closeButton.getAttribute('title')).toBeNull()
+        closeButton.click()
 
         expect(onClose).toHaveBeenCalledOnce()
         expect(panel.element.textContent).not.toContain('Generation details')

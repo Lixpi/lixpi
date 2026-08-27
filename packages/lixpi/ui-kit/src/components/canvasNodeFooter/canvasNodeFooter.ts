@@ -49,7 +49,7 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
                 className=${`canvas-node-footer-info-button nopan${config.infoButtonClassName ? ` ${config.infoButtonClassName}` : ''}`}
                 type="button"
                 aria-label=${config.infoLabel}
-                title=${config.infoTitle ?? config.infoLabel}
+                data-help-tooltip=${config.infoTitle ?? 'aria-label'}
             >
                 <span className="canvas-node-footer-info-icon" innerHTML=${infoLetterIcon}></span>
             </button>
@@ -59,7 +59,7 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
                 className="canvas-node-footer-progress-button nopan"
                 type="button"
                 aria-label=${config.progressLabel ?? 'Open generation details'}
-                title=${config.progressTitle ?? 'Generation details'}
+                data-help-tooltip=${config.progressTitle ?? 'Generation details'}
             >${this.progressRipple.element}</button>
         ` as HTMLButtonElement
         this.element = html`

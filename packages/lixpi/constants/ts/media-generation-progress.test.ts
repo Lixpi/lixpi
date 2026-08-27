@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
     mergeMediaGenerationRunProgress,
 } from './media-generation-progress.ts'
-import type { MediaGenerationRunProgress } from './types.ts'
+import {
+    GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
+    MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT,
+    type MediaGenerationRunProgress,
+} from './types.ts'
 
 function makeProgress(overrides: Partial<MediaGenerationRunProgress> = {}): MediaGenerationRunProgress {
     return {
@@ -131,5 +135,27 @@ describe('mergeMediaGenerationRunProgress', () => {
         expect(merged.items?.[0]?.trace?.facts).toEqual([
             { label: 'Operation ID', value: 'provider-123' },
         ])
+    })
+})
+
+describe('media generation configuration help contracts', () => {
+    it('publishes help text for each video toggle rendered in the configuration row', () => {
+        expect(MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT).toEqual({
+            cameraFixed: expect.any(String),
+            watermark: expect.any(String),
+            returnLastFrame: expect.any(String),
+        })
+    })
+
+    it('publishes option-level Google video constraints for tooltip rendering', () => {
+        expect(GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT).toEqual({
+            resolution: {
+                '1080p': expect.any(String),
+                '4k': expect.any(String),
+            },
+            duration: {
+                '8': expect.any(String),
+            },
+        })
     })
 })

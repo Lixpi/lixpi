@@ -251,6 +251,9 @@ describe('createExecutionTraceDetail — rendered content', () => {
             '.execution-trace-value-item .execution-trace-value-tag',
         )
         expect(firstValueTag?.tagName.toLowerCase()).toBe('svg')
+        expect(firstValueTag?.getAttribute('aria-label')).toBe('Edit')
+        expect(firstValueTag?.getAttribute('data-help-tooltip')).toBe('aria-label')
+        expect(firstValueTag?.getAttribute('title')).toBeNull()
         expect(firstValueTag?.style.width).toBe(`${firstValueTag?.getAttribute('width')}px`)
         expect(firstValueTag?.style.backgroundColor).toBe(settings.gradient.styles.shiftingColors[2])
         expect(firstValueTag?.style.getPropertyPriority('background')).toBe('important')
