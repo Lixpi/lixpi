@@ -25,7 +25,7 @@ import {
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { plusIcon } from '@lixpi/ui-kit/svg'
+import { bytedanceIcon, geminiIcon, plusIcon } from '@lixpi/ui-kit/svg'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -709,6 +709,108 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
 
             nv.destroy!()
         } finally {
+            aiModelsStore.resetStore()
+        }
+    })
+
+    it('summarizes multiple media models with provider icons and no configuration details', () => {
+        aiModelsStore.setAiModelsCatalog({
+            models: [
+                {
+                    provider: 'Google',
+                    model: 'veo-3',
+                    shortTitle: 'Veo 3',
+                    iconName: 'geminiIcon',
+                    modalities: [{ modality: 'video_generation' }],
+                },
+                {
+                    provider: 'ByteDance',
+                    model: 'seedance',
+                    shortTitle: 'Seedance',
+                    iconName: 'bytedanceIcon',
+                    modalities: [{ modality: 'video_generation' }],
+                },
+            ],
+            mediaGenerationConfigMatrix: {
+                version: 'media-generation-config-matrix-v1',
+                groups: [
+                    {
+                        groupId: 'video:google',
+                        mediaType: 'video',
+                        provider: 'Google',
+                        title: 'Google video models',
+                        modelIds: ['Google:veo-3'],
+                        controls: [
+                            {
+                                key: 'aspectRatio',
+                                label: 'Aspect ratio',
+                                kind: 'segmented',
+                                options: [{ value: '16:9', label: 'Widescreen' }],
+                                defaultValue: '16:9',
+                            },
+                            {
+                                key: 'resolution',
+                                label: 'Resolution',
+                                kind: 'segmented',
+                                options: [{ value: '1080p', label: '1080p' }],
+                                defaultValue: '1080p',
+                            },
+                            {
+                                key: 'duration',
+                                label: 'Duration',
+                                kind: 'segmented',
+                                options: [{ value: '-1', label: 'Automatic' }],
+                                defaultValue: '-1',
+                            },
+                        ],
+                    },
+                ],
+            },
+        } as any)
+
+        let nv: ReturnType<typeof createNodeView>['nv'] | null = null
+        try {
+            const modelMenuControlMountEl = document.createElement('div')
+            nv = createNodeView('Hello', {
+                mediaGenerationMode: 'video',
+                aiVideoModels: JSON.stringify(['Google:veo-3', 'ByteDance:seedance']),
+                videoGenerationConfigGroups: JSON.stringify([
+                    {
+                        groupId: 'video:google',
+                        modelIds: ['Google:veo-3'],
+                        values: { aspectRatio: '16:9', resolution: '1080p', duration: '-1' },
+                    },
+                ]),
+            }, {
+                mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
+            }).nv
+
+            const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
+            const summaryItem = summary?.querySelector('.ai-prompt-model-menu-trigger-summary-item')
+            const providerIcons = Array.from(summary?.querySelectorAll(
+                '.ai-prompt-model-menu-trigger-summary-icon',
+            ) ?? []) as HTMLSpanElement[]
+            const expectedGeminiIcon = document.createElement('span')
+            const expectedByteDanceIcon = document.createElement('span')
+            expectedGeminiIcon.innerHTML = geminiIcon
+            expectedByteDanceIcon.innerHTML = bytedanceIcon
+
+            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                .map(label => label.textContent)).toEqual(['Using multiple models'])
+            expect(summaryItem?.children[0]?.classList.contains(
+                'ai-prompt-model-menu-trigger-summary-label',
+            )).toBe(true)
+            expect(Array.from(summaryItem?.children ?? []).slice(1)).toEqual(providerIcons)
+            expect(providerIcons.map(icon => icon.innerHTML)).toEqual([
+                expectedGeminiIcon.innerHTML,
+                expectedByteDanceIcon.innerHTML,
+            ])
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-separator')).toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-dot-separator')).toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon')).toBeNull()
+            expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-clock-icon')).toBeNull()
+        } finally {
+            if (nv?.destroy) nv.destroy()
             aiModelsStore.resetStore()
         }
     })
