@@ -20,8 +20,13 @@
         "all_turns"
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
@@ -31,9 +36,9 @@
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "auto",
+    "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Omitted so the provider applies the model-family default; GPT-5.6 and earlier models use different defaults.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

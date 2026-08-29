@@ -27,30 +27,34 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Steers the model toward a named look. The API takes a fixed enum, not free text: you cannot add your own preset or pass an arbitrary style word here. Stability's own schema notes that the list itself is subject to change on their side.",
+    "summary": "Selects one of Stability's named visual presets on compatible direct edit and control endpoints. Lixpi deliberately omits it because the current Bedrock route invokes Ultra or SD3.5 foundation model IDs, whose request schemas do not accept this field; the Bedrock Image Services that do accept it use separate model IDs Lixpi does not invoke.",
     "combines": [
-        "Fixed for callers, not frozen forever: treat the 17 values as data that can shift under you, and fail soft on an unrecognised one rather than hard-coding an exhaustive switch.",
-        "Anything outside the enum belongs in the prompt instead, where Stability's (word:weight) syntax gives finer control than a preset does.",
-        "Documented on the control endpoints. It is the cheapest control on this provider: one dropdown, no change in request cost."
+        "The direct control and edit surfaces publish 17 preset values, but the value is not portable to Lixpi's current Bedrock foundation-model transport.",
+        "Exposing it would let a saved per-model configuration work on one transport and silently disappear or fail on another.",
+        "Users can describe the desired style in the prompt without creating transport-dependent saved state."
     ],
     "supportedModels": [
         "stability-ultra",
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Deliberately unused because it is not portable across the two live Stability transports.",
+    "unsupportedModels": [],
+    "unsupportedApis": [
         "bedrock"
     ],
-    "decision": "expose",
-    "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
-    "fixedValue": "",
-    "defaultValue": "enhance",
-    "note": "Make sure add a help tooltip value explaining all that in the ui.",
-    "unsupportedModels": [],
-    "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

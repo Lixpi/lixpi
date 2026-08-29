@@ -505,6 +505,7 @@ describe('AiInteractionService', () => {
         await service.sendChatMessage({
             aiReasoningModels: ['reasoner-a', 'reasoner-b'],
             useMultipleReasoningModels: true,
+            reasoningConfigGroups: [{ groupId: 'effort', modelIds: [], values: { reasoningEffort: 'high' } }],
             aiImageModels: ['image-a', 'image-b'],
             imageSize: '768x768',
             imageConfigGroups: [{ groupId: 'size', modelIds: [], values: {} }],
@@ -550,6 +551,9 @@ describe('AiInteractionService', () => {
                 requestVersion: 'media-generation-matrix-v1',
                 generationRequestId: 'matrix-request-id',
                 reasoningModelIds: ['reasoner-a', 'reasoner-b'],
+                reasoningOptions: {
+                    configGroups: [{ groupId: 'effort', modelIds: [], values: { reasoningEffort: 'high' } }],
+                },
                 imageModelIds: ['image-a', 'image-b'],
                 videoModelIds: ['video-a', 'video-b'],
                 imageOptions: {

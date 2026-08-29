@@ -1,6 +1,6 @@
 # Why Different Model Combinations Produce Different Styles
 
-Lixpi lets users pair any text model with any image model independently. Claude can write prompts for gpt-image-1, GPT-5 can drive Nano Banana, Gemini can steer Stable Diffusion. Each combination produces a **visually distinct aesthetic** — not randomly, but because of concrete architectural and data differences at every layer of the pipeline.
+Lixpi lets users pair any text model with any image model independently. Claude can write prompts for GPT Image 2, GPT-5 can drive Gemini Image, and Gemini can steer Stable Diffusion. Each combination produces a **visually distinct aesthetic**, not randomly, but because of concrete architectural and data differences at every layer of the pipeline.
 
 This document explains the technical reasons why, with references to source materials.
 
@@ -160,7 +160,7 @@ In Lixpi's model chaining architecture, the text model (Claude, GPT-5, Gemini) w
 
 These differences in how the prompt is written compound with all the factors above. The text model determines *what words* reach the text encoder, which determines *what vectors* condition the diffusion process, which activates *different regions* of the model's learned distribution (shaped by its unique architecture and training data).
 
-This compounding is why "Claude + gpt-image-1" produces a genuinely different aesthetic than "GPT-5 + Nano Banana" — every component in the chain introduces its own biases, and they multiply rather than cancel out.
+This compounding is why "Claude + GPT Image 2" produces a genuinely different aesthetic than "GPT-5 + Gemini Image": every component in the chain introduces its own biases, and they multiply rather than cancel out.
 
 ---
 

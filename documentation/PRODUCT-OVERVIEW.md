@@ -112,7 +112,7 @@ By piping the exact same reference artifact into different threads, consistency 
 
 ## 4. Image Generation Pipeline
 
-Image generation is powered by OpenAI's gpt-image-1 via the Responses API and Google's Gemini models (Nano Banana) via the Gen AI SDK. The pipeline includes progressive streaming, canvas placement, and multi-turn editing.
+Image generation uses OpenAI GPT Image 2 through the Responses API, Google Gemini 3 image models through the Gen AI SDK, and Stability AI models through Stability's image API. The pipeline includes progressive streaming, canvas placement, and model-specific generation controls. Multi-turn editing remains outside the synchronized configuration path until its implementation review is complete.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
@@ -233,11 +233,12 @@ Each AI thread has a model selector dropdown. Users can switch models between me
 
 | Provider | Models | Capabilities |
 |----------|--------|-------------|
-| **OpenAI** | GPT-5, GPT-4.1, GPT-4.1-mini, GPT-4.1-nano, o3, o4-mini | Text generation |
-| **OpenAI** | gpt-image-1 | Image generation (progressive streaming) |
-| **Anthropic** | Claude 4 Opus, Claude Sonnet 4 | Text generation |
-| **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash | Text generation |
-| **Google** | Nano Banana, Nano Banana Pro, Nano Banana 2 | Image generation (progressive streaming via Thinking) |
+| **OpenAI** | GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5, GPT-5.5 Pro, GPT-5.4, GPT-5.4 Pro | Text generation with model-specific reasoning effort, mode, and verbosity controls |
+| **OpenAI** | GPT Image 2 | Image generation with size, quality, and background controls |
+| **Anthropic** | Claude Fable 5, Claude Opus 5, Claude Opus 4.8, Claude Opus 4.7, Claude Opus 4.6, Claude Sonnet 5, Claude Sonnet 4.6, Claude Haiku 4.5 | Text generation with model-specific adaptive or manual thinking behavior |
+| **Google** | Gemini 3.7 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash, Gemini 3.5 Flash-Lite, Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash-Lite | Text generation with model-specific thinking levels or provider-managed thinking budgets |
+| **Google** | Gemini 3.1 Flash Image, Gemini 3.1 Flash-Lite Image, Gemini 3 Pro Image | Image generation with model-specific aspect ratio and resolution controls |
+| **Stability AI** | Stable Image Ultra, Stable Diffusion 3.5 Large | Image generation with reviewed aspect-ratio controls |
 | **Google** | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite | Video generation with audio (async submit/poll). See [Video Generation](media-generation/VIDEO-GENERATION.md). |
 | **BytePlus** | Seedance 2.0, Seedance 2.0 Fast, Seedance 2.0 Mini, Seedance 2.5 | Video generation with model-specific resolution, duration, audio, watermark, last-frame, and output-format controls. See [Video Generation](media-generation/VIDEO-GENERATION.md). |
 

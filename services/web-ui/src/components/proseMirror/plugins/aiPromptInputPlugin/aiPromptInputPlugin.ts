@@ -23,6 +23,9 @@ type SubmitHandler = (data: {
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
+    reasoningOptions?: {
+        configGroups?: MediaGenerationConfigSelectionGroup[]
+    }
     imageOptions?: {
         aiImageModels: string[]
         imageGenerationSize: string
@@ -89,6 +92,7 @@ export function extractContentJSON(state: EditorState): any[] | null {
 type InputAttrs = {
     mediaGenerationMode: 'image' | 'video'
     aiReasoningModels: string[]
+    reasoningGenerationConfigGroups: MediaGenerationConfigSelectionGroup[]
     aiImageModels: string[]
     imageGenerationSize: string
     imageGenerationConfigGroups: MediaGenerationConfigSelectionGroup[]
@@ -104,6 +108,7 @@ function getInputAttrs(state: EditorState): InputAttrs {
     let attrs: InputAttrs = {
         mediaGenerationMode: 'image',
         aiReasoningModels: [],
+        reasoningGenerationConfigGroups: [],
         aiImageModels: [],
         imageGenerationSize: 'auto',
         imageGenerationConfigGroups: [],
@@ -119,6 +124,7 @@ function getInputAttrs(state: EditorState): InputAttrs {
             attrs = {
                 mediaGenerationMode: node.attrs.mediaGenerationMode === 'video' ? 'video' : 'image',
                 aiReasoningModels: parseAiModelSelectionAttr(node.attrs.aiReasoningModels),
+                reasoningGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.reasoningGenerationConfigGroups),
                 aiImageModels: parseAiModelSelectionAttr(node.attrs.aiImageModels),
                 imageGenerationSize: node.attrs.imageGenerationSize || 'auto',
                 imageGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.imageGenerationConfigGroups),
@@ -192,6 +198,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         const aiReasoningModels = attrs.aiReasoningModels
         const aiImageModels = attrs.aiImageModels
         const aiVideoModels = attrs.aiVideoModels
+        const reasoningGenerationConfigGroups = attrs.reasoningGenerationConfigGroups
         const imageGenerationConfigGroups = attrs.imageGenerationConfigGroups
         const videoGenerationConfigGroups = attrs.videoGenerationConfigGroups
 
@@ -202,6 +209,9 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
             useMultipleReasoningModels: aiReasoningModels.length > 1,
             useMultipleImageModels: aiImageModels.length > 1,
             useMultipleVideoModels: aiVideoModels.length > 1,
+            reasoningOptions: reasoningGenerationConfigGroups.length > 0 ? {
+                configGroups: reasoningGenerationConfigGroups,
+            } : undefined,
             imageOptions: attrs.mediaGenerationMode === 'image' ? {
                 aiImageModels,
                 imageGenerationSize: attrs.imageGenerationSize,

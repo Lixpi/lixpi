@@ -10,31 +10,37 @@
     "currentState": "hidden",
     "availability": "supported",
     "summary": "On control/style-transfer: influence of the style image. 0 returns the input unchanged, 1 behaves as if no init image were passed.",
-    "combines": [],
+    "combines": [
+        "Applies only to a style-transfer or style-control operation with the required style reference image.",
+        "It combines with change strength, fidelity, the positive prompt, and any structure control. High values can overwhelm source preservation or other controls.",
+        "Lixpi sets it inside the chosen provider route. Exposing it separately without the operation and reference-role contract would create incompatible configurations."
+    ],
     "usage": {
         "setIn": "services/api/src/llm/providers/stability-provider.ts:305",
         "code": "formData.set('style_strength', '1')",
-        "from": "hardcoded",
-        "what": "On control/style-transfer, the influence of the style image. Pinned to the maximum, so the style image dominates the result."
+        "from": "a pipeline-owned fixed value",
+        "what": "Applies the direct style-transfer reference at maximum influence. Bedrock does not receive this field."
     },
     "supportedModels": [
         "stability-ultra",
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Show as a slider, Make sure add a help tooltip value explaining all that in the ui.",
+    "note": "Fixed internally when the direct API uses a style reference; not user-configurable.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

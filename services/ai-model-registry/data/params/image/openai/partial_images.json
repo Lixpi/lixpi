@@ -20,9 +20,6 @@
         "what": "How many progressive previews stream back before the final image. Drives the blurred-preview steps the canvas node shows while generating."
     },
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [

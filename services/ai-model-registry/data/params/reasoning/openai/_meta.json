@@ -3,10 +3,15 @@
     "providerTitle": "OpenAI",
     "apiName": "Responses API image_generation tool",
     "groupId": "openai-reasoning",
-    "title": "GPT reasoning models",
+    "title": "Current GPT reasoning models",
     "models": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
-    "docs": "https://developers.openai.com/api/reference/resources/responses"
+    "docs": "https://developers.openai.com/api/docs/guides/reasoning"
 }

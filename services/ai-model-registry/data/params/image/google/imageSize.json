@@ -2,7 +2,7 @@
     "key": "imageSize",
     "category": "output-shape",
     "apiField": "config.imageConfig.imageSize",
-    "controlKey": "imageSize",
+    "controlKey": "resolution",
     "type": "enum",
     "values": [
         "1K",
@@ -11,17 +11,17 @@
     ],
     "providerDefault": "1K",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Length of the longest edge. Every Gemini image Lixpi generates comes back at 1K because this is never sent.",
+    "summary": "Selects image pixel tier independently of aspect ratio. Larger tiers use more image tokens, cost more, and take longer. Lixpi presents only the resolutions documented for the selected model and sends the value as imageConfig.imageSize.",
     "combines": [
         "Orthogonal to aspectRatio: this sets size, that sets shape.",
         "Nano Banana Pro can produce 4K stills."
     ],
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -33,10 +33,16 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "1K",
-    "note": "",
+    "note": "Gemini 3.1 Flash Image: 512/1K/2K/4K; Flash-Lite Image: fixed 1K; Gemini 3 Pro Image: 1K/2K/4K.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
         "https://ai.google.dev/gemini-api/docs/image-generation"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:279-284",
+        "code": "config.imageConfig includes imageSize when state.imageGenerationConfig.resolution is set",
+        "from": "the selected resolution control, carried in state.imageGenerationConfig.resolution",
+        "what": "Sets imageConfig.imageSize independently of aspectRatio, so supported models can receive both output shape and output resolution."
+    }
 }

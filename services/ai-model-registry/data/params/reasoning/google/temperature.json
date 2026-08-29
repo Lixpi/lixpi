@@ -9,8 +9,12 @@
     "lixpiValue": "defaultTemperature from the model matrix, 0.7",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "Sampling randomness. Sent only when inferenceCapabilities.supportsTemperature is true.",
-    "combines": [],
+    "summary": "Sampling randomness. Google recommends keeping temperature at 1 for current Gemini reasoning models because lowering it can degrade reasoning and may cause looping. Lixpi fixes it at 1 and exposes thinkingLevel—not temperature—as the reasoning quality control.",
+    "combines": [
+        "Google recommends `1` for the reviewed Gemini thinking models. Lowering it can degrade reasoning quality or cause repetitive and looping output.",
+        "It composes with `topP` and `topK`, but changing several sampling controls at once makes output behavior harder to predict.",
+        "Thinking level controls reasoning depth independently. Lixpi fixes temperature at `1` and exposes only the reviewed thinking-level choices."
+    ],
     "usage": {
         "setIn": "services/api/src/llm/providers/google-provider.ts:275, value assembled at base-provider.ts:391",
         "code": "if (capabilities.supportsTemperature) config.temperature = temperature",
@@ -18,19 +22,25 @@
         "what": "Sampling randomness. Gated on inferenceCapabilities.supportsTemperature so models that reject the field never see it. One value for every request on a model; nothing per-conversation."
     },
     "supportedModels": [
-        "gemini reasoning models with thinkingMode google-budget or google-level"
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
     ],
     "supportedApis": [
         "gemini-developer-api",
         "vertex-ai"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "",
-    "defaultValue": "1",
-    "note": "Display as slider",
+    "fixedValue": "1",
+    "defaultValue": "",
+    "note": "Fixed at Google's recommended value. Not user-configurable.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

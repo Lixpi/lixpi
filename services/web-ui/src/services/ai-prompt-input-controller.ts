@@ -36,6 +36,10 @@ type ImageOptions = {
     configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
+type ReasoningOptions = {
+    configGroups?: MediaGenerationConfigSelectionGroup[]
+}
+
 type AiSubmitPayload = {
     messages: any[]
     mediaGenerationMode: 'image' | 'video'
@@ -44,6 +48,7 @@ type AiSubmitPayload = {
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
     threadId: string
+    reasoningOptions?: ReasoningOptions
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
@@ -64,6 +69,7 @@ type PendingMessage = {
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
+    reasoningOptions?: ReasoningOptions
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
@@ -163,6 +169,7 @@ export class AiPromptInputController {
         useMultipleReasoningModels?: boolean
         useMultipleImageModels?: boolean
         useMultipleVideoModels?: boolean
+        reasoningOptions?: ReasoningOptions
         imageOptions?: ImageOptions
         videoOptions?: VideoOptions
         referenceNodeIds?: string[]
@@ -175,6 +182,7 @@ export class AiPromptInputController {
             useMultipleReasoningModels,
             useMultipleImageModels,
             useMultipleVideoModels,
+            reasoningOptions,
             imageOptions,
             videoOptions,
             referenceNodeIds,
@@ -201,6 +209,7 @@ export class AiPromptInputController {
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
+                reasoningOptions,
                 imageOptions,
                 videoOptions,
                 referenceNodeIds,
@@ -215,6 +224,7 @@ export class AiPromptInputController {
                 useMultipleReasoningModels,
                 useMultipleImageModels,
                 useMultipleVideoModels,
+                reasoningOptions,
                 imageOptions,
                 videoOptions,
                 referenceNodeIds,
@@ -297,6 +307,9 @@ export class AiPromptInputController {
         const pendingImageConfigGroups = pending.imageOptions
             ? serializeMediaGenerationConfigSelectionAttr(pending.imageOptions.configGroups ?? [])
             : undefined
+        const pendingReasoningConfigGroups = pending.reasoningOptions
+            ? serializeMediaGenerationConfigSelectionAttr(pending.reasoningOptions.configGroups ?? [])
+            : undefined
         const pendingVideoConfigGroups = pending.videoOptions
             ? serializeMediaGenerationConfigSelectionAttr(pending.videoOptions.configGroups ?? [])
             : undefined
@@ -308,6 +321,8 @@ export class AiPromptInputController {
         const currentUseMultipleVideoModels = currentAttrs.useMultipleVideoModels === true
             || currentAttrs.useMultipleVideoModels === 'true'
         const needsUpdate = currentAttrs.aiReasoningModels !== pendingReasoningModels
+            || (pendingReasoningConfigGroups !== undefined
+                && currentAttrs.reasoningGenerationConfigGroups !== pendingReasoningConfigGroups)
             || currentAttrs.mediaGenerationMode !== pending.mediaGenerationMode
             || currentUseMultipleReasoningModels !== pendingUseMultipleReasoningModels
             || currentUseMultipleImageModels !== pendingUseMultipleImageModels
@@ -328,6 +343,9 @@ export class AiPromptInputController {
                 ...currentAttrs,
                 mediaGenerationMode: pending.mediaGenerationMode,
                 aiReasoningModels: pendingReasoningModels,
+                ...(pendingReasoningConfigGroups !== undefined
+                    ? { reasoningGenerationConfigGroups: pendingReasoningConfigGroups }
+                    : {}),
                 useMultipleReasoningModels: pendingUseMultipleReasoningModels,
                 useMultipleImageModels: pendingUseMultipleImageModels,
                 useMultipleVideoModels: pendingUseMultipleVideoModels,
@@ -363,6 +381,7 @@ export class AiPromptInputController {
         useMultipleReasoningModels?: boolean
         useMultipleImageModels?: boolean
         useMultipleVideoModels?: boolean
+        reasoningOptions?: PendingMessage['reasoningOptions']
         imageOptions?: PendingMessage['imageOptions']
         videoOptions?: PendingMessage['videoOptions']
         referenceNodeIds?: string[]
@@ -375,6 +394,7 @@ export class AiPromptInputController {
             useMultipleReasoningModels,
             useMultipleImageModels,
             useMultipleVideoModels,
+            reasoningOptions,
             imageOptions,
             videoOptions,
             referenceNodeIds,
@@ -398,6 +418,7 @@ export class AiPromptInputController {
             ? serializeAiModelSelectionAttr(collapseForMode(videoOptions.aiVideoModels, threadUseMultipleVideoModels))
             : ''
         const threadImageConfigGroups = serializeMediaGenerationConfigSelectionAttr(imageOptions?.configGroups ?? [])
+        const threadReasoningConfigGroups = serializeMediaGenerationConfigSelectionAttr(reasoningOptions?.configGroups ?? [])
         const threadVideoConfigGroups = serializeMediaGenerationConfigSelectionAttr(videoOptions?.configGroups ?? [])
 
         // Create the initial thread content
@@ -410,6 +431,9 @@ export class AiPromptInputController {
                         threadId,
                         mediaGenerationMode,
                         aiReasoningModels: threadReasoningModels,
+                        ...(threadReasoningConfigGroups
+                            ? { reasoningGenerationConfigGroups: threadReasoningConfigGroups }
+                            : {}),
                         useMultipleReasoningModels: threadUseMultipleReasoningModels,
                         useMultipleImageModels: threadUseMultipleImageModels,
                         useMultipleVideoModels: threadUseMultipleVideoModels,
@@ -460,6 +484,7 @@ export class AiPromptInputController {
                 useMultipleReasoningModels: threadUseMultipleReasoningModels,
                 useMultipleImageModels: threadUseMultipleImageModels,
                 useMultipleVideoModels: threadUseMultipleVideoModels,
+                reasoningOptions,
                 imageOptions,
                 videoOptions,
                 referenceNodeIds,

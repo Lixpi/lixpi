@@ -104,6 +104,205 @@ const OPENAI_IMAGE_SIZES = mapResolutionOptionsToAspectRatioLabels([
     { value: 'auto', label: 'Auto' },
 ])
 
+const segmentedControl = (
+    key: MediaGenerationConfigControl['key'],
+    label: string,
+    options: ImageSizeOption[],
+    defaultValue: string,
+    description: string,
+): MediaGenerationConfigControl => ({
+    key,
+    label,
+    kind: 'segmented',
+    options,
+    defaultValue,
+    description,
+})
+
+const OPENAI_REASONING_EFFORT_OPTIONS: ImageSizeOption[] = [
+    { value: 'none', label: 'None', description: 'Lowest latency. The model answers without allocating reasoning tokens.' },
+    { value: 'low', label: 'Low', description: 'Uses a small reasoning budget for latency-sensitive work.' },
+    { value: 'medium', label: 'Medium', description: 'Balanced quality, latency, and token usage. This is the provider default.' },
+    { value: 'high', label: 'High', description: 'Spends more reasoning tokens on difficult or multi-step work.' },
+    { value: 'xhigh', label: 'X-high', description: 'Uses extended reasoning for the hardest asynchronous work.' },
+]
+const OPENAI_REASONING_MAX_EFFORT_OPTIONS: ImageSizeOption[] = [
+    ...OPENAI_REASONING_EFFORT_OPTIONS,
+    { value: 'max', label: 'Max', description: 'Maximum exploration and verification, with the highest latency and token usage.' },
+]
+const OPENAI_PRO_REASONING_EFFORT_OPTIONS: ImageSizeOption[] = OPENAI_REASONING_EFFORT_OPTIONS
+    .filter(option => ['medium', 'high', 'xhigh'].includes(option.value))
+const OPENAI_VERBOSITY_OPTIONS: ImageSizeOption[] = [
+    { value: 'low', label: 'Low', description: 'More concise answers while preserving the requested result.' },
+    { value: 'medium', label: 'Medium', description: 'Balanced response detail. This is the provider default.' },
+    { value: 'high', label: 'High', description: 'More detailed explanations and supporting context.' },
+]
+const OPENAI_REASONING_MODE_OPTIONS: ImageSizeOption[] = [
+    { value: 'standard', label: 'Standard', description: 'Normal execution for routine, latency-sensitive, or high-volume work.' },
+    { value: 'pro', label: 'Pro', description: 'Applies more model work before returning one final answer. It can improve difficult tasks but increases latency and billed token usage.' },
+]
+const buildOpenAIReasoningControls = (
+    effortOptions: ImageSizeOption[],
+    includeReasoningMode = false,
+    defaultEffort = 'medium',
+): MediaGenerationConfigControl[] => [
+    segmentedControl(
+        'reasoningEffort',
+        'Reasoning effort',
+        effortOptions,
+        defaultEffort,
+        'Controls how many reasoning tokens the model may spend. Higher levels can improve complex work but increase latency and output-token cost.',
+    ),
+    ...(includeReasoningMode ? [segmentedControl(
+        'reasoningMode',
+        'Reasoning mode',
+        OPENAI_REASONING_MODE_OPTIONS,
+        'standard',
+        'Pro mode performs additional internal model work before returning a single answer. It is independent of reasoning effort and is available only on GPT-5.6.',
+    )] : []),
+    segmentedControl(
+        'reasoningVerbosity',
+        'Response detail',
+        OPENAI_VERBOSITY_OPTIONS,
+        'medium',
+        'Controls the default amount of detail in the final answer. It does not change the reasoning budget.',
+    ),
+]
+
+const ANTHROPIC_EFFORT_OPTIONS: ImageSizeOption[] = [
+    { value: 'low', label: 'Low', description: 'Lowest token use and latency, with less depth on difficult work.' },
+    { value: 'medium', label: 'Medium', description: 'Balanced capability, speed, and output-token usage.' },
+    { value: 'high', label: 'High', description: 'Provider default for strong reasoning and tool use.' },
+    { value: 'xhigh', label: 'X-high', description: 'Extended capability for long-running coding and agentic work.' },
+    { value: 'max', label: 'Max', description: 'Maximum capability without a token-efficiency constraint.' },
+]
+const ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS = ANTHROPIC_EFFORT_OPTIONS
+    .filter(option => option.value !== 'xhigh')
+const buildAnthropicReasoningControls = (
+    options: ImageSizeOption[],
+): MediaGenerationConfigControl[] => [segmentedControl(
+    'reasoningEffort',
+    'Reasoning effort',
+    options,
+    'high',
+    'Controls total response effort, including reasoning, answer text, and tool calls. Lower levels reduce latency and cost; higher levels spend more tokens for difficult work.',
+)]
+
+const GOOGLE_THINKING_LEVEL_OPTIONS: ImageSizeOption[] = [
+    { value: 'minimal', label: 'Minimal', description: 'Minimizes reasoning for the lowest latency. Not every Gemini model supports this level.' },
+    { value: 'low', label: 'Low', description: 'Uses a small reasoning budget for straightforward work.' },
+    { value: 'medium', label: 'Medium', description: 'Balanced reasoning depth and latency. This is the default on the main Gemini Flash models.' },
+    { value: 'high', label: 'High', description: 'Maximizes reasoning depth for complex multi-step work.' },
+]
+const buildGoogleThinkingControls = (
+    supportedLevels: string[],
+    defaultValue: string,
+): MediaGenerationConfigControl[] => [segmentedControl(
+    'thinkingLevel',
+    'Thinking level',
+    GOOGLE_THINKING_LEVEL_OPTIONS.filter(option => supportedLevels.includes(option.value)),
+    defaultValue,
+    'Controls how deeply Gemini reasons before answering. Higher levels can improve complex tasks but increase latency and billed output tokens.',
+)]
+
+const OPENAI_IMAGE_CONTROLS: MediaGenerationConfigControl[] = [
+    {
+        key: 'imageSize',
+        label: 'Resolution',
+        kind: 'segmented',
+        options: OPENAI_IMAGE_SIZES,
+        defaultValue: 'auto',
+        description: 'Selects the output dimensions. Auto lets GPT Image choose; the presets provide common square, landscape, and portrait sizes.',
+    },
+    segmentedControl(
+        'quality',
+        'Quality',
+        [
+            { value: 'auto', label: 'Auto', description: 'Lets the provider balance quality, latency, and image-token usage.' },
+            { value: 'low', label: 'Low', description: 'Fastest and least expensive output.' },
+            { value: 'medium', label: 'Medium', description: 'Balanced detail, latency, and cost.' },
+            { value: 'high', label: 'High', description: 'Highest detail, with greater latency and image-token cost.' },
+        ],
+        'auto',
+        'Controls output detail and image-token cost. Higher quality generally takes longer and costs more.',
+    ),
+    segmentedControl(
+        'background',
+        'Background',
+        [
+            { value: 'auto', label: 'Auto', description: 'Lets the provider choose whether the output is opaque or transparent.' },
+            { value: 'opaque', label: 'Opaque', description: 'Always produces a filled background.' },
+            { value: 'transparent', label: 'Transparent', description: 'Requests an alpha channel. GPT Image 2 treats transparency as preview functionality and it requires PNG or WebP output.' },
+        ],
+        'auto',
+        'Controls background transparency. Lixpi keeps PNG output internally, so transparent output is compatible with the fixed output format.',
+    ),
+]
+
+const GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS: ImageSizeOption[] = [
+    { value: '1:1', label: '1:1' },
+    { value: '3:2', label: '3:2' },
+    { value: '2:3', label: '2:3' },
+    { value: '3:4', label: '3:4' },
+    { value: '4:3', label: '4:3' },
+    { value: '4:5', label: '4:5' },
+    { value: '5:4', label: '5:4' },
+    { value: '9:16', label: '9:16' },
+    { value: '16:9', label: '16:9' },
+    { value: '21:9', label: '21:9' },
+]
+const GOOGLE_FLASH_IMAGE_ASPECT_RATIOS: ImageSizeOption[] = [
+    ...GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS,
+    { value: '1:4', label: '1:4' },
+    { value: '4:1', label: '4:1' },
+    { value: '1:8', label: '1:8' },
+    { value: '8:1', label: '8:1' },
+]
+const STABILITY_IMAGE_ASPECT_RATIOS: ImageSizeOption[] = [
+    { value: '1:1', label: '1:1' },
+    { value: '21:9', label: '21:9' },
+    { value: '16:9', label: '16:9' },
+    { value: '3:2', label: '3:2' },
+    { value: '5:4', label: '5:4' },
+    { value: '4:5', label: '4:5' },
+    { value: '2:3', label: '2:3' },
+    { value: '9:16', label: '9:16' },
+    { value: '9:21', label: '9:21' },
+]
+const STABILITY_IMAGE_CONTROLS: MediaGenerationConfigControl[] = [{
+    key: 'imageSize',
+    label: 'Aspect ratio',
+    kind: 'aspect-ratio',
+    options: STABILITY_IMAGE_ASPECT_RATIOS,
+    defaultValue: '1:1',
+    description: 'Controls the output shape for text-to-image and single-reference control requests. Style transfer keeps the source image frame instead.',
+}]
+const buildGoogleImageControls = (
+    aspectRatios: ImageSizeOption[],
+    resolutions: ImageSizeOption[],
+    defaultResolution = '1K',
+): MediaGenerationConfigControl[] => [
+    {
+        key: 'imageSize',
+        label: 'Aspect ratio',
+        kind: 'aspect-ratio',
+        options: aspectRatios,
+        defaultValue: '1:1',
+        description: 'Controls the output shape. Gemini defaults to the input image ratio when editing and otherwise to a square.',
+    },
+    {
+        key: 'resolution',
+        label: 'Resolution',
+        kind: resolutions.length === 1 ? 'fixed' : 'segmented',
+        options: resolutions,
+        defaultValue: resolutions.some(option => option.value === defaultResolution)
+            ? defaultResolution
+            : resolutions[0]!.value,
+        description: 'Controls output resolution and image-token cost. Larger outputs take longer and cost more.',
+        ...(resolutions.length === 1 ? { readOnly: true } : {}),
+    },
+]
+
 // VEO video-generation option lists. Reuse the ImageSizeOption { value, label }
 // shape across every synchronized media-generation control.
 const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
@@ -318,21 +517,39 @@ const OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES: ImageReferenceCapabilities = {
     supportsStructureControl: false,
     supportsPoseControl: false,
     supportsDeterministicSeed: false,
-    maxOutputPixels: 1572864,
-    supportedAspectRatios: ['1:1', '3:2', '2:3'],
+    maxOutputPixels: 8294400,
+    supportedAspectRatios: ['1:1', '3:2', '2:3', '16:9', '9:16', '4:3', '3:4', '4:5', '5:4', '21:9'],
 }
 
-const OPENAI_HIGH_IMAGE_REFERENCES: ImageReferenceCapabilities = {
-    ...OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES,
-    inputFidelity: 'high',
+const GOOGLE_FLASH_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    maxReferenceImages: 14,
+    maxIdentityReferenceImages: 4,
+    conditioningModes: ['edit', 'identity', 'style', 'structure', 'pose'],
+    inputFidelity: 'provider-managed',
+    supportsIterativeEdit: true,
+    supportsMask: false,
+    supportsStructureControl: true,
+    supportsPoseControl: true,
+    supportsDeterministicSeed: false,
+    maxOutputPixels: 18874368,
+    supportedAspectRatios: GOOGLE_FLASH_IMAGE_ASPECT_RATIOS.map(option => option.value),
 }
 
-const OPENAI_STANDARD_IMAGE_REFERENCES: ImageReferenceCapabilities = {
-    ...OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES,
-    inputFidelity: 'standard',
+const GOOGLE_FLASH_LITE_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+    maxReferenceImages: 14,
+    maxIdentityReferenceImages: 0,
+    conditioningModes: ['edit', 'style', 'structure', 'pose'],
+    inputFidelity: 'provider-managed',
+    supportsIterativeEdit: true,
+    supportsMask: false,
+    supportsStructureControl: true,
+    supportsPoseControl: true,
+    supportsDeterministicSeed: false,
+    maxOutputPixels: 1064448,
+    supportedAspectRatios: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS.map(option => option.value),
 }
 
-const GOOGLE_IMAGE_REFERENCES: ImageReferenceCapabilities = {
+const GOOGLE_PRO_IMAGE_REFERENCES: ImageReferenceCapabilities = {
     maxReferenceImages: 14,
     maxIdentityReferenceImages: 5,
     conditioningModes: ['edit', 'identity', 'style', 'structure', 'pose'],
@@ -342,8 +559,8 @@ const GOOGLE_IMAGE_REFERENCES: ImageReferenceCapabilities = {
     supportsStructureControl: true,
     supportsPoseControl: true,
     supportsDeterministicSeed: false,
-    maxOutputPixels: 4194304,
-    supportedAspectRatios: ['1:1', '3:2', '2:3', '16:9', '9:16', '4:3', '3:4', '4:5', '5:4', '21:9'],
+    maxOutputPixels: 16777216,
+    supportedAspectRatios: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS.map(option => option.value),
 }
 
 const STABILITY_IMAGE_REFERENCES: ImageReferenceCapabilities = {
@@ -387,6 +604,11 @@ const ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
     ...ANTHROPIC_INFERENCE_CAPABILITIES,
     thinkingMode: 'anthropic-manual',
     requiresAutoToolChoiceWithThinking: true,
+}
+
+const ANTHROPIC_MANUAL_NO_TEMPERATURE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
+    ...ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES,
+    supportsTemperature: false,
 }
 
 const ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
@@ -547,13 +769,6 @@ type GoogleModel = {
     outputTokenLimit?: number
 }
 
-// Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
-type ProviderBlacklist = {
-    exact: string[]
-    prefix: string[]
-    contains: string[]
-}
-
 // Default model capability/settings per provider.
 type ModelDefaults = Pick<
     AiModel,
@@ -562,6 +777,8 @@ type ModelDefaults = Pick<
     imagePromptMaxChars?: number
     imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
+    reasoningGenerationControls?: MediaGenerationConfigControl[]
+    imageGenerationControls?: MediaGenerationConfigControl[]
     videoAspectRatios?: ImageSizeOption[]
     videoResolutions?: ImageSizeOption[]
     videoDurations?: ImageSizeOption[]
@@ -672,8 +889,8 @@ export class AiModelsSync {
     private static readonly DEFAULT_MODELS: Record<DefaultAiModelCapability, AiModelId> = {
         // Anthropic Claude Haiku — default reasoning/chat model.
         reasoning: 'Anthropic:claude-haiku-4-5',
-        // Google Gemini 2.5 Flash Image — default image generation model.
-        image: 'Google:gemini-2.5-flash-image',
+        // Google Gemini 3.1 Flash Image — current general-purpose image model.
+        image: 'Google:gemini-3.1-flash-image',
         // Google Veo 3.1 Lite — default video generation model.
         video: 'Google:veo-3.1-lite-generate-preview',
     }
@@ -689,155 +906,69 @@ export class AiModelsSync {
         return model
     }
 
-    // Blacklist rules per provider: exact, prefix, and contains (partial-name) patterns
-    private static readonly MODELS_BLACKLIST: { OpenAI: ProviderBlacklist; Anthropic: ProviderBlacklist; Google: ProviderBlacklist; Stability: ProviderBlacklist; BytePlus: ProviderBlacklist } = {
-        OpenAI: {
-            // Exact matches (use for cases like 'gpt-4' to avoid excluding 'gpt-4o')
-            exact: [
-                'gpt-4',
-                'gpt-4o',
-                'gpt-5',
-            ],
-            // Prefix matches (legacy families)
-            prefix: [
-                'gpt-3.5',
-                'gpt-4-',
-                'gpt-4-turbo',
-                'gpt-4.1',
-                'gpt-4o',
-                'gpt-5-',
-                'gpt-5.1',
-                'gpt-5.2',
-                'gpt-5.3',
-                'o1',
-                'text-',
-                'code-',
-                'davinci',
-                'curie',
-                'babbage',
-                'ada',
-                'dall-e',
-                'tts',
-                'whisper'
-            ],
-            // Contains (partial-name) matches
-            contains: [
-                '-mini',
-                '-nano',
-                '-codex',
-                '-realtime',
-                '-audio',
-                '-transcribe',
-                'chatgpt',
-            ]
-        },
-        Anthropic: {
-            exact: [],
-            prefix: [
-                'claude-3-opus',
-                'claude-3-5-sonnet',
-                'claude-3-7',
-                'claude-sonnet-4-5',
-                'claude-sonnet-4-20',
-                'claude-opus-4-5',
-                'claude-opus-4-1',
-                'claude-opus-4-20',
-            ],
-            contains: []
-        },
-        Google: {
-            exact: [
-                'veo-2.0-generate-001',
-                'veo-2.0-generate-exp',
-                'veo-3.0-generate-preview',
-                'veo-3.0-fast-generate-preview',
-                'veo-3.0-generate-001',
-                'veo-3.0-fast-generate-001',
-            ],
-            prefix: [
-                'gemini-1.0',
-                'gemini-1.5',
-                'gemini-2.0',
-                'gemini-2.5',
-                'gemini-3-flash',
-                'gemini-3-pro',
-                'gemini-3.1-flash-lite',
-                'gemini-3.1-pro',
-                'gemini-flash-lite',
-                'gemini-embedding',
-                'gemma',
-                'text-embedding',
-                'embedding',
-                'aqa',
-                'deep-research',
-                'nano-banana',
-            ],
-            contains: [
-                '-tts-',
-                '-live-',
-                '-native-audio-',
-                '-robotics-',
-                '-computer-use-',
-                'imagen',
-                'lyria',
-            ]
-        },
-        Stability: {
-            exact: [],
-            prefix: [],
-            contains: []
-        },
-        // BytePlus models are a fixed static list (no list-models API), so nothing
-        // needs blacklisting — kept for shape parity with the other providers.
-        BytePlus: {
-            exact: [],
-            prefix: [],
-            contains: []
-        }
-    }
+    // Synchronize only models this product can route and has reviewed. Explicit
+    // allowlists keep retired snapshots, unrelated modalities, and newly-listed
+    // provider experiments out of the user catalog until they are evaluated.
+    private static readonly OPENAI_ALLOWED_MODELS = new Set([
+        'gpt-5.6-sol',
+        'gpt-5.6-terra',
+        'gpt-5.6-luna',
+        'gpt-5.5',
+        'gpt-5.5-pro',
+        'gpt-5.4',
+        'gpt-5.4-pro',
+        'gpt-image-2',
+    ])
+
+    private static readonly ANTHROPIC_ALLOWED_MODEL_ALIASES = new Set([
+        'claude-fable-5',
+        'claude-opus-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+        'claude-opus-4-6',
+        'claude-sonnet-5',
+        'claude-sonnet-4-6',
+        'claude-haiku-4-5',
+    ])
+
+    private static readonly GOOGLE_ALLOWED_MODELS = new Set([
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-3.1-flash-image',
+        'gemini-3.1-flash-lite-image',
+        'gemini-3-pro-image',
+    ])
+
+    private static readonly GOOGLE_RETIRED_VIDEO_MODELS = new Set([
+        'veo-2.0-generate-001',
+        'veo-2.0-generate-exp',
+        'veo-3.0-generate-preview',
+        'veo-3.0-fast-generate-preview',
+        'veo-3.0-generate-001',
+        'veo-3.0-fast-generate-001',
+    ])
 
     // Default model capability/settings per provider.
     private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults; Stability: ProviderModelDefaults; BytePlus: ProviderModelDefaults } = {
-        // OpenAI model defaults sourced from offline docs provided in temp-openai-models-info/.
+        // OpenAI model defaults sourced from the official model and pricing references.
         // Only differences from fallback are specified; remaining fields inherit via mergeWithFallback.
         OpenAI: {
             exact: {
-                // ChatGPT-4o alias page shows 128k context, 16,384 max output tokens
-                'chatgpt-4o-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '15.00' } } } } },
-                // GPT-5 Chat latest explicit alias
-                'gpt-5-chat-latest': { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } },
+                'gpt-5.6-sol': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '4.00', completion: '20.00' } } } } },
+                'gpt-5.6-terra': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '12.00' } } } } },
+                'gpt-5.6-luna': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.20', completion: '1.20' } } } } },
+                'gpt-5.5': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '30.00' } } } } },
+                'gpt-5.5-pro': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_PRO_REASONING_EFFORT_OPTIONS, false, 'high'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '30.00', completion: '180.00' } } } } },
+                'gpt-5.4': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_EFFORT_OPTIONS, false, 'none'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.50', completion: '15.00' } } } } },
+                'gpt-5.4-pro': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_PRO_REASONING_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '30.00', completion: '180.00' } } } } },
+                'gpt-image-2': { imagePromptMaxChars: 32000, contextWindow: 0, maxCompletionSize: 0, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, imageSizeMode: 'resolution', imageSizes: OPENAI_IMAGE_SIZES, imageGenerationControls: OPENAI_IMAGE_CONTROLS, imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } },
             },
-            prefix: [
-                {
-                    prefix: 'gpt-5', values: {
-                    contextWindow: 400000,
-                    maxCompletionSize: 128000,
-                    modalities: ['text', 'image'],
-                    defaultTemperature: 1,    // Supports only default value 1.
-                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
-                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } }
-                },
-                // GPT-5 Chat family: 128k context, 16,384 max output
-                { prefix: 'gpt-5-chat', values: { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
-                // GPT-4.1 family: ~1M context window, 32,768 max output
-                { prefix: 'gpt-4.1', values: { contextWindow: 1047576, maxCompletionSize: 32768, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
-                // GPT-4o (chat) family: 128k context, 16,384 max output
-                { prefix: 'gpt-4o', values: { contextWindow: 128000, maxCompletionSize: 16384, modalities: ['text', 'image'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.50', completion: '10.00' } } } } } },
-                // GPT-4o Realtime family: 32k context, 4,096 max output; supports audio
-                { prefix: 'gpt-4o-realtime', values: { contextWindow: 32000, maxCompletionSize: 4096, modalities: ['text', 'image', 'audio'], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '20.00' } } }, audio: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '40.00', completion: '80.00' } } } },
-                // O3 Deep Research: 200k context, 100k max output
-                { prefix: 'o3-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '40.00' } } } } } },
-                // O4 Mini Deep Research: 200k context, 100k max output (per page)
-                { prefix: 'o4-mini-deep-research', values: { contextWindow: 200000, maxCompletionSize: 100000, modalities: ['text'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '8.00' } } } } } },
-                { prefix: 'o1', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
-                { prefix: 'o3', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
-                { prefix: 'o4', values: { inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES } },
-                // GPT Image family: image generation models
-                { prefix: 'gpt-image-2', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1.5', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } } },
-                { prefix: 'gpt-image-1-mini', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_STANDARD_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '2.50', completion: '8.00' } } } },
-                { prefix: 'gpt-image-1', values: { modalities: ['text', 'image', 'image_generation'], imageReferenceCapabilities: OPENAI_HIGH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '0.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '10.00', completion: '40.00' } } } },
-            ],
+            prefix: [],
             contains: [],
             fallback: {
                 contextWindow: 0,
@@ -896,19 +1027,14 @@ export class AiModelsSync {
         Anthropic: {
             exact: {},
             prefix: [
-                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
-                { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '10.00' } } } } } },
-                { prefix: 'claude-opus-4-7', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-opus-4-6', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-sonnet-4-6', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-opus-4-1', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-opus-4', values: { contextWindow: 200000, maxCompletionSize: 32000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '15.00', completion: '75.00' } } } } } },
-                { prefix: 'claude-sonnet-4', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-haiku-4', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
-                { prefix: 'claude-3-7-sonnet', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-3-5-haiku', values: { contextWindow: 200000, maxCompletionSize: 8192, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
-                { prefix: 'claude-3-haiku', values: { contextWindow: 200000, maxCompletionSize: 4096, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
-                { prefix: 'claude-mythos', values: { inferenceCapabilities: ANTHROPIC_ADAPTIVE_INFERENCE_CAPABILITIES } },
+                { prefix: 'claude-fable-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '50.00' } } } } } },
+                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
+                { prefix: 'claude-opus-4-8', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
+                { prefix: 'claude-opus-4-7', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
+                { prefix: 'claude-opus-4-6', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
+                { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '10.00' } } } } } },
+                { prefix: 'claude-sonnet-4-6', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
+                { prefix: 'claude-haiku-4-5', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
             ],
             contains: [],
             fallback: {
@@ -949,39 +1075,18 @@ export class AiModelsSync {
         },
         Google: {
             exact: {
-                'gemini-2.5-flash-preview-image-generation': {
-                    contextWindow: 1048576,
-                    maxCompletionSize: 65536,
-                    modalities: ['text', 'image', 'image_generation'],
-                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
-                    imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES,
-                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
-                },
-                'gemini-2.5-flash-image': {
-                    contextWindow: 1048576,
-                    maxCompletionSize: 65536,
-                    modalities: ['text', 'image', 'image_generation'],
-                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
-                    imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES,
-                    pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } }
-                },
+                'gemini-3.7-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['low', 'medium', 'high'], 'medium'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.75', completion: '3.75' } } } } },
+                'gemini-3.6-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'medium'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.75', completion: '3.75' } } } } },
+                'gemini-3.5-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'medium'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.50', completion: '9.00' } } } } },
+                'gemini-3.5-flash-lite': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'minimal'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.30', completion: '2.50' } } } } },
+                'gemini-2.5-pro': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } },
+                'gemini-2.5-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.30', completion: '2.50' } } } } },
+                'gemini-2.5-flash-lite': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.10', completion: '0.40' } } } } },
+                'gemini-3.1-flash-image': { contextWindow: 131072, maxCompletionSize: 32768, defaultTemperature: 1, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageSizeMode: 'aspectRatio', imageSizes: GOOGLE_FLASH_IMAGE_ASPECT_RATIOS, imageGenerationControls: buildGoogleImageControls(GOOGLE_FLASH_IMAGE_ASPECT_RATIOS, [{ value: '512', label: '512 px' }, { value: '1K', label: '1K' }, { value: '2K', label: '2K' }, { value: '4K', label: '4K' }]), imageReferenceCapabilities: GOOGLE_FLASH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.50', completion: '3.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.067' } } },
+                'gemini-3.1-flash-lite-image': { contextWindow: 65536, maxCompletionSize: 4096, defaultTemperature: 1, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageSizeMode: 'aspectRatio', imageSizes: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, imageGenerationControls: buildGoogleImageControls(GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, [{ value: '1K', label: '1K' }]), imageReferenceCapabilities: GOOGLE_FLASH_LITE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.25', completion: '1.50' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.0336' } } },
+                'gemini-3-pro-image': { contextWindow: 65536, maxCompletionSize: 32768, defaultTemperature: 1, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageSizeMode: 'aspectRatio', imageSizes: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, imageGenerationControls: buildGoogleImageControls(GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, [{ value: '1K', label: '1K' }, { value: '2K', label: '2K' }, { value: '4K', label: '4K' }]), imageReferenceCapabilities: GOOGLE_PRO_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '12.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.134' } } },
             },
             prefix: [
-                // Gemini 2.5 Pro family (text-only)
-                { prefix: 'gemini-2.5-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
-                // Gemini 2.5 Flash family (text-only, image generation only in gemini-2.5-flash-image)
-                { prefix: 'gemini-2.5-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
-                // Gemini 3 Pro Image (Nano Banana Pro)
-                { prefix: 'gemini-3-pro-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '5.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
-                // Gemini 3.1 Flash Image (Nano Banana 2)
-                { prefix: 'gemini-3.1-flash-image', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageReferenceCapabilities: GOOGLE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.039' } } } },
-                // Gemini 3.1 Pro
-                { prefix: 'gemini-3.1-pro', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } } },
-                // Gemini 3.1 Flash
-                { prefix: 'gemini-3.1-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
-                // Gemini 3 Flash
-                { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
-                { prefix: 'gemini-3.', values: { inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES } },
                 // VEO 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
@@ -1027,9 +1132,9 @@ export class AiModelsSync {
                     title: (modelId: string) => {
                         // Map well-known image models to Nano Banana names and active VEO models to friendly names
                         const nanoBananaNames: Record<string, string> = {
-                            'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
-                            'gemini-3-pro-image-preview': 'Nano Banana Pro',
-                            'gemini-3.1-flash-image-preview': 'Nano Banana 2',
+                            'gemini-3.1-flash-image': 'Gemini 3.1 Flash Image',
+                            'gemini-3.1-flash-lite-image': 'Gemini 3.1 Flash-Lite Image',
+                            'gemini-3-pro-image': 'Gemini 3 Pro Image',
                             'veo-3.1-generate-preview': 'Veo 3.1',
                             'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
                             'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
@@ -1047,9 +1152,9 @@ export class AiModelsSync {
                     },
                     shortTitle: (modelId: string) => {
                         const nanoBananaNames: Record<string, string> = {
-                            'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
-                            'gemini-3-pro-image-preview': 'Nano Banana Pro',
-                            'gemini-3.1-flash-image-preview': 'Nano Banana 2',
+                            'gemini-3.1-flash-image': 'Gemini 3.1 Flash Image',
+                            'gemini-3.1-flash-lite-image': 'Gemini 3.1 Flash-Lite Image',
+                            'gemini-3-pro-image': 'Gemini 3 Pro Image',
                             'veo-3.1-generate-preview': 'Veo 3.1',
                             'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
                             'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
@@ -1105,17 +1210,8 @@ export class AiModelsSync {
                 color: '#A855F7',
                 iconName: 'stabilityIcon',
                 imageSizeMode: 'aspectRatio',
-                imageSizes: [
-                    { value: '1:1', label: '1:1' },
-                    { value: '21:9', label: '21:9' },
-                    { value: '16:9', label: '16:9' },
-                    { value: '3:2', label: '3:2' },
-                    { value: '5:4', label: '5:4' },
-                    { value: '4:5', label: '4:5' },
-                    { value: '2:3', label: '2:3' },
-                    { value: '9:16', label: '9:16' },
-                    { value: '9:21', label: '9:21' },
-                ],
+                imageSizes: STABILITY_IMAGE_ASPECT_RATIOS,
+                imageGenerationControls: STABILITY_IMAGE_CONTROLS,
                 starSortingPosition: 300,
                 transforms: {
                     title: (modelId: string) => {
@@ -1296,6 +1392,12 @@ export class AiModelsSync {
             imageReferenceCapabilities: p.imageReferenceCapabilities
                 ? structuredClone(p.imageReferenceCapabilities as ImageReferenceCapabilities)
                 : fallback.imageReferenceCapabilities,
+            reasoningGenerationControls: Array.isArray(p.reasoningGenerationControls)
+                ? structuredClone(p.reasoningGenerationControls as MediaGenerationConfigControl[])
+                : fallback.reasoningGenerationControls,
+            imageGenerationControls: Array.isArray(p.imageGenerationControls)
+                ? structuredClone(p.imageGenerationControls as MediaGenerationConfigControl[])
+                : fallback.imageGenerationControls,
             videoAspectRatios: Array.isArray(p.videoAspectRatios) ? p.videoAspectRatios : fallback.videoAspectRatios,
             videoResolutions: Array.isArray(p.videoResolutions) ? p.videoResolutions : fallback.videoResolutions,
             videoDurations: Array.isArray(p.videoDurations) ? p.videoDurations : fallback.videoDurations,
@@ -1339,19 +1441,6 @@ export class AiModelsSync {
         return fallback
     }
 
-    // Helper function to detect minor versions with date patterns
-    private isMinorVersion(modelId: string): boolean {
-        const patterns = [
-            /\d{4}-\d{2}-\d{2}/,    // 2024-01-25
-            /:\d{8}/,               // :20240125
-            /-preview$/,            // -preview suffix
-            /-alpha$/,              // -alpha suffix
-            /-beta$/,               // -beta suffix
-        ]
-
-        return patterns.some(pattern => pattern.test(modelId))
-    }
-
     // Fetch available models from OpenAI API using SDK
     private async fetchOpenAIModels(): Promise<OpenAIModel[]> {
         const apiKey = this.openai.apiKey
@@ -1363,41 +1452,7 @@ export class AiModelsSync {
             const modelsList = await this.openai.models.list()
             const models = modelsList.data
 
-            // Filter models based on blacklist and only include relevant models
-            const blacklist = AiModelsSync.MODELS_BLACKLIST.OpenAI
-
-            return models.filter((model: OpenAIModel) => {
-                const modelId = model.id
-
-                // GPT Image models are always allowed through (overrides -mini/-nano contains rules),
-                // but still drop dated snapshot versions (e.g. gpt-image-2-2026-04-21).
-                if (modelId.startsWith('gpt-image-')) {
-                    return !this.isMinorVersion(modelId)
-                }
-
-                // Check exact blacklist matches
-                if (blacklist.exact.includes(modelId)) {
-                    return false
-                }
-
-                // Check prefix blacklist matches
-                if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) {
-                    return false
-                }
-
-                // Check contains blacklist matches
-                if (blacklist.contains.some(substring => modelId.includes(substring))) {
-                    return false
-                }
-
-                // Skip minor versions/snapshots with date patterns
-                if (this.isMinorVersion(modelId)) {
-                    return false
-                }
-
-                // Include only GPT, O1, or text-davinci models (main OpenAI chat/completion models)
-                return modelId.includes('gpt') || modelId.includes('o1') || modelId.includes('text-davinci')
-            })
+            return models.filter((model: OpenAIModel) => AiModelsSync.OPENAI_ALLOWED_MODELS.has(model.id))
 
         } catch (error) {
             err('Failed to fetch OpenAI models:', error)
@@ -1408,26 +1463,11 @@ export class AiModelsSync {
     // Bedrock exposes concrete dated releases rather than the vendor's moving aliases.
     // Preserve those releases so persisted selections remain exact catalog keys.
     private filterAnthropicModels(models: AnthropicModel[], includeSnapshots = false): AnthropicModel[] {
-        const blacklist = AiModelsSync.MODELS_BLACKLIST.Anthropic
-
         return models.filter(model => {
             const modelId = model.id
-
-            if (blacklist.exact.includes(modelId)) {
-                return false
-            }
-            if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) {
-                return false
-            }
-            if (blacklist.contains.some(substring => modelId.includes(substring))) {
-                return false
-            }
-            // Skip minor versions/snapshots with date patterns
-            if (!includeSnapshots && this.isMinorVersion(modelId)) {
-                return false
-            }
-
-            return true
+            const alias = modelId.replace(/-\d{8}$/u, '')
+            if (!AiModelsSync.ANTHROPIC_ALLOWED_MODEL_ALIASES.has(alias)) return false
+            return includeSnapshots || alias === modelId
         })
     }
 
@@ -1541,30 +1581,16 @@ export class AiModelsSync {
                 })
             }
 
-            // Filter models based on blacklist
-            const blacklist = AiModelsSync.MODELS_BLACKLIST.Google
-
             return allModels.filter(model => {
                 const modelId = model.name
-
-                // Image generation models are always allowed through (overrides blacklist rules)
-                // Use '-image' to match gemini-*-image* but NOT 'imagen' models
-                if (modelId.includes('-image')) return true
 
                 // Keep active preview ids such as veo-3.1-generate-preview, but
                 // reject known shut-down ids and dated snapshots.
                 if (modelId.includes('veo')) {
-                    if (blacklist.exact.includes(modelId)) return false
+                    if (AiModelsSync.GOOGLE_RETIRED_VIDEO_MODELS.has(modelId)) return false
                     return !/\d{4}-\d{2}-\d{2}/.test(modelId) && !/:\d{8}/.test(modelId)
                 }
-
-                if (blacklist.exact.includes(modelId)) return false
-                if (blacklist.prefix.some(prefix => modelId.startsWith(prefix))) return false
-                if (blacklist.contains.some(substring => modelId.includes(substring))) return false
-                if (this.isMinorVersion(modelId) && !modelId.includes('-image')) return false
-
-                // Only include gemini models
-                return modelId.startsWith('gemini')
+                return AiModelsSync.GOOGLE_ALLOWED_MODELS.has(modelId)
             })
 
         } catch (error) {
@@ -1598,6 +1624,8 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            reasoningGenerationControls: modelDefaults.reasoningGenerationControls,
+            imageGenerationControls: modelDefaults.imageGenerationControls,
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1641,6 +1669,8 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            reasoningGenerationControls: modelDefaults.reasoningGenerationControls,
+            imageGenerationControls: modelDefaults.imageGenerationControls,
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
@@ -1688,6 +1718,8 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            reasoningGenerationControls: modelDefaults.reasoningGenerationControls,
+            imageGenerationControls: modelDefaults.imageGenerationControls,
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             videoAspectRatios: modelDefaults.videoAspectRatios,
             videoResolutions: modelDefaults.videoResolutions,
@@ -2072,6 +2104,7 @@ export class AiModelsSync {
             modalities: generateModalitiesWithMetadata(modelDefaults.modalities),
             imageSizeMode: modelDefaults.imageSizeMode,
             imageSizes: modelDefaults.imageSizes,
+            imageGenerationControls: modelDefaults.imageGenerationControls,
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,

@@ -30,6 +30,13 @@ describe('AiModel.getAvailableAiModels', () => {
                     providerTitle: 'Anthropic',
                     sortingPosition: 2,
                     modalities: [{ modality: 'text' }],
+                    reasoningGenerationControls: [{
+                        key: 'reasoningEffort',
+                        label: 'Reasoning effort',
+                        kind: 'segmented',
+                        options: [{ value: 'high', label: 'High' }],
+                        defaultValue: 'high',
+                    }],
                     pricing: { input: 99 },
                 },
                 {
@@ -77,7 +84,17 @@ describe('AiModel.getAvailableAiModels', () => {
         expect(result.models[2]).not.toHaveProperty('pricing')
 
         const imageGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'image')
+        const reasoningGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'reasoning')
         const videoGroup = result.mediaGenerationConfigMatrix.groups.find((group) => group.mediaType === 'video')
+
+        expect(reasoningGroup).toMatchObject({
+            modelIds: ['Anthropic:claude-3-opus-20240229'],
+            controls: [{
+                key: 'reasoningEffort',
+                defaultValue: 'high',
+                options: [{ value: 'high', label: 'High' }],
+            }],
+        })
 
         expect(imageGroup?.groupId).toMatch(/^image:Google:[a-f0-9]{64}$/)
         expect(imageGroup?.title).toBe('Google')
@@ -120,6 +137,49 @@ describe('AiModel.getAvailableAiModels', () => {
         ]))
     })
 
+    it('publishes synchronized image controls instead of deriving only an image-size control', async () => {
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [{
+                provider: 'OpenAI',
+                providerTitle: 'OpenAI',
+                model: 'gpt-image-2',
+                modelVersion: 'gpt-image-2',
+                sortingPosition: 1,
+                modalities: [{ modality: 'image_generation' }],
+                imageSizes: [{ value: '1024x1024', label: '1:1' }],
+                imageGenerationControls: [
+                    {
+                        key: 'imageSize',
+                        label: 'Resolution',
+                        kind: 'segmented',
+                        options: [{ value: '1024x1024', label: '1:1' }],
+                        defaultValue: '1024x1024',
+                    },
+                    {
+                        key: 'quality',
+                        label: 'Quality',
+                        kind: 'segmented',
+                        options: [{ value: 'auto', label: 'Auto' }, { value: 'high', label: 'High' }],
+                        defaultValue: 'auto',
+                    },
+                    {
+                        key: 'background',
+                        label: 'Background',
+                        kind: 'segmented',
+                        options: [{ value: 'auto', label: 'Auto' }, { value: 'transparent', label: 'Transparent' }],
+                        defaultValue: 'auto',
+                    },
+                ],
+                pricing: {},
+            }],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+        const imageGroup = result.mediaGenerationConfigMatrix.groups.find(group => group.mediaType === 'image')
+
+        expect(imageGroup?.controls.map(control => control.key)).toEqual(['imageSize', 'quality', 'background'])
+    })
+
     it('groups provider models with matching options and splits different option sets', async () => {
         const matchingImageSizes = [
             { value: '1024x1024', label: '1:1' },
@@ -130,8 +190,8 @@ describe('AiModel.getAvailableAiModels', () => {
                 {
                     provider: 'OpenAI',
                     providerTitle: 'OpenAI',
-                    model: 'gpt-image-1.5',
-                    modelVersion: 'gpt-image-1.5',
+                    model: 'gpt-image-equivalent-fixture',
+                    modelVersion: 'gpt-image-equivalent-fixture',
                     sortingPosition: 1,
                     modalities: [{ modality: 'image_generation' }],
                     imageSizeMode: 'resolution',
@@ -165,13 +225,13 @@ describe('AiModel.getAvailableAiModels', () => {
 
         const result = await AiModelModel.getAvailableAiModels()
         const imageGroups = result.mediaGenerationConfigMatrix.groups.filter(group => group.mediaType === 'image')
-        const sharedOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-1.5'))
+        const sharedOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-equivalent-fixture'))
         const differentOptionsGroup = imageGroups.find(group => group.modelIds.includes('OpenAI:gpt-image-mini'))
 
         expect(imageGroups).toHaveLength(2)
         expect(sharedOptionsGroup?.title).toBe('OpenAI')
         expect(sharedOptionsGroup?.modelIds).toEqual([
-            'OpenAI:gpt-image-1.5',
+            'OpenAI:gpt-image-equivalent-fixture',
             'OpenAI:gpt-image-2',
         ])
         expect(differentOptionsGroup?.title).toBe('OpenAI')
@@ -303,8 +363,8 @@ describe('AiModel.getAvailableAiModels', () => {
                 },
                 {
                     provider: 'Google',
-                    model: 'gemini-2.5-flash-image',
-                    modelVersion: 'gemini-2.5-flash-image',
+                    model: 'gemini-3.1-flash-image',
+                    modelVersion: 'gemini-3.1-flash-image',
                     sortingPosition: 3,
                     modalities: [{ modality: 'image_generation' }],
                     isDefaultFor: ['image'],
@@ -326,7 +386,7 @@ describe('AiModel.getAvailableAiModels', () => {
 
         expect(result.defaultModels).toEqual({
             reasoning: 'Anthropic:claude-haiku-4-5',
-            image: 'Google:gemini-2.5-flash-image',
+            image: 'Google:gemini-3.1-flash-image',
             video: 'Google:veo-3.1-lite-generate-preview',
         })
     })
@@ -416,8 +476,8 @@ describe('AiModel.getAiModel', () => {
     it('omits pricing metadata by default and preserves request contract fields', async () => {
         const modelRecord = {
             provider: 'Google',
-            model: 'gemini-2.5-flash-image',
-            modelVersion: 'gemini-2.5-flash-image',
+            model: 'gemini-3.1-flash-image',
+            modelVersion: 'gemini-3.1-flash-image',
             providerTitle: 'Google',
             imageSizeMode: 'resolution',
             imageSizes: [{ value: '1024x1024' }],
@@ -444,16 +504,16 @@ describe('AiModel.getAiModel', () => {
 
         const model = await AiModelModel.getAiModel({
             provider: 'Google',
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-3.1-flash-image',
         })
 
         expect(dynamoDBService.getItem).toHaveBeenCalledWith(expect.objectContaining({
-            key: { provider: 'Google', model: 'gemini-2.5-flash-image' },
+            key: { provider: 'Google', model: 'gemini-3.1-flash-image' },
             origin: 'model::AiModel->getAiModel()',
         }))
         expect(model).toMatchObject({
             provider: 'Google',
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-3.1-flash-image',
             providerTitle: 'Google',
             imageSizeMode: 'resolution',
             imageSizes: [{ value: '1024x1024' }],
@@ -468,14 +528,14 @@ describe('AiModel.getAiModel', () => {
     it('returns pricing metadata when omitPricing is false', async () => {
         dynamoDBService.getItem.mockImplementation(async () => ({
             provider: 'Google',
-            model: 'gemini-2.5-flash-image',
-            modelVersion: 'gemini-2.5-flash-image',
+            model: 'gemini-3.1-flash-image',
+            modelVersion: 'gemini-3.1-flash-image',
             pricing: { input: 0.1, output: 0.2 },
         }))
 
         const model = await AiModelModel.getAiModel({
             provider: 'Google',
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-3.1-flash-image',
             omitPricing: false,
         })
 

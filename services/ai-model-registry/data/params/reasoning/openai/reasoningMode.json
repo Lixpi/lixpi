@@ -2,29 +2,30 @@
     "key": "reasoningMode",
     "category": "reasoning",
     "apiField": "reasoning.mode",
-    "controlKey": null,
+    "controlKey": "reasoningMode",
     "type": "enum (open string)",
     "providerDefault": null,
     "lixpiValue": null,
-    "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Selects the reasoning execution mode for the request.",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Selects standard or pro execution for GPT-5.6 Responses requests. Pro performs additional internal work before returning the final answer, which can help on difficult tasks but increases latency and billed token use. It does not change the selected model ID and is independent of reasoning effort.",
     "combines": [
-        "Supported on: not documented (pro-tier reasoning models)",
-        "Echoed on the response as the effective execution mode.",
-        "The `pro` execution path corresponds to the substantially more expensive pro models; cost implications: not documented."
+        "Supported only by GPT-5.6 Sol, Terra, and Luna through the Responses API.",
+        "Chat Completions has reasoning_effort but does not expose reasoning.mode.",
+        "standard and pro can be combined with any reasoning effort supported by the selected GPT-5.6 model.",
+        "Pro mode stays on the selected GPT-5.6 model slug; it is not a switch to GPT-5.5 Pro or GPT-5.4 Pro."
     ],
     "values": [
         "standard",
         "pro"
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna"
     ],
     "supportedApis": [
-        "openai-responses",
-        "openai-chat-completions"
+        "openai-responses"
     ],
     "decision": "expose",
     "reviewed": true,
@@ -32,10 +33,18 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
-    "unsupportedModels": [],
-    "unsupportedApis": [],
+    "note": "Exposed only on GPT-5.6 Sol, Terra, and Luna.",
+    "unsupportedModels": [
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
+    ],
+    "unsupportedApis": [
+        "openai-chat-completions"
+    ],
     "sources": [
+        "https://developers.openai.com/api/docs/guides/latest-model",
         "https://developers.openai.com/api/reference/resources/responses"
     ]
 }

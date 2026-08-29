@@ -7,24 +7,25 @@
     "providerDefault": "1",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Number of response variations to return. The image-generation guide never uses it and notes the model will not reliably honor an explicitly requested image count.",
+    "availability": "supported",
+    "summary": "Number of response candidates requested from GenerateContent. The Google Gen AI SDK exposes the field on Gemini Developer API and Vertex AI requests, but the image-generation guide warns that Gemini may not follow an exact requested image count.",
     "combines": [
-        "Supported on: Gemini Developer API on models that support it; not documented as supported on the image models",
-        "Treat it as unreliable for image fan-out. To get N images, send N requests."
+        "The current @google/genai GenerateContentConfig exposes candidateCount without a Gemini Developer API exclusion, so the field is available on both documented API surfaces for the reviewed image models.",
+        "Google does not publish an image-model-specific maximum for candidateCount.",
+        "The image-generation guide says the model may not follow an exact requested output count, so candidateCount cannot provide reliable image fan-out. Lixpi skips it and creates one request per required variant."
     ],
-    "range": "not documented for image models",
+    "range": "integer; image-model-specific maximum not documented",
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
         "vertex-ai"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
@@ -33,6 +34,7 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://ai.google.dev/gemini-api/docs/image-generation"
+        "https://ai.google.dev/gemini-api/docs/image-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
     ]
 }

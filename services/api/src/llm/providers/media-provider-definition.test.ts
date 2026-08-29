@@ -24,7 +24,7 @@ describe('current media provider policy definitions', () => {
 
     it('uses OpenAI low moderation for image requests', () => {
         expect(CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI.moderation.settings(
-            'gpt-image-1',
+            'gpt-image-2',
             'image-conditioned',
         )).toEqual({ moderation: 'low' })
     })

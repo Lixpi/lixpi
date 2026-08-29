@@ -88,6 +88,7 @@ export class AnthropicProvider extends BaseProvider {
         const hasImageModel = !!state.imageModelVersion
         const hasVideoModel = !!state.videoModelVersion
         const maxTokens = state.maxCompletionSize ?? 4096
+        const capabilities = state.aiModelMetaInfo.inferenceCapabilities
 
         // Convert messages to Anthropic format (resolve nats-obj://, then convert content blocks).
         const formatted: Array<{ role: string; content: any }> = []
@@ -146,16 +147,22 @@ export class AnthropicProvider extends BaseProvider {
                     max_tokens: maxTokens,
                     system: capabilityToolExecutor?.withCompletionInstruction(systemPrompt) ?? systemPrompt,
                 }
+                const reasoningEffort = state.reasoningGenerationConfig?.reasoningEffort
+                if (reasoningEffort) streamArgs.output_config = { effort: reasoningEffort }
+                if (/claude-(?:opus-4-[678]|sonnet-4-6)(?:-|$)/u.test(modelVersion)) {
+                    streamArgs.thinking = { type: 'adaptive' }
+                }
                 const roundTools = [
                     ...tools,
                     ...(capabilityToolExecutor?.definitions().map(asAnthropicTool) ?? []),
                 ]
                 if (roundTools.length > 0) streamArgs.tools = roundTools
                 const pendingRequiredToolName = capabilityToolExecutor?.pendingRequiredToolName()
-                if (pendingRequiredToolName) {
+                if (pendingRequiredToolName && !capabilities.requiresAutoToolChoiceWithThinking) {
                     streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(pendingRequiredToolName)
                 } else if (!capabilityToolExecutor
                     && !state.capabilityMediaExecutionPlan
+                    && !capabilities.requiresAutoToolChoiceWithThinking
                     && hasImageModel !== hasVideoModel) {
                     streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(
                         hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME,

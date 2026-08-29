@@ -82,6 +82,12 @@ const getImageSizeControlLabel = (model: Omit<AiModel, 'pricing'>): string => {
 }
 
 const buildImageControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
+    if (model.imageGenerationControls?.length) {
+        return model.imageGenerationControls.map(control => ({
+            ...control,
+            options: control.options.map(option => ({ ...option })),
+        }))
+    }
     const options = normalizeOptions(model.imageSizes, [{ value: 'auto', label: 'Auto' }])
     const concreteValues = options.map(option => option.value).filter(value => value !== 'auto')
     const usesAspectRatios = model.imageSizeMode === 'aspectRatio'
@@ -109,7 +115,21 @@ const SUPPORTED_MEDIA_GENERATION_CONTROL_KEYS = new Set<MediaGenerationConfigCon
     'personGeneration',
     'watermark',
     'returnLastFrame',
+    'background',
+    'quality',
+    'reasoningEffort',
+    'reasoningMode',
+    'reasoningVerbosity',
+    'thinkingLevel',
 ])
+
+const buildReasoningControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] =>
+    (model.reasoningGenerationControls ?? [])
+        .filter(control => SUPPORTED_MEDIA_GENERATION_CONTROL_KEYS.has(control.key))
+        .map(control => ({
+            ...control,
+            options: control.options.map(option => ({ ...option })),
+        }))
 
 const buildVideoControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationConfigControl[] => {
     return (model.videoGenerationControls ?? [])
@@ -134,7 +154,7 @@ const getControlOptionsSignature = (controls: MediaGenerationConfigControl[]): s
 
 const getMatrixGroupKey = (
     model: Omit<AiModel, 'pricing'>,
-    mediaType: 'image' | 'video',
+    mediaType: 'reasoning' | 'image' | 'video',
     controls: MediaGenerationConfigControl[],
 ): string => {
     const optionsHash = createHash('sha256')
@@ -146,7 +166,7 @@ const getMatrixGroupKey = (
 const appendMatrixGroup = (
     groupsByKey: Map<string, MediaGenerationConfigGroup>,
     model: Omit<AiModel, 'pricing'>,
-    mediaType: 'image' | 'video',
+    mediaType: 'reasoning' | 'image' | 'video',
     controls: MediaGenerationConfigControl[],
 ): void => {
     const modelId = modelIdFor(model)
@@ -214,6 +234,11 @@ const resolveDefaultModels = (models: Array<Omit<AiModel, 'pricing'>>): DefaultA
 const buildMediaGenerationConfigMatrix = (models: Array<Omit<AiModel, 'pricing'>>): MediaGenerationConfigMatrix => {
     const groupsByKey = new Map<string, MediaGenerationConfigGroup>()
     for (const model of models) {
+        const isMediaGenerationModel = modelHasGenerationModality(model, 'image_generation')
+            || modelHasGenerationModality(model, 'video_generation')
+        if (!isMediaGenerationModel) {
+            appendMatrixGroup(groupsByKey, model, 'reasoning', buildReasoningControls(model))
+        }
         if (modelHasGenerationModality(model, 'image_generation')) {
             appendMatrixGroup(groupsByKey, model, 'image', buildImageControls(model))
         }

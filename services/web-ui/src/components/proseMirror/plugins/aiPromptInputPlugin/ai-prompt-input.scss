@@ -612,32 +612,18 @@
     flex: 0 0 auto;
 }
 
-.ai-model-config-model-column,
-.ai-model-config-inline-control {
+.ai-model-config-model-column {
     display: flex;
     flex: 1 1 auto;
     min-width: max-content;
-}
-
-.ai-model-config-model-column {
     justify-content: flex-start;
 }
 
 .ai-model-config-inline-control {
-    justify-content: flex-end;
-}
-
-.ai-model-config-inline-control .ai-media-config-control {
-    width: 100%;
-}
-
-.ai-model-config-inline-control .ai-prompt-model-menu-control-label {
-    align-self: flex-end;
-}
-
-.ai-model-config-inline-control .ai-media-config-control-field {
-    justify-content: flex-end;
-    width: 100%;
+    display: flex;
+    min-width: max-content;
+    flex: 0 0 auto;
+    justify-content: flex-start;
 }
 
 .ai-model-config-dropdown {
@@ -724,18 +710,6 @@
 .ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="returnLastFrame"] {
     grid-column: auto;
     min-width: max-content;
-}
-
-.ai-media-config-sliding-switch-host {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    overflow: hidden;
-}
-
-.ai-media-config-sliding-switch-svg {
-    display: block;
-    max-width: 100%;
 }
 
 .ai-media-config-toggle {

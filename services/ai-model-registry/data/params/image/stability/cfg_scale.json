@@ -8,30 +8,33 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "How strictly the image follows the prompt. Higher values track the prompt harder at the cost of variety.",
+    "summary": "Controls classifier-free guidance on the direct SD3.5 generation endpoint. Higher values force closer prompt adherence but can reduce variety and introduce oversaturated or brittle results; Stability documents 4.0 as the default and a 1.0 through 10.0 range.",
     "combines": [
-        "Supported on: generate/sd3 on the v2beta REST API, SD3.5 models only. Not present in the Bedrock request schemas for Ultra, Core, or SD3.5, and not accepted by the control, edit, or upscale endpoints.",
-        "Documented as applying only to the SD3.5 family."
+        "It applies to direct v2beta SD3.5 generation only. Stable Image Ultra and the reviewed Bedrock Ultra and SD3.5 request schemas do not expose this field.",
+        "A portable model control would need transport-aware availability and a numeric slider, neither of which exists in the current configuration matrix.",
+        "The provider omits the field and uses Stability's default until that separate implementation is designed."
     ],
     "range": "1.0 to 10.0",
     "supportedModels": [
-        "stability-ultra",
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "internal",
+    "decision": "skip",
     "reviewed": true,
-    "status": "none",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Show as slider, Make sure add a help tooltip value explaining all that in the ui.",
-    "unsupportedModels": [],
-    "unsupportedApis": [],
+    "note": "Requires a transport-aware numeric-control feature; not implemented in this iteration.",
+    "unsupportedModels": [
+        "stability-ultra"
+    ],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
+        "https://platform.stability.ai/docs/api-reference"
     ]
 }

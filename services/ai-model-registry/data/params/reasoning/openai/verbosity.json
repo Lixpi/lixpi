@@ -2,17 +2,17 @@
     "key": "verbosity",
     "category": "prompt-control",
     "apiField": "text.verbosity",
-    "controlKey": null,
+    "controlKey": "reasoningVerbosity",
     "type": "enum",
     "providerDefault": "medium",
     "lixpiValue": null,
-    "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Constrains how wordy the visible answer is, independently of how hard the model thinks.",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Controls how concise or detailed the visible answer should be. It changes response length and detail, not private reasoning depth, so effort and verbosity can be tuned independently.",
     "combines": [
-        "Supported on: gpt-5 family and later; not documented for o-series or gpt-4.x",
-        "Orthogonal to `reasoning.effort` — you can pair `effort: high` with `verbosity: low` for a deeply-reasoned but terse answer, which is the cheapest way to cut output tokens without cutting quality.",
-        "Ignored if `text.format` is a strict `json_schema` that fully determines the output shape."
+        "Supported by the reviewed GPT-5.4 through GPT-5.6 families. The provider default is medium.",
+        "Responses uses text.verbosity, while Chat Completions exposes the same low, medium, and high values as the top-level verbosity field.",
+        "Lower verbosity usually reduces visible output tokens and detail. It does not reduce reasoning effort or reasoning-token use by itself."
     ],
     "values": [
         "low",
@@ -20,7 +20,13 @@
         "high"
     ],
     "supportedModels": [
-        "gpt-5 family"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
@@ -31,13 +37,13 @@
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
-    "defaultValue": "",
+    "defaultValue": "medium",
     "note": "",
-    "unsupportedModels": [
-        "o-series reasoning models"
-    ],
+    "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://developers.openai.com/api/reference/resources/responses"
+        "https://developers.openai.com/api/docs/guides/latest-model",
+        "https://developers.openai.com/api/reference/resources/responses",
+        "https://cdn.jsdelivr.net/npm/openai/resources/chat/completions/completions.d.ts"
     ]
 }

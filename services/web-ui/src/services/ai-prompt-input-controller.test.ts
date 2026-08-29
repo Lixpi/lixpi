@@ -50,6 +50,7 @@ function createPromptSchema() {
                     threadId: { default: '' },
                     referenceId: { default: '' },
                     aiReasoningModels: { default: '' },
+                    reasoningGenerationConfigGroups: { default: '' },
                     useMultipleReasoningModels: { default: false },
                     useMultipleImageModels: { default: false },
                     useMultipleVideoModels: { default: false },
@@ -326,6 +327,7 @@ describe('AiPromptInputController', () => {
                 useMultipleImageModels: false,
                 useMultipleVideoModels: false,
                 aiReasoningModels: serializeAiModelSelectionAttr(['legacy']),
+                reasoningGenerationConfigGroups: '',
                 aiImageModels: serializeAiModelSelectionAttr(['old-img']),
                 imageGenerationSize: 'auto',
                 imageGenerationConfigGroups: '',
@@ -346,6 +348,13 @@ describe('AiPromptInputController', () => {
         await controller.submitMessage({
             contentJSON: [{ type: 'paragraph' }],
             aiReasoningModels: ['model-alpha', 'model-beta'],
+            reasoningOptions: {
+                configGroups: [{
+                    groupId: 'effort',
+                    modelIds: ['model-alpha', 'model-beta'],
+                    values: { reasoningEffort: 'high' },
+                }],
+            },
             useMultipleReasoningModels: true,
             useMultipleImageModels: true,
             useMultipleVideoModels: true,
@@ -366,6 +375,13 @@ describe('AiPromptInputController', () => {
         const updatedAttrs = editorEntry.nodeMarkupCalls.at(-1)?.attrs as Record<string, unknown> | undefined
         expect(updatedAttrs).toMatchObject({
             aiReasoningModels: serializeAiModelSelectionAttr(['model-alpha', 'model-beta']),
+            reasoningGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr([
+                {
+                    groupId: 'effort',
+                    modelIds: ['model-alpha', 'model-beta'],
+                    values: { reasoningEffort: 'high' },
+                },
+            ]),
             useMultipleReasoningModels: true,
             useMultipleImageModels: true,
             useMultipleVideoModels: true,

@@ -6,9 +6,9 @@
     "type": "object",
     "providerDefault": "auto",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "hidden",
     "availability": "supported",
-    "summary": "Whether the model may, must, or must not call a tool.",
+    "summary": "Controls whether Claude may or must call a tool. Lixpi owns it because tool requirements come from the orchestration graph; model settings must not override routing. When thinking compatibility requires automatic selection, the request omits forced any/tool choices.",
     "combines": [
         "Supported on: all models, with a manual-thinking restriction",
         "With manual extended thinking (`thinking: {type: \"enabled\"}`) only `auto` and `none` are allowed. `any` and `{\"type\": \"tool\", ...}` force tool use, which is incompatible with manual extended thinking, and error.",
@@ -22,11 +22,14 @@
         "{\"type\": \"none\"}"
     ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
@@ -35,9 +38,9 @@
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "{\"type\": \"auto\"}",
+    "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Pipeline-owned. Forced choices are omitted whenever the model's thinking profile requires automatic tool selection.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

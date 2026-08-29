@@ -12,7 +12,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Whether the reasoning summary comes back in the response. summarized returns readable summary text in each thinking block; omitted returns the block with an empty thinking field. Thinking still happens and is billed identically either way, so this is purely about what you receive.",
+    "summary": "Controls whether Anthropic returns a readable summary of the model's private reasoning. It does not enable reasoning or change billed thinking tokens; it changes only what reasoning-summary content is returned and therefore requires pipeline, persistence, and UI support before Lixpi can request it safely.",
     "combines": [
         "The default flipped on the newer models, so a UI that renders reasoning has to ask for summarized explicitly or it will show nothing on Opus 5 and Sonnet 5.",
         "omitted is faster to first visible token when streaming: the server skips streaming thinking tokens and sends only the signature.",
@@ -20,22 +20,25 @@
         "The raw chain of thought is never returned under any setting; summarized means a summary, not the reasoning verbatim."
     ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
     ],
     "decision": "internal",
     "reviewed": true,
-    "status": "approved",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
-    "fixedValue": "summarized",
+    "fixedValue": "",
     "defaultValue": "",
-    "note": "It must be rendered as part of pipeline.",
+    "note": "Requires a separate streamed reasoning-summary storage and rendering feature. It was deliberately not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

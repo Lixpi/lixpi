@@ -22,7 +22,6 @@ import {
     applyAiModelMenuStyleSettings,
     createAiModelMenuContent,
     createMediaGenerationConfigMatrixView,
-    createModelConfigurationRow,
     getModelOptionsForCapability,
     transformModelsToOptions,
     type AiModelMenuContentView,
@@ -320,77 +319,6 @@ function createModelMenuTrigger(onClick: (event: MouseEvent) => void): HTMLButto
     ` as HTMLButtonElement
 }
 
-type ModelSelectionRowsControls = {
-    getSelectedModelIds: () => string[]
-    setSelectedModelIds: (modelIds: string[]) => void
-    createModelDropdown: (modelIndex: number) => DropdownView
-}
-
-class ModelSelectionRows implements DropdownView {
-    readonly dom: HTMLElement
-
-    private readonly dropdowns: DropdownView[] = []
-    private renderedSignature = ''
-    private builtConnected = false
-
-    constructor(private readonly controls: ModelSelectionRowsControls) {
-        this.dom = html`<div className="ai-model-config-row-collection ai-model-config-rows" contenteditable="false"></div>` as HTMLElement
-        this.update()
-    }
-
-    private destroyDropdowns(): void {
-        for (const dropdown of this.dropdowns) dropdown.destroy?.()
-        this.dropdowns.length = 0
-    }
-
-    private removeModel(modelIndex: number): void {
-        const selectedModelIds = this.controls.getSelectedModelIds()
-        if (selectedModelIds.length <= 1) return
-        this.controls.setSelectedModelIds(selectedModelIds.filter((_, index) => index !== modelIndex))
-    }
-
-    private createRow(modelIndex: number, canRemove: boolean): HTMLElement {
-        const dropdownHost = html`<span></span>` as HTMLElement
-
-        const dropdown = this.controls.createModelDropdown(modelIndex)
-        dropdownHost.replaceChildren(dropdown.dom)
-        this.dropdowns.push(dropdown)
-
-        return createModelConfigurationRow({
-            modelDropdownHost: dropdownHost,
-            canRemove,
-            onRemove: () => this.removeModel(modelIndex),
-        }).dom
-    }
-
-    update(): void {
-        const selectedModelIds = uniqueNonEmptyValues(this.controls.getSelectedModelIds())
-        const rowCount = Math.max(1, selectedModelIds.length)
-        const nextSignature = JSON.stringify(selectedModelIds)
-        const connected = this.dom.isConnected
-        if (nextSignature === this.renderedSignature && (this.builtConnected || !connected)) {
-            for (const dropdown of this.dropdowns) dropdown.update()
-            return
-        }
-        this.renderedSignature = nextSignature
-        this.builtConnected = connected
-        this.destroyDropdowns()
-        const canRemove = selectedModelIds.length > 1
-        this.dom.replaceChildren(...Array.from(
-            { length: rowCount },
-            (_, modelIndex) => this.createRow(modelIndex, canRemove),
-        ))
-        if (this.dom.isConnected) {
-            for (const dropdown of this.dropdowns) dropdown.update()
-        }
-    }
-
-    destroy(): void {
-        this.destroyDropdowns()
-        this.dom.remove()
-    }
-}
-
 type AddModelButtonControls = {
     capability: DefaultAiModelCapability
     getSelectedModelIds: () => string[]
@@ -470,7 +398,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             getNodeAttr(view, getPos, 'mediaGenerationMode') === 'video' ? 'video' : 'image'
         )
 
-        const getConfigSelectionGroups = (attrName: 'imageGenerationConfigGroups' | 'videoGenerationConfigGroups'): MediaGenerationConfigSelectionGroup[] => {
+        const getConfigSelectionGroups = (attrName: 'reasoningGenerationConfigGroups' | 'imageGenerationConfigGroups' | 'videoGenerationConfigGroups'): MediaGenerationConfigSelectionGroup[] => {
             return parseMediaGenerationConfigSelectionAttr(getNodeAttr(view, getPos, attrName))
         }
 
@@ -515,6 +443,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             })
         }
 
+        const setReasoningConfigSelectionGroups = (groups: MediaGenerationConfigSelectionGroup[]): void => {
+            setNodeAttrs(view, getPos, {
+                reasoningGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(groups),
+            })
+        }
+
         const setVideoConfigSelectionGroups = (groups: MediaGenerationConfigSelectionGroup[]): void => {
             const firstVideoModel = getSelectedModelIds('aiVideoModels')[0]
             const firstVideoGroup = groups.find(group => firstVideoModel && group.modelIds.includes(firstVideoModel))
@@ -535,9 +469,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
         }
 
-        const reasoningModelRows = new ModelSelectionRows({
+        const reasoningConfigMatrix = createMediaGenerationConfigMatrixView({
+            mediaType: 'reasoning',
             getSelectedModelIds: () => getSelectedModelIds('aiReasoningModels'),
             setSelectedModelIds: modelIds => setSelectedModelIds('aiReasoningModels', modelIds),
+            getConfigGroups: () => getConfigSelectionGroups('reasoningGenerationConfigGroups'),
+            setConfigGroups: setReasoningConfigSelectionGroups,
             createModelDropdown: modelIndex => options.createModelDropdown({
                 getCurrentAiModel: () => getSelectedModelIds('aiReasoningModels')[modelIndex] ?? '',
                 setAiModel: modelId => replaceSelectedModelAt('aiReasoningModels', modelIndex, modelId),
@@ -652,12 +589,11 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             },
         })
         const modelDropdowns = [
-            reasoningModelRows,
             reasoningAddModel,
             imageAddModel,
             videoAddModel,
         ]
-        const mediaConfigMatrices = [imageConfigMatrix, videoConfigMatrix]
+        const mediaConfigMatrices = [reasoningConfigMatrix, imageConfigMatrix, videoConfigMatrix]
         let modelMenu: BubbleMenu | null = null
         let modelMenuTrigger: HTMLButtonElement | null = null
         let modelMenuContent: AiModelMenuContentView
@@ -810,7 +746,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 helpText: 'Reasoning model works on your prompt, resolves the most relevant items on canvas, crafts a detailed prompt for media model and passed it to the media model with the reference items included.',
                 headingControl: reasoningAddModel.dom,
                 controls: [
-                    { label: '', control: reasoningModelRows.dom },
+                    { label: '', control: reasoningConfigMatrix.dom },
                 ],
             },
             {
@@ -962,7 +898,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 reasoningAddModel.destroy()
                 imageAddModel.destroy()
                 videoAddModel.destroy()
-                reasoningModelRows.destroy()
+                reasoningConfigMatrix.destroy?.()
                 imageConfigMatrix.destroy?.()
                 videoConfigMatrix.destroy?.()
                 unsubscribeModelMenuTriggerSummary()

@@ -85,6 +85,7 @@ Attrs declared in `aiChatThreadNode.ts`:
 - `status`
 - `mediaGenerationMode` (`image` or `video`; copied from the explicit composer switch)
 - `aiReasoningModels` (JSON-serialized ordered model-id array; length 1 = singular selection)
+- `reasoningGenerationConfigGroups`
 - `useMultipleReasoningModels`
 - `useMultipleImageModels`
 - `useMultipleVideoModels`
@@ -200,16 +201,17 @@ The request payload includes:
 - `messages`
 - `mediaGenerationMode`
 - `aiReasoningModels` (ordered model-id array; collapsed to the first entry when `useMultipleReasoningModels` is off)
+- `reasoningOptions` (carries one synchronized configuration group per selected reasoning model)
 - `useMultipleReasoningModels` / `useMultipleImageModels` / `useMultipleVideoModels`
 - `conversationAssetId`
 - `imageOptions` (carries `aiImageModels` only in image mode)
 - `videoOptions` (carries `aiVideoModels` only in video mode)
 
-Each section's selection is a single JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
+Each section's selection is a JSON-like model-id array parsed with `parseAiModelSelectionAttr()`. Multi-model mode is controlled independently per section through `useMultipleReasoningModels`, `useMultipleImageModels`, and `useMultipleVideoModels`; when a flag is off, that section's array is collapsed to its first model before submit.
 
 `mediaGenerationMode` is authoritative. Prompt text cannot switch image/video routing. The handler validates that the active mode has a selected model, removes inactive media model ids from the request, and sets the matching single output media type. A multi-model selection fans out only within that explicit mode.
 
-Media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored media generation config matrix and are forwarded for singular and multi-model requests to the active `mediaGenerationRequest.imageOptions.configGroups` or `videoOptions.configGroups`; thread code does not derive provider-specific controls from selected model metadata.
+Reasoning and media configuration group attrs are JSON strings parsed through `parseMediaGenerationConfigSelectionAttr()`. They come from the API-authored generation config matrix. Reasoning groups are forwarded through `reasoningOptions.configGroups`; the active media groups are forwarded through `imageOptions.configGroups` or `videoOptions.configGroups`. The thread does not derive provider-specific controls from selected model metadata.
 
 `ContentExtractor.getActiveThreadContent()` extracts only `aiUserMessage` and
 `aiResponseMessage` blocks. It preserves code blocks with triple backticks,

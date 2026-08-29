@@ -14,22 +14,19 @@
         "Only meaningful with jpeg or webp output. Together with output_format this is the storage-size lever."
     ],
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [
         "openai-images",
         "openai-responses-image-tool"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Show as slider",
+    "note": "Only affects JPEG/WebP. Lixpi fixes output_format to PNG.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

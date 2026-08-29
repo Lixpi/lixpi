@@ -190,6 +190,41 @@ describe('AnthropicProvider', () => {
             const streamArgs = anthropicMocks.stream.mock.calls[0]?.[0]
             expect(streamArgs.tools).toBeUndefined()
         })
+
+        it('forwards effort with adaptive thinking and keeps tool choice automatic', async () => {
+            const provider = new AnthropicProvider('ws-1:thread-1:reasoning', makeDeps())
+            setProviderPublishers(provider)
+
+            anthropicMocks.stream.mockReturnValueOnce(makeAnthropicStream(
+                ['hello'],
+                { id: 'msg-adaptive', content: [{ type: 'text', text: 'hello' }], usage: { input_tokens: 1, output_tokens: 1 } },
+            ))
+
+            await (provider as any).streamImpl(makeState({
+                reasoningGenerationConfig: { reasoningEffort: 'max' },
+                aiModelMetaInfo: {
+                    provider: 'Anthropic',
+                    model: 'claude-sonnet-4-6',
+                    modelVersion: 'claude-sonnet-4-6',
+                    inferenceCapabilities: {
+                        ...ANTHROPIC_INFERENCE_CAPABILITIES,
+                        thinkingMode: 'anthropic-adaptive',
+                        requiresAutoToolChoiceWithThinking: true,
+                        supportsTemperature: false,
+                    },
+                },
+                imageModelVersion: 'gpt-image-2',
+                imageModelMetaInfo: { provider: 'OpenAI', model: 'gpt-image-2', modelVersion: 'gpt-image-2' },
+                imageProviderName: 'OpenAI',
+            }))
+
+            const streamArgs = anthropicMocks.stream.mock.calls[0]?.[0]
+            expect(streamArgs.output_config).toEqual({ effort: 'max' })
+            expect(streamArgs.thinking).toEqual({ type: 'adaptive' })
+            expect(streamArgs.tools).toHaveLength(1)
+            expect(streamArgs.tool_choice).toBeUndefined()
+            expect(streamArgs.temperature).toBeUndefined()
+        })
     })
 
     // ===== image generation tool call =====

@@ -245,7 +245,7 @@ export const assertValidMediaProviderDefinition = (definition: MediaProviderDefi
         throw new Error(`MEDIA_PROVIDER_POLICY_METADATA_REQUIRED:${definition.provider}`)
     }
     if (definition.provider === 'OpenAI') {
-        const settings = definition.moderation.settings('gpt-image-1', 'image-conditioned')
+        const settings = definition.moderation.settings('gpt-image-2', 'image-conditioned')
         if (settings.moderation !== 'low') throw new Error('OPENAI_LOW_MODERATION_PROFILE_REQUIRED')
     }
     if (definition.provider === 'Google') {

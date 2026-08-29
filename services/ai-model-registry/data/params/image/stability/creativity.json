@@ -8,10 +8,11 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "How much new detail or content the model invents rather than reconstructing. Higher values add more.",
+    "summary": "Controls how much new content Stability invents during Creative Upscale, Conservative Upscale, or Outpaint. Its valid range and default change by operation, so it cannot be represented as one model-wide generation option.",
     "combines": [
-        "Supported on: Creative Upscale, Conservative Upscale, edit/outpaint. Not accepted by Fast Upscale.",
-        "none documented"
+        "Creative and Conservative Upscale accept 0.1 through 0.5, while Outpaint accepts 0.1 through 1.0.",
+        "The current Lixpi Stability path does not invoke upscale or outpaint operations, and its Bedrock route invokes the selected Ultra or SD3.5 foundation model rather than separate Image Service model IDs.",
+        "It requires an operation-specific numeric control and request route, so the field remains absent pending implementation investigation."
     ],
     "range": "0.1 to 0.5 on Creative and Conservative Upscale; 0.1 to 1.0 on edit/outpaint",
     "supportedModels": [
@@ -19,19 +20,21 @@
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "internal",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Render as slider, make sure to add tooltip explaining what is that",
+    "note": "Upscale and outpaint feature; not implemented in this iteration.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

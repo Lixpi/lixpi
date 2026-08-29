@@ -6,7 +6,7 @@
     "type": "object (Content) or string",
     "providerDefault": "unset",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "hidden",
     "availability": "supported",
     "summary": "A standing instruction that shapes how the model behaves for the whole request: persona, tone, rules, output conventions. It sits in its own field ahead of the conversation rather than inside the user turn.",
     "combines": [
@@ -15,7 +15,13 @@
         "Lixpi already sends its own system prompt through this path on other providers; on Gemini it is the equivalent of the OpenAI `instructions` field."
     ],
     "supportedModels": [
-        "gemini reasoning models with thinkingMode google-budget or google-level"
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -23,11 +29,11 @@
     ],
     "decision": "internal",
     "reviewed": true,
-    "status": "needs-implementation-investigation",
+    "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Need to figure out where to plug it in in terms of what are the benefits of using it and what it can allow us to achieve",
+    "note": "Already authored and sent by the reasoning pipeline; not a user model-setting parameter.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

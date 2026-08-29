@@ -7,8 +7,8 @@
     "providerDefault": "not documented (historically `vivid`)",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "supported",
-    "summary": "`vivid` pushes hyper-real, dramatic images; `natural` gives more restrained, less stylized output.",
+    "availability": "unsupported",
+    "summary": "Legacy DALL-E 3 vivid/natural style selector. GPT Image 2 does not support it, so style belongs in the prompt and this field must not be sent.",
     "combines": [
         "Supported on: `dall-e-3` only",
         "Rejected on GPT image models and on `images.edit`; steer style through the prompt instead."
@@ -22,17 +22,14 @@
         "openai-images",
         "openai-responses-image-tool"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
-    "defaultValue": "natural",
-    "note": "",
+    "defaultValue": "",
+    "note": "DALL-E 3-only parameter; unsupported by GPT Image 2.",
     "unsupportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "unsupportedApis": [],

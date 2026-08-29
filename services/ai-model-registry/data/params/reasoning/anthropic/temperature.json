@@ -7,9 +7,9 @@
     "range": "0 to 1",
     "providerDefault": "1",
     "lixpiValue": "defaultTemperature from the model matrix, 0.7",
-    "currentState": "hidden",
-    "availability": "unverified",
-    "summary": "Sampling randomness.",
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Legacy sampling-randomness control. Claude 4.7 and later reject it, and the remaining reviewed reasoning models use adaptive thinking where sampling controls are not the supported quality dial. Lixpi omits it across the synchronized lineup to keep one compatible request surface.",
     "combines": [
         "Removed on Fable 5, Opus 5, Opus 4.8, Opus 4.7, and Sonnet 5, where it returns a 400. Still available on Opus 4.6, Sonnet 4.6, and older.",
         "inferenceCapabilities.supportsTemperature already encodes this per model."
@@ -22,25 +22,28 @@
     },
     "supportedModels": [
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
-    "defaultValue": "1",
-    "note": "Show as slider",
+    "defaultValue": "",
+    "note": "Not sent by the reviewed current-model profiles. Use effort and prompting instead.",
     "unsupportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
+        "claude-opus-4-7",
         "claude-sonnet-5"
     ],
     "unsupportedApis": [],
     "sources": [
-        "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
     ]
 }

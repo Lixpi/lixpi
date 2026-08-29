@@ -19,19 +19,21 @@
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
     "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Same as all other masks, investigate how to present it in ui, don't change code, report to me",
+    "note": "Mask-edit feature; not implemented in this iteration.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

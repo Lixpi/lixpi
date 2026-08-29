@@ -13,8 +13,12 @@
     "lixpiValue": "auto",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "Whether the call creates a new image or edits an existing one.",
-    "combines": [],
+    "summary": "Selects whether the image operation generates from text or edits supplied image content. Lixpi derives the operation from the authorized reference set and uses the matching Image API endpoint instead of asking the user to choose a transport action.",
+    "combines": [
+        "Generate is valid for a text-only request. Edit requires at least one accepted input image and uses the provider's edit request shape.",
+        "Masks and separate edit targets add operation-specific semantics and remain `needs-implementation-investigation`; they are not inferred from this field.",
+        "Quality, size, background, moderation, and output format apply after Lixpi has selected the operation."
+    ],
     "usage": {
         "setIn": "not set explicitly; the branch at openai-provider.ts:594 picks images.edit() when references exist and images.generate() otherwise",
         "code": "const stream = hasReferences ? await this.client.images.edit({...}) : await this.client.images.generate({...})",
@@ -22,16 +26,13 @@
         "what": "Chooses create against edit. Lixpi resolves this by calling two different endpoints rather than passing the tool's action field."
     },
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [
         "openai-responses-image-tool"
     ],
     "decision": "internal",
-    "reviewed": false,
+    "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",

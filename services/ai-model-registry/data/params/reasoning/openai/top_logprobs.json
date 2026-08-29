@@ -7,25 +7,30 @@
     "providerDefault": "null",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Returns up to N most likely alternative tokens with log probabilities at each output position.",
+    "availability": "supported",
+    "summary": "Returns up to the requested number of likely alternative tokens and their log probabilities at each output position. It is diagnostic output and can substantially increase response size.",
     "combines": [
-        "Supported on: not documented per-model; commonly unsupported on reasoning models alongside temperature/top_p",
-        "Requires `include: [\"message.output_text.logprobs\"]` to get the logprobs back in the response payload.",
-        "Fewer than requested tokens may be returned.",
-        "Inflates response size noticeably on long outputs."
+        "The current Responses and Chat Completions request schemas both expose top_logprobs with a range from 0 through 20, and OpenAI publishes no narrower restriction for the reviewed GPT-5.4 through GPT-5.6 models.",
+        "Responses requires include: [\"message.output_text.logprobs\"] to return log probabilities in output message content.",
+        "Chat Completions requires logprobs: true when top_logprobs is set.",
+        "The API may return fewer alternatives than requested."
     ],
     "range": "0 to 20",
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
         "openai-chat-completions"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
@@ -34,6 +39,7 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://developers.openai.com/api/reference/resources/responses"
+        "https://developers.openai.com/api/reference/resources/responses",
+        "https://cdn.jsdelivr.net/npm/openai/resources/chat/completions/completions.d.ts"
     ]
 }

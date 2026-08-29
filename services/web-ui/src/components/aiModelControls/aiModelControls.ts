@@ -21,10 +21,6 @@ import {
     type SlidingDropdownOptionRenderInstance,
     type SlidingDropdownOptionRenderState,
 } from '@lixpi/ui-kit/components/sliding-dropdown'
-import {
-    createSlidingSwitch,
-    type SlidingSwitchInstance,
-} from '@lixpi/ui-kit/components/sliding-switch'
 import { createToggleSwitch } from '@lixpi/ui-kit/components/toggle-switch'
 import {
     createHelpTooltip,
@@ -94,7 +90,7 @@ type VideoOptionControls = {
 }
 
 export type MediaGenerationConfigMatrixControls = {
-    mediaType: 'image' | 'video'
+    mediaType: 'reasoning' | 'image' | 'video'
     getSelectedModelIds: () => string[]
     setSelectedModelIds: (modelIds: string[]) => void
     getConfigGroups: () => MediaGenerationConfigSelectionGroup[]
@@ -136,8 +132,6 @@ type PendingMediaConfigSvgControl = {
     selectedValue: string
 }
 
-const MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT = 40
-const MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH = 320
 const MEDIA_CONFIG_HELP_TRIGGER_SIZE = 12
 const MEDIA_CONFIG_OPTION_HELP_GAP = 4
 const MEDIA_CONFIG_OPTION_FALLBACK_CHARACTER_WIDTH_RATIO = 0.6
@@ -165,10 +159,7 @@ function isDimensionValueControl(control: MediaGenerationConfigControl): boolean
 }
 
 function usesSlidingDropdown(control: MediaGenerationConfigControl): boolean {
-    return isDimensionValueControl(control)
-        || control.kind === 'duration'
-        || control.key === 'duration'
-        || control.key === 'outputFormat'
+    return control.kind !== 'toggle' && control.kind !== 'fixed'
 }
 
 function rendersDimensionGlyph(
@@ -459,7 +450,7 @@ class MediaTextDropdownOptionView implements SlidingDropdownOptionRenderInstance
 }
 
 function findMatrixControlForModel(
-    mediaType: 'image' | 'video',
+    mediaType: 'reasoning' | 'image' | 'video',
     modelId: string | undefined,
     controlKey: MediaGenerationConfigControlKey,
 ): MediaGenerationConfigControl | undefined {
@@ -931,13 +922,24 @@ function normalizeControlValue(control: MediaGenerationConfigControl, value: str
 
 function getSelectedMatrixGroups(
     matrixGroups: MediaGenerationConfigGroup[],
-    mediaType: 'image' | 'video',
+    mediaType: 'reasoning' | 'image' | 'video',
     selectedModelIds: string[],
 ): RenderedMediaConfigGroup[] {
     const mediaGroups = matrixGroups.filter(group => group.mediaType === mediaType)
     return selectedModelIds.flatMap((modelId): RenderedMediaConfigGroup[] => {
         const group = mediaGroups.find(candidate => candidate.modelIds.includes(modelId))
-        if (!group) return []
+        if (!group) {
+            if (mediaType !== 'reasoning') return []
+            return [{
+                groupId: modelId ? `reasoning:${modelId}` : 'reasoning:placeholder',
+                mediaType: 'reasoning',
+                provider: modelId.split(':')[0] || 'Reasoning',
+                title: 'Reasoning model',
+                modelIds: [],
+                controls: [],
+                selectedModelIds: [modelId],
+            }]
+        }
         return [{ ...group, selectedModelIds: [modelId] }]
     })
 }
@@ -970,12 +972,13 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         const matrix = aiModelsStore.getMediaGenerationConfigMatrix()
         const selectedModelIds = this.controls.getSelectedModelIds()
         const defaultModelId = aiModelsStore.getDefaultModelId(this.controls.mediaType)
+        let effectiveModelIds = selectedModelIds
+        if (effectiveModelIds.length === 0 && defaultModelId) effectiveModelIds = [defaultModelId]
+        if (effectiveModelIds.length === 0 && this.controls.mediaType === 'reasoning') effectiveModelIds = ['']
         return getSelectedMatrixGroups(
             matrix.groups,
             this.controls.mediaType,
-            selectedModelIds.length > 0
-                ? selectedModelIds
-                : defaultModelId ? [defaultModelId] : [],
+            effectiveModelIds,
         )
     }
 
@@ -994,7 +997,9 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
 
             return {
                 groupId: group.groupId,
-                modelIds: [modelId] as MediaGenerationConfigSelectionGroup['modelIds'],
+                modelIds: modelId
+                    ? [modelId] as MediaGenerationConfigSelectionGroup['modelIds']
+                    : [],
                 values,
             }
         })
@@ -1074,21 +1079,14 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     }
 
     private createSvgControlHost(
-        className:
-            | 'ai-media-config-sliding-dropdown-host'
-            | 'ai-media-config-sliding-switch-host',
         group: RenderedMediaConfigGroup,
         control: MediaGenerationConfigControl,
         selectedValue: string,
         pendingControls: PendingMediaConfigSvgControl[],
     ): HTMLElement {
-        const host = html`<div className=${className}></div>` as HTMLElement
+        const host = html`<div className="ai-media-config-sliding-dropdown-host"></div>` as HTMLElement
         pendingControls.push({ host, group, control, selectedValue })
         return host
-    }
-
-    private mountedControlWidth(host: HTMLElement): number {
-        return host.clientWidth || host.getBoundingClientRect().width || MEDIA_CONFIG_CONTROL_FALLBACK_WIDTH
     }
 
     private getGroupAspectRatioValue(group: RenderedMediaConfigGroup): string {
@@ -1147,42 +1145,6 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             setValue: value => slidingDropdown.setValue(value),
             destroy: () => slidingDropdown.destroy(),
         })
-    }
-
-    private mountSlidingSwitchControl(pendingControl: PendingMediaConfigSvgControl): void {
-        const { host, group, control, selectedValue } = pendingControl
-        const svg = select(host)
-            .append('svg')
-            .attr('class', 'ai-media-config-sliding-switch-svg')
-        const slidingSwitch: SlidingSwitchInstance<string> = createSlidingSwitch(svg, {
-            id: `${group.groupId}:${group.selectedModelIds[0] ?? ''}:${control.key}`,
-            x: 0,
-            y: 0,
-            width: this.mountedControlWidth(host),
-            height: MEDIA_CONFIG_SEGMENTED_CONTROL_HEIGHT,
-            options: control.options,
-            selectedValue,
-            observeParentResize: true,
-            visualOverflowPadding: { top: 0, right: 0, bottom: 0, left: 0 },
-            indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
-            indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
-            onChange: value => this.setGroupControlValue(group, control, value),
-        })
-        this.mountedControls.push({
-            groupId: group.groupId,
-            modelId: group.selectedModelIds[0] ?? '',
-            control,
-            setValue: value => slidingSwitch.setValue(value),
-            destroy: () => slidingSwitch.destroy(),
-        })
-    }
-
-    private mountSvgControl(pendingControl: PendingMediaConfigSvgControl): void {
-        if (usesSlidingDropdown(pendingControl.control)) {
-            this.mountSlidingDropdownControl(pendingControl)
-            return
-        }
-        this.mountSlidingSwitchControl(pendingControl)
     }
 
     private createToggleControl(
@@ -1284,11 +1246,9 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
         )
         const field = control.readOnly || control.kind === 'fixed'
             ? html`<div className="ai-media-config-fixed-value">${control.options.find(option => option.value === selectedValue)?.label ?? selectedValue}</div>` as HTMLElement
-            : usesSlidingDropdown(control)
-                ? this.createSvgControlHost('ai-media-config-sliding-dropdown-host', group, control, selectedValue, pendingControls)
-                : control.kind === 'toggle'
-                    ? this.createToggleControl(group, control, selectedValue)
-                    : this.createSvgControlHost('ai-media-config-sliding-switch-host', group, control, selectedValue, pendingControls)
+            : control.kind === 'toggle'
+                ? this.createToggleControl(group, control, selectedValue)
+                : this.createSvgControlHost(group, control, selectedValue, pendingControls)
 
         return html`
             <div className="ai-media-config-control" data-control-kind=${control.kind} data-control-key=${control.key}>
@@ -1316,19 +1276,20 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             control,
             dom: this.createControl(group, control, selectionGroup, pendingControls),
         }))
-        const inlineImageSizeControl = this.controls.mediaType === 'image'
-            ? renderedControls.find(({ control }) => control.key === 'imageSize')
-            : undefined
-        const remainingControlEls = renderedControls
-            .filter(renderedControl => renderedControl !== inlineImageSizeControl)
-            .map(({ dom }) => dom)
+        const rendersControlsInline = this.controls.mediaType !== 'video'
+        const inlineControlEls = rendersControlsInline
+            ? renderedControls.map(({ dom }) => dom)
+            : []
+        const remainingControlEls = rendersControlsInline
+            ? []
+            : renderedControls.map(({ dom }) => dom)
         const modelDropdownHost = html`<span></span>` as HTMLElement
         pendingModelDropdowns.push({ host: modelDropdownHost, modelIndex })
         const canRemove = this.controls.getSelectedModelIds().length > 1
 
         return createModelConfigurationRow({
             modelDropdownHost,
-            inlineControl: inlineImageSizeControl?.dom,
+            inlineControls: inlineControlEls,
             controls: remainingControlEls,
             canRemove,
             onRemove: () => this.removeModel(modelId),
@@ -1377,7 +1338,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             if (this.dom.isConnected) dropdown.update()
         }
         for (const pendingControl of pendingControls) {
-            this.mountSvgControl(pendingControl)
+            this.mountSlidingDropdownControl(pendingControl)
         }
     }
 

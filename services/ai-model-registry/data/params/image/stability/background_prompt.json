@@ -7,11 +7,12 @@
     "providerDefault": null,
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Describes in words the background to place behind subject_image on the replace-background-and-relight endpoint. Use background_reference instead when you have an actual image of the scene.",
+    "availability": "supported",
+    "summary": "Describes the generated background for Stability's asynchronous Replace Background and Relight endpoint. It can describe the scene, the desired lighting, or both, and accepts up to 10,000 characters.",
     "combines": [
-        "AWS Bedrock does not document this endpoint, so these parameters are from a client library and are unverified against the live API.",
-        "background_prompt and background_reference are alternative ways to specify the same thing."
+        "This field belongs to the direct Stability v2beta Replace Background and Relight endpoint and is not part of the Bedrock Stable Image model request.",
+        "The request must include subject_image plus background_prompt, background_reference, or both.",
+        "Supporting this field requires a separate asynchronous edit operation and result-polling path, so it remains absent pending implementation investigation."
     ],
     "supportedModels": [
         "stability-ultra",
@@ -22,16 +23,16 @@
     ],
     "decision": "skip",
     "reviewed": true,
-    "status": "none",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "This belongs to a separate asynchronous Replace Background and Relight operation. It is not a generation-row control and remains unimplemented.",
     "unsupportedModels": [],
     "unsupportedApis": [
         "bedrock"
     ],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+        "https://platform.stability.ai/docs/api-reference"
     ]
 }

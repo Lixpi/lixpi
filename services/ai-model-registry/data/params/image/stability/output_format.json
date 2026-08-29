@@ -2,7 +2,7 @@
     "key": "output_format",
     "category": "output-format",
     "apiField": "output_format",
-    "controlKey": "outputFormat",
+    "controlKey": null,
     "type": "enum",
     "values": [
         "png",
@@ -13,13 +13,17 @@
     "lixpiValue": "png",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "Output encoding. Hardcoded to png.",
-    "combines": [],
+    "summary": "Encoding used for the Stability response bytes. Format affects losslessness, transparency support, and downstream file size, but it does not change the selected aspect ratio or generated composition.",
+    "combines": [
+        "Lixpi fixes the output to PNG on both transports so the Asset pipeline receives one lossless format.",
+        "Stable Image Ultra on Bedrock documents JPEG and PNG, while SD3.5 and the direct API also document WebP. PNG is the compatible intersection.",
+        "The format does not change aspect ratio or composition and is not persisted as user configuration."
+    ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:293",
-        "code": "formData.set('output_format', 'png')",
-        "from": "hardcoded for every endpoint",
-        "what": "Output encoding. PNG keeps the image lossless into the object store at the cost of file size."
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:293 and :406",
+        "code": "formData.set('output_format', 'png') and body.output_format = 'png'",
+        "from": "a pipeline-owned fixed value",
+        "what": "Forces lossless PNG output on direct Stability and Bedrock requests so downstream Asset handling receives one compatible encoding."
     },
     "supportedModels": [
         "stability-ultra",
@@ -29,16 +33,18 @@
         "stability-v2beta",
         "bedrock"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "",
-    "defaultValue": "png",
-    "note": "",
+    "fixedValue": "png",
+    "defaultValue": "",
+    "note": "Fixed by both Stability transports.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html"
     ]
 }

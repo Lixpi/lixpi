@@ -20,21 +20,21 @@
         "It lives inside imageConfig, which google-provider.ts:281 currently builds from the aspect ratio alone, so wiring it up means changing that line rather than adding a parameter next to it."
     ],
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
         "vertex-ai"
     ],
-    "decision": "internal",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
-    "fixedValue": "ALLOW_ALL",
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Policy behavior remains provider-managed; no user model-setting control.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

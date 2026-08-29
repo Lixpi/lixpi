@@ -7,35 +7,42 @@
     "providerDefault": "null",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Automatic conversation compaction — when the context passes `compact_threshold` tokens, the API compacts earlier turns instead of failing.",
+    "availability": "supported",
+    "summary": "Configures automatic conversation compaction on the Responses API. When the request reaches the optional compact_threshold, OpenAI replaces older context with a compaction item instead of waiting for context overflow.",
     "combines": [
-        "Supported on: not documented per-model",
-        "`type` currently only accepts `\"compaction\"`.",
-        "An alternative to the deprecated `truncation: \"auto\"` and to hitting a 400 on context overflow."
+        "The field is defined on Responses requests and is absent from Chat Completions requests.",
+        "Each entry uses type compaction and may set compact_threshold to choose when compaction starts.",
+        "The reviewed GPT-5.4 through GPT-5.6 families support Responses. GPT-5.5 carries forward GPT-5.4 compaction support, and the GPT-5.6 guidance keeps Responses as the recommended stateful workflow."
     ],
     "values": [
         "entries of `{ type: \"compaction\"",
         "compact_threshold?: number }"
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
-        "openai-responses",
-        "openai-chat-completions"
+        "openai-responses"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
     "note": "",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "openai-chat-completions"
+    ],
     "sources": [
-        "https://developers.openai.com/api/reference/resources/responses"
+        "https://developers.openai.com/api/reference/resources/responses",
+        "https://developers.openai.com/api/docs/guides/latest-model"
     ]
 }

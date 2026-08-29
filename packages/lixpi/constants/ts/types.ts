@@ -258,6 +258,12 @@ export type MediaGenerationConfigControlKey =
     | 'personGeneration'
     | 'watermark'
     | 'returnLastFrame'
+    | 'background'
+    | 'quality'
+    | 'reasoningEffort'
+    | 'reasoningMode'
+    | 'reasoningVerbosity'
+    | 'thinkingLevel'
 
 export const MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT: Readonly<Partial<Record<MediaGenerationConfigControlKey, string>>> = {
     generateAudio: 'Generates synchronized dialogue, sound effects, and music for the video.',
@@ -294,7 +300,7 @@ export type MediaGenerationConfigControl = {
 
 export type MediaGenerationConfigGroup = {
     groupId: string
-    mediaType: 'image' | 'video'
+    mediaType: 'reasoning' | 'image' | 'video'
     provider: string
     providerTitle?: string
     title: string
@@ -2031,6 +2037,9 @@ export type AiInteractionMediaGenerationRequest = {
     reasoningModelIds: AiModelId[]
     imageModelIds: AiModelId[]
     videoModelIds: AiModelId[]
+    reasoningOptions?: {
+        configGroups?: MediaGenerationConfigSelectionGroup[]
+    }
     imageOptions?: {
         imageSize: ImageGenerationSize
         configGroups?: MediaGenerationConfigSelectionGroup[]
@@ -2125,6 +2134,10 @@ export type AiModel = {
     // Required for image-generation models. Describes reference budgets and
     // conditioning controls without leaking provider request syntax upstream.
     imageReferenceCapabilities?: ImageReferenceCapabilities
+    // Provider/model-specific controls authored by ai-models-synchronization.
+    // The API projects these directly into the shared configuration matrix.
+    reasoningGenerationControls?: MediaGenerationConfigControl[]
+    imageGenerationControls?: MediaGenerationConfigControl[]
     // Legacy normalized video axes retained for routing, usage, and trace fields.
     // Interactive provider/model controls are authored in videoGenerationControls.
     videoAspectRatios?: ImageSizeOption[]

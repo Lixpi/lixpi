@@ -24,16 +24,13 @@
         "openai-responses-image-tool"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "GPT Image models return base64 image data; the legacy response_format selector is unsupported.",
     "unsupportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "unsupportedApis": [],

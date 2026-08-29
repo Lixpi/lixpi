@@ -14,21 +14,21 @@
         "not documented for image models"
     ],
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
         "vertex-ai"
     ],
-    "decision": "internal",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Wire in to our existing seed implementation on media items",
+    "note": "Not documented for current Gemini API image generation.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

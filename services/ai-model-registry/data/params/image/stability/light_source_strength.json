@@ -8,10 +8,11 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "How strong the applied light source is.",
+    "summary": "Controls the intensity of the synthetic light applied by Stability's replace-background-and-relight edit operation. Higher values make the selected light source affect the subject and scene more strongly.",
     "combines": [
-        "Supported on: edit/replace-background-and-relight",
-        "Only meaningful with `light_source_direction` or `light_reference`."
+        "Supported only by `edit/replace-background-and-relight` and requires an input image for the operation.",
+        "It is meaningful only with a light-source direction or a light-reference image that defines the source being strengthened.",
+        "Background replacement, original-background depth, and source-light settings jointly determine the result; Lixpi does not expose this unimplemented operation as independent controls."
     ],
     "range": "0.0 to 1.0",
     "supportedModels": [
@@ -22,17 +23,17 @@
         "stability-v2beta"
     ],
     "decision": "skip",
-    "reviewed": false,
-    "status": "none",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Separate asynchronous Replace Background and Relight feature; not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [
         "bedrock"
     ],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+        "https://platform.stability.ai/docs/api-reference"
     ]
 }

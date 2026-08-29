@@ -3,10 +3,10 @@
     "providerTitle": "Stability",
     "apiName": "Stable Image v2beta and Bedrock",
     "groupId": "stable-image",
-    "title": "Stable Image Ultra and SD 3.5 Large",
+    "title": "Stability Ultra and Stable Diffusion 3.5 image models",
     "models": [
         "stability-ultra",
         "sd3.5-large"
     ],
-    "docs": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
+    "docs": "https://platform.stability.ai/docs/api-reference"
 }

@@ -3,7 +3,7 @@ import { html } from '$src/utils/domTemplates.ts'
 
 export type ModelConfigurationRowConfig = {
     modelDropdownHost: HTMLElement
-    inlineControl?: HTMLElement
+    inlineControls?: HTMLElement[]
     controls?: HTMLElement[]
     canRemove: boolean
     onRemove: () => void
@@ -51,13 +51,11 @@ class ModelConfigurationRow implements ModelConfigurationRowInstance {
                             <span className="ai-model-config-dropdown">${config.modelDropdownHost}</span>
                         </div>
                     </div>
-                    ${config.inlineControl
-                        ? html`
-                            <div className="ai-model-config-inline-control">
-                                ${config.inlineControl}
-                            </div>
-                        `
-                        : undefined}
+                    ${config.inlineControls?.map(control => html`
+                        <div className="ai-model-config-inline-control">
+                            ${control}
+                        </div>
+                    `)}
                     ${removeButton}
                 </div>
                 ${config.controls && config.controls.length > 0

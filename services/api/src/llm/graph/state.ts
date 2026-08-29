@@ -84,7 +84,7 @@ export type MediaFanoutPlan = {
     imageModels: AiModelMetaInfo[]
     videoModels: AiModelMetaInfo[]
     imageSize?: string
-    imageModelOptions?: Record<string, { imageSize?: string }>
+    imageModelOptions?: Record<string, Partial<Record<MediaGenerationConfigControlKey, string>>>
     videoAspectRatio?: string
     videoResolution?: string
     videoDuration?: string | number
@@ -143,6 +143,7 @@ export type ProviderState = {
     modelVersion: string
     maxCompletionSize?: number | undefined
     temperature: number
+    reasoningGenerationConfig?: Partial<Record<MediaGenerationConfigControlKey, string>> | undefined
 
     // Stream state
     streamActive: boolean
@@ -165,6 +166,7 @@ export type ProviderState = {
     imageModelMetaInfo?: AiModelMetaInfo | undefined
     imageModelVersion?: string | undefined
     imageProviderName?: ProviderName | undefined
+    imageGenerationConfig?: Partial<Record<MediaGenerationConfigControlKey, string>> | undefined
 
     // Tool-calling: dual-model image routing
     generatedImagePrompt?: string | undefined
@@ -271,6 +273,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     modelVersion: { reducer: keep },
     maxCompletionSize: { reducer: keep },
     temperature: { reducer: keep, default: () => 0.7 },
+    reasoningGenerationConfig: { reducer: keep },
     streamActive: { reducer: keep, default: () => false },
     cancelledByUser: { reducer: keep },
     error: { reducer: keep },
@@ -287,6 +290,7 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     imageModelMetaInfo: { reducer: keep },
     imageModelVersion: { reducer: keep },
     imageProviderName: { reducer: keep },
+    imageGenerationConfig: { reducer: keep },
     generatedImagePrompt: { reducer: keep },
     referenceImages: { reducer: keep },
     capabilityReferenceImages: { reducer: keep },

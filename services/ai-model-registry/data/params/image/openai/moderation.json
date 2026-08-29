@@ -12,9 +12,11 @@
     "lixpiValue": "set per model and routing mode",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "Content-moderation strictness.",
+    "summary": "Selects the provider's image-content moderation strictness. It changes provider filtering behavior, not image style or visual quality, and a rejected request still produces a normalized provider error rather than pixels.",
     "combines": [
-        "Already resolved through mediaProviderDefinition.moderation.settings."
+        "Supported for GPT Image 2 generation and editing requests.",
+        "Lixpi resolves it through `mediaProviderDefinition.moderation.settings` so text-only and image-conditioned requests use the reviewed policy profile consistently.",
+        "It is independent of size, quality, background, and output format and is not a per-prompt user control."
     ],
     "usage": {
         "setIn": "services/api/src/llm/providers/openai-provider.ts:601 and :611",
@@ -23,9 +25,6 @@
         "what": "Content-filter strictness, resolved per model and per input mode rather than fixed, so a reference-driven edit and a text prompt can carry different policy."
     },
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [

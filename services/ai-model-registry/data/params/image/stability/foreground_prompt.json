@@ -21,17 +21,17 @@
         "stability-v2beta"
     ],
     "decision": "skip",
-    "reviewed": false,
-    "status": "none",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Separate asynchronous Replace Background and Relight feature; not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [
         "bedrock"
     ],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+        "https://platform.stability.ai/docs/api-reference"
     ]
 }

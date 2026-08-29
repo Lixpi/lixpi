@@ -6,7 +6,7 @@
     "type": "number",
     "providerDefault": "model dependent, exposed as `Model.temperature` from `getModel`. Google says 1.0 for Gemini 3 models.",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "hidden",
     "availability": "supported",
     "summary": "Controls randomness. Google strongly recommends leaving it at the default 1.0 for all Gemini 3 models, image models included.",
     "combines": [
@@ -15,21 +15,21 @@
     ],
     "range": "0.0 to 2.0",
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
         "vertex-ai"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "",
+    "fixedValue": "1",
     "defaultValue": "",
-    "note": "Render as slider",
+    "note": "Fixed at the provider-recommended value; not exposed.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

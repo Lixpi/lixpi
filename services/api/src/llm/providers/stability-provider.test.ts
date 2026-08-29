@@ -211,13 +211,13 @@ describe('StabilityProvider text-to-image routing', () => {
                 model: 'stability-ultra',
                 modelVersion: 'stability-ultra',
             },
-            imageSize: '4:3',
+            imageSize: '4:5',
             messages: [{ role: 'user', content: 'Paint a red cat in a field.' }],
         })
         const formData = getFormData(request)
 
         expect(request.url).toBe('https://api.stability.ai/v2beta/stable-image/generate/ultra')
-        expect(formData.get('aspect_ratio')).toBe('4:3')
+        expect(formData.get('aspect_ratio')).toBe('4:5')
         expect(formData.get('model')).toBeNull()
     })
 })

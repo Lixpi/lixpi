@@ -9,32 +9,38 @@
     "lixpiValue": "STYLE_CONTROL_FIDELITY constant",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "On control/style: how closely the output matches the reference image's style.",
-    "combines": [],
+    "summary": "Controls how closely a Stability style-control request follows the supplied reference. Higher fidelity preserves more reference appearance; lower fidelity gives the prompt and generated composition more freedom.",
+    "combines": [
+        "Applies only to the Stability control or style route that accepts fidelity and a compatible reference image.",
+        "It combines with control strength, style strength, change strength, and the text prompt; pushing several strengths high can overconstrain the result.",
+        "Lixpi fixes it inside provider-neutral reference adaptation, so it is not exposed independently from the selected conditioning mode."
+    ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:318",
-        "code": "formData.set('fidelity', String(STYLE_CONTROL_FIDELITY))  // 0.7, defined at :28",
-        "from": "a hardcoded constant",
-        "what": "On control/style, how closely the output matches the reference image's style. 0.7 sits above Stability's own 0.5 default, so Lixpi leans toward the reference."
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:316",
+        "code": "formData.set('fidelity', String(STYLE_CONTROL_FIDELITY))",
+        "from": "the pipeline-owned STYLE_CONTROL_FIDELITY constant, fixed at 0.7",
+        "what": "Controls how closely a direct Stability style-control result follows the reference style. Bedrock does not receive this field and instead uses image-to-image strength."
     },
     "supportedModels": [
         "stability-ultra",
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
-    "defaultValue": "0.7",
-    "note": "Show as a slider, Make sure add a help tooltip value explaining all that in the ui.",
+    "defaultValue": "",
+    "note": "Fixed internally for style-control routing; not user-configurable.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

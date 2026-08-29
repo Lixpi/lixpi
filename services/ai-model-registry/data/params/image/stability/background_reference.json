@@ -8,10 +8,11 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "A reference image supplying the new background instead of a text description.",
+    "summary": "Supplies the replacement scene as an image on Stability's asynchronous Replace Background and Relight operation. It replaces or complements background_prompt; it is not a generic reference image for normal generation.",
     "combines": [
-        "Supported on: edit/replace-background-and-relight",
-        "Alternative to `background_prompt`."
+        "The operation requires subject_image plus background_prompt, background_reference, or both.",
+        "It belongs to the direct Stability v2beta asynchronous edit surface and is not accepted by Lixpi's current Bedrock Ultra or SD3.5 request path.",
+        "Supporting it requires an explicit edit operation, upload role, job polling, and result settlement, so it remains absent pending implementation investigation."
     ],
     "supportedModels": [
         "stability-ultra",
@@ -26,12 +27,12 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Description is not enough, needs more clarification",
+    "note": "Separate asynchronous edit feature; not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [
         "bedrock"
     ],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+        "https://platform.stability.ai/docs/api-reference"
     ]
 }
