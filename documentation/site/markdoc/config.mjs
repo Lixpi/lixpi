@@ -3,7 +3,7 @@
 // Keep this dependency-light: the only import is @markdoc/markdoc itself. Every
 // custom node/tag must render to a plain HTML tag name (a string) because the
 // build uses Markdoc's built-in HTML renderer (Markdoc.renderers.html), which
-// has no concept of React/Svelte components.
+// has no concept of client UI components.
 
 import Markdoc from '@markdoc/markdoc'
 import path from 'node:path'

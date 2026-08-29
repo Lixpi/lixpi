@@ -57,7 +57,7 @@ const helpTooltipCssVariableNames = [
     '--help-tooltip-content-z-index',
 ]
 
-// Small TypeScript-html tooltip primitive for ProseMirror and other non-Svelte DOM surfaces.
+// Small TypeScript-html tooltip primitive for ProseMirror and other imperative DOM surfaces.
 export type HelpTooltipConfig = {
     label: string
     text?: string

@@ -48,5 +48,5 @@ documentation/Media-Posts/
 
 ca.crt
 
-# Local-only Svelte reference kept during the Svelte removal
+# Local temporary files
 temp/

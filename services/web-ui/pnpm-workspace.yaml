@@ -11,4 +11,3 @@ allowBuilds:
   "@parcel/watcher": true
   browser-tabs-lock: true
   esbuild: true
-  svelte-preprocess: true

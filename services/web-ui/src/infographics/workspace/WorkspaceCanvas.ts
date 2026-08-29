@@ -10592,7 +10592,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
 
     // Persist canvas state without triggering a full re-render.
     // Updates internal state + persists via callback, then immediately updates the
-    // structure key so the Svelte $effect's render() call sees no structural change
+    // structure key so the view's next render call sees no structural change
     // and skips renderNodes(). The caller manages DOM updates manually.
     function commitCanvasStatePreservingEditors(nextState: CanvasState): void {
         commitCanvasState(nextState)

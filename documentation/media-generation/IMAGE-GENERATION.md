@@ -199,9 +199,9 @@ Generated-media size and branch-lineage spacing are controlled by `settings.medi
 
 ### Editor Preservation During Generation
 
-Adding image nodes to the canvas triggers a state-persistence round-trip through the Svelte store. Normally that round-trip calls `renderNodes()`, which destroys **all** editors — including the AI chat thread editor that is actively streaming the response. During image generation, the canvas calls `commitCanvasStatePreservingEditors()` instead:
+Adding image nodes to the canvas triggers a state-persistence round-trip through `workspaceStore`. Normally the view subscription calls `render()`, which can call `renderNodes()` and destroy **all** editors, including the AI chat thread editor that is actively streaming the response. During image generation, the canvas calls `commitCanvasStatePreservingEditors()` instead:
 
-- It updates the internal structure key immediately, so the Svelte `$effect`'s `render()` call sees no structural change and skips the destructive `renderNodes()`.
+- It updates the internal structure key immediately, so the view's subsequent `render()` call sees no structural change and skips the destructive `renderNodes()`.
 - The new image node's DOM is appended manually via `appendImageNodeToDOM()`.
 
 This keeps active streaming editors alive across canvas-state commits, so a multi-image generation does not tear down the thread that is producing it.

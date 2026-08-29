@@ -30,7 +30,7 @@ The current path is **renderer ownership by workload**: DOM owns text-rich contr
 
 When working on canvas code, you need to know two libraries:
 
-1. **`@xyflow/system`** for pan/zoom and connection math (no Svelte/React wrappers). The Svelte layer (`WorkspaceCanvas.svelte`) is a thin binding.
+1. **`@xyflow/system`** for pan, zoom, and connection math through its low-level API. [`workspaceCanvasView.ts`](../../services/web-ui/src/components/workspaceCanvasView.ts) is the thin integration host.
 2. **PIXI v8** for the media layer (`Application`, `Container`, `Sprite`, `Texture`). The PIXI documentation is the source of truth: <https://pixijs.com/8.x/guides/components/application>.
 
 For everything about level-of-detail tiers, the texture cache, the decode pool, mipmaps, the edge renderer diff, and the performance tuning constants, see [Image Rendering Performance](./IMAGE-RENDERING-PERFORMANCE.md). This page covers ownership and the per-frame sync machinery; that page covers throughput and memory.
@@ -70,7 +70,7 @@ Use the incremental canvas architecture documented here as the implementation re
 
 All configurable web UI settings belong in [`settings.ts`](../../services/web-ui/src/settings.ts). This includes feature flags, colors, shadows, dimensions, gaps, hit radii, animation timing, title sizing, generated-image placement spacing, and other values that product/design tuning may reasonably adjust without changing the interaction algorithm.
 
-Do not add new configurable magic-number constants or UI behavior flags directly to [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), Svelte wrappers, PIXI rendering layers, or helper modules. Add them to `settings` first and read them from the consuming code. For example, the AI chat resize/drag rail hit target lives at `settings.aiChatThread.rail.dragGrabWidth`, and the Media Library uses `settings.mediaLibrary.panelWidthFraction`.
+Do not add new configurable magic-number constants or UI behavior flags directly to [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts), DOM integration hosts, PIXI rendering layers, or helper modules. Add them to `settings` first and read them from the consuming code. For example, the AI chat resize/drag rail hit target lives at `settings.aiChatThread.rail.dragGrabWidth`, and the Media Library uses `settings.mediaLibrary.panelWidthFraction`.
 
 `settings` must stay organized by logical groups. Each top-level group is its own subsection, such as `aiChatThread`, `connector`, `selection`, or `mediaNode`; a group may contain nested subsections when a domain has a clear child domain, such as `aiChatThread.rail` or `mediaNode.image`. Every group and nested group must have a blank line before and after it in the object literal. Every key must have a short comment explaining what the value means and how changing it affects the application. Do not create a second global web UI settings module.
 
@@ -186,7 +186,7 @@ This gives DOM and the media PIXI world a single, consistent transform every fra
 
 ### Viewport State Ownership
 
-During active pan, zoom, drag, and resize, the live viewport in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) is the rendering source of truth. The Svelte/store viewport is an acknowledgement and persistence path, not an authority that can replay over the live transform while the canvas is already on screen.
+During active pan, zoom, drag, and resize, the live viewport in [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) is the rendering source of truth. The view/store viewport is an acknowledgement and persistence path, not an authority that can replay over the live transform while the canvas is already on screen.
 
 This rule exists because stale viewport-only renders can look exactly like node-position bugs. The failure signature is:
 
@@ -201,7 +201,7 @@ In that state, applying the incoming store viewport through `viewportBridge.appl
 Keep these ownership rules intact:
 
 1. `XYPanZoom` `onTransformChange` must update `lastTransform`, `currentCanvasState.viewport`, and any pending local visual commit viewport immediately before calling `viewportBridge.applyViewport(...)`.
-2. [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte) must persist canvas state with the current live `viewport`, even when the caller passes a `CanvasState` object captured before the latest pan.
+2. [`workspaceCanvasView.ts`](../../services/web-ui/src/components/workspaceCanvasView.ts) must persist canvas state with the current live `viewport`, even when the caller passes a `CanvasState` object captured before the latest pan.
 3. Debounced viewport saves must capture the scheduled viewport and abort if a newer viewport arrives before the timer fires.
 4. Store renders that only change viewport, do not change visual node/edge state, do not require a full rerender, and disagree with the live viewport must preserve the live viewport. That guard is isolated in [`workspaceViewportStatePlan.ts`](../../services/web-ui/src/infographics/workspace/workspaceViewportStatePlan.ts).
 5. Do not call `viewportBridge.applyViewport(...)` from stale-render acknowledgement paths. Use `panZoom.syncViewport(liveViewport)` to keep XYFlow's internal state aligned with the live transform without repainting a stale transform onto DOM and PIXI.

@@ -406,7 +406,7 @@ Shared packages keep service contracts in sync:
 | `@lixpi/nats-service` | TypeScript NATS client, JetStream Object Store helpers, NKey auth |
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by API and NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
-| `@xyflow/system` (vendored) | Framework-agnostic pan/zoom/coordinate math — used at the low-level API, not React Flow or Svelte Flow |
+| `@xyflow/system` | Framework-agnostic pan/zoom and coordinate math used through its low-level API rather than a framework wrapper |
 
 ---
 

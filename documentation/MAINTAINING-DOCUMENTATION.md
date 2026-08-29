@@ -59,7 +59,7 @@ Explain the risk and what to do about it.
 Avoid:
 
 - Raw framework components.
-- JSX/Svelte syntax.
+- Framework component syntax such as JSX.
 - Inline HTML that Markdoc may parse differently from GitHub.
 - Unclosed `{% callout %}` tags.
 - Mermaid diagrams that depend on unsupported runtime plugins.
@@ -99,11 +99,7 @@ Do not run the docs build after documentation changes unless the user explicitly
 
 When a docs build is explicitly requested, run it through the documented Docker-only workflow. Never run `pnpm docs:build` on the host.
 
-If documentation changes a tested source assertion, run the relevant test
-through the allowed project test command only when the user explicitly asks for
-tests in the current thread. For web UI tests, use Dockerized Vitest. Do not use
-`svelte-check`, browsers, screenshots, or manual visual inspection as
-substitutes for permitted tests.
+If documentation changes a tested source assertion, run the relevant test through the allowed project test command only when the user explicitly asks for tests in the current thread. For web UI tests, use Dockerized Vitest. Do not use browsers, screenshots, or manual visual inspection as substitutes for permitted tests.
 
 ## Before Calling It Done
 

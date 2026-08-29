@@ -110,7 +110,7 @@ A subsection per user-facing surface (panel, modal, slash command, hotkey, etc.)
 - Open/active state.
 - Inputs and outputs.
 - Persistence behavior (what survives reload, what does not).
-- Tech-stack constraints (e.g. "vanilla TS, no new Svelte components").
+- Tech-stack constraints (e.g. "TypeScript DOM, no new UI runtime dependencies").
 - File paths to touch (markdown links with line ranges).
 
 ### 10. Data model — required

@@ -1,6 +1,6 @@
 ---
 name: testing
-description: 'Follow Lixpi testing and verification rules when adding or updating tests, test utilities, mocks, fixtures, or verifying any work. Never run svelte-check or use browser-based verification.'
+description: 'Follow Lixpi testing and verification rules when adding or updating tests, test utilities, mocks, fixtures, or verifying any work. Browser-based verification is prohibited.'
 ---
 
 # Testing

@@ -1,14 +1,14 @@
 # Infographics Module
 
-This module provides framework-agnostic rendering primitives for interactive canvas-based UI components. The core idea is simple: keep the heavy lifting (pan, zoom, drag, resize, connections) in vanilla TypeScript, and let framework-specific wrappers (like Svelte components) handle only what they're good at—reactivity and lifecycle.
+This module provides framework-agnostic rendering primitives for interactive canvas UI. Pan, zoom, drag, resize, and connection behavior stays in the canvas core. The TypeScript view host owns application stores, services, DOM mount points, and lifecycle.
 
 ## Why Framework-Agnostic?
 
-We don't want to rewrite canvas logic every time we switch frameworks or need to support multiple ones. By isolating rendering and interaction code here, we can:
+The canvas core should not depend on application state wiring. Isolating rendering and interaction code here lets us:
 
-- Swap out Svelte for React or vanilla JS without touching core logic
-- Test canvas behavior independently of UI framework quirks
-- Keep components thin—they just wire up DOM refs and callbacks
+- Change the view host without rewriting canvas behavior
+- Test canvas behavior independently of application state wiring
+- Keep the view host thin by wiring DOM refs and callbacks
 
 ## How It Uses @xyflow/system
 
@@ -18,13 +18,13 @@ We leverage `@xyflow/system` as the interaction engine. It provides:
 - **Coordinate math** — converts between screen and canvas coordinates
 - **Event filtering** — respects `.nopan` and `.nowheel` class markers
 
-We do NOT use React Flow or Svelte Flow components directly. Instead, we call the low-level `@xyflow/system` APIs and manage our own DOM. This gives us full control over rendering while benefiting from battle-tested interaction logic.
+We call the low-level `@xyflow/system` APIs and manage our own DOM. This gives us full control over rendering while reusing its interaction logic.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Svelte Component                        │
-│  (WorkspaceCanvas.svelte)                                   │
-│  - Binds DOM refs                                           │
+│                   TypeScript View Host                      │
+│  (workspaceCanvasView.ts)                                   │
+│  - Creates DOM refs                                         │
 │  - Subscribes to stores                                     │
 │  - Passes callbacks                                         │
 └──────────────────────────┬──────────────────────────────────┘
@@ -60,7 +60,7 @@ infographics/
 
 ## Design Principles
 
-1. **No framework imports in core logic** — `WorkspaceCanvas.ts` doesn't import Svelte. It receives DOM elements and callbacks.
+1. **No application-view imports in core logic** — `WorkspaceCanvas.ts` receives DOM elements and callbacks.
 
 2. **Callbacks over stores** — The canvas doesn't know about `workspaceStore`. It calls `onCanvasStateChange()` and lets the caller decide what to do.
 

@@ -124,7 +124,7 @@ An animated placeholder appears immediately when generation starts; up to three 
 
 - **LangGraph** — AI workflow orchestration
 - **NATS / NATS JetStream** — messaging backbone for the entire system (end-to-end communication and object storage)
-- **PIXI.js, @xyflow/system, D3, Svelte** — infinite canvas UI
+- **PIXI.js, @xyflow/system, D3** — infinite canvas UI
 - **ProseMirror, CodeMirror** — rich-text editors for AI chat and prompt input
 - **DynamoDB** — persistence
 - **Pulumi, AWS** — cloud deployment (largely cloud-agnostic today; the plan is to go fully cloud-agnostic by swapping DynamoDB for Cassandra)

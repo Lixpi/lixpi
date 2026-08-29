@@ -1,6 +1,6 @@
 ---
 name: coding-style
-description: 'Follow Lixpi coding conventions when writing or reviewing TypeScript, Svelte, Sass, SCSS, CSS, or other implementation code. Use for code changes, refactors, and style reviews.'
+description: 'Follow Lixpi coding conventions when writing or reviewing TypeScript, Sass, SCSS, CSS, or other implementation code. Use for code changes, refactors, and style reviews.'
 ---
 
 # Coding Style

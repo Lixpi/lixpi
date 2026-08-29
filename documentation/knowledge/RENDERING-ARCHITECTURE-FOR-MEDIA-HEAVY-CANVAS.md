@@ -330,7 +330,7 @@ Reading the current frontier:
 | **Fabric.js** | SVG support, image editing primitives | Canvas2D, slower than PIXI | No — same ceiling |
 | **PencilJS / Two.js** | Tiny, good for charts | Not built for thousands of media | No |
 
-PIXI.js v8 is the right primitive: it gives you WebGPU when available, falls back to WebGL automatically, ships a battle-tested texture atlas + sprite batcher, and has a Vue/Svelte-friendly imperative API that fits your existing `WorkspaceCanvas.ts` orchestrator pattern.
+PIXI.js v8 is the right primitive: it gives you WebGPU when available, falls back to WebGL automatically, ships a battle-tested texture atlas and sprite batcher, and has an imperative API that fits the existing `WorkspaceCanvas.ts` orchestrator pattern.
 
 ### 7.3 Keep what already works
 

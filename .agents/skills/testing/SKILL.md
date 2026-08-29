@@ -1,6 +1,6 @@
 ---
 name: testing
-description: 'Read on every implementation iteration before deciding whether tests are allowed. Agents must never write, modify, or run tests unless the user explicitly asks for tests in the current thread. Never run svelte-check or use browser-based verification.'
+description: 'Read on every implementation iteration before deciding whether tests are allowed. Agents must never write, modify, or run tests unless the user explicitly asks for tests in the current thread. Browser-based verification is prohibited.'
 ---
 
 # Testing

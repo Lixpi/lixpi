@@ -206,7 +206,7 @@ A concrete Capability is one self-contained module. Do not create a capability r
 
 `services/api/src/capability-system/` supplies those injected adapters. It connects the package to DynamoDB-backed catalog models, Blob storage, Capability run records, JetStream events, chat event mirroring, LangGraph state, selected media providers, and internal NEX requests. Provider files consume the same model-tool definitions from the package; provider-specific SDK payload conversion does not fork Capability resolution or execution.
 
-`services/web-ui` imports the transport-injected catalog client from `@lixpi/capability-system/frontend` and manifest validation from `@lixpi/capability-system/shared`. Its authentication, concrete NATS transport, Svelte state, and UI remain application code.
+`services/web-ui` imports the transport-injected catalog client from `@lixpi/capability-system/frontend` and manifest validation from `@lixpi/capability-system/shared`. Its authentication, concrete NATS transport, Nano Stores state, and UI remain application code.
 
 Every direct module directory has an `index.ts` that exports one `CapabilityModuleDefinition`. A module must own its declared entry package and may contain any number of additional Tool or Skill packages. A module that needs deep media integration publishes its own strategies through `mediaStrategies` and defines every required application dependency as a typed port. `installed-capabilities.ts` binds those ports and registers each definition once; `CapabilityModuleCatalog` installs the module-owned strategies into the generic media registry.
 

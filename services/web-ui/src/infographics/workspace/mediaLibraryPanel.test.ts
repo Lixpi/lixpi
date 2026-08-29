@@ -17,7 +17,7 @@ function expectSourceNotToContain(source: string, snippet: string): void {
 const panelSource = readFileSync(resolve(__dirname, 'mediaLibraryPanel.ts'), 'utf-8')
 const panelStyles = readFileSync(resolve(__dirname, 'media-library-panel.scss'), 'utf-8')
 const canvasSource = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
-const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/workspaceCanvasView.ts'), 'utf-8')
+const workspaceCanvasViewSource = readFileSync(resolve(__dirname, '../../components/workspaceCanvasView.ts'), 'utf-8')
 const WORKSPACE_IMPORT_GUARD_SNIPPET =
     'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return'
 const WORKSPACE_IMPORT_FINALIZE_SNIPPET = 'await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)'
@@ -94,18 +94,18 @@ describe('Media Library panel contract', () => {
 
     it('keeps the Media Library trigger in the left-side circular action panel', () => {
         expectSourceToContain(
-            workspaceSvelteSource,
+			workspaceCanvasViewSource,
             'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single',
         )
-        expectSourceToContain(workspaceSvelteSource, 'workspace-zoom-indicator')
-        expectSourceNotToContain(workspaceSvelteSource, 'workspace-canvas-utility-capsule')
-        const leftRail = workspaceSvelteSource.slice(
-            workspaceSvelteSource.indexOf('workspace-canvas-left-control-rail'),
-            workspaceSvelteSource.indexOf('workspace-canvas-right-control-rail'),
+		expectSourceToContain(workspaceCanvasViewSource, 'workspace-zoom-indicator')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-utility-capsule')
+		const leftRail = workspaceCanvasViewSource.slice(
+			workspaceCanvasViewSource.indexOf('workspace-canvas-left-control-rail'),
+			workspaceCanvasViewSource.indexOf('workspace-canvas-right-control-rail'),
         )
-        const rightRail = workspaceSvelteSource.slice(
-            workspaceSvelteSource.indexOf('workspace-canvas-right-control-rail'),
-            workspaceSvelteSource.indexOf('<input'),
+		const rightRail = workspaceCanvasViewSource.slice(
+			workspaceCanvasViewSource.indexOf('workspace-canvas-right-control-rail'),
+			workspaceCanvasViewSource.indexOf('<input'),
         )
         expectSourceToContain(leftRail, 'handleToggleMediaLibrary')
         expectSourceNotToContain(rightRail, 'handleToggleMediaLibrary')
@@ -115,23 +115,23 @@ describe('Media Library panel contract', () => {
         expectSourceToContain(canvasSource, 'onInsertAsset: async (item: AssetMeta) => {')
         expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(insertion, {}, false)')
         expectSourceToContain(canvasSource, 'await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })')
-        expectSourceToContain(workspaceSvelteSource, 'await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)')
+		expectSourceToContain(workspaceCanvasViewSource, 'await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)')
     })
 
     it('imports remote images with the current workspace target and encoded auth token', () => {
-        expectSourceToContain(workspaceSvelteSource, "const targetWorkspaceId = workspaceId")
-        expectSourceToContain(workspaceSvelteSource, "fetch(`${API_BASE_URL}/api/assets/workspaces/${targetWorkspaceId}/import-url`, {")
-        expectSourceToContain(workspaceSvelteSource, "'Authorization': `Bearer ${token}`")
-        expectSourceToContain(workspaceSvelteSource, WORKSPACE_IMPORT_FINALIZE_SNIPPET)
+		expectSourceToContain(workspaceCanvasViewSource, "const targetWorkspaceId = workspaceId")
+		expectSourceToContain(workspaceCanvasViewSource, "fetch(`${API_BASE_URL}/api/assets/workspaces/${targetWorkspaceId}/import-url`, {")
+		expectSourceToContain(workspaceCanvasViewSource, "'Authorization': `Bearer ${token}`")
+		expectSourceToContain(workspaceCanvasViewSource, WORKSPACE_IMPORT_FINALIZE_SNIPPET)
         expectSourceToContain(
-            workspaceSvelteSource,
+			workspaceCanvasViewSource,
             WORKSPACE_IMPORT_GUARD_SNIPPET,
         )
     })
 
     it('bails out early if the workspace context changed while importing a remote media sample', () => {
-        const guardIndex = workspaceSvelteSource.indexOf(WORKSPACE_IMPORT_GUARD_SNIPPET)
-        const finalizeIndex = workspaceSvelteSource.indexOf(WORKSPACE_IMPORT_FINALIZE_SNIPPET)
+		const guardIndex = workspaceCanvasViewSource.indexOf(WORKSPACE_IMPORT_GUARD_SNIPPET)
+		const finalizeIndex = workspaceCanvasViewSource.indexOf(WORKSPACE_IMPORT_FINALIZE_SNIPPET)
 
         expect(guardIndex, 'stale-workspace guard should be present').toBeGreaterThan(-1)
         expect(finalizeIndex, 'import finalize call should be present').toBeGreaterThan(-1)

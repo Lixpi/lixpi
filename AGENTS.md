@@ -12,7 +12,7 @@ Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm mono
 
 | Service | Language | Path | Purpose |
 |---------|----------|------|---------|
-| **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI |
+| **web-ui** | TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI |
 | **api** | Node.js / TypeScript | `services/api/` | Gateway + in-process LLM orchestration (LangGraph), JWT auth, CRUD, DynamoDB |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for local dev |
@@ -30,7 +30,7 @@ Consuming services MUST NOT implement capability-specific runtime logic or impor
 
 ## Code Style
 
-At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.
+At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.
 
 ## AI Model Registry
 
@@ -57,7 +57,6 @@ Start at the documentation index, then read [Maintaining Documentation](document
 - When a question is related to SVG or D3, always refer to the available `D3` MCP server.
 - Agents MUST NOT write tests or run tests unless the user explicitly asks for tests in the current thread. Static review and non-test hygiene checks are allowed, but test files and test commands are user-gated.
 - Everything in `services/web-ui` runs inside Docker (`lixpi-web-ui`), but tests run via the separate `lixpi-typescript-test-runner` image, invoked as a one-shot `docker compose run`. If the user explicitly asks to run web-ui tests, use `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui` or the targeted equivalent documented in `documentation/testing/TypeScript/web-ui/TESTING-GUIDE.md`.
-- Agents MUST NOT run `svelte-check` anywhere in this repository, directly or through a package script or wrapper. It is prohibited.
 - Agents MUST NOT use a browser, browser automation, screenshots, or manual visual inspection to verify work in this repository. Use static review unless the user explicitly asks for permitted automated test commands.
 - Never use `cat` to edit files.
 - Never run large inline Python or JS code in the terminal.

@@ -88,7 +88,7 @@ function mount(): { paneEl: HTMLDivElement; instance: NavigationSidePanelInstanc
     return { paneEl, instance }
 }
 
-// Svelte stores replay their current value to a listener the moment it
+// Nano Stores replay their current value to a listener the moment it
 // subscribes, so the constructor's `renderWorkspaceList()` call is immediately
 // followed by one more synchronous re-render from `workspacesStore.subscribe`.
 // The live dropdown for a workspace is therefore the *last* one captured, not

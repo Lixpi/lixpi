@@ -141,7 +141,7 @@ describe('mergeMediaGenerationRunProgress', () => {
 describe('media generation configuration help contracts', () => {
     it('publishes help text for each video toggle rendered in the configuration row', () => {
         expect(MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT).toEqual({
-            cameraFixed: expect.any(String),
+            generateAudio: expect.any(String),
             watermark: expect.any(String),
             returnLastFrame: expect.any(String),
         })

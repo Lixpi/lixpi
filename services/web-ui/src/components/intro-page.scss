@@ -5,7 +5,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    // Replaces the Svelte `in:fade` transition that used to animate this in.
+    // Fade in the intro without delaying layout.
     animation: intro-page-fade-in 250ms ease both;
 
     .intro-message-container {

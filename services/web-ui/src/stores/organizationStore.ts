@@ -51,7 +51,7 @@ const store = writable(organization)
 export const organizationStore = {
     ...store,
 
-    // Useful for non-svelte components that need to access the store
+    // Synchronous access for imperative components.
     getMeta: (key: keyof Meta | null = null): any => {
         let returnValue: any
         const unsubscribe = store.subscribe(store => {
@@ -62,7 +62,7 @@ export const organizationStore = {
         return returnValue
     },
 
-    // Useful for non-svelte components that need to access the store
+    // Synchronous access for imperative components.
     getData: (key: keyof Organization | null = null): any => {
         let returnValue: any
         const unsubscribe = store.subscribe(store => {

@@ -212,7 +212,7 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 | `@lixpi/auth-service` | JWT verification (Auth0 RS256 + NKey Ed25519) used by both the API and the NATS Auth Callout |
 | `@lixpi/nats-auth-callout-service` | NATS connection auth with per-service permission scoping |
 | `@lixpi/prosemirror` | Shared ProseMirror schema, headless engine, stream assembly helpers, lineage projection helpers, and document-step transport types used by API and web-ui |
-| `@xyflow/system` (vendored) | Framework-agnostic pan/zoom/coordinate math — used at the low-level API, not React Flow or Svelte Flow |
+| `@xyflow/system` | Framework-agnostic pan/zoom and coordinate math used through its low-level API rather than a framework wrapper |
 
 ## Where to Go Next
 

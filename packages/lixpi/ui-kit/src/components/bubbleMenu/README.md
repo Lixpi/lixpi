@@ -14,7 +14,7 @@ The core `BubbleMenu` class handles:
 - **Prevent-hide pattern**: `mousedown` + `preventDefault` prevents focus loss when clicking menu buttons
 - **Scroll/resize tracking**: Repositions on scroll and mobile viewport resize
 
-The core does NOT know about ProseMirror, `@xyflow/system`, Svelte, or any specific editor/canvas framework.
+The core does NOT know about ProseMirror, `@xyflow/system`, or any specific editor or canvas framework.
 
 ## Consumers
 

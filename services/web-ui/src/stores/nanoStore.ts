@@ -1,10 +1,7 @@
 'use strict'
 
-// Nano Stores-backed replacement for the tiny slice of `svelte/store` the app
-// used. Every domain store keeps its own public surface (getData, setDataValues,
-// upsert, ...) and only needs a writable container underneath. Backing that
-// container with a Nano Stores `atom` removes the Svelte runtime dependency while
-// preserving the `subscribe`/`set`/`update`/`get` contract those stores rely on.
+// Writable adapter for the domain stores. Each domain store keeps its public
+// surface and delegates subscribe, set, update, and synchronous reads to an atom.
 
 import { atom } from 'nanostores'
 
@@ -14,8 +11,8 @@ export type Unsubscriber = () => void
 
 export type Writable<Value> = {
     // `atom.subscribe` calls the listener immediately with the current value and
-    // again on every change, matching the Svelte writable contract the domain
-    // stores depend on (their `getData` helpers read synchronously through it).
+    // again on every change. Domain `getData` helpers depend on that synchronous
+    // initial delivery.
     subscribe: (run: Subscriber<Value>) => Unsubscriber
     set: (value: Value) => void
     update: (updater: Updater<Value>) => void
