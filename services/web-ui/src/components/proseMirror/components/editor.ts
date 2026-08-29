@@ -41,11 +41,7 @@ import {
 
 import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
 import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
-import { createSvelteComponentRendererPlugin } from '$src/components/proseMirror/plugins/svelteComponentRenderer/svelteComponentRendererPlugin.js'
 import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
-// import TaskRow from '$src/rows/TaskRow.svelte'
-
-import { defaultAttrs as defautSubtaskAttrs } from '$src/components/proseMirror/customNodes/taskRowNode.js'
 
 type ProseMirrorEditorConfig = {
     editorMountElement: HTMLElement
@@ -233,7 +229,6 @@ export class ProseMirrorEditor {
             dropCursor(),
             gapCursor(),
             history(),
-            // createSvelteComponentRendererPlugin(TaskRow, 'taskRow', defautSubtaskAttrs),
             createCodeBlockPlugin(this.editorSchema),
             codeBlockInputRule(this.editorSchema),
             activeNodePlugin,

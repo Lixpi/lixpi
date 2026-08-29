@@ -1,7 +1,6 @@
 'use strict'
 
-import { get } from 'svelte/store'
-import { writable } from 'svelte/store'
+import { writable } from '$src/stores/nanoStore.ts'
 
 type Meta = {
     isLoading: boolean

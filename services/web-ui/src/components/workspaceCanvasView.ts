@@ -1,107 +1,110 @@
-<script lang="ts">
-    import { onMount, onDestroy } from 'svelte'
-    import {
-        type Viewport
-    } from '@xyflow/system'
-    import {
-        LoadingStatus,
-        MAX_UPLOAD_FILE_SIZE,
-        type CanvasState,
-        type DocumentCanvasNode,
-        type DocumentMediaCanvasNode,
-        type ImageCanvasNode,
-        type VideoCanvasNode,
-        type AudioCanvasNode,
-        type OperationStatusCanvasNode,
-        type MediaKind
-    } from '@lixpi/constants'
+'use strict'
 
-    import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
-    import {
-        getStashedViewportStorageKey,
-        encodeStashedViewport,
-        parseStashedViewport,
-        shouldApplyStashedViewport,
-    } from '$src/components/workspaceViewportStash.ts'
-    import { rebaseCanvasMembershipState } from '$src/infographics/workspace/canvasMembershipStateRebase.ts'
-    import AssetService from '$src/services/asset-service.ts'
-    import { workspaceStore } from '$src/stores/workspaceStore.ts'
-    import { assetsStore } from '$src/stores/assetsStore.ts'
-    import { assetDocumentsStore } from '$src/stores/assetDocumentsStore.ts'
-    import { userStore } from '$src/stores/userStore.ts'
-    import { routerStore } from '$src/stores/routerStore.ts'
-    import { servicesStore } from '$src/stores/servicesStore.ts'
-    import AuthService from '$src/services/auth-service.ts'
-    import { settings } from '$src/settings.ts'
-    import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '@lixpi/ui-kit/svg'
-    import '$src/infographics/workspace/workspace-canvas.scss'
-    import '$src/infographics/workspace/media-library-panel.scss'
+// Workspace canvas view. Builds the floating toolbar chrome and canvas mount
+// points, wires the framework-agnostic `createWorkspaceCanvas` renderer, and
+// mirrors the store-driven derivations imperatively. Renderer: TypeScript `html`
+// DOM, no framework runtime.
 
-    type PersistCanvasStateOptions = {
-        persistViewport?: boolean
-        viewportOverride?: Viewport
-    }
+import { type Viewport } from '@xyflow/system'
+import {
+    LoadingStatus,
+    MAX_UPLOAD_FILE_SIZE,
+    type CanvasState,
+    type DocumentCanvasNode,
+    type DocumentMediaCanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type AudioCanvasNode,
+    type OperationStatusCanvasNode,
+    type MediaKind,
+} from '@lixpi/constants'
 
-    type AssetAttachResponse = {
-        error?: unknown
-        assetId?: unknown
-        nodeIds?: unknown
-    }
+import { html } from '$src/utils/domTemplates.ts'
+import { createWorkspaceCanvas } from '$src/infographics/workspace/WorkspaceCanvas.ts'
+import {
+    getStashedViewportStorageKey,
+    encodeStashedViewport,
+    parseStashedViewport,
+    shouldApplyStashedViewport,
+} from '$src/components/workspaceViewportStash.ts'
+import { rebaseCanvasMembershipState } from '$src/infographics/workspace/canvasMembershipStateRebase.ts'
+import AssetService from '$src/services/asset-service.ts'
+import { workspaceStore } from '$src/stores/workspaceStore.ts'
+import { assetsStore } from '$src/stores/assetsStore.ts'
+import { assetDocumentsStore, type AssetDocumentSnapshot } from '$src/stores/assetDocumentsStore.ts'
+import { routerStore } from '$src/stores/routerStore.ts'
+import { servicesStore } from '$src/stores/servicesStore.ts'
+import AuthService from '$src/services/auth-service.ts'
+import { settings } from '$src/settings.ts'
+import { createNewFileIcon, imageIcon, mediaFoloderIcon } from '@lixpi/ui-kit/svg'
+import '$src/infographics/workspace/workspace-canvas.scss'
+import '$src/infographics/workspace/media-library-panel.scss'
 
-    type AssetDetachResponse = {
-        error?: unknown
-        success?: unknown
-    }
+type PersistCanvasStateOptions = {
+    persistViewport?: boolean
+    viewportOverride?: Viewport
+}
 
-    let paneEl: HTMLDivElement
-    let viewportEl: HTMLDivElement
+type AssetAttachResponse = {
+    error?: unknown
+    assetId?: unknown
+    nodeIds?: unknown
+}
+
+type AssetDetachResponse = {
+    error?: unknown
+    success?: unknown
+}
+
+type WorkspaceDocument = {
+    documentId: string
+    assetId: string
+    workspaceId: string
+    title: string
+    content: object | undefined
+    proseMirrorVersion: number
+    revision: number
+    organizationId: string
+}
+
+type WorkspaceAiChatThread = {
+    threadId: string
+    assetId: string
+    workspaceId: string
+    title: string
+    content: object | undefined
+    proseMirrorVersion: number
+    status: string
+    revision: number
+    organizationId: string
+    createdAt: number
+    updatedAt: number
+}
+
+export type WorkspaceCanvasViewInstance = {
+    el: HTMLElement
+    destroy: () => void
+}
+
+export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
     let renderer: ReturnType<typeof createWorkspaceCanvas> | null = null
 
-    function handleToggleMediaLibrary() {
-        renderer?.toggleMediaLibrary?.()
-    }
+    // Store-derived values, recomputed imperatively whenever a source store changes.
+    let workspaceId = ''
+    let loadedWorkspaceId: string | null = null
+    let isRouteWorkspaceLoaded = false
+    let canvasState: CanvasState | null = null
+    let isRightSidePanelOpen = false
+    let documents: WorkspaceDocument[] = []
+    let aiChatThreads: WorkspaceAiChatThread[] = []
+    let assetDocuments = new Map<string, AssetDocumentSnapshot>()
 
-    let workspaceId = $derived($routerStore.data.currentRoute.routeParams.workspaceId as string)
-    let loadedWorkspaceId = $derived($workspaceStore.data.workspaceId)
-    let isRouteWorkspaceLoaded = $derived(Boolean(workspaceId && loadedWorkspaceId === workspaceId))
-    let canvasState = $derived(isRouteWorkspaceLoaded && $workspaceStore.meta.loadingStatus === LoadingStatus.success ? $workspaceStore.data.canvasState : null)
-    let isRightSidePanelOpen = $derived(Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveConversationAssetId)))
-    let documents = $derived(isRouteWorkspaceLoaded ? Array.from($assetsStore.items.values())
-        .filter((asset) => Boolean(asset?.documents?.content))
-        .map((asset) => ({
-            documentId: asset.assetId,
-            assetId: asset.assetId,
-            workspaceId,
-            title: asset.title,
-            content: $assetDocumentsStore.get(`${asset.assetId}#content`)?.doc,
-            proseMirrorVersion: asset.documents.content?.version ?? 0,
-            revision: asset.revision,
-            organizationId: asset.organizationId,
-        })) : [])
-    let aiChatThreads = $derived(isRouteWorkspaceLoaded ? Array.from($assetsStore.items.values())
-        .filter((asset) => Boolean(asset?.documents?.conversation))
-        .map((asset) => ({
-            threadId: asset.assetId,
-            assetId: asset.assetId,
-            workspaceId,
-            title: asset.title,
-            content: $assetDocumentsStore.get(`${asset.assetId}#conversation`)?.doc,
-            proseMirrorVersion: asset.documents.conversation?.version ?? 0,
-            status: asset.states.conversation === 'none' ? 'idle' : asset.states.conversation,
-            revision: asset.revision,
-            organizationId: asset.organizationId,
-            createdAt: asset.createdAt,
-            updatedAt: asset.updatedAt,
-        })) : [])
+    // Local UI state.
+    let viewport: Viewport = { x: 0, y: 0, zoom: 1 }
+    let imageSubmenuOpen = false
+    let imageSubmenuMode: 'menu' | 'url' = 'menu'
+    let imageUrlValue = ''
 
-    let viewport: Viewport = $state({ x: 0, y: 0, zoom: 1 })
-    let imageSubmenuOpen = $state(false)
-    let imageSubmenuMode: 'menu' | 'url' = $state('menu')
-    let imageUrlValue = $state('')
-    let imageWrapperEl: HTMLDivElement
-    let mediaModeSwitchMountEl: HTMLDivElement
-    let modelMenuControlMountEl: HTMLDivElement
-    let fileInputEl: HTMLInputElement
     let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
     let transientCanvasMutationInProgress = false
     let pendingViewportSave: Viewport | null = null
@@ -122,6 +125,23 @@
         `--side-panel-toggle-color: ${rightSidePanelSettings.styles.toggleColor}`,
         `--side-panel-toggle-hover-color: ${rightSidePanelSettings.styles.toggleHoverColor}`,
     ].join('; ')
+
+    // DOM refs (equivalent to Svelte `bind:this`). `paneEl` is the outer pane and
+    // `viewportEl` the inner viewport, matching what `createWorkspaceCanvas` expects.
+    const viewportEl = html`<div className="workspace-viewport"></div>` as HTMLDivElement
+    const paneEl = html`<div className="workspace-pane"></div>` as HTMLDivElement
+    paneEl.append(viewportEl)
+    const mediaModeSwitchMountEl = html`<div className="workspace-canvas-media-mode-panel"></div>` as HTMLDivElement
+    const modelMenuControlMountEl = html`<div className="workspace-canvas-model-menu-panel"></div>` as HTMLDivElement
+    const imageWrapperEl = html`<div className="workspace-floating-toolbar-image-wrapper"></div>` as HTMLDivElement
+    const zoomIndicatorEl = html`<span className="workspace-zoom-indicator"></span>` as HTMLSpanElement
+    const fileInputEl = html`
+        <input
+            type="file"
+            accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.ppt,.pptx,.odt,.rtf,.txt,.md"
+            style="display: none"
+        />
+    ` as HTMLInputElement
 
     function getImageInsertionDimensions(aspectRatio: number): { width: number; height: number } {
         const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1
@@ -294,6 +314,7 @@
         if (!shouldApplyStashedViewport(stashedViewport, canvasState?.viewport)) return
 
         viewport = stashedViewport
+        updateZoomIndicator()
         renderer?.setViewport(stashedViewport)
         persistViewportState(stashedViewport)
     }
@@ -303,6 +324,7 @@
         if (!nextViewport) return
 
         viewport = nextViewport
+        updateZoomIndicator()
         pendingViewportSave = nextViewport
 
         const shouldPersistLeading = saveDebounceTimer === null
@@ -387,12 +409,14 @@
         imageSubmenuOpen = !imageSubmenuOpen
         imageSubmenuMode = 'menu'
         imageUrlValue = ''
+        renderImageSubmenu()
     }
 
     function closeImageSubmenu() {
         imageSubmenuOpen = false
         imageSubmenuMode = 'menu'
         imageUrlValue = ''
+        renderImageSubmenu()
     }
 
     function handleUploadFromDevice() {
@@ -573,113 +597,149 @@
         })
     }
 
-    onMount(() => {
-        if (!paneEl || !viewportEl) return
+    function handleToggleMediaLibrary() {
+        renderer?.toggleMediaLibrary?.()
+    }
 
-        window.addEventListener('pagehide', stashPendingViewportForUnload)
+    // Recompute the store-derived values that the Svelte `$derived` runes used to track.
+    function recompute(): void {
+        workspaceId = routerStore.getData('currentRoute').routeParams.workspaceId as string
+        loadedWorkspaceId = workspaceStore.getData('workspaceId')
+        isRouteWorkspaceLoaded = Boolean(workspaceId && loadedWorkspaceId === workspaceId)
+        canvasState = isRouteWorkspaceLoaded && workspaceStore.getMeta('loadingStatus') === LoadingStatus.success
+            ? workspaceStore.getData('canvasState')
+            : null
+        isRightSidePanelOpen = Boolean(isRouteWorkspaceLoaded && (canvasState?.aiChatPanel?.isOpen ?? canvasState?.lastActiveConversationAssetId))
 
+        const assets = isRouteWorkspaceLoaded ? assetsStore.getAll() : []
+        documents = assets
+            .filter((asset) => Boolean(asset?.documents?.content))
+            .map((asset) => ({
+                documentId: asset.assetId,
+                assetId: asset.assetId,
+                workspaceId,
+                title: asset.title,
+                content: assetDocuments.get(`${asset.assetId}#content`)?.doc,
+                proseMirrorVersion: asset.documents.content?.version ?? 0,
+                revision: asset.revision,
+                organizationId: asset.organizationId,
+            }))
+        aiChatThreads = assets
+            .filter((asset) => Boolean(asset?.documents?.conversation))
+            .map((asset) => ({
+                threadId: asset.assetId,
+                assetId: asset.assetId,
+                workspaceId,
+                title: asset.title,
+                content: assetDocuments.get(`${asset.assetId}#conversation`)?.doc,
+                proseMirrorVersion: asset.documents.conversation?.version ?? 0,
+                status: asset.states.conversation === 'none' ? 'idle' : asset.states.conversation,
+                revision: asset.revision,
+                organizationId: asset.organizationId,
+                createdAt: asset.createdAt,
+                updatedAt: asset.updatedAt,
+            }))
+    }
 
-        const loadedViewport = cloneViewport(canvasState?.viewport)
-        if (loadedViewport) {
-            viewport = loadedViewport
-            lastPersistedViewport = loadedViewport
-        }
+    function updateZoomIndicator(): void {
+        zoomIndicatorEl.textContent = `${Math.round(viewport.zoom * 100)}%`
+    }
 
-        renderer = createWorkspaceCanvas({
-            paneEl,
-            viewportEl,
-            mediaModeSwitchMountEl,
-            modelMenuControlMountEl,
-            workspaceId,
-            canvasState,
-            documents,
-            aiChatThreads,
-            onViewportChange: handleViewportChange,
-            onCanvasStateChange: persistCanvasState,
-            onAuthoritativeCanvasStateChange: ({ canvasState: nextCanvasState, layoutRevision }) => {
-                servicesStore.getData('workspaceService').adoptAuthoritativeCanvasState({
-                    workspaceId,
-                    canvasState: nextCanvasState,
-                    canvasStateUpdatedAt: layoutRevision,
-                })
-            },
-            onDocumentContentChange: () => {},
-            onAiChatThreadContentChange: () => {},
-            onAssetDetach: async ({ assetId, nodeId, removedNodeIds, canvasState: requestedCanvasState }) => {
-                return await runCanvasMembershipMutation(workspaceId, async () => {
-                    const nextCanvasState = rebaseRequestedCanvasMembershipState(
-                        requestedCanvasState,
-                        'detach',
-                        removedNodeIds,
-                    )
-                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                    if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
-                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
-                    const response = await assetService.detach({
-                        assetId,
-                        workspaceId,
-                        nodeId,
-                        workspaceMutation: {
-                            expectedCanvasStateUpdatedAt,
-                            canvasStateUpdatedAt,
-                            canvasState: nextCanvasState,
-                        },
-                    })
-                    assertAssetDetached(response)
-                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
-                    return nextCanvasState
-                })
-            },
-            onAssetAttach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
-                return await runCanvasMembershipMutation(workspaceId, async () => {
-                    const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, 'attach')
-                    const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                    if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
-                    const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
-                    const response = await assetService.attach({
-                        assetId,
-                        workspaceId,
-                        nodeId,
-                        workspaceMutation: {
-                            expectedCanvasStateUpdatedAt,
-                            canvasStateUpdatedAt,
-                            canvasState: nextCanvasState,
-                        },
-                    })
-                    assertAssetAttached(response, assetId, nodeId)
-                    commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
-                    return nextCanvasState
-                })
-            },
-        })
+    function updateRightSidePanelClass(): void {
+        rootEl.classList.toggle('workspace-canvas-right-side-panel-open', isRightSidePanelOpen)
+    }
 
-    })
-
-    $effect(() => {
-        if (!imageSubmenuOpen) return
-
-        function handleClickOutside(e: MouseEvent) {
-            const target = e.target as Node
-            if (!document.contains(target)) return
-            if (imageWrapperEl && !imageWrapperEl.contains(target)) {
-                closeImageSubmenu()
+    // Equivalent to the Svelte `$effect` that clicked outside the image submenu.
+    let removeImageSubmenuOutsideClick: (() => void) | null = null
+    function updateImageSubmenuOutsideClick(): void {
+        if (imageSubmenuOpen && !removeImageSubmenuOutsideClick) {
+            function handleClickOutside(e: MouseEvent) {
+                const target = e.target as Node
+                if (!document.contains(target)) return
+                if (imageWrapperEl && !imageWrapperEl.contains(target)) {
+                    closeImageSubmenu()
+                }
             }
+            const timer = setTimeout(() => document.addEventListener('click', handleClickOutside), 0)
+            removeImageSubmenuOutsideClick = () => {
+                clearTimeout(timer)
+                document.removeEventListener('click', handleClickOutside)
+            }
+        } else if (!imageSubmenuOpen && removeImageSubmenuOutsideClick) {
+            removeImageSubmenuOutsideClick()
+            removeImageSubmenuOutsideClick = null
+        }
+    }
+
+    function renderImageSubmenu(): void {
+        imageButton.classList.toggle('active', imageSubmenuOpen)
+
+        const existing = imageWrapperEl.querySelector('.workspace-image-submenu')
+        existing?.remove()
+
+        if (!imageSubmenuOpen) {
+            updateImageSubmenuOutsideClick()
+            return
         }
 
-        setTimeout(() => document.addEventListener('click', handleClickOutside), 0)
-        return () => document.removeEventListener('click', handleClickOutside)
-    })
+        let submenu: HTMLElement
+        if (imageSubmenuMode === 'menu') {
+            submenu = html`
+                <div className="workspace-image-submenu">
+                    <button className="workspace-image-submenu-option" onclick=${handleUploadFromDevice}>Upload from Device</button>
+                    <button className="workspace-image-submenu-option" onclick=${() => { imageSubmenuMode = 'url'; renderImageSubmenu() }}>Paste Image URL</button>
+                </div>
+            ` as HTMLElement
+        } else {
+            const urlInput = html`
+                <input
+                    type="url"
+                    className="workspace-image-submenu-url-input"
+                    placeholder="https://example.com/image.jpg"
+                    onkeydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') handleImageUrlInsert() }}
+                    oninput=${(e: Event) => { imageUrlValue = (e.target as HTMLInputElement).value }}
+                />
+            ` as HTMLInputElement
+            urlInput.value = imageUrlValue
+            submenu = html`
+                <div className="workspace-image-submenu">
+                    <div className="workspace-image-submenu-url-form">
+                        ${urlInput}
+                        <div className="workspace-image-submenu-url-actions">
+                            <button className="workspace-image-submenu-url-back" onclick=${() => { imageSubmenuMode = 'menu'; renderImageSubmenu() }}>Back</button>
+                            <button className="workspace-image-submenu-url-insert" onclick=${handleImageUrlInsert}>Add</button>
+                        </div>
+                    </div>
+                </div>
+            ` as HTMLElement
+        }
+        imageWrapperEl.append(submenu)
+        updateImageSubmenuOutsideClick()
+    }
 
-    $effect(() => {
-        if (!workspaceId || loadedWorkspaceId !== workspaceId) return
-        return assetService.startWorkspaceSynchronization(workspaceId)
-    })
+    // Equivalent to the Svelte `$effect` guarding workspace synchronization.
+    let syncedWorkspaceId: string | null = null
+    let stopWorkspaceSynchronization: (() => void) | void = undefined
+    function updateWorkspaceSynchronization(): void {
+        const shouldSync = Boolean(workspaceId && loadedWorkspaceId === workspaceId)
+        if (shouldSync && syncedWorkspaceId !== workspaceId) {
+            if (typeof stopWorkspaceSynchronization === 'function') stopWorkspaceSynchronization()
+            syncedWorkspaceId = workspaceId
+            stopWorkspaceSynchronization = assetService.startWorkspaceSynchronization(workspaceId)
+        } else if (!shouldSync && syncedWorkspaceId !== null) {
+            if (typeof stopWorkspaceSynchronization === 'function') stopWorkspaceSynchronization()
+            stopWorkspaceSynchronization = undefined
+            syncedWorkspaceId = null
+        }
+    }
 
-    $effect(() => {
+    // Equivalent to the Svelte `$effect` that re-rendered the canvas on data change.
+    function runRenderEffect(): void {
         if (renderer) {
             renderer.render(canvasState, documents, aiChatThreads, workspaceId)
             const liveViewport = renderer.getViewport()
             viewport = liveViewport
+            updateZoomIndicator()
             if (!pendingViewportSave && viewportsMatch(liveViewport, canvasState?.viewport)) {
                 lastPersistedViewport = liveViewport
             }
@@ -687,20 +747,185 @@
             const loadedViewport = cloneViewport(canvasState.viewport)
             if (loadedViewport) {
                 viewport = loadedViewport
+                updateZoomIndicator()
                 if (!pendingViewportSave) lastPersistedViewport = loadedViewport
             }
         }
-    })
+    }
 
+    // Equivalent to the Svelte `$effect` that restored a stashed viewport once per workspace.
     let stashRestoredWorkspaceId: string | null = null
-    $effect(() => {
+    function runStashRestoreEffect(): void {
         if (!workspaceId || loadedWorkspaceId !== workspaceId || !canvasState) return
         if (stashRestoredWorkspaceId === workspaceId) return
         stashRestoredWorkspaceId = workspaceId
         restoreStashedViewport(workspaceId)
+    }
+
+    function reconcile(): void {
+        updateRightSidePanelClass()
+        updateWorkspaceSynchronization()
+        runRenderEffect()
+        runStashRestoreEffect()
+    }
+
+    // Chrome markup (equivalent to the Svelte template).
+    const imageButton = html`
+        <button
+            className="workspace-floating-toolbar-button"
+            aria-label="Add Image"
+            data-help-tooltip="aria-label"
+            onclick=${toggleImageSubmenu}
+            innerHTML=${imageIcon}
+        ></button>
+    ` as HTMLButtonElement
+    imageWrapperEl.append(imageButton)
+
+    const rootEl = html`
+        <div className="workspace-canvas" style=${rightSidePanelStyle}>
+            <div className="workspace-canvas-left-control-rail">
+                <div className="workspace-canvas-action-panel workspace-canvas-action-panel-left">
+                    <button
+                        className="workspace-floating-toolbar-button"
+                        aria-label="New Document"
+                        data-help-tooltip="aria-label"
+                        onclick=${handleCreateDocument}
+                        innerHTML=${createNewFileIcon}
+                    ></button>
+                    ${imageWrapperEl}
+                </div>
+                <div className="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
+                    <button
+                        className="workspace-floating-toolbar-button"
+                        aria-label="Media Library"
+                        data-help-tooltip="aria-label"
+                        onclick=${handleToggleMediaLibrary}
+                        innerHTML=${mediaFoloderIcon}
+                    ></button>
+                </div>
+            </div>
+
+            <div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">
+                <div
+                    className="workspace-canvas-model-menu-hover-background"
+                    aria-hidden="true"
+                    style=${modelMenuHoverBackgroundStyle}
+                ></div>
+                ${mediaModeSwitchMountEl}
+                ${modelMenuControlMountEl}
+            </div>
+
+            ${fileInputEl}
+            ${zoomIndicatorEl}
+            ${paneEl}
+        </div>
+    ` as HTMLElement
+
+    fileInputEl.addEventListener('change', handleFileInputChange)
+
+    // Initial derivation + mount (equivalent to `onMount`).
+    recompute()
+    updateZoomIndicator()
+    updateRightSidePanelClass()
+    window.addEventListener('pagehide', stashPendingViewportForUnload)
+
+    const loadedViewport = cloneViewport(canvasState?.viewport)
+    if (loadedViewport) {
+        viewport = loadedViewport
+        lastPersistedViewport = loadedViewport
+        updateZoomIndicator()
+    }
+
+    renderer = createWorkspaceCanvas({
+        paneEl,
+        viewportEl,
+        mediaModeSwitchMountEl,
+        modelMenuControlMountEl,
+        workspaceId,
+        canvasState,
+        documents,
+        aiChatThreads,
+        onViewportChange: handleViewportChange,
+        onCanvasStateChange: persistCanvasState,
+        onAuthoritativeCanvasStateChange: ({ canvasState: nextCanvasState, layoutRevision }) => {
+            servicesStore.getData('workspaceService').adoptAuthoritativeCanvasState({
+                workspaceId,
+                canvasState: nextCanvasState,
+                canvasStateUpdatedAt: layoutRevision,
+            })
+        },
+        onDocumentContentChange: () => {},
+        onAiChatThreadContentChange: () => {},
+        onAssetDetach: async ({ assetId, nodeId, removedNodeIds, canvasState: requestedCanvasState }) => {
+            return await runCanvasMembershipMutation(workspaceId, async () => {
+                const nextCanvasState = rebaseRequestedCanvasMembershipState(
+                    requestedCanvasState,
+                    'detach',
+                    removedNodeIds,
+                )
+                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+                const response = await assetService.detach({
+                    assetId,
+                    workspaceId,
+                    nodeId,
+                    workspaceMutation: {
+                        expectedCanvasStateUpdatedAt,
+                        canvasStateUpdatedAt,
+                        canvasState: nextCanvasState,
+                    },
+                })
+                assertAssetDetached(response)
+                commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                return nextCanvasState
+            })
+        },
+        onAssetAttach: async ({ assetId, nodeId, canvasState: requestedCanvasState }) => {
+            return await runCanvasMembershipMutation(workspaceId, async () => {
+                const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, 'attach')
+                const expectedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
+                if (typeof expectedCanvasStateUpdatedAt !== 'number') throw new Error('CANVAS_REVISION_REQUIRED')
+                const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)
+                const response = await assetService.attach({
+                    assetId,
+                    workspaceId,
+                    nodeId,
+                    workspaceMutation: {
+                        expectedCanvasStateUpdatedAt,
+                        canvasStateUpdatedAt,
+                        canvasState: nextCanvasState,
+                    },
+                })
+                assertAssetAttached(response, assetId, nodeId)
+                commitCanvasMembershipState(nextCanvasState, canvasStateUpdatedAt)
+                return nextCanvasState
+            })
+        },
     })
 
-    onDestroy(() => {
+    reconcile()
+
+    // Store subscriptions replace the Svelte reactive graph. `listen` fires only on
+    // change; the initial state was already read by the `recompute()` above.
+    const handleStoreChange = () => {
+        recompute()
+        reconcile()
+    }
+    const unsubscribers = [
+        routerStore.subscribe(() => handleStoreChange()),
+        workspaceStore.subscribe(() => handleStoreChange()),
+        assetsStore.subscribe(() => handleStoreChange()),
+        assetDocumentsStore.subscribe((docs) => {
+            assetDocuments = docs
+            handleStoreChange()
+        }),
+    ]
+
+    const destroy = (): void => {
+        for (const unsubscribe of unsubscribers) unsubscribe()
+        removeImageSubmenuOutsideClick?.()
+        if (typeof stopWorkspaceSynchronization === 'function') stopWorkspaceSynchronization()
         window.removeEventListener('pagehide', stashPendingViewportForUnload)
         if (saveDebounceTimer) {
             clearTimeout(saveDebounceTimer)
@@ -711,101 +936,8 @@
         }
         pendingViewportSave = null
         renderer?.destroy()
-    })
-</script>
+        rootEl.remove()
+    }
 
-<div
-    class="workspace-canvas"
-    class:workspace-canvas-right-side-panel-open={isRightSidePanelOpen}
-    style={rightSidePanelStyle}
->
-    <!-- The in-flow rail keeps the Media Library between the composer and upload panel. -->
-    <div class="workspace-canvas-left-control-rail">
-        <div class="workspace-canvas-action-panel workspace-canvas-action-panel-left">
-            <button
-                class="workspace-floating-toolbar-button"
-                onclick={handleCreateDocument}
-                aria-label="New Document"
-                data-help-tooltip="aria-label"
-            >
-                {@html createNewFileIcon}
-            </button>
-            <div class="workspace-floating-toolbar-image-wrapper" bind:this={imageWrapperEl}>
-                <button
-                    class="workspace-floating-toolbar-button"
-                    class:active={imageSubmenuOpen}
-                    onclick={toggleImageSubmenu}
-                    aria-label="Add Image"
-                    data-help-tooltip="aria-label"
-                >
-                    {@html imageIcon}
-                </button>
-                {#if imageSubmenuOpen}
-                    <div class="workspace-image-submenu">
-                        {#if imageSubmenuMode === 'menu'}
-                            <button class="workspace-image-submenu-option" onclick={handleUploadFromDevice}>
-                                Upload from Device
-                            </button>
-                            <button class="workspace-image-submenu-option" onclick={() => { imageSubmenuMode = 'url' }}>
-                                Paste Image URL
-                            </button>
-                        {:else}
-                            <div class="workspace-image-submenu-url-form">
-                                <input
-                                    type="url"
-                                    class="workspace-image-submenu-url-input"
-                                    placeholder="https://example.com/image.jpg"
-                                    bind:value={imageUrlValue}
-                                    onkeydown={(e) => { if (e.key === 'Enter') handleImageUrlInsert() }}
-                                />
-                                <div class="workspace-image-submenu-url-actions">
-                                    <button class="workspace-image-submenu-url-back" onclick={() => { imageSubmenuMode = 'menu' }}>
-                                        Back
-                                    </button>
-                                    <button class="workspace-image-submenu-url-insert" onclick={handleImageUrlInsert}>
-                                        Add
-                                    </button>
-                                </div>
-                            </div>
-                        {/if}
-                    </div>
-                {/if}
-            </div>
-        </div>
-        <div class="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
-            <button
-                class="workspace-floating-toolbar-button"
-                onclick={handleToggleMediaLibrary}
-                aria-label="Media Library"
-                data-help-tooltip="aria-label"
-            >
-                {@html mediaFoloderIcon}
-            </button>
-        </div>
-    </div>
-
-    <div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">
-        <div
-            class="workspace-canvas-model-menu-hover-background"
-            aria-hidden="true"
-            style={modelMenuHoverBackgroundStyle}
-        ></div>
-        <div class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}></div>
-        <div
-            class="workspace-canvas-model-menu-panel"
-            bind:this={modelMenuControlMountEl}
-        ></div>
-    </div>
-
-    <input
-        type="file"
-        accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.ppt,.pptx,.odt,.rtf,.txt,.md"
-        style="display: none"
-        bind:this={fileInputEl}
-        onchange={handleFileInputChange}
-    />
-    <span class="workspace-zoom-indicator">{Math.round(viewport.zoom * 100)}%</span>
-    <div class="workspace-pane" bind:this={paneEl}>
-        <div class="workspace-viewport" bind:this={viewportEl}></div>
-    </div>
-</div>
+    return { el: rootEl, destroy }
+}

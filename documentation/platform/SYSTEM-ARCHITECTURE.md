@@ -21,7 +21,7 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 
 | Service | Language | Path | Role |
 |---------|----------|------|------|
-| **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction |
+| **web-ui** | TypeScript | `services/web-ui/` | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, and client-side context extraction. Vanilla TypeScript DOM components with Nano Stores for state |
 | **api** | Node.js / TypeScript | `services/api/` | API service — JWT auth, CRUD, DynamoDB persistence, NATS bridge, **and the in-process LangGraph LLM workflow** at `services/api/src/llm/` (pipeline events, ProseMirror transcript steps, image generation, video generation, usage tracking) |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, request/reply, organization Blob Object Store, and JetStream replay logs for pipeline/Asset-document events |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for zero-config offline development — RS256 JWT signing, JWKS, same OAuth flows as production |
@@ -42,7 +42,7 @@ Everything fans out from NATS. The browser connects to NATS over a WebSocket; th
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TB
     subgraph Client["Client Tier"]
-        UI["Web UI<br/>Svelte SPA · @xyflow/system · ProseMirror"]
+        UI["Web UI<br/>TypeScript SPA · @xyflow/system · ProseMirror"]
     end
 
     subgraph Broker["Message Broker"]
@@ -148,7 +148,7 @@ The exception is byte transport: media upload/download, video range reads, authe
 
 ### Framework-Agnostic Canvas
 
-The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks; Svelte is only a thin binding layer. This insulates the canvas logic from framework changes and is why the rendering engine can stand on its own. See [Rendering Engine](../canvas/RENDERING-ENGINE.md).
+The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks; the surrounding UI is also vanilla TypeScript DOM, with state held in Nano Stores. This insulates the canvas logic from framework changes and is why the rendering engine can stand on its own. See [Rendering Engine](../canvas/RENDERING-ENGINE.md).
 
 ### Self-Contained Capability Modules
 

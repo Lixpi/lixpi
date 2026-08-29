@@ -12,7 +12,7 @@ Lixpi is a visual, node-based AI image/video generation pipeline — a pnpm mono
 
 | Service | Language | Path | Purpose |
 |---------|----------|------|---------|
-| **web-ui** | Svelte / TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI |
+| **web-ui** | TypeScript | `services/web-ui/` | Browser SPA — canvas, ProseMirror editors, AI chat UI. Vanilla TypeScript DOM components, Vite build, Nano Stores for state |
 | **api** | Node.js / TypeScript | `services/api/` | Gateway + in-process LLM orchestration (LangGraph), JWT auth, CRUD, DynamoDB |
 | **nats** | Go (3-node cluster) | `services/nats/` | Message bus — pub/sub, JetStream Object Store |
 | **localauth0** | Rust (vendored) | `services/localauth0/` | Mock Auth0 for local dev |
@@ -24,7 +24,7 @@ Shared TypeScript packages live in `packages/lixpi/`. Infrastructure-as-Code in 
 
 ## Code Style
 
-At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, Svelte-adjacent, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.
+At the start of every implementation iteration, read [`documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md`](documentation/coding-style-guides/USING-CODING-STYLE-GUIDES.md) and follow the guides it selects for the files you are changing. [`documentation/coding-style-guides/TYPESCRIPT.md`](documentation/coding-style-guides/TYPESCRIPT.md) is mandatory for **every** TypeScript file in the repository — `services/api`, `services/nex`, `packages/lixpi`, `infrastructure/pulumi`, and `services/web-ui` alike, not only UI code. For `services/web-ui` UI, SVG, D3, canvas chrome, or component work, also read [`documentation/coding-style-guides/UI-COMPONENTS.md`](documentation/coding-style-guides/UI-COMPONENTS.md). Always read [`documentation/testing/USING-TESTING-GUIDES.md`](documentation/testing/USING-TESTING-GUIDES.md) before deciding whether any test writing or test execution is allowed.
 
 ## AI Model Registry
 

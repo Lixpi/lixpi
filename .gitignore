@@ -47,3 +47,6 @@ documentation/memory/*
 documentation/Media-Posts/
 
 ca.crt
+
+# Local-only Svelte reference kept during the Svelte removal
+temp/

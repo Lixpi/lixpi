@@ -1,6 +1,6 @@
 'use strict'
 
-import { writable } from 'svelte/store'
+import { writable } from '$src/stores/nanoStore.ts'
 import { LoadingStatus, type Asset } from '@lixpi/constants'
 
 type AssetStoreState = {

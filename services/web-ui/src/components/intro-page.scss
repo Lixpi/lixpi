@@ -1,0 +1,43 @@
+@import '$src/sass/_variables.scss';
+
+.intro-page {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    // Replaces the Svelte `in:fade` transition that used to animate this in.
+    animation: intro-page-fade-in 250ms ease both;
+
+    .intro-message-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    h1 {
+        font-size: 3rem;
+        font-weight: 400;
+        user-select: none;
+        .accent {
+            font-weight: 500;
+        }
+        .masked {
+            font-weight: 300;
+        }
+    }
+
+    .intro-icon {
+        max-width: 100px;
+        margin-left: 3rem;
+        svg {
+            width: 100%;
+            height: auto;
+            fill: $aiGreen;
+        }
+    }
+}
+
+@keyframes intro-page-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

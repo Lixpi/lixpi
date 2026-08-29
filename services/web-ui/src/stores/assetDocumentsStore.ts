@@ -1,6 +1,6 @@
 'use strict'
 
-import { writable } from 'svelte/store'
+import { writable } from '$src/stores/nanoStore.ts'
 import type { AssetDocumentRole } from '@lixpi/constants'
 
 export type AssetDocumentSnapshot = {

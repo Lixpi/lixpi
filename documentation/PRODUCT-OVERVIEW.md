@@ -171,7 +171,7 @@ Lixpi operates on a highly decoupled microservices architecture. All inter-servi
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F6C7B3', 'primaryTextColor': '#5a3a2a', 'primaryBorderColor': '#d4956a', 'secondaryColor': '#C3DEDD', 'secondaryTextColor': '#1a3a47', 'secondaryBorderColor': '#4a8a9d', 'tertiaryColor': '#DCECE9', 'tertiaryTextColor': '#1a3a47', 'tertiaryBorderColor': '#82B2C0', 'lineColor': '#d4956a', 'textColor': '#5a3a2a'}}}%%
 graph TB
     subgraph "Client Tier"
-        UI[Svelte SPA<br/>@xyflow/system · ProseMirror]
+        UI[TypeScript SPA<br/>@xyflow/system · ProseMirror]
     end
 
     subgraph "Gateway Tier"
@@ -209,7 +209,7 @@ graph TB
 
 | Service | Language | Role |
 |---------|----------|------|
-| **web-ui** | Svelte / TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction |
+| **web-ui** | TypeScript | Browser SPA — canvas rendering, ProseMirror editors, AI chat UI, context extraction. Vanilla TypeScript DOM components with Nano Stores for state |
 | **api** | Node.js / TypeScript | Gateway + in-process LangGraph workflow — Asset/Blob authority, JWT auth, DynamoDB persistence, pipeline events, Asset-document steps, generation and provenance |
 | **nats** | Go (3-node cluster) | Message bus — pub/sub, request/reply, JetStream replay/Asset-step streams, organization content-addressed Blob Object Stores |
 | **nex** | Node.js / TypeScript | NATS NEX workloads — AI-models sync and heavy file conversion/frame extraction |
@@ -219,7 +219,7 @@ graph TB
 
 **NATS-native**: The system uses NATS for auth, messaging, organization Blob Object Stores, live events, replay logs, and Asset-document step streams. The browser connects over WebSocket. The API remains the Asset/Blob authority and converts provider output into durable pipeline/provenance and document events.
 
-**Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. Svelte is a thin binding layer. This insulates the canvas from framework churn.
+**Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. The whole UI is vanilla TypeScript DOM built with the `html` helper in `utils/domTemplates.ts`, and component state lives in Nano Stores under `src/stores/`. This insulates the canvas from framework churn.
 
 **Provider-agnostic AI**: Every AI request sends the full conversation history — no provider-specific session IDs. Users can start a conversation with Claude, switch to GPT-5, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`, which plugs into the shared LangGraph workflow.
 
@@ -252,7 +252,7 @@ When a user submits a prompt in an AI chat thread, the system traverses the prec
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
-    participant UI as Svelte UI
+    participant UI as Web UI
     participant Ext as Context Extractor
     participant API as Node.js API
     participant NATS as NATS JetStream
