@@ -8,18 +8,17 @@
     "lixpiValue": "veoParams.video, set at google-provider.ts:844 for a video-extension request",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "Extends an existing Veo-generated video by 7 seconds per call, up to 20 times. The response is a single video combining the input and the new segment, up to 148 seconds.",
+    "summary": "Extends a Veo-generated source clip by roughly seven seconds and returns one combined video. It is a continuation mode, not arbitrary video-to-video editing, and Veo 3.1 Lite does not support it.",
     "combines": [
-        "Supported on: Veo 3.1 and Veo 3.1 Fast only on the Gemini Developer API, explicitly not Veo 3.1 Lite, Veo 3, or Veo 2",
-        "Gemini API accepts only videos that Veo itself generated, typically passed straight from `operation.response.generatedVideos[0].video`.",
+        "Supported on Veo 3.1 and Veo 3.1 Fast through the Gemini Developer API; Veo 3.1 Lite does not support extension.",
+        "Gemini API accepts only videos that Veo generated, typically passed straight from `operation.response.generatedVideos[0].video`.",
         "Forces `resolution` = \"720p\" and `durationSeconds` = 8.",
         "Forbids `image`, `config.lastFrame`, and `config.referenceImages`.",
-        "`personGeneration` for extension on Veo 3.1 is `allow_all` only.",
-        "Storage timer: the source video must have been generated or referenced within the last 2 days; referencing it for extension resets its 2-day timer. Extended videos count as newly generated."
+        "`personGeneration` for extension is `allow_all` only.",
+        "The source video must have been generated or referenced within the last 2 days; referencing it for extension resets its 2-day timer."
     ],
     "range": "Gemini API: Veo-generated videos only, up to 141 seconds long, 720p, 9:16 or 16:9. Vertex's newer extension guide states input videos of 1 to 30 seconds and output up to 37 seconds for Veo.",
     "supportedModels": [
-        "veo-3.0-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview"
     ],
@@ -35,11 +34,16 @@
     "defaultValue": "",
     "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
     "unsupportedModels": [
-        "veo-3.0-fast-generate-001",
         "veo-3.1-lite-generate-preview"
     ],
     "unsupportedApis": [],
     "sources": [
         "https://ai.google.dev/gemini-api/docs/veo"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:758-852",
+        "code": "source.video = extensionVideo; veoConfig.resolution = '720p'; veoConfig.durationSeconds = 8",
+        "from": "state.videoSourceForExtension, resolved to bytes from an authorized stored Asset",
+        "what": "Loads the selected source Asset, sends it through source.video, suppresses frame inputs, and applies Veo's 720p and eight-second extension constraints."
+    }
 }

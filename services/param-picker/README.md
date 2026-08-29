@@ -95,7 +95,12 @@ Each parameter file carries the documentation fields (`apiField`, `type`, `value
     "currentState": "hidden",
     "availability": "supported",
     "summary": "Decides whether the clip carries generated dialogue, effects and music.",
-    "supportedModels": ["dreamina-seedance-2-0-260128", "dreamina-seedance-2-5-260628"],
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
     "supportedApis": ["byteplus-modelark-video"],
     "decision": "expose",
     "reviewed": true,
@@ -113,7 +118,7 @@ There are two write paths, and they are deliberately different.
 
 `PUT /api/selections` is the page's own save. It rewrites only the files whose decision fields changed, each through a temp file and a rename, and does not snapshot: ticking a box is easier to redo than to recover. It refuses a save carrying fewer reviewed decisions than the tree already holds, and accepts `?snapshot=1` if you drive it programmatically.
 
-`PATCH /api/params` is the agent path, and it is how documentation edits must be made. It can rewrite any documentation field, merges only the fields you send, and always snapshots the files it touches into `data/history/params-<timestamp>/` first. It refuses unknown parameters and unknown fields, and will not create, rename or delete anything. [Maintaining the Catalog](MAINTAINING-THE-CATALOG.md) covers the workflow.
+`PATCH /api/params` is the agent path, and it is how documentation edits must be made. It can rewrite any parameter documentation field plus an existing group's `title`, `models`, and `docs`, merges only the fields you send, and always snapshots the files it touches into `data/history/params-<timestamp>/` first. It refuses unknown parameters, groups, and fields, and will not create, rename or delete anything. [Maintaining the Catalog](MAINTAINING-THE-CATALOG.md) covers the workflow.
 
 The legend in `data/params/_meta.json` explains every enum, including values an older file may still use: `needsInvestigation: true` and `status: "needs-investigation"` both read back as `needs-param-clarification`.
 

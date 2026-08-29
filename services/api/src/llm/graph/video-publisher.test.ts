@@ -68,6 +68,10 @@ const mp4Sample = Buffer.from([
     0x00, 0x00, 0x00, 0x00,
     0x69, 0x6d, 0x6f, 0x76, 0x00, 0x00, 0x00, 0x00,
 ])
+const pngSample = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47,
+    0x0d, 0x0a, 0x1a, 0x0a,
+])
 
 function createPublisher(options: { onPipelineContent?: (content: Record<string, unknown>) => void } = {}) {
     const published: Published[] = []
@@ -189,9 +193,33 @@ describe('VideoPublisher', () => {
             responseId: 'response-1',
             revisedPrompt: 'bad input',
             videoModelId: 'veo-3.1-generate-preview',
-        })).rejects.toThrow('not an MP4')
+        })).rejects.toThrow('without an ISO base-media ftyp box')
 
         expect(assetStorageMocks.settleGeneratedAssetOriginal).not.toHaveBeenCalled()
         expect(assetStorageMocks.attachGeneratedAssetNode).not.toHaveBeenCalled()
+    })
+
+    it('stores MOV output as QuickTime and preserves a provider-returned last frame', async () => {
+        const { publisher } = createPublisher()
+
+        await publisher.complete({
+            videoBuffer: mp4Sample,
+            posterBuffer: null,
+            frameBuffer: pngSample,
+            durationSeconds: 12,
+            aspectRatio: '16:9',
+            hasAudio: false,
+            responseId: 'seedance-25-response',
+            revisedPrompt: 'animate the subject',
+            videoModelId: 'dreamina-seedance-2-5-260628',
+            containerFormat: 'mov',
+        })
+
+        expect(assetStorageMocks.settleGeneratedAssetOriginal).toHaveBeenCalledWith(expect.objectContaining({
+            originalName: 'generated-video.mov',
+            mimeType: 'video/quicktime',
+            posterBuffer: null,
+            representativeFrameBuffer: pngSample,
+        }))
     })
 })

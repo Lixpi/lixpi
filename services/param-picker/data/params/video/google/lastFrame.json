@@ -8,15 +8,13 @@
     "lixpiValue": "veoConfig.lastFrame, set at google-provider.ts:788 as the stop frame",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "The final frame the video should land on, used for interpolation between a first and last image.",
+    "summary": "Pins the final frame of an interpolation request. It is invalid by itself and must be paired with the opening source image, so the two frames describe a transition rather than two independent references.",
     "combines": [
-        "Supported on: Gemini docs mark it available for Veo 3.1, 3.1 Fast, 3.1 Lite, Veo 3, Veo 3 Fast, and Veo 2 in the parameter table, while the \"Using first and last frames\" section says the feature is for Veo 3.1 models only. Gemini Developer API and Vertex.",
+        "Supported on all active Veo 3.1 models through the Gemini Developer API and Vertex.",
         "Only valid together with the top-level `image`; it cannot be used alone.",
         "Not allowed with `referenceImages` or `video`."
     ],
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"
@@ -36,5 +34,11 @@
     "unsupportedApis": [],
     "sources": [
         "https://ai.google.dev/gemini-api/docs/veo"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:782-852",
+        "code": "if (lastFrameImage) veoConfig.lastFrame = lastFrameImage",
+        "from": "the first distinct state.videoReferenceImages entry after the opening frame",
+        "what": "Converts the second selected frame to Gemini image bytes, sends it in config.lastFrame, and forces an eight-second request."
+    }
 }

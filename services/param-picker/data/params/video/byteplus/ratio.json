@@ -14,24 +14,25 @@
         "adaptive"
     ],
     "providerDefault": "adaptive",
-    "lixpiValue": "16:9",
+    "lixpiValue": "adaptive",
     "currentState": "exposed",
     "availability": "supported",
-    "summary": "Output aspect ratio. 'adaptive' inherits the ratio from the first frame or reference video instead of picking one.",
+    "summary": "Sets the output aspect ratio or lets adaptive inherit it from the task and input. Seedance 2.5 requires adaptive for first-frame, first-and-last-frame, edit, and extend tasks; Seedance 2.0, Fast, and Mini permit an explicit ratio but may center-crop a mismatched input image.",
     "combines": [
         "If the requested ratio disagrees with the first frame, ModelArk center-crops the input image.",
-        "Our default is 16:9; ByteDance's own default is adaptive.",
+        "Lixpi and ByteDance both default to adaptive.",
         "2.5 locks this to adaptive for video editing, video extension, and first-frame or first-and-last-frame tasks. The 2.0 series accepts an explicit ratio for every task type."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:119",
-        "code": "...(state.videoAspectRatio ? { ratio: state.videoAspectRatio } : {})",
-        "from": "state.videoAspectRatio, from the matrix control",
-        "what": "Sets the output shape. On image-to-video it also decides whether ModelArk center-crops the first frame to fit."
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts, BytePlusProvider.runSeedanceGeneration",
+        "code": "const ratio = isSeedance25 && (hasFirstFrame || hasLastFrame) ? 'adaptive' : state.videoAspectRatio",
+        "from": "state.videoAspectRatio, validated from the selected Seedance model's Aspect ratio dropdown",
+        "what": "Sends the selected ratio and normalizes Seedance 2.5 frame-conditioned requests to adaptive."
     },
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [
@@ -46,5 +47,7 @@
     "note": "",
     "sources": [
         "https://docs.byteplus.com/en/docs/ModelArk/1520757"
-    ]
+    ],
+    "unsupportedModels": [],
+    "unsupportedApis": []
 }

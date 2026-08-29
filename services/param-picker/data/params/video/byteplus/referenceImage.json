@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "The image source for a first frame, last frame, or reference image.",
+    "summary": "Supplies an image as an exact first frame, exact last frame, or looser reference image according to content.role. Those modes have different count, ratio, and mixing rules, so the image itself is not enough to determine the task.",
     "combines": [
         "Supported on: all models",
         "Formats: `jpeg`, `png`, `webp`, `bmp`, `tiff`, `gif`; Seedance 1.5 pro and later also `heic` and `heif`.",
@@ -28,6 +28,7 @@
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [

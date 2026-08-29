@@ -103,6 +103,21 @@ describe('VideoRouter', () => {
         expect(requestData.videoReferenceImages).toEqual(['data:image/png;base64,capability-inline'])
     })
 
+    it('merges the reasoning model negative prompt into the internal provider config', async () => {
+        const { router, process } = createRouter()
+
+        await router.execute(createState({
+            videoGenerationConfig: { generateAudio: 'false' },
+            generatedVideoNegativePrompt: 'no subtitles',
+        }))
+
+        const requestData = process.mock.calls[0]?.[0]
+        expect(requestData.videoGenerationConfig).toEqual({
+            generateAudio: 'false',
+            negativePrompt: 'no subtitles',
+        })
+    })
+
     it('omits videoReferenceImages when no source or first-frame references are available', async () => {
         const { router, process } = createRouter()
 

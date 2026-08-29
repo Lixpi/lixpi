@@ -247,6 +247,40 @@ describe('AiModel.getAvailableAiModels', () => {
         ])
     })
 
+    it('splits matrix groups when matching controls have different defaults', async () => {
+        const videoModel = (model: string, defaultValue: string) => ({
+            provider: 'BytePlus',
+            providerTitle: 'ByteDance',
+            model,
+            modelVersion: model,
+            sortingPosition: 1,
+            modalities: [{ modality: 'video_generation' }],
+            videoGenerationControls: [{
+                key: 'outputFormat',
+                label: 'Output format',
+                kind: 'segmented',
+                defaultValue,
+                options: [
+                    { value: 'mp4', label: 'MP4' },
+                    { value: 'mov', label: 'MOV' },
+                ],
+            }],
+            pricing: {},
+        })
+        dynamoDBService.scanItems.mockResolvedValue({
+            items: [
+                videoModel('seedance-default-mp4', 'mp4'),
+                videoModel('seedance-default-mov', 'mov'),
+            ],
+        })
+
+        const result = await AiModelModel.getAvailableAiModels()
+        const videoGroups = result.mediaGenerationConfigMatrix.groups.filter(group => group.mediaType === 'video')
+
+        expect(videoGroups).toHaveLength(2)
+        expect(videoGroups.map(group => group.controls[0]?.defaultValue).sort()).toEqual(['mov', 'mp4'])
+    })
+
     it('derives defaultModels from the isDefaultFor flag regardless of sort order', async () => {
         dynamoDBService.scanItems.mockResolvedValue({
             items: [

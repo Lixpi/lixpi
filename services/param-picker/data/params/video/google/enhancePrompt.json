@@ -7,16 +7,13 @@
     "providerDefault": "true",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Runs Google's prompt-rewriting layer over the prompt before generation.",
+    "availability": "supported",
+    "summary": "Controls Google's prompt-rewriting layer before video generation. Turning it off preserves literal wording; leaving it on can expand short prompts, but may also alter carefully authored camera or timing instructions.",
     "combines": [
-        "Turning it off gives literal control over the prompt; leaving it on generally improves results from short prompts.",
-        "A genuine choice for Lixpi because prompts are already built by our own orchestration.",
-        "Documented on Vertex; exposed in GenerateVideosConfig on both surfaces but absent from the Gemini Veo parameter table. Verify against the live API before relying on it."
+        "The current @google/genai converter sends parameters.enhancePrompt on both Gemini Developer API and Vertex paths.",
+        "Lixpi does not send this field because its prompts are already assembled by the reasoning pipeline; adopting it would create a second rewrite step whose effect must be evaluated first."
     ],
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"
@@ -35,6 +32,8 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://ai.google.dev/gemini-api/docs/veo"
+        "https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateVideosConfig.html",
+        "https://raw.githubusercontent.com/googleapis/js-genai/main/src/converters/_models_converters.ts",
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation"
     ]
 }

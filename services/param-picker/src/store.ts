@@ -212,4 +212,8 @@ export class ParamTree {
     async writeParam(path: string, record: ParamRecord): Promise<void> {
         await writeJsonAtomic(path, record)
     }
+
+    async writeGroupMeta(path: string, meta: GroupMeta): Promise<void> {
+        await writeJsonAtomic(path, meta)
+    }
 }

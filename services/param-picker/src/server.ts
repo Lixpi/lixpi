@@ -55,7 +55,10 @@ const DOCUMENTATION_FIELDS = [
     'supportedModels', 'unsupportedModels', 'supportedApis', 'unsupportedApis', 'sources',
 ] as const
 
+const GROUP_DOCUMENTATION_FIELDS = ['title', 'models', 'docs'] as const
+
 const EDITABLE_FIELDS: ReadonlySet<string> = new Set([...DOCUMENTATION_FIELDS, ...DECISION_FIELDS])
+const EDITABLE_GROUP_FIELDS: ReadonlySet<string> = new Set(GROUP_DOCUMENTATION_FIELDS)
 
 const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
     const chunks: Buffer[] = []
@@ -266,44 +269,91 @@ class ParamPickerServer {
         // documentation fields, and it always snapshots first, because a bulk
         // rewrite of researched prose is not something you can redo from memory.
         if (req.method === 'PATCH' && pathname === '/api/params') {
-            const body = await readJsonBody(req) as { params?: Record<string, Record<string, unknown>> }
+            const body = await readJsonBody(req) as {
+                params?: Record<string, Record<string, unknown>>
+                groups?: Record<string, Record<string, unknown>>
+            }
             const incoming = body.params ?? {}
+            const incomingGroups = body.groups ?? {}
             const { groups } = await this.tree.load()
 
             const index = new Map<string, { group: LoadedGroup; param: ParamRecord }>()
             for (const group of groups) {
                 for (const param of group.parameters) index.set(paramKey(group, param), { group, param })
             }
+            const groupIndex = new Map(groups.map(group => [
+                `${group.meta.providerId}/${group.meta.groupId}`,
+                group,
+            ]))
 
             const unknownKeys = Object.keys(incoming).filter(key => !index.has(key))
             const unknownFields = Object.entries(incoming).flatMap(([key, patch]) =>
                 Object.keys(patch).filter(field => !EDITABLE_FIELDS.has(field)).map(field => `${key}.${field}`))
-            if (unknownKeys.length > 0 || unknownFields.length > 0) {
+            const unknownGroupKeys = Object.keys(incomingGroups).filter(key => !groupIndex.has(key))
+            const unknownGroupFields = Object.entries(incomingGroups).flatMap(([key, patch]) =>
+                Object.keys(patch).filter(field => !EDITABLE_GROUP_FIELDS.has(field)).map(field => `${key}.${field}`))
+            const invalidGroupValues = Object.entries(incomingGroups).flatMap(([key, patch]) => {
+                const invalid: string[] = []
+                if ('title' in patch && (typeof patch.title !== 'string' || patch.title.trim().length === 0)) {
+                    invalid.push(`${key}.title`)
+                }
+                if ('docs' in patch && (typeof patch.docs !== 'string' || patch.docs.trim().length === 0)) {
+                    invalid.push(`${key}.docs`)
+                }
+                if ('models' in patch && (!Array.isArray(patch.models)
+                    || patch.models.length === 0
+                    || patch.models.some(model => typeof model !== 'string' || model.trim().length === 0)
+                    || new Set(patch.models).size !== patch.models.length)) {
+                    invalid.push(`${key}.models`)
+                }
+                return invalid
+            })
+            if (unknownKeys.length > 0 || unknownFields.length > 0
+                || unknownGroupKeys.length > 0 || unknownGroupFields.length > 0
+                || invalidGroupValues.length > 0) {
                 ParamPickerServer.sendJson(res, 400, {
-                    error: 'UNKNOWN_TARGET',
+                    error: invalidGroupValues.length > 0 ? 'INVALID_VALUE' : 'UNKNOWN_TARGET',
                     unknownKeys,
                     unknownFields,
-                    hint: 'This endpoint only updates parameters that already exist, and only known fields. It cannot create, rename or delete a parameter: add or remove the file on disk for that.',
+                    unknownGroupKeys,
+                    unknownGroupFields,
+                    invalidGroupValues,
+                    hint: 'This endpoint updates existing parameters and group documentation only. It cannot create, rename or delete a parameter or group.',
                 })
                 return
             }
 
-            const pending: Array<{ path: string; record: ParamRecord }> = []
+            const pendingParams: Array<{ path: string; record: ParamRecord }> = []
             for (const [key, patch] of Object.entries(incoming)) {
                 const { group, param } = index.get(key)!
                 const next = { ...param, ...patch } as ParamRecord
                 if (JSON.stringify(next) !== JSON.stringify(param)) {
-                    pending.push({ path: join(group.dir, `${param.key}.json`), record: next })
+                    pendingParams.push({ path: join(group.dir, `${param.key}.json`), record: next })
                 }
             }
 
-            await this.tree.snapshot(pending.map(item => item.path))
-            for (const { path, record } of pending) await this.tree.writeParam(path, record)
+            const pendingGroups: Array<{ path: string; meta: LoadedGroup['meta'] }> = []
+            for (const [key, patch] of Object.entries(incomingGroups)) {
+                const group = groupIndex.get(key)!
+                const next = { ...group.meta, ...patch } as LoadedGroup['meta']
+                if (JSON.stringify(next) !== JSON.stringify(group.meta)) {
+                    pendingGroups.push({ path: join(group.dir, '_meta.json'), meta: next })
+                }
+            }
+
+            const snapshotPaths = [
+                ...pendingParams.map(item => item.path),
+                ...pendingGroups.map(item => item.path),
+            ]
+            await this.tree.snapshot(snapshotPaths)
+            for (const { path, record } of pendingParams) await this.tree.writeParam(path, record)
+            for (const { path, meta } of pendingGroups) await this.tree.writeGroupMeta(path, meta)
 
             ParamPickerServer.sendJson(res, 200, {
                 ok: true,
-                written: pending.length,
-                snapshotted: pending.length > 0,
+                written: pendingParams.length,
+                writtenGroups: pendingGroups.length,
+                snapshotted: snapshotPaths.length > 0,
                 path: PARAMS_DIR,
             })
             return

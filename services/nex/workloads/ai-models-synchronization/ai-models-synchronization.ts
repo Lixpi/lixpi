@@ -135,13 +135,6 @@ const VEO_DURATIONS: ImageSizeOption[] = [
         description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.duration?.['8'],
     },
 ]
-const VEO_3_DURATIONS: ImageSizeOption[] = [
-    {
-        value: '8',
-        label: '8s',
-        description: GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT.duration?.['8'],
-    },
-]
 
 // Seedance 2.0 (BytePlus ModelArk) option lists. Standard supports up to 4K;
 // Fast supports 480p/720p. Both support adaptive aspect ratio and intelligent
@@ -165,6 +158,11 @@ const SEEDANCE_FAST_RESOLUTIONS: ImageSizeOption[] = [
     { value: '480p', label: '480p' },
     { value: '720p', label: '720p' },
 ]
+const SEEDANCE_25_RESOLUTIONS: ImageSizeOption[] = [
+    { value: '480p', label: '480p' },
+    { value: '720p', label: '720p' },
+    { value: '1080p', label: '1080p' },
+]
 const SEEDANCE_DURATIONS: ImageSizeOption[] = [
     {
         value: '-1',
@@ -183,6 +181,17 @@ const SEEDANCE_DURATIONS: ImageSizeOption[] = [
     { value: '13', label: '13s' },
     { value: '14', label: '14s' },
     { value: '15', label: '15s' },
+]
+const SEEDANCE_25_DURATIONS: ImageSizeOption[] = [
+    {
+        value: '-1',
+        label: 'Smart length',
+        description: 'Smart length lets Seedance choose any duration from 4 to 30 seconds.',
+    },
+    ...Array.from({ length: 27 }, (_, index) => {
+        const duration = String(index + 4)
+        return { value: duration, label: `${duration}s` }
+    }),
 ]
 
 const toggleControl = (
@@ -229,13 +238,17 @@ const buildVeoControls = (
     },
 ]
 
-const buildSeedanceControls = (resolutions: ImageSizeOption[]): MediaGenerationConfigControl[] => [
+const buildSeedanceControls = (
+    resolutions: ImageSizeOption[],
+    durations: ImageSizeOption[] = SEEDANCE_DURATIONS,
+    includeOutputFormat = false,
+): MediaGenerationConfigControl[] => [
     {
         key: 'aspectRatio',
         label: 'Aspect ratio',
         kind: 'aspect-ratio',
         options: SEEDANCE_ASPECT_RATIOS,
-        defaultValue: '16:9',
+        defaultValue: 'adaptive',
     },
     {
         key: 'resolution',
@@ -248,15 +261,29 @@ const buildSeedanceControls = (resolutions: ImageSizeOption[]): MediaGenerationC
         key: 'duration',
         label: 'Duration',
         kind: 'duration',
-        options: SEEDANCE_DURATIONS,
+        options: durations,
         defaultValue: '-1',
     },
     toggleControl(
-        'cameraFixed',
-        'Fixed camera',
-        'false',
-        MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.cameraFixed,
+        'generateAudio',
+        'Generate audio',
+        'true',
+        MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.generateAudio,
     ),
+    ...(includeOutputFormat ? [{
+        key: 'outputFormat' as const,
+        label: 'Output format',
+        kind: 'segmented' as const,
+        options: [
+            { value: 'mp4', label: 'MP4' },
+            {
+                value: 'mov',
+                label: 'MOV',
+                description: 'MOV preserves higher color precision for post-production but has narrower playback support.',
+            },
+        ],
+        defaultValue: 'mov',
+    }] : []),
     toggleControl(
         'watermark',
         'Watermark',
@@ -273,9 +300,13 @@ const buildSeedanceControls = (resolutions: ImageSizeOption[]): MediaGenerationC
 
 const VEO_CONTROLS = buildVeoControls(VEO_31_RESOLUTIONS)
 const VEO_LITE_CONTROLS = buildVeoControls(VEO_RESOLUTIONS)
-const VEO_3_CONTROLS = buildVeoControls(VEO_RESOLUTIONS, VEO_3_DURATIONS)
 const SEEDANCE_STANDARD_CONTROLS = buildSeedanceControls(SEEDANCE_STANDARD_RESOLUTIONS)
 const SEEDANCE_FAST_CONTROLS = buildSeedanceControls(SEEDANCE_FAST_RESOLUTIONS)
+const SEEDANCE_25_CONTROLS = buildSeedanceControls(
+    SEEDANCE_25_RESOLUTIONS,
+    SEEDANCE_25_DURATIONS,
+    true,
+)
 
 const OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES: ImageReferenceCapabilities = {
     maxReferenceImages: 16,
@@ -715,7 +746,14 @@ export class AiModelsSync {
             contains: []
         },
         Google: {
-            exact: [],
+            exact: [
+                'veo-2.0-generate-001',
+                'veo-2.0-generate-exp',
+                'veo-3.0-generate-preview',
+                'veo-3.0-fast-generate-preview',
+                'veo-3.0-generate-001',
+                'veo-3.0-fast-generate-001',
+            ],
             prefix: [
                 'gemini-1.0',
                 'gemini-1.5',
@@ -944,11 +982,9 @@ export class AiModelsSync {
                 // Gemini 3 Flash
                 { prefix: 'gemini-3-flash', values: { contextWindow: 1048576, maxCompletionSize: 65536, modalities: ['text'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.15', completion: '0.60' } } } } } },
                 { prefix: 'gemini-3.', values: { inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES } },
-                // VEO 3 / 3.1 video generation models (billed per second of video).
+                // VEO 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
-                { prefix: 'veo-3.0-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_3_DURATIONS, videoGenerationControls: VEO_3_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.0', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_3_DURATIONS, videoGenerationControls: VEO_3_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
                 { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
                 { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_LITE_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
                 { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
@@ -989,13 +1025,11 @@ export class AiModelsSync {
                 starSortingPosition: 150,
                 transforms: {
                     title: (modelId: string) => {
-                        // Map well-known image models to Nano Banana names and VEO models to friendly names
+                        // Map well-known image models to Nano Banana names and active VEO models to friendly names
                         const nanoBananaNames: Record<string, string> = {
                             'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
                             'gemini-3-pro-image-preview': 'Nano Banana Pro',
                             'gemini-3.1-flash-image-preview': 'Nano Banana 2',
-                            'veo-3.0-generate-001': 'Veo 3',
-                            'veo-3.0-fast-generate-001': 'Veo 3 Fast',
                             'veo-3.1-generate-preview': 'Veo 3.1',
                             'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
                             'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
@@ -1016,8 +1050,6 @@ export class AiModelsSync {
                             'gemini-2.5-flash-preview-image-generation': 'Nano Banana',
                             'gemini-3-pro-image-preview': 'Nano Banana Pro',
                             'gemini-3.1-flash-image-preview': 'Nano Banana 2',
-                            'veo-3.0-generate-001': 'Veo 3',
-                            'veo-3.0-fast-generate-001': 'Veo 3 Fast',
                             'veo-3.1-generate-preview': 'Veo 3.1',
                             'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
                             'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
@@ -1103,9 +1135,9 @@ export class AiModelsSync {
                 }
             }
         },
-        // BytePlus ModelArk — Seedance 2.0 video generation. Static entries (no
-        // model-list API in the repo); token-metered. videoMaxReferenceImages=9
-        // lets the provider-aware cap (Phase 2) pass up to 9 references.
+        // BytePlus ModelArk — Seedance video generation. Static entries (no
+        // model-list API in the repo); token-metered. Each exact profile owns
+        // its provider-aware reference cap and generation controls.
         //
         // Rates are the vendor's published online-inference prices in USD per 1M
         // tokens. Seedance prices by output resolution AND by whether the input
@@ -1151,6 +1183,39 @@ export class AiModelsSync {
                         },
                     },
                 },
+                'dreamina-seedance-2-0-mini-260615': {
+                    videoResolutions: SEEDANCE_FAST_RESOLUTIONS,
+                    videoGenerationControls: SEEDANCE_FAST_CONTROLS,
+                    pricing: {
+                        video: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            price: '3.5',
+                            tiers: {
+                                '480p': { withoutVideoInput: '3.5', withVideoInput: '2.1' },
+                                '720p': { withoutVideoInput: '3.5', withVideoInput: '2.1' },
+                            },
+                        },
+                    },
+                },
+                'dreamina-seedance-2-5-260628': {
+                    videoResolutions: SEEDANCE_25_RESOLUTIONS,
+                    videoDurations: SEEDANCE_25_DURATIONS,
+                    videoGenerationControls: SEEDANCE_25_CONTROLS,
+                    videoMaxReferenceImages: 30,
+                    pricing: {
+                        video: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            price: '11.7',
+                            tiers: {
+                                '480p': { withoutVideoInput: '10.7', withVideoInput: '6.4' },
+                                '720p': { withoutVideoInput: '10.7', withVideoInput: '6.4' },
+                                '1080p': { withoutVideoInput: '11.7', withVideoInput: '7.0' },
+                            },
+                        },
+                    },
+                },
             },
             prefix: [],
             contains: [],
@@ -1181,6 +1246,8 @@ export class AiModelsSync {
                         const names: Record<string, string> = {
                             'dreamina-seedance-2-0-260128': 'Seedance 2.0',
                             'dreamina-seedance-2-0-fast-260128': 'Seedance 2.0 Fast',
+                            'dreamina-seedance-2-0-mini-260615': 'Seedance 2.0 Mini',
+                            'dreamina-seedance-2-5-260628': 'Seedance 2.5',
                         }
                         return names[modelId] || modelId
                     },
@@ -1188,6 +1255,8 @@ export class AiModelsSync {
                         const names: Record<string, string> = {
                             'dreamina-seedance-2-0-260128': 'Seedance 2.0',
                             'dreamina-seedance-2-0-fast-260128': 'Seedance 2.0 Fast',
+                            'dreamina-seedance-2-0-mini-260615': 'Seedance 2.0 Mini',
+                            'dreamina-seedance-2-5-260628': 'Seedance 2.5',
                         }
                         return names[modelId] || modelId
                     }
@@ -1482,9 +1551,10 @@ export class AiModelsSync {
                 // Use '-image' to match gemini-*-image* but NOT 'imagen' models
                 if (modelId.includes('-image')) return true
 
-                // VEO video models are always allowed through. Keep preview ids
-                // (e.g. veo-3.1-generate-preview); drop only dated snapshots.
+                // Keep active preview ids such as veo-3.1-generate-preview, but
+                // reject known shut-down ids and dated snapshots.
                 if (modelId.includes('veo')) {
+                    if (blacklist.exact.includes(modelId)) return false
                     return !/\d{4}-\d{2}-\d{2}/.test(modelId) && !/:\d{8}/.test(modelId)
                 }
 
@@ -2111,11 +2181,13 @@ export class AiModelsSync {
     }
 
     // BytePlus ModelArk models (hardcoded — no list-models API in the repo).
-    // Seedance 2.0 video generation; mirrors the Stability static-injection path.
+    // Seedance video generation; mirrors the Stability static-injection path.
     private getBytePlusModels(): Array<{ id: string; displayName: string }> {
         return [
             { id: 'dreamina-seedance-2-0-260128', displayName: 'Seedance 2.0' },
             { id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' },
+            { id: 'dreamina-seedance-2-0-mini-260615', displayName: 'Seedance 2.0 Mini' },
+            { id: 'dreamina-seedance-2-5-260628', displayName: 'Seedance 2.5' },
         ]
     }
 

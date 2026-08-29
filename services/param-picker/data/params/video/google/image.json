@@ -8,12 +8,12 @@
     "lixpiValue": "veoParams.image, set at google-provider.ts:845 for a first-frame request",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "A single starting image that Veo animates as the first frame of the clip. This is the image-to-video mode.",
+    "summary": "Supplies one opening image for image-to-video generation. Veo animates this exact image as the first frame; adding config.lastFrame changes the task into first-and-last-frame interpolation.",
     "combines": [
-        "Supported on: all Veo models, Gemini Developer API and Vertex",
+        "Supported on all active Veo 3.1 models through the Gemini Developer API and Vertex.",
         "Exactly one image; there is no multi-image first-frame mode.",
         "Not allowed with `video` or `config.referenceImages`.",
-        "Restricts `personGeneration` to `allow_adult` on Veo 3 and 3.1 families.",
+        "Restricts `personGeneration` to `allow_adult`.",
         "Vertex recommends 720p or higher and a 16:9 or 9:16 ratio; other ratios or sizes may be resized or centrally cropped.",
         "Pair with `config.lastFrame` to switch this mode into first-and-last-frame interpolation."
     ],
@@ -21,10 +21,8 @@
         "image/jpeg",
         "image/png"
     ],
-    "range": "Veo 2's model card lists any resolution and aspect ratio up to a 20MB file; no size limit is documented for Veo 3.x on the Gemini API",
+    "range": "No input-size limit is documented for active Veo 3.1 models on the Gemini Developer API.",
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"
@@ -44,5 +42,11 @@
     "unsupportedApis": [],
     "sources": [
         "https://ai.google.dev/gemini-api/docs/veo"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:782-852",
+        "code": "source.image = firstFrameImage",
+        "from": "state.videoFirstFrameImage, resolved from the selected canvas reference",
+        "what": "Converts the selected image data URL to Gemini image bytes and sends it as the source image unless video extension takes precedence."
+    }
 }

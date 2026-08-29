@@ -2,37 +2,32 @@
     "key": "camera_fixed",
     "category": "camera",
     "apiField": "camera_fixed",
-    "controlKey": "cameraFixed",
+    "controlKey": null,
     "type": "boolean",
     "providerDefault": "false",
-    "lixpiValue": "user-selected",
-    "currentState": "exposed",
-    "availability": "unverified",
-    "summary": "Appends a fixed-camera instruction to the prompt so the shot does not move. The result is not guaranteed.",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Requests a fixed camera by appending a provider instruction to the prompt, but the result is not guaranteed. BytePlus limits the field to Seedance 1.5 Pro and 1.0 models, so every current Seedance 2.x model rejects it.",
     "combines": [
-        "Not supported alongside reference images.",
-        "The BytePlus supported-model list names Seedance 1.5 pro, 1.0 pro, and 1.0 pro fast, and omits the 2.0 series. We expose it as a 2.0 toggle anyway."
+        "Not available on any Seedance model Lixpi ships."
     ],
-    "usage": {
-        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:124",
-        "code": "camera_fixed: generationConfig.cameraFixed === 'true'",
-        "from": "state.videoGenerationConfig.cameraFixed, from the Fixed camera toggle",
-        "what": "Asks Seedance to hold the camera still by appending an instruction to the prompt. Sent on every 2.0 request even though the BytePlus supported-model list omits the 2.0 series."
-    },
+    "usage": {},
     "supportedModels": [],
     "supportedApis": [
         "byteplus-modelark-video"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
-    "defaultValue": "false",
+    "defaultValue": "",
     "note": "",
     "unsupportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "unsupportedApis": [],

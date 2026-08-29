@@ -919,11 +919,13 @@ describe('GoogleProvider internals', () => {
             videoAspectRatio: '16:9',
             videoResolution: '720p',
             videoDurationSeconds: 8,
+            videoGenerationConfig: { negativePrompt: 'no subtitles or captions' },
             videoFirstFrameImage: 'data:image/png;base64,ZmFrZQ==',
             messages: [{ role: 'user', content: 'make a cinematic shot' }],
         } as any)
 
         const completeArgs = videoPublisher.complete.mock.calls[0]?.[0]
+        const generateRequest = googleMocks.generateVideos.mock.calls[0]?.[0]
         expect(videoPublisher.pending).toHaveBeenCalledTimes(1)
         expect(videoPublisher.generating).toHaveBeenCalledTimes(0)
         expect(videoPublisher.complete).toHaveBeenCalledTimes(1)
@@ -937,6 +939,23 @@ describe('GoogleProvider internals', () => {
             posterBuffer: null,
             frameBuffer: null,
         })
+        expect(generateRequest.config).toMatchObject({
+            numberOfVideos: 1,
+            aspectRatio: '16:9',
+            resolution: '720p',
+            durationSeconds: 8,
+            negativePrompt: 'no subtitles or captions',
+            personGeneration: 'allow_adult',
+        })
+        expect(generateRequest.source).toEqual({
+            prompt: 'make a cinematic shot',
+            image: { imageBytes: 'ZmFrZQ==', mimeType: 'image/png' },
+        })
+        expect(generateRequest).not.toHaveProperty('prompt')
+        expect(generateRequest).not.toHaveProperty('image')
+        expect(generateRequest).not.toHaveProperty('video')
+        expect(generateRequest.config).not.toHaveProperty('seed')
+        expect(completeArgs).not.toHaveProperty('generationSeed')
         expect(update).toEqual(expect.objectContaining({
             generatedVideos: ['veo-complete'],
             videoUsage: {

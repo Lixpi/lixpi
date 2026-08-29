@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "unsupported",
-    "summary": "Generates a cheap 480p preview whose task ID can then produce the final video reusing the same inputs and seed.",
+    "summary": "Creates a lower-cost 480p preview before committing to a final render. BytePlus supports this two-stage workflow only on Seedance 1.5 Pro; all current Seedance 2.x models reject draft mode.",
     "combines": [
         "Seedance 1.5 pro only.",
         "Forces 480p and disables return_last_frame and offline inference."
@@ -27,6 +27,7 @@
     "unsupportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "unsupportedApis": [],

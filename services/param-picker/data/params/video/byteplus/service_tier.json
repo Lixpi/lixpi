@@ -12,7 +12,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "unsupported",
-    "summary": "flex is offline inference at half price with higher daily quota and much higher latency.",
+    "summary": "Selects online default processing or lower-cost, higher-latency flex processing. BytePlus explicitly excludes Seedance 2.5 and the entire Seedance 2.0 series from flex, so every model in this group must use the default tier and must not send service_tier=flex.",
     "combines": [
         "Explicitly not supported on the Seedance 2.0 and 2.5 series."
     ],
@@ -30,6 +30,7 @@
     "unsupportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "unsupportedApis": [],

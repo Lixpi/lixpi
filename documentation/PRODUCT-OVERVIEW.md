@@ -238,9 +238,10 @@ Each AI thread has a model selector dropdown. Users can switch models between me
 | **Anthropic** | Claude 4 Opus, Claude Sonnet 4 | Text generation |
 | **Google** | Gemini 2.5 Pro, Gemini 2.5 Flash | Text generation |
 | **Google** | Nano Banana, Nano Banana Pro, Nano Banana 2 | Image generation (progressive streaming via Thinking) |
-| **Google** | Veo 3, Veo 3 Fast, Veo 3.1 | Video generation with audio (async submit/poll) — see [Video Generation](media-generation/VIDEO-GENERATION.md) |
+| **Google** | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite | Video generation with audio (async submit/poll). See [Video Generation](media-generation/VIDEO-GENERATION.md). |
+| **BytePlus** | Seedance 2.0, Seedance 2.0 Fast, Seedance 2.0 Mini, Seedance 2.5 | Video generation with model-specific resolution, duration, audio, watermark, last-frame, and output-format controls. See [Video Generation](media-generation/VIDEO-GENERATION.md). |
 
-Each model carries metadata: context window size, max completion, supported modalities, and detailed pricing (input/output token rates, cached rates, image tiers by resolution, per-second video rates). Five modalities are defined in the type system: `text`, `image`, `audio`, `voice`, `video` — **image and video are implemented** (the latter via Google VEO 3); `audio` and `voice` remain infrastructure-ready.
+Each model carries metadata: context window size, max completion, supported modalities, and detailed pricing (input/output token rates, cached rates, image tiers by resolution, per-second or per-token video rates). Five modalities are defined in the type system: `text`, `image`, `audio`, `voice`, `video`. **Image and video are implemented** (video via Google Veo 3.1 and BytePlus Seedance 2.x); `audio` and `voice` remain infrastructure-ready.
 
 ---
 

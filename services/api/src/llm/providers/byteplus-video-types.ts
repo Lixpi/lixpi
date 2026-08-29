@@ -33,6 +33,8 @@ export type SeedanceImageContent = {
 
 export type SeedanceContentItem = SeedanceTextContent | SeedanceImageContent
 
+export type SeedanceOutputFormat = 'mp4' | 'mov'
+
 export type CreateVideoGenerationTaskPayload = {
     model: string
     content: SeedanceContentItem[]
@@ -41,9 +43,8 @@ export type CreateVideoGenerationTaskPayload = {
     duration?: number
     generate_audio?: boolean
     watermark?: boolean
-    seed?: number
-    camera_fixed?: boolean
     return_last_frame?: boolean
+    output_format?: SeedanceOutputFormat
     callback_url?: string
 }
 
@@ -65,6 +66,7 @@ export type RetrieveVideoGenerationTaskResponse = {
     model?: string
     content?: {
         video_url?: string
+        last_frame_url?: string
         [key: string]: unknown
     }
     usage?: SeedanceUsage
@@ -74,6 +76,7 @@ export type RetrieveVideoGenerationTaskResponse = {
     resolution?: string
     ratio?: string
     seed?: number
+    output_format?: SeedanceOutputFormat
     [key: string]: unknown
 }
 
@@ -153,19 +156,29 @@ export const retrieveVideoGenerationTask = async (
     return parseJsonOrThrow(res, 'retrieve video generation task')
 }
 
-// Downloads the hosted MP4. ModelArk output URLs are cleaned after 24 hours, so
+// Downloads a hosted ModelArk output. Output URLs are cleaned after 24 hours, so
 // the provider must call this inside the same request and persist the bytes.
-export const downloadVideo = async (videoUrl: string, signal?: AbortSignal): Promise<Buffer> => {
-    const res = await fetch(videoUrl, { signal })
+const downloadModelArkOutput = async (
+    outputUrl: string,
+    outputLabel: string,
+    signal?: AbortSignal,
+): Promise<Buffer> => {
+    const res = await fetch(outputUrl, { signal })
     if (!res.ok) {
         throw new BytePlusModelArkError(
-            `Failed to download Seedance video (HTTP ${res.status})`,
+            `Failed to download Seedance ${outputLabel} (HTTP ${res.status})`,
             { httpStatus: res.status },
         )
     }
     const arrayBuffer = await res.arrayBuffer()
     return Buffer.from(arrayBuffer)
 }
+
+export const downloadVideo = async (videoUrl: string, signal?: AbortSignal): Promise<Buffer> =>
+    downloadModelArkOutput(videoUrl, 'video', signal)
+
+export const downloadLastFrame = async (frameUrl: string, signal?: AbortSignal): Promise<Buffer> =>
+    downloadModelArkOutput(frameUrl, 'last frame', signal)
 
 export const SEEDANCE_TERMINAL_STATUSES: ReadonlySet<SeedanceTaskStatus> =
     new Set(['succeeded', 'failed', 'cancelled', 'expired'])

@@ -9,10 +9,10 @@
         "mov"
     ],
     "providerDefault": "mp4",
-    "lixpiValue": null,
-    "currentState": "absent",
+    "lixpiValue": "mov",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Container format for the finished video. Seedance 2.5 only: the 2.0 series always returns mp4 and rejects the field.",
+    "summary": "Chooses the finished video container on Seedance 2.5. MP4 has broad playback support; MOV preserves higher color precision for grading, keying, and compositing but uses H.264 YUV 4:4:4 plus PCM audio, which some players cannot decode. Seedance 2.0, Fast, and Mini always return MP4 and reject this field.",
     "combines": [
         "Seedance 2.5 only. The 2.0 series always returns mp4 and rejects this field. mov is H.264 with YUV 4:4:4 and PCM audio for grading and compositing, and plays in fewer players."
     ],
@@ -27,15 +27,23 @@
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
-    "defaultValue": "mp4",
+    "defaultValue": "mov",
     "note": "",
     "unsupportedModels": [
         "dreamina-seedance-2-0-260128",
-        "dreamina-seedance-2-0-fast-260128"
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615"
     ],
     "unsupportedApis": [],
     "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
         "https://docs.byteplus.com/en/docs/ModelArk/2607688",
-        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
-    ]
+        "https://docs.byteplus.com/en/docs/ModelArk/1330310"
+    ],
+    "usage": {
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and BytePlusProvider.runSeedanceGeneration",
+        "code": "const outputFormat = isSeedance25 && (generationConfig.outputFormat === 'mp4' || generationConfig.outputFormat === 'mov') ? generationConfig.outputFormat : undefined",
+        "from": "state.videoGenerationConfig.outputFormat, validated from Seedance 2.5's Output format dropdown",
+        "what": "Sends MP4 or MOV only for Seedance 2.5 and omits the rejected field from every Seedance 2.0 request."
+    }
 }

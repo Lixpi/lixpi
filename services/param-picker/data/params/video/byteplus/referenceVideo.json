@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "The reference video used for reference-to-video, editing, or extension.",
+    "summary": "Supplies source footage for reference-to-video, editing, or extension. Prompt intent and, on Seedance 2.5, omni_reference_task_type determine which operation runs and therefore whether ratio must be adaptive or duration must be -1.",
     "combines": [
         "Supported on: Seedance 2.5, Seedance 2.0 series",
         "Container/encoding: MP4 (`video/mp4`) and QuickTime MOV (`video/quicktime`); video H.264/AVC or H.265/HEVC; audio AAC or MP3 (the 2.5 tutorial also lists PCM for MOV).",
@@ -23,6 +23,7 @@
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [

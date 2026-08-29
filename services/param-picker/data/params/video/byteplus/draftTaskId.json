@@ -7,18 +7,14 @@
     "providerDefault": null,
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "supported",
-    "summary": "Generates the final video from an approved draft. ModelArk reuses the draft's `model`, `content.text`, `content.image_url`, `generate_audio`, `seed`, `ratio`, `duration`, and `camera_fixed`.",
+    "availability": "unsupported",
+    "summary": "Supplies a previously approved draft task to produce its final video while reusing the draft's model, prompt, images, audio choice, seed, ratio, duration, and camera setting. BytePlus supports draft_task input only on Seedance 1.5 Pro, so it is unavailable on every model in this Seedance 2.x group.",
     "combines": [
         "Supported on: Seedance 1.5 pro only",
         "Anything not in that reused list can be set manually; unset parameters fall back to model defaults.",
         "Two-step flow: create the draft with `draft: true`, then create the final task with `type: draft_task`."
     ],
-    "supportedModels": [
-        "dreamina-seedance-2-0-260128",
-        "dreamina-seedance-2-0-fast-260128",
-        "dreamina-seedance-2-5-260628"
-    ],
+    "supportedModels": [],
     "supportedApis": [
         "byteplus-modelark-video"
     ],
@@ -29,7 +25,12 @@
     "fixedValue": "",
     "defaultValue": "",
     "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
-    "unsupportedModels": [],
+    "unsupportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
     "unsupportedApis": [],
     "sources": [
         "https://docs.byteplus.com/en/docs/ModelArk/1520757"

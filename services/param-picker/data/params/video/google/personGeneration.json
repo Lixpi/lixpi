@@ -13,19 +13,19 @@
     "lixpiValue": "set per input mode",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "Safety gate for generating people and faces.",
+    "summary": "Applies Google's people-generation safety policy. The legal value depends on both region and input mode, so this is provider policy plumbing rather than a stable user preference.",
     "combines": [
-        "Veo validates this against the input mode: what is legal for text-to-video differs from what is legal when an image conditions the generation."
+        "Text-to-video and extension normally require allow_all, while image, last-frame, and reference-image conditioning require allow_adult.",
+        "In the EU, UK, Switzerland, and MENA, Veo 3 and 3.1 accept allow_adult only; the provider's restricted regional profile overrides the normal text-mode value.",
+        "Lixpi derives this field after it knows whether the request is text-only, frame-conditioned, or an extension."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/google-provider.ts:806, via Object.assign of mediaProviderDefinition.moderation.settings",
-        "code": "moderation.settings(modelVersion, usesImageConditioning ? 'image-conditioned' : extensionVideo ? 'video-extension' : 'text', { regionProfile })",
-        "from": "derived from the input mode, plus the GOOGLE_VEO_PERSON_GENERATION_PROFILE env var",
-        "what": "Safety gate for rendering people. VEO validates it against the input mode: text-to-video and extension need allow_all, image-conditioned requests need allow_adult, so it cannot be one fixed value."
+        "setIn": "services/api/src/llm/providers/google-provider.ts, GoogleProvider.runVeoGeneration",
+        "code": "Object.assign(veoConfig, moderation.settings(modelVersion, inputMode, regionProfile))",
+        "from": "the registered Google moderation profile plus the request's text, image-conditioned, or extension mode",
+        "what": "Derives the legal people-generation policy after the provider knows the input mode and configured regional profile."
     },
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"

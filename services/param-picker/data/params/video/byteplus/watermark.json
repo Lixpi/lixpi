@@ -8,17 +8,21 @@
     "lixpiValue": "false",
     "currentState": "exposed",
     "availability": "supported",
-    "summary": "Stamps an 'AI Generated' watermark in the lower-right corner.",
-    "combines": [],
+    "summary": "Controls BytePlus's visible 'AI Generated' mark in the lower-right corner of the finished video. It does not affect the separate PNG returned by return_last_frame, which BytePlus documents as watermark-free.",
+    "combines": [
+        "The provider default and Lixpi default are false; enabling it changes only the delivered video's visible mark.",
+        "The field is supported by Seedance 2.0, Fast, Mini, and 2.5 and is sent independently for each selected model."
+    ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:122",
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts, BytePlusProvider.runSeedanceGeneration",
         "code": "watermark: generationConfig.watermark === 'true'",
-        "from": "state.videoGenerationConfig.watermark, from the Watermark toggle",
-        "what": "Burns an 'AI Generated' mark into the lower-right of the output. The strict === 'true' means anything unset is treated as off."
+        "from": "state.videoGenerationConfig.watermark, validated from the Watermark toggle",
+        "what": "Sends BytePlus's visible AI-generated watermark choice independently for each selected Seedance model."
     },
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [

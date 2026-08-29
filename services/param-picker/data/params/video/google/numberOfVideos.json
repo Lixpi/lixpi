@@ -14,14 +14,12 @@
         "Lixpi pins it to 1 anyway: the canvas creates one node per generation, so extra candidates would have nowhere to land."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/google-provider.ts:736",
+        "setIn": "services/api/src/llm/providers/google-provider.ts, GoogleProvider.runVeoGeneration",
         "code": "const veoConfig = { numberOfVideos: 1, abortSignal: this.signal }",
-        "from": "hardcoded",
-        "what": "One clip per request. The canvas creates one node per generation, so more candidates would have nowhere to land."
+        "from": "fixed provider configuration",
+        "what": "Pins the Gemini Developer API request to its one-video output limit."
     },
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"

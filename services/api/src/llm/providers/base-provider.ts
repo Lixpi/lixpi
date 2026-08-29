@@ -431,7 +431,9 @@ export abstract class BaseProvider {
             videoAspectRatio: characterCreatorSelected ? undefined : requestData.videoAspectRatio,
             videoResolution: characterCreatorSelected ? undefined : requestData.videoResolution,
             videoDurationSeconds: characterCreatorSelected ? undefined : requestData.videoDurationSeconds,
+            videoGenerationConfig: characterCreatorSelected ? undefined : requestData.videoGenerationConfig,
             generatedVideoPrompt: characterCreatorSelected ? undefined : requestData.generatedVideoPrompt,
+            generatedVideoNegativePrompt: characterCreatorSelected ? undefined : requestData.generatedVideoNegativePrompt,
             videoFirstFrameImage: characterCreatorSelected ? undefined : requestData.videoFirstFrameImage,
             videoReferenceImages: characterCreatorSelected ? undefined : requestData.videoReferenceImages,
             videoSourceForExtension: characterCreatorSelected ? undefined : requestData.videoSourceForExtension,
@@ -948,22 +950,46 @@ export abstract class BaseProvider {
         const generatedVideoPrompt = state.generatedVideoPrompt
             ? sanitizeMediaReferenceText(state.generatedVideoPrompt, bindings)
             : state.generatedVideoPrompt
+        const generatedVideoNegativePrompt = state.generatedVideoNegativePrompt
+            ? sanitizeMediaReferenceText(state.generatedVideoNegativePrompt, bindings)
+            : state.generatedVideoNegativePrompt
+        const configuredVideoNegativePrompt = state.videoGenerationConfig?.negativePrompt
+            ? sanitizeMediaReferenceText(state.videoGenerationConfig.negativePrompt, bindings)
+            : state.videoGenerationConfig?.negativePrompt
+        const videoGenerationConfig = configuredVideoNegativePrompt === state.videoGenerationConfig?.negativePrompt
+            ? state.videoGenerationConfig
+            : {
+                ...state.videoGenerationConfig,
+                negativePrompt: configuredVideoNegativePrompt,
+            }
         if (
             generatedImagePrompt === state.generatedImagePrompt
             && generatedVideoPrompt === state.generatedVideoPrompt
+            && generatedVideoNegativePrompt === state.generatedVideoNegativePrompt
+            && videoGenerationConfig === state.videoGenerationConfig
         ) return state
 
         return {
             ...state,
             generatedImagePrompt,
             generatedVideoPrompt,
+            generatedVideoNegativePrompt,
+            videoGenerationConfig,
         }
     }
 
     protected assertProviderMediaPayload(state: ProviderState, prompt: string | undefined): void {
         if (!state.providerSafeMediaIntent || !prompt) return
         assertNoForbiddenMediaReferenceLeak({
-            payload: { prompt },
+            payload: {
+                prompt,
+                ...(state.generatedVideoNegativePrompt
+                    ? { generatedVideoNegativePrompt: state.generatedVideoNegativePrompt }
+                    : {}),
+                ...(state.videoGenerationConfig?.negativePrompt
+                    ? { configuredVideoNegativePrompt: state.videoGenerationConfig.negativePrompt }
+                    : {}),
+            },
             forbiddenNameVariants: state.providerSafeMediaIntent.forbiddenNameVariants,
         })
     }

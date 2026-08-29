@@ -12,11 +12,11 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Typed reference conditioning: ASSET supplies a scene, object, or character; STYLE supplies colors, lighting, and texture.",
+    "summary": "Provides typed visual references: ASSET preserves a subject, object, or scene identity, while STYLE transfers visual treatment such as color, lighting, and texture. This mode is different from pinning the first or last frame.",
     "combines": [
-        "Veo 3.1 and 3.1 Fast take up to 3. Lite does not support them.",
-        "Forces an 8-second duration.",
-        "Lixpi deliberately does not use this: google-provider.ts routes the images a user picks into `image` and `config.lastFrame` as frame conditioning instead, so ASSET and STYLE reference conditioning is unreachable today."
+        "Veo 3.1 and Veo 3.1 Fast accept up to three reference images; Veo 3.1 Lite does not support this mode.",
+        "Reference-image generation requires an eight-second duration and cannot be combined with source.image, config.lastFrame, or video extension.",
+        "Lixpi currently treats selected canvas images as first and last frames, so typed ASSET and STYLE conditioning remains absent until the UI can capture reference roles explicitly."
     ],
     "supportedModels": [
         "veo-3.1-generate-preview",
@@ -34,8 +34,6 @@
     "defaultValue": "",
     "note": "Investigate how to present it in UI, don't change anything, report",
     "unsupportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-lite-generate-preview"
     ],
     "unsupportedApis": [],

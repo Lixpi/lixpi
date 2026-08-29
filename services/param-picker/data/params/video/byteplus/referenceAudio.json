@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Reference audio, typically used to lock timbre, music, or rhythm.",
+    "summary": "Adds audio material for the model to follow when generating speech, music, timing, or sound design. Seedance 2.5 permits audio-only input; Seedance 2.0, Fast, and Mini require at least one image or video alongside reference audio.",
     "combines": [
         "Supported on: Seedance 2.5, Seedance 2.0 series",
         "Formats: `wav`, `mp3`.",
@@ -28,6 +28,7 @@
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [

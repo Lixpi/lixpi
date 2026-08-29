@@ -83,7 +83,7 @@ Krea is the closest competitor on the "AI media board" axis[⁹]:
 
 The closest architectural mirror to Lixpi[¹⁰]:
 
-- Infinite canvas over multiple models (SDXL, GPT Image, Flux Ultra, Imagen 4, Veo 3)
+- Infinite canvas over multiple models (SDXL, GPT Image, Flux Ultra, Imagen 4, Veo 3.1)
 - **Model-agnostic by design** — founders' explicit thesis: "image generation models are becoming commoditized; the frontend UI is the key differentiator"
 - Visual prompt builder (reference images + style chips) instead of text-only prompts
 - Real-time collaboration on shared canvases

@@ -14,21 +14,22 @@
     "lixpiValue": "720p",
     "currentState": "exposed",
     "availability": "supported",
-    "summary": "Output pixel budget. Each resolution and aspect-ratio pair maps to fixed dimensions, so 720p plus 21:9 is 1470x630, not a crop. Seedance 2.0 fast stops at 720p.",
+    "summary": "Selects the output pixel tier, with exact dimensions determined jointly by ratio. Seedance 2.0 supports 480p, 720p, 1080p, and 4k; Seedance 2.0 Fast and Mini stop at 720p; Seedance 2.5 supports up to 1080p.",
     "combines": [
-        "Drives billing: our matrix charges 4.0 per 1M tokens at 4K against 7.7 at 1080p.",
-        "4K output uses 10-bit color and H.265, which some browsers will not play.",
-        "2.0: 480p, 720p, 1080p, 4k. 2.0 fast: 480p and 720p only. 2.5: 480p, 720p, 1080p, with no 4k. Default 720p on all three."
+        "Each resolution-and-ratio pair maps to documented dimensions; for example, 720p at 21:9 is 1470x630 rather than a crop of 1280x720.",
+        "Seedance 2.5 1080p and Seedance 2.0 4k use 10-bit H.265/HEVC output, which offers smoother gradients but is unsupported in some browsers and players.",
+        "Resolution affects token price: Seedance 2.0 has separate 480p/720p, 1080p, and 4k rates; Fast, Mini, and 2.5 have their documented model-specific tiers."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:118",
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and BytePlusProvider.runSeedanceGeneration",
         "code": "...(state.videoResolution ? { resolution: state.videoResolution } : {})",
-        "from": "state.videoResolution, carried from the matrix control the user picked",
-        "what": "Sets the output frame size for the whole clip. Also selects the billing tier in video-token-accounting, since Seedance prices per resolution."
+        "from": "state.videoResolution, validated from the selected Seedance model's Resolution dropdown",
+        "what": "Sends only the selected profile's documented resolution tier, including Mini's 720p ceiling."
     },
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [
@@ -44,6 +45,8 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/1330310",
+        "https://docs.byteplus.com/en/docs/ModelArk/1099320"
     ]
 }

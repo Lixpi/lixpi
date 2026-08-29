@@ -16,8 +16,6 @@
         "Vertex only. The Gemini Developer API documents no fps field and fixes Veo output at 24 fps, so a value sent here is not honoured."
     ],
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"

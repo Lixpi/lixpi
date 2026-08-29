@@ -8,11 +8,14 @@ const mocks = vi.hoisted(() => ({
     attachWorkspaceReference: vi.fn(),
     blobStore: vi.fn(),
     buildAssetCanvasGeometryUpdate: vi.fn(),
+    buildBlobReferenceOperations: vi.fn(),
     buildBlobReferenceBatchOperations: vi.fn(),
+    enqueueRenditionRetry: vi.fn(),
     getAssetRecord: vi.fn(),
     getWorkspace: vi.fn(),
     publishAssetEvent: vi.fn(),
     projectGeneratedAssetNode: vi.fn(),
+    renditionProcess: vi.fn(),
     transactWrite: vi.fn(),
 }))
 
@@ -26,7 +29,7 @@ vi.mock('../models/asset.ts', () => ({
 vi.mock('../models/blob.ts', () => ({
     default: { store: mocks.blobStore },
     buildBlobReferenceBatchOperations: mocks.buildBlobReferenceBatchOperations,
-    buildBlobReferenceOperations: vi.fn(() => []),
+    buildBlobReferenceOperations: mocks.buildBlobReferenceOperations,
 }))
 vi.mock('../models/workspace.ts', () => ({
     default: { getWorkspace: mocks.getWorkspace },
@@ -35,13 +38,18 @@ vi.mock('./asset-canvas-projection.ts', () => ({
     buildAssetCanvasGeometryUpdate: mocks.buildAssetCanvasGeometryUpdate,
     projectGeneratedAssetNode: mocks.projectGeneratedAssetNode,
 }))
-vi.mock('./asset-rendition-service.ts', () => ({ default: {} }))
-vi.mock('./asset-maintenance-queue.ts', () => ({ enqueueRenditionRetry: vi.fn() }))
+vi.mock('./asset-rendition-service.ts', () => ({
+    default: { process: mocks.renditionProcess },
+}))
+vi.mock('./asset-maintenance-queue.ts', () => ({
+    enqueueRenditionRetry: mocks.enqueueRenditionRetry,
+}))
 
 import {
     attachGeneratedAssetNode,
     collectGeneratedAssetSourceIds,
     resolveInheritedGenerationSeed,
+    settleGeneratedAssetOriginal,
     settleGeneratedAssetComposition,
 } from './generated-asset-storage.ts'
 
@@ -147,6 +155,8 @@ beforeEach(() => {
     vi.resetAllMocks()
     ;(globalThis as any).dynamoDBService = { transactWrite: mocks.transactWrite }
     mocks.buildBlobReferenceBatchOperations.mockReturnValue({ operations: [], deletionBlobHashes: [] })
+    mocks.buildBlobReferenceOperations.mockReturnValue([])
+    mocks.renditionProcess.mockResolvedValue(undefined)
     mocks.transactWrite.mockResolvedValue(undefined)
     mocks.getWorkspace.mockResolvedValue({
         workspaceId: 'workspace-1',
@@ -240,6 +250,55 @@ describe('resolveInheritedGenerationSeed', () => {
             assetId: 'pending-asset',
             maxValue: 2147483647,
         })).toBeUndefined()
+    })
+})
+
+describe('settleGeneratedAssetOriginal', () => {
+    it('marks MOV as non-model-safe and stores the returned last frame as the representative frame', async () => {
+        mocks.getAssetRecord.mockResolvedValue(asset(false))
+        mocks.blobStore
+            .mockResolvedValueOnce({
+                blobKey: 'organization-1:video-hash',
+                blobHash: 'a'.repeat(64),
+                organizationId: 'organization-1',
+                referenceCount: 0,
+                status: 'staging',
+            })
+            .mockResolvedValueOnce({
+                blobKey: 'organization-1:frame-hash',
+                blobHash: 'b'.repeat(64),
+                organizationId: 'organization-1',
+                referenceCount: 0,
+                status: 'staging',
+            })
+
+        await settleGeneratedAssetOriginal({
+            generationRun,
+            workspaceId: 'workspace-1',
+            buffer: Buffer.from('mov-bytes'),
+            originalName: 'generated-video.mov',
+            mimeType: 'video/quicktime',
+            kind: 'video',
+            representativeFrameBuffer: Buffer.from('png-bytes'),
+        })
+
+        const transaction = mocks.transactWrite.mock.calls[0]?.[0]
+        const assetUpdate = transaction.operations.find((operation: any) => operation.updates?.media)
+        expect(assetUpdate.updates.media).toMatchObject({
+            kind: 'video',
+            originalName: 'generated-video.mov',
+            sourceMimeType: 'video/quicktime',
+            modelSafe: false,
+            renditions: {
+                original: { mimeType: 'video/quicktime', status: 'ready' },
+                representativeFrame: { mimeType: 'image/png', status: 'ready' },
+            },
+        })
+        expect(mocks.buildBlobReferenceOperations).toHaveBeenCalledWith(expect.objectContaining({
+            reference: expect.objectContaining({
+                referenceKey: 'asset#asset-1#rendition#representativeFrame',
+            }),
+        }))
     })
 })
 

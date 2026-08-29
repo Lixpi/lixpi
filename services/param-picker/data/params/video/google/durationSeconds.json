@@ -13,19 +13,18 @@
     "lixpiValue": "8",
     "currentState": "exposed",
     "availability": "supported",
-    "summary": "Clip length. Veo 3.0 supports 8 seconds only.",
+    "summary": "Sets the requested clip length to 4, 6, or 8 seconds. The apparent choice narrows to 8 seconds when the request uses a first or last frame, typed reference images, video extension, 1080p, or 4k.",
     "combines": [
-        "Forced to 8 whenever the request carries reference images, a first or last frame, an extension video, or a resolution above 720p."
+        "Lixpi normalizes frame-conditioned, extension, 1080p, and 4k requests to 8 seconds before sending them, so an otherwise valid matrix selection cannot reach Google as an incompatible combination.",
+        "Veo extension adds roughly seven seconds of new material even though the request must carry durationSeconds=8."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/google-provider.ts:746",
-        "code": "if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds",
-        "from": "state.videoDurationSeconds, from the Duration control",
-        "what": "Clip length. Overwritten with 8 at :793 whenever the request carries reference images, a first or last frame, an extension video, or a resolution above 720p."
+        "setIn": "services/api/src/llm/providers/google-provider.ts, GoogleProvider.runVeoGeneration",
+        "code": "if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds; if (requiresEightSeconds) veoConfig.durationSeconds = 8",
+        "from": "state.videoDurationSeconds, validated from the selected Veo model's Duration control",
+        "what": "Sends the selected duration and normalizes frame-conditioned, extension, 1080p, and 4k requests to eight seconds."
     },
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"

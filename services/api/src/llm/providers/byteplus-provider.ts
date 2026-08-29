@@ -2,7 +2,7 @@
 
 import * as process from 'process'
 
-import { info, err } from '@lixpi/debug-tools'
+import { info, warn, err } from '@lixpi/debug-tools'
 import type { ProviderName } from '@lixpi/constants'
 
 import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
@@ -12,15 +12,16 @@ import {
     BytePlusModelArkError,
     buildSeedanceContent,
     createVideoGenerationTask,
+    downloadLastFrame,
     downloadVideo,
     pollVideoGenerationTask,
     retrieveVideoGenerationTask,
     type BytePlusClientConfig,
     type CreateVideoGenerationTaskPayload,
 } from './byteplus-video-types.ts'
-import { SEEDANCE_SEED_MAX, resolveReportedSeed } from './media-generation-seed.ts'
+import { readReportedSeed } from './media-generation-seed.ts'
 
-// First-party video provider for BytePlus ModelArk's official Seedance 2.0 API.
+// First-party video provider for BytePlus ModelArk's official Seedance 2.x API.
 // A clean peer of GoogleProvider: it is invoked as a transient provider by the
 // VideoRouter (instanceKey {ws}:{thread}:video, enableVideoGeneration=true) and
 // runs the async create+poll+download path inside the request, publishing the
@@ -108,32 +109,36 @@ export class BytePlusProvider extends BaseProvider {
         })
         const duration = Number(state.videoDurationSeconds) || undefined
         const generationConfig = state.videoGenerationConfig ?? {}
-        // Seedance accepts a seed and echoes it back on the finished task, so we
-        // always send one and store whichever value the task reports.
-        const requestedSeed = await this.resolveGenerationSeed(state, SEEDANCE_SEED_MAX)
+        const hasFirstFrame = content.some(item => item.type === 'image_url' && item.role === 'first_frame')
+        const hasLastFrame = content.some(item => item.type === 'image_url' && item.role === 'last_frame')
+        const isSeedance25 = modelVersion === 'dreamina-seedance-2-5-260628'
+        const outputFormat = isSeedance25
+            && (generationConfig.outputFormat === 'mp4' || generationConfig.outputFormat === 'mov')
+            ? generationConfig.outputFormat
+            : undefined
+        const ratio = isSeedance25 && (hasFirstFrame || hasLastFrame)
+            ? 'adaptive'
+            : state.videoAspectRatio
 
         const payload: CreateVideoGenerationTaskPayload = {
             model: modelVersion,
             content,
             ...(state.videoResolution ? { resolution: state.videoResolution } : {}),
-            ...(state.videoAspectRatio ? { ratio: state.videoAspectRatio } : {}),
+            ...(ratio ? { ratio } : {}),
             ...(duration ? { duration } : {}),
             generate_audio: generationConfig.generateAudio !== 'false',
             watermark: generationConfig.watermark === 'true',
-            seed: requestedSeed,
-            camera_fixed: generationConfig.cameraFixed === 'true',
             return_last_frame: generationConfig.returnLastFrame === 'true',
+            ...(outputFormat ? { output_format: outputFormat } : {}),
         }
 
-        const hasFirstFrame = content.some((c) => c.type === 'image_url' && c.role === 'first_frame')
-        const hasLastFrame = content.some((c) => c.type === 'image_url' && c.role === 'last_frame')
         info(`[BytePlus:${this.instanceKey}] Seedance submit ${JSON.stringify({
             model: modelVersion,
             ratio: payload.ratio,
             resolution: payload.resolution,
             duration: payload.duration,
             generateAudio: payload.generate_audio,
-            cameraFixed: payload.camera_fixed,
+            outputFormat: payload.output_format,
             promptLen: providerPrompt.length,
             hasFirstFrame,
             hasLastFrame,
@@ -181,24 +186,44 @@ export class BytePlusProvider extends BaseProvider {
             if (!videoBuffer || videoBuffer.length === 0) {
                 throw new Error('Seedance: empty video bytes after download')
             }
+            let frameBuffer: Buffer | null = null
+            if (payload.return_last_frame) {
+                const lastFrameUrl = task.content?.last_frame_url
+                if (lastFrameUrl) {
+                    try {
+                        frameBuffer = await this.retryTransport(
+                            'last-frame-download',
+                            async () => await downloadLastFrame(lastFrameUrl, this.signal),
+                        )
+                    } catch (error) {
+                        warn(`[BytePlus:${this.instanceKey}] Seedance last-frame download failed: ${(error as Error).message}`)
+                    }
+                } else {
+                    warn(`[BytePlus:${this.instanceKey}] Seedance returned no last_frame_url for return_last_frame=true`)
+                }
+            }
 
             const durationSeconds = Number(task.duration ?? state.videoDurationSeconds) || 0
             const aspectRatio = task.ratio ?? state.videoAspectRatio ?? ''
             const resolution = task.resolution ?? state.videoResolution ?? ''
             const hasAudio = payload.generate_audio ?? true
-            const generationSeed = resolveReportedSeed(task.seed, requestedSeed)
+            const generationSeed = readReportedSeed(task.seed)
+            const containerFormat = task.output_format === 'mp4' || task.output_format === 'mov'
+                ? task.output_format
+                : payload.output_format ?? 'mp4'
 
             await this.videoPub.complete({
                 videoBuffer,
                 posterBuffer: null,
-                frameBuffer: null,
+                frameBuffer,
                 durationSeconds,
                 aspectRatio,
                 hasAudio,
                 responseId: taskId,
                 revisedPrompt: providerPrompt,
                 videoModelId: modelVersion,
-                generationSeed,
+                ...(generationSeed !== undefined ? { generationSeed } : {}),
+                containerFormat,
             })
 
             info(`[BytePlus:${this.instanceKey}] Seedance complete ${JSON.stringify({

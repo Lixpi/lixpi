@@ -7,27 +7,22 @@
     "providerDefault": "none, so registered webhooks (if any) are used",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Sends a notification to the given URIs when the long-running video operation completes, with optional user metadata echoed back on each event so you can correlate it with your own systems.",
+    "availability": "supported",
+    "summary": "Requests completion callbacks for the long-running video operation, with optional metadata for correlating the callback to local work. It is Gemini Developer API infrastructure, not a generation-quality control.",
     "combines": [
-        "Supported on: not documented on the Gemini Veo page; defined in the shared SDK as generic long-running-operation webhook configuration covering batch jobs and video generation",
-        "`uris` overrides any registered webhooks for the request."
+        "The current @google/genai converter sends webhookConfig only on the Gemini Developer API path and explicitly rejects it in Vertex mode.",
+        "Lixpi polls operations in-process today, so enabling this would require callback authentication, idempotency, and durable operation correlation rather than a matrix field."
     ],
     "values": [
-        "{ uris?: string[]",
-        "userMetadata?: Record<string",
-        "unknown> }"
+        "{ uris?: string[]; userMetadata?: Record<string, unknown> }"
     ],
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"
     ],
     "supportedApis": [
-        "gemini-developer-api",
-        "vertex-ai"
+        "gemini-developer-api"
     ],
     "decision": "skip",
     "reviewed": false,
@@ -37,8 +32,13 @@
     "defaultValue": "",
     "note": "",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "vertex-ai"
+    ],
     "sources": [
-        "https://ai.google.dev/gemini-api/docs/veo"
+        "https://ai.google.dev/gemini-api/docs/webhooks",
+        "https://ai.google.dev/api/webhooks",
+        "https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateVideosConfig.html",
+        "https://raw.githubusercontent.com/googleapis/js-genai/main/src/converters/_models_converters.ts"
     ]
 }

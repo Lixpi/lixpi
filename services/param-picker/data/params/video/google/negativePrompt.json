@@ -5,23 +5,22 @@
     "controlKey": "negativePrompt",
     "type": "string",
     "providerDefault": null,
-    "lixpiValue": "a fixed internal string (VEO_NEGATIVE_PROMPT)",
+    "lixpiValue": "reasoning-derived per request",
     "currentState": "hidden",
-    "availability": "unverified",
-    "summary": "Describes what to keep out of the video.",
+    "availability": "supported",
+    "summary": "Lists visible or audible elements the generated video should avoid, such as captions, logos, camera shake, or unwanted objects. It complements the positive prompt and should describe exclusions rather than restating the desired scene.",
     "combines": [
-        "Lixpi sends a constant here, never anything the user wrote.",
-        "Documented on Vertex and exposed by the SDK on the Gemini path, but the Gemini Veo parameter table does not list it. Lixpi sends a fixed string here today without documented confirmation that Gemini honours it."
+        "The video generation tool preserves an explicit user negative prompt; otherwise the reasoning model may derive only concrete unwanted output from the request.",
+        "The provider sanitizes the negative prompt with the same boundary policy as the main prompt before placing it in config.negativePrompt.",
+        "The current @google/genai converter maps negativePrompt on both Gemini Developer API and Vertex video paths."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/google-provider.ts:751",
+        "setIn": "services/api/src/llm/tools/video-generation.ts, services/api/src/llm/tools/video-router.ts, and GoogleProvider.runVeoGeneration",
         "code": "if (generationConfig.negativePrompt) veoConfig.negativePrompt = generationConfig.negativePrompt",
-        "from": "state.videoGenerationConfig.negativePrompt, populated from the VEO_NEGATIVE_PROMPT constant in llm/tools/video-generation-trace.ts:12",
-        "what": "A fixed house string of things to keep out of every clip. No user text ever reaches this field."
+        "from": "the explicit generate_video negativePrompt or the reasoning model's provider-neutral video tool result",
+        "what": "Carries a sanitized native negative prompt through routing and sends it only to providers with a native field."
     },
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"
@@ -40,6 +39,7 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://ai.google.dev/gemini-api/docs/veo"
+        "https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateVideosConfig.html",
+        "https://raw.githubusercontent.com/googleapis/js-genai/main/src/converters/_models_converters.ts"
     ]
 }

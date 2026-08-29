@@ -6,22 +6,23 @@
     "type": "boolean",
     "providerDefault": "true",
     "lixpiValue": "true",
-    "currentState": "hidden",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Generates synchronized dialogue, sound effects, and music. Output is always mono. Every Seedance video Lixpi produces has audio because nothing ever sets this to false.",
+    "summary": "Turns synchronized mono speech, sound effects, and background music on or off. It changes the delivered media, not reference-audio input; disabling it produces a silent output even when the prompt describes sound.",
     "combines": [
         "Dialogue placed in double quotes inside the prompt improves the generated speech.",
         "2.5 additionally accepts audio-only input; the 2.0 series requires at least one reference image or video."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:121",
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and BytePlusProvider.runSeedanceGeneration",
         "code": "generate_audio: generationConfig.generateAudio !== 'false'",
-        "from": "state.videoGenerationConfig.generateAudio, which no matrix control ever sets",
-        "what": "Decides whether the clip carries generated dialogue, effects, and music. The !== 'false' test means the absent value reads as true, so every Seedance video Lixpi produces has audio. Also read at :192 to record hasAudio on the asset."
+        "from": "state.videoGenerationConfig.generateAudio, validated from the Generate audio toggle",
+        "what": "Sends the per-model audio choice, defaulting to BytePlus's documented true value."
     },
     "supportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "supportedApis": [

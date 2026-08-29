@@ -14,8 +14,6 @@
         "Requires a Google Cloud project and bucket, so it is unusable with an API-key-only Gemini client."
     ],
     "supportedModels": [
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
         "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
         "veo-3.1-lite-generate-preview"

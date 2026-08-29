@@ -43,10 +43,10 @@ const CHEVRON = '<svg class="chevron" viewBox="0 0 16 16" width="14" height="14"
 const COLLAPSE_STORAGE_KEY = 'param-picker:collapsed'
 const SCROLL_STORAGE_KEY = 'param-picker:scroll'
 
-// Trailing build stamps carry no meaning in a pill: dreamina-seedance-2-5-260628
-// and veo-3.0-generate-001 read as the same model with or without them. Only a
-// run of three or more digits is dropped, so claude-opus-4-8 and gpt-image-1
-// keep the digits that are part of the name.
+// Trailing build stamps carry no meaning in a pill, so
+// dreamina-seedance-2-5-260628 reads the same with or without its final stamp.
+// Only a run of three or more digits is dropped, so claude-opus-4-8 and
+// gpt-image-1 keep the digits that are part of the name.
 const shortModel = (model: string): string => String(model).replace(/-\d{3,}$/u, '')
 
 const titleFromSlug = (slug: string): string => String(slug)
@@ -719,8 +719,6 @@ const picker = new ParamPicker(document.getElementById('providers') as HTMLEleme
 picker.init().catch((error: Error) => {
     document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
 })
-
-
 
 
 

@@ -131,6 +131,17 @@ class TestProvider extends BaseProvider {
         )
         return this.executeImageGeneration(state)
     }
+
+    async runVideoGeneration(state: ProviderState): Promise<Partial<ProviderState>> {
+        this.streamPublisher = new StreamPublisher(
+            this.deps.natsService,
+            state.workspaceId,
+            state.aiChatThreadId,
+            this.providerName,
+            state.generationRun,
+        )
+        return this.executeVideoGeneration(state)
+    }
 }
 
 class FailingStreamProvider extends BaseProvider {
@@ -420,6 +431,34 @@ describe('BaseProvider request validation', () => {
         expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
             generatedImagePrompt: 'Create a character sheet.',
             capabilityMediaExecutionPlan: plan,
+        }), expect.anything())
+    })
+
+    it('preserves video configuration and the reasoning model negative prompt in provider state', async () => {
+        const nats = makeFakeNats()
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: nats.fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+        } as BaseProviderDeps)
+        const invoke = vi.fn(async (initialState: ProviderState) => initialState)
+        ;(provider as any).app = { invoke }
+
+        await provider.process({
+            organizationId: 'organization-1',
+            workspaceId: 'ws-1',
+            aiChatThreadId: 'thread-1',
+            aiModelMetaInfo: { provider: 'BytePlus', model: 'seedance', modelVersion: 'seedance' },
+            messages: [{ role: 'user', content: 'Animate the subject.' }],
+            enableVideoGeneration: true,
+            videoGenerationConfig: { generateAudio: 'false', outputFormat: 'mov' },
+            generatedVideoNegativePrompt: 'no subtitles',
+        })
+
+        expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
+            videoGenerationConfig: { generateAudio: 'false', outputFormat: 'mov' },
+            generatedVideoNegativePrompt: 'no subtitles',
         }), expect.anything())
     })
 
@@ -856,6 +895,38 @@ describe('BaseProvider provider-safe media prompts', () => {
         expect(runImageRouter).toHaveBeenCalledWith(
             expect.objectContaining({
                 generatedImagePrompt: 'Create a cinematic shot where REFERENCE_1 walks through the alley.',
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('sanitizes generated and configured negative prompts before video-provider dispatch', async () => {
+        const runVideoRouter = vi.fn(async () => ({ generatedVideos: ['generated-video'] }))
+        const provider = new TestProvider('ws-1:thread-1', {
+            natsService: makeFakeNats().fake,
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter,
+        } as BaseProviderDeps)
+        const state = createFanoutState({
+            mediaFanoutPlan: undefined,
+            generatedVideoPrompt: 'Animate REFERENCE_1 walking through the alley.',
+            generatedVideoNegativePrompt: 'Do not render Robert James as text.',
+            videoGenerationConfig: {
+                negativePrompt: 'No captions naming Robert James.',
+            },
+            providerSafeMediaIntent,
+        })
+
+        await expect(provider.runVideoGeneration(state)).resolves.toEqual({
+            generatedVideos: ['generated-video'],
+        })
+        expect(runVideoRouter).toHaveBeenCalledWith(
+            expect.objectContaining({
+                generatedVideoNegativePrompt: 'Do not render REFERENCE_1 as text.',
+                videoGenerationConfig: {
+                    negativePrompt: 'No captions naming REFERENCE_1.',
+                },
             }),
             expect.any(Object),
         )

@@ -9,7 +9,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "unsupported",
-    "summary": "Sub-second length control. Takes precedence over duration.",
+    "summary": "Specifies a 24 fps frame count for fractional-second output and overrides duration when both fields are present. BytePlus limits frames to Seedance 1.0 models, so every current Seedance 2.x model rejects it.",
     "combines": [
         "Seedance 1.0 series only."
     ],
@@ -27,6 +27,7 @@
     "unsupportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "unsupportedApis": [],

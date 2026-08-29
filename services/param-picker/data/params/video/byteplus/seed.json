@@ -6,34 +6,29 @@
     "type": "integer",
     "range": "-1 to 2147483647",
     "providerDefault": "-1",
-    "lixpiValue": "randomly generated per request",
-    "currentState": "hidden",
-    "availability": "unverified",
-    "summary": "Controls randomness. The same seed plus the same request gives similar, not identical, results.",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Controls best-effort randomness on Seedance 1.5 Pro and 1.0 models; identical inputs and seeds may produce similar but not guaranteed identical results. BytePlus excludes every current Seedance 2.x model, including Mini, so Lixpi must not send it on this group.",
     "combines": [
-        "The BytePlus supported-model list names Seedance 1.5 pro and the 1.0 series, and omits the 2.0 series.",
-        "The finished task echoes the seed back, so it can be stored and replayed."
+        "Not available on any Seedance model Lixpi ships."
     ],
-    "usage": {
-        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:123",
-        "code": "seed: requestedSeed  (generated at :111 via SEEDANCE_SEED_MAX)",
-        "from": "generateMediaGenerationSeed in media-generation-seed.ts, fresh per request",
-        "what": "Pins the random draw so a generation can be described after the fact. resolveReportedSeed reconciles what the finished task echoes back with what we sent, and that lands on the asset record."
-    },
+    "usage": {},
     "supportedModels": [],
     "supportedApis": [
         "byteplus-modelark-video"
     ],
-    "decision": "internal",
-    "reviewed": false,
-    "status": "approved",
-    "irrelevant": false,
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
     "note": "",
     "unsupportedModels": [
         "dreamina-seedance-2-0-260128",
         "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
         "dreamina-seedance-2-5-260628"
     ],
     "unsupportedApis": [],

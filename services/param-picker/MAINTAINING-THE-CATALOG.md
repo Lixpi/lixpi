@@ -25,11 +25,16 @@ curl -s -X PATCH http://localhost:3010/api/params \
             "supportedModels": ["..."],
             "unsupportedModels": ["..."]
           }
+        },
+        "groups": {
+          "byteplus/seedance-2-video": {
+            "models": ["..."]
+          }
         }
       }'
 ```
 
-Keys are `<providerId>/<groupId>/<paramKey>`. The endpoint merges only the fields you send and leaves the rest alone, so a documentation refresh cannot disturb anyone's decision by omission. It refuses a parameter that does not exist and a field it does not recognise, including `key`, because that is the file's identity. Recovering from a bad edit is copying the file back out of the snapshot folder.
+Parameter keys are `<providerId>/<groupId>/<paramKey>` and group keys are `<providerId>/<groupId>`. Existing groups expose only `title`, `models`, and `docs` through this endpoint. The endpoint merges only the fields you send and leaves the rest alone, so a documentation refresh cannot disturb anyone's decision by omission. It refuses a target that does not exist and a field it does not recognise, including identity fields such as `key`, `providerId`, and `groupId`. Recovering from a bad edit is copying the file back out of the snapshot folder.
 
 Two things it deliberately will not do, because both change identity rather than content: **creating** and **deleting** parameters. Add a new parameter by writing its file into the right folder, and retire one by marking it `availability: "unsupported"` rather than deleting it. Do those on disk, and take your own copy of the tree first:
 

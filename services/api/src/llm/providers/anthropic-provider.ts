@@ -222,11 +222,13 @@ export class AnthropicProvider extends BaseProvider {
                 const imageCall = hasImageModel && !videoCall ? extractToolCall('Anthropic', finalMessage) : undefined
                 if (videoCall) {
                     update.generatedVideoPrompt = videoCall.prompt
+                    update.generatedVideoNegativePrompt = videoCall.negativePrompt
                     info(`[Anthropic:${this.instanceKey}] generate_video tool call ${JSON.stringify({
                         chatModel: modelVersion,
                         targetVideoProvider: state.videoProviderName,
                         targetVideoModel: state.videoModelVersion,
                         promptLen: videoCall.prompt.length,
+                        negativePromptLen: videoCall.negativePrompt?.length ?? 0,
                     }, null, 0)}`)
                 } else if (imageCall) {
                     const refs = extractReferenceImages(messages)

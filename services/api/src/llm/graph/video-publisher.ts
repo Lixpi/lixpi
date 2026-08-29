@@ -13,6 +13,16 @@ import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../se
 import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 
+const isPng = (buffer: Buffer): boolean => buffer.length >= 8
+    && buffer[0] === 0x89
+    && buffer[1] === 0x50
+    && buffer[2] === 0x4e
+    && buffer[3] === 0x47
+    && buffer[4] === 0x0d
+    && buffer[5] === 0x0a
+    && buffer[6] === 0x1a
+    && buffer[7] === 0x0a
+
 // Mirrors ImagePublisher but for the async VEO lifecycle. There are no partial
 // frames: the API projects VIDEO_PENDING (placeholder + traveling outline), then
 // periodic VIDEO_GENERATING keepalive pings during the poll loop, then a single
@@ -89,9 +99,12 @@ export class VideoPublisher {
         revisedPrompt: string
         videoModelId: string
         generationSeed?: number
+        containerFormat?: 'mp4' | 'mov'
     }): Promise<void> {
         const {
             videoBuffer,
+            posterBuffer,
+            frameBuffer,
             durationSeconds,
             aspectRatio,
             hasAudio,
@@ -99,30 +112,37 @@ export class VideoPublisher {
             revisedPrompt,
             videoModelId,
             generationSeed,
+            containerFormat = 'mp4',
         } = args
 
         if (!videoBuffer || videoBuffer.length === 0) {
             throw new Error('Video completion failed: provider returned no video bytes')
         }
-        // MP4 sanity check: the second box must be `ftyp`.
-        const isMp4 = videoBuffer.length > 12
+        // MP4 and QuickTime MOV are ISO base-media containers with an `ftyp` box.
+        const isIsoBaseMedia = videoBuffer.length > 12
             && videoBuffer[4] === 0x66
             && videoBuffer[5] === 0x74
             && videoBuffer[6] === 0x79
             && videoBuffer[7] === 0x70
-        if (!isMp4) {
-            throw new Error('Video completion failed: provider returned bytes that are not an MP4 (no ftyp box)')
+        if (!isIsoBaseMedia) {
+            throw new Error('Video completion failed: provider returned bytes without an ISO base-media ftyp box')
         }
+        if (posterBuffer && !isPng(posterBuffer)) throw new Error('Video completion failed: provider poster is not a PNG')
+        if (frameBuffer && !isPng(frameBuffer)) throw new Error('Video completion failed: provider frame is not a PNG')
 
         if (!this.generationRun) throw new Error('Video completion is missing generationRun')
+        const originalName = `generated-video.${containerFormat}`
+        const mimeType = containerFormat === 'mov' ? 'video/quicktime' : 'video/mp4'
         const videoResult = await settleGeneratedAssetOriginal({
             generationRun: this.generationRun,
             workspaceId: this.workspaceId,
             buffer: videoBuffer,
-            originalName: 'generated-video.mp4',
-            mimeType: 'video/mp4',
+            originalName,
+            mimeType,
             kind: 'video',
             ...(generationSeed !== undefined ? { generationSeed } : {}),
+            posterBuffer,
+            representativeFrameBuffer: frameBuffer,
         })
         const parsedAspectRatio = aspectRatio.includes(':')
             ? Number(aspectRatio.split(':')[0]) / Number(aspectRatio.split(':')[1])

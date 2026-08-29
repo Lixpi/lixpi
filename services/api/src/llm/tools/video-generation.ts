@@ -29,14 +29,29 @@ const BASE_PARAMETERS = {
                 'The exact moving-media prompt derived from the user request and authorized reference roles. ' +
                 'It must preserve requested temporal behavior, avoid invented content, and be moderation-compliant.',
         },
+        negativePrompt: {
+            type: 'string',
+            description:
+                'Content the user explicitly wants excluded from the video. Preserve an explicit user negative prompt as-is. ' +
+                'Otherwise include only concrete unwanted output derived from the request, or omit this field when none applies.',
+        },
     },
     required: ['prompt'],
 }
 
 export type VideoToolCall = {
     prompt: string
+    negativePrompt?: string
     toolCallId?: string
 }
+
+const toVideoToolCall = (args: Record<string, unknown>, toolCallId?: string): VideoToolCall => ({
+    prompt: typeof args.prompt === 'string' ? args.prompt : '',
+    ...(typeof args.negativePrompt === 'string' && args.negativePrompt.length > 0
+        ? { negativePrompt: args.negativePrompt }
+        : {}),
+    ...(toolCallId ? { toolCallId } : {}),
+})
 
 export const getVideoToolForProvider = (provider: ProviderName): Record<string, any> => {
     if (provider === 'OpenAI') {
@@ -60,7 +75,7 @@ export const extractVideoToolCallOpenAI = (response: any): VideoToolCall | undef
                 const args = typeof item.arguments === 'string'
                     ? JSON.parse(item.arguments)
                     : item.arguments
-                return { prompt: args?.prompt ?? '', toolCallId: item.call_id }
+                return toVideoToolCall(args ?? {}, item.call_id)
             } catch (e) {
                 warn(`Failed to parse OpenAI video tool call: ${e}`)
             }
@@ -75,7 +90,7 @@ export const extractVideoToolCallAnthropic = (finalMessage: any): VideoToolCall 
     for (const block of finalMessage.content) {
         if (block?.type === 'tool_use' && block?.name === VIDEO_TOOL_NAME) {
             const args = block.input ?? {}
-            return { prompt: args.prompt ?? '', toolCallId: block.id }
+            return toVideoToolCall(args, block.id)
         }
     }
     return undefined
@@ -91,7 +106,7 @@ export const extractVideoToolCallGoogle = (response: any): VideoToolCall | undef
             const fnCall = part.functionCall ?? part.function_call
             if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
                 const args = fnCall.args ? { ...fnCall.args } : {}
-                return { prompt: args.prompt ?? '' }
+                return toVideoToolCall(args)
             }
         }
     }
