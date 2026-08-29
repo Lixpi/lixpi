@@ -1,0 +1,44 @@
+{
+    "key": "responseModalities",
+    "category": "output-format",
+    "apiField": "config.responseModalities",
+    "controlKey": null,
+    "type": "object",
+    "values": [
+        "TEXT",
+        "IMAGE"
+    ],
+    "providerDefault": null,
+    "lixpiValue": "['TEXT', 'IMAGE']",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Tells generateContent to return an image alongside text. Required plumbing, not a user choice.",
+    "combines": [],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:279",
+        "code": "config.responseModalities = ['TEXT', 'IMAGE']",
+        "from": "hardcoded whenever image generation is enabled",
+        "what": "Tells generateContent to return image parts alongside text. Required plumbing for the Nano Banana path, not a creative choice."
+    },
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

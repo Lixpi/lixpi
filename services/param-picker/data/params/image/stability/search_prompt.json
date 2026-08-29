@@ -1,0 +1,38 @@
+{
+    "key": "search_prompt",
+    "category": "masking-editing",
+    "apiField": "search_prompt",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Names the thing to find and replace on the search-and-replace endpoint, in plain words, so you can inpaint without drawing a mask. `search_prompt` says what to look for; `prompt` says what to put there instead.",
+    "combines": [
+        "Worked example: search_prompt 'sweater' with a prompt describing the garment you want in its place.",
+        "The AWS mirror labels this 'what to inpaint in the image', which reads backwards. Its own example makes the direction clear: this field is the search term, not the replacement.",
+        "Pairs with grow_mask to soften the seam where the replacement meets the original."
+    ],
+    "range": "max 10,000 characters",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

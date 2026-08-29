@@ -1,0 +1,54 @@
+{
+    "key": "inlineAssetReferences",
+    "category": "reference-assets",
+    "apiField": "Inline prompt asset references",
+    "controlKey": null,
+    "type": "string (prompt convention, not a wire field)",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Assets are addressed inside the prompt by asset type plus number, where the number is the position of that asset among assets of the same type in the request body. The docs never use the `[Image1]` bracket form; official examples use `@Image1`, `@Video 1`, `Image 1`, `<Video_N>`.",
+    "combines": [
+        "Supported on: Seedance 2.5, Seedance 2.0 series (any model that accepts reference assets)",
+        "Never reference an asset by its `asset://` ID in the prompt. \"asset-2026**** is a beauty influencer\" is explicitly called out as incorrect; \"The beauty influencer in Image 1\" is correct.",
+        "State what each asset supplies (appearance, action, camera movement, timbre, lighting) and what should not be referenced.",
+        "Multi-subject mapping should be listed one by one, e.g. \"Images 1-2 are Character 1 and correspond to Audio 1; Images 3-4 are Character 2 and correspond to Audio 2.\"",
+        "For edit/extend tasks, write `<Video_N>` directly and avoid the word \"reference\", or the task is misclassified as reference-to-video.",
+        "Sound markup: `()` music, `<>` sound effects, `{}` dialogue, `【】` subtitles. Mark the language for uncommon-language dialogue.",
+        "Seedance 2.5 supports integer-second timestamps (\"0-3 seconds...\", \"[1s-4s]...\", \"at the 5-second mark\"); Seedance 2.0 responds only to shot numbers.",
+        "Seedance 2.5 negative control is documented for subtitles (\"no subtitles\") and audio (\"No BGM\")."
+    ],
+    "values": [
+        "@Image1",
+        "@Image 1",
+        "Image 1",
+        "@Video1",
+        "@Video 1",
+        "<Video_N>",
+        "@Audio1",
+        "Audio 1"
+    ],
+    "range": "numbering follows the upload order of assets of that type within `content`",
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/2607688",
+        "https://docs.byteplus.com/en/docs/ModelArk/2298881"
+    ]
+}

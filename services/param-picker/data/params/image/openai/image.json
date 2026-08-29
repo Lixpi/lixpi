@@ -1,0 +1,42 @@
+{
+    "key": "image",
+    "category": "reference-assets",
+    "apiField": "image",
+    "controlKey": null,
+    "type": "file | file[]",
+    "providerDefault": "required on images.edit",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "The input image or images on images.edit. Despite the endpoint name this is not only for masked editing: passing several images uses them as references and the model composes a new image from their contents.",
+    "combines": [
+        "Multiple images are allowed and are treated as references to draw from, not blended together. OpenAI's own worked example passes four.",
+        "A mask applies to the first image only. The rest stay as pure references.",
+        "Each file must be under 50MB, and the image and mask must match in format and size.",
+        "On gpt-image-2 input_fidelity has no effect here: that model already processes every input at high fidelity and the API rejects attempts to change it.",
+        "This is the parameter behind Lixpi's reference-image path, which is why openai-provider.ts branches to images.edit whenever references are present."
+    ],
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "openai-responses-image-tool"
+    ],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/images/methods/edit"
+    ]
+}

@@ -1,0 +1,38 @@
+{
+    "key": "preserve_original_subject",
+    "category": "masking-editing",
+    "apiField": "preserve_original_subject",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "How strictly the original subject is preserved through the relight.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "none documented"
+    ],
+    "range": "0.0 to 1.0",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

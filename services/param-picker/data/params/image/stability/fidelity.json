@@ -1,0 +1,40 @@
+{
+    "key": "fidelity",
+    "category": "conditioning-strength",
+    "apiField": "fidelity",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": "0.5",
+    "lixpiValue": "STYLE_CONTROL_FIDELITY constant",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "On control/style: how closely the output matches the reference image's style.",
+    "combines": [],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:318",
+        "code": "formData.set('fidelity', String(STYLE_CONTROL_FIDELITY))  // 0.7, defined at :28",
+        "from": "a hardcoded constant",
+        "what": "On control/style, how closely the output matches the reference image's style. 0.7 sits above Stability's own 0.5 default, so Lixpi leans toward the reference."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "0.7",
+    "note": "Show as a slider, Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

@@ -1,0 +1,36 @@
+{
+    "key": "presencePenalty",
+    "category": "sampling",
+    "apiField": "config.presencePenalty",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A binary on/off penalty on tokens that already appeared in the response, independent of how many times.",
+    "combines": [
+        "Supported on: Gemini Developer API",
+        "Negative values encourage reuse and shrink the vocabulary."
+    ],
+    "range": "not documented; negative values are allowed",
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

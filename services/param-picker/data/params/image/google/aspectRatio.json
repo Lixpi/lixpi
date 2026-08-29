@@ -1,0 +1,58 @@
+{
+    "key": "aspectRatio",
+    "category": "output-shape",
+    "apiField": "config.imageConfig.aspectRatio",
+    "controlKey": "aspectRatio",
+    "type": "enum",
+    "values": [
+        "1:1",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:3",
+        "4:5",
+        "5:4",
+        "9:16",
+        "16:9",
+        "21:9",
+        "1:8",
+        "8:1",
+        "1:4",
+        "4:1"
+    ],
+    "providerDefault": "1:1",
+    "lixpiValue": "1:1",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Output shape. Sets shape only, not size.",
+    "combines": [
+        "Our matrix lists ten of these plus Auto and omits the extremes (1:8, 8:1, 1:4, 4:1)."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:281",
+        "code": "if (imageSize && imageSize !== 'auto') config.imageConfig = { aspectRatio: imageSize }",
+        "from": "the model's imageSizes control; 'auto' is dropped rather than forwarded",
+        "what": "Output shape. Note the whole imageConfig object is built from this one field, so nothing else in ImageConfig, imageSize included, is reachable without changing this line."
+    },
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

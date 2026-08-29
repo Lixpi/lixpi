@@ -1,0 +1,43 @@
+{
+    "key": "verbosity",
+    "category": "prompt-control",
+    "apiField": "text.verbosity",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "medium",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "Constrains how wordy the visible answer is, independently of how hard the model thinks.",
+    "combines": [
+        "Supported on: gpt-5 family and later; not documented for o-series or gpt-4.x",
+        "Orthogonal to `reasoning.effort` — you can pair `effort: high` with `verbosity: low` for a deeply-reasoned but terse answer, which is the cheapest way to cut output tokens without cutting quality.",
+        "Ignored if `text.format` is a strict `json_schema` that fully determines the output shape."
+    ],
+    "values": [
+        "low",
+        "medium",
+        "high"
+    ],
+    "supportedModels": [
+        "gpt-5 family"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "o-series reasoning models"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

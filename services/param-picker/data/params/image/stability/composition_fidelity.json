@@ -1,0 +1,37 @@
+{
+    "key": "composition_fidelity",
+    "category": "conditioning-strength",
+    "apiField": "composition_fidelity",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": "0.9",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "On the control/style-transfer endpoint, how much of the input image's composition survives the restyle: the layout and placement of subjects, as distinct from style_strength, which governs how strongly the style image is applied. Stability's default is 0.9.",
+    "combines": [
+        "Style transfer has three independent dials: style_strength for how much style comes across, composition_fidelity for how much of the original layout is kept, and change_strength for how much the original is allowed to change overall.",
+        "Lixpi sends style_strength (pinned to 1) but not this one, so style transfer currently runs at Stability's 0.9 default with no way to loosen the composition."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

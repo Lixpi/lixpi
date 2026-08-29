@@ -1,0 +1,41 @@
+{
+    "key": "context_management",
+    "category": "caching",
+    "apiField": "context_management",
+    "controlKey": null,
+    "type": "object[]",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "Automatic conversation compaction — when the context passes `compact_threshold` tokens, the API compacts earlier turns instead of failing.",
+    "combines": [
+        "Supported on: not documented per-model",
+        "`type` currently only accepts `\"compaction\"`.",
+        "An alternative to the deprecated `truncation: \"auto\"` and to hitting a 400 on context overflow."
+    ],
+    "values": [
+        "entries of `{ type: \"compaction\"",
+        "compact_threshold?: number }"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

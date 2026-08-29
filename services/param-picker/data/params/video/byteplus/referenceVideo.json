@@ -1,0 +1,44 @@
+{
+    "key": "referenceVideo",
+    "category": "reference-assets",
+    "apiField": "content[].video_url.url",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "- (required when `type` is `video_url`)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "The reference video used for reference-to-video, editing, or extension.",
+    "combines": [
+        "Supported on: Seedance 2.5, Seedance 2.0 series",
+        "Container/encoding: MP4 (`video/mp4`) and QuickTime MOV (`video/quicktime`); video H.264/AVC or H.265/HEVC; audio AAC or MP3 (the 2.5 tutorial also lists PCM for MOV).",
+        "Resolution: 1520757 and 2298881 say `480p`, `720p`, `1080p`, `4k`; the 2.5 tutorial (2607688) restricts 2.5 input to `480p`, `720p`. The docs disagree; treat 2.5 input above 720p as unverified.",
+        "Duration: 2.5 non-editing 2–30 s per video, 2.5 editing 4–30 s per video, up to 10 videos, total <= 30 s. 2.0 series 2–15 s per video, up to 3 videos, total <= 15 s.",
+        "Dimensions: aspect ratio `[0.4, 2.5]`, width/height `[300, 6000]` px, total pixels `[614x664=407696, 3326x2494=8295044]`.",
+        "Size <= 200 MB per video; frame rate `[24, 60]` FPS.",
+        "Face-containing videos are accepted only when they are trusted model outputs (see Trusted model outputs) or `asset://` assets.",
+        "2.5 accepts up to 10 reference videos, 2 to 30 seconds each and 30 seconds in total. The 2.0 series accepts up to 3, 2 to 15 seconds each and 15 seconds in total."
+    ],
+    "range": "see limits below",
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/2607688"
+    ]
+}

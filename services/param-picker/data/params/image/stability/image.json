@@ -1,0 +1,43 @@
+{
+    "key": "image",
+    "category": "reference-assets",
+    "apiField": "image",
+    "controlKey": null,
+    "type": "string (base64 on Bedrock, file upload on v2beta)",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "The input image the operation works from.",
+    "combines": [
+        "Supported on: Required on all edit endpoints except style-transfer (which uses `init_image`), on control/sketch, control/structure, control/style, and all three upscale endpoints. Optional on generate/ultra and generate/sd3 where it switches on image-to-image.",
+        "On SD3.5 and Ultra, supplying `image` requires `strength` and puts the request in image-to-image mode.",
+        "On inpaint and erase, an alpha channel in `image` is used as the mask when no explicit `mask` is passed."
+    ],
+    "values": [
+        "jpeg",
+        "png",
+        "webp"
+    ],
+    "range": "see the per-group constraints above",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Need to figure out how to use this feature",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+    ]
+}

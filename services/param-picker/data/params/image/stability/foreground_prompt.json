@@ -1,0 +1,37 @@
+{
+    "key": "foreground_prompt",
+    "category": "prompt-control",
+    "apiField": "foreground_prompt",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Describes the subject, which helps stop the background generation from bleeding into the foreground.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "none documented"
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

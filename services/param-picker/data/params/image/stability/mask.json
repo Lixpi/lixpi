@@ -1,0 +1,37 @@
+{
+    "key": "mask",
+    "category": "masking-editing",
+    "apiField": "mask",
+    "controlKey": null,
+    "type": "string (base64 image)",
+    "providerDefault": "derived from the input image's alpha channel when omitted",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Per-pixel strength map for the edit. Black means no edit, white means maximum edit, greys interpolate.",
+    "combines": [
+        "Supported on: edit/inpaint, edit/erase",
+        "If both an explicit mask and an image with an alpha channel are supplied, the mask wins.",
+        "With alpha-derived masks, transparent pixels are edited and opaque pixels are preserved."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Same as all other masks, investigate how to present it in ui, don't change code, report to me",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

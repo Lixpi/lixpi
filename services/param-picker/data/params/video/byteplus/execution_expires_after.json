@@ -1,0 +1,34 @@
+{
+    "key": "execution_expires_after",
+    "category": "job-control",
+    "apiField": "execution_expires_after",
+    "controlKey": null,
+    "type": "integer",
+    "range": "3600 to 259200 seconds",
+    "providerDefault": "172800",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Marks a task expired after this many seconds. The 48-hour default is far longer than any interactive session.",
+    "combines": [],
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

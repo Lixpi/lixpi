@@ -1,0 +1,39 @@
+{
+    "key": "outputMimeType",
+    "category": "output-format",
+    "apiField": "config.imageConfig.outputMimeType",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Picks the encoding of the returned image on Vertex. On the Developer API you take whatever the model returns in the inline data part.",
+    "combines": [
+        "Supported on: Vertex only. SDK doc comment: \"This field is not supported in Gemini API.\"",
+        "Pairs with `outputCompressionQuality`, which only applies to `image/jpeg`."
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts",
+        "https://ai.google.dev/api/generate-content"
+    ]
+}

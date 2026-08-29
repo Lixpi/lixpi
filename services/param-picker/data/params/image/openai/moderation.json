@@ -1,0 +1,47 @@
+{
+    "key": "moderation",
+    "category": "safety",
+    "apiField": "moderation",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "auto",
+        "low"
+    ],
+    "providerDefault": "auto",
+    "lixpiValue": "set per model and routing mode",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Content-moderation strictness.",
+    "combines": [
+        "Already resolved through mediaProviderDefinition.moderation.settings."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/openai-provider.ts:601 and :611",
+        "code": "...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned' | 'text')",
+        "from": "the per-provider policy in media-provider-definition.ts:46",
+        "what": "Content-filter strictness, resolved per model and per input mode rather than fixed, so a reference-driven edit and a text prompt can carry different policy."
+    },
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "low",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

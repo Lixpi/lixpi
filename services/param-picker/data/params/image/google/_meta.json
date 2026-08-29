@@ -1,0 +1,13 @@
+{
+    "providerId": "google",
+    "providerTitle": "Google",
+    "apiName": "Gemini API",
+    "groupId": "gemini-image",
+    "title": "Gemini image (Nano Banana family)",
+    "models": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "docs": "https://ai.google.dev/gemini-api/docs/image-generation"
+}

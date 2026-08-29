@@ -1,0 +1,41 @@
+{
+    "key": "prompt_cache_retention",
+    "category": "caching",
+    "apiField": "prompt_cache_retention",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "`24h` for orgs without ZDR; `in_memory` for orgs with ZDR when unset. For `gpt-5.5`, `gpt-5.5-pro` and later, only `24h` is supported.",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Deprecated maximum retention policy for cached prefixes. Use `prompt_cache_options.ttl` instead.",
+    "combines": [
+        "Supported on: models supporting extended prompt caching",
+        "Marked `@deprecated` in SDK v7.8.0.",
+        "`24h` keeps prefixes warm far longer, which raises cache hit rate on infrequent conversations."
+    ],
+    "values": [
+        "in_memory",
+        "24h"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

@@ -1,0 +1,47 @@
+{
+    "key": "outputFormat",
+    "category": "structured-output",
+    "apiField": "text.format",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "`{ type: \"text\" }`",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Forces the shape of the model's output. `json_schema` guarantees the response validates against your supplied JSON Schema.",
+    "combines": [
+        "Supported on: `json_schema` (Structured Outputs) on gpt-4o and later, gpt-4.1, gpt-5 family, o-series; `json_object` is legacy and not recommended for gpt-4o and newer",
+        "`text.format.name` must match `[a-zA-Z0-9_-]{1,64}`.",
+        "`text.format.strict: true` restricts you to the Structured Outputs subset of JSON Schema (every property required, `additionalProperties: false`, no unsupported keywords) but gives a hard guarantee.",
+        "Prefer `json_schema` over `json_object`; `json_object` only guarantees syntactically valid JSON."
+    ],
+    "values": [
+        "{ type: \"text\" }",
+        "{ type: \"json_object\" }",
+        "{ type: \"json_schema\"",
+        "name",
+        "schema",
+        "description?",
+        "strict? }"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

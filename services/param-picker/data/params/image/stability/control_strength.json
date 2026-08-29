@@ -1,0 +1,44 @@
+{
+    "key": "control_strength",
+    "category": "conditioning-strength",
+    "apiField": "control_strength",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": "0.7",
+    "lixpiValue": "STRUCTURE_CONTROL_STRENGTH constant",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "On the control/structure endpoint, how tightly the output has to follow the geometry of the input image. 0 is the least influence and 1 the most, so unlike strength, higher means closer to the reference. Stability's default is 0.7.",
+    "combines": [
+        "Lixpi pins it to 0.9 (STRUCTURE_CONTROL_STRENGTH, stability-provider.ts:29), well above Stability's default, so composition is held very close to the reference.",
+        "Its sense is opposite to strength: raise control_strength to stay near the reference, raise strength to get away from it.",
+        "Only reaches the API on the direct v2beta path. Bedrock has no control endpoint, so the Bedrock route substitutes the image-to-image strength constant instead."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:311",
+        "code": "formData.set('control_strength', String(STRUCTURE_CONTROL_STRENGTH))  // 0.9, defined at :29",
+        "from": "a hardcoded constant",
+        "what": "On control/structure, how tightly the output traces the reference image's geometry. At 0.9 Lixpi holds the composition very close to the reference."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

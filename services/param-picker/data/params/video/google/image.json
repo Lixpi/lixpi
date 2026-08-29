@@ -1,0 +1,48 @@
+{
+    "key": "image",
+    "category": "reference-assets",
+    "apiField": "image",
+    "controlKey": null,
+    "type": "object (`Image`: `imageBytes` + `mimeType` on the Gemini API; `bytesBase64Encoded` or `gcsUri` + `mimeType` on Vertex)",
+    "providerDefault": null,
+    "lixpiValue": "veoParams.image, set at google-provider.ts:845 for a first-frame request",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "A single starting image that Veo animates as the first frame of the clip. This is the image-to-video mode.",
+    "combines": [
+        "Supported on: all Veo models, Gemini Developer API and Vertex",
+        "Exactly one image; there is no multi-image first-frame mode.",
+        "Not allowed with `video` or `config.referenceImages`.",
+        "Restricts `personGeneration` to `allow_adult` on Veo 3 and 3.1 families.",
+        "Vertex recommends 720p or higher and a 16:9 or 9:16 ratio; other ratios or sizes may be resized or centrally cropped.",
+        "Pair with `config.lastFrame` to switch this mode into first-and-last-frame interpolation."
+    ],
+    "values": [
+        "image/jpeg",
+        "image/png"
+    ],
+    "range": "Veo 2's model card lists any resolution and aspect ratio up to a 20MB file; no size limit is documented for Veo 3.x on the Gemini API",
+    "supportedModels": [
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ]
+}

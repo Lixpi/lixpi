@@ -1,0 +1,36 @@
+{
+    "key": "seed",
+    "category": "sampling",
+    "apiField": "seed",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "There is no seed field on the Responses API. It exists only on Chat Completions, where it is beta and best-effort, so reproducible sampling is simply unavailable on the surface Lixpi calls.",
+    "combines": [
+        "Absent from the Responses create-params schema in the current SDK. Treat Responses-API determinism as unavailable rather than as something to wire up."
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "openai-responses"
+    ],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

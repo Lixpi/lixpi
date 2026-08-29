@@ -1,0 +1,49 @@
+{
+    "key": "quality",
+    "category": "sampling",
+    "apiField": "quality",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+    ],
+    "providerDefault": "auto",
+    "lixpiValue": "high",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Generation quality. Hardcoded to high everywhere in Lixpi.",
+    "combines": [
+        "The single largest cost lever on OpenAI images: quality drives output token count, and image output bills at 32 to 40 per 1M tokens."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/openai-provider.ts:602 and :612, plus :244, :308, :505, :565",
+        "code": "quality: 'high'",
+        "from": "hardcoded at every call site",
+        "what": "Generation quality. This is the single largest cost driver on OpenAI images: quality sets how many output tokens the model spends, billed at 32 to 40 per 1M."
+    },
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "auto",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

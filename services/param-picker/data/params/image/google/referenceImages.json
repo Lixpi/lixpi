@@ -1,0 +1,44 @@
+{
+    "key": "referenceImages",
+    "category": "reference-assets",
+    "apiField": "Reference images and multi-image input",
+    "controlKey": null,
+    "type": "object (array of Part)",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "You mix reference images into `contents` alongside the text prompt; there is no separate reference-image field. The count and the roles those images can play differ by model.",
+    "combines": [
+        "Supported on: Gemini Developer API",
+        "`gemini-3-pro-image`: up to 14 images total, of which up to 6 are high-fidelity object references, up to 5 are character-consistency references, and up to 3 are style references. The Limitations section words the object budget as \"5 images with high fidelity, and up to 14 images in total\", so treat 5 to 6 as the practical high-fidelity ceiling.",
+        "`gemini-3.1-flash-image`: up to 14 total, up to 10 high-fidelity object references, up to 4 character references, no style-reference slot.",
+        "`gemini-3.1-flash-lite-image`: up to 14 object references, no character or style reference support; the docs say it is not optimized for multiple reference inputs or multi-turn sequential editing.",
+        "`gemini-2.5-flash-image`: works best with up to 3 input images.",
+        "Audio input is never supported for image generation. Video input is supported only on `gemini-3.1-flash-image`.",
+        "Per-request size limits are the general Gemini limits, not image-specific: inline request payloads are capped at 20MB, and larger files go through the File API. The image-generation page itself does not state a byte limit.",
+        "Input token limits bound how much you can attach: 65,536 on `gemini-3-pro-image`, 131,072 on `gemini-3.1-flash-image`. Output token limit is 32,768 on both."
+    ],
+    "range": "up to 14 reference images on Gemini 3 image models",
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Investigate how this fits in into our existing pipeline and ui, propose the solution and benefits and implications, don't change code before approved",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

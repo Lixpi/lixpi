@@ -1,0 +1,44 @@
+{
+    "key": "strength",
+    "category": "conditioning-strength",
+    "apiField": "strength",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": "0.35",
+    "lixpiValue": "a per-routing-mode constant",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "On an image-to-image request, how far the model is allowed to move away from the input image. 0 returns the input essentially untouched; 1 behaves as though no input image were supplied. Bedrock documents 0.35 as the default.",
+    "combines": [
+        "Required, along with image, whenever mode is image-to-image; it has no meaning in text-to-image.",
+        "Lixpi only uses it on the Bedrock path, where there are no control endpoints, so each reference mode collapses onto image-to-image with its own constant: 0.65 for style-control, 0.35 for structure-control, 0.6 for style-transfer (stability-provider.ts:39).",
+        "Read it as the inverse of faithfulness: higher means more freedom to invent, not more influence from the reference."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:39, used on the Bedrock path only",
+        "code": "BEDROCK_IMAGE_TO_IMAGE_STRENGTH = { 'style-control': 0.65, 'structure-control': 0.35, 'style-transfer': 0.6 }",
+        "from": "a constant per routing mode",
+        "what": "How far the model may move from the init image. Bedrock has no control endpoints, so every reference mode collapses onto image-to-image and this constant is what stands in for the control-specific knob."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+    ]
+}

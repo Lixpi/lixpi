@@ -1,0 +1,39 @@
+{
+    "key": "context_management",
+    "category": "caching",
+    "apiField": "context_management",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Server-side edits applied to the prompt before it reaches Claude. Your client keeps the full history locally; the server trims or summarizes what the model actually sees.",
+    "combines": [
+        "Supported on: Beta. Context editing strategies use header `context-management-2025-06-27`; the compaction strategy uses `compact-2026-01-12`.",
+        "When combining thinking-block clearing with tool-result clearing, the thinking strategy must come first in `edits`.",
+        "The response reports what ran under `context_management.applied_edits`, and `count_tokens` accepts the same field so you can preview the effect."
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

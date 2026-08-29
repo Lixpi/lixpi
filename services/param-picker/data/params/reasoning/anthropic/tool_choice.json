@@ -1,0 +1,46 @@
+{
+    "key": "tool_choice",
+    "category": "tools",
+    "apiField": "tool_choice",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "auto",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Whether the model may, must, or must not call a tool.",
+    "combines": [
+        "Supported on: all models, with a manual-thinking restriction",
+        "With manual extended thinking (`thinking: {type: \"enabled\"}`) only `auto` and `none` are allowed. `any` and `{\"type\": \"tool\", ...}` force tool use, which is incompatible with manual extended thinking, and error.",
+        "Adaptive thinking, including on models where thinking is on by default, supports forced tool use."
+    ],
+    "values": [
+        "{\"type\": \"auto\"}",
+        "{\"type\": \"any\"}",
+        "{\"type\": \"tool\"",
+        "\"name\": ...}",
+        "{\"type\": \"none\"}"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "{\"type\": \"auto\"}",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

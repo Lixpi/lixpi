@@ -1,0 +1,46 @@
+{
+    "key": "temperature",
+    "category": "sampling",
+    "apiField": "temperature",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": "1",
+    "lixpiValue": "defaultTemperature from the model matrix, 0.7",
+    "currentState": "hidden",
+    "availability": "unverified",
+    "summary": "Sampling randomness.",
+    "combines": [
+        "Removed on Fable 5, Opus 5, Opus 4.8, Opus 4.7, and Sonnet 5, where it returns a 400. Still available on Opus 4.6, Sonnet 4.6, and older.",
+        "inferenceCapabilities.supportsTemperature already encodes this per model."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/base-provider.ts:391",
+        "code": "temperature: requestData.aiModelMetaInfo?.defaultTemperature ?? 0.7",
+        "from": "aiModelMetaInfo.defaultTemperature from the model record",
+        "what": "Sampling randomness, carried into the request for every model whose inferenceCapabilities.supportsTemperature is true. Newer Claude models reject the field, which is why some model entries use the no-temperature capability profile."
+    },
+    "supportedModels": [
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "1",
+    "note": "Show as slider",
+    "unsupportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+    ]
+}

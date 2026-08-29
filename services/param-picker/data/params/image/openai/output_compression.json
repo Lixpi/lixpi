@@ -1,0 +1,38 @@
+{
+    "key": "output_compression",
+    "category": "output-format",
+    "apiField": "output_compression",
+    "controlKey": null,
+    "type": "integer",
+    "range": "0 to 100",
+    "providerDefault": "100",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Compression level for the generated image.",
+    "combines": [
+        "Only meaningful with jpeg or webp output. Together with output_format this is the storage-size lever."
+    ],
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Show as slider",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

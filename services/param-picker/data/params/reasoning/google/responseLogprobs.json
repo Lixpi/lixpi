@@ -1,0 +1,39 @@
+{
+    "key": "responseLogprobs",
+    "category": "sampling",
+    "apiField": "config.responseLogprobs",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Returns log probabilities for the chosen tokens.",
+    "combines": [
+        "Supported on: Gemini Developer API",
+        "Required to be true before `logprobs` is valid."
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

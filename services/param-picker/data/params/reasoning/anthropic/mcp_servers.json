@@ -1,0 +1,43 @@
+{
+    "key": "mcp_servers",
+    "category": "tools",
+    "apiField": "mcp_servers",
+    "controlKey": null,
+    "type": "array of object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Connects the Messages API directly to remote MCP servers with no local MCP client. Only tool calls from the MCP spec are supported, and the server must be reachable over HTTPS (Streamable HTTP or SSE); local stdio servers cannot be used.",
+    "combines": [
+        "Supported on: Beta, header `mcp-client-2025-11-20`. Claude API, Claude Platform on AWS, Microsoft Foundry. Not available on Amazon Bedrock or Google Cloud. Not ZDR eligible.",
+        "`type` currently only accepts `\"url\"`; `url` must start with https://.",
+        "Every server must be referenced by exactly one `mcp_toolset` in `tools`, and each server by only one toolset. Tool enabling/disabling now lives in the toolset (`default_config` and per-tool `configs`, each with `enabled` default true and `defer_loading` default false), not on the server definition.",
+        "Unknown tool names in `configs` log a backend warning rather than erroring.",
+        "`mcp_servers` works in Message Batches requests and is billed the same as regular requests.",
+        "The older `mcp-client-2025-04-04` header with `tool_configuration.enabled` / `allowed_tools` on the server object is deprecated."
+    ],
+    "range": "multiple servers per request allowed; no numeric cap documented",
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

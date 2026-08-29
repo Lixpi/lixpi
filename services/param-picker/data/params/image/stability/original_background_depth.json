@@ -1,0 +1,38 @@
+{
+    "key": "original_background_depth",
+    "category": "masking-editing",
+    "apiField": "original_background_depth",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "How much of the original background's depth structure is carried into the new background.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "Relevant mainly when `keep_original_background` is set."
+    ],
+    "range": "0.0 to 1.0",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

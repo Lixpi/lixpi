@@ -1,0 +1,43 @@
+{
+    "key": "init_image",
+    "category": "reference-assets",
+    "apiField": "init_image",
+    "controlKey": null,
+    "type": "string (base64 image)",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "The subject image on the style-transfer endpoint: the picture whose content and composition you want to keep. The look applied to it comes from style_image.",
+    "combines": [
+        "Every side at least 64 px, at most 9,437,184 total pixels, aspect ratio between 1:2.5 and 2.5:1, in jpeg, png or webp.",
+        "How much of this image's layout survives is set by composition_fidelity, and how far it may change overall by change_strength.",
+        "The AWS mirror gives init_image and style_image word-for-word identical descriptions, both saying 'the subject you wish to restyle'. That is a documentation bug: the endpoint takes one subject and one style source, and init_image is the subject."
+    ],
+    "values": [
+        "jpeg",
+        "png",
+        "webp"
+    ],
+    "range": "every side at least 64 px, total pixels at most 9,437,184, aspect ratio between 1:2.5 and 2.5:1",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

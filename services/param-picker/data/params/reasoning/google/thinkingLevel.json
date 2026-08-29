@@ -1,0 +1,43 @@
+{
+    "key": "thinkingLevel",
+    "category": "reasoning",
+    "apiField": "config.thinkingConfig.thinkingLevel",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "model-dependent",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Reasoning depth as a named level rather than a token count, on models whose thinkingMode is google-level. Accepts minimal, low, medium, and high. This is the control Google recommends for Gemini 3 and later.",
+    "combines": [
+        "Defaults differ per model rather than being one constant: Gemini 3 defaults to high, while Gemini 3.1 defaults to minimal to keep latency down. Read the default off the model, not off the parameter.",
+        "Gemini 2.5 models accept low, medium, and high but not minimal.",
+        "Mutually exclusive with thinkingBudget in practice: Google says do not send both in the same request.",
+        "It is the cleanest fit for a segmented control, since the four levels are a fixed named set."
+    ],
+    "values": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

@@ -1,0 +1,37 @@
+{
+    "key": "creativity",
+    "category": "conditioning-strength",
+    "apiField": "creativity",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": "0.3 on Creative Upscale, 0.35 on Conservative Upscale, 0.5 on edit/outpaint",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "How much new detail or content the model invents rather than reconstructing. Higher values add more.",
+    "combines": [
+        "Supported on: Creative Upscale, Conservative Upscale, edit/outpaint. Not accepted by Fast Upscale.",
+        "none documented"
+    ],
+    "range": "0.1 to 0.5 on Creative and Conservative Upscale; 0.1 to 1.0 on edit/outpaint",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Render as slider, make sure to add tooltip explaining what is that",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

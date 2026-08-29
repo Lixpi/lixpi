@@ -1,0 +1,44 @@
+{
+    "key": "output_format",
+    "category": "output-format",
+    "apiField": "output_format",
+    "controlKey": "outputFormat",
+    "type": "enum",
+    "values": [
+        "png",
+        "jpeg",
+        "webp"
+    ],
+    "providerDefault": "png",
+    "lixpiValue": "png",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Output encoding. Hardcoded to png.",
+    "combines": [],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:293",
+        "code": "formData.set('output_format', 'png')",
+        "from": "hardcoded for every endpoint",
+        "what": "Output encoding. PNG keeps the image lossless into the object store at the cost of file size."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "png",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+    ]
+}

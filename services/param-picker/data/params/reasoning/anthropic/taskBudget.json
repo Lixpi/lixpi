@@ -1,0 +1,51 @@
+{
+    "key": "taskBudget",
+    "category": "reasoning",
+    "apiField": "output_config.task_budget",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "- (no budget when omitted)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Tells Claude how many tokens it has for a whole agentic loop, including thinking, tool calls, tool results, and output. The model sees a server-injected countdown and paces itself against it.",
+    "combines": [
+        "Supported on: Beta, header `task-budgets-2026-03-13`. claude-opus-5, claude-fable-5, claude-mythos-5, claude-opus-4-8, claude-opus-4-7. Explicitly not supported on Claude Sonnet 5, Opus 4.6, Sonnet 4.6, Haiku 4.5, and not available on Claude Code or Cowork surfaces.",
+        "Advisory, not enforced. Claude can overshoot; `max_tokens` remains the hard per-request cap. The two are independent, and neither has to be at or below the other.",
+        "The countdown counts what Claude sees this turn, not what your client resends. Resent history is not recounted.",
+        "No remaining-budget field appears in the response; track spend client-side by summing `usage.output_tokens` plus appended tool-result tokens.",
+        "A budget that is clearly too small for the task can produce refusal-like behavior, aggressive scope-cutting, or early stops.",
+        "The countdown marker is injected per turn and does not match across requests, and mutating `remaining` client-side invalidates any cache prefix containing it. Set the budget once and let the model self-regulate.",
+        "Per-model: available on Opus 5, Opus 4.8 and Opus 4.7, and rejected on Sonnet 5, Opus 4.6 and Sonnet 4.6."
+    ],
+    "values": [
+        "{ \"type\": \"tokens\"",
+        "\"total\": <int>",
+        "\"remaining\": <int",
+        "optional> }"
+    ],
+    "range": "`total` minimum 20,000 tokens on every model that currently supports it; below the minimum returns a 400",
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

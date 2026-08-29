@@ -1,0 +1,37 @@
+{
+    "key": "subject_image",
+    "category": "reference-assets",
+    "apiField": "subject_image",
+    "controlKey": null,
+    "type": "image",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "The foreground subject on the replace-background-and-relight endpoint. The service cuts it out, drops it onto a new background and relights it to match.",
+    "combines": [
+        "AWS Bedrock does not document this endpoint at all. Its parameters come from a Stability client library and need checking against the live API before anyone builds on them.",
+        "The new background comes from either background_prompt or background_reference."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

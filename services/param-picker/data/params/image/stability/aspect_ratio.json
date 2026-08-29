@@ -1,0 +1,52 @@
+{
+    "key": "aspect_ratio",
+    "category": "output-shape",
+    "apiField": "aspect_ratio",
+    "controlKey": "aspectRatio",
+    "type": "enum",
+    "values": [
+        "1:1",
+        "21:9",
+        "16:9",
+        "3:2",
+        "5:4",
+        "4:5",
+        "2:3",
+        "9:16",
+        "9:21"
+    ],
+    "providerDefault": "1:1",
+    "lixpiValue": "user-selected",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Output shape. Stability has no resolution parameter: output is roughly one megapixel and the ratio decides the shape.",
+    "combines": [
+        "Only applies to text-to-image requests."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:308, :314 and :327",
+        "code": "formData.set('aspect_ratio', aspectRatio)",
+        "from": "the matrix control",
+        "what": "Output shape, and effectively the only size control Stability has: output is about one megapixel and the ratio decides how it is spent. Not sent on the style-transfer path, where the init image dictates the frame."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "1:1",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+    ]
+}

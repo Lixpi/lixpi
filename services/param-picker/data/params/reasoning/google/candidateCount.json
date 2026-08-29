@@ -1,0 +1,35 @@
+{
+    "key": "candidateCount",
+    "category": "sampling",
+    "apiField": "config.candidateCount",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "1",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Number of generated response variations to return.",
+    "combines": [
+        "Supported on: Gemini Developer API. Explicitly does not work on the Gemini 1.0 family.",
+        "Higher values multiply output token billing, thought tokens included."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

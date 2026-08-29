@@ -1,0 +1,36 @@
+{
+    "key": "topP",
+    "category": "sampling",
+    "apiField": "config.topP",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": "model dependent, readable as `Model.top_p` from `getModel`",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Nucleus sampling cutoff. Tokens are considered until their cumulative probability reaches this value.",
+    "combines": [
+        "Supported on: all Gemini models, Gemini Developer API",
+        "Applied together with `topK` when the model uses combined sampling."
+    ],
+    "range": "not documented as a fixed range; it is a cumulative probability, so 0.0 to 1.0",
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "key": "background",
+    "category": "output-format",
+    "apiField": "background",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "transparent",
+        "opaque",
+        "auto"
+    ],
+    "providerDefault": "auto",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Transparency of the generated background. Worth having on a node-based compositing canvas.",
+    "combines": [
+        "transparent requires output_format of png or webp.",
+        "gpt-image-2 rejects transparent outright."
+    ],
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "auto",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

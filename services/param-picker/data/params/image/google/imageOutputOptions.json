@@ -1,0 +1,43 @@
+{
+    "key": "imageOutputOptions",
+    "category": "output-format",
+    "apiField": "config.imageConfig.imageOutputOptions",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Newer grouped form of the output format controls, replacing the two flat `output*` fields.",
+    "combines": [
+        "Supported on: Vertex only. SDK doc comment on both the field and the `ImageConfigImageOutputOptions` type: \"not supported in Gemini API.\"",
+        "Redundant with `outputMimeType` / `outputCompressionQuality`; the docs do not say what happens if both are sent."
+    ],
+    "values": [
+        "{ mimeType?: string",
+        "compressionQuality?: number }"
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts",
+        "https://ai.google.dev/api/generate-content"
+    ]
+}

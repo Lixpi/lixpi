@@ -1,0 +1,41 @@
+{
+    "key": "promptCacheMode",
+    "category": "caching",
+    "apiField": "prompt_cache_options.mode",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "implicit",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "`implicit` lets OpenAI add one automatic cache breakpoint plus up to three of your explicit ones; `explicit` disables the automatic breakpoint and writes up to four of yours.",
+    "combines": [
+        "Supported on: `gpt-5.6` and later",
+        "Explicit breakpoints are placed with `prompt_cache_breakpoint` on content blocks; up to four writes per request, and matching considers the latest 80 breakpoints in the conversation.",
+        "With `explicit` mode and no explicit breakpoints, the request uses no prompt caching at all."
+    ],
+    "values": [
+        "implicit",
+        "explicit"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

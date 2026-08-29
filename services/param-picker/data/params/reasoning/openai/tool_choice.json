@@ -1,0 +1,37 @@
+{
+    "key": "tool_choice",
+    "category": "tools",
+    "apiField": "tool_choice",
+    "controlKey": null,
+    "type": "string | object",
+    "providerDefault": "auto",
+    "lixpiValue": null,
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Whether and which tool the model must call.",
+    "combines": [
+        "Supported on: models with tool support",
+        "`\"required\"` guarantees a tool call but can loop if your loop does not eventually switch to `\"auto\"`.",
+        "Forcing `{type:\"image_generation\"}` is the way to guarantee the Responses image tool fires on a given turn."
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

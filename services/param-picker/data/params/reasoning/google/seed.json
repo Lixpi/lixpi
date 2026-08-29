@@ -1,0 +1,35 @@
+{
+    "key": "seed",
+    "category": "sampling",
+    "apiField": "config.seed",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "a randomly generated seed",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Best-effort reproducibility. With a fixed seed the model tries to return the same response for repeated identical requests.",
+    "combines": [
+        "Supported on: all Gemini models, Gemini Developer API",
+        "Best effort only, not a determinism guarantee. Thinking models are unlikely to reproduce identical reasoning."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "key": "personGeneration",
+    "category": "safety",
+    "apiField": "config.imageConfig.personGeneration",
+    "controlKey": "personGeneration",
+    "type": "enum",
+    "values": [
+        "ALLOW_ALL",
+        "ALLOW_ADULT",
+        "ALLOW_NONE"
+    ],
+    "providerDefault": "ALLOW_ALL",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Safety gate on rendering people, and specifically on rendering children. ALLOW_ALL permits adults and children, ALLOW_ADULT permits adults but not children, and ALLOW_NONE blocks images of people entirely.",
+    "combines": [
+        "Lixpi never sends it, so whatever the API applies by default is what every Gemini image gets. Setting it is the only way to guarantee a stricter floor than the account default.",
+        "The distinction that actually matters is children: ALLOW_ADULT is the setting that blocks minors while still allowing people.",
+        "It lives inside imageConfig, which google-provider.ts:281 currently builds from the aspect ratio alone, so wiring it up means changing that line rather than adding a parameter next to it."
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "ALLOW_ALL",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

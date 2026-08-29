@@ -1,0 +1,39 @@
+{
+    "key": "service_tier",
+    "category": "job-control",
+    "apiField": "service_tier",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "default",
+        "flex"
+    ],
+    "providerDefault": "default",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "flex is offline inference at half price with higher daily quota and much higher latency.",
+    "combines": [
+        "Explicitly not supported on the Seedance 2.0 and 2.5 series."
+    ],
+    "supportedModels": [],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

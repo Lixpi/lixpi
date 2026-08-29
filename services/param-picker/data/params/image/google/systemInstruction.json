@@ -1,0 +1,37 @@
+{
+    "key": "systemInstruction",
+    "category": "prompt-control",
+    "apiField": "config.systemInstruction",
+    "controlKey": null,
+    "type": "object (Content) or string",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Developer-set steering that sits outside the conversation turns.",
+    "combines": [
+        "Supported on: Gemini Developer API, request-level. Text only.",
+        "The REST reference says \"Currently, text only\", so you cannot put a reference image in the system instruction."
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

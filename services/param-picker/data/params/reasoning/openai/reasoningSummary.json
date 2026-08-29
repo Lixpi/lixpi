@@ -1,0 +1,42 @@
+{
+    "key": "reasoningSummary",
+    "category": "reasoning",
+    "apiField": "reasoning.summary",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "null (no summary emitted)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Requests a natural-language summary of the model's reasoning, useful for showing \"thinking\" in a UI. `auto` yields the most detailed summarizer the model offers.",
+    "combines": [
+        "Supported on: reasoning models; `concise` is supported for `computer-use-preview` and all reasoning models after `gpt-5`",
+        "When streaming, arrives as `response.reasoning_summary_text.delta` / `.done` events, separate from `response.output_text.delta`.",
+        "Summary tokens are generated tokens and are billed."
+    ],
+    "values": [
+        "auto",
+        "concise",
+        "detailed"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "detailed",
+    "defaultValue": "",
+    "note": "It must be integrated in the timeline pipeline",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

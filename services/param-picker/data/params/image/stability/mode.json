@@ -1,0 +1,45 @@
+{
+    "key": "mode",
+    "category": "masking-editing",
+    "apiField": "mode",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "text-to-image",
+        "image-to-image"
+    ],
+    "providerDefault": "text-to-image",
+    "lixpiValue": "derived from whether references are present",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Which generation path runs. image-to-image additionally requires image and strength.",
+    "combines": [
+        "aspect_ratio is ignored in image-to-image mode."
+    ],
+    "usage": {
+        "setIn": "not sent as a field; chosen by endpoint at stability-provider.ts:296-330",
+        "code": "routingMode picks STYLE_TRANSFER_ENDPOINT, STRUCTURE_CONTROL_ENDPOINT, STYLE_CONTROL_ENDPOINT or MODEL_ENDPOINT_MAP[modelVersion]",
+        "from": "derived from how many references the request carries and what kind",
+        "what": "Selects text-to-image against the reference-driven paths. On the direct v2beta API this is a URL choice, not a parameter."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+    ]
+}

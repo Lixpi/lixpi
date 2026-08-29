@@ -1,0 +1,37 @@
+{
+    "key": "max_tool_calls",
+    "category": "limits",
+    "apiField": "max_tool_calls",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "null (unbounded)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Maximum total calls to built-in tools across the whole response, not per tool. Further tool calls the model attempts are ignored.",
+    "combines": [
+        "Supported on: models supporting built-in tools",
+        "Only counts built-in tools (web search, file search, code interpreter, image_generation), not your own function tools.",
+        "Present in the Response object and the client-event schema in SDK v7.8.0; it is not declared on `ResponseCreateParamsBase` in that version's types, so passing it may need a cast even though the API accepts it."
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

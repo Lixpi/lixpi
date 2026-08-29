@@ -1,0 +1,35 @@
+{
+    "key": "topK",
+    "category": "sampling",
+    "apiField": "config.topK",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "model dependent; an empty `topK` on the `Model` resource means the model does not apply top-k sampling",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Caps how many of the most probable tokens are considered at each step.",
+    "combines": [
+        "Supported on: Gemini Developer API, but only on models that use top-k. Models running pure nucleus sampling reject `topK`.",
+        "Check the model's `topK` attribute from `getModel` before sending it. If the attribute is empty, the request will be rejected."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

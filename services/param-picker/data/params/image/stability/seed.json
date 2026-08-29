@@ -1,0 +1,42 @@
+{
+    "key": "seed",
+    "category": "sampling",
+    "apiField": "seed",
+    "controlKey": null,
+    "type": "integer",
+    "range": "0 to 4294967294, 0 means random",
+    "providerDefault": "0",
+    "lixpiValue": "randomly generated per request",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Genuinely deterministic when every other parameter is held constant, and the API returns the seed it used.",
+    "combines": [
+        "Lixpi already generates one and stores what comes back, so exposing it as an editable field is mostly UI work."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:294",
+        "code": "formData.set('seed', String(requestedSeed))",
+        "from": "generated per request",
+        "what": "Pins the random draw. Stability is genuinely deterministic here and returns the seed it used, which resolveReportedSeed stores on the asset, so a generation can be reproduced exactly."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+    ]
+}

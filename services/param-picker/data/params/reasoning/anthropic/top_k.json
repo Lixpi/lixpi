@@ -1,0 +1,41 @@
+{
+    "key": "top_k",
+    "category": "sampling",
+    "apiField": "top_k",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Top-k sampling cutoff: the model samples only from the k most likely next tokens. Same purpose as top_p, expressed as a count rather than a probability mass, and retired on the same schedule.",
+    "combines": [
+        "Not supported on Claude 4.7 and later, so Opus 5, Opus 4.8 and Sonnet 5 in this group reject a non-default value with a 400. Unlike top_p there is no backwards-compatible value that still passes.",
+        "Still works on Opus 4.6 and Sonnet 4.6.",
+        "temperature, top_p and top_k were removed together; inferenceCapabilities.supportsTemperature already tracks which models are affected.",
+        "The Python SDK v1.0 removed the parameter from its Messages methods outright."
+    ],
+    "supportedModels": [
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+    ]
+}

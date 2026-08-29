@@ -1,0 +1,43 @@
+{
+    "key": "context_management_edits_trigger",
+    "category": "caching",
+    "apiField": "context_management.edits[].trigger",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "100,000 input tokens",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Input-token threshold at which old tool results start being cleared.",
+    "combines": [
+        "Supported on: `clear_tool_uses_20250919`",
+        "none documented"
+    ],
+    "values": [
+        "{\"type\": \"input_tokens\"",
+        "\"value\": <int>}"
+    ],
+    "range": "not documented beyond the default",
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

@@ -1,0 +1,37 @@
+{
+    "key": "light_reference",
+    "category": "lighting",
+    "apiField": "light_reference",
+    "controlKey": null,
+    "type": "image",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A reference image the lighting is copied from, instead of a named direction.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "Alternative to `light_source_direction`."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

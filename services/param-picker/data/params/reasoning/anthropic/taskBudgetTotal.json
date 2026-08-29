@@ -1,0 +1,40 @@
+{
+    "key": "taskBudgetTotal",
+    "category": "reasoning",
+    "apiField": "output_config.task_budget.total",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "- (required within the object)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Total tokens Claude may spend across the agentic loop.",
+    "combines": [
+        "Supported on: same as `output_config.task_budget`",
+        "The docs suggest starting at the p99 of your measured per-task token spend."
+    ],
+    "range": "minimum 20,000 on all currently supporting models",
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "key": "response_format",
+    "category": "output-format",
+    "apiField": "response_format",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "`url` for `dall-e-2`/`dall-e-3`",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Whether the result comes back as a temporary URL or inline base64.",
+    "combines": [
+        "Supported on: `dall-e-2` and `dall-e-3` only. NOT supported on any GPT image model, which always returns base64.",
+        "URLs expire 60 minutes after generation, so they must be downloaded and re-hosted.",
+        "Sending it with a GPT image model is an error; a codebase that switched from DALL-E must drop the field."
+    ],
+    "values": [
+        "url",
+        "b64_json"
+    ],
+    "supportedModels": [],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "key": "assetRole",
+    "category": "reference-assets",
+    "apiField": "content[].role",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "blank (treated as `first_frame` when a single image is supplied)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Declares what each asset is for. The role set chosen decides the task type and therefore which other parameters are legal.",
+    "combines": [
+        "Supported on: `first_frame` all models; `last_frame` Seedance 2.5, 2.0 series, 1.5 pro, 1.0 pro (not 1.0 pro fast); `reference_image` Seedance 2.5 (1–30) and 2.0 series (1–9); `reference_video` and `reference_audio` Seedance 2.5 and 2.0 series only",
+        "Image-to-video (first frame): exactly one `image_url` with `role` = `first_frame` or blank.",
+        "Image-to-video (first and last frames): exactly two `image_url` items, roles required, one `first_frame` and one `last_frame`. The two images may be identical. If their aspect ratios differ, the first frame wins and the last frame is cropped (2607689 says the last frame is stretched, so keep both ratios equal).",
+        "`first_frame`/`last_frame`, and omni reference roles (`reference_image`, `reference_video`, `reference_audio`) are mutually exclusive and cannot be mixed in one request.",
+        "`reference_video` is fixed to that value; `reference_audio` is fixed to that value.",
+        "With omni references you can name an image as first/last frame inside the prompt for an approximate effect, but only `first_frame`/`last_frame` guarantee an exact match. Using `reference_image` this way does not lock the output aspect ratio.",
+        "On Seedance 2.5, `first_frame`/`last_frame` force `ratio` = `adaptive`; the omni roles plus an edit/extend prompt intent force `ratio` = `adaptive` (and `duration` = `-1` for editing).",
+        "On 2.5, first_frame and last_frame force ratio to adaptive, and an edit or extend intent additionally forces duration to -1."
+    ],
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/2607688"
+    ]
+}

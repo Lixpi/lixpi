@@ -1,0 +1,37 @@
+{
+    "key": "background_prompt",
+    "category": "prompt-control",
+    "apiField": "background_prompt",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "Describes in words the background to place behind subject_image on the replace-background-and-relight endpoint. Use background_reference instead when you have an actual image of the scene.",
+    "combines": [
+        "AWS Bedrock does not document this endpoint, so these parameters are from a client library and are unverified against the live API.",
+        "background_prompt and background_reference are alternative ways to specify the same thing."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

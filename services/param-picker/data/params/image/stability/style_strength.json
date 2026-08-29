@@ -1,0 +1,40 @@
+{
+    "key": "style_strength",
+    "category": "conditioning-strength",
+    "apiField": "style_strength",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": "1.0",
+    "lixpiValue": "1",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "On control/style-transfer: influence of the style image. 0 returns the input unchanged, 1 behaves as if no init image were passed.",
+    "combines": [],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:305",
+        "code": "formData.set('style_strength', '1')",
+        "from": "hardcoded",
+        "what": "On control/style-transfer, the influence of the style image. Pinned to the maximum, so the style image dominates the result."
+    },
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Show as a slider, Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "key": "context_management_edits_type",
+    "category": "caching",
+    "apiField": "context_management.edits[].type",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "- (required per edit)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Picks which server-side context strategy to run.",
+    "combines": [
+        "Supported on: the clearing strategies are documented as available on all supported Claude models; `compact_20260112` on claude-fable-5, claude-mythos-5, claude-mythos-preview, claude-opus-5, claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-sonnet-5, claude-sonnet-4-6",
+        "Tool-result clearing invalidates cached prefixes; thinking-block clearing preserves cache when thinking is kept."
+    ],
+    "values": [
+        "clear_tool_uses_20250919",
+        "clear_thinking_20251015",
+        "compact_20260112"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

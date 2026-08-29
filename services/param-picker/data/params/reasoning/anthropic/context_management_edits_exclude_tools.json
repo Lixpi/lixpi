@@ -1,0 +1,38 @@
+{
+    "key": "context_management_edits_exclude_tools",
+    "category": "caching",
+    "apiField": "context_management.edits[].exclude_tools",
+    "controlKey": null,
+    "type": "array of string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Tools whose results are never cleared.",
+    "combines": [
+        "Supported on: `clear_tool_uses_20250919`",
+        "none documented"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

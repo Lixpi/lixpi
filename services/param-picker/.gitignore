@@ -1,0 +1,10 @@
+# Client build output. src/client is the source: TypeScript and SCSS, compiled
+# into here by src/build.ts inside the container.
+public/
+
+# Snapshots the server writes before an agent-driven bulk edit, plus manual tree
+# copies taken before a refresh. Recovery material for one machine: the parameter
+# tree itself is versioned, so git history already covers what these protect.
+data/history/
+
+node_modules/

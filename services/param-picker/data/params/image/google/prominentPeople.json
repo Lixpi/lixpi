@@ -1,0 +1,44 @@
+{
+    "key": "prominentPeople",
+    "category": "safety",
+    "apiField": "config.imageConfig.prominentPeople",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "PROMINENT_PEOPLE_UNSPECIFIED, which allows prominent people",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Controls whether the model may generate recognizable celebrities and public figures.",
+    "combines": [
+        "Supported on: Vertex only. The SDK doc comment says \"This enum is not supported in Gemini API.\"",
+        "`personGeneration` wins when both are set. If `personGeneration` blocks people, prominent people are blocked too."
+    ],
+    "values": [
+        "PROMINENT_PEOPLE_UNSPECIFIED",
+        "ALLOW_PROMINENT_PEOPLE",
+        "BLOCK_PROMINENT_PEOPLE"
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts",
+        "https://ai.google.dev/api/generate-content"
+    ]
+}

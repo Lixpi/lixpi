@@ -1,0 +1,35 @@
+{
+    "key": "callback_url",
+    "category": "job-control",
+    "apiField": "callback_url",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Turns the task into a push notification instead of a poll. The callback body matches the retrieve-task response and retries three times on delivery failure.",
+    "combines": [
+        "Infrastructure choice, not a user-facing control. Lixpi polls today."
+    ],
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

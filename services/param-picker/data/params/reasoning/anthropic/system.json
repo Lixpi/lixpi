@@ -1,0 +1,43 @@
+{
+    "key": "system",
+    "category": "prompt-control",
+    "apiField": "system",
+    "controlKey": null,
+    "type": "string or array of object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "System prompt. Accepts `cache_control` breakpoints when passed as blocks.",
+    "combines": [
+        "Supported on: all models",
+        "System-prompt cache breakpoints can miss when the thinking configuration, effort, or `budget_tokens` change, depending on where the model renders the configuration into the prompt.",
+        "On Opus 5 with thinking disabled, system-prompt rules telling the model not to think increase XML tag leakage into visible output."
+    ],
+    "values": [
+        "text",
+        "or an array of `TextBlockParam"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

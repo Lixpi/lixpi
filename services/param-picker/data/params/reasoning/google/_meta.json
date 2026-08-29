@@ -1,0 +1,11 @@
+{
+    "providerId": "google",
+    "providerTitle": "Google",
+    "apiName": "Gemini API",
+    "groupId": "google-reasoning",
+    "title": "Gemini reasoning models",
+    "models": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "docs": "https://ai.google.dev/gemini-api/docs/thinking"
+}

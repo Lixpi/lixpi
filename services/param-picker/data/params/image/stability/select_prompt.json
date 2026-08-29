@@ -1,0 +1,38 @@
+{
+    "key": "select_prompt",
+    "category": "masking-editing",
+    "apiField": "select_prompt",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Names the thing to recolour on the search-and-recolor endpoint. `select_prompt` picks the object out of the image; `prompt` describes the colour or finish it should end up with.",
+    "combines": [
+        "Worked example: select_prompt 'jacket' with a prompt describing the new colour.",
+        "Recolour keeps the object's shape and texture and changes its appearance, unlike search-and-replace which substitutes the object outright.",
+        "The AWS mirror's wording for this field and for search_prompt is transposed; the endpoint each belongs to is what disambiguates them."
+    ],
+    "range": "max 10,000 characters",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}
