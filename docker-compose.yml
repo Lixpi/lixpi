@@ -40,16 +40,15 @@ services:
                 condition: service_healthy
                 restart: true
 
-    # Internal review tool for the provider generation-parameter audit. Each
-    # parameter is one JSON file under services/param-picker/data/params/, and
-    # ticking a box rewrites just that file. Zero dependencies, so it starts
-    # without a pnpm install.
-    lixpi-param-picker:
-        container_name: lixpi-param-picker
+    # Internal AI model registry for provider parameters, model compatibility,
+    # implementation state, and UI exposure decisions. Each parameter is one
+    # JSON file under services/ai-model-registry/data/params/.
+    lixpi-ai-model-registry:
+        container_name: lixpi-ai-model-registry
         profiles: ["dev"]
-        image: lixpi/param-picker
+        image: lixpi/ai-model-registry
         build:
-            dockerfile: services/param-picker/Dockerfile
+            dockerfile: services/ai-model-registry/Dockerfile
             context: .
         environment:
             # Vite serves the page on CLIENT_PORT and proxies /api to the Node
@@ -61,11 +60,11 @@ services:
         volumes:
             # Only sources are mounted. public/ is build output and stays inside
             # the container, where node_modules also lives.
-            - ./services/param-picker/src:/usr/src/service/src:cached
-            - ./services/param-picker/vite.config.ts:/usr/src/service/vite.config.ts:cached
+            - ./services/ai-model-registry/src:/usr/src/service/src:cached
+            - ./services/ai-model-registry/vite.config.ts:/usr/src/service/vite.config.ts:cached
             # Directory mount: the parameter tree lives here and the server
             # writes each file through a temp file and a rename.
-            - ./services/param-picker/data:/usr/src/service/data
+            - ./services/ai-model-registry/data:/usr/src/service/data
         working_dir: /usr/src/service
         # Vite serves the client with HMR; `node --watch` restarts the API server
         # when its own sources change.

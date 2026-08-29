@@ -1,4 +1,4 @@
-// Generation parameter picker client. Vite serves this in development with HMR
+// AI Model Registry client. Vite serves this in development with HMR
 // and builds it into public/ for the image. Rendering is one innerHTML pass per
 // load plus targeted row updates, with all input handled by delegation on the
 // container.
@@ -40,8 +40,8 @@ const AVAILABILITY_LABELS: Record<string, string> = {
 const CHEVRON = '<svg class="chevron" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
     + '<path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
-const COLLAPSE_STORAGE_KEY = 'param-picker:collapsed'
-const SCROLL_STORAGE_KEY = 'param-picker:scroll'
+const COLLAPSE_STORAGE_KEY = 'ai-model-registry:collapsed'
+const SCROLL_STORAGE_KEY = 'ai-model-registry:scroll'
 
 // Trailing build stamps carry no meaning in a pill, so
 // dreamina-seedance-2-5-260628 reads the same with or without its final stamp.
@@ -719,6 +719,5 @@ const picker = new ParamPicker(document.getElementById('providers') as HTMLEleme
 picker.init().catch((error: Error) => {
     document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
 })
-
 
 

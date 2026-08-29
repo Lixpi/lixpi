@@ -3,10 +3,8 @@
 import { readFile, writeFile, rename, mkdir, readdir, unlink, copyFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-// The parameter tree is the source of truth. There is no registry: the shape is
-// the directory layout, so adding a parameter means dropping a JSON file into
-// the right folder and adding a provider means creating a folder with a
-// _meta.json in it.
+// The parameter tree is the AI Model Registry's source of truth. There is no
+// separate database or index: the directory layout defines the registry shape.
 //
 //   params/_meta.json                 catalog-level metadata and the legend
 //   params/<type>/_meta.json          one media type: reasoning, image, video
@@ -192,7 +190,7 @@ export class ParamTree {
             }
             await this.prune()
         } catch (error) {
-            console.error('[param-picker] could not snapshot parameter files:', error)
+            console.error('[ai-model-registry] could not snapshot parameter files:', error)
         }
     }
 

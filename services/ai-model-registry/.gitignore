@@ -1,0 +1,9 @@
+# Client build output. src/client is the source: TypeScript and SCSS, compiled
+# into here by src/build.ts inside the container.
+public/
+
+# Snapshots the server writes before API-driven bulk edits. These are local
+# recovery material; the parameter tree itself remains versioned.
+data/history/
+
+node_modules/

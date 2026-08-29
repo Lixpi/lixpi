@@ -74,7 +74,7 @@ const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
 const paramKey = (group: LoadedGroup, param: ParamRecord): string =>
     `${group.meta.providerId}/${group.meta.groupId}/${param.key}`
 
-class ParamPickerServer {
+class AiModelRegistryServer {
     private readonly tree: ParamTree
     private readonly port: number
     constructor(tree: ParamTree, port: number) {
@@ -129,7 +129,7 @@ class ParamPickerServer {
     }
 
     private static sendJson(res: ServerResponse, status: number, value: unknown): void {
-        ParamPickerServer.send(res, status, JSON.stringify(value), 'application/json; charset=utf-8')
+        AiModelRegistryServer.send(res, status, JSON.stringify(value), 'application/json; charset=utf-8')
     }
 
     private async serveStatic(res: ServerResponse, pathname: string): Promise<void> {
@@ -138,14 +138,14 @@ class ParamPickerServer {
             : normalize(pathname).replace(/^(\.\.[/\\])+/u, '').replace(/^[/\\]+/u, '')
         const filePath = join(PUBLIC_DIR, relative)
         if (!filePath.startsWith(PUBLIC_DIR)) {
-            ParamPickerServer.send(res, 403, 'Forbidden', 'text/plain; charset=utf-8')
+            AiModelRegistryServer.send(res, 403, 'Forbidden', 'text/plain; charset=utf-8')
             return
         }
         try {
             const file = await readFile(filePath)
-            ParamPickerServer.send(res, 200, file, CONTENT_TYPES[extname(filePath)] ?? 'application/octet-stream')
+            AiModelRegistryServer.send(res, 200, file, CONTENT_TYPES[extname(filePath)] ?? 'application/octet-stream')
         } catch {
-            ParamPickerServer.send(res, 404, 'Not found', 'text/plain; charset=utf-8')
+            AiModelRegistryServer.send(res, 404, 'Not found', 'text/plain; charset=utf-8')
         }
     }
 
@@ -177,7 +177,7 @@ class ParamPickerServer {
 
         if (req.method === 'GET' && pathname === '/api/catalog') {
             const { root, groups } = await this.tree.load()
-            ParamPickerServer.sendJson(res, 200, ParamPickerServer.assemble(groups, root))
+            AiModelRegistryServer.sendJson(res, 200, AiModelRegistryServer.assemble(groups, root))
             return
         }
 
@@ -197,7 +197,7 @@ class ParamPickerServer {
                     }
                 }
             }
-            ParamPickerServer.sendJson(res, 200, { selections, path: PARAMS_DIR })
+            AiModelRegistryServer.sendJson(res, 200, { selections, path: PARAMS_DIR })
             return
         }
 
@@ -217,7 +217,7 @@ class ParamPickerServer {
                 (total, group) => total + group.parameters.filter(param => param.reviewed).length, 0)
             const incomingReviewed = Object.values(incoming).filter(entry => entry?.reviewed === true).length
             if (incomingReviewed < storedReviewed) {
-                ParamPickerServer.sendJson(res, 409, {
+                AiModelRegistryServer.sendJson(res, 409, {
                     error: 'REFUSING_TO_DISCARD_REVIEWED_DECISIONS',
                     storedReviewed,
                     incomingReviewed,
@@ -255,11 +255,11 @@ class ParamPickerServer {
             if (wantsSnapshot) await this.tree.snapshot(pending.map(item => item.path))
             for (const { path, record } of pending) await this.tree.writeParam(path, record)
 
-            ParamPickerServer.sendJson(res, 200, {
+            AiModelRegistryServer.sendJson(res, 200, {
                 ok: true,
                 written: pending.length,
                 snapshotted: wantsSnapshot,
-                summary: ParamPickerServer.summarise(groups, incoming),
+                summary: AiModelRegistryServer.summarise(groups, incoming),
                 path: PARAMS_DIR,
             })
             return
@@ -311,7 +311,7 @@ class ParamPickerServer {
             if (unknownKeys.length > 0 || unknownFields.length > 0
                 || unknownGroupKeys.length > 0 || unknownGroupFields.length > 0
                 || invalidGroupValues.length > 0) {
-                ParamPickerServer.sendJson(res, 400, {
+                AiModelRegistryServer.sendJson(res, 400, {
                     error: invalidGroupValues.length > 0 ? 'INVALID_VALUE' : 'UNKNOWN_TARGET',
                     unknownKeys,
                     unknownFields,
@@ -349,7 +349,7 @@ class ParamPickerServer {
             for (const { path, record } of pendingParams) await this.tree.writeParam(path, record)
             for (const { path, meta } of pendingGroups) await this.tree.writeGroupMeta(path, meta)
 
-            ParamPickerServer.sendJson(res, 200, {
+            AiModelRegistryServer.sendJson(res, 200, {
                 ok: true,
                 written: pendingParams.length,
                 writtenGroups: pendingGroups.length,
@@ -364,21 +364,21 @@ class ParamPickerServer {
             return
         }
 
-        ParamPickerServer.send(res, 405, 'Method not allowed', 'text/plain; charset=utf-8')
+        AiModelRegistryServer.send(res, 405, 'Method not allowed', 'text/plain; charset=utf-8')
     }
 
     start(): void {
         const server = createServer((req, res) => {
             this.handle(req, res).catch(error => {
-                console.error(`[param-picker] ${req.method} ${req.url} failed:`, error)
-                if (!res.headersSent) ParamPickerServer.sendJson(res, 500, { error: String((error as Error).message ?? error) })
+                console.error(`[ai-model-registry] ${req.method} ${req.url} failed:`, error)
+                if (!res.headersSent) AiModelRegistryServer.sendJson(res, 500, { error: String((error as Error).message ?? error) })
                 else res.end()
             })
         })
 
         server.listen(this.port, '0.0.0.0', () => {
-            console.log(`[param-picker] listening on http://0.0.0.0:${this.port}`)
-            console.log(`[param-picker] reading parameters from ${PARAMS_DIR}`)
+            console.log(`[ai-model-registry] listening on http://0.0.0.0:${this.port}`)
+            console.log(`[ai-model-registry] reading parameters from ${PARAMS_DIR}`)
         })
 
         const shutdown = () => server.close(() => process.exit(0))
@@ -387,4 +387,4 @@ class ParamPickerServer {
     }
 }
 
-new ParamPickerServer(new ParamTree(PARAMS_DIR), PORT).start()
+new AiModelRegistryServer(new ParamTree(PARAMS_DIR), PORT).start()
