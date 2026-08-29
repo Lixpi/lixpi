@@ -14,9 +14,11 @@ docker compose --profile dev --profile main up -d lixpi-param-picker
 
 Then open http://localhost:3010. Stop it with `docker compose --profile dev --profile main stop lixpi-param-picker`. The second profile is only there to make the compose project parse: `lixpi-dynamodb-admin` sits in the dev profile and depends on `lixpi-dynamodb` in main.
 
-Everything runs inside the container. Node runs `src/server.ts` directly through native type stripping, so the server needs no build; the client is TypeScript and SCSS under `src/client`, compiled into `public/` by `src/build.ts` using esbuild and sass.
+Everything runs inside the container. Node runs `src/server.ts` directly through native type stripping, so the server needs no build. The client is TypeScript and SCSS under `src/client`, served by Vite in development and built into `public/` for the image.
 
-It hot reloads. `src/` is mounted, a watcher rebuilds the client on every save, the server notices the new output and pushes a reload to open pages, and `node --watch` restarts the server when its own sources change. `public/` is build output and is gitignored; never edit it by hand.
+It hot reloads. Vite serves the page on 3010 and proxies `/api` to the Node server on 3011, so a saved stylesheet hot-swaps without losing your place and a saved module reloads the page. `node --watch` restarts the API server when its own sources change. Vite's watcher polls, because sources are bind-mounted from the host and an atomic editor save lands as a rename that produces no inotify event inside the container.
+
+`public/` is build output and is gitignored; never edit it by hand. In the built image there is no Vite: the Node server serves the compiled assets and the API on 3010.
 
 ## Deciding a parameter
 

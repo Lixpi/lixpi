@@ -2,7 +2,6 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { readFile } from 'node:fs/promises'
-import { watch } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
@@ -75,35 +74,15 @@ const paramKey = (group: LoadedGroup, param: ParamRecord): string =>
 class ParamPickerServer {
     private readonly tree: ParamTree
     private readonly port: number
-    // Open live-reload streams. The build writes into public/, a watch there
-    // notices, and every open page reloads itself.
-    private readonly listeners = new Set<ServerResponse>()
-
     constructor(tree: ParamTree, port: number) {
         this.tree = tree
         this.port = port
     }
 
-    private watchBuildOutput(): void {
-        let pending: NodeJS.Timeout | null = null
-        try {
-            // `persistent: false` so a stuck watch cannot hold the process open.
-            watch(PUBLIC_DIR, { recursive: true, persistent: true }, () => {
-                if (pending) clearTimeout(pending)
-                // esbuild writes the script and the map separately, so one save
-                // produces several events. Collapse them into a single reload.
-                pending = setTimeout(() => {
-                    for (const listener of this.listeners) listener.write('data: reload\n\n')
-                }, 80)
-            })
-        } catch (error) {
-            console.error('[param-picker] live reload unavailable:', (error as Error).message)
-        }
-    }
-
     // Assembles the catalog the page renders. Every parameter carries the models
-    // and API surfaces it can reach, and each group carries the union of those,
-    // so the client can filter without a second request.
+    // and API surfaces it can reach, and each group carries the union of those
+    // plus the categories it contains, so the client can filter and group
+    // without a second request.
     private static assemble(groups: LoadedGroup[], root: Record<string, unknown>) {
         const providers = new Map<string, Record<string, unknown>>()
 
@@ -192,18 +171,6 @@ class ParamPickerServer {
 
     private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
         const { pathname } = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-
-        if (req.method === 'GET' && pathname === '/api/livereload') {
-            res.writeHead(200, {
-                'content-type': 'text/event-stream',
-                'cache-control': 'no-store',
-                connection: 'keep-alive',
-            })
-            res.write('retry: 1000\n\n')
-            this.listeners.add(res)
-            req.on('close', () => this.listeners.delete(res))
-            return
-        }
 
         if (req.method === 'GET' && pathname === '/api/catalog') {
             const { root, groups } = await this.tree.load()
@@ -358,8 +325,6 @@ class ParamPickerServer {
                 else res.end()
             })
         })
-
-        this.watchBuildOutput()
 
         server.listen(this.port, '0.0.0.0', () => {
             console.log(`[param-picker] listening on http://0.0.0.0:${this.port}`)

@@ -3,11 +3,11 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "node ./src/build.ts",
-        "dev": "node ./src/build.ts --watch & node --watch ./src/server.ts"
+        "dev": "vite --host 0.0.0.0",
+        "build": "vite build"
     },
     "devDependencies": {
-        "esbuild": "^0.25.0",
-        "sass": "^1.83.0"
+        "sass": "*",
+        "vite": "^6"
     }
 }

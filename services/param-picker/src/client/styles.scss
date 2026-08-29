@@ -1,3 +1,11 @@
+@use 'sass:math';
+
+// Radii are compile-time values. The colour tokens below stay CSS custom
+// properties because the client writes measured header heights into the same
+// namespace at runtime.
+$radius: 10px;
+$radius-card: 8px;
+
 :root {
     color-scheme: dark;
 
@@ -16,7 +24,6 @@
     --warn: #e06c75;
     --cream: #b8b3a8;
     --pink: #da81ad;
-    --radius: 10px;
     /* Measured header heights. Each sticky level parks under the one above, so
        these are what keep the three of them meeting exactly. */
     --section-h: 32px;
@@ -39,11 +46,16 @@ body {
 
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; color: var(--hidden); }
 
-.save-state { font-weight: 600; font-size: 13px; white-space: nowrap; }
-.save-state[data-state="idle"] { color: var(--muted); }
-.save-state[data-state="saving"] { color: var(--hidden); }
-.save-state[data-state="saved"] { color: var(--exposed); }
-.save-state[data-state="error"] { color: var(--warn); }
+.save-state {
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+
+    &[data-state='idle'] { color: var(--muted); }
+    &[data-state='saving'] { color: var(--hidden); }
+    &[data-state='saved'] { color: var(--exposed); }
+    &[data-state='error'] { color: var(--warn); }
+}
 
 /* Search, filter, counts and save state all share one line. Nothing here grows:
    the toolbar is chrome, so it stays small and leaves the page to the cards. */
@@ -117,7 +129,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .group {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: $radius;
     margin-bottom: 18px;
 }
 
@@ -130,7 +142,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     gap: 12px;
     padding: 6px 18px;
     border-bottom: 1px solid var(--border);
-    border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+    border-radius: #{$radius - 1px} #{$radius - 1px} 0 0;
     background: var(--surface-raised);
 }
 
@@ -182,7 +194,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     flex-direction: column;
     padding: 16px 18px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: $radius-card;
     background: var(--bg);
 }
 
@@ -225,13 +237,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     border: 1px solid var(--border);
     color: var(--muted);
     white-space: nowrap;
+
+    &[data-state='exposed'] { color: var(--exposed); border-color: currentColor; }
+    &[data-state='hidden'] { color: var(--hidden); border-color: currentColor; }
+    &[data-state='absent'] { color: var(--absent); }
+    &[data-availability='unsupported'] { color: var(--warn); border-color: currentColor; }
+    &[data-availability='unverified'] { color: var(--warn); border-color: currentColor; font-weight: 600; }
+    &[data-availability='supported'] { display: none; }
 }
-.badge[data-state="exposed"] { color: var(--exposed); border-color: currentColor; }
-.badge[data-state="hidden"] { color: var(--hidden); border-color: currentColor; }
-.badge[data-state="absent"] { color: var(--absent); }
-.badge[data-availability="unsupported"] { color: var(--warn); border-color: currentColor; }
-.badge[data-availability="unverified"] { color: var(--warn); border-color: currentColor; font-weight: 600; }
-.badge[data-availability="supported"] { display: none; }
 
 .summary { margin: 0 0 8px; }
 
@@ -405,15 +418,25 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     border-radius: 999px;
     border: 1px solid currentColor;
     white-space: nowrap;
+
+    &[data-kind='yes'] { color: var(--exposed); }
+    &[data-kind='no'] { color: var(--warn); }
 }
-.pill[data-kind="yes"] { color: var(--exposed); }
-.pill[data-kind="no"] { color: var(--warn); }
 
 /* The page each fact was read from, so a claim can be checked at its source.
    Plain links rather than pills: these are references, not status. */
-.source-links { font-size: 15px; color: var(--muted); }
-.source-links a { color: var(--accent); text-decoration: none; }
-.source-links a:hover { text-decoration: underline; }
+.source-links {
+    font-size: 15px;
+    color: var(--muted);
+
+    a {
+        color: var(--accent);
+        text-decoration: none;
+
+        &:hover { text-decoration: underline; }
+    }
+}
+
 
 
 

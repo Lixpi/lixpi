@@ -1,8 +1,16 @@
-// Generation parameter picker. Vanilla ES modules, no build step: the container
-// serves this file as-is. Rendering is one innerHTML pass per load plus targeted
-// row updates, with all input handled by delegation on the container.
+// Generation parameter picker client. Vite serves this in development with HMR
+// and builds it into public/ for the image. Rendering is one innerHTML pass per
+// load plus targeted row updates, with all input handled by delegation on the
+// container.
 
-const STATE_LABELS = {
+import './styles.scss'
+
+import type {
+    Catalog, CatalogGroup, CatalogParam, CatalogProvider, CategoryMeta,
+    Decision, SelectionEntry, SelectionMap, Status, Summary,
+} from './types.ts'
+
+const STATE_LABELS: Record<string, string> = {
     exposed: 'Already exposed',
     hidden: 'Sent but hidden',
     absent: 'Never sent',
@@ -10,20 +18,20 @@ const STATE_LABELS = {
 
 // Mirrors DEFAULT_DECISION_BY_STATE in src/server.ts. A row nobody has touched
 // shows what Lixpi does today, so the page opens describing the live system.
-const DEFAULT_DECISION_BY_STATE = {
+const DEFAULT_DECISION_BY_STATE: Record<string, Decision> = {
     exposed: 'expose',
     hidden: 'internal',
     absent: 'skip',
 }
 
 // Top-level sections, in the order they are read.
-const MEDIA_SECTIONS = [
+const MEDIA_SECTIONS: Array<{ mediaType: string; title: string }> = [
     { mediaType: 'text', title: 'Reasoning models' },
     { mediaType: 'image', title: 'Image models' },
     { mediaType: 'video', title: 'Video models' },
 ]
 
-const AVAILABILITY_LABELS = {
+const AVAILABILITY_LABELS: Record<string, string> = {
     supported: 'Supported',
     unsupported: 'Not on our models',
     unverified: 'Verify first',
@@ -39,14 +47,14 @@ const SCROLL_STORAGE_KEY = 'param-picker:scroll'
 // and veo-3.0-generate-001 read as the same model with or without them. Only a
 // run of three or more digits is dropped, so claude-opus-4-8 and gpt-image-1
 // keep the digits that are part of the name.
-const shortModel = (model) => String(model).replace(/-\d{3,}$/u, '')
+const shortModel = (model: string): string => String(model).replace(/-\d{3,}$/u, '')
 
-const titleFromSlug = (slug) => String(slug)
+const titleFromSlug = (slug: string): string => String(slug)
     .split('-')
     .map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
     .join(' ')
 
-const escapeHtml = (value) => String(value ?? '')
+const escapeHtml = (value: unknown): string => String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
@@ -55,15 +63,17 @@ const escapeHtml = (value) => String(value ?? '')
 // Which selection field each value control writes to. `fixed` is the value sent
 // when a parameter is used but not exposed; `default` is where an exposed
 // control starts. Only one is visible at a time, decided by the row's decision.
-const VALUE_CONTROLS = [
+type ValueControl = { role: 'fixed' | 'default'; label: string }
+
+const VALUE_CONTROLS: ValueControl[] = [
     { role: 'fixed', label: 'Value to send' },
     { role: 'default', label: 'Default value' },
 ]
 
-const VALUE_PATCH_KEY = { fixed: 'fixedValue', default: 'defaultValue' }
+const VALUE_PATCH_KEY: Record<string, 'fixedValue' | 'defaultValue'> = { fixed: 'fixedValue', default: 'defaultValue' }
 
 // Sign-off on a decision. Mutually exclusive, so ticking one clears the other.
-const STATUSES = [
+const STATUSES: Array<{ value: Status; label: string }> = [
     { value: 'needs-param-clarification', label: 'Needs param clarification' },
     { value: 'needs-implementation-investigation', label: 'Needs implementation investigation' },
     { value: 'approved', label: 'Approved' },
@@ -73,11 +83,11 @@ const STATUS_FILTERS = new Set(STATUSES.map(({ value }) => value))
 
 // The control shape follows what the provider accepts: a picker when there is a
 // published value list or a boolean, a free-text field otherwise.
-const chipOptionsFor = (parameter) => parameter.values?.length ? parameter.values
+const chipOptionsFor = (parameter: CatalogParam): string[] | null => parameter.values?.length ? parameter.values
     : parameter.type === 'boolean' ? ['true', 'false']
     : null
 
-const renderValueControl = (id, parameter, { role, label }, value) => {
+const renderValueControl = (id: string, parameter: CatalogParam, { role, label }: ValueControl, value: string): string => {
     // A parameter with a value list is picked straight from its chips, so it
     // needs no control here at all.
     if (chipOptionsFor(parameter)) return ''
@@ -89,16 +99,18 @@ const renderValueControl = (id, parameter, { role, label }, value) => {
 }
 
 
-class SelectionsClient {
-    #pending = null
-    #timer = null
-    #onStatus
+type StatusReporter = (state: string, summary?: Summary | null, message?: string) => void
 
-    constructor(onStatus) {
+class SelectionsClient {
+    #pending: SelectionMap | null = null
+    #timer: ReturnType<typeof setTimeout> | undefined
+    #onStatus: StatusReporter
+
+    constructor(onStatus: StatusReporter) {
         this.#onStatus = onStatus
     }
 
-    async load() {
+    async load(): Promise<{ catalog: Catalog; selections: SelectionMap; path: string }> {
         const [catalogRes, selectionsRes] = await Promise.all([
             fetch('/api/catalog'),
             fetch('/api/selections'),
@@ -111,14 +123,14 @@ class SelectionsClient {
 
     // Saves are debounced so dragging through a column of checkboxes produces one
     // write, not twenty. The latest map always wins.
-    queue(selections) {
+    queue(selections: SelectionMap): void {
         this.#pending = selections
         this.#onStatus('saving')
         clearTimeout(this.#timer)
         this.#timer = setTimeout(() => void this.#flush(), 350)
     }
 
-    async #flush() {
+    async #flush(): Promise<void> {
         const payload = this.#pending
         this.#pending = null
         try {
@@ -137,16 +149,20 @@ class SelectionsClient {
 }
 
 class ParamPicker {
-    #catalog = null
-    #categories = {}
-    #selections = {}
+    #catalog!: Catalog
+    #categories: Record<string, CategoryMeta> = {}
+    #selections: SelectionMap = {}
     #filter = 'all'
     #modelFilter = 'all'
     #query = ''
     #client
-    #collapsed = new Set()
+    #collapsed = new Set<string>()
 
-    constructor(root) {
+    readonly root: HTMLElement
+    saveState!: HTMLElement
+    tally!: HTMLElement
+
+    constructor(root: HTMLElement) {
         this.root = root
         this.saveState = document.getElementById('save-state')
         this.tally = document.getElementById('tally')
@@ -160,7 +176,7 @@ class ParamPicker {
         this.#client = new SelectionsClient((state, summary, message) => this.#renderStatus(state, summary, message))
     }
 
-    async init() {
+    async init(): Promise<void> {
         const { catalog, selections } = await this.#client.load()
         this.#catalog = catalog
         this.#categories = catalog.categories ?? {}
@@ -180,7 +196,7 @@ class ParamPicker {
 
     // A row with no stored decision starts at whatever Lixpi does today, so the
     // page opens describing the live system rather than a blank slate.
-    #entry(id, currentState) {
+    #entry(id: string, currentState: string): SelectionEntry {
         return this.#selections[id] ?? {
             decision: DEFAULT_DECISION_BY_STATE[currentState] ?? 'skip',
             reviewed: false,
@@ -194,7 +210,7 @@ class ParamPicker {
 
     // Every edit marks the row reviewed: that is what separates a seeded value
     // from a call somebody actually made.
-    #set(id, currentState, patch) {
+    #set(id: string, currentState: string, patch: Partial<SelectionEntry>): void {
         this.#selections[id] = { ...this.#entry(id, currentState), reviewed: true, ...patch }
         this.#client.queue(this.#selections)
         this.#renderTally()
@@ -202,7 +218,7 @@ class ParamPicker {
 
     // Flagging a row for research is the opposite of having decided it, so this
     // is the one edit that leaves `reviewed` alone.
-    #setFlag(id, currentState, patch) {
+    #setFlag(id: string, currentState: string, patch: Partial<SelectionEntry>): void {
         this.#selections[id] = { ...this.#entry(id, currentState), ...patch }
         this.#client.queue(this.#selections)
         this.#renderTally()
@@ -210,7 +226,7 @@ class ParamPicker {
 
     // Section headers stick below the toolbar, whose height changes when the
     // filter chips wrap, so it is measured instead of hardcoded.
-    #trackToolbarHeight() {
+    #trackToolbarHeight(): void {
         const toolbar = document.querySelector('.toolbar')
         if (!toolbar) return
         const apply = () => {
@@ -226,7 +242,7 @@ class ParamPicker {
     // Each sticky level parks under the one above, so its offset is the sum of
     // the heights above it. Those are measured rather than assumed: a hardcoded
     // offset leaves a band of scrolled content showing between two headers.
-    #measureHeaderHeights() {
+    #measureHeaderHeights(): void {
         for (const [selector, property, fallback] of [
             ['.section-head', '--section-h', 32],
             ['.group-head', '--group-h', 52],
@@ -238,7 +254,7 @@ class ParamPicker {
 
     // The model list is whatever the tree declares, so a new model appears in
     // the filter as soon as a parameter names it.
-    #populateModelFilter() {
+    #populateModelFilter(): void {
         const models = new Set()
         for (const provider of this.#catalog.providers) {
             for (const group of provider.groups) {
@@ -253,7 +269,7 @@ class ParamPicker {
     // Reloading in the middle of a long list should not throw away your place.
     // Restored after the first render and filter pass, when the page is finally
     // tall enough for the offset to mean anything.
-    #restoreScroll() {
+    #restoreScroll(): void {
         let saved = 0
         try {
             saved = Number(sessionStorage.getItem(SCROLL_STORAGE_KEY)) || 0
@@ -277,7 +293,7 @@ class ParamPicker {
         }, { passive: true })
     }
 
-    #bind() {
+    #bind(): void {
         this.root.addEventListener('change', (event) => {
             const target = event.target
             const id = target.dataset.id
@@ -393,21 +409,21 @@ class ParamPicker {
     }
 
 
-    #activeValue(id, currentState) {
+    #activeValue(id: string, currentState: string): string {
         const entry = this.#entry(id, currentState)
         if (entry.decision === 'expose') return entry.defaultValue
         if (entry.decision === 'internal') return entry.fixedValue
         return ''
     }
 
-    #syncChips(row, id) {
+    #syncChips(row: HTMLElement, id: string): void {
         const chosen = this.#activeValue(id, row.dataset.currentState)
         for (const chip of row.querySelectorAll('.values code[data-value]')) {
             chip.classList.toggle('is-selected', chosen !== '' && chip.dataset.value === chosen)
         }
     }
 
-    #syncRow(id) {
+    #syncRow(id: string): void {
         const row = this.root.querySelector(`[data-row="${CSS.escape(id)}"]`)
         if (!row) return
         const { decision, reviewed, irrelevant, status } = this.#entry(id, row.dataset.currentState)
@@ -430,7 +446,7 @@ class ParamPicker {
         this.#applyFilter()
     }
 
-    #renderStatus(state, summary, message) {
+    #renderStatus(state: string, summary?: Summary | null, message?: string): void {
         const text = {
             idle: 'Ready',
             saving: 'Saving',
@@ -442,7 +458,7 @@ class ParamPicker {
         if (summary) this.#renderTally(summary)
     }
 
-    #renderTally(summary) {
+    #renderTally(summary?: Summary): void {
         const counts = summary ?? { total: 0, expose: 0, internal: 0, skip: 0, reviewed: 0, unreviewed: 0, approved: 0, needsParamClarification: 0, needsImplementationInvestigation: 0 }
 
         if (!summary) {
@@ -472,7 +488,7 @@ class ParamPicker {
         `
     }
 
-    #applyFilter() {
+    #applyFilter(): void {
         for (const row of this.root.querySelectorAll('[data-row]')) {
             const matchesState = this.#filter === 'all'
                 || (this.#filter === 'unreviewed' ? row.dataset.reviewed === 'false'
@@ -501,7 +517,7 @@ class ParamPicker {
     // The page is organised by what the model produces, not by who sells it, so
     // reviewing all the image knobs means reading one section instead of hopping
     // between four providers. Provider stays on each group header.
-    #render() {
+    #render(): void {
         this.root.innerHTML = MEDIA_SECTIONS.map(({ mediaType, title }) => {
             const groups = this.#catalog.providers.flatMap((provider) => provider.groups
                 .filter((group) => group.mediaType === mediaType)
@@ -518,7 +534,7 @@ class ParamPicker {
         }).join('')
     }
 
-    #renderGroup(provider, group) {
+    #renderGroup(provider: CatalogProvider, group: CatalogGroup): string {
         const key = `${provider.id}/${group.id}`
         return `
             <section class="group" data-collapsed="${this.#collapsed.has(key)}">
@@ -542,7 +558,7 @@ class ParamPicker {
 
     // Parameters are grouped by what they do, so a provider's list reads as a
     // handful of named concerns rather than one long alphabetical run.
-    #renderCategories(provider, group) {
+    #renderCategories(provider: CatalogProvider, group: CatalogGroup): string {
         const buckets = new Map()
         for (const parameter of group.parameters) {
             const category = parameter.category ?? 'uncategorised'
@@ -569,7 +585,7 @@ class ParamPicker {
         `).join('')
     }
 
-    #renderRow(provider, group, parameter) {
+    #renderRow(provider: CatalogProvider, group: CatalogGroup, parameter: CatalogParam): string {
         const id = `${provider.id}/${group.id}/${parameter.key}`
         const { decision, reviewed, fixedValue, defaultValue, status, irrelevant, note } = this.#entry(id, parameter.currentState)
         const valueByRole = { fixed: fixedValue, default: defaultValue }
@@ -695,10 +711,11 @@ class ParamPicker {
     }
 }
 
-const picker = new ParamPicker(document.getElementById('providers'))
-picker.init().catch((error) => {
-    document.getElementById('providers').innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
+const picker = new ParamPicker(document.getElementById('providers') as HTMLElement)
+picker.init().catch((error: Error) => {
+    document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
 })
+
 
 
 

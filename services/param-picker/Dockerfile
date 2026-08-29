@@ -6,17 +6,18 @@ FROM node:${NODE_VERSION}-alpine
 # Set the working directory
 WORKDIR /usr/src/service
 
-# esbuild and sass are the only dependencies, and they exist to build the client:
-# TypeScript to a bundle, SCSS to a stylesheet. The server itself needs nothing,
-# because Node runs its TypeScript directly through native type stripping.
+# Vite builds the client; sass compiles its stylesheet. The server needs no
+# dependencies at all, because Node runs its TypeScript directly through native
+# type stripping.
 COPY ./services/param-picker/package.json ./package.json
-RUN npm install --omit=optional --no-audit --no-fund
+RUN npm install --no-audit --no-fund
 
+COPY ./services/param-picker/vite.config.ts ./vite.config.ts
 COPY ./services/param-picker/src ./src
 
-# Build once so the image can serve without a writable mount. In development the
-# container rebuilds on every change instead, see the compose command.
-RUN node ./src/build.ts
+# Build once so the image can serve the client without a dev server. In
+# development Vite serves it instead, see the compose command.
+RUN npm run build
 
 # Parameter files live here. docker-compose mounts the host directory over it.
 RUN mkdir -p /usr/src/service/data
