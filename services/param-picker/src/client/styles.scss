@@ -9,13 +9,15 @@ $radius-card: 8px;
 :root {
     color-scheme: dark;
 
+    // Mirrored as a literal in src/client/index.html so the page paints dark
+    // before this stylesheet loads. Change both together.
     --bg: #1e242e;
     --surface: #252c38;
     --surface-raised: #2a323f;
     --code-bg: #2d3542;
     --surface-muted: #262d37;
     --border: #363e4b;
-    --text: #c8d0dc;
+    --text: #c8d0dc; // also mirrored in index.html, see --bg above
     --muted: #8792a6;
     --accent: #6cb6ff;
     --exposed: #7d9b68;
@@ -116,15 +118,34 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 }
 .provider-name { color: var(--accent); }
 
-/* Both header levels toggle their own body. The chevron points down when open
-   and rotates a quarter turn anticlockwise when the body is hidden. */
-.section-head, .group-head { cursor: pointer; user-select: none; }
-.section-head:hover, .group-head:hover { color: var(--text); }
+/* All three header levels toggle their own body: media type, provider, and the
+   categories inside a provider. The chevron points down when open and rotates a
+   quarter turn anticlockwise when the body is hidden. */
+.section-head,
+.group-head,
+.category-head {
+    cursor: pointer;
+    user-select: none;
+
+    &:hover { color: var(--text); }
+}
+
 .chevron { flex-shrink: 0; transition: transform 0.15s ease; }
-.section[data-collapsed="true"] > .section-head .chevron,
-.group[data-collapsed="true"] > .group-head .chevron { transform: rotate(-90deg); }
-.section[data-collapsed="true"] > .section-body,
-.group[data-collapsed="true"] > .group-body { display: none; }
+
+.section[data-collapsed='true'] {
+    > .section-head .chevron { transform: rotate(-90deg); }
+    > .section-body { display: none; }
+}
+
+.group[data-collapsed='true'] {
+    > .group-head .chevron { transform: rotate(-90deg); }
+    > .group-body { display: none; }
+}
+
+.category[data-collapsed='true'] {
+    > .category-head .chevron { transform: rotate(-90deg); }
+    > .rows { display: none; }
+}
 
 .group {
     background: var(--surface);

@@ -5,6 +5,15 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Generation parameter picker</title>
         <link rel="icon" href="data:," />
+        <!-- Painted before the stylesheet loads, so a reload does not flash white.
+             color-scheme alone fixes the browser's own canvas and form controls;
+             the two colours have to be literals here because custom properties
+             are not defined yet. Keep them in step with --bg and --text in
+             src/client/styles.scss. -->
+        <meta name="color-scheme" content="dark" />
+        <style>
+            html { background: #1e242e; color: #c8d0dc; }
+        </style>
     </head>
     <body>
         <nav class="toolbar">

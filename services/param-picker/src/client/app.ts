@@ -572,17 +572,21 @@ class ParamPicker {
             return orderA - orderB || a.localeCompare(b)
         })
 
-        return ordered.map((category) => `
-            <section class="category" data-category="${escapeHtml(category)}">
-                <h4 class="category-head">
+        return ordered.map((category) => {
+            const key = `${provider.id}/${group.id}/${category}`
+            return `
+            <section class="category" data-category="${escapeHtml(category)}" data-collapsed="${this.#collapsed.has(key)}">
+                <h4 class="category-head" data-toggle-key="${escapeHtml(key)}">
+                    ${CHEVRON}
                     ${escapeHtml(this.#categories[category]?.title ?? titleFromSlug(category))}
                     <span class="category-count"></span>
                 </h4>
                 <div class="rows">
-                    ${buckets.get(category).map((parameter) => this.#renderRow(provider, group, parameter)).join('')}
+                    ${buckets.get(category)!.map((parameter) => this.#renderRow(provider, group, parameter)).join('')}
                 </div>
             </section>
-        `).join('')
+        `
+        }).join('')
     }
 
     #renderRow(provider: CatalogProvider, group: CatalogGroup, parameter: CatalogParam): string {
