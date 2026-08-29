@@ -2,7 +2,7 @@
 
 ## Scope
 
-Use this guide when building UI components in `services/web-ui` that are not pure PIXI renderers. This includes Svelte UI, ProseMirror node views, canvas chrome, SVG controls, menus, switches, sliders, toolbars, overlays, and small reusable primitives.
+Use this guide when building UI components in `services/web-ui` that are not pure PIXI renderers. This includes TypeScript DOM UI, ProseMirror node views, canvas chrome, SVG controls, menus, switches, sliders, toolbars, overlays, and small reusable primitives.
 
 This guide does not replace the PIXI rendering rules for canvas scene content. If the element is part of the canvas world and can be rendered naturally in PIXI, PIXI is the first choice. Use this guide for UI that sits outside PIXI or for canvas-adjacent controls that need DOM/SVG semantics.
 
@@ -10,7 +10,7 @@ This guide does not replace the PIXI rendering rules for canvas scene content. I
 
 `services/web-ui` is a presentational and interaction layer. It must not own distributed-system decisions or product-domain orchestration. Frontend code may collect user input, build non-authoritative snapshots for the API, render streamed API state, compute local geometry, and handle direct UI interaction. It must not decide branch topology, generated-media parentage, fork/origin marker creation, reasoning-run routing, model fanout, context relevance, resolver outcomes, lineage provenance, billing, authorization, persistence ownership, or any other API-owned workflow state.
 
-If a feature needs a decision that must stay correct across reloads, concurrent editors, multiple clients, retries, workers, or service restarts, the decision belongs in `services/api` or a shared backend service. The browser receives that decision through a typed API response, stream event, or persisted state contract, then applies it visually. Do not hide these decisions in Svelte components, ProseMirror plugins, `WorkspaceCanvas.ts`, canvas utilities, stores, or client services.
+If a feature needs a decision that must stay correct across reloads, concurrent editors, multiple clients, retries, workers, or service restarts, the decision belongs in `services/api` or a shared backend service. The browser receives that decision through a typed API response, stream event, or persisted state contract, then applies it visually. Do not hide these decisions in UI components, ProseMirror plugins, `WorkspaceCanvas.ts`, canvas utilities, stores, or client services.
 
 ## Rendering Decision
 
@@ -20,11 +20,10 @@ Choose the rendering approach by where the UI lives and what it does.
 |-----------|--------------|----------|
 | Canvas scene content | PIXI | Nodes, images, videos, sprites, shapes, hit-tested scene objects, high-frequency transforms, zoomed world content |
 | Canvas-adjacent controls | D3 SVG | Menus, switches, sliders, playback controls, control bars, badges, handles, and similar UI that must track canvas geometry but needs precise interactive controls |
-| Normal app UI | Svelte | Panels, dialogs, forms, settings, inspectors, app navigation, persistent screens |
-| Non-Svelte TypeScript DOM UI | `html` tagged template | ProseMirror node views, plugins, and small DOM surfaces covered by [`TYPESCRIPT.md`](./TYPESCRIPT.md) |
+| Normal app UI | TypeScript `html` tagged template | Panels, dialogs, forms, settings, inspectors, app navigation, persistent screens, ProseMirror node views, and plugins covered by [`TYPESCRIPT.md`](./TYPESCRIPT.md) |
 | Static icon or decorative SVG in DOM | Existing icon system | Import from [`@lixpi/ui-kit/svg`](../../packages/lixpi/ui-kit/src/svg/svgIcons.ts), then inject or parse according to the host renderer |
 
-Do not use D3 as a general replacement for Svelte. Do not use HTML templates for canvas chrome when the control is expected to live in an SVG overlay. Do not use PIXI for form-like UI, menus, segmented switches, media controls, or text-heavy widgets unless there is a concrete rendering reason.
+Do not use D3 for ordinary application DOM. Do not use HTML templates for canvas chrome when the control is expected to live in an SVG overlay. Do not use PIXI for form-like UI, menus, segmented switches, media controls, or text-heavy widgets unless there is a concrete rendering reason.
 
 ## Canvas Rule
 
@@ -172,15 +171,13 @@ button.append('rect')
     .attr('fill', 'transparent')
 ```
 
-## Svelte And HTML Rules
+## HTML Rules
 
-Use Svelte for ordinary application UI. Keep Svelte components declarative and let Svelte own DOM updates.
-
-Use the `html` tagged template from [`TYPESCRIPT.md`](./TYPESCRIPT.md) for non-Svelte `.ts` files that create normal DOM elements. This is mandatory for ProseMirror plugins, NodeViews, shared DOM utilities, and other TypeScript-built HTML.
+Use the `html` tagged template from [`TYPESCRIPT.md`](./TYPESCRIPT.md) for `.ts` files that create normal DOM elements. This is mandatory for application UI, ProseMirror plugins, NodeViews, shared DOM utilities, and other TypeScript-built HTML.
 
 Do not mix approaches inside one component without a clear boundary:
 
-- A Svelte panel can host an `<svg>` and call a D3 SVG primitive.
+- A TypeScript DOM panel can host an `<svg>` and call a D3 SVG primitive.
 - A ProseMirror NodeView can create a DOM shell with `html` and mount an SVG control inside it.
 - A canvas chrome layer can position an SVG host and let D3 render inside it.
 - A D3 SVG primitive should not create random HTML siblings.
@@ -194,7 +191,7 @@ Patterns:
 - Internal state: the component owns the value and exposes setters/getters.
 - External state: the host owns the value and calls `render()` or setters when it changes.
 - DOM/media state: a DOM object is the source of truth, and the component listens to its events.
-- Store state: a Svelte store or app state object is the source of truth, and the component is a view/controller for it.
+- Store state: a Nano Store or app state object is the source of truth, and the component is a view/controller for it.
 
 Do not maintain parallel state copies without a sync plan. If the component writes to external state, callbacks should report the change. If a setter is programmatic, document whether it fires callbacks.
 
@@ -219,7 +216,7 @@ Instance APIs should be small:
 - `getValue()` or `getChecked()` only when callers need internal state.
 - `destroy()` for cleanup.
 
-Do not expose internal D3 selections, DOM nodes, or Svelte internals unless the host genuinely needs them.
+Do not expose internal D3 selections or DOM nodes unless the host genuinely needs them.
 
 ## Layout
 
@@ -233,7 +230,7 @@ For D3 SVG components:
 - Clamp pointer-derived values.
 - Hide unsupported controls with `display="none"` and remove or disable their hit areas.
 
-For Svelte/HTML components:
+For HTML components:
 
 - Use existing layout primitives and CSS rules from nearby code.
 - Keep app UI responsive through CSS, not D3 calculations.
@@ -304,7 +301,7 @@ Keep durations short. Use easing intentionally. Avoid playful easing unless the 
 
 Use existing icons from [`@lixpi/ui-kit/svg`](../../packages/lixpi/ui-kit/src/svg/svgIcons.ts).
 
-For HTML/Svelte, inject icon markup through the existing DOM/template patterns.
+For HTML, inject icon markup through the existing DOM/template patterns.
 
 For D3 SVG controls, use `appendSvgPathIcon` from
 [`svgIconPaths.ts`](../../packages/lixpi/ui-kit/src/svg/svgIconPaths.ts) to
@@ -352,7 +349,7 @@ For D3 SVG controls:
 - Support `Enter` and `Space` for buttons.
 - Support arrow keys for sliders, segmented controls, and menu movement when needed.
 
-For Svelte/HTML controls, use native controls when possible before recreating semantics manually.
+For HTML controls, use native controls when possible before recreating semantics manually.
 
 Do not rely on color alone. Text, icon state, geometry, and ARIA should reflect the current value.
 
@@ -384,13 +381,13 @@ For D3 SVG UI:
 - Assert public setters update rendered state.
 - Assert `destroy()` removes the group and external listeners.
 
-For Svelte/HTML UI, use the existing test approach near the component. Do not use browser screenshots or manual browser inspection for agent verification.
+For TypeScript DOM UI, use the existing test approach near the component. Do not use browser screenshots or manual browser inspection for agent verification.
 
 ## Documentation
 
 Component docs should describe:
 
-- Which renderer owns the UI: PIXI, D3 SVG, Svelte, or TypeScript `html`.
+- Which renderer owns the UI: PIXI, D3 SVG, or TypeScript `html`.
 - Where the component mounts.
 - Public config and instance API.
 - State ownership and callback behavior.
@@ -408,8 +405,7 @@ Before merging a UI component, check:
 - The renderer choice follows the decision table.
 - Canvas scene content uses PIXI unless there is a documented reason not to.
 - Canvas-adjacent controls use D3 SVG when they need menus, switches, sliders, control bars, or similar UI.
-- Normal app UI uses Svelte.
-- Non-Svelte TypeScript HTML uses the `html` tagged template.
+- Normal app UI uses the TypeScript `html` tagged template.
 - State has one source of truth.
 - Public API is small and explicit.
 - Geometry and colors are centralized.

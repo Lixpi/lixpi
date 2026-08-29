@@ -1,10 +1,6 @@
 # Lixpi Docs Site (standalone Markdoc renderer)
 
-A zero-framework static renderer that turns every `.md` file under
-`documentation/` into a browsable HTML site. The **only** runtime dependency is
-[`@markdoc/markdoc`](https://github.com/markdoc/markdoc) — no React, no Svelte,
-no SSG. Rendering uses Markdoc's built-in HTML string renderer
-(`Markdoc.renderers.html`).
+A zero-framework static renderer that turns every `.md` file under `documentation/` into a browsable HTML site. The **only** runtime dependency is [`@markdoc/markdoc`](https://github.com/markdoc/markdoc), with no client UI framework or SSG. Rendering uses Markdoc's built-in HTML string renderer (`Markdoc.renderers.html`).
 
 ## Build
 

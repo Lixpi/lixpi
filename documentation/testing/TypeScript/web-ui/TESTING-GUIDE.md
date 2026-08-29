@@ -23,13 +23,12 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 
 ## Prohibited Verification
 
-- Never run `svelte-check`, including `pnpm svelte-check`, `pnpm run svelte-check`, or another script or wrapper that invokes it.
 - Never load the application in a browser or use browser automation, screenshots, or manual visual inspection to verify an agent's work.
 - Never replace a missing test with one of these prohibited checks. State the uncovered behavior in the completion report.
 
 ## Test Infrastructure
 
-Tests use **Vitest** with the `happy-dom` DOM environment. The configuration lives in `vitest.config.ts` (NOT in `vite.config.ts` — we keep them separate because the Svelte vite plugin crashes Vitest's internal server).
+Tests use **Vitest** with the `happy-dom` DOM environment. The configuration lives in `vitest.config.ts`, separate from the application build configuration in `vite.config.ts`.
 
 ### Path Aliases
 
@@ -179,9 +178,8 @@ for (const { name, createNode } of imageNodeCases) {
 
 ## What NOT To Do
 
-- **Don't test DOM rendering** — we don't render Svelte components in tests. Test the logic layer underneath.
+- **Don't use browser rendering as a substitute for tests** — test the logic layer and the DOM contracts supported by `happy-dom`.
 - **Don't use `npx`** — it's `pnpm`. Always run through `lixpi-typescript-test-runner`'s `run-tests.sh web-ui`.
 - **Don't run tests outside Docker** — the `lixpi-typescript-test-runner` container has the correct node_modules and environment. Your host machine doesn't.
 - **Don't run tests inside `lixpi-web-ui`** — that container no longer has a test runner; use `lixpi-typescript-test-runner` instead.
-- **Don't run `svelte-check`** — directly or through another script; it is prohibited for agents.
 - **Don't use browser-based verification** — browsers, browser automation, screenshots, and manual visual inspection are prohibited for verifying agent work.

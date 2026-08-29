@@ -107,7 +107,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
 | [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |
 | [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules — mandatory for all TypeScript in the repo |
-| [UI Components Coding Style](coding-style-guides/UI-COMPONENTS.md) | Svelte, D3/SVG, canvas chrome, component ownership, layout, and event rules |
+| [UI Components Coding Style](coding-style-guides/UI-COMPONENTS.md) | TypeScript DOM, D3/SVG, canvas chrome, component ownership, layout, and event rules |
 | [Markdown Rendering](conventions/MARKDOWN-RENDERING.md) | The one-parser rule and the two renderers |
 | [API-Owned Media Lineage Planning](knowledge/API-OWNED-MEDIA-LINEAGE-PLANNING.md) | API/browser ownership boundary for media branch topology, lineage plans, marker provenance, and canvas application |
 | [Rendering Architecture for a Media-Heavy Canvas](knowledge/RENDERING-ARCHITECTURE-FOR-MEDIA-HEAVY-CANVAS.md) | Why the DOM/PIXI split; what the leading canvases use |

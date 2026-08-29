@@ -42,7 +42,7 @@ When you open a workspace, you see a canvas. On that canvas are nodes (documents
 - **Select edges** by clicking the connector line
 - **Delete edges** using Delete/Backspace (when an edge is selected), or by dragging an endpoint to empty space
 
-All of this happens without the Svelte component knowing the details. It just passes DOM refs, performs app/service integration, and gets callbacks when things change. Canvas behavior such as placement, collision resolution, drag/resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities, not in `services/web-ui/src/components/WorkspaceCanvas.svelte`.
+[`workspaceCanvasView.ts`](../../components/workspaceCanvasView.ts) passes DOM refs, performs app and service integration, and receives callbacks when state changes. Canvas behavior such as placement, collision resolution, drag and resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities, not in the view host.
 
 ## Node Types
 
@@ -125,7 +125,7 @@ All of this happens without the Svelte component knowing the details. It just pa
 The Asset details section renders subject identity, status, renditions, lineage, and the generation seed. The seed row appears only when the media model recorded one on `asset.lineage.generationSeed`, and it carries a `createHelpTooltip` explaining what reusing a seed does.
 
 The canvas details panel and Media Library inspector mount one shared Subject identity dropdown using the same `createPureDropdown` component and configuration as the Asset scope selector. It performs the direct revisioned attestation mutation and restores the previous selection on conflict/error. Medium and identity remain separate fields; there is no modal or proof form.
-- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; Svelte supplies the independent launcher to the left of the composer, beside the upload/image controls.
+- Implemented in `mediaLibraryPanel.ts` and `media-library-panel.scss` inside this canvas module; `workspaceCanvasView.ts` supplies the independent launcher to the left of the composer, beside the upload/image controls.
 - The top-level `Capabilities` / `Media` / `AI Threads` switch is the shared mode control for the right side panel. Capabilities lists authorized Tools; Media hosts cataloged Assets.
 - Renders media through Asset metadata projections; save and insertion create references without copying Blob bytes.
 - Shows the authorized Assets attachable to the current canvas: its own Workspace-scoped Assets plus available user- and Organization-scoped Assets. Assets scoped to another Workspace are excluded because the API cannot attach them to the current canvas.
@@ -165,8 +165,8 @@ Icon-only canvas controls keep their ARIA labels and opt into the ui-kit help-to
 
 ```mermaid
 flowchart TB
-    subgraph Svelte["Svelte Layer"]
-        WC[WorkspaceCanvas.svelte]
+    subgraph View["TypeScript View Layer"]
+        Host[workspaceCanvasView.ts]
         WS[workspaceStore]
         AS[assetsStore]
         ADS[assetDocumentsStore]
@@ -196,10 +196,10 @@ flowchart TB
         OBJ[Organization Blob Object Store]
     end
 
-    WC -->|"paneEl, viewportEl"| CC
-    WC -->|"canvasState, Assets, role snapshots"| CC
-    CC -->|"onCanvasStateChange"| WC
-    WC -->|"persistCanvasState"| WS
+    Host -->|"paneEl, viewportEl"| CC
+    Host -->|"canvasState, Assets, role snapshots"| CC
+    CC -->|"onCanvasStateChange"| Host
+    Host -->|"persistCanvasState"| WS
     WS -->|"updateCanvasState"| NS
     NS --> API
     AssetService --> NS
@@ -227,7 +227,7 @@ flowchart TB
 
 ### Initialization
 
-1. Svelte mounts and binds `paneEl` and `viewportEl` refs
+1. `workspaceCanvasView.ts` creates and mounts `paneEl` and `viewportEl`
 2. `createWorkspaceCanvas()` is called with these refs plus initial data
 3. XYPanZoom attaches to the pane for viewport control
 4. Document nodes are created as DOM elements and appended to viewport
@@ -242,9 +242,9 @@ The viewport element uses CSS transforms for pan/zoom:
 transform: translate(${x}px, ${y}px) scale(${zoom})
 ```
 
-XYPanZoom fires `onTransformChange` on every pan/zoom. We update the CSS and notify Svelte via `onViewportChange`. The Svelte layer debounces and persists to backend.
+XYPanZoom fires `onTransformChange` on every pan or zoom. The canvas updates the CSS and notifies `workspaceCanvasView.ts` through `onViewportChange`. The view debounces and persists the viewport to the backend.
 
-During interaction, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth. `onTransformChange` updates `currentCanvasState.viewport` immediately, and Svelte persistence is treated as an acknowledgement. If a later store render changes only `viewport` and disagrees with the live transform already on screen, `workspaceViewportStatePlan.ts` preserves the live viewport so a stale debounced save cannot replay an older pan position and make nodes appear to jump.
+During interaction, the live viewport inside `WorkspaceCanvas.ts` is the rendering source of truth. `onTransformChange` updates `currentCanvasState.viewport` immediately, and view persistence is treated as an acknowledgement. If a later store render changes only `viewport` and disagrees with the live transform already on screen, `workspaceViewportStatePlan.ts` preserves the live viewport so a stale debounced save cannot replay an older pan position and make nodes appear to jump.
 
 ### Document Nodes
 
@@ -498,7 +498,7 @@ Each document node instantiates a `ProseMirrorEditor`. The editor container has 
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
-    participant Svelte as WorkspaceCanvas.svelte
+    participant Host as workspaceCanvasView.ts
     participant Store as workspaceStore
     participant Service as WorkspaceService
     participant Backend as NATS/API
@@ -506,9 +506,9 @@ sequenceDiagram
     User->>Canvas: Drag document
     Canvas->>Canvas: Update DOM position
     User->>Canvas: Release mouse
-    Canvas->>Svelte: onCanvasStateChange(newState)
-    Svelte->>Store: updateCanvasState(newState)
-    Svelte->>Service: updateCanvasState()
+    Canvas->>Host: onCanvasStateChange(newState)
+    Host->>Store: updateCanvasState(newState)
+    Host->>Service: updateCanvasState()
     Service->>Backend: NATS request
 ```
 

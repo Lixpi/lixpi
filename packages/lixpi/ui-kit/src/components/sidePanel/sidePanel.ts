@@ -1,6 +1,6 @@
 // SidePanel - reusable resizable side panel for a canvas-hosted panel.
 //
-// Renderer: TypeScript `html` DOM (no Svelte). It is meant to be mounted as a
+// Renderer: TypeScript `html` DOM. It is meant to be mounted as a
 // child of any canvas-hosted panel element. The component renders the resize
 // handle, optional overlay, optional toggle, and owns the resize lifecycle:
 //

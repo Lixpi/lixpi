@@ -34,8 +34,8 @@ describe('canvas collision documentation', () => {
 		expectSourceToContain(workspaceReadme, 'collision resolution, viewport-centered insertion cleanup, and drag-release collision rules', 'workspace README')
 	})
 
-	it('keeps collision ownership out of the Svelte wrapper in local documentation', () => {
-		expectSourceToContain(workspaceReadme, 'Canvas behavior such as placement, collision resolution, drag/resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities', 'workspace README')
+	it('keeps collision ownership out of the canvas view in local documentation', () => {
+		expectSourceToContain(workspaceReadme, 'Canvas behavior such as placement, collision resolution, drag and resize planning, and viewport-coordinate math belongs in this `infographics/workspace` module or its utilities, not in the view host.', 'workspace README')
 	})
 
 	it('keeps local docs free of stale removed grouping config names', () => {

@@ -1,6 +1,6 @@
 # Sass and CSS Coding Style Guide
 
-This guide applies to `.scss` files, styles inside Svelte components, and TypeScript or Svelte code that creates or selects styled DOM elements.
+This guide applies to `.scss` files and TypeScript code that creates or selects styled DOM elements.
 
 ## Style Ownership
 
@@ -64,7 +64,7 @@ Before renaming a selector, determine whether it is:
 CSS class names form a contract across styles, templates, code, tests, and documentation. Rename the full contract in one change:
 
 - Sass or CSS selectors, each written as a complete class name.
-- Svelte `class` and `class:` bindings.
+- TypeScript template attributes and bindings.
 - TypeScript `className`, `classList`, `querySelector`, and test fixture strings.
 - Dynamically generated variants such as `` `media-library-toast-${variant}` ``.
 - Tests and nearby documentation that state the DOM or styling contract.
@@ -103,6 +103,6 @@ panelEl.style.setProperty('--media-library-panel-width', width)
 
 When a change renames or introduces shared styled DOM contracts:
 
-1. Search `.scss`, `.svelte`, and `.ts` files for old full selectors and dynamic class strings.
+1. Search `.scss` and `.ts` files for old full selectors and dynamic class strings.
 2. Check that CSS custom properties and external class contracts were not swept into application-class changes.
 3. Update relevant tests and the nearest existing README or feature documentation when it describes affected classes or behavior.

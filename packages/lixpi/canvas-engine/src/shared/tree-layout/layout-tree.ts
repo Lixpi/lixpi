@@ -2,7 +2,7 @@
 //
 // Geometry-agnostic block-allocation algorithm: a simplified, provably
 // overlap-free variant of Reingold–Tilford "Tidy Drawings of Trees" (1981).
-// It knows nothing about the canvas, PIXI, Svelte, branchId, or media kinds —
+// It knows nothing about the canvas, PIXI, branchId, or media kinds —
 // it only places abstract boxes that form a single tree. The workspace layer
 // adapts concrete canvas nodes to the TreeLayoutNode shape, runs this, and maps
 // the relative result back onto world positions.

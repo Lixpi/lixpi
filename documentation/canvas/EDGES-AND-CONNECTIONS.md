@@ -268,7 +268,7 @@ sequenceDiagram
     participant User
     participant WCM as WorkspaceConnectionManager
     participant WC as WorkspaceCanvas
-    participant Svelte as WorkspaceCanvas.svelte
+    participant Host as workspaceCanvasView.ts
     participant Store as workspaceStore
     participant WSvc as WorkspaceService
     participant NATS
@@ -289,11 +289,11 @@ sequenceDiagram
     rect rgb(195, 222, 221)
         Note over User, NATS: PHASE 2 - UPDATE STORES
         activate WC
-        WC->>Svelte: onCanvasStateChange({ nodes, edges })
-        activate Svelte
-        Svelte->>Store: updateCanvasState()
-        Svelte->>WSvc: updateCanvasState()
-        deactivate Svelte
+        WC->>Host: onCanvasStateChange({ nodes, edges })
+        activate Host
+        Host->>Store: updateCanvasState()
+        Host->>WSvc: updateCanvasState()
+        deactivate Host
         deactivate WC
     end
 

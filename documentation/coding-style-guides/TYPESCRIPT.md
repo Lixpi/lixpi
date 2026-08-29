@@ -113,7 +113,7 @@ fetchData().then((data) => { ... })
 
 **This rule is mandatory. No exceptions outside of test files.**
 
-In all non-Svelte `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components, canvas code (`WorkspaceCanvas.ts`, utilities, etc.), and any other file that builds UI — always use the `html` tagged template from `domTemplates.ts`:
+In all `services/web-ui` `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components, canvas code (`WorkspaceCanvas.ts`, utilities, etc.), and any other file that builds UI — always use the `html` tagged template from `domTemplates.ts`:
 
 ```typescript
 import { html } from '$src/utils/domTemplates.ts'

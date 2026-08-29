@@ -126,8 +126,8 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         `--side-panel-toggle-hover-color: ${rightSidePanelSettings.styles.toggleHoverColor}`,
     ].join('; ')
 
-    // DOM refs (equivalent to Svelte `bind:this`). `paneEl` is the outer pane and
-    // `viewportEl` the inner viewport, matching what `createWorkspaceCanvas` expects.
+    // `paneEl` is the outer pane and `viewportEl` is the inner viewport, matching
+    // what `createWorkspaceCanvas` expects.
     const viewportEl = html`<div className="workspace-viewport"></div>` as HTMLDivElement
     const paneEl = html`<div className="workspace-pane"></div>` as HTMLDivElement
     paneEl.append(viewportEl)
@@ -601,7 +601,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         renderer?.toggleMediaLibrary?.()
     }
 
-    // Recompute the store-derived values that the Svelte `$derived` runes used to track.
+    // Recompute values derived from the current route and workspace stores.
     function recompute(): void {
         workspaceId = routerStore.getData('currentRoute').routeParams.workspaceId as string
         loadedWorkspaceId = workspaceStore.getData('workspaceId')
@@ -649,7 +649,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         rootEl.classList.toggle('workspace-canvas-right-side-panel-open', isRightSidePanelOpen)
     }
 
-    // Equivalent to the Svelte `$effect` that clicked outside the image submenu.
+    // Close the image submenu when a click lands outside its wrapper.
     let removeImageSubmenuOutsideClick: (() => void) | null = null
     function updateImageSubmenuOutsideClick(): void {
         if (imageSubmenuOpen && !removeImageSubmenuOutsideClick) {
@@ -717,7 +717,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         updateImageSubmenuOutsideClick()
     }
 
-    // Equivalent to the Svelte `$effect` guarding workspace synchronization.
+    // Keep workspace synchronization scoped to the loaded route workspace.
     let syncedWorkspaceId: string | null = null
     let stopWorkspaceSynchronization: (() => void) | void = undefined
     function updateWorkspaceSynchronization(): void {
@@ -733,7 +733,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         }
     }
 
-    // Equivalent to the Svelte `$effect` that re-rendered the canvas on data change.
+    // Re-render the canvas when its store-backed inputs change.
     function runRenderEffect(): void {
         if (renderer) {
             renderer.render(canvasState, documents, aiChatThreads, workspaceId)
@@ -753,7 +753,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         }
     }
 
-    // Equivalent to the Svelte `$effect` that restored a stashed viewport once per workspace.
+    // Restore a stashed viewport once per workspace.
     let stashRestoredWorkspaceId: string | null = null
     function runStashRestoreEffect(): void {
         if (!workspaceId || loadedWorkspaceId !== workspaceId || !canvasState) return
@@ -769,7 +769,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
         runStashRestoreEffect()
     }
 
-    // Chrome markup (equivalent to the Svelte template).
+    // Workspace chrome markup.
     const imageButton = html`
         <button
             className="workspace-floating-toolbar-button"
@@ -906,8 +906,7 @@ export const createWorkspaceCanvasView = (): WorkspaceCanvasViewInstance => {
 
     reconcile()
 
-    // Store subscriptions replace the Svelte reactive graph. `listen` fires only on
-    // change; the initial state was already read by the `recompute()` above.
+    // Store subscriptions keep the imperative view reconciled with application state.
     const handleStoreChange = () => {
         recompute()
         reconcile()

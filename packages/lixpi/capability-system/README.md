@@ -60,7 +60,7 @@ When exactly one authorized original Asset exists, Character Creator determinist
 
 ### `src/frontend`
 
-Frontend code owns the transport-injected catalog client, cache, deterministic empty-query ranking, manifest JSON parsing, catalog management calls, and run replay/subscription filtering. Authorized module metadata includes the description sheet used by application-owned hover and focus cards. Svelte state, editor components, authentication, and the concrete NATS client stay in `services/web-ui` and call this package.
+Frontend code owns the transport-injected catalog client, cache, deterministic empty-query ranking, manifest JSON parsing, catalog management calls, and run replay/subscription filtering. Authorized module metadata includes the description sheet used by application-owned hover and focus cards. Nano Stores state, editor components, authentication, and the concrete NATS client stay in `services/web-ui` and call this package.
 
 Concrete module frontend definitions live beside their shared/backend definitions. They provide canvas, editor-plugin, optional prompt-control, generated-output info/replay, prompt-reference, and library factories through generic browser host ports. Action Timeline intentionally provides no prompt-control factory: `/` keeps the standard module badge and the API extracts timing from authoritative prompt text. Module code never imports `services/web-ui`.
 

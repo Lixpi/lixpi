@@ -4,7 +4,7 @@ Reusable resizable side panel for canvas-hosted UI.
 
 ## Renderer
 
-TypeScript `html` DOM (no Svelte, no PIXI). The component is built to mount into any canvas-hosted side panel system. It owns the drag-to-resize gesture, touch swipe-to-close gesture when configured, the body cursor and text-selection management during resize, the visible resize-handle line, the translucent glass backdrop, the optional background overlay, the optional open/collapse toggle button, and the drawer open/close animation. The resize-handle line is a single unbroken line spanning the full panel height.
+TypeScript `html` DOM with no PIXI dependency. The component is built to mount into any canvas-hosted side panel system. It owns the drag-to-resize gesture, touch swipe-to-close gesture when configured, the body cursor and text-selection management during resize, the visible resize-handle line, the translucent glass backdrop, the optional background overlay, the optional open/collapse toggle button, and the drawer open/close animation. The resize-handle line is a single unbroken line spanning the full panel height.
 
 The resize gesture is driven by Pointer Events, so it works with mouse, touch, and pen. The resize handle sets `touch-action: none` and captures the pointer for the duration of a drag, so the drag keeps tracking on touch devices and past the window edge.
 

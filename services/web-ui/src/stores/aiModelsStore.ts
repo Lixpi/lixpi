@@ -49,7 +49,7 @@ const store = writable(aiModels);
 export const aiModelsStore = {
     ...store,
 
-    // Useful for non-svelte components that need to access the store
+    // Synchronous access for imperative components.
     getMeta: (key: keyof Meta | null = null): any => {
         let returnValue: any;
         const unsubscribe = store.subscribe(store => {
@@ -60,7 +60,7 @@ export const aiModelsStore = {
         return returnValue;
     },
 
-    // Useful for non-svelte components that need to access the store
+    // Synchronous access for imperative components.
     getData: (key: keyof AiModel | null = null): any => {
         let returnValue: any;
         const unsubscribe = store.subscribe(store => {

@@ -75,7 +75,7 @@ function loadWorkspaceLoadingOutline(): string {
 	return readSourceFile('workspaceLoadingOutline.ts')
 }
 
-function loadWorkspaceCanvasSvelte(): string {
+function loadWorkspaceCanvasView(): string {
 	return readSourceFile('../../components/workspaceCanvasView.ts', 'components/workspaceCanvasView.ts')
 }
 
@@ -1196,7 +1196,7 @@ describe('Workspace canvas — video node interaction', () => {
 
 	describe('Workspace canvas — media descriptors', () => {
 		const ts = loadTs()
-		const svelte = loadWorkspaceCanvasSvelte()
+		const workspaceCanvasViewSource = loadWorkspaceCanvasView()
 		const scss = loadScss()
 
 	it('derives a descriptor from generated media metadata for free (no extra model call)', () => {
@@ -1240,12 +1240,12 @@ describe('Workspace canvas — video node interaction', () => {
 		})
 
 		it('keeps uploaded exotic media inert until the canonical object is returned', () => {
-			expectSourceToContain(svelte, "type: 'operationStatus',")
-			expectSourceToContain(svelte, "operation: 'upload',")
-			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(file.name)')
-			expectSourceToContain(svelte, 'placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))')
-			expectSourceToContain(svelte, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false)')
-			expectSourceToContain(svelte, 'renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)')
+			expectSourceToContain(workspaceCanvasViewSource, "type: 'operationStatus',")
+			expectSourceToContain(workspaceCanvasViewSource, "operation: 'upload',")
+			expectSourceToContain(workspaceCanvasViewSource, 'placeholderNodeId = insertUploadPlaceholder(file.name)')
+			expectSourceToContain(workspaceCanvasViewSource, 'placeholderNodeId = insertUploadPlaceholder(getRemotePlaceholderName(url))')
+			expectSourceToContain(workspaceCanvasViewSource, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false)')
+			expectSourceToContain(workspaceCanvasViewSource, 'renderer?.commitTransientCanvasNodeInsertion(nextCanvasState, nodeId, placeholderNodeId ?? undefined)')
 			expectSourceToContain(ts, "candidate.type === 'operationStatus' && candidate.operation === 'upload' && candidate.nodeId === placeholderNodeId")
 			expectSourceToContain(ts, 'viewportEl.querySelector(`[data-node-id="${replacedPlaceholderNodeId}"]`)?.remove()')
 			expectSourceToContain(ts, 'appendCanvasNodeToDOM(insertedNode)')
@@ -1256,7 +1256,7 @@ describe('Workspace canvas — video node interaction', () => {
 			const insertionCommitEnd = ts.indexOf('function commitCanvasMetadataState(', insertionCommitStart)
 			const insertionCommit = ts.slice(insertionCommitStart, insertionCommitEnd)
 			expectExcerptNotToContain(insertionCommit, 'selectNode(', 'transient upload insertion commit')
-			expectSourceNotToContain(svelte, 'new Image()')
+			expectSourceNotToContain(workspaceCanvasViewSource, 'new Image()')
 		})
 
 		it('renders generic operation status and non-image upload node shells after reload', () => {
@@ -1647,7 +1647,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
 
 describe('Workspace canvas — viewport ownership during store renders', () => {
 	const ts = loadTs()
-	const svelte = loadWorkspaceCanvasSvelte()
+	const workspaceCanvasViewSource = loadWorkspaceCanvasView()
 
 	it('routes same-workspace render decisions through the stale viewport planner', () => {
 		expectSourceToContain(ts, 'shouldPreserveLiveViewportForSameWorkspaceRender({')
@@ -1672,18 +1672,18 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(ts, 'onViewportChange?.(vp)')
 	})
 
-	it('persists every Svelte-side canvas save with the current live viewport', () => {
-		expectSourceToContain(svelte, 'const stateToPersist = {')
-		expectSourceToContain(svelte, '...newCanvasState,')
-		expectSourceToContain(svelte, 'viewport: stateViewport,')
-		expectSourceToContain(svelte, 'workspaceStore.updateCanvasState(stateToPersist)')
-		expectSourceToContain(svelte, 'canvasState: stateToPersist')
+	it('persists every canvas-view save with the current live viewport', () => {
+		expectSourceToContain(workspaceCanvasViewSource, 'const stateToPersist = {')
+		expectSourceToContain(workspaceCanvasViewSource, '...newCanvasState,')
+		expectSourceToContain(workspaceCanvasViewSource, 'viewport: stateViewport,')
+		expectSourceToContain(workspaceCanvasViewSource, 'workspaceStore.updateCanvasState(stateToPersist)')
+		expectSourceToContain(workspaceCanvasViewSource, 'canvasState: stateToPersist')
 	})
 
 	it('does not expose route workspace canvas state until the workspace load succeeds', () => {
-		expectSourceToContain(svelte, 'LoadingStatus')
-		expectSourceToContain(svelte, "canvasState = isRouteWorkspaceLoaded && workspaceStore.getMeta('loadingStatus') === LoadingStatus.success")
-		expectSourceToContain(svelte, "? workspaceStore.getData('canvasState')")
+		expectSourceToContain(workspaceCanvasViewSource, 'LoadingStatus')
+		expectSourceToContain(workspaceCanvasViewSource, "canvasState = isRouteWorkspaceLoaded && workspaceStore.getMeta('loadingStatus') === LoadingStatus.success")
+		expectSourceToContain(workspaceCanvasViewSource, "? workspaceStore.getData('canvasState')")
 	})
 
 	it('keeps workspace load feedback in the TypeScript canvas layer', () => {
@@ -1694,26 +1694,26 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 		expectSourceToContain(loadingOutlineTs, 'class WorkspaceLoadingOutline implements WorkspaceLoadingOutlineInstance')
 		expectSourceToContain(loadingOutlineTs, 'setErrorMessage = (message: string | null): void')
 		expectSourceToContain(loadingOutlineTs, 'className="workspace-loading-error"')
-		expectSourceNotToContain(svelte, 'workspace-loading-error')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-loading-error')
 	})
 
 	it('refuses to persist a debounced viewport after a newer viewport arrives', () => {
-		expectSourceToContain(svelte, 'const scheduledViewport = nextViewport')
-		expectSourceToContain(svelte, 'viewport.x !== scheduledViewport.x')
-		expectSourceToContain(svelte, 'viewport.y !== scheduledViewport.y')
-		expectSourceToContain(svelte, 'viewport.zoom !== scheduledViewport.zoom')
-		expectSourceToContain(svelte, 'if (persistViewportState(scheduledViewport)) pendingViewportSave = null')
+		expectSourceToContain(workspaceCanvasViewSource, 'const scheduledViewport = nextViewport')
+		expectSourceToContain(workspaceCanvasViewSource, 'viewport.x !== scheduledViewport.x')
+		expectSourceToContain(workspaceCanvasViewSource, 'viewport.y !== scheduledViewport.y')
+		expectSourceToContain(workspaceCanvasViewSource, 'viewport.zoom !== scheduledViewport.zoom')
+		expectSourceToContain(workspaceCanvasViewSource, 'if (persistViewportState(scheduledViewport)) pendingViewportSave = null')
 	})
 
-	it('no longer owns a fallback document-save debounce in the Svelte canvas host', () => {
+	it('does not own a fallback document-save debounce in the canvas view host', () => {
 		// Document/thread persistence moved to the ProseMirror authority service's
-		// own collab flow; the Svelte host wires these callbacks as no-ops instead
+		// own collab flow; the view host wires these callbacks as no-ops instead
 		// of maintaining its own per-document debounce-and-POST bookkeeping.
-		expectSourceToContain(svelte, 'onDocumentContentChange: () => {},')
-		expectSourceToContain(svelte, 'onAiChatThreadContentChange: () => {},')
-		expectSourceNotToContain(svelte, 'const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()')
-		expectSourceNotToContain(svelte, 'const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()')
-		expectSourceNotToContain(svelte, 'function scheduleDocumentUpdate(update: PendingDocumentUpdate): void')
+		expectSourceToContain(workspaceCanvasViewSource, 'onDocumentContentChange: () => {},')
+		expectSourceToContain(workspaceCanvasViewSource, 'onAiChatThreadContentChange: () => {},')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'const documentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'const pendingDocumentUpdates = new Map<string, PendingDocumentUpdate>()')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'function scheduleDocumentUpdate(update: PendingDocumentUpdate): void')
 	})
 })
 
@@ -1974,7 +1974,7 @@ describe('Right side panel — TS infrastructure', () => {
 	it('places the media library on the left and the icon switch plus model control on the composer’s right', () => {
 		const ts = loadTs()
 		const scss = loadScss()
-		const svelte = loadWorkspaceCanvasSvelte()
+		const workspaceCanvasViewSource = loadWorkspaceCanvasView()
 		const pixiMediaLayer = loadPixiMediaLayer()
 		const leftRailItems = extractBlockContainingSelector(
 			scss,
@@ -1991,24 +1991,24 @@ describe('Right side panel — TS infrastructure', () => {
 			scss,
 			'.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background'
 		)
-		const rightRailStart = svelte.indexOf(
+		const rightRailStart = workspaceCanvasViewSource.indexOf(
 			'<div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">'
 		)
-		const rightRailEnd = svelte.indexOf('\n            </div>\n\n            ${fileInputEl}', rightRailStart)
-		const rightRailMarkup = svelte.slice(rightRailStart, rightRailEnd)
+		const rightRailEnd = workspaceCanvasViewSource.indexOf('\n            </div>\n\n            ${fileInputEl}', rightRailStart)
+		const rightRailMarkup = workspaceCanvasViewSource.slice(rightRailStart, rightRailEnd)
 		const screenGlassTargets = extractFunctionBody(pixiMediaLayer, 'getScreenGlassBorderTargets')
 
 		expectSourceToContain(
-			svelte,
+			workspaceCanvasViewSource,
 			'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single'
 		)
-		expectSourceToContain(svelte, 'workspace-canvas-right-control-rail')
-		expectSourceToContain(svelte, 'className="workspace-canvas-model-menu-hover-background"')
-		expectSourceToContain(svelte, 'className="workspace-canvas-media-mode-panel"')
-		expectSourceToContain(svelte, 'className="workspace-canvas-model-menu-panel"')
-		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
-		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
-		expectSourceNotToContain(svelte, 'workspace-canvas-media-mode-panel-right')
+		expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-right-control-rail')
+		expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-model-menu-hover-background"')
+		expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-media-mode-panel"')
+		expectSourceToContain(workspaceCanvasViewSource, 'className="workspace-canvas-model-menu-panel"')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel-right')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-media-mode-panel-right')
 		expect(rightRailStart).toBeGreaterThan(-1)
 		expect(rightRailEnd).toBeGreaterThan(rightRailStart)
 		expect(rightRailMarkup.indexOf('${mediaModeSwitchMountEl}')).toBeLessThan(
@@ -2254,17 +2254,17 @@ describe('Right side panel — TS infrastructure', () => {
 
 	it('uses content-agnostic right side panel sizing for right-edge surfaces', () => {
 		const scss = loadScss()
-		const svelte = loadWorkspaceCanvasSvelte()
+		const workspaceCanvasViewSource = loadWorkspaceCanvasView()
 		const layout = loadLayout()
 		const navigationSidePanel = loadNavigationSidePanel()
 		const navigationSidePanelScss = loadNavigationSidePanelScss()
 
 		const sidePanelScss = loadSidePanelScss()
-		expectSourceToContain(svelte, 'const rightSidePanelSettings = settings.rightSidePanel')
-		expectSourceToContain(svelte, '--workspace-right-side-panel-width')
-		expectSourceToContain(svelte, '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)')
-		expectSourceToContain(svelte, '--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px')
-		expectSourceToContain(svelte, 'workspace-canvas-right-side-panel-open')
+		expectSourceToContain(workspaceCanvasViewSource, 'const rightSidePanelSettings = settings.rightSidePanel')
+		expectSourceToContain(workspaceCanvasViewSource, '--workspace-right-side-panel-width')
+		expectSourceToContain(workspaceCanvasViewSource, '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)')
+		expectSourceToContain(workspaceCanvasViewSource, '--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px')
+		expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-right-side-panel-open')
 		// The glass backdrop is owned by the SidePanel component.
 		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
 		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-backdrop-z-index, 90)')
@@ -2272,11 +2272,11 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(sidePanelScss, 'backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '-webkit-backdrop-filter: blur(24px) saturate(145%)')
 		expectSourceToContain(sidePanelScss, '@media (prefers-reduced-transparency: reduce)')
-		expectSourceToContain(svelte, 'workspace-canvas-media-library-panel workspace-canvas-action-panel-single')
-		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
-		expectSourceToContain(svelte, 'mediaFoloderIcon')
-		expectSourceToContain(svelte, 'workspace-zoom-indicator')
-		expectSourceNotToContain(svelte, 'workspace-canvas-utility-capsule')
+		expectSourceToContain(workspaceCanvasViewSource, 'workspace-canvas-media-library-panel workspace-canvas-action-panel-single')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-action-panel-right')
+		expectSourceToContain(workspaceCanvasViewSource, 'mediaFoloderIcon')
+		expectSourceToContain(workspaceCanvasViewSource, 'workspace-zoom-indicator')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'workspace-canvas-utility-capsule')
 		expectSourceToContain(scss, '.workspace-canvas-right-side-panel-open .workspace-zoom-indicator')
 		expectSourceToContain(scss, 'right: calc(var(--workspace-right-side-panel-width) + 5px)')
 		expectSourceToContain(scss, 'right: calc(0px - var(--workspace-canvas-padding-inline))')
@@ -2769,21 +2769,21 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
 describe('Workspace canvas — collision resolution ownership', () => {
 	const ts = loadTs()
-	const svelte = loadWorkspaceCanvasSvelte()
+	const workspaceCanvasViewSource = loadWorkspaceCanvasView()
 	const collisionTs = readSourceFile('../../../packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts', 'packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts')
 
-	it('keeps toolbar insertion collision logic out of the Svelte wrapper', () => {
+	it('keeps toolbar insertion collision logic out of the canvas view', () => {
 		// Toolbar/upload/URL-import insertion is now unified through
 		// addAssetToCanvas, which routes both replace-placeholder and fresh
 		// insertion through the renderer instead of a separate document/image path.
-		expectSourceToContain(svelte, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false)')
-		expectSourceToContain(svelte, 'renderer?.insertNodeAtViewportCenter(node, {}, false)')
-		expectSourceNotToContain(svelte, ['context', 'RegionNode'].join(''))
-		expectSourceNotToContain(svelte, 'resolveCollisions')
-		expectSourceNotToContain(svelte, 'resolveInsertionCollisions')
-		expectSourceNotToContain(svelte, 'computeViewportCenterInsertionPosition')
-		expectSourceNotToContain(svelte, ['context', 'RegionCl', 'oudsIntersect'].join(''))
-		expectSourceNotToContain(svelte, ['rectIntersectsContext', 'RegionCl', 'oud'].join(''))
+		expectSourceToContain(workspaceCanvasViewSource, 'renderer?.replaceUploadPlaceholder(placeholderNodeId, node, false)')
+		expectSourceToContain(workspaceCanvasViewSource, 'renderer?.insertNodeAtViewportCenter(node, {}, false)')
+		expectSourceNotToContain(workspaceCanvasViewSource, ['context', 'RegionNode'].join(''))
+		expectSourceNotToContain(workspaceCanvasViewSource, 'resolveCollisions')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'resolveInsertionCollisions')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'computeViewportCenterInsertionPosition')
+		expectSourceNotToContain(workspaceCanvasViewSource, ['context', 'RegionCl', 'oudsIntersect'].join(''))
+		expectSourceNotToContain(workspaceCanvasViewSource, ['rectIntersectsContext', 'RegionCl', 'oud'].join(''))
 	})
 
 	it('routes toolbar insertion through the workspace renderer collision path', () => {
@@ -2795,11 +2795,11 @@ describe('Workspace canvas — collision resolution ownership', () => {
 	})
 
 	it('uses the image-node theme width for Asset upload insertion sizing', () => {
-		expectSourceToContain(svelte, 'const width = settings.mediaNode.image.defaultInsertionWidth')
-		expectSourceToContain(svelte, 'getImageInsertionDimensions(result.kind === \'document\' ? 0.7727 : 1)')
-		expectSourceToContain(svelte, 'dimensions,')
-		expectSourceNotToContain(svelte, 'const maxWidth = 400')
-		expectSourceNotToContain(svelte, 'FALLBACK_IMAGE_DIMENSIONS')
+		expectSourceToContain(workspaceCanvasViewSource, 'const width = settings.mediaNode.image.defaultInsertionWidth')
+		expectSourceToContain(workspaceCanvasViewSource, 'getImageInsertionDimensions(result.kind === \'document\' ? 0.7727 : 1)')
+		expectSourceToContain(workspaceCanvasViewSource, 'dimensions,')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'const maxWidth = 400')
+		expectSourceNotToContain(workspaceCanvasViewSource, 'FALLBACK_IMAGE_DIMENSIONS')
 	})
 
 	it('builds rectangular collision boxes from node world bounds', () => {
@@ -3291,12 +3291,12 @@ describe('video generation — canvas + plugin source shape', () => {
 
 describe('asset membership persistence', () => {
 	const ts = loadTs()
-	const svelte = loadWorkspaceCanvasSvelte()
+	const workspaceCanvasViewSource = loadWorkspaceCanvasView()
 
 	it('requires explicit membership confirmation before committing upload state', () => {
-		const uploadHandlerStart = svelte.indexOf('async function addAssetToCanvas(')
-		const uploadHandlerEnd = svelte.indexOf('\n    function handleToggleMediaLibrary()', uploadHandlerStart)
-		const uploadHandler = svelte.slice(uploadHandlerStart, uploadHandlerEnd)
+		const uploadHandlerStart = workspaceCanvasViewSource.indexOf('async function addAssetToCanvas(')
+		const uploadHandlerEnd = workspaceCanvasViewSource.indexOf('\n    function handleToggleMediaLibrary()', uploadHandlerStart)
+		const uploadHandler = workspaceCanvasViewSource.slice(uploadHandlerStart, uploadHandlerEnd)
 		const assertionIndex = uploadHandler.indexOf('assertAssetAttached(response, result.assetId, nodeId)')
 		const commitIndex = uploadHandler.indexOf('renderer?.commitTransientCanvasNodeInsertion(')
 
@@ -3304,22 +3304,22 @@ describe('asset membership persistence', () => {
 		expect(uploadHandlerEnd).toBeGreaterThan(uploadHandlerStart)
 		expect(assertionIndex).toBeGreaterThan(-1)
 		expect(commitIndex).toBeGreaterThan(assertionIndex)
-		expectSourceToContain(svelte, 'if (attached.assetId !== assetId')
-		expectSourceToContain(svelte, '!attached.nodeIds.includes(nodeId)')
-		expectSourceToContain(svelte, "throw new Error('INVALID_ASSET_ATTACH_RESPONSE')")
-		expectSourceToContain(svelte, 'assertAssetDetached(response)')
+		expectSourceToContain(workspaceCanvasViewSource, 'if (attached.assetId !== assetId')
+		expectSourceToContain(workspaceCanvasViewSource, '!attached.nodeIds.includes(nodeId)')
+		expectSourceToContain(workspaceCanvasViewSource, "throw new Error('INVALID_ASSET_ATTACH_RESPONSE')")
+		expectSourceToContain(workspaceCanvasViewSource, 'assertAssetDetached(response)')
 	})
 
 	it('uses the per-workspace mutation lane and commits the rebased accepted state', () => {
 		const membershipRebase = loadCanvasMembershipStateRebase()
 
-		expectSourceToContain(svelte, 'return await workspaceService.runCanvasMembershipMutation({')
-		expectSourceToContain(svelte, 'const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, \'attach\')')
-		expectSourceToContain(svelte, "'detach',\n                    removedNodeIds,")
+		expectSourceToContain(workspaceCanvasViewSource, 'return await workspaceService.runCanvasMembershipMutation({')
+		expectSourceToContain(workspaceCanvasViewSource, 'const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, \'attach\')')
+		expectSourceToContain(workspaceCanvasViewSource, "'detach',\n                    removedNodeIds,")
 		expectSourceToContain(membershipRebase, 'const removedNodeIdSet = new Set(removedNodeIds)')
 		expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(node.nodeId)')
 		expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(edge.sourceNodeId)')
-		expectSourceToContain(svelte, 'const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)')
+		expectSourceToContain(workspaceCanvasViewSource, 'const canvasStateUpdatedAt = getNextCanvasMembershipRevision(expectedCanvasStateUpdatedAt)')
 		expectSourceToContain(ts, 'removedNodeIds: string[]')
 		expectSourceToContain(ts, 'onAssetAttach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>')
 		expectSourceToContain(ts, 'const committedState = await onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })')

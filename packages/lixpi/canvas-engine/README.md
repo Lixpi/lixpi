@@ -7,8 +7,8 @@ The package is intentionally split by runtime boundary:
 ```text
 src/
   shared/      Rendering-agnostic code. Safe in API, workers, tests, and browser code.
-  backend/     Server-side adapters and orchestration helpers. No DOM, Svelte, PIXI, or browser APIs.
-  frontend/    Browser-side adapters. No web-ui imports or Svelte components.
+  backend/     Server-side adapters and orchestration helpers. No DOM, PIXI, or browser APIs.
+  frontend/    Browser-side adapters. No web-ui imports or application UI components.
     animation/ Shared animation timing utilities.
     rendering/ Actual rendering modules. DOM, PIXI, canvas, and SVG drawing code belongs here.
 ```
@@ -45,7 +45,7 @@ Use `shared` for deterministic data transforms and geometry algorithms:
 - layout planning that accepts plain data and returns plain data;
 - canvas-node data transforms that do not require rendering objects.
 
-Shared modules must not import DOM APIs, Svelte stores, PIXI, browser globals, requestAnimationFrame, NATS clients, DynamoDB clients, or workspace service singletons. They can import shared data types from packages such as `@lixpi/constants` when the type is part of the cross-runtime canvas contract.
+Shared modules must not import DOM APIs, client state stores, PIXI, browser globals, requestAnimationFrame, NATS clients, DynamoDB clients, or workspace service singletons. They can import shared data types from packages such as `@lixpi/constants` when the type is part of the cross-runtime canvas contract.
 
 ### `src/backend`
 
@@ -67,7 +67,7 @@ Use `frontend` for browser-only canvas orchestration that does not directly rend
 - pointer or keyboard interaction planning;
 - web-ui integration helpers.
 
-Frontend modules can depend on browser concepts when needed. They must not import `services/web-ui` modules or Svelte components. Keep pure data logic in `shared` instead.
+Frontend modules can depend on browser concepts when needed. They must not import `services/web-ui` modules or application UI components. Keep pure data logic in `shared` instead.
 
 ### `src/frontend/animation`
 

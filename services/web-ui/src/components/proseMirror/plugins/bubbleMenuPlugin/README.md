@@ -30,7 +30,7 @@ const plugins = [
 ]
 ```
 
-Styles are imported once from `@lixpi/ui-kit/styles/bubble-menu` by `App.svelte`.
+Styles are imported once from `@lixpi/ui-kit/styles/bubble-menu` by `app.ts`.
 
 ## Architecture
 

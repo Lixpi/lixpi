@@ -269,7 +269,7 @@ type PixiMediaLayerOptions = {
         height: number
         preserveNodeGeometry?: boolean
     }) => void
-    // Lets the Svelte host react to Pixi health transitions.
+    // Lets the view host react to Pixi health transitions.
     onHealthChange?: (health: PixiRendererHealth) => void
 }
 

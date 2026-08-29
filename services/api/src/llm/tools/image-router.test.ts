@@ -171,7 +171,7 @@ describe('ImageRouter', () => {
         expect(result.imageUsage).toMatchObject({
             generatedCount: 1,
             size: '1:1',
-            quality: 'high',
+            quality: 'auto',
         })
     })
 

@@ -1,7 +1,7 @@
 # Web UI — Tech Debt
 
-## Payment and account UI awaiting a @lixpi/ui-kit rewrite
+## Payment and account UI
 
-`views/layouts/layout.svelte` and `components/subscription-management/*.svelte` were built on shadcn-svelte. Now that shadcn-svelte, Tailwind and `bits-ui` are gone, the markup that depended on them is commented out in place: the user drawer, the theme switcher, the add-funds dialog, the top-up form and the saved-cards table.
+The web UI does not provide the user drawer, theme switcher, add-funds dialog, top-up form, or saved-cards table. Rebuild these surfaces with `@lixpi/ui-kit`, TypeScript DOM components, and SCSS before exposing them again.
 
-**Remove by**: rebuilding those surfaces on `@lixpi/ui-kit` and SCSS, then deleting the commented-out blocks.
+**Remove by**: shipping those surfaces and verifying their account and payment flows.

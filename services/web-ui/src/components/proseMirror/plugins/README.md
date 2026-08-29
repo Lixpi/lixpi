@@ -300,7 +300,7 @@ return {
 
 ## Templating & NodeViews
 
-**All DOM creation in non-Svelte `.ts` files must use the `html` tagged template** from `$src/utils/domTemplates.ts`. This applies to ProseMirror NodeViews, plugins, shared components (dropdowns, bubble menus, loading placeholders, info bubbles), and canvas code. Never use `document.createElement` or manual attribute/style assignment for building UI.
+**All DOM creation in `.ts` files must use the `html` tagged template** from `$src/utils/domTemplates.ts`. This applies to ProseMirror NodeViews, plugins, shared components (dropdowns, bubble menus, loading placeholders, info bubbles), and canvas code. Never use `document.createElement` or manual attribute/style assignment for building UI.
 
 ```ts
 import { html } from '$src/utils/domTemplates.ts'

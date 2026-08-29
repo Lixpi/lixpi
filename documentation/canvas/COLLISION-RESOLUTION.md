@@ -7,7 +7,7 @@ description: How the canvas keeps newly inserted and released workspace nodes fr
 
 Collision resolution keeps newly inserted and released workspace nodes from sitting on top of each other. When the toolbar drops a node at the viewport center, when a generation commits a new media node, or when a drag is released, the canvas nudges overlapping nodes apart so the surface stays legible.
 
-This is a **workspace-engine behavior, not a Svelte behavior**. The Svelte wrapper may create domain objects after app/service work, but placement, viewport-coordinate math, drag-release planning, and collision resolution belong in [`services/web-ui/src/infographics/workspace`](../../services/web-ui/src/infographics/workspace) or shared infographics utilities — never in the component layer.
+This is a **workspace-engine behavior, not a view behavior**. [`workspaceCanvasView.ts`](../../services/web-ui/src/components/workspaceCanvasView.ts) may create domain objects after app or service work, but placement, viewport-coordinate math, drag-release planning, and collision resolution belong in [`services/web-ui/src/infographics/workspace`](../../services/web-ui/src/infographics/workspace) or shared infographics utilities, never in the component layer.
 
 {% callout type="note" %}
 This page is part of the canvas domain. For the DOM/PIXI rendering architecture and canvas configuration ownership rules see [Rendering Engine](./RENDERING-ENGINE.md); for the workspace data model, node types, and user-facing canvas concepts see [Workspace Model](./WORKSPACE-MODEL.md).
@@ -19,7 +19,7 @@ Collision resolution is implemented as two layers with a hard separation of conc
 
 | Layer | File | Responsibility |
 |---|---|---|
-| Shared resolver | [`resolve-collisions.ts`](../../packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts) | Geometry-agnostic. Accepts rectangular boxes and pushes overlapping boxes apart. Knows nothing about canvas node types, parentage, Svelte, PIXI, or viewport state. |
+| Shared resolver | [`resolve-collisions.ts`](../../packages/lixpi/canvas-engine/src/shared/collision/resolve-collisions.ts) | Geometry-agnostic. Accepts rectangular boxes and pushes overlapping boxes apart. Knows nothing about canvas node types, parentage, PIXI, or viewport state. |
 | Workspace plan | [`WorkspaceCanvas.ts`](../../services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts) | Builds workspace-specific collision plans. Converts canvas nodes into world-space resolver boxes, applies parent/child exclusions, and converts resolved world positions back to persisted node positions. |
 
 The split is deliberate: all workspace-specific knowledge (node types, generated-image metadata, parent-child containment, framework state) lives in the plan; the resolver stays a pure rectangle pusher that any future surface can reuse.
@@ -54,7 +54,7 @@ flowchart TB
 | `insertNodeAtViewportCenter(...)` | Renderer API used by toolbar insertions. Computes viewport-centered placement inside the workspace engine and resolves top-level collisions before emitting canvas state. |
 | `computeWorkspaceDragPlan(...)` | Decides whether a drag release is allowed to run collision resolution and whether parent-container descendants participate in the drag. |
 | `createCollisionPlan(...)` | Converts canvas nodes into world-space rectangular resolver boxes and adds parent/child exclusions. |
-| `resolveCollisions(...)` | Shared rectangle resolver. It knows nothing about canvas node types, parentage, Svelte, PIXI, or viewport state. |
+| `resolveCollisions(...)` | Shared rectangle resolver. It knows nothing about canvas node types, parentage, PIXI, or viewport state. |
 
 Workspace collision parameters live in `settings.workspaceCollision`. Each collision-producing flow (`insertion`, `dragRelease`, and `branchTree`) has per-canvas-node-type iterations, margin, and overlap threshold for `document`, `image`, `video`, `branchOrigin`, `branchFork`, and `branchLine`.
 
@@ -97,7 +97,7 @@ Several user actions can produce overlapping nodes. Each routes through the reso
 
 | Path | Collision behavior |
 |---|---|
-| Toolbar document/image insertion | Svelte creates the node data and calls `renderer.insertNodeAtViewportCenter(...)`. The renderer computes viewport-centered placement and resolves top-level collisions. |
+| Toolbar document/image insertion | `workspaceCanvasView.ts` creates the node data and calls `renderer.insertNodeAtViewportCenter(...)`. The renderer computes viewport-centered placement and resolves top-level collisions. |
 | Image or video generation commit | The generated media node is added to the canvas, parent/child pairs are excluded, and the resolver can move colliding nodes. |
 | Image-to-image branch continuation | The new media node is placed from the latest branch node, then the resolver can move colliding nodes. |
 | Generated output placement beside source media | The new generated media node is placed near the source/reference bounds, then the branch tree re-tidies and top-level collisions are resolved. |
@@ -106,7 +106,7 @@ Several user actions can produce overlapping nodes. Each routes through the reso
 For generated-media commit placement specifically, `generatedMediaRebalancePipeline.ts` proxies transient pending geometry, re-tidies the affected branch tree through `rebalanceBranchTreesAndResolve(...)`, restores persisted node geometry, and lets the resolver run only as a rigid-box cleanup pass afterward. See [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md) for how lineage placement is computed.
 
 {% callout type="warning" %}
-Do not duplicate this behavior in [`WorkspaceCanvas.svelte`](../../services/web-ui/src/components/WorkspaceCanvas.svelte). The Svelte file is a thin integration wrapper for DOM refs, stores, service calls, upload plumbing, and callbacks.
+Do not duplicate this behavior in [`workspaceCanvasView.ts`](../../services/web-ui/src/components/workspaceCanvasView.ts). The view is a thin integration host for DOM refs, stores, service calls, upload plumbing, and callbacks.
 {% /callout %}
 
 ## Parent And Child Rules
@@ -119,7 +119,7 @@ Coordinate spaces matter here. When a resolved child position is returned from t
 
 These properties must hold across all collision-producing flows:
 
-- Collision resolution must run through `resolveCollisions.ts`. Do not create a second resolver in Svelte or a feature-specific component.
+- Collision resolution must run through `resolveCollisions.ts`. Do not create a second resolver in the view or a feature-specific component.
 - Workspace-specific collision knowledge belongs in `WorkspaceCanvas.ts` or a workspace utility, not in the generic resolver.
 - Parent/child pairs must be excluded from collision resolution so containment does not push children out of their parent container.
 - Persisted child positions must remain parent-relative after world-space collision resolution.
@@ -130,7 +130,7 @@ These properties must hold across all collision-producing flows:
 
 | Symptom | Likely cause | Check |
 |---|---|---|
-| A newly inserted toolbar node overlaps an existing node | Insertion bypassed `renderer.insertNodeAtViewportCenter(...)` or top-level resolution | Check `WorkspaceCanvas.svelte` for direct position/collision logic. |
+| A newly inserted toolbar node overlaps an existing node | Insertion bypassed `renderer.insertNodeAtViewportCenter(...)` or top-level resolution | Check `workspaceCanvasView.ts` for direct position or collision logic. |
 | Children are pushed out of a parent container after drag | Parent/child `excludePairs` were not passed to the resolver | Check the collision-exclusion set before `resolveCollisions(...)`. |
 | Adopted child nodes persist at wrong coordinates | Resolved world position was not converted back to parent-relative position | Check `toParentRelativePosition(...)` usage after collision resolution. |
 | Multi-selected nodes lose their spacing after drag | Drag plan allowed global collision resolution for a rigid group move | Check `computeWorkspaceDragPlan(...)` in `workspaceDragPlan.ts`. |

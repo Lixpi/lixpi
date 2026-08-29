@@ -5,7 +5,7 @@ description: The end-to-end canvas interactions — opening a workspace, creatin
 
 # User Flows
 
-This page walks through the canvas interactions a user performs day to day, each illustrated with a sequence diagram across the Svelte component, the framework-agnostic canvas engine, the frontend services, and the backend. Read it alongside the [Workspace Model](./WORKSPACE-MODEL.md), which defines every entity these flows read and write, and [Edges & Connections](./EDGES-AND-CONNECTIONS.md), which covers the connect/disconnect interactions that are not repeated here.
+This page walks through the canvas interactions a user performs day to day, each illustrated with a sequence diagram across the TypeScript view, the framework-agnostic canvas engine, the frontend services, and the backend. Read it alongside the [Workspace Model](./WORKSPACE-MODEL.md), which defines every entity these flows read and write, and [Edges & Connections](./EDGES-AND-CONNECTIONS.md), which covers the connect/disconnect interactions that are not repeated here.
 
 {% callout type="note" %}
 This page is part of the canvas domain. The "why" of each persisted shape lives in [Workspace Model](./WORKSPACE-MODEL.md); how the result is drawn lives in [Rendering Engine](./RENDERING-ENGINE.md). AI-driven flows (generating an image or video from a chat thread) are documented in [Image Generation](../media-generation/IMAGE-GENERATION.md), [Video Generation](../media-generation/VIDEO-GENERATION.md), and [Branch Lineage & Provenance](../media-generation/BRANCH-LINEAGE.md).
@@ -118,7 +118,7 @@ The canvas upload control accepts images, videos, audio, PDFs, office documents,
 %%{init: {'theme': 'base', 'themeVariables': { 'noteBkgColor': '#82B2C0', 'noteTextColor': '#1a3a47', 'noteBorderColor': '#5a9aad', 'actorBkg': '#F6C7B3', 'actorBorder': '#d4956a', 'actorTextColor': '#5a3a2a', 'actorLineColor': '#d4956a', 'signalColor': '#d4956a', 'signalTextColor': '#5a3a2a', 'labelBoxBkgColor': '#F6C7B3', 'labelBoxBorderColor': '#d4956a', 'labelTextColor': '#5a3a2a', 'loopTextColor': '#5a3a2a', 'activationBorderColor': '#9DC49D', 'activationBkgColor': '#9DC49D', 'sequenceNumberColor': '#5a3a2a'}}}%%
 sequenceDiagram
     participant User
-    participant Svelte as WorkspaceCanvas.svelte
+    participant Host as workspaceCanvasView.ts
     participant Picker as Upload Picker
     participant API as /api/assets/workspaces/:workspaceId
     participant NEX as asset-rendition workload
@@ -129,16 +129,16 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(220, 236, 233)
         Note over User, WSvc: PHASE 1 - UPLOAD — User picks a file
-        User->>Svelte: Click upload control
-        activate Svelte
-        Svelte->>Picker: open()
-        deactivate Svelte
+        User->>Host: Click upload control
+        activate Host
+        Host->>Picker: open()
+        deactivate Host
         User->>Picker: Select file
         activate Picker
-        Picker->>Svelte: File selected
-        activate Svelte
-        Svelte->>Svelte: Insert operationStatus upload node
-        Svelte->>API: POST multipart file
+        Picker->>Host: File selected
+        activate Host
+        Host->>Host: Insert operationStatus upload node
+        Host->>API: POST multipart file
         activate API
         API->>API: sniff bytes + apply MEDIA_POLICY
         API->>ObjStore: putObject(org bucket, SHA-256 Blob key)
@@ -152,19 +152,19 @@ sequenceDiagram
     rect rgb(195, 222, 221)
         Note over User, WSvc: PHASE 2 - CONVERT OR PROBE
         alt required rendition already exists
-            API-->>Svelte: { status: processing, assetId, kind, originalUrl }
+            API-->>Host: { status: processing, assetId, kind, originalUrl }
         else rendition work required
-            API-->>Svelte: { status: processing, assetId, kind, originalUrl }
-            Svelte->>Svelte: Observe Asset update events
+            API-->>Host: { status: processing, assetId, kind, originalUrl }
+            Host->>Host: Observe Asset update events
             API->>NEX: blob.rendition.request
             activate NEX
             NEX->>ObjStore: read verified original Blob
             NEX->>ObjStore: write required rendition Blobs
             NEX-->>API: rendition Blob descriptors
             deactivate NEX
-            API-->>Svelte: publish conversion notification
+            API-->>Host: publish conversion notification
         end
-        deactivate Svelte
+        deactivate Host
     end
 
     %% ═══════════════════════════════════════════════════════════════
@@ -172,13 +172,13 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(242, 234, 224)
         Note over User, WSvc: PHASE 3 - CREATE NODE + PERSIST
-        activate Svelte
-        Svelte->>Svelte: Replace placeholder with image/video/audio/mediaDocument node
-        Svelte->>WSvc: updateCanvasState()
+        activate Host
+        Host->>Host: Replace placeholder with image/video/audio/mediaDocument node
+        Host->>WSvc: updateCanvasState()
         activate WSvc
         deactivate WSvc
-        Svelte->>Svelte: Re-render with stored media node
-        deactivate Svelte
+        Host->>Host: Re-render with stored media node
+        deactivate Host
     end
 ```
 
@@ -310,7 +310,7 @@ Dragging a node disables pan and updates the node's DOM position live; on mouse-
 sequenceDiagram
     participant User
     participant Canvas as WorkspaceCanvas.ts
-    participant Svelte
+    participant Host as workspaceCanvasView.ts
     participant Store as workspaceStore
     participant WSvc as WorkspaceService
     %% ═══════════════════════════════════════════════════════════════
@@ -332,13 +332,13 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
         Note over User, WSvc: PHASE 2 - SAVE
-        Canvas->>Svelte: onCanvasStateChange(newNodes)
-        activate Svelte
-        Svelte->>Store: updateCanvasState()
-        Svelte->>WSvc: updateCanvasState()
+        Canvas->>Host: onCanvasStateChange(newNodes)
+        activate Host
+        Host->>Store: updateCanvasState()
+        Host->>WSvc: updateCanvasState()
         activate WSvc
         deactivate WSvc
-        deactivate Svelte
+        deactivate Host
     end
 ```
 

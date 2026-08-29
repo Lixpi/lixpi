@@ -15,7 +15,6 @@ These rules apply before an agent selects or runs any verification command, whet
 - Never run `npm`, `npx`, `pnpm`, or `pnpx` on the host. Any package-manager-backed verification must run inside the appropriate Docker container when verification is otherwise allowed.
 - Never install project dependencies or tooling on the host. Dependency changes are handled through Docker images or containers, not local host setup.
 - Never write, modify, or run tests unless the user explicitly asks for tests in the current thread.
-- Never run `svelte-check`, directly or indirectly through a package script or wrapper. It is prohibited for agents.
 - Never open the application in a browser or use browser automation, screenshots, or manual visual inspection to verify work.
 - For TypeScript tests, follow the shared conventions in `TypeScript/TESTING-GUIDE.md`. All TypeScript test execution — for `services/web-ui`, `services/api`, `services/nex`, and the shared `packages/lixpi` packages — runs through the single `lixpi-typescript-test-runner` image via `docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner <domain>`, never through the app-runtime containers (`lixpi-web-ui`, `lixpi-api`, `lixpi-nex`), which no longer ship a test runner.
 - For `services/web-ui` work, also follow `TypeScript/web-ui/TESTING-GUIDE.md`, and verify test behavior only with its Dockerized `run-tests.sh web-ui` commands.

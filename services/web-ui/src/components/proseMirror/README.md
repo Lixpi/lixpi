@@ -56,7 +56,7 @@ Custom nodes are intentionally split by responsibility:
 
 - Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
-  - `taskRowNode`: placeholder for future Svelte-backed rendering.
+  - `taskRowNode`: placeholder for future custom NodeView rendering.
 
 - AI chat nodes (schema specs exported by `@lixpi/prosemirror`; browser NodeViews stay in `plugins/aiChatThreadPlugin/`):
   - `aiChatThreadNode` (`aiChatThread`): conversation container. Content expression: `(aiUserMessage | aiResponseMessage)+`. Pure conversation log — no inline composer.
@@ -176,7 +176,7 @@ graph LR
   AUTH-- START/STEP/END -->EditorView
   ACT-- media/branch side effects -->EditorView
   CBP-- CM6 NodeView and code fences -->EditorView
-  SP-- docChanged --> Svelte
+  SP-- docChanged --> Host[workspaceCanvasView.ts]
   BM-- floating menu --> EditorView
 ```
 
@@ -288,24 +288,6 @@ sequenceDiagram
   end
   end
 ```
-
-
-## Svelte component rendering (optional)
-
-The generic `createSvelteComponentRendererPlugin` in `plugins/svelteComponentRenderer/` lets you mount a Svelte component as a NodeView for any node type. It provides a simple contract:
-
-- Plugin factory: `createSvelteComponentRendererPlugin(SvelteComponent, nodeName, defaultAttrs)`
-- In `appendTransaction`, listens for `insert:<nodeName>` meta to create and insert the node at the current selection.
-- NodeView: uses `SvelteComponentRenderer.create(node, Component, node.attrs)` to mount into a DOM wrapper and stores the component instance on `node._svelteComponent` for cleanup.
-
-Usage pattern
-- Define a NodeSpec for `nodeName` in `customNodes`.
-- Register the plugin in `createPlugins(...)`.
-- Dispatch `tr.setMeta(
-  `insert:<nodeName>`, attrs
-)` to insert a component-backed node at the selection.
-
-Note: The editor currently ships with the TaskRow Svelte renderer commented out in `components/editor.ts`. It can be re-enabled by providing the actual component and desired default attrs.
 
 
 ## AI interactions and streaming
@@ -467,7 +449,7 @@ flowchart LR
 
 ## File map
 
-- Workspace host: `components/WorkspaceCanvas.svelte` and `infographics/workspace/WorkspaceCanvas.ts`
+- Workspace host: `components/workspaceCanvasView.ts` and `infographics/workspace/WorkspaceCanvas.ts`
 - Editor driver: `components/editor.ts`
 - Prompt composer wrapper: `aiPromptComposer.ts`
 - Shared schema package: `packages/lixpi/prosemirror`
@@ -475,7 +457,7 @@ flowchart LR
 - Bubble menu: `plugins/bubbleMenuPlugin/*`
 - Keymap & rules: `components/keyMap.js`, `components/inputRules.js`, `components/prompt.js`, `components/commands.js`
 - Custom nodes: `customNodes/*` and `customNodes/index.js`
-- Plugins: `plugins/*.js` (active), `plugins/svelteComponentRenderer/*` (component NodeView helper), and `plugins/DEPRECATED_DUMPSTER/*` (inactive)
+- Plugins: `plugins/*.js` and `plugins/*.ts` (active), plus `plugins/DEPRECATED_DUMPSTER/*` (inactive)
 
 
 ## Quick glossary
