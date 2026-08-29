@@ -1,0 +1,13 @@
+{
+    "name": "@lixpi/param-picker",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "node ./src/build.ts",
+        "dev": "node ./src/build.ts --watch & node --watch ./src/server.ts"
+    },
+    "devDependencies": {
+        "esbuild": "^0.25.0",
+        "sass": "^1.83.0"
+    }
+}

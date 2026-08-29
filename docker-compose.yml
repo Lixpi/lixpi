@@ -55,15 +55,19 @@ services:
             PORT: 3010
             PARAMS_DIR: /usr/src/service/data/params
         volumes:
-            # Sources are mounted so edits land without a rebuild; restart the
-            # container to pick up server.ts changes, reload the page for the rest.
+            # Only sources are mounted. public/ is build output and stays inside
+            # the container, rebuilt on every change by the watcher below.
             - ./services/param-picker/src:/usr/src/service/src:cached
-            - ./services/param-picker/public:/usr/src/service/public:cached
             # Directory mount: the parameter tree lives here and the server
             # writes each file through a temp file and a rename.
             - ./services/param-picker/data:/usr/src/service/data
         working_dir: /usr/src/service
-        command: node ./src/server.ts
+        # Two watchers. The build watches src/client and rewrites public/, which
+        # the server notices and pushes to open pages as a reload. `node --watch`
+        # restarts the server itself when its own sources change.
+        command: >
+            sh -c "node ./src/build.ts --watch &
+            node --watch ./src/server.ts"
         stop_signal: SIGTERM
         ports:
             - 3010:3010

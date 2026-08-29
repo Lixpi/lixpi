@@ -6,14 +6,19 @@ FROM node:${NODE_VERSION}-alpine
 # Set the working directory
 WORKDIR /usr/src/service
 
-# The picker has no dependencies. Node runs the TypeScript entrypoint directly
-# through native type stripping, so there is nothing to install and nothing to
-# build. Sources are bind-mounted in docker-compose for the dev loop; these
-# copies keep the image runnable on its own.
-COPY ./services/param-picker/src ./src
-COPY ./services/param-picker/public ./public
+# esbuild and sass are the only dependencies, and they exist to build the client:
+# TypeScript to a bundle, SCSS to a stylesheet. The server itself needs nothing,
+# because Node runs its TypeScript directly through native type stripping.
+COPY ./services/param-picker/package.json ./package.json
+RUN npm install --omit=optional --no-audit --no-fund
 
-# Selections are written here. docker-compose mounts the host directory over it.
+COPY ./services/param-picker/src ./src
+
+# Build once so the image can serve without a writable mount. In development the
+# container rebuilds on every change instead, see the compose command.
+RUN node ./src/build.ts
+
+# Parameter files live here. docker-compose mounts the host directory over it.
 RUN mkdir -p /usr/src/service/data
 
 EXPOSE 3010
