@@ -1,0 +1,39 @@
+{
+    "key": "assetIds",
+    "category": "reference-assets",
+    "apiField": "asset:// IDs",
+    "controlKey": null,
+    "type": "string (value form of `image_url.url`, `video_url.url`, `audio_url.url`)",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "References a preset digital character from the digital characters library, or an authorized real-person asset added to the asset library after real-person verification. Each asset has its own ID.",
+    "combines": [
+        "Supported on: Seedance 2.5, Seedance 2.0 series (documented in their portrait workflow)",
+        "Works with `reference_image`, `reference_video`, and `reference_audio` roles.",
+        "The ID is only a transport handle. Prompts must address the asset as \"Image 1\", \"Video 1\", etc.",
+        "Digital character library needs activation (ModelArk/2223965); real-person assets need the onboarding flow in ModelArk/2315856."
+    ],
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/2608626"
+    ]
+}

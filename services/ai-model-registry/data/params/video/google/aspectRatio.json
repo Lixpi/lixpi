@@ -1,0 +1,47 @@
+{
+    "key": "aspectRatio",
+    "category": "output-shape",
+    "apiField": "config.aspectRatio",
+    "controlKey": "aspectRatio",
+    "type": "enum",
+    "values": [
+        "16:9",
+        "9:16"
+    ],
+    "providerDefault": "16:9",
+    "lixpiValue": "16:9",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Sets the output frame shape, not its pixel count. Veo 3.1 supports landscape 16:9 and portrait 9:16 only, so square and ultrawide requests must be reframed before submission.",
+    "combines": [
+        "Resolution controls pixel count separately; changing aspectRatio does not change the selected 720p, 1080p, or 4k tier.",
+        "Image-conditioned input should already match the requested shape because the Gemini Developer API does not expose Vertex's crop-versus-pad resizeMode control."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts, GoogleProvider.runVeoGeneration",
+        "code": "if (state.videoAspectRatio) veoConfig.aspectRatio = state.videoAspectRatio",
+        "from": "state.videoAspectRatio, validated from the selected Veo model's Aspect ratio control",
+        "what": "Sends 16:9 or 9:16 on each active Veo 3.1 model."
+    },
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "16:9",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ]
+}

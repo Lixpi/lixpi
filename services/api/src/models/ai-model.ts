@@ -107,7 +107,6 @@ const SUPPORTED_MEDIA_GENERATION_CONTROL_KEYS = new Set<MediaGenerationConfigCon
     'generateAudio',
     'negativePrompt',
     'personGeneration',
-    'cameraFixed',
     'watermark',
     'returnLastFrame',
 ])
@@ -124,8 +123,11 @@ const buildVideoControls = (model: Omit<AiModel, 'pricing'>): MediaGenerationCon
 const getControlOptionsSignature = (controls: MediaGenerationConfigControl[]): string => {
     return JSON.stringify(controls.map(control => [
         control.key,
+        control.label,
         control.kind,
+        control.defaultValue ?? null,
         control.description ?? null,
+        control.readOnly ?? false,
         control.options.map(option => [option.value, option.label, option.description ?? null]),
     ]))
 }

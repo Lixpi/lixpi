@@ -413,11 +413,13 @@ export class OpenAIProvider extends BaseProvider {
                         const imageCall = args.hasImageModel && !videoCall ? extractToolCall('OpenAI', response) : undefined
                         if (videoCall) {
                             update.generatedVideoPrompt = videoCall.prompt
+                            update.generatedVideoNegativePrompt = videoCall.negativePrompt
                             info(`[OpenAI:${this.instanceKey}] generate_video tool call ${JSON.stringify({
                                 chatModel: args.modelVersion,
                                 targetVideoProvider: args.state.videoProviderName,
                                 targetVideoModel: args.state.videoModelVersion,
                                 promptLen: videoCall.prompt.length,
+                                negativePromptLen: videoCall.negativePrompt?.length ?? 0,
                             }, null, 0)}`)
                         } else if (imageCall) {
                             const refs = extractReferenceImages(args.state.messages)

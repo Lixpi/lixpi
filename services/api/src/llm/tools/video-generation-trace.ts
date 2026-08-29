@@ -104,11 +104,7 @@ const buildAudioDirection = (state: ProviderState): string => (
         : 'AUDIO DIRECTION: generate synchronized audio that follows the described action and environment.'
 )
 
-const buildCameraDirection = (state: ProviderState): string => (
-    state.videoGenerationConfig?.cameraFixed === 'true'
-        ? 'CAMERA DIRECTION: keep the camera completely fixed; all motion occurs within the locked frame.'
-        : 'CAMERA DIRECTION: follow any camera instructions in the user request while maintaining smooth, coherent motion.'
-)
+const CAMERA_DIRECTION = 'CAMERA DIRECTION: follow any camera instructions in the user request while maintaining smooth, coherent motion.'
 
 const buildImageConditioningSafetyDirection = (state: ProviderState, profile: VideoModelProfile): string | undefined => {
     if (!profile.imageConditioningSafetyDirection) return undefined
@@ -131,7 +127,7 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
             profile.qualityDirection,
             buildImageConditioningSafetyDirection(state, profile),
             buildInputModeDirection(state, profile),
-            buildCameraDirection(state),
+            CAMERA_DIRECTION,
             buildAudioDirection(state),
             'MANDATORY CHARACTER CREATOR GENERATION: preserve one consistent character identity, anatomy, clothing, materials, colors, and distinguishing details from the request and attached source images. The capability sample is a layout reference, not a subject to copy.',
             capabilityUsagePrompt ? `CHARACTER CREATOR BRIEF:\n${capabilityUsagePrompt}` : undefined,
@@ -145,7 +141,7 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
         profile.qualityDirection,
         buildImageConditioningSafetyDirection(state, profile),
         buildInputModeDirection(state, profile),
-        buildCameraDirection(state),
+        CAMERA_DIRECTION,
         buildAudioDirection(state),
         hasCapabilityReferences || capabilityUsagePrompt
             ? 'MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO: the capability reference image(s) and capability brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the capability sample subject, pose, composition, or layout.'

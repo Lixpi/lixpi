@@ -1085,6 +1085,8 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                     { key: 'aspectRatio', label: 'Aspect ratio', kind: 'aspect-ratio', options: [{ value: '16:9' }, { value: '4:3' }], defaultValue: '16:9' },
                     { key: 'resolution', label: 'Resolution', kind: 'segmented', options: [{ value: '720p' }, { value: '1080p' }], defaultValue: '720p' },
                     { key: 'duration', label: 'Duration', kind: 'segmented', options: [{ value: '8' }, { value: '12' }], defaultValue: '8' },
+                    { key: 'outputFormat', label: 'Output format', kind: 'segmented', options: [{ value: 'mp4' }, { value: 'mov' }], defaultValue: 'mp4' },
+                    { key: 'generateAudio', label: 'Audio', kind: 'toggle', options: [{ value: 'true' }, { value: 'false' }], defaultValue: 'true' },
                 ],
             } as any
         })
@@ -1112,7 +1114,13 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                         {
                             groupId: 'vid-only',
                             modelIds: ['Google:veo-3.1-generate-preview'],
-                            values: { aspectRatio: '4:3', duration: '12', resolution: '1080p' },
+                            values: {
+                                aspectRatio: '4:3',
+                                duration: '12',
+                                resolution: '1080p',
+                                outputFormat: 'mov',
+                                generateAudio: 'false',
+                            },
                         },
                     ],
                 },
@@ -1124,6 +1132,15 @@ describe('MediaGenerationMatrixOrchestrator', () => {
             aspectRatio: '4:3',
             resolution: '1080p',
             duration: '12',
+            outputFormat: 'mov',
+            generateAudio: 'false',
+        })
+        expect(state.videoGenerationConfig).toMatchObject({
+            aspectRatio: '4:3',
+            resolution: '1080p',
+            duration: '12',
+            outputFormat: 'mov',
+            generateAudio: 'false',
         })
         expect(state.videoDurationSeconds).toBe(12)
     })

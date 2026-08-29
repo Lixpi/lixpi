@@ -1,0 +1,43 @@
+{
+    "key": "generateAudio",
+    "category": "audio",
+    "apiField": "config.generateAudio",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "true",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Controls whether Veo generates synchronized speech, effects, and music on Vertex. The Gemini Developer API does not expose this switch and active Veo 3.1 models always generate audio there.",
+    "combines": [
+        "Lixpi uses the Gemini Developer API, so the matrix must not show an audio toggle and the provider must not send generateAudio on that surface.",
+        "Audio safety filtering can block the whole generation; Google says blocked generations are not charged."
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

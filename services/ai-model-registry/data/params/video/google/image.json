@@ -1,0 +1,52 @@
+{
+    "key": "image",
+    "category": "reference-assets",
+    "apiField": "image",
+    "controlKey": null,
+    "type": "object (`Image`: `imageBytes` + `mimeType` on the Gemini API; `bytesBase64Encoded` or `gcsUri` + `mimeType` on Vertex)",
+    "providerDefault": null,
+    "lixpiValue": "veoParams.image, set at google-provider.ts:845 for a first-frame request",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Supplies one opening image for image-to-video generation. Veo animates this exact image as the first frame; adding config.lastFrame changes the task into first-and-last-frame interpolation.",
+    "combines": [
+        "Supported on all active Veo 3.1 models through the Gemini Developer API and Vertex.",
+        "Exactly one image; there is no multi-image first-frame mode.",
+        "Not allowed with `video` or `config.referenceImages`.",
+        "Restricts `personGeneration` to `allow_adult`.",
+        "Vertex recommends 720p or higher and a 16:9 or 9:16 ratio; other ratios or sizes may be resized or centrally cropped.",
+        "Pair with `config.lastFrame` to switch this mode into first-and-last-frame interpolation."
+    ],
+    "values": [
+        "image/jpeg",
+        "image/png"
+    ],
+    "range": "No input-size limit is documented for active Veo 3.1 models on the Gemini Developer API.",
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:782-852",
+        "code": "source.image = firstFrameImage",
+        "from": "state.videoFirstFrameImage, resolved from the selected canvas reference",
+        "what": "Converts the selected image data URL to Gemini image bytes and sends it as the source image unless video extension takes precedence."
+    }
+}

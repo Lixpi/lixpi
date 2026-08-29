@@ -1,11 +1,11 @@
 ---
 title: Video Generation
-description: The video branch of the shared AI generation pipeline — Google VEO async submit/poll execution, the video ProviderState fields, the runVeoGeneration input precedence, VEO storage and ffmpeg posters, the VideoCanvasNode, video-specific stream nuances, multi-turn extension, and how video differs from image generation.
+description: The video branch of the shared AI generation pipeline, including Google Veo 3.1 and Seedance execution, provider configuration, storage, playback, and extension.
 ---
 
 # Video Generation
 
-Video generation is the **video branch** of Lixpi's shared AI generation pipeline. It **extends** [image generation](./IMAGE-GENERATION.md) rather than replacing it: the composer Image/Video sliding switch explicitly selects the media branch, then a user-selected **text model** (Claude, GPT, or Gemini) reads the conversation — including any references — writes a cinematic enhanced prompt, and emits the only media Tool exposed for that mode. The workflow routes the video prompt to an independently selected **video model** (Google VEO 3 / 3.1 or ByteDance Seedance 2.0) and stores the finished clip as a playable `VideoCanvasNode`.
+Video generation is the **video branch** of Lixpi's shared AI generation pipeline. It **extends** [image generation](./IMAGE-GENERATION.md) rather than replacing it: the composer Image/Video sliding switch explicitly selects the media branch, then a user-selected **text model** (Claude, GPT, or Gemini) reads the conversation, including any references, writes a cinematic enhanced prompt, and emits the only media Tool exposed for that mode. The workflow routes the video prompt to an independently selected **video model** (Google Veo 3.1 or BytePlus Seedance 2.x) and stores the finished clip as a playable `VideoCanvasNode`.
 
 Structurally, video adds a sibling to every image primitive: a `generate_video` tool mirroring `generate_image`, a `VideoRouter` mirroring `ImageRouter`, a `VideoPublisher` mirroring the image publisher, and a second post-stream branch in the shared graph. The one place it **cannot** mirror image generation is **execution**. VEO is long-running and asynchronous — submit an operation, poll it until done (≈11s–6min), with no partial frames — so the progressive `IMAGE_PARTIAL` streaming model is replaced by a *placeholder + keepalive + `VIDEO_COMPLETE`* model.
 
@@ -19,7 +19,7 @@ The shared workflow, dual-model routing, the `generate_video` tool schema, the 3
 
 The composer stores `mediaGenerationMode: image | video` in its ProseMirror node and preserves separate image/video model selections and configuration groups. Only the active mode's model ids and options enter `mediaGenerationRequest`; prompt wording and source-video context cannot switch modes. The bottom summary row is the settings trigger. Its menu shows the reasoning section plus only the active image or video section.
 
-The API model catalog publishes a per-model `mediaGenerationConfigMatrix`. Video controls are copied from `AiModel.videoGenerationControls`, whose authoring source is `services/nex/workloads/ai-models-synchronization`. Each selected model has its own configuration row. Aspect ratio, resolution, and duration use the shared ui-kit sliding dropdown and sit in one three-column row, while the remaining provider-specific controls span the row below them. Seedance `Smart length` is an ordered duration option whose question-mark trigger opens its option description through the shared help tooltip. Negative prompting, moderation policy, output count, output format, and audio defaults remain pipeline-owned and are not composer controls. The API validates every submitted value against the same synchronized profile before provider execution.
+The API model catalog publishes a per-model `mediaGenerationConfigMatrix`. Video controls are copied from `AiModel.videoGenerationControls`, whose authoring source is `services/nex/workloads/ai-models-synchronization`. Each selected model has its own configuration row. Aspect ratio, resolution, duration, and Seedance 2.5 output format use the shared ui-kit sliding dropdown. Seedance `Smart length` is an ordered duration option whose question-mark trigger opens its option description through the shared help tooltip. All Seedance models expose generated audio. Negative prompting, moderation policy, and provider output count remain pipeline-owned. The API validates every submitted value against the same synchronized profile before provider execution.
 
 ## Where Video Generation Sits
 
@@ -67,7 +67,7 @@ sequenceDiagram
     %% ═══════════════════════════════════════════════════════════════
     rect rgb(195, 222, 221)
         Note over Canvas, Store: PHASE 2 - SUBMIT + POLL — Async generation with keepalive pings, no partial frames
-        VEO->>VeoApi: generateVideos { prompt, conditioning input, aspect/resolution/duration }
+        VEO->>VeoApi: generateVideos { source: { prompt, image/video }, config }
         activate VeoApi
         loop every VEO_POLL_INTERVAL_MS until operation.done
             VEO->>VeoApi: operations.getVideosOperation
@@ -102,17 +102,18 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 |-------|------|---------|
 | `enableVideoGeneration` | `boolean` | `true` when the provider is invoked as the video model by `VideoRouter`. |
 | `videoModelMetaInfo` | `AiModelMetaInfo` | Video model pricing + metadata (resolved by the gateway). |
-| `videoModelVersion` | `string` | Selected video model id (e.g. `veo-3.0-generate-001`). |
+| `videoModelVersion` | `string` | Selected video model id (e.g. `veo-3.1-generate-preview`). |
 | `videoProviderName` | `ProviderName` | Video model provider (`Google`). |
 | `videoAspectRatio` | `string` | `16:9` \| `9:16`. |
 | `videoResolution` | `string` | `720p` \| `1080p` \| `4k`. |
-| `videoDurationSeconds` | `number` | Selected synchronized duration. VEO 3.1 exposes 4/6/8 seconds; the provider forces 8 for conditioned/high-resolution requests. Seedance accepts 4–15 or `-1` for intelligent duration. |
+| `videoDurationSeconds` | `number` | Selected synchronized duration. VEO 3.1 exposes 4, 6, or 8 seconds; the provider forces 8 for conditioned/high-resolution requests. Seedance 2.0 accepts 4 through 15 and Seedance 2.5 accepts 4 through 30; both support `-1` for intelligent duration. |
 | `videoGenerationConfig` | `Partial<Record<MediaGenerationConfigControlKey, string>>` | Validated per-model settings not represented by the legacy scalar aspect/resolution/duration fields. |
 | `generatedVideoPrompt` | `string` | Enhanced prompt extracted from the text model's `generate_video` tool call. |
+| `generatedVideoNegativePrompt` | `string` | Optional negative prompt produced by the reasoning model and merged into the transient provider configuration. |
 | `videoFirstFrameImage` | `string` | VLM-selected first frame, as a data URL (image-to-video). |
 | `videoReferenceImages` | `string[]` | VLM-selected style/content references (≤3). |
 | `videoSourceForExtension` | `string` | `nats-obj://…` URI of a source MP4 to extend (multi-turn). |
-| `isMediaRegenerationRun` | `boolean` | Set by the media routers when the lineage plan carries a `regenerationTarget`, so the provider takes a fresh seed instead of inheriting one. |
+| `isMediaRegenerationRun` | `boolean` | Shared media-regeneration flag. It affects seed selection only for providers that accept a client-supplied seed. |
 | `generatedVideos` | `string[]` | Resulting video URLs/ids. |
 | `videoUsage` | `VideoUsage` | `{ durationSeconds, resolution, aspectRatio }` for billing, plus optional `completionTokens` / `totalTokens` for token-metered providers (Seedance). |
 
@@ -120,7 +121,7 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 `GoogleProvider.runVeoGeneration` ([`google-provider.ts`](../../services/api/src/llm/providers/google-provider.ts)) runs **only** when `enableVideoGeneration && modelNameImpliesVideoOutput` — a non-VEO Google model never enters this path, and the existing Gemini image branch is untouched.
 
-**Config.** The synchronized VEO profiles expose visual `aspectRatio`, per-model `resolution`, per-model `durationSeconds`, fixed `numberOfVideos: 1`, fixed MP4 output, always-on audio, and optional `negativePrompt`. The provider sends an unsigned-32-bit `seed` on every request and records it on the generated Asset as `lineage.generationSeed`; it is not a user control. VEO never reports a seed back, so the value sent is the value stored. Seed selection follows the shared rule in [Seed inheritance](#seed-inheritance). Veo 3.1/3.1 Fast support 720p/1080p/4K while 3.1 Lite omits 4K; Veo 3 is fixed to 8 seconds and 1080p is 16:9 only. The provider forces 8 seconds for frame/reference conditioning and 1080p/4K, forces 720p for extension, and selects `personGeneration` through the registered moderation profile rather than exposing a user safety bypass. `generateAudio` is sent only for Vertex clients; the Gemini Developer API rejects that knob but still generates VEO 3 audio by default.
+**Config.** The synchronized Veo 3.1 profiles expose visual `aspectRatio`, per-model `resolution`, and per-model `durationSeconds`. `numberOfVideos` remains fixed at one and output remains MP4. The reasoning model can populate Veo's native `negativePrompt`; an explicit user negative prompt is preserved by the Tool contract, while the shared Veo prompt wrapper still appends its fixed temporal-quality exclusions inline. Veo 3.1 and 3.1 Fast support 720p, 1080p, and 4K while 3.1 Lite omits 4K. The provider forces 8 seconds for frame/reference conditioning and 1080p/4K, forces 720p for extension, and selects `personGeneration` through the registered moderation profile rather than exposing a user safety bypass. The Gemini Developer API generates audio for all active Veo models but rejects both `generateAudio` and `seed`, so the provider does not send either field.
 
 **Input precedence.** Exactly one conditioning input is sent, in this fixed order. The first applicable input wins; the rest are ignored:
 
@@ -133,22 +134,22 @@ The video fields mirror the image fields and use the same **"keep if undefined"*
 
 **Submit + poll.** `client.models.generateVideos(...)` returns an operation; the provider loops on `client.operations.getVideosOperation(...)` every `VEO_POLL_INTERVAL_MS`, publishing a `VIDEO_GENERATING` keepalive each tick and honoring the abort signal, until `operation.done`.
 
-**Download.** `fetchVideoBytes` uses inline `videoBytes` (base64) when present, otherwise `client.files.download(...)` to a temp file. `VideoPublisher.complete` validates the MP4 (`ftyp` box) before storing; non-MP4 bytes throw. Poster and representative-frame extraction is requested from the NEX file-conversion workload through `extractVideoFramesViaWorkload`, so ffmpeg work stays out of the API process.
+**Download.** `fetchVideoBytes` uses inline `videoBytes` (base64) when present, otherwise `client.files.download(...)` to a temp file. `VideoPublisher.complete` validates the ISO base-media `ftyp` box before storing. Poster and representative-frame extraction is requested from the NEX file-conversion workload through `extractVideoFramesViaWorkload`, so ffmpeg work stays out of the API process.
 
-## Seedance 2.0 via BytePlus ModelArk
+## Seedance 2.x via BytePlus ModelArk
 
-`BytePlusProvider` ([`byteplus-provider.ts`](../../services/api/src/llm/providers/byteplus-provider.ts)) is a first-party peer of `GoogleProvider` that produces video through **BytePlus ModelArk's** official Seedance 2.0 API. It is **video-only** — text streaming throws a capability error — and runs **only** when `enableVideoGeneration && /seedance/i.test(modelVersion)`. Everything else is reused unchanged: the same `generate_video` tool, post-stream router, VLM resolver, generated Asset settlement, NEX rendition processing, and `VideoCanvasNode`. The router selects it exactly like VEO (`createTransient(instanceKey, 'BytePlus')`).
+`BytePlusProvider` ([`byteplus-provider.ts`](../../services/api/src/llm/providers/byteplus-provider.ts)) is a first-party peer of `GoogleProvider` that produces video through **BytePlus ModelArk's** official Seedance 2.x API. It is **video-only**: text streaming throws a capability error. It runs **only** when `enableVideoGeneration && /seedance/i.test(modelVersion)`. Everything else is reused unchanged: the same `generate_video` tool, post-stream router, VLM resolver, generated Asset settlement, NEX rendition processing, and `VideoCanvasNode`. The router selects it exactly like VEO (`createTransient(instanceKey, 'BytePlus')`).
 
 **Official route** (overridable via `BYTEPLUS_ARK_BASE_URL`):
 
 - Create: `POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks`
 - Retrieve: `GET …/contents/generations/tasks/{id}`
 - Auth: `Authorization: Bearer $ARK_API_KEY` (or `BYTEPLUS_ARK_API_KEY`)
-- Model ids: `dreamina-seedance-2-0-260128`, `dreamina-seedance-2-0-fast-260128` (China/Volcengine Ark uses `doubao-*` ids instead).
+- Model ids: `dreamina-seedance-2-0-260128`, `dreamina-seedance-2-0-fast-260128`, `dreamina-seedance-2-0-mini-260615`, and `dreamina-seedance-2-5-260628` (China/Volcengine Ark uses `doubao-*` ids instead).
 
 The typed REST client lives in [`byteplus-video-types.ts`](../../services/api/src/llm/providers/byteplus-video-types.ts) (`createVideoGenerationTask` / `retrieveVideoGenerationTask` / `downloadVideo` over `fetch` + `AbortSignal`, preserving ModelArk `error.code`), with pure `buildSeedanceContent` and an injectable `pollVideoGenerationTask`.
 
-**Config.** The exact synchronized Standard/Fast profiles expose aspect ratios `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, and adaptive; dynamic duration `4–15` or `-1` intelligent length; audio; fixed MP4 output; Lixpi fanout quantity `1–8`; fixed camera; watermark; and return-last-frame. Fixed camera keeps the generated camera stationary. Watermark adds the provider's AI-generated mark to the lower-right corner. Return last frame supplies the final frame as a separate image for continuing a sequence. Standard exposes 480p/720p/1080p/4K, while Fast exposes 480p/720p. The provider serializes these validated values to ModelArk's `ratio`, `resolution`, `duration`, `generate_audio`, `seed`, `camera_fixed`, `watermark`, and `return_last_frame` fields, where `seed` comes from [Seed inheritance](#seed-inheritance) rather than from the user. The finished task echoes the seed it used, and that value is stored on the generated Asset as `lineage.generationSeed`. Quantity fans out one provider task per requested output because ModelArk returns one video per task.
+**Config.** Every synchronized Seedance profile exposes adaptive plus the six fixed aspect ratios, generated audio, watermark, and return-last-frame. Seedance 2.0 Standard, Fast, and Mini support 4 through 15 seconds; Standard supports 480p/720p/1080p/4K, while Fast and Mini support 480p/720p. Seedance 2.5 supports 4 through 30 seconds, 480p/720p/1080p, up to 30 reference images, and an MP4/MOV output-format dropdown; frame-conditioned 2.5 requests force `ratio: adaptive` as required by ModelArk. All four models support intelligent `-1` duration. The provider serializes the validated values to `ratio`, `resolution`, `duration`, `generate_audio`, `output_format` where supported, `watermark`, and `return_last_frame`. Current Seedance 2.x models do not accept `seed`, `camera_fixed`, draft mode, or `service_tier=flex`, so the provider sends none of those fields. If ModelArk reports a generated seed in the completed task, Lixpi stores it on the Asset as `lineage.generationSeed`.
 
 **Input precedence.** `content[]` is text-first, then ONE input family — first-frame and reference are mutually exclusive in Seedance, matching VEO:
 
@@ -163,7 +164,7 @@ Inputs are base64 data URLs (the resolver already supplies them); private `nats-
 
 For `self` or `authorized-real-person` references, the router first requires a valid BytePlus provider Asset handle in the configured account scope. Missing/expired/revoked handles pause the durable request before submit and expose **Verify with provider** in the planned canvas slot. The provider-hosted H5 flow sends liveness/identity media directly to BytePlus; Lixpi stores only signed-session hashes and the resulting scoped handle. Seedance then receives `asset://<subjectHandle>`. See [Media Reference Identity and Provider Moderation](./MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md#byteplus-native-verification).
 
-**Submit + poll + store.** Publish `VIDEO_PENDING` on accept; poll `GET …/tasks/{id}` every `BYTEPLUS_VIDEO_POLL_INTERVAL_MS` (default = `VEO_POLL_INTERVAL_MS`, 10s), publishing a `VIDEO_GENERATING` keepalive on each non-terminal poll, until `succeeded`/`failed`/`cancelled`/`expired`. On success, **download `content.video_url` immediately** — ModelArk output URLs are cleaned after 24 hours — then `VideoPublisher.complete` validates the MP4 (`ftyp`), extracts a poster + mid-frame, stores, and publishes `VIDEO_COMPLETE`. Vendor token usage (`usage.total_tokens`) flows into `videoUsage` for billing.
+**Submit + poll + store.** Publish `VIDEO_PENDING` on accept; poll `GET …/tasks/{id}` every `BYTEPLUS_VIDEO_POLL_INTERVAL_MS` (default = `VEO_POLL_INTERVAL_MS`, 10s), publishing a `VIDEO_GENERATING` keepalive on each non-terminal poll, until `succeeded`/`failed`/`cancelled`/`expired`. On success, **download `content.video_url` immediately** because ModelArk output URLs are cleaned after 24 hours. When `return_last_frame` is enabled, download `content.last_frame_url` too and store the PNG as the Asset's ready `representativeFrame` rendition. `VideoPublisher.complete` validates the MP4/MOV `ftyp` box, stores the provider container with the matching MIME type, and starts the normal rendition pipeline; MOV is transcoded to the canonical MP4. Vendor token usage (`usage.total_tokens`) flows into `videoUsage` for billing.
 
 **Prompt phrasing.** The shared final-prompt wrapper (`buildVideoModelPrompt`) selects a per-provider profile: Seedance uses positive/affirmative phrasing, **omits VEO's inline `Negative prompt:` line** (negative tokens backfire on Seedance — the model renders them), and adds an image-safety context that preserves visible reference characteristics when selected image-conditioned references are generated or visibly stylized canvas media. VEO's emitted prompt is byte-identical. The shared wrapper + profiles are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
@@ -187,20 +188,22 @@ The registered Google profile requires `GOOGLE_VEO_PERSON_GENERATION_PROFILE=sta
 
 ## Seed inheritance
 
-Seeds are provider state, not a composer control. `BaseProvider.resolveGenerationSeed` picks one for every provider that accepts a seed, and every media path shares the rule:
+Seeds are provider state, not a composer control. Stability is the active provider that accepts a client-supplied seed. `BaseProvider.resolveGenerationSeed` applies this rule:
 
 1. Read the pending Asset's lineage and walk its `parentAssetId`, then its `sourceAssetIds` in recorded order.
 2. Reuse the first `lineage.generationSeed` found, so a branch continued for editing or a prompt that references an earlier generated Asset lands near that output.
 3. Skip an inherited seed that falls outside the target provider's accepted range, which is how a seed recorded by one provider can never be rejected by another.
 4. Generate a fresh seed when nothing in the lineage carries one.
 
-Regeneration is the deliberate exception. A regeneration run carries `isMediaRegenerationRun`, set by `ImageRouter` and `VideoRouter` from the lineage plan's `regenerationTarget`, and always gets a fresh seed. Reusing the source seed there would return the output the user just asked to redo.
+Regeneration is the deliberate exception. A regeneration run carries `isMediaRegenerationRun`, set by the media routers from the lineage plan's `regenerationTarget`, and always gets a fresh seed on providers that accept one. Reusing the source seed there would return the output the user just asked to redo.
 
 A lineage read failure never blocks generation; the provider logs it and falls back to a fresh seed.
 
+The active Google and BytePlus video paths do not send a seed. BytePlus may still report the provider-generated seed on completion, and Lixpi stores that reported value without trying to reuse it in a later request.
+
 ## Storage & Durability
 
-Video uses the same Asset/Blob contract as every other media kind. The MP4 is the Asset's `original` rendition; NEX writes `canonical`, `poster`, and `representativeFrame` renditions required by the shared matrix. Each rendition points to a SHA-256-addressed Blob in `blobs-{organizationId}-files`. Existing Blob metadata is reused only after its object hash and byte size verify.
+Video uses the same Asset/Blob contract as every other media kind. The provider MP4 or MOV is the Asset's `original` rendition; MOV receives a canonical MP4 from NEX. NEX writes the remaining `poster` and `representativeFrame` renditions required by the shared matrix unless the provider already supplied the returned last frame. Each rendition points to a SHA-256-addressed Blob in `blobs-{organizationId}-files`. Existing Blob metadata is reused only after its object hash and byte size verify.
 
 **HTTP routes** ([`asset-routes.ts`](../../services/api/src/routes/asset-routes.ts)).
 
@@ -264,14 +267,14 @@ Matrix child video lifecycle events are mirrored onto the live canonical respons
 `ai-models-synchronization.ts` makes VEO models discoverable:
 
 - A new `video_generation` modality (`{ title: 'Video Generation', shortTitle: 'VID GEN' }`); VEO models carry modalities `['video', 'video_generation']`.
-- `'veo'` is removed from the Google blacklist; `fetchGoogleModels` allows VEO ids through (keeping `-preview` ids, dropping dated snapshots).
-- Every VEO profile authors its complete `videoGenerationControls` list: aspect ratio, family-specific resolution and duration, always-on audio, MP4, one output, negative prompt, and server-managed people policy.
+- `fetchGoogleModels` admits active Veo ids, drops dated snapshots, and explicitly filters every shut-down Veo id even if the upstream list endpoint returns one.
+- Every VEO profile authors its user-facing `videoGenerationControls` list: aspect ratio plus family-specific resolution and duration. Audio, MP4 output, one output, request-derived native negative prompting, and people policy remain provider-managed.
 - **Per-second pricing** on `AiModel.pricing.video` (`{ measuringUnit: 'seconds', pricePer: '1', price }`). Current prices are **placeholders** to reconcile against [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
-- Friendly titles: `veo-3.0-generate-001` → "Veo 3", `veo-3.0-fast-generate-001` → "Veo 3 Fast", `veo-3.1-generate-preview` → "Veo 3.1", etc.
+- Friendly titles map the three active Veo 3.1 ids to "Veo 3.1", "Veo 3.1 Fast", and "Veo 3.1 Lite".
 
 The API catalog copies those controls into one configuration-matrix group per model. The frontend renders the control kinds without provider logic, and the orchestrator validates submitted values against the selected model's synchronized controls. The video-model selector filters models by the `video_generation` modality and is excluded from the text-model list.
 
-**BytePlus (Seedance) static injection.** BytePlus has no model-list API in the repo, so `synchronizeBytePlusModels` injects exact Standard and Fast entries. Both expose adaptive plus six fixed aspect ratios, 4–15 seconds plus intelligent `-1` duration, audio, MP4, quantity, seed, fixed camera, watermark, and returned last frame. Standard exposes 480p/720p/1080p/4K; Fast exposes 480p/720p. `videoMaxReferenceImages: 9` is read by the router and branch resolver. Token-metered pricing remains model/resolution/input-mode specific.
+**BytePlus (Seedance) static injection.** BytePlus has no model-list API in the repo, so `synchronizeBytePlusModels` injects the four active Seedance 2.x IDs from BytePlus's current model list: 2.0 Standard, 2.0 Fast, 2.0 Mini, and 2.5. All expose adaptive plus six fixed aspect ratios, intelligent duration, audio, watermark, and returned last frame. Standard exposes 480p/720p/1080p/4K and 4 through 15 seconds; Fast and Mini expose 480p/720p and 4 through 15 seconds; 2.5 exposes 480p/720p/1080p, 4 through 30 seconds, MP4/MOV output, and 30 references. Token-metered pricing remains model/resolution/input-mode specific.
 
 ## Usage Metering
 
@@ -302,7 +305,7 @@ A completed `VideoCanvasNode` can be continued. The browser sends its `assetId` 
 |---|---|---|
 | Execution | Synchronous / streaming | Async submit + poll, run in-request |
 | Progress to UI | `IMAGE_PARTIAL` progressive previews | `VIDEO_PENDING` + `VIDEO_GENERATING` keepalive, no partial frames |
-| Payload | base64 PNG/JPEG | multi-MB MP4 (validated by `ftyp`) |
+| Payload | base64 PNG/JPEG | multi-MB MP4/MOV (validated by `ftyp`) |
 | Prompt display | `>` quote block | `<video_prompt>…</video_prompt>` XML tags |
 | Workflow node | `validateImagePrompt` → `executeImageGeneration` | `executeVideoGeneration` (no validate step) |
 | Pricing | per-image tiers | per-second (VEO) or per-token (Seedance), via `pricing.video.measuringUnit` |
@@ -333,7 +336,7 @@ services/api/src/
 │   │   └── video-generation-trace.ts # VIDEO_GENERATION_TRACE builder
 │   ├── graph/
 │   │   ├── state.ts                  # ProviderState video fields + VideoUsage
-│   │   ├── video-publisher.ts        # VIDEO_PENDING/GENERATING/COMPLETE/ERROR, MP4 validation
+│   │   ├── video-publisher.ts        # VIDEO_PENDING/GENERATING/COMPLETE/ERROR, MP4/MOV validation
 │   │   ├── media-branch-resolver.ts  # VLM gate generalized to video; VEO ref mapping
 │   │   └── stream-publisher.ts       # videoGenerationTrace()
 │   ├── usage/usage-reporter.ts       # reportVideoUsage (per-second VEO / per-token Seedance)
@@ -370,8 +373,8 @@ packages/lixpi/constants/
 
 ### Vendor docs (Google)
 
-- VEO 3 video generation: https://ai.google.dev/gemini-api/docs/video
-- VEO dialogue example: https://ai.google.dev/gemini-api/docs/video?example=dialogue
+- Veo 3.1 video generation: https://ai.google.dev/gemini-api/docs/veo
+- VEO dialogue example: https://ai.google.dev/gemini-api/docs/veo?example=dialogue
 - Veo 3.1 announcement: https://developers.googleblog.com/introducing-veo-3-1-and-new-creative-capabilities-in-the-gemini-api/
 - Gemini API pricing: https://ai.google.dev/gemini-api/docs/pricing
 
@@ -379,6 +382,8 @@ packages/lixpi/constants/
 
 - Create video generation task: https://docs.byteplus.com/en/docs/ModelArk/1520757
 - Retrieve video generation task: https://docs.byteplus.com/en/docs/ModelArk/1521309
+- Active model list: https://docs.byteplus.com/en/docs/ModelArk/1330310
+- Online inference pricing: https://docs.byteplus.com/en/docs/ModelArk/1099320
 - Dreamina Seedance 2.0 tutorial: https://docs.byteplus.com/en/docs/ModelArk/2291680
 - Seedance 2.0 prompt guide: https://docs.byteplus.com/en/docs/ModelArk/2222480
 - Resource packs (pricing): https://docs.byteplus.com/en/docs/ModelArk/2191775

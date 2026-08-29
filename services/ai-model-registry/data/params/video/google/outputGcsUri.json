@@ -1,0 +1,39 @@
+{
+    "key": "outputGcsUri",
+    "category": "job-control",
+    "apiField": "config.outputGcsUri",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "none, video bytes are returned inline",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Writes generated videos to a Cloud Storage location instead of returning base64 bytes.",
+    "combines": [
+        "Supported on: Vertex only. Wire name `storageUri` in the Vertex `parameters` object; `outputGcsUri` is the SDK name. The Gemini Developer API returns a file handle you download through `files.download`.",
+        "Requires a Google Cloud project and bucket, so it is unusable with an API-key-only Gemini client."
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

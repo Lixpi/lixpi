@@ -1,0 +1,49 @@
+{
+    "key": "referenceImage",
+    "category": "reference-assets",
+    "apiField": "content[].image_url.url",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "- (required when `type` is `image_url`)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Supplies an image as an exact first frame, exact last frame, or looser reference image according to content.role. Those modes have different count, ratio, and mixing rules, so the image itself is not enough to determine the task.",
+    "combines": [
+        "Supported on: all models",
+        "Formats: `jpeg`, `png`, `webp`, `bmp`, `tiff`, `gif`; Seedance 1.5 pro and later also `heic` and `heif`.",
+        "Aspect ratio (width/height) `[0.4, 2.5]`; width and height each `[300, 6000]` px.",
+        "Single image < 30 MB; request body <= 64 MB.",
+        "Counts: first frame 1; first and last frames 2; omni reference 1–30 (Seedance 2.5) or 1–9 (Seedance 2.0 series).",
+        "`asset://` IDs come from the digital character library or an authorized real-person asset.",
+        "2.5 accepts 1 to 30 reference images; the 2.0 series accepts 1 to 9."
+    ],
+    "values": [
+        "public image URL",
+        "data:image/<format>;base64",
+        "<data>` (format lowercase)",
+        "or `asset://<ASSET_ID>"
+    ],
+    "range": "see limits below",
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

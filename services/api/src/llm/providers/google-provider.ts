@@ -24,6 +24,7 @@ import {
 import {
     VIDEO_TOOL_NAME,
     getVideoToolForProvider,
+    type VideoToolCall,
 } from '../tools/video-generation.ts'
 import { VEO_POLL_INTERVAL_MS } from '../config.ts'
 import {
@@ -35,8 +36,6 @@ import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
-import { VEO_SEED_MAX } from './media-generation-seed.ts'
-
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -45,7 +44,7 @@ type VeoImageInput = { imageBytes: string; mimeType: string }
 
 type GoogleToolStreamResult = {
     detectedImage?: string
-    detectedVideo?: string
+    detectedVideo?: VideoToolCall
     capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }>
     usageMetadata?: any
     textCharacterCount: number
@@ -468,7 +467,7 @@ export class GoogleProvider extends BaseProvider {
                         }),
                     )
                     let detectedImage: string | undefined
-                    let detectedVideo: string | undefined
+                    let detectedVideo: VideoToolCall | undefined
                     const capabilityCalls: Array<{ callId: string; name: string; arguments: Record<string, any>; part: any }> = []
                     let streamUsageMetadata: any = null
                     let textCharacterCount = 0
@@ -487,7 +486,13 @@ export class GoogleProvider extends BaseProvider {
                                 if (fnCall && fnCall.name === TOOL_NAME) {
                                     detectedImage = (fnCall.args ?? {}).prompt ?? ''
                                 } else if (fnCall && fnCall.name === VIDEO_TOOL_NAME) {
-                                    detectedVideo = (fnCall.args ?? {}).prompt ?? ''
+                                    const args = fnCall.args ?? {}
+                                    detectedVideo = {
+                                        prompt: args.prompt ?? '',
+                                        ...(typeof args.negativePrompt === 'string' && args.negativePrompt.length > 0
+                                            ? { negativePrompt: args.negativePrompt }
+                                            : {}),
+                                    }
                                 } else if (fnCall && capabilityToolExecutor?.recognizes(fnCall.name)) {
                                     capabilityCalls.push({
                                         callId: fnCall.id ?? `${fnCall.name}-${capabilityCalls.length}`,
@@ -596,12 +601,14 @@ export class GoogleProvider extends BaseProvider {
                 }
 
                 if (detectedVideo) {
-                    update.generatedVideoPrompt = detectedVideo
+                    update.generatedVideoPrompt = detectedVideo.prompt
+                    update.generatedVideoNegativePrompt = detectedVideo.negativePrompt
                     info(`[Google:${this.instanceKey}] generate_video tool call ${JSON.stringify({
                         chatModel: modelVersion,
                         targetVideoProvider: state.videoProviderName,
                         targetVideoModel: state.videoModelVersion,
-                        promptLen: detectedVideo.length,
+                        promptLen: detectedVideo.prompt.length,
+                        negativePromptLen: detectedVideo.negativePrompt?.length ?? 0,
                     }, null, 0)}`)
                 } else if (detectedImage) {
                     const refs = extractReferenceImages(resolvedMessages)
@@ -738,16 +745,12 @@ export class GoogleProvider extends BaseProvider {
         }
         const generationConfig = state.videoGenerationConfig ?? {}
         // `generateAudio` is a Vertex-AI-only knob. The Gemini Developer API
-        // (apiKey mode) rejects it outright — VEO 3 still generates audio there
-        // by default — so only send the flag when the client is in Vertex mode.
+        // (apiKey mode) rejects it outright and Veo 3.1 still generates audio
+        // there, so only send the flag when the client is in Vertex mode.
         if (this.client.vertexai) veoConfig.generateAudio = true
         if (state.videoAspectRatio) veoConfig.aspectRatio = state.videoAspectRatio
         if (state.videoResolution) veoConfig.resolution = state.videoResolution
         if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds
-        // VEO accepts a seed but never reports it back, so the value we send is
-        // the one stored on the Asset.
-        const generationSeed = await this.resolveGenerationSeed(state, VEO_SEED_MAX)
-        veoConfig.seed = generationSeed
         if (generationConfig.negativePrompt) veoConfig.negativePrompt = generationConfig.negativePrompt
 
         // Video extension (Phase 6) is mutually exclusive with image/referenceImages
@@ -792,9 +795,6 @@ export class GoogleProvider extends BaseProvider {
             || veoConfig.resolution === '4k'
         if (requiresEightSeconds) veoConfig.durationSeconds = 8
         if (extensionVideo) veoConfig.resolution = '720p'
-        if (modelVersion.startsWith('veo-3.0') && veoConfig.resolution === '1080p') {
-            veoConfig.aspectRatio = '16:9'
-        }
 
         const usesImageConditioning = !!firstFrameImage || !!lastFrameImage
         // VEO validates personGeneration by input mode: text-to-video and extension
@@ -834,16 +834,17 @@ export class GoogleProvider extends BaseProvider {
             const startedAt = Date.now()
             let pollCount = 0
 
+            const source: Record<string, any> = { prompt }
             const veoParams: Record<string, any> = {
                 model: modelVersion,
-                prompt,
+                source,
                 config: veoConfig,
             }
             // VEO precedence: extension > first-frame > reference-images > text-only.
             if (extensionVideo) {
-                veoParams.video = extensionVideo
+                source.video = extensionVideo
             } else if (firstFrameImage) {
-                veoParams.image = firstFrameImage
+                source.image = firstFrameImage
             }
             // Nothing is published before the operation is accepted, so the
             // submit is safe to reattempt.
@@ -922,7 +923,6 @@ export class GoogleProvider extends BaseProvider {
                 responseId: typeof operation.name === 'string' ? operation.name : '',
                 revisedPrompt: prompt,
                 videoModelId: modelVersion,
-                generationSeed,
             })
         } catch (e: any) {
             const message = e?.message ?? String(e)

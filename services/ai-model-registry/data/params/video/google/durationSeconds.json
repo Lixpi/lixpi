@@ -1,0 +1,48 @@
+{
+    "key": "durationSeconds",
+    "category": "output-length",
+    "apiField": "config.durationSeconds",
+    "controlKey": "duration",
+    "type": "enum",
+    "values": [
+        "4",
+        "6",
+        "8"
+    ],
+    "providerDefault": "8",
+    "lixpiValue": "8",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Sets the requested clip length to 4, 6, or 8 seconds. The apparent choice narrows to 8 seconds when the request uses a first or last frame, typed reference images, video extension, 1080p, or 4k.",
+    "combines": [
+        "Lixpi normalizes frame-conditioned, extension, 1080p, and 4k requests to 8 seconds before sending them, so an otherwise valid matrix selection cannot reach Google as an incompatible combination.",
+        "Veo extension adds roughly seven seconds of new material even though the request must carry durationSeconds=8."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts, GoogleProvider.runVeoGeneration",
+        "code": "if (state.videoDurationSeconds) veoConfig.durationSeconds = state.videoDurationSeconds; if (requiresEightSeconds) veoConfig.durationSeconds = 8",
+        "from": "state.videoDurationSeconds, validated from the selected Veo model's Duration control",
+        "what": "Sends the selected duration and normalizes frame-conditioned, extension, 1080p, and 4k requests to eight seconds."
+    },
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "8",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ]
+}

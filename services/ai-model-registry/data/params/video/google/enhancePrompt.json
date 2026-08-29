@@ -1,0 +1,39 @@
+{
+    "key": "enhancePrompt",
+    "category": "prompt-control",
+    "apiField": "config.enhancePrompt",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "true",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Controls Google's prompt-rewriting layer before video generation. Turning it off preserves literal wording; leaving it on can expand short prompts, but may also alter carefully authored camera or timing instructions.",
+    "combines": [
+        "The current @google/genai converter sends parameters.enhancePrompt on both Gemini Developer API and Vertex paths.",
+        "Lixpi does not send this field because its prompts are already assembled by the reasoning pipeline; adopting it would create a second rewrite step whose effect must be evaluated first."
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateVideosConfig.html",
+        "https://raw.githubusercontent.com/googleapis/js-genai/main/src/converters/_models_converters.ts",
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation"
+    ]
+}

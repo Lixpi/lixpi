@@ -1,0 +1,40 @@
+{
+    "key": "service_tier",
+    "category": "job-control",
+    "apiField": "service_tier",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "default",
+        "flex"
+    ],
+    "providerDefault": "default",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Selects online default processing or lower-cost, higher-latency flex processing. BytePlus explicitly excludes Seedance 2.5 and the entire Seedance 2.0 series from flex, so every model in this group must use the default tier and must not send service_tier=flex.",
+    "combines": [
+        "Explicitly not supported on the Seedance 2.0 and 2.5 series."
+    ],
+    "supportedModels": [],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

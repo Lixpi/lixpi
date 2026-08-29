@@ -1,0 +1,13 @@
+{
+    "name": "@lixpi/ai-model-registry",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite --host 0.0.0.0",
+        "build": "vite build"
+    },
+    "devDependencies": {
+        "sass": "*",
+        "vite": "^6"
+    }
+}

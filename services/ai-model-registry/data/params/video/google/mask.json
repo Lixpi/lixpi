@@ -1,0 +1,45 @@
+{
+    "key": "mask",
+    "category": "masking-editing",
+    "apiField": "config.mask",
+    "controlKey": null,
+    "type": "object",
+    "values": [
+        "INSERT",
+        "REMOVE",
+        "outpainting modes"
+    ],
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Turns Veo into a video editor: insert a prompted object into a masked region on the first frame and carry it through, or track and remove an object.",
+    "combines": [
+        "Inpainting masks must match the input video's aspect ratio; outpainting masks must be 9:16 or 16:9.",
+        "This is a whole feature, not a toggle.",
+        "Vertex only. The mask editing path is absent from the Gemini Veo page, its parameter table and its feature table."
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Same for image masking in image models question, investigate how to present it in the ui, don't change anything, report to me",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

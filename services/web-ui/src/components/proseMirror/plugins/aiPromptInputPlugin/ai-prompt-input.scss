@@ -715,11 +715,11 @@
 
 .ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="aspectRatio"],
 .ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="resolution"],
-.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="duration"] {
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="duration"],
+.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="outputFormat"] {
     grid-column: auto;
 }
 
-.ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="cameraFixed"],
 .ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="watermark"],
 .ai-media-config-matrix[data-media-type="video"] .ai-media-config-control[data-control-key="returnLastFrame"] {
     grid-column: auto;

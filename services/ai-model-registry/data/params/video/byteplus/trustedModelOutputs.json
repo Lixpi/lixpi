@@ -1,0 +1,41 @@
+{
+    "key": "trustedModelOutputs",
+    "category": "reference-assets",
+    "apiField": "Trusted model outputs as input assets",
+    "controlKey": null,
+    "type": "behavior, not a parameter",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Face-containing outputs generated under the same account can be fed back in without tripping input moderation. Scope: face-containing videos from Seedance 2.5/2.0 (trusted from March 11, 2026), their last-frame images (from April 16, 2026), and face-containing images from Seedream 5.0 lite text-to-image (from April 16, 2026).",
+    "combines": [
+        "Supported on: input to Seedance 2.5 and Seedance 2.0 series",
+        "ModelArk outputs only, same account only, original files only. Secondary editing, compression, or forwarding can void the trust.",
+        "Trust applies to input moderation only; output can still be blocked by security moderation.",
+        "Only relevant when face moderation would trigger; face-free outputs are freely reusable.",
+        "Video URLs live 24 hours, so transfer to your own TOS bucket (TOS data subscription) before reusing."
+    ],
+    "range": "30-day validity from the output's generation time",
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/2608626"
+    ]
+}

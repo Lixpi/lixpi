@@ -256,12 +256,11 @@ export type MediaGenerationConfigControlKey =
     | 'generateAudio'
     | 'negativePrompt'
     | 'personGeneration'
-    | 'cameraFixed'
     | 'watermark'
     | 'returnLastFrame'
 
 export const MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT: Readonly<Partial<Record<MediaGenerationConfigControlKey, string>>> = {
-    cameraFixed: 'Keeps the camera stationary instead of allowing generated camera movement.',
+    generateAudio: 'Generates synchronized dialogue, sound effects, and music for the video.',
     watermark: 'Adds an AI-generated watermark to the lower-right corner of the output video.',
     returnLastFrame: 'Returns the final video frame as a separate image that can continue a video sequence.',
 }

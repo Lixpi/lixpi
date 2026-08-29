@@ -1,0 +1,45 @@
+{
+    "key": "negativePrompt",
+    "category": "prompt-control",
+    "apiField": "config.negativePrompt",
+    "controlKey": "negativePrompt",
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": "reasoning-derived per request",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Lists visible or audible elements the generated video should avoid, such as captions, logos, camera shake, or unwanted objects. It complements the positive prompt and should describe exclusions rather than restating the desired scene.",
+    "combines": [
+        "The video generation tool preserves an explicit user negative prompt; otherwise the reasoning model may derive only concrete unwanted output from the request.",
+        "The provider sanitizes the negative prompt with the same boundary policy as the main prompt before placing it in config.negativePrompt.",
+        "The current @google/genai converter maps negativePrompt on both Gemini Developer API and Vertex video paths."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/tools/video-generation.ts, services/api/src/llm/tools/video-router.ts, and GoogleProvider.runVeoGeneration",
+        "code": "if (generationConfig.negativePrompt) veoConfig.negativePrompt = generationConfig.negativePrompt",
+        "from": "the explicit generate_video negativePrompt or the reasoning model's provider-neutral video tool result",
+        "what": "Carries a sanitized native negative prompt through routing and sends it only to providers with a native field."
+    },
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "It must be populated based on what reasoning model decides to put there based on user's input. User may also provide explicit negative prompt, then it must be used as is",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://googleapis.github.io/js-genai/release_docs/interfaces/types.GenerateVideosConfig.html",
+        "https://raw.githubusercontent.com/googleapis/js-genai/main/src/converters/_models_converters.ts"
+    ]
+}

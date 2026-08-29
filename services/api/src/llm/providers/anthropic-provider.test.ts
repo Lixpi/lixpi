@@ -240,7 +240,10 @@ describe('AnthropicProvider', () => {
                         type: 'tool_use',
                         id: 'tool_2',
                         name: 'generate_video',
-                        input: { prompt: 'A drone shot rising over a foggy forest.' },
+                        input: {
+                            prompt: 'A drone shot rising over a foggy forest.',
+                            negativePrompt: 'no subtitles',
+                        },
                     }],
                     usage: { input_tokens: 5, output_tokens: 5 },
                 },
@@ -255,6 +258,7 @@ describe('AnthropicProvider', () => {
             const streamArgs = anthropicMocks.stream.mock.calls[0]?.[0]
             expect(streamArgs.tool_choice).toEqual({ type: 'tool', name: 'generate_video' })
             expect(result.generatedVideoPrompt).toBe('A drone shot rising over a foggy forest.')
+            expect(result.generatedVideoNegativePrompt).toBe('no subtitles')
             expect(result.generatedImagePrompt).toBeUndefined()
             expect(publisherState.error).not.toHaveBeenCalled()
         })

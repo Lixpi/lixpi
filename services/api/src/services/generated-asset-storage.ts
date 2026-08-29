@@ -3,9 +3,11 @@
 import * as process from 'node:process'
 
 import {
+    MEDIA_POLICY,
     getDynamoDbTableStageName,
     NATS_SUBJECTS,
     type Asset,
+    type AssetRenditionName,
     type AssetMediaComposition,
     type CanvasGeometryUpdate,
     type MediaBranchCandidateSnapshot,
@@ -205,6 +207,8 @@ export const settleGeneratedAssetOriginal = async ({
     width,
     height,
     generationSeed,
+    posterBuffer,
+    representativeFrameBuffer,
 }: {
     generationRun: MediaGenerationRunMeta
     workspaceId: string
@@ -215,11 +219,15 @@ export const settleGeneratedAssetOriginal = async ({
     width?: number
     height?: number
     generationSeed?: number
+    posterBuffer?: Buffer | null
+    representativeFrameBuffer?: Buffer | null
 }): Promise<{ assetId: string; organizationId: string; url: string }> => {
     const assetId = generationRun.lineageAssignment?.assetId
     if (!assetId) throw new Error('Generated media run is missing assetId')
     const asset = await getAssetRecord(assetId)
     if (!asset) throw new Error(`Pending Asset not found: ${assetId}`)
+    const mediaPolicy = MEDIA_POLICY[mimeType]
+    if (!mediaPolicy || mediaPolicy.kind !== kind) throw new Error(`GENERATED_ASSET_MEDIA_POLICY_MISMATCH:${mimeType}`)
     const blob = await BlobModel.store({
         organizationId: asset.organizationId,
         bytes: buffer,
@@ -236,12 +244,30 @@ export const settleGeneratedAssetOriginal = async ({
         }
         return { assetId, organizationId: asset.organizationId, url: `/api/assets/${assetId}/renditions/original` }
     }
+    const supplementalInputs: Array<{
+        name: Extract<AssetRenditionName, 'poster' | 'representativeFrame'>
+        buffer: Buffer
+    }> = [
+        ...(posterBuffer?.length ? [{ name: 'poster' as const, buffer: posterBuffer }] : []),
+        ...(representativeFrameBuffer?.length
+            ? [{ name: 'representativeFrame' as const, buffer: representativeFrameBuffer }]
+            : []),
+    ]
+    const supplementalBlobs = await Promise.all(supplementalInputs.map(async input => ({
+        ...input,
+        blob: await BlobModel.store({
+            organizationId: asset.organizationId,
+            bytes: input.buffer,
+            mimeType: 'image/png',
+            description: `generated-video-${input.name}.png`,
+        }),
+    })))
     const now = Date.now()
     const media: NonNullable<Asset['media']> = {
         kind,
         originalName,
         sourceMimeType: mimeType,
-        modelSafe: true,
+        modelSafe: mediaPolicy.modelSafe,
         ...(width && height ? { width, height, aspectRatio: width / height } : {}),
         renditions: {
             original: {
@@ -252,6 +278,14 @@ export const settleGeneratedAssetOriginal = async ({
                 byteSize: buffer.byteLength,
                 updatedAt: now,
             },
+            ...Object.fromEntries(supplementalBlobs.map(input => [input.name, {
+                name: input.name,
+                status: 'ready' as const,
+                blobHash: input.blob.blobHash,
+                mimeType: 'image/png',
+                byteSize: input.buffer.byteLength,
+                updatedAt: now,
+            }])),
         },
     }
     // The seed only exists once the provider has run, so it lands on the lineage
@@ -284,6 +318,19 @@ export const settleGeneratedAssetOriginal = async ({
                     },
                     now,
                 }),
+                ...supplementalBlobs.flatMap(input => buildBlobReferenceOperations({
+                    blob: input.blob,
+                    reference: {
+                        blobKey: input.blob.blobKey,
+                        blobHash: input.blob.blobHash,
+                        organizationId: input.blob.organizationId,
+                        referenceKey: `asset#${assetId}#rendition#${input.name}`,
+                        ownerType: 'asset',
+                        ownerId: assetId,
+                        createdAt: now,
+                    },
+                    now,
+                })),
                 {
                     type: 'update',
                     tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),

@@ -1,0 +1,43 @@
+{
+    "key": "resizeMode",
+    "category": "output-shape",
+    "apiField": "config.resizeMode",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "CROP",
+        "PAD"
+    ],
+    "providerDefault": "CROP",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "What happens when an input image does not match the requested aspect ratio: lose edges or gain bars.",
+    "combines": [
+        "Seedance always crops and centers; Veo lets you pick. Belongs next to the aspect-ratio control on image-conditioned generations.",
+        "Vertex only. Not documented for the Gemini Developer API, so crop-versus-pad is not selectable on our surface."
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

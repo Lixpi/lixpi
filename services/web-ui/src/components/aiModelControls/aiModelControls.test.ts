@@ -197,7 +197,10 @@ import {
 type MediaGenerationConfigSelectionGroup = {
     groupId: string
     modelIds: string[]
-    values: Partial<Record<'imageSize' | 'aspectRatio' | 'resolution' | 'duration' | 'cameraFixed', string>>
+    values: Partial<Record<
+        'imageSize' | 'aspectRatio' | 'resolution' | 'duration' | 'outputFormat' | 'generateAudio' | 'watermark',
+        string
+    >>
 }
 
 function resetMocks(): void {
@@ -541,9 +544,9 @@ describe('createMediaGenerationConfigMatrixView', () => {
                 ],
             },
             {
-                key: 'cameraFixed',
+                key: 'watermark',
                 kind: 'toggle',
-                label: 'Fixed camera',
+                label: 'Watermark',
                 defaultValue: 'false',
                 options: [
                     { value: 'false', label: 'Off' },
@@ -556,7 +559,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
             configGroups: [{
                 groupId: 'image:google/openai',
                 modelIds: ['google:imagen-4'],
-                values: { imageSize: '1:1', cameraFixed: 'false' },
+                values: { imageSize: '1:1', watermark: 'false' },
             }],
         })
         const view = createMediaGenerationConfigMatrixView(controls)
@@ -571,15 +574,15 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(view.dom.dataset.visible).toBe('true')
         expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(1)
         expect(toggle.getAttribute('aria-pressed')).toBe('false')
-        expect(toggleControl.querySelector('.ai-prompt-model-menu-control-label')?.textContent).toBe('Fixed camera')
+        expect(toggleControl.querySelector('.ai-prompt-model-menu-control-label')?.textContent).toBe('Watermark')
         expect(toggleControl.querySelector('.mock-help-tooltip')).not.toBeNull()
         expect(toggleControl.querySelector('.ai-media-config-description')).toBeNull()
         expect(mockState.helpTooltipConfigs.at(-1)).toMatchObject({
-            label: 'Fixed camera details',
+            label: 'Watermark details',
             text: expect.any(String),
         })
         expect(toggleConfig).toEqual(expect.objectContaining({
-            id: 'image:google/openai:google:imagen-4:cameraFixed',
+            id: 'image:google/openai:google:imagen-4:watermark',
             width: 30,
             height: 18,
             checked: false,
@@ -590,7 +593,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
             groupId: 'image:google/openai',
             modelIds: ['google:imagen-4'],
-            values: { imageSize: '1:1', cameraFixed: 'true' },
+            values: { imageSize: '1:1', watermark: 'true' },
         }])
         expect(toggle.getAttribute('aria-pressed')).toBe('true')
         expect(mockState.toggleSwitchInstances.at(-1)?.setChecked).toHaveBeenCalledWith(true)
@@ -654,6 +657,74 @@ describe('createMediaGenerationConfigMatrixView', () => {
             label: '1080p details',
             text: '1080p requires an 8 second duration.',
         })
+
+        view.destroy()
+    })
+
+    it('renders and persists the approved Seedance output format and audio controls', () => {
+        const videoGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
+            group.groupId === 'video:bytedance'
+        ))
+        videoGroup.controls = [
+            {
+                key: 'outputFormat',
+                label: 'Output format',
+                kind: 'segmented',
+                defaultValue: 'mov',
+                options: [
+                    { value: 'mp4', label: 'MP4' },
+                    { value: 'mov', label: 'MOV' },
+                ],
+            },
+            {
+                key: 'generateAudio',
+                label: 'Generate audio',
+                kind: 'toggle',
+                defaultValue: 'true',
+                options: [
+                    { value: 'true', label: 'On' },
+                    { value: 'false', label: 'Off' },
+                ],
+            },
+        ]
+        const controls = createControls({
+            mediaType: 'video',
+            selectedModelIds: ['bytedance:seedance'],
+            configGroups: [{
+                groupId: 'video:bytedance',
+                modelIds: ['bytedance:seedance'],
+                values: { generateAudio: 'false' },
+            }],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const outputFormatDropdown = mockState.slidingDropdownConfigs.find(config => config.id.endsWith(':outputFormat'))
+        const audioToggle = view.dom.querySelector('[data-control-key="generateAudio"] .ai-media-config-toggle') as HTMLButtonElement
+
+        expect(outputFormatDropdown.selectedValue).toBe('mov')
+        expect(outputFormatDropdown.options).toEqual([
+            { value: 'mp4', label: 'MP4' },
+            { value: 'mov', label: 'MOV' },
+        ])
+        expect(mockState.slidingSwitchConfigs.some(config => config.id.endsWith(':outputFormat'))).toBe(false)
+        expect(audioToggle.getAttribute('aria-pressed')).toBe('false')
+
+        outputFormatDropdown.onChange('mp4')
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
+            groupId: 'video:bytedance',
+            modelIds: ['bytedance:seedance'],
+            values: { outputFormat: 'mp4', generateAudio: 'false' },
+        }])
+
+        audioToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
+            groupId: 'video:bytedance',
+            modelIds: ['bytedance:seedance'],
+            values: { outputFormat: 'mp4', generateAudio: 'true' },
+        }])
 
         view.destroy()
     })

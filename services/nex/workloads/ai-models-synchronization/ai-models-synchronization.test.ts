@@ -240,31 +240,6 @@ describe('AiModelsSync — VEO video model mapping', () => {
         })
     })
 
-    it('maps veo-3.0-generate-001 with video + video_generation modalities, per-second pricing, and safe option lists', () => {
-        const model = sync.mapGoogleModelToAiModel({ name: 'veo-3.0-generate-001' }, 1)
-        const modalities = model.modalities.map((m: any) => m.modality)
-
-        expect(modalities).toContain('video_generation')
-        expect(modalities).toContain('video')
-        expect(modalities).not.toContain('image_generation')
-
-        expect(model.pricing.video?.measuringUnit).toBe('seconds')
-        expect(model.pricing.video?.price).toBe('0.40')
-
-        expect(model.videoAspectRatios?.map((o: any) => o.value)).toEqual(['16:9', '9:16'])
-        expect(model.videoResolutions?.map((o: any) => o.value)).toEqual(['720p', '1080p'])
-        expect(model.videoDurations?.map((o: any) => o.value)).toEqual(['8'])
-
-        expect(model.title).toBe('Veo 3')
-        expect(model.shortTitle).toBe('Veo 3')
-    })
-
-    it('maps the fast variant to the cheaper per-second price and a Fast title (prefix order matters)', () => {
-        const model = sync.mapGoogleModelToAiModel({ name: 'veo-3.0-fast-generate-001' }, 2)
-        expect(model.pricing.video?.price).toBe('0.15')
-        expect(model.title).toBe('Veo 3 Fast')
-    })
-
     it('maps the veo-3.1 preview family with friendly names and correct pricing', () => {
         const v31 = sync.mapGoogleModelToAiModel({ name: 'veo-3.1-generate-preview' }, 3)
         expect(v31.title).toBe('Veo 3.1')
@@ -309,12 +284,43 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(gemini.pricing.video).toBeUndefined()
     })
 
-    it('allows veo models through the Google contains blacklist', () => {
+    it('allows active veo models through the Google contains blacklist and explicitly retires shut-down ids', async () => {
         const containsBlacklist = (AiModelsSync as any).MODELS_BLACKLIST.Google.contains
+        const exactBlacklist = (AiModelsSync as any).MODELS_BLACKLIST.Google.exact
         expect(containsBlacklist).not.toContain('veo')
-        // Unrelated entries must remain blacklisted.
         expect(containsBlacklist).toContain('imagen')
         expect(containsBlacklist).toContain('lyria')
+        expect(exactBlacklist).toEqual(expect.arrayContaining([
+            'veo-2.0-generate-001',
+            'veo-3.0-generate-001',
+            'veo-3.0-fast-generate-001',
+        ]))
+
+        const originalGoogle = sync.google
+        sync.google = {
+            models: {
+                list: vi.fn(async () => ({
+                    async *[Symbol.asyncIterator]() {
+                        yield { name: 'models/veo-2.0-generate-001' }
+                        yield { name: 'models/veo-3.0-generate-001' }
+                        yield { name: 'models/veo-3.0-fast-generate-001' }
+                        yield { name: 'models/veo-3.1-generate-preview' }
+                        yield { name: 'models/veo-3.1-fast-generate-preview' }
+                        yield { name: 'models/veo-3.1-lite-generate-preview' }
+                    },
+                })),
+            },
+        }
+        try {
+            const models = await sync.fetchGoogleModels()
+            expect(models.map((model: any) => model.name)).toEqual([
+                'veo-3.1-generate-preview',
+                'veo-3.1-fast-generate-preview',
+                'veo-3.1-lite-generate-preview',
+            ])
+        } finally {
+            sync.google = originalGoogle
+        }
     })
 
     it('keeps existing image models intact (regression) — Nano Banana mapping unchanged', () => {
@@ -332,7 +338,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
 })
 
 // =============================================================================
-// BYTEPLUS / SEEDANCE 2.0 VIDEO MODEL SYNC — static injection (mirrors VEO)
+// BYTEPLUS / SEEDANCE VIDEO MODEL SYNC — static injection (mirrors VEO)
 // =============================================================================
 
 describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
@@ -353,9 +359,14 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(PROVIDER_NAMES).toContain('BytePlus')
     })
 
-    it('exposes both Seedance models in the static list', () => {
+    it('exposes every approved Seedance model in the static list', () => {
         const ids = sync.getBytePlusModels().map((m: any) => m.id)
-        expect(ids).toEqual(['dreamina-seedance-2-0-260128', 'dreamina-seedance-2-0-fast-260128'])
+        expect(ids).toEqual([
+            'dreamina-seedance-2-0-260128',
+            'dreamina-seedance-2-0-fast-260128',
+            'dreamina-seedance-2-0-mini-260615',
+            'dreamina-seedance-2-5-260628',
+        ])
     })
 
     it('maps dreamina-seedance-2-0-260128 with video modalities, token pricing, option lists, and a 9-image reference cap', () => {
@@ -380,12 +391,16 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         const controlsByKey = new Map(model.videoGenerationControls.map((control: any) => [control.key, control]))
         expect([...controlsByKey.keys()]).not.toContain('serviceTier')
         expect([...controlsByKey.keys()]).not.toContain('priority')
+        expect(controlsByKey.get('aspectRatio')).toMatchObject({ defaultValue: 'adaptive' })
         expect(controlsByKey.get('duration')).toMatchObject({ kind: 'duration' })
         expect(controlsByKey.get('duration').options.find((option: any) => option.value === '-1')).toMatchObject({
             description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
         })
-        expect(controlsByKey.get('cameraFixed')).toMatchObject({
-            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.cameraFixed,
+        expect([...controlsByKey.keys()]).not.toContain('cameraFixed')
+        expect(controlsByKey.get('generateAudio')).toMatchObject({
+            kind: 'toggle',
+            defaultValue: 'true',
+            description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.generateAudio,
         })
         expect(controlsByKey.get('watermark')).toMatchObject({
             description: MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.watermark,
@@ -405,6 +420,66 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
         expect(model.videoMaxReferenceImages).toBe(9)
         expect(model.title).toBe('Seedance 2.0 Fast')
         expect(model.shortTitle).toBe('Seedance 2.0 Fast')
+    })
+
+    it('maps Seedance 2.0 Mini with its 720p ceiling, 9-image cap, and lower pricing tier', () => {
+        const model = sync.mapBytePlusModelToAiModel({
+            id: 'dreamina-seedance-2-0-mini-260615',
+            displayName: 'Seedance 2.0 Mini',
+        }, 3)
+
+        expect(model.videoResolutions?.map((option: any) => option.value)).toEqual(['480p', '720p'])
+        expect(model.videoDurations?.map((option: any) => option.value)).toEqual([
+            '-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15',
+        ])
+        expect(model.videoMaxReferenceImages).toBe(9)
+        expect(model.pricing.video).toMatchObject({
+            measuringUnit: 'tokens',
+            pricePer: '1000000',
+            price: '3.5',
+            tiers: {
+                '480p': { withoutVideoInput: '3.5', withVideoInput: '2.1' },
+                '720p': { withoutVideoInput: '3.5', withVideoInput: '2.1' },
+            },
+        })
+        expect(model.title).toBe('Seedance 2.0 Mini')
+        expect(model.shortTitle).toBe('Seedance 2.0 Mini')
+    })
+
+    it('maps Seedance 2.5 with its 30-second range, MOV control, reference cap, and pricing tiers', () => {
+        const model = sync.mapBytePlusModelToAiModel({
+            id: 'dreamina-seedance-2-5-260628',
+            displayName: 'Seedance 2.5',
+        }, 3)
+        const controlsByKey = new Map(model.videoGenerationControls.map((control: any) => [control.key, control]))
+
+        expect(model.videoResolutions?.map((option: any) => option.value)).toEqual(['480p', '720p', '1080p'])
+        expect(model.videoDurations?.map((option: any) => option.value)).toEqual([
+            '-1',
+            ...Array.from({ length: 27 }, (_, index) => String(index + 4)),
+        ])
+        expect(model.videoMaxReferenceImages).toBe(30)
+        expect(model.pricing.video).toMatchObject({
+            measuringUnit: 'tokens',
+            pricePer: '1000000',
+            price: '11.7',
+            tiers: {
+                '480p': { withoutVideoInput: '10.7', withVideoInput: '6.4' },
+                '720p': { withoutVideoInput: '10.7', withVideoInput: '6.4' },
+                '1080p': { withoutVideoInput: '11.7', withVideoInput: '7.0' },
+            },
+        })
+        expect(controlsByKey.get('outputFormat')).toMatchObject({
+            kind: 'segmented',
+            defaultValue: 'mov',
+            options: [
+                { value: 'mp4', label: 'MP4' },
+                expect.objectContaining({ value: 'mov', label: 'MOV' }),
+            ],
+        })
+        expect(controlsByKey.get('generateAudio')).toMatchObject({ defaultValue: 'true' })
+        expect(model.title).toBe('Seedance 2.5')
+        expect(model.shortTitle).toBe('Seedance 2.5')
     })
 })
 

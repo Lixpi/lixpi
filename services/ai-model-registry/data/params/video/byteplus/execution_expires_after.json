@@ -1,0 +1,35 @@
+{
+    "key": "execution_expires_after",
+    "category": "job-control",
+    "apiField": "execution_expires_after",
+    "controlKey": null,
+    "type": "integer",
+    "range": "3600 to 259200 seconds",
+    "providerDefault": "172800",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Sets how long a queued or running task may exist before ModelArk terminates it as expired. The default is 172800 seconds (48 hours), the accepted range is 3600 to 259200 seconds, and expiry is independent of the generated video's duration.",
+    "combines": [],
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

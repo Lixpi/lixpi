@@ -1,0 +1,43 @@
+{
+    "key": "generate_audio",
+    "category": "audio",
+    "apiField": "generate_audio",
+    "controlKey": "generateAudio",
+    "type": "boolean",
+    "providerDefault": "true",
+    "lixpiValue": "true",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Turns synchronized mono speech, sound effects, and background music on or off. It changes the delivered media, not reference-audio input; disabling it produces a silent output even when the prompt describes sound.",
+    "combines": [
+        "Dialogue placed in double quotes inside the prompt improves the generated speech.",
+        "2.5 additionally accepts audio-only input; the 2.0 series requires at least one reference image or video."
+    ],
+    "usage": {
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and BytePlusProvider.runSeedanceGeneration",
+        "code": "generate_audio: generationConfig.generateAudio !== 'false'",
+        "from": "state.videoGenerationConfig.generateAudio, validated from the Generate audio toggle",
+        "what": "Sends the per-model audio choice, defaulting to BytePlus's documented true value."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "true",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

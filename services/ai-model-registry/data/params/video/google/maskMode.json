@@ -1,0 +1,49 @@
+{
+    "key": "maskMode",
+    "category": "masking-editing",
+    "apiField": "config.mask.maskMode",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "`insert` paints the prompt's object into a masked rectangle on the first frame and carries it through the clip. `remove` tracks an object identified in the first frame and deletes it. `remove_static` deletes objects inside a fixed region. `outpaint` treats the mask as the box the input video sits in and generates the surrounding area from the prompt.",
+    "combines": [
+        "Supported on: Vertex only",
+        "`insert`, `remove`, and `remove_static` masks must match the input video's aspect ratio.",
+        "`outpaint` masks may be 9:16 or 16:9, and video masks are not supported for outpainting (image masks only)."
+    ],
+    "values": [
+        "SDK: \"INSERT\"",
+        "\"REMOVE\"",
+        "\"REMOVE_STATIC\"",
+        "\"OUTPAINT\". Vertex REST: `insert",
+        "remove",
+        "remove_static",
+        "outpaint`."
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

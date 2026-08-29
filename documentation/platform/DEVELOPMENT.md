@@ -15,8 +15,11 @@ This guide gets Lixpi running locally. Everything runs in **Docker** via `docker
 | **api** | `services/api/` | Node.js / TypeScript gateway — auth, CRUD, DynamoDB, plus the in-process LangGraph LLM workflow (pipeline events, ProseMirror transcript steps, image generation, video generation) |
 | **nats** | `services/nats/` | NATS message bus (3-node cluster) |
 | **localauth0** | `services/localauth0/` | Mock Auth0 for zero-config offline dev (Rust — vendored `primait/localauth0` image) |
+| **ai-model-registry** | `services/ai-model-registry/` | Development-only provider model and parameter registry; all administration runs inside `lixpi-ai-model-registry` |
 
 See [System Architecture](./SYSTEM-ARCHITECTURE.md) for the full service responsibilities and the NATS backbone, and [Authentication](./AUTHENTICATION.md) for the auth model.
+
+The [AI Model Registry](../development-workflow/AI-MODEL-REGISTRY.md) defines the mandatory synchronization contract for provider model and parameter changes. Its registry API and maintenance tools run only inside the registry container.
 
 ## Quick Start
 

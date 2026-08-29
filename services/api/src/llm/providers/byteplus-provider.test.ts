@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
+    warn: vi.fn(),
     err: vi.fn(),
 }))
 
@@ -16,6 +17,7 @@ import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-def
 const byteplusMocks = vi.hoisted(() => ({
     createVideoGenerationTask: vi.fn(),
     pollVideoGenerationTask: vi.fn(),
+    downloadLastFrame: vi.fn(),
     downloadVideo: vi.fn(),
 }))
 
@@ -34,6 +36,7 @@ vi.mock('./byteplus-video-types.ts', async () => {
         ...actual,
         createVideoGenerationTask: byteplusMocks.createVideoGenerationTask,
         pollVideoGenerationTask: byteplusMocks.pollVideoGenerationTask,
+        downloadLastFrame: byteplusMocks.downloadLastFrame,
         downloadVideo: byteplusMocks.downloadVideo,
     }
 })
@@ -66,7 +69,7 @@ const setProviderPublishers = (provider: BytePlusProvider) => {
 const makeState = (overrides: Record<string, any> = {}) => ({
     workspaceId: 'ws-1',
     aiChatThreadId: 'thread-1',
-    modelVersion: 'seedance-2.0',
+    modelVersion: 'dreamina-seedance-2-0-260128',
     messages: [{ role: 'user', content: 'A cat riding a motorcycle through a city at night.' }],
     enableVideoGeneration: true,
     videoResolution: '1080p',
@@ -84,6 +87,7 @@ describe('BytePlusProvider', () => {
         delete process.env.ARK_API_KEY
         byteplusMocks.createVideoGenerationTask.mockReset()
         byteplusMocks.pollVideoGenerationTask.mockReset()
+        byteplusMocks.downloadLastFrame.mockReset()
         byteplusMocks.downloadVideo.mockReset()
         generatedAssetStorageMocks.resolveInheritedGenerationSeed.mockReset()
         generatedAssetStorageMocks.resolveInheritedGenerationSeed.mockResolvedValue(undefined)
@@ -100,53 +104,6 @@ describe('BytePlusProvider', () => {
         process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
         const provider = new BytePlusProvider('ws:thread:video', noopDeps)
         expect(provider.providerName).toBe('BytePlus')
-    })
-
-    const runSucceedingGeneration = async (stateOverrides: Record<string, any>) => {
-        process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
-        const provider = new BytePlusProvider('ws-1:thread-1:video', makeDeps())
-        setProviderPublishers(provider)
-        byteplusMocks.createVideoGenerationTask.mockResolvedValueOnce({ id: 'seedance-task-1' })
-        byteplusMocks.pollVideoGenerationTask.mockResolvedValueOnce({
-            id: 'seedance-task-1',
-            status: 'succeeded',
-            content: { video_url: 'https://byteplus.local/video.mp4' },
-        })
-        byteplusMocks.downloadVideo.mockResolvedValueOnce(Buffer.from('video-bytes'))
-        await (provider as any).streamImpl(makeState(stateOverrides))
-        return byteplusMocks.createVideoGenerationTask.mock.calls[0]?.[1]
-    }
-
-    const lineageState = {
-        generationRun: {
-            generationRequestId: 'request-1',
-            lineageAssignment: { assetId: 'pending-asset' },
-        },
-    }
-
-    it('reuses the seed inherited from the continued or referenced Asset', async () => {
-        generatedAssetStorageMocks.resolveInheritedGenerationSeed.mockResolvedValue(555)
-
-        const submittedPayload = await runSucceedingGeneration(lineageState)
-
-        expect(generatedAssetStorageMocks.resolveInheritedGenerationSeed).toHaveBeenCalledWith({
-            assetId: 'pending-asset',
-            maxValue: 2147483647,
-        })
-        expect(submittedPayload?.seed).toBe(555)
-    })
-
-    it('generates a fresh seed when regenerating instead of repeating the rejected output', async () => {
-        generatedAssetStorageMocks.resolveInheritedGenerationSeed.mockResolvedValue(555)
-
-        const submittedPayload = await runSucceedingGeneration({
-            ...lineageState,
-            isMediaRegenerationRun: true,
-        })
-
-        expect(generatedAssetStorageMocks.resolveInheritedGenerationSeed).not.toHaveBeenCalled()
-        expect(submittedPayload?.seed).not.toBe(555)
-        expect(Number.isSafeInteger(submittedPayload?.seed)).toBe(true)
     })
 
     it('falls back to ARK_API_KEY', () => {
@@ -199,7 +156,7 @@ describe('BytePlusProvider', () => {
             hasAudio: true,
             responseId: 'seedance-task-1',
             revisedPrompt: 'A cat riding a motorcycle through a city at night.',
-            videoModelId: 'seedance-2.0',
+            videoModelId: 'dreamina-seedance-2-0-260128',
             generationSeed: 4242,
         })
         expect(completeArgs).toMatchObject({
@@ -209,13 +166,16 @@ describe('BytePlusProvider', () => {
         })
         const submittedPayload = byteplusMocks.createVideoGenerationTask.mock.calls[0]?.[1]
         expect(submittedPayload).toMatchObject({
-            camera_fixed: true,
+            duration: 6,
+            resolution: '1080p',
+            ratio: '16:9',
+            generate_audio: true,
             watermark: true,
             return_last_frame: true,
         })
-        // The seed is generated per request now that it is not a user control.
-        expect(Number.isSafeInteger(submittedPayload?.seed)).toBe(true)
-        expect(submittedPayload?.seed).toBeGreaterThan(0)
+        expect(submittedPayload).not.toHaveProperty('camera_fixed')
+        expect(submittedPayload).not.toHaveProperty('seed')
+        expect(generatedAssetStorageMocks.resolveInheritedGenerationSeed).not.toHaveBeenCalled()
         expect(submittedPayload).not.toHaveProperty('service_tier')
         expect(submittedPayload).not.toHaveProperty('priority')
         expect(result).toEqual(expect.objectContaining({
@@ -229,6 +189,57 @@ describe('BytePlusProvider', () => {
                 totalTokens: 222,
                 responseId: 'seedance-task-1',
             },
+        }))
+    })
+
+    it('sends approved Seedance 2.5 controls and persists the returned last frame and MOV container', async () => {
+        process.env.BYTEPLUS_ARK_API_KEY = 'test-key'
+        const provider = new BytePlusProvider('ws-1:thread-1:video', makeDeps())
+        const publisherState = setProviderPublishers(provider)
+        const lastFrame = Buffer.from('last-frame-png')
+
+        byteplusMocks.createVideoGenerationTask.mockResolvedValueOnce({ id: 'seedance-25-task' })
+        byteplusMocks.pollVideoGenerationTask.mockResolvedValueOnce({
+            id: 'seedance-25-task',
+            status: 'succeeded',
+            content: {
+                video_url: 'https://byteplus.local/video.mov',
+                last_frame_url: 'https://byteplus.local/last-frame.png',
+            },
+            output_format: 'mov',
+            duration: 12,
+            resolution: '1080p',
+            ratio: 'adaptive',
+        })
+        byteplusMocks.downloadVideo.mockResolvedValueOnce(Buffer.from('video-bytes'))
+        byteplusMocks.downloadLastFrame.mockResolvedValueOnce(lastFrame)
+
+        await (provider as any).streamImpl(makeState({
+            modelVersion: 'dreamina-seedance-2-5-260628',
+            videoFirstFrameImage: 'data:image/png;base64,Zmlyc3Q=',
+            videoGenerationConfig: {
+                generateAudio: 'false',
+                outputFormat: 'mov',
+                returnLastFrame: 'true',
+            },
+        }))
+
+        const submittedPayload = byteplusMocks.createVideoGenerationTask.mock.calls[0]?.[1]
+        expect(submittedPayload).toMatchObject({
+            model: 'dreamina-seedance-2-5-260628',
+            ratio: 'adaptive',
+            generate_audio: false,
+            output_format: 'mov',
+            return_last_frame: true,
+        })
+        expect(byteplusMocks.downloadLastFrame).toHaveBeenCalledWith(
+            'https://byteplus.local/last-frame.png',
+            expect.any(AbortSignal),
+        )
+        expect(publisherState.complete).toHaveBeenCalledWith(expect.objectContaining({
+            frameBuffer: lastFrame,
+            hasAudio: false,
+            containerFormat: 'mov',
         }))
     })
 

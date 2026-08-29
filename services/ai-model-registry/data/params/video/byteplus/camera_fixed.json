@@ -1,0 +1,38 @@
+{
+    "key": "camera_fixed",
+    "category": "camera",
+    "apiField": "camera_fixed",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Requests a fixed camera by appending a provider instruction to the prompt, but the result is not guaranteed. BytePlus limits the field to Seedance 1.5 Pro and 1.0 models, so every current Seedance 2.x model rejects it.",
+    "combines": [
+        "Not available on any Seedance model Lixpi ships."
+    ],
+    "usage": {},
+    "supportedModels": [],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/2298881"
+    ]
+}

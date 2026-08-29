@@ -28,6 +28,8 @@ Lixpi runs as a small set of containerized services plus a managed datastore. Sh
 | **nex** | Node.js / TypeScript | `services/nex/` | NATS NEX execution-engine node — runs background workloads on the bus: the hourly AI-models catalog sync and heavy file conversion/frame extraction. See [NEX Execution Engine](./deployment/NEX-EXECUTION-ENGINE.md) |
 | **DynamoDB** | AWS (local via Docker) | — | Asset/Blob metadata and references, Workspaces, Capabilities, Capability Runs, users, and AI model metadata |
 
+The development-only [AI Model Registry](../development-workflow/AI-MODEL-REGISTRY.md) runs separately from the production topology. It records provider models, parameters, compatibility, implementation state, and configuration-control decisions that must match NEX model synchronization, API provider code, and the web configuration matrix.
+
 {% callout type="note" %}
 **Historical note.** LLM orchestration used to live in a separate Python `services/llm-api/` Fargate task using the Python LangGraph package. It was absorbed into `services/api` once the TypeScript LangGraph package covered Lixpi's workflow needs. The in-process LangGraph workflow now runs alongside the gateway logic in the `api` container. For the internal-service NATS auth pattern that the former Python service used — and that a future split would reuse — see [Internal Service NATS Auth Pattern](../knowledge/INTERNAL-SERVICE-NATS-AUTH-PATTERN.md).
 {% /callout %}

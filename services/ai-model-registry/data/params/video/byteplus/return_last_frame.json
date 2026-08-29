@@ -1,0 +1,43 @@
+{
+    "key": "return_last_frame",
+    "category": "job-control",
+    "apiField": "return_last_frame",
+    "controlKey": "returnLastFrame",
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": "user-selected",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Requests a separate watermark-free PNG of the generated video's final frame at the same pixel dimensions. The frame is useful for continuity because it can become the exact first_frame of the next task; it is unavailable in the Seedance 1.5 draft workflow, which is outside this group.",
+    "combines": [
+        "Its purpose is chaining: feed the frame back as the next task's first_frame for a continuous sequence.",
+        "Not supported in draft mode."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts, BytePlusProvider.runSeedanceGeneration",
+        "code": "return_last_frame: generationConfig.returnLastFrame === 'true'; download content.last_frame_url when returned",
+        "from": "state.videoGenerationConfig.returnLastFrame, validated from the Return last frame toggle",
+        "what": "Requests the final frame, downloads the returned PNG, and stores it with the generated Asset."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

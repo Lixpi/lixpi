@@ -1,0 +1,45 @@
+{
+    "key": "duration",
+    "category": "output-length",
+    "apiField": "duration",
+    "controlKey": "duration",
+    "type": "integer",
+    "range": "4 to 15, or -1 for model-chosen",
+    "providerDefault": "5",
+    "lixpiValue": "-1",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Sets output length in whole seconds; -1 delegates the choice to the model. Seedance 2.0, Fast, and Mini accept 4 to 15 seconds or -1, while Seedance 2.5 accepts 4 to 30 seconds or -1.",
+    "combines": [
+        "The returned duration is floor(frames / 24) and can read a second short of the real length.",
+        "2.0 series: 4 to 15 whole seconds or -1, default 5. 2.5: 4 to 30 whole seconds or -1, default -1."
+    ],
+    "usage": {
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and BytePlusProvider.runSeedanceGeneration",
+        "code": "const duration = Number(state.videoDurationSeconds) || undefined; ...(duration ? { duration } : {})",
+        "from": "state.videoDurationSeconds, validated from the selected Seedance model's Duration control",
+        "what": "Sends -1 or a whole-second value from the selected model's documented range."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/1330310"
+    ]
+}

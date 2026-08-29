@@ -1,0 +1,43 @@
+{
+    "key": "numberOfVideos",
+    "category": "sampling",
+    "apiField": "config.numberOfVideos",
+    "controlKey": "outputCount",
+    "type": "integer",
+    "providerDefault": "1",
+    "lixpiValue": "1",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "How many candidate videos one request returns. On the Gemini Developer API the answer to 'what is the maximum' is 1: the Veo 3.1 model card states 'Output video: 1', so the field cannot be raised there.",
+    "combines": [
+        "Vertex AI exposes the same knob as sampleCount and does allow more than one candidate, but Lixpi builds every GoogleGenAI client with an apiKey, so only the Gemini Developer API limit applies.",
+        "Lixpi pins it to 1 anyway: the canvas creates one node per generation, so extra candidates would have nowhere to land."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts, GoogleProvider.runVeoGeneration",
+        "code": "const veoConfig = { numberOfVideos: 1, abortSignal: this.signal }",
+        "from": "fixed provider configuration",
+        "what": "Pins the Gemini Developer API request to its one-video output limit."
+    },
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "What is the max value supported by this model?",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ]
+}

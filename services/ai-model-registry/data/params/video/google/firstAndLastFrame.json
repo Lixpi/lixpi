@@ -1,0 +1,50 @@
+{
+    "key": "firstAndLastFrame",
+    "category": "reference-assets",
+    "apiField": "image + config.lastFrame",
+    "controlKey": null,
+    "type": "object pair",
+    "providerDefault": null,
+    "lixpiValue": "both frames, from videoFirstFrameImage plus the first videoReferenceImages entry",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Interpolates a clip whose opening frame must match the first image and whose ending frame must match the second image. This is frame anchoring, not ASSET or STYLE reference conditioning.",
+    "combines": [
+        "Supported on all active Veo 3.1 models through the Gemini Developer API and Vertex.",
+        "`lastFrame` goes in `config`, while the first frame goes in the top-level `image`.",
+        "Restricts `personGeneration` to `allow_adult`.",
+        "Not combinable with `referenceImages` or `video`."
+    ],
+    "values": [
+        "image/jpeg",
+        "image/png for both frames"
+    ],
+    "range": "exactly 2 images, one first frame and one last frame",
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:782-852",
+        "code": "source.image = firstFrameImage; veoConfig.lastFrame = lastFrameImage; veoConfig.durationSeconds = 8",
+        "from": "state.videoFirstFrameImage plus the first distinct state.videoReferenceImages entry",
+        "what": "Sends the first image through source.image, the second through config.lastFrame, and forces the compatible eight-second duration."
+    }
+}

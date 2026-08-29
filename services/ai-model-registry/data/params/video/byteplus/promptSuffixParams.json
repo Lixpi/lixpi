@@ -1,0 +1,40 @@
+{
+    "key": "promptSuffixParams",
+    "category": "prompt-control",
+    "apiField": "--parameter suffix form",
+    "controlKey": null,
+    "type": "string suffix appended to `content.text`",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A legacy way to set output specs by appending flags to the prompt text instead of using body fields. Example: `\"The kitten is yawning at the camera. --rs 720p --rt 16:9 --dur 5 --seed 11 --cf false --wm true\"`.",
+    "combines": [
+        "Supported on: all models, for `resolution`, `ratio`, `duration`, `frames`, `seed`, `camera_fixed`, `watermark` only",
+        "Weak validation: invalid or unsupported parameters are ignored or cause an error. Body parameters use strict validation and return an error for anything invalid, which is why the docs recommend the body form.",
+        "No documented flags exist for `generate_audio`, `output_format`, `omni_reference_task_type`, `return_last_frame`, `draft`, `service_tier`, `priority`, `callback_url`, `execution_expires_after`, or `safety_identifier`."
+    ],
+    "range": "same ranges as the corresponding body parameters",
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/2298881"
+    ]
+}

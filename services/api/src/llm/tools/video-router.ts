@@ -174,6 +174,12 @@ export class VideoRouter {
         const capabilityReferenceImages = state.capabilityReferenceImages ?? []
         const capabilityUsagePrompt = state.capabilityUsagePrompt?.trim()
         const referenceCount = videoReferenceImages?.length ?? 0
+        const videoGenerationConfig = {
+            ...state.videoGenerationConfig,
+            ...(state.generatedVideoNegativePrompt
+                ? { negativePrompt: state.generatedVideoNegativePrompt }
+                : {}),
+        }
 
         info(`[VideoRouter] invocation chain ${JSON.stringify({
             workspaceId,
@@ -217,7 +223,7 @@ export class VideoRouter {
                 videoAspectRatio: state.videoAspectRatio,
                 videoResolution: state.videoResolution,
                 videoDurationSeconds: state.videoDurationSeconds,
-                videoGenerationConfig: state.videoGenerationConfig,
+                videoGenerationConfig,
                 videoFirstFrameImage: state.videoFirstFrameImage,
                 videoReferenceImages,
                 videoSourceForExtension: state.videoSourceForExtension,

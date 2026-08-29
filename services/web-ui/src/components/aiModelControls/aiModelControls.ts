@@ -165,7 +165,10 @@ function isDimensionValueControl(control: MediaGenerationConfigControl): boolean
 }
 
 function usesSlidingDropdown(control: MediaGenerationConfigControl): boolean {
-    return isDimensionValueControl(control) || control.kind === 'duration' || control.key === 'duration'
+    return isDimensionValueControl(control)
+        || control.kind === 'duration'
+        || control.key === 'duration'
+        || control.key === 'outputFormat'
 }
 
 function rendersDimensionGlyph(

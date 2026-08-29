@@ -1,0 +1,52 @@
+{
+    "key": "cameraControl",
+    "category": "camera",
+    "apiField": "instances.cameraControl",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Applies a named camera move to the generated video instead of describing it in the prompt.",
+    "combines": [
+        "Supported on: Vertex only (`VideoGenerationModelInstance.cameraControl`); not present in `@google/genai` `GenerateVideosParameters` and not documented on the Gemini API",
+        "Only usable when `image` is also provided."
+    ],
+    "values": [
+        "fixed",
+        "pan_left",
+        "pan_right",
+        "tilt_up",
+        "tilt_down",
+        "truck_left",
+        "truck_right",
+        "pedestal_up",
+        "pedestal_down",
+        "push_in",
+        "pull_out"
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

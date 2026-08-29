@@ -1,0 +1,53 @@
+{
+    "key": "ratio",
+    "category": "output-shape",
+    "apiField": "ratio",
+    "controlKey": "aspectRatio",
+    "type": "enum",
+    "values": [
+        "16:9",
+        "4:3",
+        "1:1",
+        "3:4",
+        "9:16",
+        "21:9",
+        "adaptive"
+    ],
+    "providerDefault": "adaptive",
+    "lixpiValue": "adaptive",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Sets the output aspect ratio or lets adaptive inherit it from the task and input. Seedance 2.5 requires adaptive for first-frame, first-and-last-frame, edit, and extend tasks; Seedance 2.0, Fast, and Mini permit an explicit ratio but may center-crop a mismatched input image.",
+    "combines": [
+        "If the requested ratio disagrees with the first frame, ModelArk center-crops the input image.",
+        "Lixpi and ByteDance both default to adaptive.",
+        "2.5 locks this to adaptive for video editing, video extension, and first-frame or first-and-last-frame tasks. The 2.0 series accepts an explicit ratio for every task type."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts, BytePlusProvider.runSeedanceGeneration",
+        "code": "const ratio = isSeedance25 && (hasFirstFrame || hasLastFrame) ? 'adaptive' : state.videoAspectRatio",
+        "from": "state.videoAspectRatio, validated from the selected Seedance model's Aspect ratio dropdown",
+        "what": "Sends the selected ratio and normalizes Seedance 2.5 frame-conditioned requests to adaptive."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "adaptive",
+    "note": "",
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ],
+    "unsupportedModels": [],
+    "unsupportedApis": []
+}

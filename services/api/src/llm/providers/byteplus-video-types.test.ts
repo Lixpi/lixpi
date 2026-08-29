@@ -6,6 +6,7 @@ import {
     SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE,
     buildSeedanceContent,
     createVideoGenerationTask,
+    downloadLastFrame,
     downloadVideo,
     pollVideoGenerationTask,
     retrieveVideoGenerationTask,
@@ -86,6 +87,7 @@ describe('createVideoGenerationTask', () => {
             ratio: '16:9',
             duration: 5,
             generate_audio: true,
+            output_format: 'mov',
             watermark: false,
         }
         const res = await createVideoGenerationTask(config, payload)
@@ -96,7 +98,13 @@ describe('createVideoGenerationTask', () => {
         expect(init.method).toBe('POST')
         expect(init.headers.Authorization).toBe('Bearer secret-key')
         expect(init.headers['Content-Type']).toBe('application/json')
-        expect(JSON.parse(init.body)).toMatchObject({ model: 'dreamina-seedance-2-0-260128', resolution: '720p', ratio: '16:9', duration: 5 })
+        expect(JSON.parse(init.body)).toMatchObject({
+            model: 'dreamina-seedance-2-0-260128',
+            resolution: '720p',
+            ratio: '16:9',
+            duration: 5,
+            output_format: 'mov',
+        })
     })
 
     it('throws a BytePlusModelArkError preserving error.code and HTTP status on failure', async () => {
@@ -147,6 +155,18 @@ describe('downloadVideo', () => {
 
         await expect(downloadVideo('https://cdn/expired.mp4'))
             .rejects.toMatchObject({ name: 'BytePlusModelArkError', httpStatus: 404 })
+    })
+})
+
+describe('downloadLastFrame', () => {
+    it('returns the last-frame PNG bytes as a Buffer', async () => {
+        const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        const fetchMock = vi.fn(async () => new Response(bytes, { status: 200 }))
+        vi.stubGlobal('fetch', fetchMock)
+
+        const buffer = await downloadLastFrame('https://cdn/x.png')
+        expect(Buffer.isBuffer(buffer)).toBe(true)
+        expect(buffer).toEqual(Buffer.from(bytes))
     })
 })
 

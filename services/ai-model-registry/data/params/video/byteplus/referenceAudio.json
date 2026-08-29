@@ -1,0 +1,50 @@
+{
+    "key": "referenceAudio",
+    "category": "reference-assets",
+    "apiField": "content[].audio_url.url",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "- (required when `type` is `audio_url`)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Adds audio material for the model to follow when generating speech, music, timing, or sound design. Seedance 2.5 permits audio-only input; Seedance 2.0, Fast, and Mini require at least one image or video alongside reference audio.",
+    "combines": [
+        "Supported on: Seedance 2.5, Seedance 2.0 series",
+        "Formats: `wav`, `mp3`.",
+        "Seedance 2.5: each clip 2–30 s, up to 10 clips, total <= 30 s. Seedance 2.0 series: each clip 2–15 s, up to 3 clips, total <= 15 s.",
+        "Each audio file <= 15 MB; request body <= 64 MB.",
+        "Seedance 2.5 accepts audio-only input; the 2.0 series does not and requires at least one reference image or video.",
+        "All generated audio is mono regardless of input channel count.",
+        "2.5 accepts up to 10 audio clips, 2 to 30 seconds each and 30 seconds total, and allows audio-only input. The 2.0 series accepts up to 3, 2 to 15 seconds each and 15 seconds total, and requires an image or video alongside."
+    ],
+    "values": [
+        "public audio URL",
+        "data:audio/<format>;base64",
+        "<data>` (format lowercase)",
+        "or `asset://<ASSET_ID>"
+    ],
+    "range": "see limits below",
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-0-mini-260615",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/2607688"
+    ]
+}

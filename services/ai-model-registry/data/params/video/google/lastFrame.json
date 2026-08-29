@@ -1,0 +1,44 @@
+{
+    "key": "lastFrame",
+    "category": "reference-assets",
+    "apiField": "config.lastFrame",
+    "controlKey": null,
+    "type": "object (`Image`: `imageBytes` + `mimeType`, or `gcsUri` on Vertex)",
+    "providerDefault": null,
+    "lixpiValue": "veoConfig.lastFrame, set at google-provider.ts:788 as the stop frame",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Pins the final frame of an interpolation request. It is invalid by itself and must be paired with the opening source image, so the two frames describe a transition rather than two independent references.",
+    "combines": [
+        "Supported on all active Veo 3.1 models through the Gemini Developer API and Vertex.",
+        "Only valid together with the top-level `image`; it cannot be used alone.",
+        "Not allowed with `referenceImages` or `video`."
+    ],
+    "supportedModels": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:782-852",
+        "code": "if (lastFrameImage) veoConfig.lastFrame = lastFrameImage",
+        "from": "the first distinct state.videoReferenceImages entry after the opening frame",
+        "what": "Converts the second selected frame to Gemini image bytes, sends it in config.lastFrame, and forces an eight-second request."
+    }
+}

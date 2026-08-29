@@ -1,0 +1,13 @@
+{
+    "providerId": "google",
+    "providerTitle": "Google",
+    "apiName": "Gemini API",
+    "groupId": "veo-video",
+    "title": "Veo 3.1",
+    "models": [
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "docs": "https://ai.google.dev/gemini-api/docs/veo"
+}

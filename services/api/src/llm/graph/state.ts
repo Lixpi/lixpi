@@ -201,6 +201,7 @@ export type ProviderState = {
     videoDurationSeconds?: number | undefined
     videoGenerationConfig?: Partial<Record<MediaGenerationConfigControlKey, string>> | undefined
     generatedVideoPrompt?: string | undefined
+    generatedVideoNegativePrompt?: string | undefined
     videoFirstFrameImage?: string | undefined
     videoReferenceImages?: string[] | undefined
     videoSourceForExtension?: string | undefined
