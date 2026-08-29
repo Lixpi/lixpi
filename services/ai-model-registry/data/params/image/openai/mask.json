@@ -16,9 +16,6 @@
     ],
     "range": "under 4MB, same dimensions as `image`",
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [

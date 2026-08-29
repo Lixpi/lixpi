@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "A target number of tokens for the model's internal reasoning, on models whose thinkingMode is google-budget. 0 disables thinking, -1 hands the decision back to the model, and any positive value is a target rather than a hard cap. The valid range and the default both vary by model.",
+    "summary": "Sets a target number of internal thinking tokens on older Gemini models. Zero disables thinking, minus one delegates the choice to the model, and positive ranges vary by model. Lixpi omits it on Gemini 2.5 so the provider applies the reviewed model default; Gemini 3.x uses thinkingLevel instead.",
     "combines": [
         "This is the Gemini 2.5-era control. Google now recommends thinkingLevel instead for Gemini 3 and later, and says not to send both in one request.",
         "Thinking tokens are billed as output tokens, so the budget is a direct cost lever.",
@@ -16,7 +16,9 @@
     ],
     "range": "0 disables, -1 automatic, positive values are model-dependent",
     "supportedModels": [
-        "gemini reasoning models with thinkingMode google-budget or google-level"
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -28,8 +30,13 @@
     "irrelevant": false,
     "fixedValue": "auto",
     "defaultValue": "",
-    "note": "",
-    "unsupportedModels": [],
+    "note": "Gemini 2.5 provider-managed default. Lixpi deliberately omits the field rather than presenting model-specific token ranges as one portable control.",
+    "unsupportedModels": [
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite"
+    ],
     "unsupportedApis": [],
     "sources": [
         "https://ai.google.dev/gemini-api/docs/thinking"

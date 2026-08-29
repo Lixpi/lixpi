@@ -6,9 +6,9 @@
     "type": "number",
     "providerDefault": "1",
     "lixpiValue": null,
-    "currentState": "hidden",
+    "currentState": "absent",
     "availability": "unsupported",
-    "summary": "Sampling randomness. Higher is more varied, lower more deterministic.",
+    "summary": "Sampling randomness is not the supported quality control for the synchronized GPT reasoning models and non-default values are incompatible with reasoning execution. Lixpi omits it and exposes effort, mode where supported, and answer verbosity instead.",
     "combines": [
         "Supported on: gpt-4o, gpt-4.1 and other non-reasoning models. REJECTED with a 400 `Unsupported parameter` / \"not supported with this model\" on o-series (o1, o1-mini, o3, o3-mini, o4-mini) and on gpt-5 family reasoning models. Reported exception: `gpt-5.1` accepts it when `reasoning.effort` is `none`. `gpt-5-chat-latest` / `gpt-5.x-chat-latest` are non-reasoning chat models and accept it.",
         "Adjust this or `top_p`, not both.",
@@ -21,16 +21,21 @@
         "openai-responses",
         "openai-chat-completions"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
-    "irrelevant": false,
+    "status": "none",
+    "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Show as slider",
+    "note": "Not sent by current GPT reasoning model profiles. Use reasoning effort and prompting.",
     "unsupportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "unsupportedApis": [],
     "sources": [

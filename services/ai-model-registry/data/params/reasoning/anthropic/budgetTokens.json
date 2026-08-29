@@ -21,21 +21,24 @@
     "range": "minimum 1,024; normally must be less than `max_tokens`",
     "supportedModels": [
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
     "defaultValue": "",
     "note": "",
     "unsupportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
+        "claude-opus-4-7",
         "claude-sonnet-5"
     ],
     "unsupportedApis": [],

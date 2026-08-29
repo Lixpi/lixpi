@@ -12,7 +12,7 @@
     "lixpiValue": "high where the model allows it",
     "currentState": "hidden",
     "availability": "supported",
-    "summary": "How hard the model works to preserve fine detail from the input images when editing: faces, logos, text, and other features that a normal edit tends to redraw. low is the API default; high keeps those details noticeably closer to the source.",
+    "summary": "Controls how strongly editing/reference inputs are preserved. GPT Image 2 always uses its current high-fidelity behavior, so Lixpi keeps this internal and relies on the synchronized reference capability profile instead of exposing a no-op choice.",
     "combines": [
         "It costs real money. high adds roughly 4,096 image input tokens for a square input and 6,144 for a non-square one, on top of the normal per-tile cost.",
         "Edit path only. It has no meaning on a pure text-to-image request, which is why openai-provider.ts sends it at :603 and not at :613.",
@@ -26,24 +26,20 @@
         "what": "How hard the model works to match the faces and style in reference images. Only sent on the edit path, since there are no references to be faithful to otherwise."
     },
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [
         "openai-images",
         "openai-responses-image-tool"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
-    "defaultValue": "high",
-    "note": "Make a research what it actually means and what implications it has, update explanation here",
-    "unsupportedModels": [
-        "gpt-image-1-mini"
-    ],
+    "defaultValue": "",
+    "note": "Provider/model-managed for GPT Image 2; not a user control.",
+    "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
         "https://developers.openai.com/api/reference/resources/images/methods/edit"

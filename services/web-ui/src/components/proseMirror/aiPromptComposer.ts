@@ -37,6 +37,9 @@ export type AiPromptComposerSubmitData = {
     useMultipleReasoningModels: boolean
     useMultipleImageModels: boolean
     useMultipleVideoModels: boolean
+    reasoningOptions?: {
+        configGroups?: MediaGenerationConfigSelectionGroup[]
+    }
     imageOptions?: {
         aiImageModels: string[]
         imageGenerationSize: string

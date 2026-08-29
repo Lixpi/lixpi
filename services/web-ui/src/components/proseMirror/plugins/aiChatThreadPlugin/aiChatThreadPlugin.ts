@@ -75,6 +75,10 @@ type ImageOptions = {
     configGroups?: MediaGenerationConfigSelectionGroup[]
 }
 
+type ReasoningOptions = {
+    configGroups?: MediaGenerationConfigSelectionGroup[]
+}
+
 type VideoOptions = {
     aiVideoModels: string[]
     videoAspectRatio?: string
@@ -92,6 +96,7 @@ type SendAiRequestHandler = (data: AiInteractionChatSubmitPayload & {
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
+    reasoningOptions?: ReasoningOptions
     imageOptions?: ImageOptions
     videoOptions?: VideoOptions
     referenceNodeIds?: string[]
@@ -2419,6 +2424,7 @@ class AiChatThreadPluginClass {
         const {
             mediaGenerationMode: rawMediaGenerationMode = 'image',
             aiReasoningModels = '',
+            reasoningGenerationConfigGroups = '',
             useMultipleReasoningModels = false,
             useMultipleImageModels = false,
             useMultipleVideoModels = false,
@@ -2446,6 +2452,7 @@ class AiChatThreadPluginClass {
         const rawReasoningModelIds = parseAiModelSelectionAttr(aiReasoningModels)
         const rawImageModelIds = parseAiModelSelectionAttr(aiImageModels)
         const rawVideoModelIds = parseAiModelSelectionAttr(aiVideoModels)
+        const reasoningConfigGroups = parseMediaGenerationConfigSelectionAttr(reasoningGenerationConfigGroups)
         const imageConfigGroups = parseMediaGenerationConfigSelectionAttr(imageGenerationConfigGroups)
         const videoConfigGroups = parseMediaGenerationConfigSelectionAttr(videoGenerationConfigGroups)
         // Multi disabled → only the first selected model is used for that section.
@@ -2504,6 +2511,9 @@ class AiChatThreadPluginClass {
             imageGenerationSize,
             ...(imageConfigGroups.length > 0 ? { configGroups: imageConfigGroups } : {}),
         } : undefined
+        const reasoningOptions = reasoningConfigGroups.length > 0 ? {
+            configGroups: reasoningConfigGroups,
+        } : undefined
 
         // Build video generation options if a video model is selected. The
         // sourceVideoNodeId is preserved through the thread node attrs and only
@@ -2542,6 +2552,7 @@ class AiChatThreadPluginClass {
             useMultipleVideoModels: videoModelsEnabled,
             conversationAssetId: threadId,
             referenceNodeIds,
+            reasoningOptions,
             imageOptions,
             videoOptions,
         }

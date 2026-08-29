@@ -13,7 +13,11 @@
     "currentState": "hidden",
     "availability": "supported",
     "summary": "Tells generateContent to return an image alongside text. Required plumbing, not a user choice.",
-    "combines": [],
+    "combines": [
+        "The array must include `IMAGE` for native image output. Lixpi sends both `TEXT` and `IMAGE` so the provider may return explanatory text with the pixels.",
+        "It is required with image-capable Gemini models and composes with `imageConfig` aspect ratio and resolution settings.",
+        "Changing this value would change the response contract consumed by the image publisher, so it is pipeline plumbing rather than a user preference."
+    ],
     "usage": {
         "setIn": "services/api/src/llm/providers/google-provider.ts:279",
         "code": "config.responseModalities = ['TEXT', 'IMAGE']",
@@ -21,21 +25,21 @@
         "what": "Tells generateContent to return image parts alongside text. Required plumbing for the Nano Banana path, not a creative choice."
     },
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
         "vertex-ai"
     ],
     "decision": "internal",
-    "reviewed": false,
+    "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "",
+    "fixedValue": "TEXT,IMAGE",
     "defaultValue": "",
-    "note": "",
+    "note": "Required internally for native image output.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

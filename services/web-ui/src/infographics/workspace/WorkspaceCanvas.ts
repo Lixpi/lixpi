@@ -6436,6 +6436,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         useMultipleReasoningModels,
                         useMultipleImageModels,
                         useMultipleVideoModels,
+                        reasoningConfigGroups: submittedData.reasoningOptions?.configGroups,
                         aiImageModels: imageOptions?.aiImageModels,
                         imageSize: imageOptions?.imageGenerationSize,
                         imageConfigGroups: imageOptions?.configGroups,
@@ -6602,6 +6603,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
         const imageGenerationConfigGroups = data.imageOptions
             ? serializeMediaGenerationConfigSelectionAttr(data.imageOptions.configGroups ?? [])
             : ''
+        const reasoningGenerationConfigGroups = data.reasoningOptions
+            ? serializeMediaGenerationConfigSelectionAttr(data.reasoningOptions.configGroups ?? [])
+            : ''
         const videoGenerationConfigGroups = data.videoOptions
             ? serializeMediaGenerationConfigSelectionAttr(data.videoOptions.configGroups ?? [])
             : ''
@@ -6614,6 +6618,7 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                         threadId,
                         mediaGenerationMode: data.mediaGenerationMode,
                         aiReasoningModels,
+                        ...(reasoningGenerationConfigGroups ? { reasoningGenerationConfigGroups } : {}),
                         useMultipleReasoningModels,
                         useMultipleImageModels,
                         useMultipleVideoModels,
@@ -13100,6 +13105,9 @@ export function createWorkspaceCanvas(options: WorkspaceCanvasOptions) {
                             mediaGenerationMode: generation?.mediaGenerationMode
                                 ?? (generation?.outputMediaTypes?.includes('video') ? 'video' : 'image'),
                             aiReasoningModels: serializeAiModelSelectionAttr(selection.reasoningModelIds ?? []),
+                            reasoningGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(
+                                generation?.reasoningOptions?.configGroups ?? [],
+                            ),
                             useMultipleReasoningModels: (selection.reasoningModelIds?.length ?? 0) > 1,
                             useMultipleImageModels: imageModelIds.length > 1,
                             useMultipleVideoModels: videoModelIds.length > 1,

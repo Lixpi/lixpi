@@ -972,7 +972,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         ])
     })
 
-    it('applies model-specific image config groups and normalizes invalid option values', async () => {
+    it('applies model-specific reasoning and image config groups and normalizes invalid option values', async () => {
         // Note: outputMediaTypes collapses to a single scalar media type per
         // request (see normalizeRequest()'s `.slice(0, 1)`), so image and video
         // config-group fanout cannot be exercised in the same process() call —
@@ -988,6 +988,15 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                     model: 'claude-sonnet-4-6',
                     modelVersion: 'claude-sonnet-4-6',
                     modalities: [{ modality: 'text' }],
+                    reasoningGenerationControls: [
+                        {
+                            key: 'reasoningEffort',
+                            label: 'Reasoning effort',
+                            kind: 'segmented',
+                            options: [{ value: 'low' }, { value: 'high' }],
+                            defaultValue: 'high',
+                        },
+                    ],
                 } as any
             }
             if (model === 'gemini-image-a') {
@@ -997,6 +1006,22 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                     modelVersion: 'gemini-image-a',
                     modalities: [{ modality: 'image_generation' }],
                     imageSizes: [{ value: '256x256' }, { value: '512x512' }],
+                    imageGenerationControls: [
+                        {
+                            key: 'imageSize',
+                            label: 'Resolution',
+                            kind: 'segmented',
+                            options: [{ value: '256x256' }, { value: '512x512' }],
+                            defaultValue: '256x256',
+                        },
+                        {
+                            key: 'quality',
+                            label: 'Quality',
+                            kind: 'segmented',
+                            options: [{ value: 'auto' }, { value: 'high' }],
+                            defaultValue: 'auto',
+                        },
+                    ],
                 } as any
             }
             return {
@@ -1005,6 +1030,22 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 modelVersion: 'gemini-image-b',
                 modalities: [{ modality: 'image_generation' }],
                 imageSizes: [{ value: '1024x1024' }, { value: '2048x2048' }],
+                imageGenerationControls: [
+                    {
+                        key: 'imageSize',
+                        label: 'Resolution',
+                        kind: 'segmented',
+                        options: [{ value: '1024x1024' }, { value: '2048x2048' }],
+                        defaultValue: '1024x1024',
+                    },
+                    {
+                        key: 'quality',
+                        label: 'Quality',
+                        kind: 'segmented',
+                        options: [{ value: 'auto' }, { value: 'high' }],
+                        defaultValue: 'auto',
+                    },
+                ],
             } as any
         })
 
@@ -1024,13 +1065,22 @@ describe('MediaGenerationMatrixOrchestrator', () => {
                 videoModelIds: [],
                 useMultipleImageModels: true,
                 useMultipleVideoModels: false,
+                reasoningOptions: {
+                    configGroups: [
+                        {
+                            groupId: 'reasoning',
+                            modelIds: ['Anthropic:claude-sonnet-4-6'],
+                            values: { reasoningEffort: 'low' },
+                        },
+                    ],
+                },
                 imageOptions: {
                     imageSize: '1024x1024',
                     configGroups: [
                         {
                             groupId: 'img-a',
                             modelIds: ['Google:gemini-image-a'],
-                            values: { imageSize: 'invalid-size' },
+                            values: { imageSize: 'invalid-size', quality: 'high' },
                         },
                         {
                             groupId: 'img-b',
@@ -1049,6 +1099,7 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         }))
 
         const state = registry.process.mock.calls[0]?.[2] as any
+        expect(state.reasoningGenerationConfig).toEqual({ reasoningEffort: 'low' })
         expect(state.mediaFanoutPlan.imageConfigGroups).toHaveLength(2)
         expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-a')).toBe(true)
         expect(state.mediaFanoutPlan.imageConfigGroups.some((group: any) => group.groupId === 'img-b')).toBe(true)
@@ -1056,9 +1107,15 @@ describe('MediaGenerationMatrixOrchestrator', () => {
         // back to the model's first available option.
         expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-a']).toMatchObject({
             imageSize: '256x256',
+            quality: 'high',
         })
         expect(state.mediaFanoutPlan.imageModelOptions?.['Google:gemini-image-b']).toMatchObject({
             imageSize: '1024x1024',
+            quality: 'auto',
+        })
+        expect(state.imageGenerationConfig).toEqual({
+            imageSize: '256x256',
+            quality: 'high',
         })
     })
 

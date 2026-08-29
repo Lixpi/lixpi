@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Requests a natural-language summary of the model's reasoning, useful for showing \"thinking\" in a UI. `auto` yields the most detailed summarizer the model offers.",
+    "summary": "Requests a provider-generated summary of internal reasoning. This is not the private chain of thought, but it still adds response items that the pipeline must parse, persist, and render consistently before the field can be enabled.",
     "combines": [
         "Supported on: reasoning models; `concise` is supported for `computer-use-preview` and all reasoning models after `gpt-5`",
         "When streaming, arrives as `response.reasoning_summary_text.delta` / `.done` events, separate from `response.output_text.delta`.",
@@ -20,8 +20,13 @@
         "detailed"
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
@@ -29,11 +34,11 @@
     ],
     "decision": "internal",
     "reviewed": true,
-    "status": "approved",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
-    "fixedValue": "detailed",
+    "fixedValue": "",
     "defaultValue": "",
-    "note": "It must be integrated in the timeline pipeline",
+    "note": "Requires separate streamed reasoning-summary parsing, persistence, and UI. It was deliberately not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

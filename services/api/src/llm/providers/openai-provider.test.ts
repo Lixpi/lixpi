@@ -129,6 +129,11 @@ const processWithCharacterReferences = async (
         enableImageGeneration: true,
         preflightResolved: true,
         imageSize: '1536x1024',
+        imageGenerationConfig: {
+            imageSize: '1536x1024',
+            quality: 'high',
+            background: 'transparent',
+        },
         aiModelMetaInfo: {
             provider: 'OpenAI',
             model: modelVersion,
@@ -200,6 +205,9 @@ describe('OpenAIProvider panel-reference ingestion', () => {
 
         expect(captured.request.url).toBe('https://api.openai.com/v1/images/edits')
         expect(captured.formData.get('model')).toBe('gpt-image-2')
+        expect(captured.formData.get('quality')).toBe('high')
+        expect(captured.formData.get('background')).toBe('transparent')
+        expect(captured.formData.get('output_format')).toBe('png')
         expect(prompt).toContain('INPUT IMAGE ORDER')
         expect(prompt).toContain('INPUT IMAGE 1 — AUTHORITATIVE ORIGINAL SOURCE')
         expect(prompt).toContain('INPUT IMAGE 2 — FACE IDENTITY CROP')
@@ -260,17 +268,67 @@ describe('OpenAIProvider panel-reference ingestion', () => {
         )
     })
 
-    it.each(['gpt-image-1', 'gpt-image-1.5'])(
-        'applies synchronized high-fidelity request metadata for %s',
-        async modelVersion => {
-            const captured = await processWithCharacterReferences(modelVersion, 'high')
-            expect(captured.formData.get('input_fidelity')).toBe('high')
-        },
-    )
+    it('applies high-fidelity request metadata from synchronized capabilities', async () => {
+        const captured = await processWithCharacterReferences('gpt-image-high-fidelity-fixture', 'high')
+        expect(captured.formData.get('input_fidelity')).toBe('high')
+    })
 
     it('does not infer an input-fidelity request from the model name', async () => {
-        const captured = await processWithCharacterReferences('gpt-image-1', 'standard')
+        const captured = await processWithCharacterReferences('gpt-image-2', 'provider-managed')
 
         expect(captured.formData.get('input_fidelity')).toBeNull()
+    })
+
+    it('forwards synchronized reasoning controls to the Responses API', async () => {
+        const provider = new OpenAIProvider('workspace-1:thread-1:reasoning-1', makeDeps())
+        const create = vi.fn(async () => ({
+            [Symbol.asyncIterator]: async function* () {
+                yield {
+                    type: 'response.completed',
+                    response: { id: 'response-1', output: [] },
+                }
+            },
+        }))
+        ;(provider as any).client.responses.create = create
+        ;(provider as any).abortController = new AbortController()
+
+        await (provider as any).generateViaResponsesApi({
+            state: {
+                aiModelMetaInfo: {
+                    provider: 'OpenAI',
+                    model: 'gpt-5.6-sol',
+                    modelVersion: 'gpt-5.6-sol',
+                    inferenceCapabilities: {
+                        ...OPENAI_INFERENCE_CAPABILITIES,
+                        supportsTemperature: false,
+                    },
+                },
+                reasoningGenerationConfig: {
+                    reasoningEffort: 'max',
+                    reasoningMode: 'pro',
+                    reasoningVerbosity: 'high',
+                },
+            },
+            inputMessages: [{ role: 'user', content: 'Solve this.' }],
+            modelVersion: 'gpt-5.6-sol',
+            instructions: undefined,
+            temperature: 0.7,
+            maxTokens: 4096,
+            tools: undefined,
+            hasImageModel: false,
+            hasVideoModel: false,
+            enableImageGeneration: false,
+            enableVideoGeneration: false,
+            workspaceId: 'workspace-1',
+            aiChatThreadId: 'thread-1',
+        })
+
+        expect(create).toHaveBeenCalledWith(expect.objectContaining({
+            model: 'gpt-5.6-sol',
+            reasoning: { effort: 'max', mode: 'pro' },
+            text: { verbosity: 'high' },
+            max_output_tokens: 4096,
+        }), expect.any(Object))
+        expect(create.mock.calls[0]?.[0]).not.toHaveProperty('temperature')
     })
 })

@@ -2,18 +2,18 @@
     "key": "thinkingLevel",
     "category": "reasoning",
     "apiField": "config.thinkingConfig.thinkingLevel",
-    "controlKey": null,
+    "controlKey": "thinkingLevel",
     "type": "enum",
     "providerDefault": "model-dependent",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Reasoning depth as a named level rather than a token count, on models whose thinkingMode is google-level. Accepts minimal, low, medium, and high. This is the control Google recommends for Gemini 3 and later.",
+    "summary": "Selects Gemini reasoning depth using named levels. Higher levels improve difficult multi-step work but increase latency and billed output tokens. The supported levels and default vary by model, so the synchronized catalog supplies a separate option matrix for each compatibility set.",
     "combines": [
-        "Defaults differ per model rather than being one constant: Gemini 3 defaults to high, while Gemini 3.1 defaults to minimal to keep latency down. Read the default off the model, not off the parameter.",
-        "Gemini 2.5 models accept low, medium, and high but not minimal.",
-        "Mutually exclusive with thinkingBudget in practice: Google says do not send both in the same request.",
-        "It is the cleanest fit for a segmented control, since the four levels are a fixed named set."
+        "Gemini 3.7 Flash supports low, medium and high and defaults to medium.",
+        "Gemini 3.6 Flash and Gemini 3.5 Flash support minimal, low, medium and high and default to medium.",
+        "Gemini 3.5 Flash-Lite supports the same four levels and defaults to minimal.",
+        "Do not combine with thinkingBudget; the two controls belong to different model generations."
     ],
     "values": [
         "minimal",
@@ -22,7 +22,10 @@
         "high"
     ],
     "supportedModels": [
-        "gemini reasoning models with thinkingMode google-budget or google-level"
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -34,8 +37,12 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
-    "unsupportedModels": [],
+    "note": "Exposed only on Gemini 3.x models, using each model's documented level set and default. Gemini 2.5 keeps provider-managed budget thinking.",
+    "unsupportedModels": [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
+    ],
     "unsupportedApis": [],
     "sources": [
         "https://ai.google.dev/gemini-api/docs/thinking"

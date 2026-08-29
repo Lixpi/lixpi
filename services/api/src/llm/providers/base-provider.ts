@@ -389,6 +389,7 @@ export abstract class BaseProvider {
             modelVersion: requestData.aiModelMetaInfo?.modelVersion,
             maxCompletionSize: requestData.aiModelMetaInfo?.maxCompletionSize,
             temperature: requestData.aiModelMetaInfo?.defaultTemperature ?? 0.7,
+            reasoningGenerationConfig: requestData.reasoningGenerationConfig,
             streamActive: false,
             aiRequestReceivedAt: Date.now(),
             enableImageGeneration: requestData.enableImageGeneration ?? false,
@@ -396,6 +397,7 @@ export abstract class BaseProvider {
             imageModelMetaInfo: requestData.imageModelMetaInfo,
             imageModelVersion: requestData.imageModelMetaInfo?.modelVersion,
             imageProviderName: requestData.imageModelMetaInfo?.provider,
+            imageGenerationConfig: requestData.imageGenerationConfig,
             generatedImagePrompt: requestData.generatedImagePrompt
                 ?? (requestData.capabilityMediaExecutionPlan
                     ? requestData.providerSafeMediaIntent?.safePrompt
@@ -1075,6 +1077,7 @@ export abstract class BaseProvider {
                 imageModelVersion: imageModelMetaInfo.modelVersion,
                 imageProviderName: imageModelMetaInfo.provider as ProviderName,
                 imageSize: imageModelOptions?.imageSize ?? state.mediaFanoutPlan?.imageSize ?? state.imageSize,
+                imageGenerationConfig: imageModelOptions,
                 eventMeta: this.mediaGenerationRunPlanner.buildEventMeta(state.eventMeta, generationRun),
             }
             const replayPrompt = state.mediaFanoutPlan?.replayPrompts?.find(prompt =>

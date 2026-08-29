@@ -9,12 +9,13 @@
     "lixpiValue": "1",
     "currentState": "absent",
     "availability": "supported",
-    "summary": "How many images one request returns.",
-    "combines": [],
+    "summary": "Number of final images returned by one Image API request. GPT Image 2 accepts 1 through 10; increasing it multiplies output volume, image-token cost, processing time, settlement work, and the number of branches the UI must represent.",
+    "combines": [
+        "The selected size, quality, background, and output format apply to every returned image, so higher `n` multiplies the cost of those choices.",
+        "`partial_images` controls progressive previews and does not replace `n`; previews must still be associated with the correct final output.",
+        "Lixpi currently settles one output per media run. Multi-output identity, progress, placement, and lineage require the separate implementation investigation recorded on this parameter."
+    ],
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [

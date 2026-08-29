@@ -276,10 +276,17 @@ export class GoogleProvider extends BaseProvider {
 
         if (effectiveImageGen) {
             config.responseModalities = ['TEXT', 'IMAGE']
-            if (imageSize && imageSize !== 'auto') {
-                config.imageConfig = { aspectRatio: imageSize }
+            const requestedResolution = state.imageGenerationConfig?.resolution
+            if ((imageSize && imageSize !== 'auto') || requestedResolution) {
+                config.imageConfig = {
+                    ...(imageSize && imageSize !== 'auto' ? { aspectRatio: imageSize } : {}),
+                    ...(requestedResolution ? { imageSize: requestedResolution } : {}),
+                }
             }
         }
+
+        const thinkingLevel = state.reasoningGenerationConfig?.thinkingLevel
+        if (thinkingLevel) config.thinkingConfig = { thinkingLevel }
 
         if (injectTool || injectVideoTool || capabilityToolExecutor) {
             if (injectTool) {
@@ -323,7 +330,10 @@ export class GoogleProvider extends BaseProvider {
         if (systemInstruction) config.systemInstruction = systemInstruction
 
         if (effectiveImageGen && capabilities.thinkingMode === 'google-level') {
-            config.thinkingConfig = { includeThoughts: true }
+            config.thinkingConfig = {
+                ...config.thinkingConfig,
+                includeThoughts: true,
+            }
         }
 
         const update: Partial<ProviderState> = {}
@@ -355,6 +365,7 @@ export class GoogleProvider extends BaseProvider {
                     model: modelVersion,
                     responseModalities: config.responseModalities,
                     aspectRatio: (config as any).imageConfig?.aspectRatio ?? 'auto',
+                    imageSize: (config as any).imageConfig?.imageSize ?? 'provider-default',
                     temperature,
                     maxOutputTokens: maxTokens,
                     contentsCount: contents.length,

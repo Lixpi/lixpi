@@ -16,10 +16,10 @@
         "Read it as the inverse of faithfulness: higher means more freedom to invent, not more influence from the reference."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:39, used on the Bedrock path only",
-        "code": "BEDROCK_IMAGE_TO_IMAGE_STRENGTH = { 'style-control': 0.65, 'structure-control': 0.35, 'style-transfer': 0.6 }",
-        "from": "a constant per routing mode",
-        "what": "How far the model may move from the init image. Bedrock has no control endpoints, so every reference mode collapses onto image-to-image and this constant is what stands in for the control-specific knob."
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:410 through :413",
+        "code": "body.strength = BEDROCK_IMAGE_TO_IMAGE_STRENGTH[routingMode]",
+        "from": "a pipeline-owned value selected by style, structure, or style-transfer routing mode",
+        "what": "Controls how far Bedrock may move from the primary reference after direct Stability control routes are degraded to image-to-image."
     },
     "supportedModels": [
         "stability-ultra",
@@ -29,16 +29,18 @@
         "stability-v2beta",
         "bedrock"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "note": "Derived internally from the provider-neutral reference role when Bedrock degrades reference routing to image-to-image.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html"
     ]
 }

@@ -255,10 +255,17 @@ describe('aiChatThreadPlugin — request payload construction', () => {
     it('forwards valid image generation config groups to imageOptions', async () => {
         const sendAiRequestHandler = vi.fn()
         const plugin = createPlugin(sendAiRequestHandler)
+        const reasoningGenerationConfigGroups = JSON.stringify([
+            {
+                groupId: 'reasoning-effort',
+                modelIds: ['Anthropic:claude-sonnet-4-6'],
+                values: { reasoningEffort: 'high' },
+            },
+        ])
         const imageGenerationConfigGroups = JSON.stringify([
             {
                 groupId: 'image-quality',
-                modelIds: ['Google:gemini-2.5-flash-image'],
+                modelIds: ['Google:gemini-3.1-flash-image'],
                 values: {
                     quality: 'high',
                     style: 'cinematic',
@@ -272,8 +279,9 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                     {
                         threadId: 'thread-image-config',
                         aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
+                        reasoningGenerationConfigGroups,
                         useMultipleImageModels: true,
-                        aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
+                        aiImageModels: JSON.stringify(['Google:gemini-3.1-flash-image']),
                         imageGenerationConfigGroups,
                     },
                     [makeUserMessage('Image config group test')]
@@ -292,11 +300,18 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         await Promise.resolve()
 
         const payload = sendAiRequestHandler.mock.calls.at(-1)?.[0]
+        expect(payload.reasoningOptions).toEqual({
+            configGroups: [{
+                groupId: 'reasoning-effort',
+                modelIds: ['Anthropic:claude-sonnet-4-6'],
+                values: { reasoningEffort: 'high' },
+            }],
+        })
         expect(payload.imageOptions).toMatchObject({
             configGroups: [
                 {
                     groupId: 'image-quality',
-                    modelIds: ['Google:gemini-2.5-flash-image'],
+                    modelIds: ['Google:gemini-3.1-flash-image'],
                     values: {
                         quality: 'high',
                         style: 'cinematic',

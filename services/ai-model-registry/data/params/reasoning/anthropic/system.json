@@ -19,22 +19,25 @@
         "or an array of `TextBlockParam"
     ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
     ],
     "decision": "internal",
-    "reviewed": false,
+    "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Authored by the orchestration pipeline; never a model-settings UI field.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

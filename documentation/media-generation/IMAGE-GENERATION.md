@@ -1,13 +1,13 @@
 ---
 title: Image Generation
-description: The image branch of the shared AI generation pipeline — the OpenAI Image API / Responses API / Gemini-native provider paths, reference-image extraction, the image system-prompt enhancement, sizes and options, dedup, multi-turn editing, and image-specific stream nuances.
+description: The image branch of the shared AI generation pipeline, including current provider routes, synchronized model controls, reference adaptation, deduplication, editing, and image-specific stream behavior.
 ---
 
 # Image Generation
 
-Image generation is the **image branch** of Lixpi's shared AI generation pipeline. A user-selected **text model** (Claude, GPT, or Gemini) reads the conversation — including any reference photos — writes an exhaustive image prompt, and emits a `generate_image` tool call; the workflow routes that prompt to an independently-selected **image model** (OpenAI GPT Image, an OpenAI Responses-API model, or Gemini native) which synthesizes the pixels. The finished image lands on the workspace canvas as an `ImageCanvasNode` with full provenance, ready to be piped into later threads or branched into edits.
+Image generation is the image branch of Lixpi's shared AI generation pipeline. A selected reasoning model reads the authorized conversation and reference context, writes the image prompt, and emits a `generate_image` tool call. The workflow routes that prompt to an independently selected OpenAI, Google, or Stability image model. The finished image lands on the workspace canvas as an `ImageCanvasNode` with full provenance and can be used as context for later requests.
 
-This page covers what is specific to image generation: the three image-model provider execution paths, how reference images are extracted from each provider's message format, the image system-prompt instructions, image sizes and hardcoded options, content-hash dedup, multi-turn editing, and the image-specific stream-event details. The shared LangGraph workflow, dual-model routing, tool schema, post-stream router, `ProviderState`, `ImageRouter`, and stream lifecycle are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
+This page covers the current image-model provider paths, synchronized model controls, reference adaptation, prompt construction, content-hash deduplication, multi-turn editing, and image-specific stream behavior. The shared workflow, model-matrix routing, `ProviderState`, `ImageRouter`, and stream lifecycle are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
 The shared workflow, dual-model routing, tool injection/extraction mechanism, and `ImageRouter` live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection live in [Branch Lineage](./BRANCH-LINEAGE.md). Uploaded/source/reference images can anchor placement, but only API-selected existing generated-media branch members become `parentMediaNodeId` connector parents. The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md).
@@ -25,78 +25,67 @@ graph LR
     Validate -->|accepted| Exec[executeImageGeneration<br/>ImageRouter]
     Validate -->|rejected| Usage[calculateUsage]
     Exec --> Router{image model<br/>provider path}
-    Router -->|gpt-image-*| ImgAPI[OpenAI Image API<br/>images.generate / images.edit]
-    Router -->|gpt-4.1 / gpt-5| RespAPI[OpenAI Responses API<br/>image_generation tool]
-    Router -->|gemini-*| Gemini[Gemini native<br/>generate_content]
+    Router -->|gpt-image-2| ImgAPI[OpenAI Image API<br/>images.generate / images.edit]
+    Router -->|Gemini image model| Gemini[Gemini native<br/>generateContent]
+    Router -->|Stable Image model| Stability[Stability image endpoint]
     ImgAPI --> Usage
-    RespAPI --> Usage
     Gemini --> Usage
+    Stability --> Usage
 ```
 
 | Provider path | Selected when | API surface |
 |---------------|---------------|-------------|
-| OpenAI GPT Image | image model id starts with `gpt-image-` | `client.images.generate()` / `client.images.edit()` |
-| OpenAI Responses API | image model is a mainline OpenAI model (`gpt-4.1`, `gpt-5`, …) | `responses.create()` with the built-in `image_generation` tool |
-| Gemini native | image model is an image-capable Google model | `generate_content()` with `response_modalities: ['TEXT', 'IMAGE']` |
+| OpenAI GPT Image | `gpt-image-2` | `client.images.generate()` or `client.images.edit()` |
+| Gemini native | `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, or `gemini-3-pro-image` | `generateContent()` with `responseModalities: ['TEXT', 'IMAGE']` |
+| Stability | `stability-ultra` or `sd3.5-large` | The model-specific Stability text-to-image or control endpoint |
 
 ## Image Model Provider Paths
 
-All three paths receive the same input from the `ImageRouter`: the text model's enhanced prompt as the user message, plus the VLM-approved reference images as content blocks, plus `image_size`. They are invoked with `enable_image_generation: true`, which is what makes the transient image provider skip its own `START_STREAM` / `END_STREAM` and route into the image path rather than the normal text path. They differ only in the vendor API and in how partial frames (if any) are produced.
+All three providers receive the same provider-neutral input from `ImageRouter`: the enhanced prompt, the VLM-approved reference set, the selected per-model generation configuration, and the synchronized model metadata. `enableImageGeneration: true` routes the transient provider into its image path and keeps the parent reasoning run responsible for the text stream lifecycle.
 
-### OpenAI — GPT Image Models (`gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`)
+### OpenAI GPT Image 2
 
-GPT Image models use the dedicated **Image API**, *not* the Responses API. The provider's `_stream_impl` dispatches on the model prefix:
+The synchronized OpenAI image catalog contains `gpt-image-2`. It uses the dedicated Image API. `streamImpl()` dispatches any `gpt-image-*` image route to `generateViaImageApi()`:
 
 ```text
-if enable_image_generation and model_version.startswith('gpt-image-'):
-    → _generate_via_image_api()      # Image API
+if enableImageGeneration && modelVersion.startsWith('gpt-image-'):
+    -> generateViaImageApi()
 else:
-    → _generate_via_responses_api()   # Responses API
+    -> generateViaResponsesApi()
 ```
 
 Within the Image API path, the presence of reference images selects the endpoint:
 
 | Condition | Call | Notes |
 |-----------|------|-------|
-| No reference images | `client.images.generate(stream=True, partial_images=3)` | Text-to-image. |
-| With reference images | `client.images.edit(image=files, stream=True, partial_images=3)` | `images.edit()` is the endpoint that accepts reference images; `images.generate()` is text-only. |
+| No reference images | `client.images.generate({ stream: true, partial_images: 3 })` | Text-to-image. |
+| With reference images | `client.images.edit({ image: files, stream: true, partial_images: 3 })` | `images.edit()` accepts the adapted reference files. |
 
-Reference-image data URLs are converted to `BytesIO` file objects via `_data_url_to_file()` before being passed to the SDK. The streaming response yields `ImageGenPartialImageEvent` objects (each carrying progressive base64) and a terminal `ImageGenCompletedEvent` (final base64 + usage data). `partial_images=3` is what drives the up-to-three progressive previews the canvas paints into the placeholder node.
+Reference bytes are converted to SDK upload files before the request. The streaming response yields progressive base64 previews and one terminal image with usage data. `partial_images: 3` allows up to three previews. Lixpi fixes `output_format` to PNG, which keeps transparent-background output compatible with the provider requirement for PNG or WebP.
 
 Every synchronized image model carries a required `imageReferenceCapabilities` profile. It declares total and identity-reference budgets, supported conditioning modes, fidelity behavior, iterative-edit and control support, output pixel limits, and aspect ratios. Provider adapters consume the selected model's profile instead of inferring behavior from model names. OpenAI's adapter sends explicit input-fidelity values only when synchronized metadata requires one.
 
-### OpenAI — Responses API Models (`gpt-4.1`, `gpt-5`, …)
+### Google Gemini image generation
 
-When the selected image model is a mainline OpenAI model rather than a `gpt-image-*` model, generation runs through the **Responses API** with the native `image_generation` tool configured:
+The synchronized Google image catalog contains `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, and `gemini-3-pro-image`. These models use `generateContent()` with `responseModalities: ['TEXT', 'IMAGE']`. The response contains inline image parts whose raw bytes are published as image events. The final-image call is single-shot, so the canvas shows the pending node until the response arrives.
 
-```python
-tools = [{
-    'type': 'image_generation',
-    'quality': 'high',
-    'partial_images': 3,
-    'size': image_size
-}]
-```
+For models whose synchronized capability profile enables level-based thinking, Lixpi asks Google to include thoughts. Thought images are published as `IMAGE_PARTIAL` events. The provider request also receives the selected aspect ratio and resolution through `imageConfig`.
 
-The model generates images internally (calling GPT Image under the hood) and streams response events including `response.image_generation_call.partial_image` and `response.completed`. Reference images travel inline as `input_image` blocks in the request messages rather than as separate file uploads, and the placeholder is triggered by the `response.output_item.added` event rather than an explicit empty partial.
+### Stability image generation
 
-### Google — Gemini Native Image Generation
-
-Image-capable Gemini models use `generate_content()` with `response_modalities: ['TEXT', 'IMAGE']`. The response contains `inline_data` parts whose raw bytes are base64-encoded before publishing. This path is **non-streaming** — it returns a single response rather than progressive partials — so the canvas shows the empty-placeholder animation until the one completed image arrives.
-
-For Gemini 3+ models, `thinking_config` is enabled and **thought images** (intermediate generation steps the model produces while reasoning) are published as `IMAGE_PARTIAL` events, giving Gemini a partial-like progression even though the final-image call itself is single-shot.
+`stability-ultra` uses the Ultra endpoint. `sd3.5-large` uses the SD3 endpoint with its exact model id. Lixpi maps the selected aspect ratio to the provider request and chooses the control endpoint from the adapted reference roles. Style or structure control does not imply identity conditioning. Seed, output format, strength, fidelity, and control-strength values remain pipeline-owned because the registry classifies them as internal rather than composer controls.
 
 ### Provider Comparison
 
-The three paths converge on the same `IMAGE_PARTIAL` / `IMAGE_COMPLETE` stream contract but differ in API surface, how (and whether) partials are produced, how references are passed, how the placeholder is triggered, and where usage data lands:
+The provider paths converge on the same `IMAGE_PARTIAL` and `IMAGE_COMPLETE` contract:
 
-| Capability | OpenAI (GPT Image) | OpenAI (Responses API) | Google (Gemini native) |
+| Capability | OpenAI GPT Image 2 | Google Gemini image | Stability |
 |---|---|---|---|
-| API method | `images.generate()` / `images.edit()` | `responses.create()` with `image_generation` tool | `generate_content()` with `response_modalities` |
-| Streaming | `partial_images=3` | Built-in partial-image events | Non-streaming (single response) |
-| Reference images | `images.edit(image=files)` (file uploads) | Inline `input_image` blocks in messages | Inline `inline_data` blocks in contents |
-| Placeholder trigger | Explicit empty `IMAGE_PARTIAL` before the API call | `response.output_item.added` event | Explicit empty `IMAGE_PARTIAL` before the API call |
-| Usage data | `ImageGenCompletedEvent.usage` | `response.completed` usage object | `usage_metadata` on the response |
+| API method | `images.generate()` or `images.edit()` | `generateContent()` with `responseModalities` | Model-specific Stability image endpoint |
+| Progressive provider output | Up to three partial images | Thought images when returned | No |
+| Reference transport | Uploaded files on `images.edit()` | Inline image parts | Multipart endpoint fields |
+| Placeholder trigger | Empty `IMAGE_PARTIAL` before submission | Empty `IMAGE_PARTIAL` before submission | Empty `IMAGE_PARTIAL` before submission |
+| Usage source | Image API terminal event | `usageMetadata` | Provider response and synchronized credit price |
 
 ## Reference Image Extraction
 
@@ -128,7 +117,7 @@ The unresolved relationships live in the `imageGenerationReferences` LangGraph s
 - Google interleaves the same provider-neutral role labels with image parts.
 - Stability uses only the image, style, and structure inputs exposed by the selected endpoint. Style transfer does not satisfy identity conditioning.
 
-Stability is the only image provider that accepts a seed. It sends one on every request across both the REST and Bedrock transports, reads back the seed the response reports, and stores it on the generated Asset as `lineage.generationSeed`. OpenAI's image API and Google's Gemini image models expose no seed, so their Assets carry none. Seeds are never a composer control, and seed selection follows the shared rule in [Seed inheritance](./VIDEO-GENERATION.md#seed-inheritance).
+Lixpi sends a pipeline-owned seed on Stability requests across the REST and Bedrock transports, reads back the seed the response reports, and stores it on the generated Asset as `lineage.generationSeed`. OpenAI and Google image requests do not receive a user-configurable seed. Seeds are never composer controls, and Stability seed selection follows the shared rule in [Seed inheritance](./VIDEO-GENERATION.md#seed-inheritance).
 
 A referenced-character plan fails before panel work when the selected image model lacks identity conditioning. Reference authority, ordering, and omission are determined from the shared graph state and declared model capabilities; the Character graph contains no provider-name branches.
 
@@ -155,24 +144,31 @@ When an image model is selected, the text model's system prompt is augmented via
 
 ## Image Sizes and Options
 
-The image-size dropdown auto-selects a sensible default (image generation works without extra configuration). The supported sizes are:
+The API catalog builds one configuration row per selected image model from synchronized controls. The browser stores `{ groupId, modelIds: [modelId], values }` and sends it unchanged. The API rejects values that are not present in that model's synchronized option list and falls back to the synchronized default when a stored value becomes invalid.
 
-| Option | Dimensions | Use case |
-|--------|------------|----------|
-| Square | `1024×1024` | Logos, icons, profile pictures |
-| Landscape | `1536×1024` | Banners, headers, wide scenes |
-| Portrait | `1024×1536` | Posters, phone wallpapers, tall scenes |
-| Auto | Model decides | Let the model pick based on the prompt |
+| Model | Exposed controls | Defaults and implications |
+|-------|------------------|---------------------------|
+| `gpt-image-2` | Size: `auto`, `1024x1024`, `1536x1024`, `1024x1536`; quality: `auto`, `low`, `medium`, `high`; background: `auto`, `opaque`, `transparent` | Size and quality affect image-token cost and latency. Transparent output requires PNG or WebP, and Lixpi fixes the internal output format to PNG. |
+| `gemini-3.1-flash-image` | Aspect ratios from `1:8` through `8:1`; resolution: `512`, `1K`, `2K`, `4K` | `1:1` and `1K` are the generation defaults. Editing can inherit the input ratio when the provider receives no explicit ratio. Larger outputs cost more and take longer. |
+| `gemini-3.1-flash-lite-image` | Standard aspect ratios; fixed `1K` resolution | The read-only resolution control explains that this model has no alternate output resolution. |
+| `gemini-3-pro-image` | Standard aspect ratios; resolution: `1K`, `2K`, `4K` | `1:1` and `1K` are the defaults. Larger outputs cost more and take longer. |
+| `stability-ultra`, `sd3.5-large` | Aspect ratio | The provider supports a fixed reviewed ratio list. Other operation-specific controls remain internal or require separate implementation investigation. |
 
-The selected size flows through state as `image_size` and is passed to whichever provider path runs. Gemini native generation uses the model's own sizing rather than these explicit OpenAI dimensions.
+`quality`, `background`, aspect ratio, and resolution are independent only where the synchronized model profile exposes them. A control never appears for a model that does not accept it. Multi-model requests keep a separate configuration object for each selected model, so one model's value cannot leak into a sibling request.
 
-Other generation knobs are **hardcoded** for best output rather than exposed to the user:
+Pipeline-owned settings are deliberately absent from the composer:
 
-| Knob | Value | Why |
-|------|-------|-----|
-| Quality | `high` | Always maximum output quality. |
-| Input fidelity | `high` | Preserves details when editing an existing image. |
-| Content moderation | `low` | Avoids unnecessary restrictions on legitimate requests. |
+| Setting | Behavior |
+|---------|----------|
+| OpenAI output format | Fixed to PNG. |
+| OpenAI partial images | Fixed to three previews. |
+| OpenAI moderation | Uses the registered low-moderation profile for image generation. |
+| Reference fidelity | Comes from `imageReferenceCapabilities`; provider-managed fidelity is omitted from the request. |
+| Stability seed and route strengths | Chosen and recorded by the pipeline, not submitted as user configuration. |
+
+The registry keeps documented but unimplemented operation-specific parameters marked `needs-implementation-investigation`. Those parameters do not appear in synchronized controls or provider payloads. Masks, separate edit targets, multi-output image counts, Google multi-turn editing, Anthropic thought display, OpenAI reasoning summaries, and Stability operation-specific edit controls remain outside this configuration path.
+
+Provider details and constraints are reviewed against the [OpenAI image generation guide](https://platform.openai.com/docs/guides/image-generation), [Gemini image generation guide](https://ai.google.dev/gemini-api/docs/image-generation), and [Stability Platform API reference](https://platform.stability.ai/docs/api-reference). The AI Model Registry stores the parameter-level source URLs and review decisions used to build the synchronized catalog.
 
 ## Storage and Deduplication
 

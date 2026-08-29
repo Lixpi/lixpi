@@ -17,9 +17,6 @@
         "This is the parameter behind Lixpi's reference-image path, which is why openai-provider.ts branches to images.edit whenever references are present."
     ],
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [

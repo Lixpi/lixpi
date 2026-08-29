@@ -154,7 +154,7 @@ const TRACE_CATEGORICAL_TAG_COLORS = [
     },
 ] as const satisfies readonly TagPillColors[]
 
-// The trace stores raw provider ids (`openai:gpt-image-1`). The provider prefix
+// The trace stores raw provider ids (`openai:gpt-image-2`). The provider prefix
 // is rendered separately, so the model line stays readable at canvas sizes.
 export function formatExecutionTraceModelId(modelId: string): string {
     const parts = modelId.split(':')

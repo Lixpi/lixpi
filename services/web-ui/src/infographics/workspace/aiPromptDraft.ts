@@ -11,6 +11,9 @@ export type AiPromptSubmitModelData = {
     useMultipleReasoningModels?: boolean | string
     useMultipleImageModels?: boolean | string
     useMultipleVideoModels?: boolean | string
+    reasoningOptions?: {
+        configGroups?: MediaGenerationConfigSelectionGroup[]
+    }
     imageOptions?: {
         aiImageModels?: readonly string[] | string
         imageGenerationSize?: string
@@ -42,6 +45,7 @@ export function buildAiPromptDraftAttrsFromSubmitData(data: AiPromptSubmitModelD
     return {
         mediaGenerationMode: data.mediaGenerationMode === 'video' ? 'video' : 'image',
         aiReasoningModels: serializePromptModelSelection(data.aiReasoningModels, useMultipleReasoningModels),
+        reasoningGenerationConfigGroups: serializeMediaGenerationConfigSelectionAttr(data.reasoningOptions?.configGroups ?? []),
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
@@ -72,6 +76,7 @@ export function buildAiPromptDraftFromText(promptText: string, attrs: Record<str
                 attrs: {
                     mediaGenerationMode: attrs.mediaGenerationMode === 'video' ? 'video' : 'image',
                     aiReasoningModels: serializePromptModelSelection(attrs.aiReasoningModels, useMultipleReasoningModels),
+                    reasoningGenerationConfigGroups: attrs.reasoningGenerationConfigGroups || '',
                     useMultipleReasoningModels,
                     useMultipleImageModels,
                     useMultipleVideoModels,

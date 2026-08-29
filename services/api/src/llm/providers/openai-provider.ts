@@ -138,6 +138,7 @@ export class OpenAIProvider extends BaseProvider {
         const hasVideoModel = !!state.videoModelVersion
         const injectVideoTool = hasVideoModel && !enableImageGeneration && !enableVideoGeneration
         const maxTokens = state.maxCompletionSize
+        const imageGenerationConfig = state.imageGenerationConfig ?? {}
 
         const inputMessages: Array<{ role: string; content: any }> = []
         for (const msg of messages) {
@@ -167,6 +168,7 @@ export class OpenAIProvider extends BaseProvider {
         const tools = this.buildImageGenerationTools(
             enableImageGeneration,
             imageSize,
+            imageGenerationConfig,
             state.aiModelMetaInfo.imageReferenceCapabilities,
         ) ?? []
         if (injectTool) {
@@ -236,13 +238,16 @@ export class OpenAIProvider extends BaseProvider {
     private buildImageGenerationTools(
         enableImageGeneration: boolean,
         imageSize: string,
+        imageGenerationConfig: ProviderState['imageGenerationConfig'],
         imageReferenceCapabilities: ImageReferenceCapabilities | undefined,
     ): Array<Record<string, any>> | undefined {
         if (!enableImageGeneration) return undefined
         return [{
             type: 'image_generation',
-            quality: 'high',
+            quality: imageGenerationConfig?.quality ?? 'auto',
+            background: imageGenerationConfig?.background ?? 'auto',
             ...this.deps.mediaProviderDefinition.moderation.settings('', 'text'),
+            output_format: 'png',
             ...(imageReferenceCapabilities?.inputFidelity === 'high'
                 ? { input_fidelity: 'high' }
                 : {}),
@@ -279,6 +284,16 @@ export class OpenAIProvider extends BaseProvider {
             store: false,
         }
         if (caps.supportsTemperature) requestKwargs.temperature = args.temperature
+        const reasoningConfig = args.state.reasoningGenerationConfig ?? {}
+        if (reasoningConfig.reasoningEffort || reasoningConfig.reasoningMode) {
+            requestKwargs.reasoning = {
+                ...(reasoningConfig.reasoningEffort ? { effort: reasoningConfig.reasoningEffort } : {}),
+                ...(reasoningConfig.reasoningMode ? { mode: reasoningConfig.reasoningMode } : {}),
+            }
+        }
+        if (reasoningConfig.reasoningVerbosity) {
+            requestKwargs.text = { verbosity: reasoningConfig.reasoningVerbosity }
+        }
         if (args.maxTokens && args.maxTokens > 0) {
             requestKwargs.max_output_tokens = args.maxTokens
         }
@@ -305,7 +320,8 @@ export class OpenAIProvider extends BaseProvider {
             info(`[OpenAI:${this.instanceKey}] Responses-API image-gen call ${JSON.stringify({
                 model: args.modelVersion,
                 imageSize: args.state.imageSize,
-                quality: 'high',
+                quality: args.state.imageGenerationConfig?.quality ?? 'auto',
+                background: args.state.imageGenerationConfig?.background ?? 'auto',
                 inputFidelity: args.state.aiModelMetaInfo.imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
                 moderation: 'low',
                 partialImages: 3,
@@ -504,7 +520,7 @@ export class OpenAIProvider extends BaseProvider {
             update.imageUsage = {
                 generatedCount: imagesGenerated,
                 size: args.state.imageSize ?? 'auto',
-                quality: 'high',
+                quality: args.state.imageGenerationConfig?.quality ?? 'auto',
             }
             update.generatedImages = generatedImages
         }
@@ -552,6 +568,8 @@ export class OpenAIProvider extends BaseProvider {
         const hasReferences = referenceFiles.length > 0
         prompt = prependImageReferencePromptLegend(prompt, resolvedReferences)
         const imageReferenceCapabilities = args.state.aiModelMetaInfo.imageReferenceCapabilities
+        const quality = args.state.imageGenerationConfig?.quality ?? 'auto'
+        const background = args.state.imageGenerationConfig?.background ?? 'auto'
         const inputFidelityRequestValue = imageReferenceCapabilities?.inputFidelity === 'high' ? 'high' : undefined
         // The SDK's own retry loop is disabled so every reattempt goes through
         // the bounded, logged transport retry below instead of happening
@@ -564,7 +582,8 @@ export class OpenAIProvider extends BaseProvider {
             api: hasReferences ? 'images.edit' : 'images.generate',
             model: args.modelVersion,
             size: args.imageSize,
-            quality: 'high',
+            quality,
+            background,
             inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
             automaticRetries: imageRequestOptions.maxRetries,
             transportRetryBudgetMs: TRANSPORT_RETRY_BUDGET_MS,
@@ -601,7 +620,9 @@ export class OpenAIProvider extends BaseProvider {
                             : referenceFiles[0]!.file,
                         prompt,
                         ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'image-conditioned'),
-                        quality: 'high',
+                        quality,
+                        background,
+                        output_format: 'png',
                         ...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {}),
                         size: resolvedSize,
                         stream: true,
@@ -611,7 +632,9 @@ export class OpenAIProvider extends BaseProvider {
                         model: args.modelVersion,
                         prompt,
                         ...this.deps.mediaProviderDefinition.moderation.settings(args.modelVersion, 'text'),
-                        quality: 'high',
+                        quality,
+                        background,
+                        output_format: 'png',
                         size: resolvedSize,
                         stream: true,
                         partial_images: 3,
@@ -651,7 +674,7 @@ export class OpenAIProvider extends BaseProvider {
                 update.imageUsage = {
                     generatedCount: 1,
                     size: args.imageSize || 'auto',
-                    quality: 'high',
+                    quality,
                 }
             }
             const usage = finalImage.usage

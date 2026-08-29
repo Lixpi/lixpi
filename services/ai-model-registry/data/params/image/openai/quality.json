@@ -2,7 +2,7 @@
     "key": "quality",
     "category": "sampling",
     "apiField": "quality",
-    "controlKey": null,
+    "controlKey": "quality",
     "type": "enum",
     "values": [
         "low",
@@ -12,22 +12,19 @@
     ],
     "providerDefault": "auto",
     "lixpiValue": "high",
-    "currentState": "hidden",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Generation quality. Hardcoded to high everywhere in Lixpi.",
+    "summary": "Controls output detail, generation latency, and image-token cost. Auto lets GPT Image 2 balance them; low is fastest and least expensive, medium is balanced, and high uses the most image tokens for maximum detail.",
     "combines": [
         "The single largest cost lever on OpenAI images: quality drives output token count, and image output bills at 32 to 40 per 1M tokens."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/openai-provider.ts:602 and :612, plus :244, :308, :505, :565",
-        "code": "quality: 'high'",
-        "from": "hardcoded at every call site",
-        "what": "Generation quality. This is the single largest cost driver on OpenAI images: quality sets how many output tokens the model spends, billed at 32 to 40 per 1M."
+        "setIn": "services/api/src/llm/providers/openai-provider.ts:238-256 and 568-641",
+        "code": "quality is read from state.imageGenerationConfig with an 'auto' fallback and sent through Responses image tools, images.generate, and images.edit",
+        "from": "the selected quality matrix control",
+        "what": "Controls output quality, latency, and image-token usage on every OpenAI image-generation path."
     },
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [
@@ -40,7 +37,7 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "auto",
-    "note": "",
+    "note": "Options: auto, low, medium, high.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

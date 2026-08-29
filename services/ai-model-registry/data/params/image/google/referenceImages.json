@@ -6,9 +6,9 @@
     "type": "object (array of Part)",
     "providerDefault": null,
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "hidden",
     "availability": "supported",
-    "summary": "You mix reference images into `contents` alongside the text prompt; there is no separate reference-image field. The count and the roles those images can play differ by model.",
+    "summary": "Supplies image references for editing, identity, style, structure, or pose guidance. Limits and supported roles vary by model, so Lixpi resolves and labels references in the media pipeline and enforces the synchronized reference capability profile rather than exposing raw provider slots.",
     "combines": [
         "Supported on: Gemini Developer API",
         "`gemini-3-pro-image`: up to 14 images total, of which up to 6 are high-fidelity object references, up to 5 are character-consistency references, and up to 3 are style references. The Limitations section words the object budget as \"5 images with high fidelity, and up to 14 images in total\", so treat 5 to 6 as the practical high-fidelity ceiling.",
@@ -21,9 +21,9 @@
     ],
     "range": "up to 14 reference images on Gemini 3 image models",
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -31,11 +31,11 @@
     ],
     "decision": "internal",
     "reviewed": true,
-    "status": "needs-implementation-investigation",
+    "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Investigate how this fits in into our existing pipeline and ui, propose the solution and benefits and implications, don't change code before approved",
+    "note": "Implemented through Lixpi's provider-neutral structured reference contract and per-model reference budgets; not a direct user model-setting field.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

@@ -8,7 +8,7 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Asks the API to return thought summaries alongside the answer. Summaries come back as parts flagged `thought: true` on `generateContent`.",
+    "summary": "Requests Gemini thought summaries in response parts flagged as thoughts. It does not control whether thinking happens and it can change response parsing, storage, and presentation, so reasoning-model use remains blocked on a dedicated pipeline feature.",
     "combines": [
         "Supported on: thinking-capable models, Gemini Developer API",
         "Summaries are returned only if the model supports thoughts and actually produced enough reasoning. A thought block can arrive with a signature and no summary text.",
@@ -20,7 +20,13 @@
         "false"
     ],
     "supportedModels": [
-        "gemini reasoning models with thinkingMode google-budget or google-level"
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -28,11 +34,11 @@
     ],
     "decision": "internal",
     "reviewed": true,
-    "status": "approved",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
-    "fixedValue": "true",
+    "fixedValue": "",
     "defaultValue": "",
-    "note": "It must be rendered as part of pipeline",
+    "note": "Requires separate thought-summary streaming, persistence, and presentation work. It was not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

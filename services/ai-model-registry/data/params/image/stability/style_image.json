@@ -5,14 +5,14 @@
     "controlKey": null,
     "type": "string (base64 image)",
     "providerDefault": null,
-    "lixpiValue": null,
-    "currentState": "absent",
+    "lixpiValue": "second resolved reference bytes",
+    "currentState": "hidden",
     "availability": "supported",
-    "summary": "The style source on the style-transfer endpoint: the picture whose palette, texture and rendering get applied to init_image. Its content is not copied across, only its look.",
+    "summary": "Supplies the visual style source for direct Stability style transfer. Lixpi derives it from the second resolved image reference; it is an attachment role, not a dropdown or scalar model option.",
     "combines": [
-        "Every side at least 64 px, at most 9,437,184 total pixels, aspect ratio between 1:2.5 and 2.5:1, in jpeg, png or webp.",
-        "style_strength governs how strongly this image's look is applied. Lixpi pins it to 1, the maximum.",
-        "The AWS mirror repeats init_image's description verbatim for this field, which is wrong: this is the style reference, not the subject."
+        "Direct style transfer requires init_image for subject and composition plus style_image for palette, texture, and rendering style.",
+        "style_strength controls its influence and Lixpi fixes that value at 1.",
+        "The current Bedrock Ultra and SD3.5 route accepts only one image, so it drops the second style reference instead of sending style_image."
     ],
     "values": [
         "jpeg",
@@ -25,19 +25,27 @@
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
-    "status": "none",
+    "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Populated internally from the second provider-neutral reference; not shown as a model configuration control.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:304",
+        "code": "formData.set('style_image', styleBlob, `style.${styleExt}`)",
+        "from": "the second resolved image reference on a two-reference direct request",
+        "what": "Provides the style source for direct Stability style transfer without adding a model configuration row."
+    }
 }

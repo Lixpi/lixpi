@@ -5,14 +5,14 @@
     "controlKey": null,
     "type": "string (base64 on Bedrock, file upload on v2beta)",
     "providerDefault": null,
-    "lixpiValue": null,
-    "currentState": "absent",
+    "lixpiValue": "resolved primary reference bytes",
+    "currentState": "hidden",
     "availability": "supported",
-    "summary": "The input image the operation works from.",
+    "summary": "Carries the source image for reference-driven generation. Lixpi resolves the selected workspace reference into bytes, uploads it to the matching direct Stability control endpoint, or base64-encodes it for Bedrock image-to-image; it is not a scalar composer setting.",
     "combines": [
-        "Supported on: Required on all edit endpoints except style-transfer (which uses `init_image`), on control/sketch, control/structure, control/style, and all three upscale endpoints. Optional on generate/ultra and generate/sd3 where it switches on image-to-image.",
-        "On SD3.5 and Ultra, supplying `image` requires `strength` and puts the request in image-to-image mode.",
-        "On inpaint and erase, an alpha channel in `image` is used as the mask when no explicit `mask` is passed."
+        "On direct Stability requests, one style or structure reference becomes the image multipart field on the matching control endpoint.",
+        "On Bedrock, the same primary reference becomes image and requires mode=image-to-image plus a pipeline-owned strength.",
+        "Two-reference direct style transfer uses init_image and style_image instead. Bedrock has no equivalent two-image route and drops the separate style reference."
     ],
     "values": [
         "jpeg",
@@ -28,16 +28,25 @@
         "stability-v2beta",
         "bedrock"
     ],
-    "decision": "skip",
+    "decision": "internal",
     "reviewed": true,
-    "status": "needs-implementation-investigation",
+    "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Need to figure out how to use this feature",
+    "note": "Populated internally from the resolved provider-neutral reference; not shown as a model configuration control.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
-    ]
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:312, :319, :412",
+        "code": "formData.set('image', refBlob, ...) or body.image = primaryRef.bytes.toString('base64')",
+        "from": "the first resolved provider-neutral image reference",
+        "what": "Supplies the input image for direct style or structure control and for the Bedrock image-to-image fallback."
+    }
 }

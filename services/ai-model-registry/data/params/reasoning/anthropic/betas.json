@@ -16,17 +16,20 @@
         "The Claude API and Claude Platform on AWS accept the interleaved header on any model and ignore it where it has no effect; Bedrock and Google Cloud likewise accept and ignore."
     ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",

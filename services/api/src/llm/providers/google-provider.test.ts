@@ -393,13 +393,17 @@ describe('GoogleProvider internals', () => {
 
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
-            modelVersion: 'gemini-2.5-flash-image',
+            modelVersion: 'gemini-3.1-flash-image',
             aiModelMetaInfo: googleModelMeta(
-                'gemini-2.5-flash-image',
+                'gemini-3.1-flash-image',
                 ['text', 'image', 'image_generation'],
             ),
             enableImageGeneration: true,
             imageSize: '16:9',
+            imageGenerationConfig: {
+                imageSize: '16:9',
+                resolution: '4K',
+            },
             messages: [{ role: 'user', content: 'show me a dog' }],
             resolvedImageGenerationReferences: [
                 {
@@ -426,6 +430,9 @@ describe('GoogleProvider internals', () => {
         })
 
         expect(generateContent).toHaveBeenCalledWith(expect.objectContaining({
+            config: expect.objectContaining({
+                imageConfig: { aspectRatio: '16:9', imageSize: '4K' },
+            }),
             contents: [{
                 role: 'user',
                 parts: [
@@ -448,7 +455,7 @@ describe('GoogleProvider internals', () => {
             imageBase64: '/9j/4AAQSk',
             responseId: '',
             revisedPrompt: '',
-            imageModelId: 'gemini-2.5-flash-image',
+            imageModelId: 'gemini-3.1-flash-image',
         })
         expect(chunk).toHaveBeenCalledWith('preview text')
         expect(update).toMatchObject({
@@ -516,9 +523,9 @@ describe('GoogleProvider internals', () => {
 
         const update = await (provider as any).streamImpl({
             ...baseGoogleState(),
-            modelVersion: 'gemini-2.5-flash-image',
+            modelVersion: 'gemini-3.1-flash-image',
             aiModelMetaInfo: googleModelMeta(
-                'gemini-2.5-flash-image',
+                'gemini-3.1-flash-image',
                 ['text', 'image', 'image_generation'],
             ),
             enableImageGeneration: true,
@@ -529,7 +536,7 @@ describe('GoogleProvider internals', () => {
         expect(imagePublisher.partial).toHaveBeenCalledWith('', 0)
         expect(imagePublisher.complete).not.toHaveBeenCalled()
         expect(update).toEqual(expect.objectContaining({
-            error: 'Google image model gemini-2.5-flash-image returned no inline image data.',
+            error: 'Google image model gemini-3.1-flash-image returned no inline image data.',
             usage: {
                 promptTokens: 5,
                 completionTokens: 8,
@@ -870,6 +877,7 @@ describe('GoogleProvider internals', () => {
             ...baseGoogleState(),
             enableImageGeneration: false,
             enableVideoGeneration: false,
+            reasoningGenerationConfig: { thinkingLevel: 'low' },
             messages: [{ role: 'user', content: 'plain text request' }],
         })
 
@@ -890,6 +898,11 @@ describe('GoogleProvider internals', () => {
         })
         expect(update.generatedImages).toBeUndefined()
         expect(update.generatedVideos).toBeUndefined()
+        expect(googleMocks.generateContentStream).toHaveBeenCalledWith(expect.objectContaining({
+            config: expect.objectContaining({
+                thinkingConfig: { thinkingLevel: 'low' },
+            }),
+        }))
     })
 
     it('streams VEO from synchronized video modality metadata and updates media usage', async () => {

@@ -2,7 +2,7 @@
     "key": "effort",
     "category": "reasoning",
     "apiField": "output_config.effort",
-    "controlKey": null,
+    "controlKey": "reasoningEffort",
     "type": "enum",
     "values": [
         "low",
@@ -13,18 +13,21 @@
     ],
     "providerDefault": "high",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Controls thinking depth and total token spend together. The closest thing to a user-facing quality-versus-cost dial for reasoning models.",
+    "summary": "Controls total response effort across internal reasoning, visible answer text, and tool use. Lower levels reduce latency and output-token cost; higher levels let Claude spend more tokens exploring, checking, and completing difficult work.",
     "combines": [
-        "Maps cleanly onto the segmented control the matrix already renders, with a direct billing consequence.",
-        "The tiers are not a simple ladder across models: Opus 4.6 and Sonnet 4.6 support `max` but not `xhigh`, while `xhigh` exists on Opus 5, Opus 4.8, Opus 4.7 and Sonnet 5. An unsupported tier is a 400."
+        "Sent as output_config.effort and independent of max_tokens, which remains the hard output ceiling.",
+        "Adaptive thinking is provider-managed on the newest models and enabled internally on the 4.6 through 4.8 models that otherwise default it off.",
+        "Changing effort can change prompt-cache prefixes; keep it stable within a cached conversation."
     ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
+        "claude-sonnet-5",
         "claude-sonnet-4-6"
     ],
     "supportedApis": [
@@ -36,10 +39,13 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "high",
-    "note": "",
-    "unsupportedModels": [],
+    "note": "Per-model options are synchronized: low/medium/high/xhigh/max on Fable 5, Opus 5, Opus 4.8, Opus 4.7 and Sonnet 5; low/medium/high/max on Opus 4.6 and Sonnet 4.6; unavailable on Haiku 4.5.",
+    "unsupportedModels": [
+        "claude-haiku-4-5"
+    ],
     "unsupportedApis": [],
     "sources": [
-        "https://platform.claude.com/docs/en/build-with-claude/effort"
+        "https://platform.claude.com/docs/en/build-with-claude/effort",
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
     ]
 }

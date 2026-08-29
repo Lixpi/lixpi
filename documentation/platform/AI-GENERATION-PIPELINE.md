@@ -35,6 +35,8 @@ Every Capability module publishes a required description sheet with purpose, exp
 
 Reasoning and media models are independent selected axes. The reasoning provider can emit `generate_image` or `generate_video`; the matching router invokes the selected media model in a transient provider workflow. Matrix requests enumerate concrete reasoning/media combinations and isolate failures by run.
 
+The AI model catalog also returns synchronized configuration controls for each reasoning and media model. A matrix request carries one configuration group per selected model. The API validates every value against that model's catalog controls, applies the synchronized default when a stored value is invalid, and places only the resolved model-specific values in `ProviderState`. OpenAI receives effort, reasoning mode, and response verbosity where supported. Anthropic receives effort with its reviewed thinking mode. Google receives thinking level on reviewed reasoning models. Image providers receive only their reviewed size, aspect-ratio, resolution, quality, or background controls. Parameters marked `needs-implementation-investigation` in the AI Model Registry are not included in the catalog or provider requests.
+
 Capability policies may remove an axis. Character Creator removes video models before matrix normalization. It never substitutes an image model. Action Timeline produces non-media Artifacts and suppresses media lineage entirely.
 
 ## Capability media strategies

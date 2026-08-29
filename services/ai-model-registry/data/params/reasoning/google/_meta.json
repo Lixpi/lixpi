@@ -3,9 +3,15 @@
     "providerTitle": "Google",
     "apiName": "Gemini API",
     "groupId": "google-reasoning",
-    "title": "Gemini reasoning models",
+    "title": "Current stable Gemini reasoning models",
     "models": [
-        "gemini reasoning models with thinkingMode google-budget or google-level"
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
     ],
-    "docs": "https://ai.google.dev/gemini-api/docs/thinking"
+    "docs": "https://ai.google.dev/gemini-api/docs/models"
 }

@@ -7,23 +7,28 @@
     "providerDefault": "null",
     "lixpiValue": null,
     "currentState": "absent",
-    "availability": "unverified",
-    "summary": "Runs a moderation model over this response's input and output, either scoring or hard-blocking.",
+    "availability": "supported",
+    "summary": "Requests integrated moderation for the input and generated output. The moderation object selects a moderation model and policies that can score or block content.",
     "combines": [
-        "Supported on: not documented per-model",
-        "`moderation.model` is required when the object is present, e.g. `omni-moderation-latest`.",
-        "Adds a second model call, so it adds latency and cost."
+        "The current OpenAI SDK defines moderation on both Responses and Chat Completions request types.",
+        "moderation.model selects the moderation model, such as omni-moderation-latest, and input/output policies determine whether a violation is reported or blocks completion.",
+        "Moderation results or moderation errors are returned separately for the request input and generated output."
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
         "openai-chat-completions"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
@@ -32,6 +37,7 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://developers.openai.com/api/reference/resources/responses"
+        "https://developers.openai.com/api/reference/resources/responses",
+        "https://cdn.jsdelivr.net/npm/openai/resources/chat/completions/completions.d.ts"
     ]
 }

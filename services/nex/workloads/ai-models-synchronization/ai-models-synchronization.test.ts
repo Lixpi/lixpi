@@ -39,10 +39,10 @@ describe('AiModelsSync — image generation option metadata', () => {
         })
     })
 
-    it('stores OpenAI provider dimensions as values while exposing them as aspect-ratio choices', () => {
-        const model = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 1)
+    it('stores GPT Image 2 dimensions as resolution values with readable ratio labels', () => {
+        const model = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-2' }, 1)
 
-        expect(model.imageSizeMode).toBe('aspectRatio')
+        expect(model.imageSizeMode).toBe('resolution')
         expect(model.imageSizes?.map((o: any) => o.value)).toEqual(['1024x1024', '1536x1024', '1024x1536', 'auto'])
         expect(model.imageSizes?.map((o: any) => o.label)).toEqual(['1:1', '3:2', '2:3', 'Auto'])
     })
@@ -73,7 +73,7 @@ describe('AiModelsSync — image generation option metadata', () => {
             anthropicApiKey: 'test-key',
             googleApiKey: 'test-key',
         })
-        const model = persistenceSync.mapOpenAIModelToAiModel({ id: 'gpt-image-1.5' }, 1)
+        const model = persistenceSync.mapOpenAIModelToAiModel({ id: 'gpt-image-2' }, 1)
 
         await persistenceSync.updateModelsSequentially([model], 'ai-models-test', 'test')
 
@@ -88,35 +88,43 @@ describe('AiModelsSync — image generation option metadata', () => {
     })
 
     it('marks Gemini image options as aspect ratios because Google receives imageConfig.aspectRatio', () => {
-        const model = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image-preview' }, 1)
+        const model = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image' }, 1)
 
         expect(model.imageSizeMode).toBe('aspectRatio')
         expect(model.imageSizes?.map((o: any) => o.value)).toContain('16:9')
     })
 
-    it('synchronizes OpenAI image-reference capabilities per model', () => {
+    it('synchronizes the current GPT Image 2 reference and configuration controls', () => {
         const gptImage2 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-2' }, 1)
-        const gptImage15 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1.5' }, 2)
-        const gptImageMini = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1-mini' }, 3)
-        const gptImage1 = sync.mapOpenAIModelToAiModel({ id: 'gpt-image-1' }, 4)
 
         expect(gptImage2.imageReferenceCapabilities.inputFidelity).toBe('provider-managed')
-        expect(gptImage15.imageReferenceCapabilities.inputFidelity).toBe('high')
-        expect(gptImageMini.imageReferenceCapabilities.inputFidelity).toBe('standard')
-        expect(gptImage1.imageReferenceCapabilities.inputFidelity).toBe('high')
-        expect(gptImage1.imageReferenceCapabilities.maxIdentityReferenceImages).toBe(5)
+        expect(gptImage2.imageReferenceCapabilities.maxReferenceImages).toBe(16)
+        expect(gptImage2.imageReferenceCapabilities.maxOutputPixels).toBe(8294400)
+        expect(gptImage2.imageGenerationControls.map((control: any) => control.key)).toEqual([
+            'imageSize',
+            'quality',
+            'background',
+        ])
     })
 
     it('synchronizes provider-specific reference controls for non-OpenAI image providers', () => {
-        const geminiImage = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image-preview' }, 1)
+        const geminiImage = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image' }, 1)
         const stabilityImage = sync.mapStabilityModelToAiModel({
             id: 'sd3.5-large',
             displayName: 'SD 3.5 Large',
         }, 2)
-        const geminiText = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 3)
+        const geminiText = sync.mapGoogleModelToAiModel({ name: 'gemini-3.7-flash' }, 3)
 
         expect(geminiImage.imageReferenceCapabilities.conditioningModes).toContain('identity')
         expect(stabilityImage.imageReferenceCapabilities.conditioningModes).not.toContain('identity')
+        expect(stabilityImage.imageGenerationControls).toEqual([{
+            key: 'imageSize',
+            label: 'Aspect ratio',
+            kind: 'aspect-ratio',
+            options: stabilityImage.imageSizes,
+            defaultValue: '1:1',
+            description: 'Controls the output shape for text-to-image and single-reference control requests. Style transfer keeps the source image frame instead.',
+        }])
         expect(geminiText.imageReferenceCapabilities).toBeUndefined()
     })
 })
@@ -151,22 +159,36 @@ describe('AiModelsSync — inference capabilities', () => {
         })
     })
 
-    it('synchronizes OpenAI temperature support without requiring API model-name matching', () => {
-        const gpt5 = sync.mapOpenAIModelToAiModel({ id: 'gpt-5-chat-latest' }, 1)
-        const gpt41 = sync.mapOpenAIModelToAiModel({ id: 'gpt-4.1' }, 2)
+    it('synchronizes current OpenAI reasoning controls per model family', () => {
+        const gpt56 = sync.mapOpenAIModelToAiModel({ id: 'gpt-5.6-sol' }, 1)
+        const gpt55Pro = sync.mapOpenAIModelToAiModel({ id: 'gpt-5.5-pro' }, 2)
 
-        expect(gpt5.inferenceCapabilities.supportsTemperature).toBe(false)
-        expect(gpt41.inferenceCapabilities.supportsTemperature).toBe(true)
-        expect(gpt41.inferenceCapabilities.requiresClosedJsonSchema).toBe(true)
+        expect(gpt56.inferenceCapabilities.supportsTemperature).toBe(false)
+        expect(gpt56.reasoningGenerationControls.map((control: any) => control.key)).toEqual([
+            'reasoningEffort',
+            'reasoningMode',
+            'reasoningVerbosity',
+        ])
+        expect(gpt56.reasoningGenerationControls[0].options.map((option: any) => option.value)).toContain('max')
+        expect(gpt55Pro.reasoningGenerationControls[0].options.map((option: any) => option.value)).toEqual([
+            'medium',
+            'high',
+            'xhigh',
+        ])
     })
 
     it('synchronizes provider-native Google thinking modes', () => {
-        const gemini25 = sync.mapGoogleModelToAiModel({ name: 'gemini-2.5-flash-image' }, 1)
-        const gemini31 = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 2)
+        const gemini25 = sync.mapGoogleModelToAiModel({ name: 'gemini-2.5-flash' }, 1)
+        const gemini37 = sync.mapGoogleModelToAiModel({ name: 'gemini-3.7-flash' }, 2)
 
         expect(gemini25.inferenceCapabilities.thinkingMode).toBe('google-budget')
-        expect(gemini31.inferenceCapabilities.thinkingMode).toBe('google-level')
-        expect(gemini31.inferenceCapabilities.supportedInputKinds).toContain('audio')
+        expect(gemini25.reasoningGenerationControls).toEqual([])
+        expect(gemini37.inferenceCapabilities.thinkingMode).toBe('google-level')
+        expect(gemini37.reasoningGenerationControls[0].options.map((option: any) => option.value)).toEqual([
+            'low',
+            'medium',
+            'high',
+        ])
     })
 
     it('synchronizes non-reasoning media models with a closed inference profile', () => {
@@ -202,7 +224,7 @@ describe('AiModelsSync — default model flags', () => {
 
     it('flags the configured default reasoning, image, and video models', () => {
         const haiku = sync.applyDefaultModelFlags(sync.mapAnthropicModelToAiModel({ id: 'claude-haiku-4-5' }, 1))
-        const geminiImage = sync.applyDefaultModelFlags(sync.mapGoogleModelToAiModel({ name: 'gemini-2.5-flash-image' }, 1))
+        const geminiImage = sync.applyDefaultModelFlags(sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image' }, 1))
         const veoLite = sync.applyDefaultModelFlags(sync.mapGoogleModelToAiModel({ name: 'veo-3.1-lite-generate-preview' }, 1))
 
         expect(haiku.isDefaultFor).toEqual(['reasoning'])
@@ -273,7 +295,7 @@ describe('AiModelsSync — VEO video model mapping', () => {
     })
 
     it('does NOT give gemini text models any video modality, options, or pricing (regression)', () => {
-        const gemini = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-pro' }, 6)
+        const gemini = sync.mapGoogleModelToAiModel({ name: 'gemini-3.7-flash' }, 6)
         const modalities = gemini.modalities.map((m: any) => m.modality)
 
         expect(modalities).not.toContain('video_generation')
@@ -284,13 +306,9 @@ describe('AiModelsSync — VEO video model mapping', () => {
         expect(gemini.pricing.video).toBeUndefined()
     })
 
-    it('allows active veo models through the Google contains blacklist and explicitly retires shut-down ids', async () => {
-        const containsBlacklist = (AiModelsSync as any).MODELS_BLACKLIST.Google.contains
-        const exactBlacklist = (AiModelsSync as any).MODELS_BLACKLIST.Google.exact
-        expect(containsBlacklist).not.toContain('veo')
-        expect(containsBlacklist).toContain('imagen')
-        expect(containsBlacklist).toContain('lyria')
-        expect(exactBlacklist).toEqual(expect.arrayContaining([
+    it('keeps reviewed VEO models while explicitly retiring shut-down ids', async () => {
+        const retiredVideoModels = (AiModelsSync as any).GOOGLE_RETIRED_VIDEO_MODELS
+        expect([...retiredVideoModels]).toEqual(expect.arrayContaining([
             'veo-2.0-generate-001',
             'veo-3.0-generate-001',
             'veo-3.0-fast-generate-001',
@@ -324,11 +342,11 @@ describe('AiModelsSync — VEO video model mapping', () => {
     })
 
     it('keeps existing image models intact (regression) — Nano Banana mapping unchanged', () => {
-        const nano = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image-preview' }, 7)
+        const nano = sync.mapGoogleModelToAiModel({ name: 'gemini-3.1-flash-image' }, 7)
         const modalities = nano.modalities.map((m: any) => m.modality)
         expect(modalities).toContain('image_generation')
         expect(modalities).not.toContain('video_generation')
-        expect(nano.title).toBe('Nano Banana 2')
+        expect(nano.title).toBe('Gemini 3.1 Flash Image')
     })
 
     it('does NOT give VEO models a reference cap (absent => provider-aware default of 3)', () => {

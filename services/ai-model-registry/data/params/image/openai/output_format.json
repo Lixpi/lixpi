@@ -2,7 +2,7 @@
     "key": "output_format",
     "category": "output-format",
     "apiField": "output_format",
-    "controlKey": "outputFormat",
+    "controlKey": null,
     "type": "enum",
     "values": [
         "png",
@@ -11,29 +11,28 @@
     ],
     "providerDefault": "png",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "hidden",
     "availability": "supported",
-    "summary": "Output encoding.",
+    "summary": "Encoding used for final image bytes: PNG, JPEG, or WebP. The choice affects alpha-channel support, file size, and whether output compression can be applied; it does not change the requested image dimensions.",
     "combines": [
-        "Gates whether background=transparent is legal."
+        "`background: transparent` requires PNG or WebP because JPEG cannot carry an alpha channel.",
+        "`output_compression` applies only to JPEG and WebP. It has no effect on PNG output.",
+        "Lixpi fixes the format to PNG so the settlement and rendition pipeline receives a lossless, transparency-compatible source."
     ],
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [
         "openai-images",
         "openai-responses-image-tool"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
-    "fixedValue": "",
+    "fixedValue": "png",
     "defaultValue": "",
-    "note": "",
+    "note": "Fixed to PNG by the image pipeline; required for transparent output compatibility.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

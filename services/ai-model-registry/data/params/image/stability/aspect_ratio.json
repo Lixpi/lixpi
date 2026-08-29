@@ -2,7 +2,7 @@
     "key": "aspect_ratio",
     "category": "output-shape",
     "apiField": "aspect_ratio",
-    "controlKey": "aspectRatio",
+    "controlKey": "imageSize",
     "type": "enum",
     "values": [
         "1:1",
@@ -19,15 +19,17 @@
     "lixpiValue": "user-selected",
     "currentState": "exposed",
     "availability": "supported",
-    "summary": "Output shape. Stability has no resolution parameter: output is roughly one megapixel and the ratio decides the shape.",
+    "summary": "Selects the output shape for Stability text-to-image and single-reference control requests. All reviewed values target roughly one megapixel, so changing the ratio redistributes pixels between width and height instead of selecting a separate resolution tier.",
     "combines": [
-        "Only applies to text-to-image requests."
+        "The control applies to text-to-image on both transports and to direct Stability style or structure control requests.",
+        "It is omitted for direct style transfer and Bedrock image-to-image requests because the source image defines the frame.",
+        "The synchronized default is 1:1. The model matrix validates the selected value against this exact nine-value list before provider execution."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:308, :314 and :327",
-        "code": "formData.set('aspect_ratio', aspectRatio)",
-        "from": "the matrix control",
-        "what": "Output shape, and effectively the only size control Stability has: output is about one megapixel and the ratio decides how it is spent. Not sent on the style-transfer path, where the init image dictates the frame."
+        "setIn": "services/nex/workloads/ai-models-synchronization/ai-models-synchronization.ts and services/api/src/llm/providers/stability-provider.ts:308, :315, :324, :421",
+        "code": "STABILITY_IMAGE_CONTROLS publishes imageSize; the provider sends aspect_ratio only on routes where Stability accepts it",
+        "from": "the Stability image model configuration row",
+        "what": "Shows the Aspect ratio dropdown, persists its value per selected Stability model, validates it in the matrix, and sends it on compatible direct API and Bedrock requests."
     },
     "supportedModels": [
         "stability-ultra",
@@ -47,6 +49,8 @@
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html"
     ]
 }

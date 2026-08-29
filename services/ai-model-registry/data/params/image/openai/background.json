@@ -2,7 +2,7 @@
     "key": "background",
     "category": "output-format",
     "apiField": "background",
-    "controlKey": null,
+    "controlKey": "background",
     "type": "enum",
     "values": [
         "transparent",
@@ -11,17 +11,14 @@
     ],
     "providerDefault": "auto",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "Transparency of the generated background. Worth having on a node-based compositing canvas.",
+    "summary": "Controls whether GPT Image 2 chooses the background automatically, always returns an opaque background, or requests transparency. Transparent output is preview functionality and requires PNG or WebP; Lixpi's internal PNG output keeps that combination compatible.",
     "combines": [
         "transparent requires output_format of png or webp.",
         "gpt-image-2 rejects transparent outright."
     ],
     "supportedModels": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "supportedApis": [
@@ -39,5 +36,11 @@
     "unsupportedApis": [],
     "sources": [
         "https://developers.openai.com/api/docs/guides/image-generation"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/openai-provider.ts:238-256 and 568-641",
+        "code": "background is read from state.imageGenerationConfig with an 'auto' fallback and sent through Responses image tools, images.generate, and images.edit",
+        "from": "the selected background matrix control",
+        "what": "Controls whether the generated image uses provider-selected, opaque, or transparent background handling. Lixpi fixes output_format to PNG."
+    }
 }

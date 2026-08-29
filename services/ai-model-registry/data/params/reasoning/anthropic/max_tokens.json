@@ -18,11 +18,14 @@
     ],
     "range": "0 to the model's output limit. 128k on Opus 5, Opus 4.8, Opus 4.7, Sonnet 5, Opus 4.6, Sonnet 4.6, Fable 5, Mythos 5, Mythos Preview; 64k on Haiku 4.5, Sonnet 4.5, Opus 4.5. The `output-300k-2026-03-24` beta header raises it to 300k on the Message Batches API for Opus 5, Opus 4.8, Opus 4.7, Sonnet 5, Opus 4.6, and Sonnet 4.6.",
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"

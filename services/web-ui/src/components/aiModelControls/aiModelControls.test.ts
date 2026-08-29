@@ -198,7 +198,7 @@ type MediaGenerationConfigSelectionGroup = {
     groupId: string
     modelIds: string[]
     values: Partial<Record<
-        'imageSize' | 'aspectRatio' | 'resolution' | 'duration' | 'outputFormat' | 'generateAudio' | 'watermark',
+        'imageSize' | 'aspectRatio' | 'resolution' | 'duration' | 'outputFormat' | 'generateAudio' | 'watermark' | 'quality' | 'background',
         string
     >>
 }
@@ -494,6 +494,115 @@ describe('createMediaGenerationConfigMatrixView', () => {
                 values: { imageSize: '1536x1024' },
             },
         ])
+
+        view.destroy()
+    })
+
+    it('uses sliding dropdowns for quality and background controls', () => {
+        const imageGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
+            group.groupId === 'image:google/openai'
+        ))
+        imageGroup.controls = [
+            {
+                key: 'quality',
+                label: 'Quality',
+                kind: 'segmented',
+                defaultValue: 'auto',
+                options: [
+                    { value: 'auto', label: 'Auto', description: 'Provider-selected quality.' },
+                    { value: 'high', label: 'High', description: 'Highest available quality.' },
+                ],
+            },
+            {
+                key: 'background',
+                label: 'Background',
+                kind: 'segmented',
+                defaultValue: 'auto',
+                options: [
+                    { value: 'auto', label: 'Auto', description: 'Provider-selected background.' },
+                    { value: 'transparent', label: 'Transparent', description: 'Requests an alpha channel.' },
+                ],
+            },
+        ]
+        const controls = createControls({
+            selectedModelIds: ['openai:gpt-image-1'],
+            configGroups: [{
+                groupId: 'image:google/openai',
+                modelIds: ['openai:gpt-image-1'],
+                values: { quality: 'high', background: 'transparent' },
+            }],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const qualityDropdown = latestSlidingDropdownConfig(config => config.id.endsWith(':quality'))
+        const backgroundDropdown = latestSlidingDropdownConfig(config => config.id.endsWith(':background'))
+        const primaryRow = view.dom.querySelector('.ai-model-config-primary-row') as HTMLElement
+
+        expect(qualityDropdown.selectedValue).toBe('high')
+        expect(backgroundDropdown.selectedValue).toBe('transparent')
+        expect(qualityDropdown.renderOption).toEqual(expect.any(Function))
+        expect(backgroundDropdown.renderOption).toEqual(expect.any(Function))
+        expect(mockState.slidingSwitchConfigs).toHaveLength(0)
+        expect(primaryRow.querySelectorAll('.ai-model-config-inline-control')).toHaveLength(2)
+        expect(primaryRow.querySelector('[data-control-key="quality"]')).not.toBeNull()
+        expect(primaryRow.querySelector('[data-control-key="background"]')).not.toBeNull()
+        expect(view.dom.querySelector('.ai-model-config-controls')).toBeNull()
+
+        qualityDropdown.onChange('auto')
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
+            groupId: 'image:google/openai',
+            modelIds: ['openai:gpt-image-1'],
+            values: { quality: 'auto', background: 'transparent' },
+        }])
+
+        view.destroy()
+    })
+
+    it('keeps aspect ratio and resolution beside the image model', () => {
+        const imageGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
+            group.groupId === 'image:google/openai'
+        ))
+        imageGroup.controls = [
+            {
+                key: 'imageSize',
+                label: 'Aspect ratio',
+                kind: 'aspect-ratio',
+                defaultValue: '1:1',
+                options: [
+                    { value: '1:1', label: '1:1' },
+                    { value: '16:9', label: '16:9' },
+                ],
+            },
+            {
+                key: 'resolution',
+                label: 'Resolution',
+                kind: 'segmented',
+                defaultValue: '1K',
+                options: [
+                    { value: '1K', label: '1K' },
+                    { value: '2K', label: '2K' },
+                ],
+            },
+        ]
+        const controls = createControls({
+            selectedModelIds: ['google:imagen-4'],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const primaryRow = view.dom.querySelector('.ai-model-config-primary-row') as HTMLElement
+        const inlineControls = Array.from(primaryRow.querySelectorAll('.ai-model-config-inline-control'))
+
+        expect(inlineControls).toHaveLength(2)
+        expect(inlineControls.map(control => (
+            control.querySelector('.ai-media-config-control')?.getAttribute('data-control-key')
+        ))).toEqual(['imageSize', 'resolution'])
+        expect(view.dom.querySelector('.ai-model-config-controls')).toBeNull()
 
         view.destroy()
     })

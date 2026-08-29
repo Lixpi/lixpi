@@ -9,8 +9,12 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "What to keep out of the image. Matters more here than anywhere else, because the diffusion models respond to it directly instead of routing it through a rewriting layer.",
-    "combines": [],
+    "summary": "Describes content the diffusion model should avoid. It materially affects generation and must be reconciled with Lixpi's authoritative prompt, moderation, retry, and multi-transport routing before it can be accepted as a separate user field.",
+    "combines": [
+        "It is evaluated with the positive prompt; contradictory positive and negative instructions can reduce quality or produce unstable results.",
+        "It does not bypass provider moderation or Lixpi's provider-safe prompt boundary.",
+        "A separate user-authored negative field must preserve authoritative prompt ownership and behave consistently across direct Stability and Bedrock transports, which is why the registry keeps it out of this implementation."
+    ],
     "supportedModels": [
         "stability-ultra",
         "sd3.5-large"
@@ -19,16 +23,18 @@
         "stability-v2beta",
         "bedrock"
     ],
-    "decision": "internal",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "It must be populated based on what reasoning model decides to put there based on user's input. User may also provide explicit negative prompt, then it must be used as is",
+    "note": "Requires a separate prompt-authority and cross-provider configuration feature; not implemented in this iteration.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html"
     ]
 }

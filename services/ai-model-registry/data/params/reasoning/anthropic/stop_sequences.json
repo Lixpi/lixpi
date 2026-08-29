@@ -8,14 +8,21 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Strings that end generation when produced.",
-    "combines": [],
+    "summary": "One or more exact text sequences that stop Claude when it generates a match. The matching sequence ends the response and is reported through the provider stop reason rather than being treated as ordinary answer text.",
+    "combines": [
+        "Applies alongside `max_tokens`; whichever termination condition is reached first ends the response.",
+        "A stop sequence can cut off JSON, prose, or a tool-use turn before it is complete, so it is unsafe as a general user control in Lixpi's structured tool workflow.",
+        "It does not replace tool choice or structured-output validation. Lixpi leaves provider and orchestration termination rules in control."
+    ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"

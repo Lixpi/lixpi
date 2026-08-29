@@ -39,6 +39,7 @@ describe('aiPromptInputNodeSpec', () => {
             aiVideoModels: '["video"]',
             useMultipleImageModels: false,
             useMultipleVideoModels: true,
+            reasoningGenerationConfigGroups: '[{"groupId":"effort","modelIds":["gpt-4"],"values":{"reasoningEffort":"high"}}]',
             imageGenerationConfigGroups: '[{"groupId":"size","modelIds":["model"],"values":{"size":"large"}}]',
             videoGenerationConfigGroups: '[{"groupId":"fps","modelIds":["v"],"values":{"fps":"60"}}]',
             imageGenerationSize: '1024x1024',
@@ -51,6 +52,7 @@ describe('aiPromptInputNodeSpec', () => {
         expect(dom['data-ai-reasoning-models']).toBe('["gpt-4"]')
         expect(dom['data-ai-image-models']).toBe('["img"]')
         expect(dom['data-ai-video-models']).toBe('["video"]')
+        expect(dom['data-reasoning-generation-config-groups']).toBe('[{"groupId":"effort","modelIds":["gpt-4"],"values":{"reasoningEffort":"high"}}]')
         expect(dom['data-image-generation-config-groups']).toBe('[{"groupId":"size","modelIds":["model"],"values":{"size":"large"}}]')
         expect(dom['data-video-generation-config-groups']).toBe('[{"groupId":"fps","modelIds":["v"],"values":{"fps":"60"}}]')
     })
@@ -64,6 +66,7 @@ describe('aiPromptInputNodeSpec', () => {
             'data-use-multiple-video-models': 'true',
             'data-ai-image-models': '[\"img\", \"\", \"img\"]',
             'data-ai-video-models': '[\"video\"]',
+            'data-reasoning-generation-config-groups': '[{"groupId":"effort","modelIds":["r1"]}]',
             'data-video-resolution': '720p',
             'data-image-generation-size': 'auto',
             'data-image-generation-config-groups': '[{\"groupId\":\"size\",\"modelIds\":[\"x\",\"y\"]}]',
@@ -77,6 +80,7 @@ describe('aiPromptInputNodeSpec', () => {
             useMultipleVideoModels: true,
             aiImageModels: '["img"]',
             aiVideoModels: '["video"]',
+            reasoningGenerationConfigGroups: '[{"groupId":"effort","modelIds":["r1"],"values":{}}]',
             imageGenerationConfigGroups: '[{"groupId":"size","modelIds":["x","y"],"values":{}}]',
             videoGenerationConfigGroups: '[{"groupId":"fps","modelIds":["v1"],"values":{}}]',
         })

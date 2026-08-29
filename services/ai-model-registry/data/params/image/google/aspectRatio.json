@@ -2,7 +2,7 @@
     "key": "aspectRatio",
     "category": "output-shape",
     "apiField": "config.imageConfig.aspectRatio",
-    "controlKey": "aspectRatio",
+    "controlKey": "imageSize",
     "type": "enum",
     "values": [
         "1:1",
@@ -24,20 +24,20 @@
     "lixpiValue": "1:1",
     "currentState": "exposed",
     "availability": "supported",
-    "summary": "Output shape. Sets shape only, not size.",
+    "summary": "Controls output shape without selecting pixel density. The accepted ratios differ by image model, and editing defaults may inherit the input image's ratio, so Lixpi validates the selection against the selected model's configuration row before sending imageConfig.aspectRatio.",
     "combines": [
         "Our matrix lists ten of these plus Auto and omits the extremes (1:8, 8:1, 1:4, 4:1)."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/google-provider.ts:281",
-        "code": "if (imageSize && imageSize !== 'auto') config.imageConfig = { aspectRatio: imageSize }",
-        "from": "the model's imageSizes control; 'auto' is dropped rather than forwarded",
-        "what": "Output shape. Note the whole imageConfig object is built from this one field, so nothing else in ImageConfig, imageSize included, is reachable without changing this line."
+        "setIn": "services/api/src/llm/providers/google-provider.ts:277-285",
+        "code": "config.imageConfig includes aspectRatio when state.imageSize is set and is not 'auto'",
+        "from": "the selected image aspect-ratio control, carried in state.imageSize",
+        "what": "Sets imageConfig.aspectRatio. It can be sent together with imageConfig.imageSize when the model also exposes a resolution control."
     },
     "supportedModels": [
-        "gemini-2.5-flash-preview-image-generation",
-        "gemini-3-pro-image-preview",
-        "gemini-3.1-flash-image-preview"
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image"
     ],
     "supportedApis": [
         "gemini-developer-api",
@@ -49,7 +49,7 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Per-model option lists are synchronized; Gemini 3.1 Flash Image also supports the extreme 1:4, 4:1, 1:8 and 8:1 ratios.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

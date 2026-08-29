@@ -84,6 +84,7 @@ type NormalizedMatrixRequest = {
     reasoningModelIds: AiModelId[]
     imageModelIds: AiModelId[]
     videoModelIds: AiModelId[]
+    reasoningConfigGroups: MediaGenerationConfigSelectionGroup[]
     imageSize: ImageGenerationSize
     imageConfigGroups: MediaGenerationConfigSelectionGroup[]
     videoAspectRatio?: string
@@ -99,11 +100,12 @@ type ResolvedMatrixRequest = NormalizedMatrixRequest & {
     imageModels: ResolvedAiModel[]
     videoModels: ResolvedAiModel[]
     videoFanoutModels: ResolvedAiModel[]
-    imageModelOptions: Record<AiModelId, { imageSize?: string }>
-    videoModelOptions: Record<AiModelId, VideoModelOptions>
+    reasoningModelOptions: Record<AiModelId, ModelGenerationOptions>
+    imageModelOptions: Record<AiModelId, ModelGenerationOptions>
+    videoModelOptions: Record<AiModelId, ModelGenerationOptions>
 }
 
-type VideoModelOptions = Partial<Record<MediaGenerationConfigControlKey, string>>
+type ModelGenerationOptions = Partial<Record<MediaGenerationConfigControlKey, string>>
 
 type StopMatrixRequestParams = {
     workspaceId: string
@@ -211,7 +213,7 @@ const findConfigGroupValue = (
     return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-const normalizeVideoControlValue = (
+const normalizeControlValue = (
     control: MediaGenerationConfigControl,
     requested: string | number | undefined,
 ): string | undefined => {
@@ -302,8 +304,10 @@ export class MediaGenerationMatrixOrchestrator {
             normalizedReasoningModelIds: normalized.reasoningModelIds,
             normalizedImageModelIds: normalized.imageModelIds,
             normalizedVideoModelIds: normalized.videoModelIds,
+            reasoningConfigGroups: normalized.reasoningConfigGroups,
             imageConfigGroups: normalized.imageConfigGroups,
             videoConfigGroups: normalized.videoConfigGroups,
+            reasoningModelOptions: normalized.reasoningModelOptions,
             imageModelOptions: normalized.imageModelOptions,
             videoModelOptions: normalized.videoModelOptions,
         })
@@ -348,6 +352,7 @@ export class MediaGenerationMatrixOrchestrator {
                     reasoningIndex,
                     ...(lineageAssignment ? { lineageAssignment } : {}),
                 })
+                const reasoningOptions = normalized.reasoningModelOptions[reasoningModel.modelId]
                 return this.registry.process(instanceKey, reasoningModel.provider, {
                     ...requestData,
                     ...admissions[reasoningIndex],
@@ -381,9 +386,11 @@ export class MediaGenerationMatrixOrchestrator {
                     // last (the spreads above never contain these keys today, but
                     // ordering keeps that guarantee robust).
                     aiModelMetaInfo: reasoningModel.meta,
+                    reasoningGenerationConfig: reasoningOptions,
                     imageModelMetaInfo: primaryImageModel?.meta,
                     videoModelMetaInfo: primaryVideoModel?.meta,
                     imageSize: primaryImageOptions?.imageSize ?? normalized.imageSize,
+                    imageGenerationConfig: primaryImageOptions,
                     videoAspectRatio: primaryVideoOptions?.aspectRatio,
                     videoResolution: primaryVideoOptions?.resolution,
                     videoDurationSeconds: primaryVideoOptions?.duration ? Number(primaryVideoOptions.duration) : undefined,
@@ -427,6 +434,9 @@ export class MediaGenerationMatrixOrchestrator {
                         reasoningModelIds: normalized.reasoningModelIds,
                         imageModelIds: normalized.imageModelIds,
                         videoModelIds: normalized.videoModelIds,
+                        reasoningOptions: {
+                            configGroups: normalized.reasoningConfigGroups,
+                        },
                         imageOptions: {
                             imageSize: normalized.imageSize,
                             configGroups: normalized.imageConfigGroups,
@@ -608,6 +618,7 @@ export class MediaGenerationMatrixOrchestrator {
             reasoningModelIds,
             imageModelIds,
             videoModelIds,
+            reasoningConfigGroups: normalizeConfigGroupsForModels(request?.reasoningOptions?.configGroups, reasoningModelIds),
             imageSize: (request?.imageOptions?.imageSize ?? requestData.imageSize ?? 'auto') as ImageGenerationSize,
             imageConfigGroups: normalizeConfigGroupsForModels(request?.imageOptions?.configGroups, imageModelIds),
             videoAspectRatio: request?.videoOptions?.aspectRatio ?? requestData.videoAspectRatio,
@@ -643,6 +654,7 @@ export class MediaGenerationMatrixOrchestrator {
             imageModels,
             videoModels,
             videoFanoutModels,
+            reasoningModelOptions: this.resolveReasoningModelOptions(normalized, reasoningModels),
             imageModelOptions: this.resolveImageModelOptions(normalized, imageModels),
             videoModelOptions,
         }
@@ -651,49 +663,82 @@ export class MediaGenerationMatrixOrchestrator {
     private resolveImageModelOptions(
         normalized: NormalizedMatrixRequest,
         imageModels: ResolvedAiModel[],
-    ): Record<AiModelId, { imageSize?: string }> {
-        const optionsByModelId: Record<AiModelId, { imageSize?: string }> = {}
+    ): Record<AiModelId, ModelGenerationOptions> {
+        const optionsByModelId: Record<AiModelId, ModelGenerationOptions> = {}
         for (const imageModel of imageModels) {
-            const requestedImageSize = findConfigGroupValue(
-                normalized.imageConfigGroups,
-                imageModel.modelId,
-                'imageSize',
-            ) ?? normalized.imageSize
-            optionsByModelId[imageModel.modelId] = {
-                imageSize: normalizeModelOption(requestedImageSize, imageModel.meta.imageSizes) ?? 'auto',
+            const controls = imageModel.meta.imageGenerationControls
+            if (!controls?.length) {
+                const requestedImageSize = findConfigGroupValue(
+                    normalized.imageConfigGroups,
+                    imageModel.modelId,
+                    'imageSize',
+                ) ?? normalized.imageSize
+                optionsByModelId[imageModel.modelId] = {
+                    imageSize: normalizeModelOption(requestedImageSize, imageModel.meta.imageSizes) ?? 'auto',
+                }
+                continue
             }
+            optionsByModelId[imageModel.modelId] = this.resolveModelControlOptions(
+                imageModel.modelId,
+                controls,
+                normalized.imageConfigGroups,
+                control => control.key === 'imageSize' ? normalized.imageSize : undefined,
+            )
         }
         return optionsByModelId
+    }
+
+    private resolveReasoningModelOptions(
+        normalized: NormalizedMatrixRequest,
+        reasoningModels: ResolvedAiModel[],
+    ): Record<AiModelId, ModelGenerationOptions> {
+        return Object.fromEntries(reasoningModels.map(reasoningModel => [
+            reasoningModel.modelId,
+            this.resolveModelControlOptions(
+                reasoningModel.modelId,
+                reasoningModel.meta.reasoningGenerationControls ?? [],
+                normalized.reasoningConfigGroups,
+            ),
+        ])) as Record<AiModelId, ModelGenerationOptions>
     }
 
     private resolveVideoModelOptions(
         normalized: NormalizedMatrixRequest,
         videoModels: ResolvedAiModel[],
-    ): Record<AiModelId, VideoModelOptions> {
-        const optionsByModelId: Record<AiModelId, VideoModelOptions> = {}
+    ): Record<AiModelId, ModelGenerationOptions> {
+        const optionsByModelId: Record<AiModelId, ModelGenerationOptions> = {}
         for (const videoModel of videoModels) {
             if (!videoModel.meta.videoGenerationControls?.length) {
                 throw new Error(`VIDEO_GENERATION_CONTROLS_MISSING:${videoModel.modelId}`)
             }
-            optionsByModelId[videoModel.modelId] = Object.fromEntries(
-                videoModel.meta.videoGenerationControls.flatMap((control): Array<[MediaGenerationConfigControlKey, string]> => {
-                    const requestedValue = findConfigGroupValue(
-                        normalized.videoConfigGroups,
-                        videoModel.modelId,
-                        control.key,
-                    ) ?? (control.key === 'aspectRatio'
+            optionsByModelId[videoModel.modelId] = this.resolveModelControlOptions(
+                videoModel.modelId,
+                videoModel.meta.videoGenerationControls,
+                normalized.videoConfigGroups,
+                control => control.key === 'aspectRatio'
                         ? normalized.videoAspectRatio
                         : control.key === 'resolution'
                             ? normalized.videoResolution
                             : control.key === 'duration'
                                 ? normalized.videoDuration
-                                : undefined)
-                    const value = normalizeVideoControlValue(control, requestedValue)
-                    return value ? [[control.key, value]] : []
-                }),
+                                : undefined,
             )
         }
         return optionsByModelId
+    }
+
+    private resolveModelControlOptions(
+        modelId: AiModelId,
+        controls: MediaGenerationConfigControl[],
+        configGroups: MediaGenerationConfigSelectionGroup[],
+        fallback?: (control: MediaGenerationConfigControl) => string | number | undefined,
+    ): ModelGenerationOptions {
+        return Object.fromEntries(controls.flatMap((control): Array<[MediaGenerationConfigControlKey, string]> => {
+            const requestedValue = findConfigGroupValue(configGroups, modelId, control.key)
+                ?? fallback?.(control)
+            const value = normalizeControlValue(control, requestedValue)
+            return value ? [[control.key, value]] : []
+        }))
     }
 
     private async resolveModels(modelIds: AiModelId[]): Promise<ResolvedAiModel[]> {
@@ -728,8 +773,8 @@ export class MediaGenerationMatrixOrchestrator {
         normalized: ResolvedMatrixRequest
         primaryImageModel?: ResolvedAiModel
         primaryVideoModel?: ResolvedAiModel
-        primaryImageOptions?: { imageSize?: string }
-        primaryVideoOptions?: VideoModelOptions
+        primaryImageOptions?: ModelGenerationOptions
+        primaryVideoOptions?: ModelGenerationOptions
     }): Promise<SharedPreflightResult> {
         const reasoningModel = normalized.reasoningModels[0]
         const abortController = new AbortController()
@@ -767,10 +812,12 @@ export class MediaGenerationMatrixOrchestrator {
             modelVersion: reasoningModel.meta.modelVersion,
             maxCompletionSize: reasoningModel.meta.maxCompletionSize,
             temperature: reasoningModel.meta.defaultTemperature ?? 0.7,
+            reasoningGenerationConfig: normalized.reasoningModelOptions[reasoningModel.modelId],
             streamActive: false,
             aiRequestReceivedAt: Date.now(),
             enableImageGeneration: requestData.enableImageGeneration ?? false,
             imageSize: primaryImageOptions?.imageSize ?? normalized.imageSize,
+            imageGenerationConfig: primaryImageOptions,
             imageModelMetaInfo: primaryImageModel?.meta,
             imageModelVersion: primaryImageModel?.meta.modelVersion,
             imageProviderName: primaryImageModel?.provider,

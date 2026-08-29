@@ -1060,7 +1060,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                     },
                     {
                         provider: 'OpenAI',
-                        model: 'gpt-image-1',
+                        model: 'gpt-image-2',
                         shortTitle: 'GPT Image',
                         iconName: 'gptAvatarIcon',
                         modalities: [{ modality: 'image_generation' }],
@@ -1088,7 +1088,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                             mediaType: 'image',
                             provider: 'test',
                             title: 'Image models',
-                            modelIds: ['Google:imagen-4', 'OpenAI:gpt-image-1'],
+                            modelIds: ['Google:imagen-4', 'OpenAI:gpt-image-2'],
                             controls: [],
                         },
                         {
@@ -1104,7 +1104,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             } as any)
             const { nv } = createNodeView('Hello', {
                 aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
-                aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-1']),
+                aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-2']),
                 aiVideoModels: JSON.stringify(['Google:veo-3', 'ByteDance:seedance']),
             })
             const sections = Array.from(nv.dom.querySelectorAll('.ai-prompt-model-menu-section'))
@@ -1141,7 +1141,6 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             )
             const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
 
-            expectSourceToContain(nodeSource, 'return createModelConfigurationRow({')
             expectSourceToContain(modelControlsSource, 'return createModelConfigurationRow({')
             expectSourceNotToContain(nodeSource, 'className="ai-model-config-remove"')
             expectSourceNotToContain(modelControlsSource, 'className="ai-model-config-remove"')
@@ -1627,8 +1626,9 @@ describe('createAiPromptInputNodeView — control adapters', () => {
         expect(controls).not.toHaveProperty('onStop')
         expect(controls).not.toHaveProperty('isReceiving')
 
-        controls.onSubmit()
         const modelDropdownUpdate = factories.createModelDropdown.mock.results[0]!.value.update
+        modelDropdownUpdate.mockClear()
+        controls.onSubmit()
         expect(modelDropdownUpdate).toHaveBeenCalledOnce()
         expect(modelDropdownUpdate.mock.invocationCallOrder[0]).toBeLessThan(onSubmit.mock.invocationCallOrder[0]!)
         expect(onSubmit).toHaveBeenCalledOnce()
@@ -1957,7 +1957,12 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const testDoc = doc(promptInput({
             mediaGenerationMode: 'video',
             aiReasoningModels: JSON.stringify(['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4']),
-            aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-1']),
+            reasoningGenerationConfigGroups: JSON.stringify([{
+                groupId: 'reasoning:test',
+                modelIds: ['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4'],
+                values: { reasoningEffort: 'high' },
+            }]),
+            aiImageModels: JSON.stringify(['Google:imagen-4', 'OpenAI:gpt-image-2']),
             aiVideoModels: JSON.stringify(['Google:veo-3', 'BytePlus:seedance-2']),
             useMultipleReasoningModels: false,
             useMultipleImageModels: false,
@@ -1973,6 +1978,13 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
 
         expect(options.onSubmit).toHaveBeenCalledWith(expect.objectContaining({
             aiReasoningModels: ['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4'],
+            reasoningOptions: {
+                configGroups: [{
+                    groupId: 'reasoning:test',
+                    modelIds: ['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4'],
+                    values: { reasoningEffort: 'high' },
+                }],
+            },
             useMultipleReasoningModels: true,
             useMultipleImageModels: true,
             useMultipleVideoModels: true,
@@ -2126,7 +2138,12 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const testDoc = doc(promptInput({
             aiReasoningModels: serializedModels,
             useMultipleReasoningModels: true,
-            aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
+            reasoningGenerationConfigGroups: JSON.stringify([{
+                groupId: 'reasoning:test',
+                modelIds: selectedModels,
+                values: { reasoningEffort: 'high' },
+            }]),
+            aiImageModels: JSON.stringify(['Google:gemini-3.1-flash-image']),
             imageGenerationSize: 'auto',
         }, p('Hello world')))
         const state = createEditorStateWithPlugins(testDoc, [plugin])
@@ -2145,7 +2162,12 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         expect(inputNode.textContent).toBe('')
         expect(inputNode.attrs.aiReasoningModels).toBe(serializedModels)
         expect(inputNode.attrs.useMultipleReasoningModels).toBe(true)
-        expect(inputNode.attrs.aiImageModels).toBe(JSON.stringify(['Google:gemini-2.5-flash-image']))
+        expect(inputNode.attrs.reasoningGenerationConfigGroups).toBe(JSON.stringify([{
+            groupId: 'reasoning:test',
+            modelIds: selectedModels,
+            values: { reasoningEffort: 'high' },
+        }]))
+        expect(inputNode.attrs.aiImageModels).toBe(JSON.stringify(['Google:gemini-3.1-flash-image']))
         expect(inputNode.attrs.imageGenerationSize).toBe('auto')
     })
 })

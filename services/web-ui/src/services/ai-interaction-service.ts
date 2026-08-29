@@ -42,6 +42,7 @@ type SendChatMessageOptions = Omit<AiInteractionChatSendMessagePayload, 'convers
     useMultipleReasoningModels?: boolean
     useMultipleImageModels?: boolean
     useMultipleVideoModels?: boolean
+    reasoningConfigGroups?: MediaGenerationConfigSelectionGroup[]
     aiImageModels?: string[]
     imageSize?: ImageGenerationSize
     imageConfigGroups?: MediaGenerationConfigSelectionGroup[]
@@ -658,6 +659,7 @@ export default class AiInteractionService {
         useMultipleReasoningModels,
         useMultipleImageModels,
         useMultipleVideoModels,
+        reasoningConfigGroups,
         aiImageModels,
         imageSize,
         imageConfigGroups,
@@ -764,6 +766,9 @@ export default class AiInteractionService {
                 reasoningModelIds,
                 imageModelIds: matrixImageModelIds,
                 videoModelIds: matrixVideoModelIds,
+                ...(reasoningConfigGroups?.length ? { reasoningOptions: {
+                    configGroups: reasoningConfigGroups,
+                } } : {}),
                 ...(matrixImageModelIds.length > 0 ? { imageOptions: {
                     imageSize: imageSize || 'auto',
                     ...(imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),

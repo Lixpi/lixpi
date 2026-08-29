@@ -3,11 +3,8 @@
     "providerTitle": "OpenAI",
     "apiName": "Responses API image_generation tool",
     "groupId": "gpt-image",
-    "title": "GPT Image (1, 1-mini, 1.5, 2)",
+    "title": "GPT Image 2",
     "models": [
-        "gpt-image-1",
-        "gpt-image-1-mini",
-        "gpt-image-1.5",
         "gpt-image-2"
     ],
     "docs": "https://developers.openai.com/api/docs/guides/image-generation"

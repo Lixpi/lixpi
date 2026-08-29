@@ -6,7 +6,7 @@
     "type": "string (base64 image)",
     "providerDefault": null,
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "hidden",
     "availability": "supported",
     "summary": "The subject image on the style-transfer endpoint: the picture whose content and composition you want to keep. The look applied to it comes from style_image.",
     "combines": [
@@ -25,19 +25,27 @@
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
-    "status": "none",
+    "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Populated internally from the resolved provider-neutral reference image.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
-    ]
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:303",
+        "code": "formData.set('init_image', initBlob, `init.${initExt}`)",
+        "from": "the first resolved reference when two references select direct style transfer",
+        "what": "Provides the subject and composition that direct Stability style transfer restyles. It is a reference attachment, not a model configuration row."
+    }
 }

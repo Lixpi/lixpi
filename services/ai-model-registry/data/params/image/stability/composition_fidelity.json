@@ -19,19 +19,21 @@
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "skip",
     "reviewed": true,
-    "status": "approved",
+    "status": "needs-implementation-investigation",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "note": "Operation-specific style-transfer control; not implemented in this iteration.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

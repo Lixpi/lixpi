@@ -14,10 +14,10 @@
         "Lixpi already generates one and stores what comes back, so exposing it as an editable field is mostly UI work."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:294",
-        "code": "formData.set('seed', String(requestedSeed))",
-        "from": "generated per request",
-        "what": "Pins the random draw. Stability is genuinely deterministic here and returns the seed it used, which resolveReportedSeed stores on the asset, so a generation can be reproduced exactly."
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:294 and :407",
+        "code": "formData.set('seed', String(requestedSeed)) and body.seed = requestedSeed",
+        "from": "a pipeline-generated seed constrained to the common Stability model range",
+        "what": "Makes the provider request reproducible, then stores the seed reported by Stability on the generated Asset. It is not an editable composer option."
     },
     "supportedModels": [
         "stability-ultra",
@@ -28,15 +28,17 @@
         "bedrock"
     ],
     "decision": "internal",
-    "reviewed": false,
+    "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Generated and recorded by the pipeline for every request; not a composer setting.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html"
+        "https://platform.stability.ai/docs/api-reference",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-stable-ultra-text-image-request-response.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-diffusion-3-5-large.html"
     ]
 }

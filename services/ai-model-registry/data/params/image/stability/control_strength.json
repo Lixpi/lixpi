@@ -16,29 +16,31 @@
         "Only reaches the API on the direct v2beta path. Bedrock has no control endpoint, so the Bedrock route substitutes the image-to-image strength constant instead."
     ],
     "usage": {
-        "setIn": "services/api/src/llm/providers/stability-provider.ts:311",
-        "code": "formData.set('control_strength', String(STRUCTURE_CONTROL_STRENGTH))  // 0.9, defined at :29",
-        "from": "a hardcoded constant",
-        "what": "On control/structure, how tightly the output traces the reference image's geometry. At 0.9 Lixpi holds the composition very close to the reference."
+        "setIn": "services/api/src/llm/providers/stability-provider.ts:309",
+        "code": "formData.set('control_strength', String(STRUCTURE_CONTROL_STRENGTH))",
+        "from": "the pipeline-owned STRUCTURE_CONTROL_STRENGTH constant, fixed at 0.9",
+        "what": "Keeps a direct Stability structure-control result close to the reference geometry. Bedrock does not receive this field; that transport degrades the route to image-to-image with its own strength value."
     },
     "supportedModels": [
         "stability-ultra",
         "sd3.5-large"
     ],
     "supportedApis": [
-        "stability-v2beta",
-        "bedrock"
+        "stability-v2beta"
     ],
-    "decision": "expose",
+    "decision": "internal",
     "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "note": "Fixed internally for structure-control routing; not user-configurable.",
     "unsupportedModels": [],
-    "unsupportedApis": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
     "sources": [
+        "https://platform.stability.ai/docs/api-reference",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
     ]
 }

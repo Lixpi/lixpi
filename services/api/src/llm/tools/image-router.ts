@@ -296,6 +296,7 @@ export class ImageRouter {
                     aiChatThreadId,
                     enableImageGeneration: true,
                     imageSize,
+                    imageGenerationConfig: state.imageGenerationConfig,
                     imageGenerationReferences: args.passReferences,
                     generationRun,
                     isMediaRegenerationRun: Boolean(state.mediaBranchLineagePlan?.regenerationTarget),
@@ -346,7 +347,7 @@ export class ImageRouter {
                 ...finalState,
                 generatedImages,
                 imageUsage: generatedImages.length > 0
-                    ? { generatedCount, size: imageSize, quality: 'high' }
+                    ? { generatedCount, size: imageSize, quality: state.imageGenerationConfig?.quality ?? 'auto' }
                     : undefined,
             }
         } catch (e: any) {

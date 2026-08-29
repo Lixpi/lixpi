@@ -2,13 +2,13 @@
     "key": "effort",
     "category": "reasoning",
     "apiField": "reasoning.effort",
-    "controlKey": null,
+    "controlKey": "reasoningEffort",
     "type": "enum",
     "providerDefault": "model-specific — `medium` for `gpt-5.5` and `gpt-5.6-sol`; `none` for `gpt-5.1`",
     "lixpiValue": null,
-    "currentState": "absent",
+    "currentState": "exposed",
     "availability": "supported",
-    "summary": "How much internal reasoning the model spends before answering. Lower effort means faster responses and fewer reasoning tokens.",
+    "summary": "Controls how many reasoning tokens the model may spend before answering. Higher effort can improve complex planning, coding, and verification, but increases latency and billed output-token use. The catalog validates the request against the selected model because supported levels and defaults are not uniform.",
     "combines": [
         "Supported on: gpt-5 family and o-series only. `gpt-5.6-sol` documents none/low/medium/high/xhigh/max. `gpt-5.5` documents none/low/medium/high/xhigh (no `max`). `gpt-5.1` documents none/low/medium/high. `minimal` is the gpt-5.0-era lowest tier. Non-reasoning models (gpt-4o, gpt-4.1) reject the `reasoning` object.",
         "Directly drives cost and latency: reasoning tokens are billed as output tokens, so `xhigh`/`max` can multiply the bill several times over for the same visible answer.",
@@ -26,8 +26,13 @@
         "max"
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
@@ -39,10 +44,10 @@
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "medium",
-    "note": "",
+    "note": "Per-model allowed levels and defaults are synchronized, including max on GPT-5.6 and restricted medium/high/xhigh on Pro models.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [
-        "https://developers.openai.com/api/reference/resources/responses"
+        "https://developers.openai.com/api/docs/guides/reasoning"
     ]
 }

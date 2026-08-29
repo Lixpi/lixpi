@@ -41,13 +41,19 @@ describe('ai-prompt-input.scss', () => {
         expectSourceNotToContain(scss, '.ai-prompt-model-menu-trigger-mode')
     })
 
-    it('lays out model and inline configuration fields in one flexible row', () => {
+    it('lays out model and inline configuration fields in one aligned row', () => {
         expectSourceToContain(scss, '.ai-model-config-primary-row')
         expectSourceToContain(scss, 'flex-wrap: nowrap;')
-        expectSourceToContain(scss, '.ai-model-config-model-column,')
-        expectSourceToContain(scss, '.ai-model-config-inline-control')
-        expectSourceToContain(scss, 'justify-content: flex-end;')
+        expectSourceToContain(scss, '.ai-model-config-model-column {')
+        expectSourceToContain(scss, `.ai-model-config-inline-control {
+    display: flex;
+    min-width: max-content;
+    flex: 0 0 auto;
+    justify-content: flex-start;
+}`)
         expectSourceToContain(scss, 'width: max-content;')
+        expectSourceNotToContain(scss, '.ai-model-config-inline-control .ai-prompt-model-menu-control-label')
+        expectSourceNotToContain(scss, '.ai-model-config-inline-control .ai-media-config-control-field')
     })
 
     it('caps the model settings surface and scrolls only that surface when content exceeds the viewport space', () => {

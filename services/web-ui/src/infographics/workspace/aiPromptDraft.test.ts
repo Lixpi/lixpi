@@ -14,10 +14,17 @@ describe('AI prompt draft model settings', () => {
         const attrs = buildAiPromptDraftAttrsFromSubmitData({
             aiReasoningModels: selectedModels,
             useMultipleReasoningModels: true,
+            reasoningOptions: {
+                configGroups: [{
+                    groupId: 'effort',
+                    modelIds: selectedModels,
+                    values: { reasoningEffort: 'high' },
+                }],
+            },
             useMultipleImageModels: false,
             useMultipleVideoModels: false,
             imageOptions: {
-                aiImageModels: ['Google:gemini-2.5-flash-image'],
+                aiImageModels: ['Google:gemini-3.1-flash-image'],
                 imageGenerationSize: 'auto',
             },
             videoOptions: {
@@ -33,7 +40,12 @@ describe('AI prompt draft model settings', () => {
         expect(draftAttrs.useMultipleReasoningModels).toBe(true)
         expect(draftAttrs.useMultipleImageModels).toBe(false)
         expect(draftAttrs.useMultipleVideoModels).toBe(false)
-        expect(JSON.parse(draftAttrs.aiImageModels)).toEqual(['Google:gemini-2.5-flash-image'])
+        expect(JSON.parse(draftAttrs.aiImageModels)).toEqual(['Google:gemini-3.1-flash-image'])
+        expect(JSON.parse(draftAttrs.reasoningGenerationConfigGroups)).toEqual([{
+            groupId: 'effort',
+            modelIds: selectedModels,
+            values: { reasoningEffort: 'high' },
+        }])
         expect(draftAttrs.imageGenerationSize).toBe('auto')
         expect(JSON.parse(draftAttrs.aiVideoModels)).toEqual(['Video:default'])
         expect(draftAttrs.videoAspectRatio).toBe('16:9')

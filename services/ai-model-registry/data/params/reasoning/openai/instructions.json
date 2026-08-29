@@ -14,20 +14,25 @@
         "When used with `previous_response_id`, instructions from the previous response are NOT carried over — each request must resend them. That makes swapping system prompts cheap but silently drops them if you forget."
     ],
     "supportedModels": [
-        "gpt-5 family",
-        "o-series reasoning models"
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro"
     ],
     "supportedApis": [
         "openai-responses",
         "openai-chat-completions"
     ],
     "decision": "internal",
-    "reviewed": false,
+    "reviewed": true,
     "status": "approved",
     "irrelevant": false,
     "fixedValue": "",
     "defaultValue": "",
-    "note": "",
+    "note": "Pipeline-authored system instructions; never user model settings.",
     "unsupportedModels": [],
     "unsupportedApis": [],
     "sources": [

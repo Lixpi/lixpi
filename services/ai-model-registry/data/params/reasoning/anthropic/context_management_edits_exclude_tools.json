@@ -8,23 +8,27 @@
     "lixpiValue": null,
     "currentState": "absent",
     "availability": "supported",
-    "summary": "Tools whose results are never cleared.",
+    "summary": "Exact tool names whose completed tool-use inputs and results must be protected from automatic context clearing. Protected tool history remains in the request context, which preserves information but increases later input-token use.",
     "combines": [
-        "Supported on: `clear_tool_uses_20250919`",
-        "none documented"
+        "Applies only inside a `clear_tool_uses_20250919` context-management edit; it has no effect without that edit type.",
+        "Names must match the request's declared tool names exactly. Unlisted tool uses remain eligible for clearing when the configured trigger and keep rules are reached.",
+        "Use with the edit trigger, keep count, and clear-at-least threshold. Excluding many high-volume tools can prevent context management from reclaiming enough tokens."
     ],
     "supportedModels": [
+        "claude-fable-5",
         "claude-opus-5",
         "claude-opus-4-8",
-        "claude-sonnet-5",
+        "claude-opus-4-7",
         "claude-opus-4-6",
-        "claude-sonnet-4-6"
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
     ],
     "supportedApis": [
         "anthropic-messages"
     ],
     "decision": "skip",
-    "reviewed": false,
+    "reviewed": true,
     "status": "none",
     "irrelevant": true,
     "fixedValue": "",
