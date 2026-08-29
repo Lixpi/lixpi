@@ -1,0 +1,43 @@
+{
+    "key": "speed",
+    "category": "job-control",
+    "apiField": "speed",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "standard speed when omitted",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Runs the same model weights on a faster inference configuration for up to 2.5x higher output tokens per second, at premium pricing ($10/MTok input, $50/MTok output).",
+    "combines": [
+        "Supported on: Research preview, beta header `fast-mode-2026-02-01`, access gated by account. claude-opus-5 and claude-opus-4-8 only, on the Claude API (including Managed Agents). Requests with `speed: \"fast\"` to claude-opus-4-7 return an error with no fallback. Requests to claude-opus-4-6 do not error: they silently run at standard speed, bill at standard rates, and report `usage.speed: \"standard\"`. Not available on Amazon Bedrock, Claude Platform on AWS, Google Cloud, or Microsoft Foundry.",
+        "The gain is in output tokens per second, not time to first token, so it shows up most when streaming.",
+        "Switching between fast and standard invalidates the prompt cache; the two do not share cached prefixes.",
+        "Not available with the Batch API or with a Priority Tier commitment.",
+        "Fast mode has its own rate limits and its own `anthropic-fast-*-tokens-*` response headers; exceeding them returns 429 with `retry-after`.",
+        "Per-model: Opus 5 and Opus 4.8 only, and account-gated even there."
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

@@ -1,0 +1,36 @@
+{
+    "key": "maxOutputTokens",
+    "category": "limits",
+    "apiField": "config.maxOutputTokens",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "varies by model, readable as `Model.output_token_limit` from `getModel`",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Caps tokens in a response candidate. Gemini 3 models allow up to 64k output tokens; gemini-2.5-pro, gemini-2.5-flash, and gemini-2.5-flash-lite are 65,536.",
+    "combines": [
+        "Supported on: all Gemini models, Gemini Developer API",
+        "Thought tokens count against your billing but the guides do not state that they count against `maxOutputTokens`, so do not assume a tight budget leaves room for the answer. Set it generously on high thinking levels."
+    ],
+    "range": "bounded by the model's output token limit",
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

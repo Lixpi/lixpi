@@ -1,0 +1,43 @@
+{
+    "key": "videoMaskEditing",
+    "category": "masking-editing",
+    "apiField": "video + config.mask",
+    "controlKey": null,
+    "type": "object pair",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Edits an existing video instead of extending it: insert an object into a masked region, remove a tracked or static object, or outpaint the frame outward from the masked box.",
+    "combines": [
+        "Supported on: Vertex only. Not documented anywhere on the Gemini Developer API Veo pages.",
+        "Presence of `mask` switches the `video` input from extension to editing.",
+        "Inpainting masks must match the input video's aspect ratio; outpainting masks may be 9:16 or 16:9 and must be images, not videos.",
+        "Corresponds to Vertex `task: \"edit\"`."
+    ],
+    "supportedModels": [
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

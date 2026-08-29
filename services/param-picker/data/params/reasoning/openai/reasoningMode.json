@@ -1,0 +1,41 @@
+{
+    "key": "reasoningMode",
+    "category": "reasoning",
+    "apiField": "reasoning.mode",
+    "controlKey": null,
+    "type": "enum (open string)",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "Selects the reasoning execution mode for the request.",
+    "combines": [
+        "Supported on: not documented (pro-tier reasoning models)",
+        "Echoed on the response as the effective execution mode.",
+        "The `pro` execution path corresponds to the substantially more expensive pro models; cost implications: not documented."
+    ],
+    "values": [
+        "standard",
+        "pro"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

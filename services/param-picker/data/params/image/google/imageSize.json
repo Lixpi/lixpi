@@ -1,0 +1,42 @@
+{
+    "key": "imageSize",
+    "category": "output-shape",
+    "apiField": "config.imageConfig.imageSize",
+    "controlKey": "imageSize",
+    "type": "enum",
+    "values": [
+        "1K",
+        "2K",
+        "4K"
+    ],
+    "providerDefault": "1K",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Length of the longest edge. Every Gemini image Lixpi generates comes back at 1K because this is never sent.",
+    "combines": [
+        "Orthogonal to aspectRatio: this sets size, that sets shape.",
+        "Nano Banana Pro can produce 4K stills."
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "1K",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

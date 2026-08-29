@@ -1,0 +1,36 @@
+{
+    "key": "instructions",
+    "category": "prompt-control",
+    "apiField": "instructions",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "A system/developer message inserted at the front of the model's context.",
+    "combines": [
+        "Supported on: all",
+        "When used with `previous_response_id`, instructions from the previous response are NOT carried over — each request must resend them. That makes swapping system prompts cheap but silently drops them if you forget."
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

@@ -1,0 +1,39 @@
+{
+    "key": "thinkingLevel",
+    "category": "reasoning",
+    "apiField": "config.thinkingConfig.thinkingLevel",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "MINIMAL on `gemini-3.1-flash-image` and `gemini-3.1-flash-lite-image`; HIGH on `gemini-3-pro-image` (and HIGH is the only level it accepts)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Trades image quality against latency by capping how much the model reasons before rendering. `gemini-3.1-flash-image` accepts `minimal` and `high` only, not `low` or `medium`.",
+    "combines": [
+        "Supported on: Gemini 3 image models, Gemini Developer API. Not applicable to `gemini-2.5-flash-image`.",
+        "Thinking on the Gemini 3 image models is on by default and cannot be turned off through the API.",
+        "Thinking tokens are billed whether or not you read the thought output."
+    ],
+    "supportedModels": [
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "gemini-2.5-flash-preview-image-generation"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

@@ -1,0 +1,42 @@
+{
+    "key": "background",
+    "category": "job-control",
+    "apiField": "background",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Runs the response asynchronously; you poll or reconnect for the result instead of holding the connection open.",
+    "combines": [
+        "Supported on: all",
+        "Requires `store: true`.",
+        "Designed for long `xhigh`/`max` effort runs and pro models that exceed HTTP timeouts.",
+        "Combine with `stream: true` to reconnect to an in-flight stream."
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

@@ -1,0 +1,42 @@
+{
+    "key": "return_last_frame",
+    "category": "job-control",
+    "apiField": "return_last_frame",
+    "controlKey": "returnLastFrame",
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": "user-selected",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Returns the final frame as a separate watermark-free PNG at the video's own dimensions.",
+    "combines": [
+        "Its purpose is chaining: feed the frame back as the next task's first_frame for a continuous sequence.",
+        "Not supported in draft mode."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:125",
+        "code": "return_last_frame: generationConfig.returnLastFrame === 'true'",
+        "from": "state.videoGenerationConfig.returnLastFrame, from the Return last frame toggle",
+        "what": "Asks for the closing frame back as a separate PNG so it can seed the next clip's first frame and chain a sequence."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

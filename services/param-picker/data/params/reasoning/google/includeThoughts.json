@@ -1,0 +1,41 @@
+{
+    "key": "includeThoughts",
+    "category": "reasoning",
+    "apiField": "config.thinkingConfig.includeThoughts",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Asks the API to return thought summaries alongside the answer. Summaries come back as parts flagged `thought: true` on `generateContent`.",
+    "combines": [
+        "Supported on: thinking-capable models, Gemini Developer API",
+        "Summaries are returned only if the model supports thoughts and actually produced enough reasoning. A thought block can arrive with a signature and no summary text.",
+        "You are billed for full thought tokens even though only the summary is returned.",
+        "On image models the thought content can include interim thought images as well as text."
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "true",
+    "defaultValue": "",
+    "note": "It must be rendered as part of pipeline",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

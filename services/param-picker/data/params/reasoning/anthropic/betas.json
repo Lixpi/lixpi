@@ -1,0 +1,40 @@
+{
+    "key": "betas",
+    "category": "job-control",
+    "apiField": "betas",
+    "controlKey": null,
+    "type": "array of string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "SDK-level field that sets the `anthropic-beta` request header. Each beta feature above names the header it needs.",
+    "combines": [
+        "Supported on: all models; individual betas have their own model lists",
+        "`interleaved-thinking-2025-05-14` enables thinking between tool calls in manual mode on Opus 4.5, Sonnet 4.5, and earlier Claude 4 models, and is deprecated-but-working on Sonnet 4.6. Opus 4.6 has no manual-mode interleaving at all. Haiku 4.5 does not support interleaved thinking; the header is accepted and ignored.",
+        "Adaptive thinking interleaves automatically with no header on Fable 5, Mythos 5, Mythos Preview, Opus 5, Opus 4.8, and Opus 4.7.",
+        "The Claude API and Claude Platform on AWS accept the interleaved header on any model and ignore it where it has no effect; Bedrock and Google Cloud likewise accept and ignore."
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

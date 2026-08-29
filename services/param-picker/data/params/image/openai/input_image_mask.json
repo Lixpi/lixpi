@@ -1,0 +1,38 @@
+{
+    "key": "input_image_mask",
+    "category": "masking-editing",
+    "apiField": "input_image_mask",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Inpainting mask marking where the input image should be edited.",
+    "combines": [
+        "A whole feature, not a toggle."
+    ],
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "You must figure out how to present it. Don't make decision on your own, propose options and wait for my input",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "openai-images"
+    ],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

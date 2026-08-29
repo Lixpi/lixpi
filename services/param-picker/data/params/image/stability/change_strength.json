@@ -1,0 +1,34 @@
+{
+    "key": "change_strength",
+    "category": "conditioning-strength",
+    "apiField": "change_strength",
+    "controlKey": null,
+    "type": "number",
+    "range": "0.1 to 1",
+    "providerDefault": "0.9",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "On control/style-transfer: how much the original image is allowed to change.",
+    "combines": [],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Show as a slider, Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

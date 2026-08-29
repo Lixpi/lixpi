@@ -1,0 +1,41 @@
+{
+    "key": "parallel_tool_calls",
+    "category": "tools",
+    "apiField": "parallel_tool_calls",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "true",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Whether the model may emit several tool calls in one turn.",
+    "combines": [
+        "Supported on: models with function calling",
+        "Set `false` when your tools have side effects that must be ordered, or when downstream code cannot fan out.",
+        "Interacts with `tool_choice`: forcing a specific tool makes parallelism moot."
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "true",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

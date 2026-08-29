@@ -1,0 +1,41 @@
+{
+    "key": "mask",
+    "category": "masking-editing",
+    "apiField": "mask",
+    "controlKey": null,
+    "type": "file",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "An inpainting mask whose fully transparent pixels (alpha zero) mark the region to be regenerated.",
+    "combines": [
+        "Supported on: `images.edit`",
+        "Applies to the first image when `image` is an array.",
+        "Dimension mismatch with `image` is an error, so masks must be regenerated whenever the source is resized."
+    ],
+    "range": "under 4MB, same dimensions as `image`",
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "You must figure out how to present it. Don't make decision on your own, propose options and wait for my input",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "openai-responses-image-tool"
+    ],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/images/methods/edit"
+    ]
+}

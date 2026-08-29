@@ -1,0 +1,37 @@
+{
+    "key": "prompt_cache_key",
+    "category": "caching",
+    "apiField": "prompt_cache_key",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A caller-chosen bucketing key that helps OpenAI route similar requests to the same cache. Replaces the deprecated `user` field for this purpose.",
+    "combines": [
+        "Supported on: all",
+        "Cached input tokens bill at roughly 10% of normal input rates on gpt-5.6-sol, so a stable key on a stable prefix is a large cost lever.",
+        "Requires a genuinely shared prefix (system prompt, tool definitions) to help; a per-request unique key does nothing."
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

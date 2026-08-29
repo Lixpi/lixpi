@@ -1,0 +1,42 @@
+{
+    "key": "style",
+    "category": "prompt-control",
+    "apiField": "style",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "not documented (historically `vivid`)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "`vivid` pushes hyper-real, dramatic images; `natural` gives more restrained, less stylized output.",
+    "combines": [
+        "Supported on: `dall-e-3` only",
+        "Rejected on GPT image models and on `images.edit`; steer style through the prompt instead."
+    ],
+    "values": [
+        "vivid",
+        "natural"
+    ],
+    "supportedModels": [],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "natural",
+    "note": "",
+    "unsupportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

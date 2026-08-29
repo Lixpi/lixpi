@@ -1,0 +1,39 @@
+{
+    "key": "watermark",
+    "category": "safety",
+    "apiField": "watermark",
+    "controlKey": "watermark",
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": "false",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Stamps an 'AI Generated' watermark in the lower-right corner.",
+    "combines": [],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:122",
+        "code": "watermark: generationConfig.watermark === 'true'",
+        "from": "state.videoGenerationConfig.watermark, from the Watermark toggle",
+        "what": "Burns an 'AI Generated' mark into the lower-right of the output. The strict === 'true' means anything unset is treated as off."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "false",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

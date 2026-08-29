@@ -1,0 +1,13 @@
+{
+    "providerId": "byteplus",
+    "providerTitle": "ByteDance",
+    "apiName": "BytePlus ModelArk",
+    "groupId": "seedance-2-video",
+    "title": "Seedance 2.0, 2.0 fast and 2.5",
+    "models": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "docs": "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+}

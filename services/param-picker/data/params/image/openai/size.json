@@ -1,0 +1,51 @@
+{
+    "key": "size",
+    "category": "output-shape",
+    "apiField": "size",
+    "controlKey": "imageSize",
+    "type": "enum",
+    "values": [
+        "1024x1024",
+        "1536x1024",
+        "1024x1536",
+        "auto",
+        "arbitrary WIDTHxHEIGHT on gpt-image-2"
+    ],
+    "providerDefault": "auto",
+    "lixpiValue": "user-selected from three fixed sizes plus auto",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Output dimensions. The matrix rewrites each pixel size into an aspect-ratio label, so 1536x1024 shows as 3:2.",
+    "combines": [
+        "gpt-image-2 accepts arbitrary WIDTHxHEIGHT: both sides divisible by 16, ratio between 1:3 and 3:1, maximum 3840x2160, experimental above 2560x1440.",
+        "Our matrix hands gpt-image-2 the same three fixed sizes as every other model, so that capability is unreachable."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/openai-provider.ts:604 and :613 (also :250 and :504 on the tool-call paths)",
+        "code": "size: resolvedSize",
+        "from": "state.imageSize from the matrix control, falling back to 'auto'",
+        "what": "Output dimensions. The matrix shows these as aspect-ratio labels via mapResolutionOptionsToAspectRatioLabels, so the user picks a shape and the pixel size rides along."
+    },
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "auto",
+    "note": "For widthxheight when selected additional input must be rendered that allows to set that value",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

@@ -1,0 +1,37 @@
+{
+    "key": "safety_identifier",
+    "category": "safety",
+    "apiField": "safety_identifier",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A stable per-end-user identifier that helps OpenAI detect policy-violating users of your app. Send a hash of the username or email, never the raw value.",
+    "combines": [
+        "Supported on: all",
+        "Replaces the abuse-detection half of the deprecated `user` field; `prompt_cache_key` replaces the caching half."
+    ],
+    "range": "max 64 characters",
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

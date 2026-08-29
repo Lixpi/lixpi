@@ -1,0 +1,15 @@
+{
+    "providerId": "anthropic",
+    "providerTitle": "Anthropic",
+    "apiName": "Messages API",
+    "groupId": "claude-reasoning",
+    "title": "Claude reasoning models",
+    "models": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "docs": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking"
+}

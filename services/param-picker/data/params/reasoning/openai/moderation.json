@@ -1,0 +1,37 @@
+{
+    "key": "moderation",
+    "category": "safety",
+    "apiField": "moderation",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "Runs a moderation model over this response's input and output, either scoring or hard-blocking.",
+    "combines": [
+        "Supported on: not documented per-model",
+        "`moderation.model` is required when the object is present, e.g. `omni-moderation-latest`.",
+        "Adds a second model call, so it adds latency and cost."
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

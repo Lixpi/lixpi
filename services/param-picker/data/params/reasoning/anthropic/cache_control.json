@@ -1,0 +1,44 @@
+{
+    "key": "cache_control",
+    "category": "caching",
+    "apiField": "cache_control",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "5m TTL",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Prompt caching breakpoint. As a top-level marker it applies to the last cacheable block.",
+    "combines": [
+        "Supported on: all models",
+        "Thinking-heavy work often outlives the 5-minute lifetime; the docs suggest the 1-hour TTL for long thinking sessions.",
+        "Thinking blocks are cached along with tool results automatically during a tool-use loop, even without explicit markers, and count as input tokens when read back.",
+        "Any change to thinking mode, `budget_tokens`, effort, structured-output format, or fast-mode speed starts a new cache prefix."
+    ],
+    "values": [
+        "{\"type\": \"ephemeral\"",
+        "\"ttl\": \"5m\" | \"1h\"}"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

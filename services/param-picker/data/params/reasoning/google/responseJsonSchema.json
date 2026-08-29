@@ -1,0 +1,38 @@
+{
+    "key": "responseJsonSchema",
+    "category": "structured-output",
+    "apiField": "config.responseJsonSchema",
+    "controlKey": null,
+    "type": "object (JSON Schema)",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Alternative to `responseSchema` that accepts standard JSON Schema. Only a subset of JSON Schema is honored.",
+    "combines": [
+        "Supported on: structured-output models, Gemini Developer API",
+        "Supported keywords: `$id`, `$defs`, `$ref`, `$anchor`, `type`, `format`, `title`, `description`, `enum` (strings and numbers), `items`, `prefixItems`, `minItems`, `maxItems`, `minimum`, `maximum`, `anyOf`, `oneOf` (treated as `anyOf`), `properties`, `additionalProperties`, `required`, plus the non-standard `propertyOrdering`.",
+        "`responseMimeType` is required when this is set, and `responseSchema` must be omitted.",
+        "Cyclic references are unrolled only to a limited degree and may only appear inside non-required properties. Nullable is not enough.",
+        "If `$ref` is set on a sub-schema, no other non-`$` properties may be set on it."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

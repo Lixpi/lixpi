@@ -1,0 +1,50 @@
+{
+    "key": "ratio",
+    "category": "output-shape",
+    "apiField": "ratio",
+    "controlKey": "aspectRatio",
+    "type": "enum",
+    "values": [
+        "16:9",
+        "4:3",
+        "1:1",
+        "3:4",
+        "9:16",
+        "21:9",
+        "adaptive"
+    ],
+    "providerDefault": "adaptive",
+    "lixpiValue": "16:9",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Output aspect ratio. 'adaptive' inherits the ratio from the first frame or reference video instead of picking one.",
+    "combines": [
+        "If the requested ratio disagrees with the first frame, ModelArk center-crops the input image.",
+        "Our default is 16:9; ByteDance's own default is adaptive.",
+        "2.5 locks this to adaptive for video editing, video extension, and first-frame or first-and-last-frame tasks. The 2.0 series accepts an explicit ratio for every task type."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:119",
+        "code": "...(state.videoAspectRatio ? { ratio: state.videoAspectRatio } : {})",
+        "from": "state.videoAspectRatio, from the matrix control",
+        "what": "Sets the output shape. On image-to-video it also decides whether ModelArk center-crops the first frame to fit."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "adaptive",
+    "note": "",
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

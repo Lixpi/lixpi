@@ -1,0 +1,49 @@
+{
+    "key": "resolution",
+    "category": "output-shape",
+    "apiField": "resolution",
+    "controlKey": "resolution",
+    "type": "enum",
+    "values": [
+        "480p",
+        "720p",
+        "1080p",
+        "4k"
+    ],
+    "providerDefault": "720p",
+    "lixpiValue": "720p",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Output pixel budget. Each resolution and aspect-ratio pair maps to fixed dimensions, so 720p plus 21:9 is 1470x630, not a crop. Seedance 2.0 fast stops at 720p.",
+    "combines": [
+        "Drives billing: our matrix charges 4.0 per 1M tokens at 4K against 7.7 at 1080p.",
+        "4K output uses 10-bit color and H.265, which some browsers will not play.",
+        "2.0: 480p, 720p, 1080p, 4k. 2.0 fast: 480p and 720p only. 2.5: 480p, 720p, 1080p, with no 4k. Default 720p on all three."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:118",
+        "code": "...(state.videoResolution ? { resolution: state.videoResolution } : {})",
+        "from": "state.videoResolution, carried from the matrix control the user picked",
+        "what": "Sets the output frame size for the whole clip. Also selects the billing tier in video-token-accounting, since Seedance prices per resolution."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "720p",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

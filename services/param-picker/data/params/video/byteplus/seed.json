@@ -1,0 +1,44 @@
+{
+    "key": "seed",
+    "category": "sampling",
+    "apiField": "seed",
+    "controlKey": null,
+    "type": "integer",
+    "range": "-1 to 2147483647",
+    "providerDefault": "-1",
+    "lixpiValue": "randomly generated per request",
+    "currentState": "hidden",
+    "availability": "unverified",
+    "summary": "Controls randomness. The same seed plus the same request gives similar, not identical, results.",
+    "combines": [
+        "The BytePlus supported-model list names Seedance 1.5 pro and the 1.0 series, and omits the 2.0 series.",
+        "The finished task echoes the seed back, so it can be stored and replayed."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:123",
+        "code": "seed: requestedSeed  (generated at :111 via SEEDANCE_SEED_MAX)",
+        "from": "generateMediaGenerationSeed in media-generation-seed.ts, fresh per request",
+        "what": "Pins the random draw so a generation can be described after the fact. resolveReportedSeed reconciles what the finished task echoes back with what we sent, and that lands on the asset record."
+    },
+    "supportedModels": [],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757",
+        "https://docs.byteplus.com/en/docs/ModelArk/2298881"
+    ]
+}

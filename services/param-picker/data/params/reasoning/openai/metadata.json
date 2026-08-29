@@ -1,0 +1,37 @@
+{
+    "key": "metadata",
+    "category": "safety",
+    "apiField": "metadata",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Arbitrary structured labels attached to the stored response object, queryable via API and dashboard.",
+    "combines": [
+        "Supported on: all",
+        "Only meaningful with `store: true`, since it lives on the stored object."
+    ],
+    "range": "keys max 64 chars, values max 512 chars",
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

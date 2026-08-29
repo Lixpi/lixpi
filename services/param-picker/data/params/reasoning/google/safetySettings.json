@@ -1,0 +1,45 @@
+{
+    "key": "safetySettings",
+    "category": "safety",
+    "apiField": "config.safetySettings",
+    "controlKey": null,
+    "type": "object (array of SafetySetting)",
+    "providerDefault": "OFF on Gemini 2.5 and Gemini 3 models",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Sets the probability at which Gemini blocks a response per harm category. A lower threshold blocks more, a higher one lets more through, so BLOCK_LOW_AND_ABOVE is the strictest and OFF disables that category's filter.",
+    "combines": [
+        "Thresholds, strictest to loosest: BLOCK_LOW_AND_ABOVE, BLOCK_MEDIUM_AND_ABOVE, BLOCK_ONLY_HIGH, BLOCK_NONE, OFF.",
+        "Four categories are adjustable: harassment, hate speech, sexually explicit and dangerous content. Built-in protections such as child safety are not adjustable here.",
+        "Because current models already default to OFF, sending this can only make Lixpi stricter than the platform default.",
+        "A blocked response returns finishReason SAFETY with no content, and safetyRatings names the category and probability that tripped it. Any caller has to handle an empty candidate."
+    ],
+    "values": [
+        "categories HARM_CATEGORY_HATE_SPEECH",
+        "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "HARM_CATEGORY_HARASSMENT",
+        "HARM_CATEGORY_CIVIC_INTEGRITY",
+        "HARM_CATEGORY_JAILBREAK"
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/safety-settings"
+    ]
+}

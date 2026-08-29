@@ -1,0 +1,42 @@
+{
+    "key": "reasoningContext",
+    "category": "reasoning",
+    "apiField": "reasoning.context",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "auto — the `gpt-5.6` family resolves to `all_turns`, earlier models to `current_turn`",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Controls which reasoning items from earlier turns get rendered back into the model's context on later turns.",
+    "combines": [
+        "Supported on: reasoning models",
+        "`all_turns` preserves more chain-of-thought across a conversation but grows the prompt, raising input token cost (partly offset by prompt caching).",
+        "Echoed back on the response as the effective mode used."
+    ],
+    "values": [
+        "auto",
+        "current_turn",
+        "all_turns"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "auto",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

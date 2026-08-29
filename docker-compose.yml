@@ -40,6 +40,36 @@ services:
                 condition: service_healthy
                 restart: true
 
+    # Internal review tool for the provider generation-parameter audit. Each
+    # parameter is one JSON file under services/param-picker/data/params/, and
+    # ticking a box rewrites just that file. Zero dependencies, so it starts
+    # without a pnpm install.
+    lixpi-param-picker:
+        container_name: lixpi-param-picker
+        profiles: ["dev"]
+        image: lixpi/param-picker
+        build:
+            dockerfile: services/param-picker/Dockerfile
+            context: .
+        environment:
+            PORT: 3010
+            PARAMS_DIR: /usr/src/service/data/params
+        volumes:
+            # Sources are mounted so edits land without a rebuild; restart the
+            # container to pick up server.ts changes, reload the page for the rest.
+            - ./services/param-picker/src:/usr/src/service/src:cached
+            - ./services/param-picker/public:/usr/src/service/public:cached
+            # Directory mount: the parameter tree lives here and the server
+            # writes each file through a temp file and a rename.
+            - ./services/param-picker/data:/usr/src/service/data
+        working_dir: /usr/src/service
+        command: node ./src/server.ts
+        stop_signal: SIGTERM
+        ports:
+            - 3010:3010
+        networks:
+            - nats
+
     lixpi-caddy:
         container_name: lixpi-caddy
         profiles: ["deploy"]

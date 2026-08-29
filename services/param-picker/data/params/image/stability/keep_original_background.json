@@ -1,0 +1,41 @@
+{
+    "key": "keep_original_background",
+    "category": "masking-editing",
+    "apiField": "keep_original_background",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Keeps the existing background and only relights the image.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "Makes `background_prompt` and `background_reference` moot."
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

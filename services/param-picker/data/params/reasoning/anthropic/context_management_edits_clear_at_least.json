@@ -1,0 +1,42 @@
+{
+    "key": "context_management_edits_clear_at_least",
+    "category": "caching",
+    "apiField": "context_management.edits[].clear_at_least",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Minimum number of tokens to clear once clearing fires, so you do not churn the cache for a trivial saving.",
+    "combines": [
+        "Supported on: `clear_tool_uses_20250919`",
+        "Exists specifically to make clearing worth the cache invalidation it causes."
+    ],
+    "values": [
+        "{\"type\": \"input_tokens\"",
+        "\"value\": <int>}"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

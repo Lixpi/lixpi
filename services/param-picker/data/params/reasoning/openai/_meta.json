@@ -1,0 +1,12 @@
+{
+    "providerId": "openai",
+    "providerTitle": "OpenAI",
+    "apiName": "Responses API image_generation tool",
+    "groupId": "openai-reasoning",
+    "title": "GPT reasoning models",
+    "models": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "docs": "https://developers.openai.com/api/reference/resources/responses"
+}

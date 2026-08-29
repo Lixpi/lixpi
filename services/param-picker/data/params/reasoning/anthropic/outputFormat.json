@@ -1,0 +1,47 @@
+{
+    "key": "outputFormat",
+    "category": "structured-output",
+    "apiField": "output_config.format",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": "- (unconstrained text)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Structured outputs. Constrains the final text block to valid JSON matching your schema.",
+    "combines": [
+        "Supported on: claude-opus-5, claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-sonnet-5, claude-sonnet-4-6, claude-sonnet-4-5-20250929, claude-opus-4-5-20251101, claude-haiku-4-5-20251001. On Amazon Bedrock: Opus 4.6, Sonnet 4.6, Sonnet 4.5, Opus 4.5, Haiku 4.5.",
+        "Schema rules: `additionalProperties: false` required on every object, no external `$ref`, no recursive or circular schemas. Supported: object, array, string, integer, number, boolean, null, `enum` (scalars only), `const`, `anyOf`, `allOf`, internal `$ref`/`$defs`/`definitions`, `default`, `required`, string formats (date-time, time, date, duration, email, hostname, uri, ipv4, ipv6, uuid), and array `minItems` of only 0 or 1. Not supported: `minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`, other array constraints, and unsupported regex features in `pattern`.",
+        "Composes with strict tool use (`\"strict\": true`): the schema shapes the final answer while strict tools validate tool arguments.",
+        "Applies only to the final response, not to thinking content.",
+        "Grammars are compiled on first use and cached for 24 hours. Changing the schema or the set of tools invalidates the compiled grammar; changing only tool `name`/`description` does not.",
+        "Adds an injected system prompt, so input token counts rise slightly, and changing the format invalidates the prompt cache.",
+        "The old top-level `output_format` parameter and the `structured-outputs-2025-11-13` beta header are deprecated. Python SDK v1.0+ rejects `output_format` on `beta.messages.create()` and `count_tokens()`."
+    ],
+    "values": [
+        "{ \"type\": \"json_schema\"",
+        "\"schema\": <JSON Schema object> }"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

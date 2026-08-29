@@ -1,0 +1,41 @@
+{
+    "key": "pubsubTopic",
+    "category": "job-control",
+    "apiField": "config.pubsubTopic",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Publishes video generation progress messages to a Cloud Pub/Sub topic.",
+    "combines": [
+        "Supported on: Vertex only",
+        "Requires a Google Cloud project, so it is unusable with a Gemini API key."
+    ],
+    "supportedModels": [
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "gemini-developer-api"
+    ],
+    "sources": [
+        "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation",
+        "https://cdn.jsdelivr.net/npm/@google/genai/dist/genai.d.ts"
+    ]
+}

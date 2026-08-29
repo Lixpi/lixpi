@@ -1,0 +1,91 @@
+{
+    "catalogVersion": "generation-parameter-catalog-v1",
+    "source": "documentation/memory/PROVIDER-GENERATION-PARAMETER-SURFACE.md",
+    "capturedAt": "2026-08",
+    "legend": {
+        "currentState": {
+            "exposed": "A control for this parameter already exists in the model configuration matrix.",
+            "hidden": "Lixpi sends this parameter today, but the value is hardcoded or derived and the user cannot change it.",
+            "absent": "Lixpi never sends this parameter."
+        },
+        "availability": {
+            "supported": "Confirmed supported on the models Lixpi ships for this group.",
+            "unsupported": "The provider documents this as unavailable on the models Lixpi ships for this group.",
+            "unverified": "Provider docs are ambiguous or contradict what Lixpi currently sends. Verify against the live API before deciding."
+        }
+    },
+    "categories": {
+        "output-shape": {
+            "title": "Output shape and size",
+            "order": 1
+        },
+        "output-length": {
+            "title": "Length and frame rate",
+            "order": 2
+        },
+        "output-format": {
+            "title": "Output format and encoding",
+            "order": 3
+        },
+        "audio": {
+            "title": "Audio",
+            "order": 4
+        },
+        "reference-assets": {
+            "title": "Reference assets",
+            "order": 5
+        },
+        "masking-editing": {
+            "title": "Masking and editing",
+            "order": 6
+        },
+        "camera": {
+            "title": "Camera",
+            "order": 7
+        },
+        "lighting": {
+            "title": "Lighting",
+            "order": 8
+        },
+        "prompt-control": {
+            "title": "Prompt control",
+            "order": 9
+        },
+        "conditioning-strength": {
+            "title": "Conditioning strength",
+            "order": 10
+        },
+        "reasoning": {
+            "title": "Reasoning and thinking",
+            "order": 11
+        },
+        "sampling": {
+            "title": "Sampling and randomness",
+            "order": 12
+        },
+        "structured-output": {
+            "title": "Structured output",
+            "order": 13
+        },
+        "safety": {
+            "title": "Safety and moderation",
+            "order": 14
+        },
+        "limits": {
+            "title": "Limits",
+            "order": 15
+        },
+        "caching": {
+            "title": "Caching and context",
+            "order": 16
+        },
+        "tools": {
+            "title": "Tool use",
+            "order": 17
+        },
+        "job-control": {
+            "title": "Job control and delivery",
+            "order": 18
+        }
+    }
+}

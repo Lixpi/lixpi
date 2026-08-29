@@ -1,0 +1,38 @@
+{
+    "key": "context_management_edits_instructions",
+    "category": "caching",
+    "apiField": "context_management.edits[].instructions",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "null",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Custom summarization prompt. It completely replaces the default prompt rather than adding to it.",
+    "combines": [
+        "Supported on: `compact_20260112`",
+        "none documented"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

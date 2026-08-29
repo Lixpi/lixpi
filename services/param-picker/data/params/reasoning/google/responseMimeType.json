@@ -1,0 +1,36 @@
+{
+    "key": "responseMimeType",
+    "category": "structured-output",
+    "apiField": "config.responseMimeType",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "text/plain",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Declares the MIME type of the generated text.",
+    "combines": [
+        "Supported on: models with structured-output support, Gemini Developer API",
+        "Required to be `application/json` and compatible whenever you set `responseSchema` or `responseJsonSchema`.",
+        "The model still needs to be prompted toward the right output type; otherwise behavior is undefined."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

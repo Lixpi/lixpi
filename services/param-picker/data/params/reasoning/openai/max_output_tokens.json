@@ -1,0 +1,38 @@
+{
+    "key": "max_output_tokens",
+    "category": "limits",
+    "apiField": "max_output_tokens",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "null (model maximum)",
+    "lixpiValue": null,
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Upper bound on generated tokens for the response.",
+    "combines": [
+        "Supported on: all",
+        "Counts visible output tokens AND reasoning tokens together. On a reasoning model with high effort the budget can be consumed entirely by reasoning, returning `status: \"incomplete\"` with empty text — budget generously (community reports recommend a large headroom at `xhigh`/`max`).",
+        "Replaces Chat Completions' `max_tokens`, which is rejected on this endpoint."
+    ],
+    "range": "model-specific; 128,000 for the gpt-5.1 through gpt-5.6 families",
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Don't limit, but if limit is required, set to max allowed",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

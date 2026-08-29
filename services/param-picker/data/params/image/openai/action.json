@@ -1,0 +1,47 @@
+{
+    "key": "action",
+    "category": "masking-editing",
+    "apiField": "action",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "generate",
+        "edit",
+        "auto"
+    ],
+    "providerDefault": "auto",
+    "lixpiValue": "auto",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Whether the call creates a new image or edits an existing one.",
+    "combines": [],
+    "usage": {
+        "setIn": "not set explicitly; the branch at openai-provider.ts:594 picks images.edit() when references exist and images.generate() otherwise",
+        "code": "const stream = hasReferences ? await this.client.images.edit({...}) : await this.client.images.generate({...})",
+        "from": "derived from whether the request carries reference images",
+        "what": "Chooses create against edit. Lixpi resolves this by calling two different endpoints rather than passing the tool's action field."
+    },
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-responses-image-tool"
+    ],
+    "decision": "internal",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "openai-images"
+    ],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

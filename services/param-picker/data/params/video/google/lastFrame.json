@@ -1,0 +1,40 @@
+{
+    "key": "lastFrame",
+    "category": "reference-assets",
+    "apiField": "config.lastFrame",
+    "controlKey": null,
+    "type": "object (`Image`: `imageBytes` + `mimeType`, or `gcsUri` on Vertex)",
+    "providerDefault": null,
+    "lixpiValue": "veoConfig.lastFrame, set at google-provider.ts:788 as the stop frame",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "The final frame the video should land on, used for interpolation between a first and last image.",
+    "combines": [
+        "Supported on: Gemini docs mark it available for Veo 3.1, 3.1 Fast, 3.1 Lite, Veo 3, Veo 3 Fast, and Veo 2 in the parameter table, while the \"Using first and last frames\" section says the feature is for Veo 3.1 models only. Gemini Developer API and Vertex.",
+        "Only valid together with the top-level `image`; it cannot be used alone.",
+        "Not allowed with `referenceImages` or `video`."
+    ],
+    "supportedModels": [
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "I the ui it needs to be decided how to present this configuration, investigate, report to me, don't change any code yet",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/veo"
+    ]
+}

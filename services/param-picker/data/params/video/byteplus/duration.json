@@ -1,0 +1,43 @@
+{
+    "key": "duration",
+    "category": "output-length",
+    "apiField": "duration",
+    "controlKey": "duration",
+    "type": "integer",
+    "range": "4 to 15, or -1 for model-chosen",
+    "providerDefault": "5",
+    "lixpiValue": "-1",
+    "currentState": "exposed",
+    "availability": "supported",
+    "summary": "Output length in whole seconds. -1 lets the model pick a length inside the valid range.",
+    "combines": [
+        "The returned duration is floor(frames / 24) and can read a second short of the real length.",
+        "2.0 series: 4 to 15 whole seconds or -1, default 5. 2.5: 4 to 30 whole seconds or -1, default -1."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/byteplus-provider.ts:109 and :120",
+        "code": "const duration = Number(state.videoDurationSeconds) || undefined  ->  ...(duration ? { duration } : {})",
+        "from": "state.videoDurationSeconds, from the Duration control",
+        "what": "Clip length in seconds. The Number() coercion means the Smart-length value -1 falls through as a real -1, letting the model choose. What the task echoes back is what usage accounting bills."
+    },
+    "supportedModels": [
+        "dreamina-seedance-2-0-260128",
+        "dreamina-seedance-2-0-fast-260128",
+        "dreamina-seedance-2-5-260628"
+    ],
+    "supportedApis": [
+        "byteplus-modelark-video"
+    ],
+    "decision": "expose",
+    "reviewed": false,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.byteplus.com/en/docs/ModelArk/1520757"
+    ]
+}

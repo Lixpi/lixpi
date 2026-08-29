@@ -1,0 +1,36 @@
+{
+    "key": "frequencyPenalty",
+    "category": "sampling",
+    "apiField": "config.frequencyPenalty",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A penalty that scales with how many times a token has already been used.",
+    "combines": [
+        "Supported on: Gemini Developer API",
+        "Large negative values make the model repeat a token until it hits `maxOutputTokens`."
+    ],
+    "range": "not documented; negative values are allowed",
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

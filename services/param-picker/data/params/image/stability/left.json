@@ -1,0 +1,38 @@
+{
+    "key": "left",
+    "category": "masking-editing",
+    "apiField": "left",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "0",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "How many pixels of new image to generate beyond the left edge on the outpaint endpoint. The model invents plausible content there rather than stretching or mirroring what is already in frame.",
+    "combines": [
+        "The four directions combine freely, so a single call can widen, heighten or extend a frame in one direction only.",
+        "At least one direction must be non-zero or the request has nothing to do.",
+        "Outpainting changes the output dimensions, so the result no longer matches the input's size or aspect ratio."
+    ],
+    "range": "0 to 2000 pixels",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

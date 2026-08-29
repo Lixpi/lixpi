@@ -1,0 +1,51 @@
+{
+    "key": "input_fidelity",
+    "category": "conditioning-strength",
+    "apiField": "input_fidelity",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "low",
+        "high"
+    ],
+    "providerDefault": "low",
+    "lixpiValue": "high where the model allows it",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "How hard the model works to preserve fine detail from the input images when editing: faces, logos, text, and other features that a normal edit tends to redraw. low is the API default; high keeps those details noticeably closer to the source.",
+    "combines": [
+        "It costs real money. high adds roughly 4,096 image input tokens for a square input and 6,144 for a non-square one, on top of the normal per-tile cost.",
+        "Edit path only. It has no meaning on a pure text-to-image request, which is why openai-provider.ts sends it at :603 and not at :613.",
+        "Supported on gpt-image-1 and gpt-image-1.5 and later; gpt-image-1-mini does not accept it.",
+        "Lixpi already resolves it per model through imageReferenceCapabilities.inputFidelity, so the value is decided by the model record rather than by the request."
+    ],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/openai-provider.ts:603 (and :247 on the tool path)",
+        "code": "...(inputFidelityRequestValue ? { input_fidelity: inputFidelityRequestValue } : {})",
+        "from": "imageReferenceCapabilities.inputFidelity on the model record, set per model in the sync workload",
+        "what": "How hard the model works to match the faces and style in reference images. Only sent on the edit path, since there are no references to be faithful to otherwise."
+    },
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "high",
+    "note": "Make a research what it actually means and what implications it has, update explanation here",
+    "unsupportedModels": [
+        "gpt-image-1-mini"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/images/methods/edit"
+    ]
+}

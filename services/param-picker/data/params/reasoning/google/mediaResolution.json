@@ -1,0 +1,39 @@
+{
+    "key": "mediaResolution",
+    "category": "limits",
+    "apiField": "config.mediaResolution",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "MEDIA_RESOLUTION_UNSPECIFIED. On Gemini 3 that resolves to 1120 tokens per image, 70 per video frame, 560 per PDF page.",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Caps how many tokens each media input consumes, trading detail against latency and cost.",
+    "combines": [
+        "Supported on: multimodal Gemini models, Gemini Developer API. The request-level field works everywhere; setting resolution on individual content items is exclusive to Gemini 3 models.",
+        "Gemini 3 token counts: low 280 image / 70 video / 280 plus native text PDF; medium 560 / 70 / 560 plus native text; high 1120 / 280 / 1120 plus native text; ultra_high 2240 image only.",
+        "The REST enum descriptions (\"low = 64 tokens\", \"medium = 256 tokens\", \"high = zoomed reframing with 256 tokens\") describe pre-Gemini-3 behavior and disagree with the current media-resolution guide. Trust the guide's table for Gemini 3.",
+        "`ultra_high` is per-content-item only and is what computer-use workloads need.",
+        "Recommended settings: `high` for images, `medium` for PDFs, `low` for general video, `high` for text-heavy video. For video, `low` and `medium` are treated identically.",
+        "Migrating to Gemini 3 defaults raises PDF token usage and lowers video token usage; drop the resolution explicitly if you start blowing the context window."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

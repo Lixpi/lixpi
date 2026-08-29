@@ -1,0 +1,37 @@
+{
+    "key": "light_source_direction",
+    "category": "lighting",
+    "apiField": "light_source_direction",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Where the key light comes from in the relit image.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "Alternative to `light_reference`."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

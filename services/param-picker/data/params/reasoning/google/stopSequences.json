@@ -1,0 +1,35 @@
+{
+    "key": "stopSequences",
+    "category": "structured-output",
+    "apiField": "config.stopSequences",
+    "controlKey": null,
+    "type": "string (array)",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Generation halts when one of these strings appears in the response.",
+    "combines": [
+        "Supported on: all Gemini models, Gemini Developer API",
+        "not documented for interactions with thinking"
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

@@ -1,0 +1,45 @@
+{
+    "key": "thinking",
+    "category": "reasoning",
+    "apiField": "thinking",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "adaptive",
+        "disabled"
+    ],
+    "providerDefault": "on by default on Opus 5 and Sonnet 5; off on Opus 4.8, 4.7, 4.6 and Sonnet 4.6 until requested",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Whether Claude reasons before answering. Adaptive thinking lets Claude decide per request whether to think and how deeply, replacing the old fixed token budget. Reasoning arrives as thinking blocks ahead of the response and is billed as output tokens.",
+    "combines": [
+        "Opus 5, Sonnet 5, Fable 5 think by default with no configuration. Opus 4.8, Opus 4.7, Opus 4.6 and Sonnet 4.6 do nothing until you send thinking: {type: 'adaptive'}, so omitting the field is not the same thing across the models in this group.",
+        "The old form, thinking: {type: 'enabled', budget_tokens: N}, is deprecated on the 4.6 pair and returns a 400 on Opus 4.7 and later. Depth now lives in output_config.effort instead of a token budget.",
+        "Adaptive thinking interleaves between tool calls on its own, so the interleaved-thinking beta header is no longer needed.",
+        "Changing the thinking configuration mid-conversation invalidates prompt cache breakpoints, so pick one setting and hold it for the life of a cached thread."
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "adaptive",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting",
+        "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+    ]
+}

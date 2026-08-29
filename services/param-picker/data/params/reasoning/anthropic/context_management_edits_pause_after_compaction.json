@@ -1,0 +1,42 @@
+{
+    "key": "context_management_edits_pause_after_compaction",
+    "category": "caching",
+    "apiField": "context_management.edits[].pause_after_compaction",
+    "controlKey": null,
+    "type": "boolean",
+    "providerDefault": "false",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Stops after generating the compaction summary so you can inspect or adjust it before continuing.",
+    "combines": [
+        "Supported on: `compact_20260112`",
+        "none documented"
+    ],
+    "values": [
+        "true",
+        "false"
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

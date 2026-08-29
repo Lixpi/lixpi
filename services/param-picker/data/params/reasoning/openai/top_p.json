@@ -1,0 +1,37 @@
+{
+    "key": "top_p",
+    "category": "sampling",
+    "apiField": "top_p",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": "1",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Nucleus sampling. `0.1` means only tokens in the top 10% probability mass are considered.",
+    "combines": [
+        "Supported on: same as `temperature` — accepted on non-reasoning models, rejected on o-series and gpt-5 reasoning models",
+        "Mutually exclusive in practice with `temperature`; OpenAI recommends altering one, not both."
+    ],
+    "range": "0 to 1",
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

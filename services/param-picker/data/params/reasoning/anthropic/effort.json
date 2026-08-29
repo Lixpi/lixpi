@@ -1,0 +1,45 @@
+{
+    "key": "effort",
+    "category": "reasoning",
+    "apiField": "output_config.effort",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+    ],
+    "providerDefault": "high",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Controls thinking depth and total token spend together. The closest thing to a user-facing quality-versus-cost dial for reasoning models.",
+    "combines": [
+        "Maps cleanly onto the segmented control the matrix already renders, with a direct billing consequence.",
+        "The tiers are not a simple ladder across models: Opus 4.6 and Sonnet 4.6 support `max` but not `xhigh`, while `xhigh` exists on Opus 5, Opus 4.8, Opus 4.7 and Sonnet 5. An unsupported tier is a 400."
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "high",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/effort"
+    ]
+}

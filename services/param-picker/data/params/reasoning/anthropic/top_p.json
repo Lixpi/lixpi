@@ -1,0 +1,42 @@
+{
+    "key": "top_p",
+    "category": "sampling",
+    "apiField": "top_p",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 1",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unsupported",
+    "summary": "Nucleus sampling cutoff: the model samples only from the smallest set of tokens whose probabilities sum to top_p. Lower values make output more focused, higher values more varied. It is being retired across the Claude line.",
+    "combines": [
+        "Not supported on Claude 4.7 and later, which covers Opus 5, Opus 4.8 and Sonnet 5 in this group. A value of 0.99 or above is still accepted for backwards compatibility; anything else returns a 400.",
+        "Still works on Opus 4.6 and Sonnet 4.6, the two older models in this group.",
+        "Anthropic's guidance is to drop it from request payloads and steer behaviour through prompting and effort instead.",
+        "The Python SDK v1.0 removed the parameter from its Messages methods outright."
+    ],
+    "supportedModels": [
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+    ]
+}

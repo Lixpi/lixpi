@@ -1,0 +1,45 @@
+{
+    "key": "budgetTokens",
+    "category": "reasoning",
+    "apiField": "thinking.budget_tokens",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "- (required when `type: \"enabled\"`)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Target token budget for internal reasoning in manual mode. A target, not a strict cap; `max_tokens` is still the hard ceiling and Claude may stop well short of the budget.",
+    "combines": [
+        "Supported on: only with `thinking.type: \"enabled\"`, so: Opus 4.5, Sonnet 4.5, Haiku 4.5, earlier Claude 4 models, Mythos Preview, and (deprecated) Opus 4.6 and Sonnet 4.6. Rejected along with `type: \"enabled\"` on Claude 4.7 and later.",
+        "Interleaved thinking is the one exception to `budget_tokens < max_tokens`, because the budget spans all thinking blocks in one assistant turn.",
+        "Cannot be combined with `max_tokens: 0` cache pre-warming.",
+        "Changing it between requests invalidates cache breakpoints, because the value is rendered into the prompt. Pick a budget and hold it for the life of a cached conversation.",
+        "On Opus 4.5, set both `budget_tokens` and `effort`: effort shapes the whole response, the budget sets thinking depth.",
+        "Tuning guidance: start near 1,024 for simple tasks, 16,000 or more for complex ones. Above 32k, use the Batch API to avoid timeouts and connection limits.",
+        "Track actual spend with `usage.output_tokens_details.thinking_tokens`."
+    ],
+    "range": "minimum 1,024; normally must be less than `max_tokens`",
+    "supportedModels": [
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5"
+    ],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+    ]
+}

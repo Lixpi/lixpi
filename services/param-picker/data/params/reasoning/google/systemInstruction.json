@@ -1,0 +1,36 @@
+{
+    "key": "systemInstruction",
+    "category": "prompt-control",
+    "apiField": "config.systemInstruction",
+    "controlKey": null,
+    "type": "object (Content) or string",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A standing instruction that shapes how the model behaves for the whole request: persona, tone, rules, output conventions. It sits in its own field ahead of the conversation rather than inside the user turn.",
+    "combines": [
+        "It is separate from the user turn on purpose. Rules put here are not competing with the user's actual question, and they are not something the user's own text can appear to override.",
+        "It is billed as input tokens like any other content, and it is part of the cached prefix, so keeping it byte-stable across a conversation is what keeps caching working.",
+        "Lixpi already sends its own system prompt through this path on other providers; on Gemini it is the equivalent of the OpenAI `instructions` field."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Need to figure out where to plug it in in terms of what are the benefits of using it and what it can allow us to achieve",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

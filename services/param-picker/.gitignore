@@ -1,0 +1,5 @@
+# Snapshots the server writes before an agent-driven bulk edit, plus manual
+# tree copies taken before a refresh. Recovery material for one machine, not
+# something to carry in the repository: the parameter tree itself is versioned,
+# so git history already covers what these protect against.
+data/history/

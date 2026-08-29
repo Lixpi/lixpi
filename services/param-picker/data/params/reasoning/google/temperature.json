@@ -1,0 +1,39 @@
+{
+    "key": "temperature",
+    "category": "sampling",
+    "apiField": "config.temperature",
+    "controlKey": null,
+    "type": "number",
+    "range": "0 to 2",
+    "providerDefault": "1",
+    "lixpiValue": "defaultTemperature from the model matrix, 0.7",
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Sampling randomness. Sent only when inferenceCapabilities.supportsTemperature is true.",
+    "combines": [],
+    "usage": {
+        "setIn": "services/api/src/llm/providers/google-provider.ts:275, value assembled at base-provider.ts:391",
+        "code": "if (capabilities.supportsTemperature) config.temperature = temperature",
+        "from": "aiModelMetaInfo.defaultTemperature from the model record, falling back to 0.7",
+        "what": "Sampling randomness. Gated on inferenceCapabilities.supportsTemperature so models that reject the field never see it. One value for every request on a model; nothing per-conversation."
+    },
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "1",
+    "note": "Display as slider",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

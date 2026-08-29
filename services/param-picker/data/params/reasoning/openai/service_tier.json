@@ -1,0 +1,46 @@
+{
+    "key": "service_tier",
+    "category": "job-control",
+    "apiField": "service_tier",
+    "controlKey": null,
+    "type": "enum",
+    "providerDefault": "auto (which resolves to the project setting, normally `default`)",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Latency/price tier for processing the request.",
+    "combines": [
+        "Supported on: `flex` on supported models for scale-tier customers; `fast`/`priority` for Fast mode (the response reports `priority` for both); `ultrafast` is access-controlled and currently only for `gpt-5.6-sol`",
+        "Direct cost lever: `flex` trades latency for a lower price; `priority`/`fast`/`ultrafast` pay more for lower latency.",
+        "The response body echoes the tier actually used, which may differ from what you asked for."
+    ],
+    "values": [
+        "auto",
+        "default",
+        "flex",
+        "scale",
+        "priority",
+        "fast",
+        "ultrafast"
+    ],
+    "supportedModels": [
+        "gpt-5 family",
+        "o-series reasoning models"
+    ],
+    "supportedApis": [
+        "openai-responses",
+        "openai-chat-completions"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "default",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/reference/resources/responses"
+    ]
+}

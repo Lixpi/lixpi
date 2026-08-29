@@ -1,0 +1,43 @@
+{
+    "key": "container",
+    "category": "tools",
+    "apiField": "container",
+    "controlKey": null,
+    "type": "object or string",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Reuses an existing code-execution sandbox instead of getting a fresh one. Every request that runs code gets a container; passing its id back keeps the same filesystem alive, so files written on one turn are still there on the next.",
+    "combines": [
+        "Only relevant alongside the code execution tool. Without that tool there is no container to reuse.",
+        "The response carries a top-level container object with its id and an expires_at timestamp; that id is what you send back.",
+        "A container is checkpointed after roughly five minutes idle and restored on the next request. It expires 30 days after creation, and an expired id cannot be reused: drop the parameter to get a new one.",
+        "The rolling expires_at in the response is shorter than the real 30-day limit, so it is not a reliable signal of when the container is gone for good.",
+        "It can also carry a skills list, capped at 20 entries.",
+        "Lixpi does not run the code execution tool today, so this has nothing to attach to yet."
+    ],
+    "range": "`skills` limited to 20 items",
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/agents-and-tools/tool-use/code-execution-tool"
+    ]
+}

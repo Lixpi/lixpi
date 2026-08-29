@@ -1,0 +1,36 @@
+{
+    "key": "n",
+    "category": "sampling",
+    "apiField": "n",
+    "controlKey": "outputCount",
+    "type": "integer",
+    "range": "1 to 10",
+    "providerDefault": "1",
+    "lixpiValue": "1",
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "How many images one request returns.",
+    "combines": [],
+    "supportedModels": [
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2"
+    ],
+    "supportedApis": [
+        "openai-images",
+        "openai-responses-image-tool"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "1",
+    "note": "Our ui does not support rendering multiple outputs, you must figure out how to present it. Don't make decision on your own, propose options and wait for my input",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://developers.openai.com/api/docs/guides/image-generation"
+    ]
+}

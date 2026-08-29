@@ -1,0 +1,38 @@
+{
+    "key": "candidateCount",
+    "category": "sampling",
+    "apiField": "config.candidateCount",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "1",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "unverified",
+    "summary": "Number of response variations to return. The image-generation guide never uses it and notes the model will not reliably honor an explicitly requested image count.",
+    "combines": [
+        "Supported on: Gemini Developer API on models that support it; not documented as supported on the image models",
+        "Treat it as unreliable for image fan-out. To get N images, send N requests."
+    ],
+    "range": "not documented for image models",
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

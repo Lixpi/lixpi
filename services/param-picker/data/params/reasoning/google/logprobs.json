@@ -1,0 +1,36 @@
+{
+    "key": "logprobs",
+    "category": "sampling",
+    "apiField": "config.logprobs",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "How many top candidate tokens to report log probabilities for at each decoding step.",
+    "combines": [
+        "Supported on: Gemini Developer API",
+        "Only valid when `responseLogprobs` is true."
+    ],
+    "range": "0 to 20",
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

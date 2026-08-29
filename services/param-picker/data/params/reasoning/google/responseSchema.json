@@ -1,0 +1,37 @@
+{
+    "key": "responseSchema",
+    "category": "structured-output",
+    "apiField": "config.responseSchema",
+    "controlKey": null,
+    "type": "object (OpenAPI 3.0 Schema subset)",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Constrains the response to a schema, using Google's Schema subset of OpenAPI 3.0.",
+    "combines": [
+        "Supported on: structured-output models, Gemini Developer API",
+        "A compatible `responseMimeType` must also be set.",
+        "Mutually exclusive with `responseJsonSchema`; if `responseJsonSchema` is set, `responseSchema` must be omitted.",
+        "If your schema does not translate correctly, Google suggests trying `responseJsonSchema`."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

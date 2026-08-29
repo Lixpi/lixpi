@@ -1,0 +1,37 @@
+{
+    "key": "background_reference",
+    "category": "reference-assets",
+    "apiField": "background_reference",
+    "controlKey": null,
+    "type": "image",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "A reference image supplying the new background instead of a text description.",
+    "combines": [
+        "Supported on: edit/replace-background-and-relight",
+        "Alternative to `background_prompt`."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta"
+    ],
+    "decision": "skip",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Description is not enough, needs more clarification",
+    "unsupportedModels": [],
+    "unsupportedApis": [
+        "bedrock"
+    ],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}

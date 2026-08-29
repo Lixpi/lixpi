@@ -1,0 +1,35 @@
+{
+    "key": "cachedContent",
+    "category": "caching",
+    "apiField": "config.cachedContent",
+    "controlKey": null,
+    "type": "string",
+    "providerDefault": "unset",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Points the request at a previously created context cache.",
+    "combines": [
+        "Supported on: caching-capable models, Gemini Developer API. Context caching is supported on Gemini 3",
+        "Image models list caching as Not supported, so do not combine it with an image request."
+    ],
+    "supportedModels": [
+        "gemini reasoning models with thinkingMode google-budget or google-level"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "skip",
+    "reviewed": false,
+    "status": "none",
+    "irrelevant": true,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/thinking"
+    ]
+}

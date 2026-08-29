@@ -1,0 +1,42 @@
+{
+    "key": "max_tokens",
+    "category": "limits",
+    "apiField": "max_tokens",
+    "controlKey": null,
+    "type": "integer",
+    "providerDefault": "- (required)",
+    "lixpiValue": null,
+    "currentState": "hidden",
+    "availability": "supported",
+    "summary": "Hard ceiling on generated tokens for the request, thinking plus text. Hitting it returns `stop_reason: \"max_tokens\"`, often with truncated or missing text.",
+    "combines": [
+        "Supported on: all models",
+        "Thinking tokens count against it, so a long thinking pass can eat the whole budget. Raise `max_tokens` or lower `effort`.",
+        "`max_tokens: 0` is the cache pre-warming mode and cannot be combined with `thinking.type: \"enabled\"`, because `budget_tokens` must be less than `max_tokens`.",
+        "The docs recommend at least 64k when running Opus 5, Opus 4.8, or Opus 4.7 at `xhigh` or `max` effort.",
+        "SDKs require `stream: true` when `max_tokens` is above 21,333. That is client-side validation, not an API rule."
+    ],
+    "range": "0 to the model's output limit. 128k on Opus 5, Opus 4.8, Opus 4.7, Sonnet 5, Opus 4.6, Sonnet 4.6, Fable 5, Mythos 5, Mythos Preview; 64k on Haiku 4.5, Sonnet 4.5, Opus 4.5. The `output-300k-2026-03-24` beta header raises it to 300k on the Message Batches API for Opus 5, Opus 4.8, Opus 4.7, Sonnet 5, Opus 4.6, and Sonnet 4.6.",
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "Don't limit or if param is required set to max supported value",
+    "defaultValue": "",
+    "note": "",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    ]
+}

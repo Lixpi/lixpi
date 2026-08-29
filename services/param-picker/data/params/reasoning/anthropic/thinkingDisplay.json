@@ -1,0 +1,44 @@
+{
+    "key": "thinkingDisplay",
+    "category": "reasoning",
+    "apiField": "thinking.display",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "summarized",
+        "omitted"
+    ],
+    "providerDefault": "omitted on Opus 5, Sonnet 5, Opus 4.8 and 4.7; summarized on Opus 4.6, Sonnet 4.6 and earlier",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Whether the reasoning summary comes back in the response. summarized returns readable summary text in each thinking block; omitted returns the block with an empty thinking field. Thinking still happens and is billed identically either way, so this is purely about what you receive.",
+    "combines": [
+        "The default flipped on the newer models, so a UI that renders reasoning has to ask for summarized explicitly or it will show nothing on Opus 5 and Sonnet 5.",
+        "omitted is faster to first visible token when streaming: the server skips streaming thinking tokens and sends only the signature.",
+        "Either way the block's signature still carries the encrypted reasoning, so multi-turn continuity is unaffected by this choice.",
+        "The raw chain of thought is never returned under any setting; summarized means a summary, not the reasoning verbatim."
+    ],
+    "supportedModels": [
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6"
+    ],
+    "supportedApis": [
+        "anthropic-messages"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "summarized",
+    "defaultValue": "",
+    "note": "It must be rendered as part of pipeline.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+    ]
+}

@@ -1,0 +1,39 @@
+{
+    "key": "multiTurnEditing",
+    "category": "reference-assets",
+    "apiField": "Multi-turn image editing",
+    "controlKey": null,
+    "type": "object",
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "The documented way to iterate is a normal multi-turn `generateContent` conversation: append the model's previous image part and your new instruction to `contents`. The model keeps visual context across turns.",
+    "combines": [
+        "Supported on: `gemini-2.5-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-image`, Gemini Developer API",
+        "On Gemini 3 image models this depends on thought signatures, so echo the model's returned parts back verbatim including `thoughtSignature`. Stripping them breaks continuity.",
+        "`gemini-3.1-flash-lite-image` is explicitly called out as not optimized for multi-turn sequential editing.",
+        "Every generated image carries a SynthID watermark, on every model and every turn."
+    ],
+    "supportedModels": [
+        "gemini-2.5-flash-preview-image-generation",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview"
+    ],
+    "supportedApis": [
+        "gemini-developer-api",
+        "vertex-ai"
+    ],
+    "decision": "internal",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Investigate how this fits in into our existing pipeline and ui, propose the solution and benefits and implications, don't change code before approved",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://ai.google.dev/gemini-api/docs/image-generation"
+    ]
+}

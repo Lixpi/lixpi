@@ -1,0 +1,56 @@
+{
+    "key": "style_preset",
+    "category": "prompt-control",
+    "apiField": "style_preset",
+    "controlKey": null,
+    "type": "enum",
+    "values": [
+        "3d-model",
+        "analog-film",
+        "anime",
+        "cinematic",
+        "comic-book",
+        "digital-art",
+        "enhance",
+        "fantasy-art",
+        "isometric",
+        "line-art",
+        "low-poly",
+        "modeling-compound",
+        "neon-punk",
+        "origami",
+        "photographic",
+        "pixel-art",
+        "tile-texture"
+    ],
+    "providerDefault": null,
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Steers the model toward a named look. The API takes a fixed enum, not free text: you cannot add your own preset or pass an arbitrary style word here. Stability's own schema notes that the list itself is subject to change on their side.",
+    "combines": [
+        "Fixed for callers, not frozen forever: treat the 17 values as data that can shift under you, and fail soft on an unrecognised one rather than hard-coding an exhaustive switch.",
+        "Anything outside the enum belongs in the prompt instead, where Stability's (word:weight) syntax gives finer control than a preset does.",
+        "Documented on the control endpoints. It is the cheapest control on this provider: one dropdown, no change in request cost."
+    ],
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "approved",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "enhance",
+    "note": "Make sure add a help tooltip value explaining all that in the ui.",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-stability-diffusion.html"
+    ]
+}

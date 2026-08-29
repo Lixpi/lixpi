@@ -1,0 +1,37 @@
+{
+    "key": "grow_mask",
+    "category": "masking-editing",
+    "apiField": "grow_mask",
+    "controlKey": null,
+    "type": "number",
+    "providerDefault": "5",
+    "lixpiValue": null,
+    "currentState": "absent",
+    "availability": "supported",
+    "summary": "Expands the mask outward in all directions and blurs the added band, which smooths the seam between edited and original content.",
+    "combines": [
+        "Supported on: edit/inpaint, edit/erase, edit/search-and-replace, edit/search-and-recolor",
+        "Too much growth obscures fine detail in the mask and can merge nearby masked regions."
+    ],
+    "range": "0 to 20",
+    "supportedModels": [
+        "stability-ultra",
+        "sd3.5-large"
+    ],
+    "supportedApis": [
+        "stability-v2beta",
+        "bedrock"
+    ],
+    "decision": "expose",
+    "reviewed": true,
+    "status": "needs-implementation-investigation",
+    "irrelevant": false,
+    "fixedValue": "",
+    "defaultValue": "",
+    "note": "Same as all other masks, investigate how to present it in ui, don't change code, report to me",
+    "unsupportedModels": [],
+    "unsupportedApis": [],
+    "sources": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/stable-image-services.html"
+    ]
+}
