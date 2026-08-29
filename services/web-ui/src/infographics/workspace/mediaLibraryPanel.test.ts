@@ -17,7 +17,7 @@ function expectSourceNotToContain(source: string, snippet: string): void {
 const panelSource = readFileSync(resolve(__dirname, 'mediaLibraryPanel.ts'), 'utf-8')
 const panelStyles = readFileSync(resolve(__dirname, 'media-library-panel.scss'), 'utf-8')
 const canvasSource = readFileSync(resolve(__dirname, 'WorkspaceCanvas.ts'), 'utf-8')
-const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/WorkspaceCanvas.svelte'), 'utf-8')
+const workspaceSvelteSource = readFileSync(resolve(__dirname, '../../components/workspaceCanvasView.ts'), 'utf-8')
 const WORKSPACE_IMPORT_GUARD_SNIPPET =
     'if (workspaceId !== targetWorkspaceId || loadedWorkspaceId !== targetWorkspaceId) return'
 const WORKSPACE_IMPORT_FINALIZE_SNIPPET = 'await addAssetToCanvas(data, targetWorkspaceId, placeholderNodeId)'

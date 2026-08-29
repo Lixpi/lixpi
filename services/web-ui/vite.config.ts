@@ -1,13 +1,9 @@
 import path from "path"
 import { pathToFileURL } from "url"
 import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [
-        svelte(),
-    ],
     test: {
         environment: 'happy-dom',
         globals: true,
@@ -59,13 +55,9 @@ export default defineConfig({
             $src: path.resolve("./src"),
         },
 
-        // Without this it was throwing  (Error during service initialization Svelte error: lifecycle_function_unavailable`mount(...)` is not available on the server)
-        // What does it even mean???
-        // Found solution here:
-        //      https://github.com/sveltejs/svelte/discussions/12037
-        //      https://github.com/sveltejs/svelte/issues/11394
+        // This is a browser-only SPA, so prefer the `browser` export condition when
+        // packages ship separate browser and server entry points.
         conditions: ['browser']
-        // END
     },
 
     // SASS $src alias - same as TypeScript/JavaScript aliases

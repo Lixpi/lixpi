@@ -1,7 +1,9 @@
 
-// Some shared variables are imported globally into svelte app via svelte.config.js
-// _variables
-// _transitions
+// Shared variables, transitions, and the active theme. This global stylesheet is
+// imported once from the app entry point, so it pulls them in directly.
+@import '$src/sass/_variables.scss';
+@import '$src/sass/_transitions.scss';
+@import '$src/sass/themes/_minimalist-chic.scss';
 
 @import 'components/_reset';
 @import '_helpers';

@@ -34,7 +34,7 @@ function extractBlock(source: string, selector: string): string {
 describe('generated media review controls', () => {
     const canvasSource = readSourceFile('WorkspaceCanvas.ts')
     const scssSource = readSourceFile('workspace-canvas.scss')
-    const layoutSource = readSourceFile('../../views/layouts/layout.svelte')
+    const layoutSource = readSourceFile('../../views/layouts/layout.ts')
     const settingsSource = readSourceFile('../../settings.ts')
     const iconSource = readSourceFile('../../../packages/lixpi/ui-kit/src/svg/svgIcons.ts')
     const footerSource = readSourceFile('../../../packages/lixpi/ui-kit/src/components/canvasNodeFooter/canvasNodeFooter.ts')
@@ -76,6 +76,6 @@ describe('generated media review controls', () => {
 
     it('binds the shared hover duration from settings into the application root', () => {
         expectSourceToContain(settingsSource, 'hover: {\n        transitionDurationMs: 150,', 'settings.ts')
-        expectSourceToContain(layoutSource, "document.documentElement.style.setProperty('--default-hover-transition-duration', `${settings.hover.transitionDurationMs}ms`)", 'layout.svelte')
+        expectSourceToContain(layoutSource, "document.documentElement.style.setProperty('--default-hover-transition-duration', `${settings.hover.transitionDurationMs}ms`)", 'layout.ts')
     })
 })

@@ -408,7 +408,6 @@ services:
             - ./services/web-ui/src:/usr/src/service/src:cached
 
             - ./services/web-ui/vite.config.ts:/usr/src/service/vite.config.ts:cached
-            - ./services/web-ui/svelte.config.js:/usr/src/service/svelte.config.js:cached
 
 
             - ./services/web-ui/tsconfig.json:/usr/src/service/tsconfig.json:cached

@@ -1,7 +1,5 @@
 'use strict'
 
-import { mount, flushSync } from "svelte"
-
 import NatsService from '@lixpi/nats-service'
 import { configureUiKit } from '@lixpi/ui-kit'
 
@@ -14,7 +12,7 @@ import AiModelService from '$src/services/ai-model-service.ts'
 import WorkspaceService from '$src/services/workspace-service.ts'
 import AssetService from '$src/services/asset-service.ts'
 
-import App from '$src/App.svelte'
+import { mountApp } from '$src/app.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
@@ -89,10 +87,9 @@ async function initializeServicesSequentially() {
 initializeServicesSequentially()
     .then(() => {
         // console.log('All services initialized successfully');
-        const app = mount(App, {
-            target: document.getElementById('app')
-        })
-        flushSync();
+        const target = document.getElementById('app')
+        if (!target) throw new Error('Application mount target #app not found')
+        mountApp(target)
     })
     .catch(error => {
         console.error('Application failed to start', error);

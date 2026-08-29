@@ -8,7 +8,7 @@ For the architecture and service map, start with [`documentation/PRODUCT-OVERVIE
 
 | Directory | Contents |
 |-----------|----------|
-| `services/` | Application services, including the Svelte web UI and Node API. |
+| `services/` | Application services, including the TypeScript web UI and Node API. |
 | `packages/lixpi/` | Shared TypeScript libraries and constants. |
 | `packages-vendor/` | Vendored third-party source used by the application. |
 | `infrastructure/` | Pulumi infrastructure and initialization scripts. |

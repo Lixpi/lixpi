@@ -76,7 +76,7 @@ function loadWorkspaceLoadingOutline(): string {
 }
 
 function loadWorkspaceCanvasSvelte(): string {
-	return readSourceFile('../../components/WorkspaceCanvas.svelte', 'components/WorkspaceCanvas.svelte')
+	return readSourceFile('../../components/workspaceCanvasView.ts', 'components/workspaceCanvasView.ts')
 }
 
 function loadCanvasMembershipStateRebase(): string {
@@ -124,7 +124,7 @@ function loadCanvasNodeFooterScss(): string {
 }
 
 function loadLayout(): string {
-	return readSourceFile('../../views/layouts/layout.svelte', 'views/layouts/layout.svelte')
+	return readSourceFile('../../views/layouts/layout.ts', 'views/layouts/layout.ts')
 }
 
 function loadNavigationSidePanel(): string {
@@ -1682,7 +1682,8 @@ describe('Workspace canvas — viewport ownership during store renders', () => {
 
 	it('does not expose route workspace canvas state until the workspace load succeeds', () => {
 		expectSourceToContain(svelte, 'LoadingStatus')
-		expectSourceToContain(svelte, 'let canvasState = $derived(isRouteWorkspaceLoaded && $workspaceStore.meta.loadingStatus === LoadingStatus.success ? $workspaceStore.data.canvasState : null)')
+		expectSourceToContain(svelte, "canvasState = isRouteWorkspaceLoaded && workspaceStore.getMeta('loadingStatus') === LoadingStatus.success")
+		expectSourceToContain(svelte, "? workspaceStore.getData('canvasState')")
 	})
 
 	it('keeps workspace load feedback in the TypeScript canvas layer', () => {
@@ -1991,9 +1992,9 @@ describe('Right side panel — TS infrastructure', () => {
 			'.workspace-canvas-right-control-rail:has(> .workspace-canvas-model-menu-panel > .ai-prompt-model-menu-trigger:hover) > .workspace-canvas-model-menu-hover-background'
 		)
 		const rightRailStart = svelte.indexOf(
-			'<div class="workspace-canvas-action-panel workspace-canvas-right-control-rail">'
+			'<div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">'
 		)
-		const rightRailEnd = svelte.indexOf('\n    </div>\n\n    <input', rightRailStart)
+		const rightRailEnd = svelte.indexOf('\n            </div>\n\n            ${fileInputEl}', rightRailStart)
 		const rightRailMarkup = svelte.slice(rightRailStart, rightRailEnd)
 		const screenGlassTargets = extractFunctionBody(pixiMediaLayer, 'getScreenGlassBorderTargets')
 
@@ -2002,16 +2003,16 @@ describe('Right side panel — TS infrastructure', () => {
 			'workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single'
 		)
 		expectSourceToContain(svelte, 'workspace-canvas-right-control-rail')
-		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-hover-background"')
-		expectSourceToContain(svelte, 'class="workspace-canvas-media-mode-panel" bind:this={mediaModeSwitchMountEl}')
-		expectSourceToContain(svelte, 'class="workspace-canvas-model-menu-panel"')
+		expectSourceToContain(svelte, 'className="workspace-canvas-model-menu-hover-background"')
+		expectSourceToContain(svelte, 'className="workspace-canvas-media-mode-panel"')
+		expectSourceToContain(svelte, 'className="workspace-canvas-model-menu-panel"')
 		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel workspace-canvas-model-menu-panel')
 		expectSourceNotToContain(svelte, 'workspace-canvas-action-panel-right')
 		expectSourceNotToContain(svelte, 'workspace-canvas-media-mode-panel-right')
 		expect(rightRailStart).toBeGreaterThan(-1)
 		expect(rightRailEnd).toBeGreaterThan(rightRailStart)
-		expect(rightRailMarkup.indexOf('workspace-canvas-media-mode-panel')).toBeLessThan(
-			rightRailMarkup.indexOf('workspace-canvas-model-menu-panel')
+		expect(rightRailMarkup.indexOf('${mediaModeSwitchMountEl}')).toBeLessThan(
+			rightRailMarkup.indexOf('${modelMenuControlMountEl}')
 		)
 
 		expectSourceToContain(
@@ -2263,7 +2264,7 @@ describe('Right side panel — TS infrastructure', () => {
 		expectSourceToContain(svelte, '--workspace-right-side-panel-width')
 		expectSourceToContain(svelte, '--side-panel-backdrop-width: var(--workspace-right-side-panel-width)')
 		expectSourceToContain(svelte, '--workspace-right-sidebar-content-font-size: ${rightSidePanelSettings.typography.contentFontSize}px')
-		expectSourceToContain(svelte, 'class:workspace-canvas-right-side-panel-open')
+		expectSourceToContain(svelte, 'workspace-canvas-right-side-panel-open')
 		// The glass backdrop is owned by the SidePanel component.
 		expectSourceToContain(sidePanelScss, '.side-panel-backdrop')
 		expectSourceToContain(sidePanelScss, 'z-index: var(--side-panel-backdrop-z-index, 90)')
@@ -3294,7 +3295,7 @@ describe('asset membership persistence', () => {
 
 	it('requires explicit membership confirmation before committing upload state', () => {
 		const uploadHandlerStart = svelte.indexOf('async function addAssetToCanvas(')
-		const uploadHandlerEnd = svelte.indexOf('\n    onMount(() => {', uploadHandlerStart)
+		const uploadHandlerEnd = svelte.indexOf('\n    function handleToggleMediaLibrary()', uploadHandlerStart)
 		const uploadHandler = svelte.slice(uploadHandlerStart, uploadHandlerEnd)
 		const assertionIndex = uploadHandler.indexOf('assertAssetAttached(response, result.assetId, nodeId)')
 		const commitIndex = uploadHandler.indexOf('renderer?.commitTransientCanvasNodeInsertion(')
@@ -3314,7 +3315,7 @@ describe('asset membership persistence', () => {
 
 		expectSourceToContain(svelte, 'return await workspaceService.runCanvasMembershipMutation({')
 		expectSourceToContain(svelte, 'const nextCanvasState = rebaseRequestedCanvasMembershipState(requestedCanvasState, \'attach\')')
-		expectSourceToContain(svelte, "'detach',\n                        removedNodeIds,")
+		expectSourceToContain(svelte, "'detach',\n                    removedNodeIds,")
 		expectSourceToContain(membershipRebase, 'const removedNodeIdSet = new Set(removedNodeIds)')
 		expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(node.nodeId)')
 		expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(edge.sourceNodeId)')
