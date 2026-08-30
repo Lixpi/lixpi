@@ -162,6 +162,12 @@ function usesSlidingDropdown(control: MediaGenerationConfigControl): boolean {
     return control.kind !== 'toggle' && control.kind !== 'fixed'
 }
 
+function isUserConfigurableControl(control: MediaGenerationConfigControl): boolean {
+    if (control.kind === 'fixed' || control.readOnly) return false
+    if (control.kind === 'number' || control.kind === 'text') return true
+    return new Set(control.options.map(option => option.value)).size > 1
+}
+
 function rendersDimensionGlyph(
     mediaType: MediaGenerationConfigMatrixControls['mediaType'],
     control: MediaGenerationConfigControl,
@@ -1135,6 +1141,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             options: slidingDropdownOptions(control),
             selectedValue,
             ariaLabel: control.label,
+            observeParentResize: false,
             renderOption,
             onChange: value => this.setGroupControlValue(group, control, value),
         })
@@ -1244,11 +1251,9 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             control.description?.trim()
                 || MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT[control.key],
         )
-        const field = control.readOnly || control.kind === 'fixed'
-            ? html`<div className="ai-media-config-fixed-value">${control.options.find(option => option.value === selectedValue)?.label ?? selectedValue}</div>` as HTMLElement
-            : control.kind === 'toggle'
-                ? this.createToggleControl(group, control, selectedValue)
-                : this.createSvgControlHost(group, control, selectedValue, pendingControls)
+        const field = control.kind === 'toggle'
+            ? this.createToggleControl(group, control, selectedValue)
+            : this.createSvgControlHost(group, control, selectedValue, pendingControls)
 
         return html`
             <div className="ai-media-config-control" data-control-kind=${control.kind} data-control-key=${control.key}>
@@ -1272,10 +1277,12 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
     ): HTMLElement {
         const modelId = group.selectedModelIds[0] ?? ''
         const selectionGroup = this.getSelectionForGroup(selectionGroups, group.groupId, modelId)
-        const renderedControls = group.controls.map(control => ({
-            control,
-            dom: this.createControl(group, control, selectionGroup, pendingControls),
-        }))
+        const renderedControls = group.controls
+            .filter(isUserConfigurableControl)
+            .map(control => ({
+                control,
+                dom: this.createControl(group, control, selectionGroup, pendingControls),
+            }))
         const rendersControlsInline = this.controls.mediaType !== 'video'
         const inlineControlEls = rendersControlsInline
             ? renderedControls.map(({ dom }) => dom)

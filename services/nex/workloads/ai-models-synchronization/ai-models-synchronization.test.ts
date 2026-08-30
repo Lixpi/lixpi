@@ -127,6 +127,51 @@ describe('AiModelsSync — image generation option metadata', () => {
         }])
         expect(geminiText.imageReferenceCapabilities).toBeUndefined()
     })
+
+    it('marks every single-value synchronized control as non-configurable across model types', () => {
+        const openAIModels = [...(AiModelsSync as any).OPENAI_ALLOWED_MODELS]
+            .map((id: string, index: number) => sync.mapOpenAIModelToAiModel({ id }, index + 1))
+        const anthropicModels = [...(AiModelsSync as any).ANTHROPIC_ALLOWED_MODEL_ALIASES]
+            .map((id: string, index: number) => sync.mapAnthropicModelToAiModel({ id }, index + 1))
+        const googleModels = [
+            ...(AiModelsSync as any).GOOGLE_ALLOWED_MODELS,
+            'veo-3.1-generate-preview',
+            'veo-3.1-fast-generate-preview',
+            'veo-3.1-lite-generate-preview',
+        ].map((name: string, index: number) => sync.mapGoogleModelToAiModel({ name }, index + 1))
+        const stabilityModels = sync.getStabilityModels()
+            .map((model: any, index: number) => sync.mapStabilityModelToAiModel(model, index + 1))
+        const bytePlusModels = sync.getBytePlusModels()
+            .map((model: any, index: number) => sync.mapBytePlusModelToAiModel(model, index + 1))
+        const synchronizedControls = [
+            ...openAIModels,
+            ...anthropicModels,
+            ...googleModels,
+            ...stabilityModels,
+            ...bytePlusModels,
+        ].flatMap((model: any) => [
+            ...(model.reasoningGenerationControls ?? []),
+            ...(model.imageGenerationControls ?? []),
+            ...(model.videoGenerationControls ?? []),
+        ].map((control: any) => ({
+            modelId: `${model.provider}:${model.model}`,
+            control,
+        })))
+        const nonConfigurableControls = synchronizedControls.filter(({ control }: any) => (
+            control.kind === 'fixed'
+            || control.readOnly === true
+            || (!['number', 'text'].includes(control.kind)
+                && new Set(control.options.map((option: any) => option.value)).size <= 1)
+        ))
+        const incorrectlyEditableControls = nonConfigurableControls.filter(({ control }: any) => (
+            control.kind !== 'fixed' && control.readOnly !== true
+        ))
+
+        expect(incorrectlyEditableControls).toEqual([])
+        expect(nonConfigurableControls.map(({ modelId, control }: any) => `${modelId}:${control.key}`)).toEqual([
+            'Google:gemini-3.1-flash-lite-image:resolution',
+        ])
+    })
 })
 
 // =============================================================================
