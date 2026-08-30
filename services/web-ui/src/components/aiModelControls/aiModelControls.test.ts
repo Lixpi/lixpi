@@ -311,7 +311,7 @@ afterEach(() => {
 
 describe('createMediaGenerationConfigMatrixView', () => {
     function createControls(overrides: {
-        mediaType?: 'image' | 'video'
+        mediaType?: 'reasoning' | 'image' | 'video'
         selectedModelIds?: string[]
         configGroups?: MediaGenerationConfigSelectionGroup[]
     } = {}): MediaGenerationConfigMatrixControls & {
@@ -381,6 +381,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
         expect(imageSizeDropdown?.optionHorizontalPadding).toBe(
             settings.aiModelControls.styles.dimensionsDropdown.horizontalPadding,
         )
+        expect(imageSizeDropdown?.observeParentResize).toBe(false)
         expect(settings.slidingDropdown.styles.indicator.closedBorderWidth).toBe(0)
 
         imageSizeDropdown.onChange('16:9', 'image:google/openai:imageSize')
@@ -603,6 +604,104 @@ describe('createMediaGenerationConfigMatrixView', () => {
             control.querySelector('.ai-media-config-control')?.getAttribute('data-control-key')
         ))).toEqual(['imageSize', 'resolution'])
         expect(view.dom.querySelector('.ai-model-config-controls')).toBeNull()
+
+        view.destroy()
+    })
+
+    it('hides a fixed resolution while retaining its provider value when another control changes', () => {
+        const imageGroup = aiModelsStoreState.mediaGenerationConfigMatrix.groups.find(group => (
+            group.groupId === 'image:google/openai'
+        ))
+        imageGroup.controls = [
+            {
+                key: 'imageSize',
+                label: 'Aspect ratio',
+                kind: 'aspect-ratio',
+                defaultValue: '1:1',
+                options: [
+                    { value: '1:1', label: '1:1' },
+                    { value: '16:9', label: '16:9' },
+                ],
+            },
+            {
+                key: 'resolution',
+                label: 'Resolution',
+                kind: 'fixed',
+                readOnly: true,
+                defaultValue: '1K',
+                description: 'Controls output resolution and image-token cost.',
+                options: [{ value: '1K', label: '1K' }],
+            },
+        ]
+        const controls = createControls({
+            selectedModelIds: ['google:imagen-4'],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        const aspectRatioDropdown = latestSlidingDropdownConfig(config => config.id.endsWith(':imageSize'))
+        const resolutionDropdown = latestSlidingDropdownConfig(config => config.id.endsWith(':resolution'))
+
+        expect(aspectRatioDropdown).toEqual(expect.objectContaining({
+            selectedValue: '1:1',
+            options: [
+                { value: '1:1', label: '1:1' },
+                { value: '16:9', label: '16:9' },
+            ],
+        }))
+        expect(resolutionDropdown).toBeUndefined()
+        expect(view.dom.querySelector('[data-control-key="resolution"]')).toBeNull()
+        expect(mockState.slidingSwitchConfigs.some(config => config.id.endsWith(':resolution'))).toBe(false)
+
+        aspectRatioDropdown.onChange('16:9')
+        expect(controls.setConfigGroups).toHaveBeenLastCalledWith([{
+            groupId: 'image:google/openai',
+            modelIds: ['google:imagen-4'],
+            values: { imageSize: '16:9', resolution: '1K' },
+        }])
+
+        view.destroy()
+    })
+
+    it.each([
+        { mediaType: 'reasoning' as const, modelId: 'openai:reasoning-only', key: 'reasoningEffort' },
+        { mediaType: 'image' as const, modelId: 'google:image-only', key: 'resolution' },
+        { mediaType: 'video' as const, modelId: 'google:video-only', key: 'duration' },
+    ])('hides single-value $mediaType controls even when their metadata is not marked fixed', ({
+        mediaType,
+        modelId,
+        key,
+    }) => {
+        const groupId = `${mediaType}:single-value`
+        aiModelsStoreState.mediaGenerationConfigMatrix.groups = [{
+            groupId,
+            mediaType,
+            provider: modelId.split(':')[0],
+            title: 'Single-value control',
+            modelIds: [modelId],
+            controls: [{
+                key,
+                label: 'Only value',
+                kind: 'segmented',
+                defaultValue: 'only',
+                options: [{ value: 'only', label: 'Only' }],
+            }],
+        }]
+        const controls = createControls({
+            mediaType,
+            selectedModelIds: [modelId],
+            configGroups: [],
+        })
+        const view = createMediaGenerationConfigMatrixView(controls)
+
+        document.body.appendChild(view.dom)
+        view.update()
+
+        expect(view.dom.dataset.visible).toBe('true')
+        expect(view.dom.querySelector(`[data-control-key="${key}"]`)).toBeNull()
+        expect(mockState.slidingDropdownConfigs.some(config => config.id.endsWith(`:${key}`))).toBe(false)
 
         view.destroy()
     })

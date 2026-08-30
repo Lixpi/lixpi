@@ -743,23 +743,6 @@
     overflow: visible;
 }
 
-.ai-media-config-fixed-value {
-    width: 100%;
-    min-height: 38px;
-    box-sizing: border-box;
-    padding: 9px 11px;
-    border: 1px solid rgba(96, 108, 133, 0.12);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.78);
-    color: #1a2744;
-    font: inherit;
-    font-size: 12px;
-}
-
-.ai-media-config-fixed-value {
-    color: rgba(49, 59, 78, 0.68);
-}
-
 .ai-media-config-description {
     max-width: 300px;
     color: rgba(49, 59, 78, 0.52);

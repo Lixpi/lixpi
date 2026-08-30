@@ -80,6 +80,7 @@ describe('ai-prompt-input.scss', () => {
         expectSourceToContain(scss, '.ai-media-config-control-label')
         expectSourceToContain(scss, 'align-self: flex-start;')
         expectSourceToContain(scss, '.ai-media-config-toggle-svg-host')
+        expectSourceNotToContain(scss, '.ai-media-config-fixed-value')
         expectSourceToContain(scss, 'border: none;')
         expectSourceToContain(scss, 'background: transparent;')
         expectSourceNotToContain(scss, '.ai-media-config-toggle-track')
