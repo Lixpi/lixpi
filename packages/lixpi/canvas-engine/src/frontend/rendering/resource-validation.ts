@@ -1,10 +1,8 @@
-'use strict'
-
-import type {
-    MaterialBinding,
-    MaterialProgram,
-    MeshData,
-    TextureInput,
+import {
+    type MaterialBinding,
+    type MaterialProgram,
+    type MeshData,
+    type TextureInput,
 } from './resources.ts'
 
 const uniformLengths = { f32: 1, vec2f: 2, vec3f: 3, vec4f: 4, mat3f: 9, mat4f: 16 } as const

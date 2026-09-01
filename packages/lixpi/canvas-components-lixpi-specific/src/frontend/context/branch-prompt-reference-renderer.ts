@@ -1,4 +1,6 @@
-import type { BranchPromptReferenceRenderer } from '../nodes/branch-marker-prompt.ts'
+import {
+    type BranchPromptReferenceRenderer,
+} from '../nodes/branch-marker-prompt.ts'
 import { createCapabilityPromptReferencePreview } from './capability-prompt-preview.ts'
 
 import {

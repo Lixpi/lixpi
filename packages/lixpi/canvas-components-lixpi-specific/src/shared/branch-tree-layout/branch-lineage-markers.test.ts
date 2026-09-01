@@ -3,14 +3,14 @@ import {
     it,
     expect,
 } from 'vitest'
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    DocumentCanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
+import {
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type DocumentCanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
 
 import {

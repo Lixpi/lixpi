@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     Container,
     Mesh,
@@ -7,11 +5,13 @@ import {
     Texture,
     type Shader,
 } from 'pixi.js'
-import type {
-    CanvasEngineRect,
-    Dispose,
+import {
+    type CanvasEngineRect,
+    type Dispose,
 } from '../../shared/index.ts'
-import type { MeshData } from './resources.ts'
+import {
+    type MeshData,
+} from './resources.ts'
 import { validateMesh } from './resource-validation.ts'
 import { PixiMaterialResource } from './pixi-material-resource.ts'
 

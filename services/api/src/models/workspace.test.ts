@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -9,7 +7,9 @@ import {
 } from 'vitest'
 
 import Workspace from './workspace.ts'
-import type { ContentDescriptor } from '@lixpi/constants'
+import {
+    type ContentDescriptor,
+} from '@lixpi/constants'
 
 const dynamo = {
     getItem: vi.fn(),

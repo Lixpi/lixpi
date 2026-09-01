@@ -1,8 +1,6 @@
-'use strict'
-
 import * as process from 'node:process'
 
-import NATS_Service from '@lixpi/nats-service'
+import type NATS_Service from '@lixpi/nats-service'
 import {
     getDynamoDbTableStageName,
     NATS_SUBJECTS,

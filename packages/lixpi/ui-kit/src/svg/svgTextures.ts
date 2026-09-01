@@ -1,5 +1,3 @@
-'use strict'
-
 // !!!!!!!!!!!!!!!! DISCLAIMER !!!!!!!!!!!!!!!!!!!!!!
 // Some of these icons may be premium icons distributed by FlatIcon.
 // Any use outside of this project is not allowed by their licence

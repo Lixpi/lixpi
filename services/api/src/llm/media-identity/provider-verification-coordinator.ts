@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 import {
     createHash,
@@ -8,12 +6,12 @@ import {
 } from 'node:crypto'
 import { v4 as uuid } from 'uuid'
 
-import type {
-    AssetRequesterContext,
-    MediaGenerationRequest,
-    ProviderIdentityVerification,
-    ProviderName,
-    ProviderVerificationSession,
+import {
+    type AssetRequesterContext,
+    type MediaGenerationRequest,
+    type ProviderIdentityVerification,
+    type ProviderName,
+    type ProviderVerificationSession,
 } from '@lixpi/constants'
 
 import AssetModel from '../../models/asset.ts'

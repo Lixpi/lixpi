@@ -1,9 +1,9 @@
-import type {
-    ExecutionTrace,
-    ExecutionTraceFact,
-    ExecutionTraceHandle,
-    ExecutionTraceModelCall,
-    ExecutionTraceParam,
+import {
+    type ExecutionTrace,
+    type ExecutionTraceFact,
+    type ExecutionTraceHandle,
+    type ExecutionTraceModelCall,
+    type ExecutionTraceParam,
 } from '@lixpi/constants'
 import {
     createTagPill,
@@ -12,13 +12,13 @@ import {
 } from '@lixpi/ui-kit/components/tag-pill'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { select } from 'd3-selection'
-import { createCapabilityPromptReferencePreview } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
-
 import {
+    createCapabilityPromptReferencePreview,
     createMediaPromptReferencePreview,
     createPromptReferenceChipElement,
     type PromptReferencePreviewRenderer,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+
 import {
     applyMediaModelBadgeStyleProperties,
     resolveMediaModelBadgeConfig,

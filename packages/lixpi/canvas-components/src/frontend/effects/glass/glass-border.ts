@@ -1,18 +1,16 @@
-'use strict'
-
 import { roundedRectanglePath } from '@lixpi/ui-primitives/svg'
-import type {
-    CanvasEngineRect,
-    Dispose,
+import {
+    type CanvasEngineRect,
+    type Dispose,
 } from '@lixpi/canvas-engine/shared'
-import type {
-    CanvasDrawingSurface,
-    CanvasLayer,
-    CaptureResource,
-    CaptureSpec,
-    ResourceHandle,
-    TextureInput,
-    VectorShape,
+import {
+    type CanvasDrawingSurface,
+    type CanvasLayer,
+    type CaptureResource,
+    type CaptureSpec,
+    type ResourceHandle,
+    type TextureInput,
+    type VectorShape,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import {
     bakeGlassDisplacementMap,

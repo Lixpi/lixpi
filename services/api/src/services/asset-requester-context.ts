@@ -1,6 +1,6 @@
-'use strict'
-
-import type { AssetRequesterContext } from '@lixpi/constants'
+import {
+    type AssetRequesterContext,
+} from '@lixpi/constants'
 
 import Organization from '../models/organization.ts'
 import Workspace from '../models/workspace.ts'

@@ -1,7 +1,5 @@
 // @vitest-environment node
 
-'use strict'
-
 import {
     describe,
     expect,
@@ -21,7 +19,7 @@ const packageStylesheetImporter: FileImporter<'async'> = {
         if (!packageImport) return null
 
         const [, packageName, subpath] = packageImport
-        const packageDirectory = resolve(__dirname, '../../packages/lixpi', packageName)
+        const packageDirectory = resolve(import.meta.dirname, '../../packages/lixpi', packageName)
         const packageJson = JSON.parse(
             readFileSync(resolve(packageDirectory, 'package.json'), 'utf-8'),
         )
@@ -39,7 +37,7 @@ const packageStylesheetImporter: FileImporter<'async'> = {
 describe('workspace canvas styles', () => {
     it('compiles through the package Sass exports used by the web UI', async () => {
         const stylesheetPath = resolve(
-            __dirname,
+            import.meta.dirname,
             '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.scss',
         )
         const result = await compileAsync(stylesheetPath, {

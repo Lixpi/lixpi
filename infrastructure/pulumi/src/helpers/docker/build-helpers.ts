@@ -1,5 +1,3 @@
-'use strict'
-
 import * as pulumi from '@pulumi/pulumi'
 import * as aws from '@pulumi/aws'
 import * as dockerBuild from '@pulumi/docker-build'

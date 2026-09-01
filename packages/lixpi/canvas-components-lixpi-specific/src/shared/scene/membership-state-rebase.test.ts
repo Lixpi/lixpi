@@ -3,12 +3,12 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    BranchLineCanvasNode,
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
-    WorkspaceEdge,
+import {
+    type BranchLineCanvasNode,
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 
 import { rebaseCanvasMembershipState } from './membership-state-rebase.ts'

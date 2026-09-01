@@ -1,22 +1,22 @@
-'use strict'
-
 import sharp from 'sharp'
 
-import type {
-    CharacterFidelityObjectCoordinate,
-    ImageReferenceCapabilities,
+import {
+    type CharacterFidelityObjectCoordinate,
+    type ImageReferenceCapabilities,
 } from '@lixpi/constants'
 
-import type {
-    CharacterEvidenceProfile,
-    CharacterEvidenceRegion,
-    CharacterSourceRegion,
+import {
+    type CharacterEvidenceProfile,
+    type CharacterEvidenceRegion,
+    type CharacterSourceRegion,
 } from './character-evidence.ts'
-import type { ResolvedCharacterReference } from './reference-resolver.ts'
-import type {
-    CharacterImageReference,
-    CharacterImageReferenceRole,
-    CharacterTransientMediaStorePort,
+import {
+    type ResolvedCharacterReference,
+} from './reference-resolver.ts'
+import {
+    type CharacterImageReference,
+    type CharacterImageReferenceRole,
+    type CharacterTransientMediaStorePort,
 } from './runtime-ports.ts'
 
 export type CharacterReferencePackEntry = CharacterImageReference & {

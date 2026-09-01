@@ -1,13 +1,13 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import type { ProviderName } from '@lixpi/constants'
-import type { ProviderSafeMediaIntent } from '@lixpi/constants'
+import {
+    type ProviderName,
+    type ProviderSafeMediaIntent,
+} from '@lixpi/constants'
 
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 import {

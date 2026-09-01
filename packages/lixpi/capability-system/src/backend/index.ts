@@ -1,5 +1,3 @@
-'use strict'
-
 export * from '../shared/index.ts'
 export * from './capability-action-registry.ts'
 export * from './capability-artifact-registry.ts'

@@ -1,10 +1,10 @@
-import type {
-    CanvasGeometryUpdate,
-    CapabilityRunEvent,
-    MediaBranchVlmResolution,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
-    WorkspaceContextResolution,
+import {
+    type CanvasGeometryUpdate,
+    type CapabilityRunEvent,
+    type MediaBranchVlmResolution,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
+    type WorkspaceContextResolution,
 } from '@lixpi/constants'
 
 export type CanvasMediaSegment = {

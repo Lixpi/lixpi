@@ -1,4 +1,4 @@
-@import '@lixpi/ui-primitives/styles/transitions';
+@import "@lixpi/ui-primitives/styles/transitions";
 
 // NavigationSidePanel workspace-list layout. Shared resize, backdrop, overlay,
 // toggle, and slide animation styles live in components/sidePanel.
@@ -60,11 +60,13 @@
 .navigation-side-panel-toggle {
     border-radius: 999px;
     background: transparent;
-    transition: var(--side-panel-slide-transition), #{hoverTransition(color, 150ms)};
+    transition:
+        var(--side-panel-slide-transition),
+        #{hoverTransition(color, 150ms)};
 }
 
 .navigation-side-panel-toggle::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: -8px;
     border-radius: 999px;
@@ -82,7 +84,7 @@
 }
 
 .navigation-side-panel-header::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 4%;
     right: 4%;

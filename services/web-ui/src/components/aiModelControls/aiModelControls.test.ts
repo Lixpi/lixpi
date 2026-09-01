@@ -794,7 +794,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         expect(view.dom.dataset.visible).toBe('true')
         expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(1)
-        expect(toggle.getAttribute('aria-pressed')).toBe('false')
+        expect(toggle.ariaPressed).toBe('false')
         expect(toggleControl.querySelector('.ai-prompt-model-menu-control-label')?.textContent).toBe('Watermark')
         expect(toggleControl.querySelector('.mock-help-tooltip')).not.toBeNull()
         expect(toggleControl.querySelector('.ai-media-config-description')).toBeNull()
@@ -816,7 +816,7 @@ describe('createMediaGenerationConfigMatrixView', () => {
             modelIds: ['google:imagen-4'],
             values: { imageSize: '1:1', watermark: 'true' },
         }])
-        expect(toggle.getAttribute('aria-pressed')).toBe('true')
+        expect(toggle.ariaPressed).toBe('true')
         expect(mockState.toggleSwitchInstances.at(-1)?.setChecked).toHaveBeenCalledWith(true)
 
         view.destroy()

@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -8,9 +6,9 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    CapabilityCatalogRecord,
-    CapabilityResourceRef,
+import {
+    type CapabilityCatalogRecord,
+    type CapabilityResourceRef,
 } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
@@ -25,9 +23,9 @@ vi.mock('../../../models/capability.ts', () => ({
 }))
 
 import { persistStyle } from './stage6-persist.ts'
-import type {
-    StyleExtractionState,
-    StageLogger,
+import {
+    type StyleExtractionState,
+    type StageLogger,
 } from './types.ts'
 
 const logger: StageLogger = {

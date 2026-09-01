@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -11,7 +9,9 @@ import {
     buildImageModelPrompt,
     normalizeImageSize,
 } from './image-generation-trace.ts'
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     return {

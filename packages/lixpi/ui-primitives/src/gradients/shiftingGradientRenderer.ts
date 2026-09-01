@@ -336,7 +336,7 @@ export class ShiftingGradientBackground {
         this.renderer = options.renderer ?? new ShiftingGradientRenderer(options.colors)
         this.ownsRenderer = !options.renderer
         this.updateCanvasSize()
-        container.insertBefore(this.canvas, container.firstChild)
+        container.prepend(this.canvas)
         this.renderer.subscribe(this.canvas)
         void this.loadPattern()
 

@@ -22,7 +22,10 @@ import {
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
 } from '@lixpi/ui-kit/svg'
-import { CapabilityModulePromiseCache } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    CapabilityModulePromiseCache,
+    getPromptReferenceIcon,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import {
     createStateWithNodeSelection,
@@ -37,7 +40,6 @@ import {
     createPromptReferenceNodeViewPlugin,
     PromptReferenceNodeView,
 } from './promptReferenceNodeView.ts'
-import { getPromptReferenceIcon } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 const capabilityMeta = {
     moduleId: 'global.character-creator',

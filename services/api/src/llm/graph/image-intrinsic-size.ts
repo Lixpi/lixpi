@@ -1,5 +1,3 @@
-'use strict'
-
 // Intrinsic pixel size read straight from the PNG IHDR / JPEG SOF header bytes
 // without an image-library dependency.
 export function readImageIntrinsicSize(buffer: Buffer): { width: number; height: number } | null {

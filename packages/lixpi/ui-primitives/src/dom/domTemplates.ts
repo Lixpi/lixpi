@@ -1,5 +1,3 @@
-'use strict'
-
 import htm from 'htm/mini'
 
 type StyleObject = Partial<CSSStyleDeclaration>

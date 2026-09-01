@@ -1,5 +1,4 @@
 // @ts-nocheck
-'use strict'
 
 import { EditorState } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
@@ -24,9 +23,7 @@ import {
     createAiChatThreadPlugin,
     type AiChatStreamObserver,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
-import {
-    createAiPromptInputPlugin,
-} from '$src/components/proseMirror/plugins/aiPromptInputPlugin'
+import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin'
 import {
     createCodeBlockPlugin,
     codeBlockInputRule,
@@ -41,7 +38,9 @@ import {
     createPromptReferenceNodeViewPlugin,
     createSlashCapabilityModulePickerPlugin,
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
-import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 import { buildKeymap } from '$src/components/proseMirror/components/keyMap.js'
 import { buildInputRules } from '$src/components/proseMirror/components/inputRules.js'

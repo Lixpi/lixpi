@@ -1,9 +1,9 @@
-import type {
-    Asset,
-    CanvasNode,
-    CanvasState,
-    OperationStatusCanvasNode,
-    WorkspaceEdge,
+import {
+    type Asset,
+    type CanvasNode,
+    type CanvasState,
+    type OperationStatusCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { isGeneratedOutputCanvasNode } from '../canvas-node/generated-media-node.ts'
 import { isGeneratedOutputRejectableForCanvas } from '../review/generated-output-review-state.ts'

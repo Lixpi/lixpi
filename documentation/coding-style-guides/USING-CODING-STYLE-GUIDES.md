@@ -6,7 +6,7 @@ Read this file before writing or modifying implementation code, then read every 
 
 | Files being touched | Mandatory guides |
 |---------------------|------------------|
-| Any `.ts` or `.tsx` file, anywhere in the repository — `services/api`, `services/nex`, `services/web-ui`, `packages/lixpi`, `infrastructure/pulumi`, scripts | [`TYPESCRIPT.md`](TYPESCRIPT.md) |
+| Any `.ts` file, anywhere in the repository — `services/api`, `services/nex`, `services/web-ui`, `packages/lixpi`, `infrastructure/pulumi`, scripts | [`TYPESCRIPT.md`](TYPESCRIPT.md) |
 | `.scss` files or code that creates or selects styled DOM elements | [`SASS-AND-CSS.md`](SASS-AND-CSS.md) |
 | `services/web-ui` UI work — TypeScript DOM components, D3/SVG, canvas chrome, ProseMirror plugins, shared components | [`UI-COMPONENTS.md`](UI-COMPONENTS.md), in addition to the guides above |
 

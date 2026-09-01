@@ -1,5 +1,3 @@
-'use strict'
-
 import { v4 as uuid } from 'uuid'
 import {
     StateGraph,
@@ -22,7 +20,9 @@ import {
     type StreamStatus,
 } from '@lixpi/constants'
 
-import type { MetricsClient } from '../../metrics/metrics-client.ts'
+import {
+    type MetricsClient,
+} from '../../metrics/metrics-client.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
 import {
@@ -37,7 +37,9 @@ import {
 } from '../graph/stream-publisher.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 import { VideoPublisher } from '../graph/video-publisher.ts'
-import { UsageReporter } from '../usage/usage-reporter.ts'
+import {
+    type UsageReporter,
+} from '../usage/usage-reporter.ts'
 import {
     getImagePromptMaxChars,
     validateImagePrompt as toolValidateImagePrompt,
@@ -68,7 +70,9 @@ import {
 } from '../../services/generated-asset-storage.ts'
 import { generateMediaGenerationSeed } from './media-generation-seed.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
-import type { CapabilityDispatcher } from '@lixpi/capability-system/backend'
+import {
+    type CapabilityDispatcher,
+} from '@lixpi/capability-system/backend'
 import { getCapabilityDispatcher } from '../../capability-system/capability-runtime.ts'
 import {
     executeRequiredCapabilitiesForState,
@@ -78,7 +82,9 @@ import {
     resolveCapabilitiesForState,
 } from '../../capability-system/capability-state-resolver.ts'
 import { isCharacterCreatorCapabilitySelected } from '@lixpi/capability-system'
-import type { MediaProviderDefinition } from './media-provider-definition.ts'
+import {
+    type MediaProviderDefinition,
+} from './media-provider-definition.ts'
 import { assertNoForbiddenMediaReferenceLeak } from '../media-reference/provider-safe-context.ts'
 import { sanitizeMediaReferenceText } from '../media-reference/media-reference-compiler.ts'
 import { resolveImageGenerationReferences } from '../image-generation-references.ts'

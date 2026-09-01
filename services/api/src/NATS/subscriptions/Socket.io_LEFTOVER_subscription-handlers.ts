@@ -1,5 +1,3 @@
-'use strict'
-
 import chalk from 'chalk'
 import {
     log,
@@ -16,10 +14,7 @@ import {
     USER_SUBSCRIPTION_SUBJECTS,
     LoadingStatus,
     PaymentProcessingStatus,
-} from '@lixpi/constants'
-
-import type {
-    SocketIoResponse,
+    type SocketIoResponse,
 } from '@lixpi/constants'
 
 export const notifyClientOfBalanceTopUp = async (data) => {

@@ -9,8 +9,8 @@ import {
     html,
 } from '@lixpi/ui-primitives/dom'
 import {
-    type UiKitSlidingDropdownStyles,
     uiKitSettings,
+    type UiKitSlidingDropdownStyles,
 } from '../../runtime-settings.ts'
 import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 import { chevronDownIcon } from '../../svg/svgIcons.ts'

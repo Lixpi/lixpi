@@ -1,5 +1,3 @@
-'use strict'
-
 // App entry component. Wires the global help-tooltip provider and mounts the
 // root layout. Renderer: TypeScript DOM, no framework runtime.
 

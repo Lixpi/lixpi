@@ -7,11 +7,11 @@ import {
     getSmoothStepPath,
     Position,
 } from '@xyflow/system'
-import type {
-    PathType,
-    ComputedPath,
-    AnchorPosition,
-    NodeConfig,
+import {
+    type PathType,
+    type ComputedPath,
+    type AnchorPosition,
+    type NodeConfig,
 } from './types.ts'
 
 // Simple node bounds type for path obstacle avoidance
@@ -112,7 +112,7 @@ function findSafeVerticalLane(
         if (mergedRanges.length === 0) {
             mergedRanges.push(range)
         } else {
-            const last = mergedRanges[mergedRanges.length - 1]
+            const last = mergedRanges.at(-1)!
             if (range.left <= last.right) {
                 // Overlapping, merge
                 last.right = Math.max(last.right, range.right)
@@ -149,8 +149,9 @@ function findSafeVerticalLane(
     }
 
     // Check space after last forbidden range
-    if (mergedRanges[mergedRanges.length - 1].right < searchRight) {
-        validRanges.push({ left: mergedRanges[mergedRanges.length - 1].right, right: searchRight })
+    const lastMergedRange = mergedRanges.at(-1)!
+    if (lastMergedRange.right < searchRight) {
+        validRanges.push({ left: lastMergedRange.right, right: searchRight })
     }
 
     // If no valid ranges at all (shouldn't happen), fall back to midpoint
@@ -274,7 +275,7 @@ function buildMultiSegmentPath(
     }
 
     // Final line to last point
-    const last = points[points.length - 1]
+    const last = points.at(-1)!
     segments.push(`L ${last.x},${last.y}`)
 
     return segments.join(' ')
@@ -537,7 +538,7 @@ function buildOrthogonalPath(
     }
 
     // Final line to target
-    const lastPoint = points[points.length - 1]
+    const lastPoint = points.at(-1)!
     segments.push(`L ${lastPoint.x},${lastPoint.y}`)
 
     return segments.join(' ')

@@ -1,5 +1,3 @@
-'use strict'
-
 import NATS_Service from '@lixpi/nats-service'
 import {
     getAssetEventSubject,

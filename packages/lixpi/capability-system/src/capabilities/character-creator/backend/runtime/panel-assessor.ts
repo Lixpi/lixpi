@@ -1,21 +1,25 @@
-'use strict'
-
 import sharp from 'sharp'
 import {
     info,
     warn,
 } from '@lixpi/debug-tools'
 
-import type {
-    CharacterFidelityAssessmentRequest,
-    CharacterFidelityAssessmentResponse,
-    CharacterFidelityObjectCoordinate,
-    CharacterFidelityUnavailableReason,
+import {
+    type CharacterFidelityAssessmentRequest,
+    type CharacterFidelityAssessmentResponse,
+    type CharacterFidelityObjectCoordinate,
+    type CharacterFidelityUnavailableReason,
 } from '@lixpi/constants'
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
 
-import type { CharacterEvidenceProfile } from './character-evidence.ts'
-import type { CharacterFidelityPort } from './runtime-ports.ts'
+import {
+    type CharacterEvidenceProfile,
+} from './character-evidence.ts'
+import {
+    type CharacterFidelityPort,
+} from './runtime-ports.ts'
 
 export type CharacterPanelDimensionAssessment = {
     dimension: string

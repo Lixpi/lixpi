@@ -1,5 +1,3 @@
-'use strict'
-
 export type AssetReferenceDocumentRole = 'content' | 'conversation' | 'capabilityArtifact'
 
 function collectAssetIds(

@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import type { MediaBranchCandidateSnapshot } from '@lixpi/constants'
+import {
+    type MediaBranchCandidateSnapshot,
+} from '@lixpi/constants'
 
 import { restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
 

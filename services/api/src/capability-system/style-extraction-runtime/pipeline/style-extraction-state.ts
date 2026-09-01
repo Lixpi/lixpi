@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    StyleExtractionInput,
-    StyleExtractionState,
-    ReferenceImage,
+import {
+    type StyleExtractionInput,
+    type StyleExtractionState,
+    type ReferenceImage,
 } from './types.ts'
 
 export function extractStyleReferenceImagesFromMessages(

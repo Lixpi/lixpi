@@ -1,5 +1,3 @@
-'use strict'
-
 import process from 'node:process'
 
 import DynamoDBService from '@lixpi/dynamodb-service'

@@ -1,20 +1,18 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetRequesterContext,
-    CanvasNode,
-    CapabilityPromptReference,
-    MediaBranchCandidateImage,
-    MessageContent,
-    MessageContentBlock,
-    PromptReference,
-    PromptReferenceAtomAttrs,
-    Workspace,
+import {
+    type Asset,
+    type AssetRequesterContext,
+    type CanvasNode,
+    type CapabilityPromptReference,
+    type MediaBranchCandidateImage,
+    type MessageContent,
+    type MessageContentBlock,
+    type PromptReference,
+    type PromptReferenceAtomAttrs,
+    type Workspace,
 } from '@lixpi/constants'
-import type {
-    CapabilityModuleCatalog,
-    CapabilityResolvedModelInput,
+import {
+    type CapabilityModuleCatalog,
+    type CapabilityResolvedModelInput,
 } from '@lixpi/capability-system/backend'
 import {
     findAiChatThreadContentNode,
@@ -29,7 +27,9 @@ import {
 
 import AssetModel from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'
-import CapabilityModel, { type CapabilityRequesterContext } from '../models/capability.ts'
+import CapabilityModel, {
+    type CapabilityRequesterContext,
+} from '../models/capability.ts'
 import AssetDocumentService from './asset-document-service.ts'
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
 import { resolveAuthorizedAssetModelInput } from '../capability-system/capability-model-input-adapter.ts'

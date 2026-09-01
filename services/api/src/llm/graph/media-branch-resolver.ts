@@ -1,16 +1,14 @@
-'use strict'
-
 import * as process from 'process'
 import { randomUUID } from 'crypto'
 
 import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'
-import type {
-    MediaBranchCandidateImage,
-    MediaBranchVlmReferenceDecision,
-    MediaBranchVlmResolution,
-    ImageGenerationOperationKind,
-    ProviderName,
+import {
+    type MediaBranchCandidateImage,
+    type MediaBranchVlmReferenceDecision,
+    type MediaBranchVlmResolution,
+    type ImageGenerationOperationKind,
+    type ProviderName,
 } from '@lixpi/constants'
 
 import {
@@ -21,11 +19,13 @@ import {
 } from '../structured-vlm/structured-vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import { restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
-import type {
-    ChatMessage,
-    ProviderState,
+import {
+    type ChatMessage,
+    type ProviderState,
 } from './state.ts'
-import type { StreamPublisher } from './stream-publisher.ts'
+import {
+    type StreamPublisher,
+} from './stream-publisher.ts'
 import { requiredCapabilityProducedCapabilityOnlyOutput } from '../../capability-system/capability-state-resolver.ts'
 
 type ResolveMediaBranchDeps = {

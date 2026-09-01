@@ -1,5 +1,3 @@
-'use strict'
-
 import { html } from '@lixpi/ui-primitives/dom'
 import {
     CanvasRenderer,

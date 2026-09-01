@@ -1,10 +1,10 @@
-'use strict'
-
-import type { ConfirmRequest } from '@lixpi/constants'
-import type {
-    UsageReport,
-    ImageUsageReport,
-    VideoUsageReport,
+import {
+    type ConfirmRequest,
+} from '@lixpi/constants'
+import {
+    type UsageReport,
+    type ImageUsageReport,
+    type VideoUsageReport,
 } from './usage-reporter.ts'
 
 // Maps the usage reporter's per-call reports to metrics ConfirmRequests. One

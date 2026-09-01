@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -22,7 +20,7 @@ vi.mock('$src/stores/authStore.ts', () => ({
 }))
 
 vi.mock('@lixpi/ui-primitives/dom', () => ({
-    applyStyle: vi.fn(),
+    html: vi.fn(),
 }))
 
 const STORAGE_KEY = 'localauth0_token'

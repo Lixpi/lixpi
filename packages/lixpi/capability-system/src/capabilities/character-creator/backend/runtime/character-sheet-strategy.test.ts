@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFile } from 'node:fs/promises'
 
 import sharp from 'sharp'
@@ -12,9 +10,13 @@ import {
     vi,
 } from 'vitest'
 
-import type { OperationProgressItem } from '@lixpi/constants'
+import {
+    type OperationProgressItem,
+} from '@lixpi/constants'
 
-import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
+import {
+    type CapabilityMediaExecutionContext,
+} from '../../../../backend/capability-media-strategy.ts'
 import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
 import {

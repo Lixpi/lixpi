@@ -1,24 +1,24 @@
-'use strict'
-
 import { Application } from 'pixi.js'
-import type {
-    CanvasEngineRect,
-    CanvasEngineSize,
-    CanvasViewport,
-    Dispose,
+import {
+    type CanvasEngineRect,
+    type CanvasEngineSize,
+    type CanvasViewport,
+    type Dispose,
 } from '../../shared/index.ts'
 import { FrameScheduler } from '../runtime/frame-scheduler.ts'
 import { Lifetime } from '../runtime/lifetime.ts'
 import { CanvasMedia } from '../media/canvas-media.ts'
-import type { ImageDecoderOptions } from '../media/image-decoder.ts'
-import type {
-    EngineMedia,
-    MediaCacheOptions,
-    MediaSourceResolver,
+import {
+    type ImageDecoderOptions,
+} from '../media/image-decoder.ts'
+import {
+    type EngineMedia,
+    type MediaCacheOptions,
+    type MediaSourceResolver,
 } from '../media/types.ts'
-import type {
-    CanvasLayer,
-    DrawingResources,
+import {
+    type CanvasLayer,
+    type DrawingResources,
 } from './resources.ts'
 import { PixiDrawingResources } from './pixi-drawing-resources.ts'
 import { CanvasDrawingScope } from './drawing-scope.ts'

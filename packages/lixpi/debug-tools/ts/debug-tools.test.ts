@@ -1,5 +1,3 @@
-'use strict'
-
 import util from 'node:util'
 import {
     afterEach,

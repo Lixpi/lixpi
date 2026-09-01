@@ -1,15 +1,15 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
-import type { ImageReferenceCapabilities } from '@lixpi/constants'
+import {
+    type ImageReferenceCapabilities,
+} from '@lixpi/constants'
 
-import type {
-    ImageGenerationReferenceRole,
-    ResolvedImageGenerationReference,
+import {
+    type ImageGenerationReferenceRole,
+    type ResolvedImageGenerationReference,
 } from '../image-generation-references.ts'
 import {
     buildImageReferencePromptLabel,

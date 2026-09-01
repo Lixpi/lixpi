@@ -1,0 +1,6 @@
+.sample-panel {
+    color: #fff;
+    &:hover {
+        color: #000;
+    }
+}

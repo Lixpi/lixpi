@@ -22,8 +22,8 @@ import {
 } from './capability-action-registry.ts'
 import { CapabilityError } from '../shared/capability-errors.ts'
 import {
-    type LoadedCapabilityResource,
     SealedResolvedCapabilityPlan,
+    type LoadedCapabilityResource,
 } from './capability-resolver.ts'
 import {
     CapabilityWorkflowRunner,

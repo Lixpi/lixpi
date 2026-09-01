@@ -7,21 +7,21 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    EngineMedia,
-    MediaDescriptor,
+import {
+    type EngineMedia,
+    type MediaDescriptor,
 } from '@lixpi/canvas-engine/frontend/media'
-import type {
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
 import {
     NodeRegistry,
     type ComponentContext,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type {
-    ResourceHandle,
-    ResourceKind,
+import {
+    type ResourceHandle,
+    type ResourceKind,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import {
     NativePlayback,

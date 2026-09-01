@@ -4,12 +4,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    CanvasGeometryUpdate,
-    BranchLineCanvasNode,
-    BranchForkCanvasNode,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type CanvasGeometryUpdate,
+    type BranchLineCanvasNode,
+    type BranchForkCanvasNode,
 } from '@lixpi/constants'
 import { WorkspaceGenerationPlacements } from '../generation/workspace-generation-placements.ts'
 import {

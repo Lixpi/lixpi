@@ -1,62 +1,93 @@
-import type { WorkspaceCanvasHost } from './workspace-canvas-host.ts'
-import type { WorkspacePromptCatalog } from './workspace-canvas-editors.ts'
-import type {
-    WorkspaceCanvasDocument as Document,
-    WorkspaceCanvasConversation as AiChatThread,
+import {
+    type WorkspaceCanvasHost,
+} from './workspace-canvas-host.ts'
+import {
+    type WorkspacePromptCatalog,
+} from './workspace-canvas-editors.ts'
+import {
+    type WorkspaceCanvasDocument as Document,
+    type WorkspaceCanvasConversation as AiChatThread,
 } from './workspace-canvas-surface.ts'
 import { WorkspaceGenerationContext } from '../../shared/generation/workspace-generation-context.ts'
-import { WorkspaceNodeDeletion } from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspaceNodeGestures } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
-import { WorkspaceGenerationHandlers } from '@lixpi/canvas-components-lixpi-specific/frontend/media'
 import {
+    WorkspaceNodeDeletion,
     WorkspaceMediaTrackers,
-    type PendingGeneratedMediaTracker,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspaceApiCanvasGeometry } from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspaceGenerationSettlement } from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspacePreflightMarkers } from '@lixpi/canvas-components-lixpi-specific/shared'
-import {
+    WorkspaceApiCanvasGeometry,
+    WorkspaceGenerationSettlement,
+    WorkspacePreflightMarkers,
     WorkspaceBranchMarkerHandoff,
-    type WorkspaceBranchMarkerSettlementOptions as BranchMarkerSettlementOptions,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspaceLineageProjection } from '@lixpi/canvas-components-lixpi-specific/shared'
-import {
+    WorkspaceLineageProjection,
     WorkspaceGenerationPlacements,
-    type PendingGeneratedImagePlacement,
-    type BranchMarkerUiPhase,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspaceGeometry } from '@lixpi/canvas-components-lixpi-specific/shared'
-import {
+    WorkspaceGeometry,
     WorkspaceConversationProjection,
     WorkspaceMediaOperationRecovery,
     WorkspaceMediaAnalysis,
+    WorkspaceHistory,
+    countProseMirrorNodesByType,
+    getBranchMarkerThreadId,
+    WorkspaceReferenceProjection,
+    getBranchMarkerPromptText,
+    getBranchMarkerReasoningResponseText,
+    WorkspaceBranchActivity,
+    CanvasGenerationSubmission,
+    CanvasGenerationEvents,
+    estimateBranchMarkerDimensions,
+    getPendingGeneratedMediaNodeId,
+    resizeBranchMarkerToDimensions,
+    getBranchMarkerPromptDisplayText,
+    getBranchMarkerMediaModelCircleDescriptors,
+    resolveBranchMarkerRenderOwnership,
+    createPendingCanvasVisualCommit,
+    getCanvasVisualSyncKey,
+    getNodeStructureKey,
+    mergeIncomingCanvasStateWithPendingVisualCommit,
+    updatePendingCanvasVisualCommitViewport,
+    planWorkspaceRenderTransition,
+    getMediaGenerationReferenceResolutionForMarker,
+    isMediaGenerationReferenceResolutionOperation,
+    BranchCapabilityProgress,
+    buildBranchMarkerProgress,
+    isMediaGenerationOperationSupersededByOutput,
+    getAiChatPanelState,
+    setAiChatPanelState,
+    type PendingGeneratedMediaTracker,
+    type WorkspaceBranchMarkerSettlementOptions as BranchMarkerSettlementOptions,
+    type PendingGeneratedImagePlacement,
+    type BranchMarkerUiPhase,
+    type GeneratedOutputCanvasNode,
+    type BranchMarkerPromptPart,
+    type GeneratedMediaRebalancePipeline,
+    type BranchMarkerNode,
+    type CanvasGeometry,
+    type PendingCanvasVisualCommit,
+    type MediaGenerationOperationRecoveryResult,
 } from '@lixpi/canvas-components-lixpi-specific/shared'
 import {
-    defaultPanZoomConfig,
-    type ViewportController,
-} from '@lixpi/canvas-engine/frontend/viewport'
-import {
+    WorkspaceNodeGestures,
     CanvasConversationRun,
     WorkspaceConversationRuns,
     WorkspaceRightPanel,
     type WorkspaceRightPanelRenderOptions,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 import {
-    WorkspaceHistory,
-    countProseMirrorNodesByType,
-    getBranchMarkerThreadId,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+    defaultPanZoomConfig,
+    createViewportBridge,
+    type ViewportController,
+    type ViewportBridge,
+} from '@lixpi/canvas-engine/frontend/viewport'
 
 import {
-    WorkspaceReferenceProjection,
-    getBranchMarkerPromptText,
-    getBranchMarkerReasoningResponseText,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { WorkspaceBranchActivity } from '@lixpi/canvas-components-lixpi-specific/shared'
-import { CanvasGenerationSubmission } from '@lixpi/canvas-components-lixpi-specific/shared'
-import { CapabilityModulePromiseCache } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+    CapabilityModulePromiseCache,
+    createMediaPromptReferencePreview,
+    createCanvasPromptReferenceRenderer,
+    WorkspaceContextTrays,
+    type PromptReferencePreviewRenderer,
+    type ContextPreviewEnvironment,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import {
     Lifetime,
+    createNodeLayerManager,
+    lockCanvasScrollLayers,
     type CanvasConnectionControls,
 } from '@lixpi/canvas-engine/frontend/runtime'
 import {
@@ -76,10 +107,13 @@ import {
     rectangleContainsPoint,
     unionRectangles,
     getIntersectingNodeIds,
-} from '@lixpi/canvas-engine/shared'
-import type {
-    ViewportSnapshot as Viewport,
-    CanvasEngineRect as Rect,
+    fitDimensionsToAspectRatio,
+    getAdaptiveBoundedZoomScalingOptions,
+    scaleCanvasChromeToScreenForZoom,
+    scaleCanvasChromeWorldSizeForZoom,
+    shouldPreserveLiveViewportForScene,
+    type ViewportSnapshot as Viewport,
+    type CanvasEngineRect as Rect,
 } from '@lixpi/canvas-engine/shared'
 import {
     LoadingStatus,
@@ -116,80 +150,38 @@ import {
     type AiPromptComposerSubmitData,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/composer'
 import {
-    createMediaPromptReferencePreview,
-    type PromptReferencePreviewRenderer,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
-import {
     serializeAiModelSelectionAttr,
     serializeMediaGenerationConfigSelectionAttr,
 } from '@lixpi/prosemirror/shared/model-selection-attrs'
-import { CanvasGenerationEvents } from '@lixpi/canvas-components-lixpi-specific/shared'
 import {
     type BranchMarkerConversationPreview,
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror/shared/thread-doc'
-import type { AiLineageProjectionScope } from '@lixpi/prosemirror'
 import {
-    estimateBranchMarkerDimensions,
-    getPendingGeneratedMediaNodeId,
-    resizeBranchMarkerToDimensions,
-    type GeneratedOutputCanvasNode,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+    type AiLineageProjectionScope,
+} from '@lixpi/prosemirror'
 import { normalizeHexColor } from '@lixpi/ui-primitives/gradients'
-import {
-    fitDimensionsToAspectRatio,
-    getAdaptiveBoundedZoomScalingOptions,
-    scaleCanvasChromeToScreenForZoom,
-    scaleCanvasChromeWorldSizeForZoom,
-} from '@lixpi/canvas-engine/shared'
 import { arrowRightIcon } from '@lixpi/ui-kit/svg'
 
 import { extractSvgPathIcon } from '@lixpi/ui-primitives/svg'
-import {
-    type BranchMarkerPromptPart,
-    getBranchMarkerPromptDisplayText,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { createCanvasPromptReferenceRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
-import {
-    GeneratedMediaRebalancePipeline,
-    type BranchMarkerNode,
-    type CanvasGeometry,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { getBranchMarkerMediaModelCircleDescriptors } from '@lixpi/canvas-components-lixpi-specific/shared'
 
-import { resolveBranchMarkerRenderOwnership } from '@lixpi/canvas-components-lixpi-specific/shared'
-
-import { createNodeLayerManager } from '@lixpi/canvas-engine/frontend/runtime'
-
-import {
-    createPendingCanvasVisualCommit,
-    getCanvasVisualSyncKey,
-    getNodeStructureKey,
-    mergeIncomingCanvasStateWithPendingVisualCommit,
-    updatePendingCanvasVisualCommitViewport,
-    type PendingCanvasVisualCommit,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import { shouldPreserveLiveViewportForScene } from '@lixpi/canvas-engine/shared'
-import { lockCanvasScrollLayers } from '@lixpi/canvas-engine/frontend/runtime'
-import { planWorkspaceRenderTransition } from '@lixpi/canvas-components-lixpi-specific/shared'
-import { type MediaGenerationOperationRecoveryResult } from '@lixpi/canvas-components-lixpi-specific/shared'
-import {
-    getMediaGenerationReferenceResolutionForMarker,
-    isMediaGenerationReferenceResolutionOperation,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
 import {
     createMediaGenerationProgress,
     type MediaGenerationProgressInstance,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/progress'
 import {
-    BranchCapabilityProgress,
-    buildBranchMarkerProgress,
-    isMediaGenerationOperationSupersededByOutput,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import {
     createGeneratedOutputDetailsSidebar,
+    WorkspaceOutputReview,
+    WorkspaceAssetViews,
+    WorkspaceOutputDetails,
+    WorkspaceGenerationHistory,
+    mountWorkspaceMediaHistory,
     type GeneratedOutputDetailsSidebarInstance,
+    type GeneratedOutputRegenerationRequest,
+    type WorkspaceGenerationHistoryPorts,
+    type WorkspaceHistoryView,
+    type WorkspaceAssetDetailsPorts,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/review'
 
 import {
@@ -198,6 +190,7 @@ import {
 } from '@lixpi/canvas-components-lixpi-specific/frontend/menus'
 
 import {
+    WorkspaceGenerationHandlers,
     createWorkspaceMediaLayer,
     WorkspaceVideoChrome,
     WorkspaceOutputChrome,
@@ -210,35 +203,12 @@ import {
     type WorkspaceLoadingOutlineInstance,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/loading'
 import {
-    createViewportBridge,
-    type ViewportBridge,
-} from '@lixpi/canvas-engine/frontend/viewport'
-import {
-    WorkspaceOutputReview,
-    type GeneratedOutputRegenerationRequest,
-    WorkspaceAssetViews,
-    WorkspaceOutputDetails,
-    WorkspaceGenerationHistory,
-    mountWorkspaceMediaHistory,
-    type WorkspaceGenerationHistoryPorts,
-    type WorkspaceHistoryView,
-    type WorkspaceAssetDetailsPorts,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/review'
-import {
     createCapabilityLibraryPanel,
     createArtifactLibraryPanel,
     createMediaLibraryPanel,
     type CapabilityLibraryPanelInstance,
     type WorkspaceLibraryPorts,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/library'
-import {
-    getAiChatPanelState,
-    setAiChatPanelState,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
-import {
-    WorkspaceContextTrays,
-    type ContextPreviewEnvironment,
-} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 type ResizeHandle = ResizeCorner
 type GeneratedMediaProjectionTarget = {
@@ -4310,7 +4280,8 @@ export class LixpiWorkspaceCanvas {
         if (!nodeEl) return
         const dragOverlay = nodeEl.querySelector('.branch-origin-drag-overlay, .branch-fork-drag-overlay, .branch-line-drag-overlay')
         const nextContent = this.createBranchMarkerContent({ node, label: this.getBranchMarkerTypeLabel(node) })
-        nodeEl.insertBefore(nextContent, dragOverlay)
+        if (dragOverlay) dragOverlay.before(nextContent)
+        else nodeEl.append(nextContent)
         this.syncBranchMarkerActions(node, nodeEl)
     }
 
@@ -4325,7 +4296,7 @@ export class LixpiWorkspaceCanvas {
         const { nodeEl, dragOverlay, own } = this.nodeShells.createBranchMarker(node, () => this.handleBranchMarkerInfoClick(node.nodeId))
         own(() => this.destroyBranchMarkerContent(node.nodeId))
         const content = this.createBranchMarkerContent({ node, label: this.getBranchMarkerTypeLabel(node) })
-        nodeEl.insertBefore(content, dragOverlay)
+        dragOverlay.before(content)
         this.syncBranchMarkerActions(node, nodeEl)
         return nodeEl
     }

@@ -1,7 +1,9 @@
-'use strict'
-
-import type { CanvasEngineRect } from '../geometry/index.ts'
-import type { CanvasPositionedNode } from '../scene/types.ts'
+import {
+    type CanvasEngineRect,
+} from '../geometry/index.ts'
+import {
+    type CanvasPositionedNode,
+} from '../scene/types.ts'
 
 export type RigidCanvasNodeGroup = {
     id: string

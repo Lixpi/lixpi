@@ -1,4 +1,6 @@
-import type { WorkspaceCanvasHost } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+import {
+    type WorkspaceCanvasHost,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 import { WorkspaceMediaAdapter } from './workspace-media.ts'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { createWorkspaceCanvasEditors } from './workspace-editors.ts'

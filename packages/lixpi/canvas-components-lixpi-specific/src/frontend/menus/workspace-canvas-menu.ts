@@ -1,4 +1,6 @@
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { BubbleMenu } from '@lixpi/ui-kit/components/bubble-menu'
 import {

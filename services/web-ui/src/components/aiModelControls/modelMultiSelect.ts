@@ -14,7 +14,9 @@ import {
     type AiModelDropdownOption,
 } from '$src/components/aiModelControls/aiModelControls.ts'
 
-import type { DefaultAiModelCapability } from '@lixpi/constants'
+import {
+    type DefaultAiModelCapability,
+} from '@lixpi/constants'
 
 export type AiModelMultiSelectControls = {
     getCurrentAiModel: () => string

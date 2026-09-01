@@ -18,7 +18,7 @@ function typescriptFiles(directory: string): string[] {
 
 describe('components directory layout', () => {
     it('keeps every direct child in a dedicated directory', () => {
-        const files = readdirSync(resolve(__dirname, '../components'), { withFileTypes: true })
+        const files = readdirSync(resolve(import.meta.dirname, '../components'), { withFileTypes: true })
             .filter(entry => entry.isFile())
             .map(entry => entry.name)
         expect(files).toEqual([])
@@ -28,11 +28,11 @@ describe('components directory layout', () => {
 describe('canvas source integrity', () => {
     it('checks extracted runtime and renderer composition contracts without emitting files', () => {
         const files = [
-            ...['canvas-engine', 'canvas-components'].flatMap(name => typescriptFiles(resolve(__dirname, '../../packages/lixpi', name, 'examples'))),
-            ...['canvas-engine', 'canvas-components', 'canvas-components-lixpi-specific', 'ui-primitives'].flatMap(name => typescriptFiles(resolve(__dirname, '../../packages/lixpi', name, 'src'))),
-            ...typescriptFiles(resolve(__dirname, '../canvas-adapters')),
-            resolve(__dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'),
-            resolve(__dirname, '../services/asset-service.ts'),
+            ...['canvas-engine', 'canvas-components'].flatMap(name => typescriptFiles(resolve(import.meta.dirname, '../../packages/lixpi', name, 'examples'))),
+            ...['canvas-engine', 'canvas-components', 'canvas-components-lixpi-specific', 'ui-primitives'].flatMap(name => typescriptFiles(resolve(import.meta.dirname, '../../packages/lixpi', name, 'src'))),
+            ...typescriptFiles(resolve(import.meta.dirname, '../canvas-adapters')),
+            resolve(import.meta.dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'),
+            resolve(import.meta.dirname, '../services/asset-service.ts'),
         ].filter(file => !file.endsWith('.test.ts'))
         const api = new API()
         try {
@@ -51,11 +51,11 @@ describe('canvas source integrity', () => {
 
     it('parses native TypeScript sources without emitting files or initializing browser rendering', () => {
         const files = [
-            ...['canvas-engine', 'canvas-components'].flatMap(name => typescriptFiles(resolve(__dirname, '../../packages/lixpi', name, 'examples'))),
-            ...typescriptFiles(__dirname),
-            ...typescriptFiles(resolve(__dirname, '../canvas-adapters')),
-            resolve(__dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'),
-            ...['canvas-engine', 'canvas-components', 'canvas-components-lixpi-specific', 'ui-primitives'].flatMap(name => typescriptFiles(resolve(__dirname, '../../packages/lixpi', name, 'src'))),
+            ...['canvas-engine', 'canvas-components'].flatMap(name => typescriptFiles(resolve(import.meta.dirname, '../../packages/lixpi', name, 'examples'))),
+            ...typescriptFiles(import.meta.dirname),
+            ...typescriptFiles(resolve(import.meta.dirname, '../canvas-adapters')),
+            resolve(import.meta.dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'),
+            ...['canvas-engine', 'canvas-components', 'canvas-components-lixpi-specific', 'ui-primitives'].flatMap(name => typescriptFiles(resolve(import.meta.dirname, '../../packages/lixpi', name, 'src'))),
         ]
         const api = new API()
         try {

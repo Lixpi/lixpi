@@ -1,5 +1,3 @@
-'use strict'
-
 import { fileTypeFromBuffer } from 'file-type'
 
 import {

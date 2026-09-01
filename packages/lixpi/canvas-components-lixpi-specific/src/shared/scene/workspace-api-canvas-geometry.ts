@@ -1,21 +1,25 @@
-import type {
-    CanvasState,
-    CanvasNode,
-    BranchForkCanvasNode,
-    CanvasGeometryUpdate,
-    OperationStatusCanvasNode,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type BranchForkCanvasNode,
+    type CanvasGeometryUpdate,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import { applyCanvasGeometryUpdateToState } from '../canvas-node/canvas-geometry-update.ts'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
 import { getSupersededBranchMarkerNodeIdsForAuthoritativePlan } from '../branch-tree-layout/marker-settlement.ts'
 import { hasCompletePlannedBranchMarkerGeometry } from '../branch-tree-layout/marker-render-ownership.ts'
 import { getBranchMarkerThreadId } from '../review/workspace-history.ts'
 import { lineagePlanReferencesBranchMarkerNode } from '../generation/workspace-branch-activity.ts'
-import type {
-    WorkspaceGenerationPlacements,
-    PendingBranchMarkerRecord,
+import {
+    type WorkspaceGenerationPlacements,
+    type PendingBranchMarkerRecord,
 } from '../generation/workspace-generation-placements.ts'
-import type { WorkspaceGenerationSettlement } from '../generation/workspace-generation-settlement.ts'
+import {
+    type WorkspaceGenerationSettlement,
+} from '../generation/workspace-generation-settlement.ts'
 
 type GeometryScope = { workspaceId: string; sceneKey: string }
 type GeometryTicket = GeometryScope & { epoch: number }

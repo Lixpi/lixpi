@@ -1,19 +1,23 @@
-import type {
-    Asset,
-    CapabilityArtifactCanvasNode,
+import {
+    type Asset,
+    type CapabilityArtifactCanvasNode,
 } from '@lixpi/constants'
-import type {
-    CapabilityArtifactCanvasHost,
-    CapabilityArtifactFrontendDefinition,
+import {
+    type CapabilityArtifactCanvasHost,
+    type CapabilityArtifactFrontendDefinition,
 } from '@lixpi/capability-system/frontend'
-import type { CapabilityArtifactSharedDefinition } from '@lixpi/capability-system/shared'
+import {
+    type CapabilityArtifactSharedDefinition,
+} from '@lixpi/capability-system/shared'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     createErrorPlaceholder,
     createLoadingPlaceholder,
 } from '@lixpi/ui-kit/components/loading-placeholder'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { WorkspaceNodeShells } from './workspace-node-shells.ts'
+import {
+    type WorkspaceNodeShells,
+} from './workspace-node-shells.ts'
 
 type EditorRequest = Parameters<NonNullable<CapabilityArtifactCanvasHost['mountEditor']>>[0]
 export type WorkspaceCapabilityEditorOptions = EditorRequest & {

@@ -4,9 +4,9 @@ import {
     workspacePersistenceSettings,
 } from '@lixpi/constants'
 import { createWorkspaceConnectorSettings } from '../connectors/workspace-connector-settings.ts'
-import type {
-    LixpiCanvasPalette,
-    LixpiCanvasSettings,
+import {
+    type LixpiCanvasPalette,
+    type LixpiCanvasSettings,
 } from './types.ts'
 
 export function createLixpiCanvasSettings(palette: Partial<LixpiCanvasPalette> = {}): LixpiCanvasSettings {

@@ -1,5 +1,3 @@
-'use strict'
-
 export type CharacterFidelityModelArtifact = {
     artifactId: string
     version: string

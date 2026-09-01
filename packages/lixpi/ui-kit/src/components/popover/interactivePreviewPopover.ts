@@ -1,4 +1,3 @@
-'use strict'
 export type InteractivePreviewPopoverOptions = {
     root: HTMLElement
     trigger: HTMLElement

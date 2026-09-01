@@ -1,5 +1,3 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
 import {
     info,
@@ -11,17 +9,21 @@ import {
     type ProviderName,
 } from '@lixpi/constants'
 
-import type {
-    BaseProvider,
-    BaseProviderDeps,
+import {
+    type BaseProvider,
+    type BaseProviderDeps,
 } from './base-provider.ts'
-import type { ProviderState } from '../graph/state.ts'
-import type {
-    ProseMirrorContentHandler,
-    ProseMirrorSnapshotProvider,
+import {
+    type ProviderState,
+} from '../graph/state.ts'
+import {
+    type ProseMirrorContentHandler,
+    type ProseMirrorSnapshotProvider,
 } from '../graph/stream-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
-import type { MetricsClient } from '../../metrics/metrics-client.ts'
+import {
+    type MetricsClient,
+} from '../../metrics/metrics-client.ts'
 import {
     assertValidMediaProviderDefinition,
     type MediaProviderDefinition,

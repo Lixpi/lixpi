@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -7,10 +5,10 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    Asset,
-    ProviderIdentityVerification,
-    SubjectIdentityClassification,
+import {
+    type Asset,
+    type ProviderIdentityVerification,
+    type SubjectIdentityClassification,
 } from '@lixpi/constants'
 
 import {

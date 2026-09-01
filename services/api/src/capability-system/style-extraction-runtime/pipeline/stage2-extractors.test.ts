@@ -11,10 +11,10 @@ import {
     runExtractorAxis,
     selectApplicableExtractors,
 } from './stage2-extractors.ts'
-import type {
-    StyleExtractionState,
-    StyleExtractor,
-    StageLogger,
+import {
+    type StyleExtractionState,
+    type StyleExtractor,
+    type StageLogger,
 } from './types.ts'
 
 function makeState(): StyleExtractionState {

@@ -1,29 +1,31 @@
-import type {
-    CanvasState,
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchForkLineagePlan,
-    BranchLineLineagePlan,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
-    WorkspaceEdge,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchForkLineagePlan,
+    type BranchLineLineagePlan,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { computeCenteredPositionToRightOfRect } from '@lixpi/canvas-engine/shared'
-import type {
-    Point,
-    Rect,
-    BranchMarkerNode,
+import {
+    type Point,
+    type Rect,
+    type BranchMarkerNode,
 } from './generated-media-rebalance.ts'
 import {
-    WorkspaceGeometry,
+    type WorkspaceGeometry,
     type WorkspaceGeometrySettings,
 } from './workspace-geometry.ts'
-import { WorkspaceGenerationPlacements } from '../generation/workspace-generation-placements.ts'
+import {
+    type WorkspaceGenerationPlacements,
+} from '../generation/workspace-generation-placements.ts'
 import { estimateBranchMarkerDimensions } from './marker-dimensions.ts'
 import { computeReferenceBranchRootMarkerPosition } from './reference-branch-placement.ts'
 import { normalizeBranchLineageNodeGap } from './branch-lineage-spacing.ts'

@@ -1,6 +1,6 @@
-import type {
-    CapabilityJsonValue,
-    MediaGenerationConfigSelectionGroup,
+import {
+    type CapabilityJsonValue,
+    type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
 export type SerializedCapabilityInputs = Record<string, Record<string, CapabilityJsonValue>>

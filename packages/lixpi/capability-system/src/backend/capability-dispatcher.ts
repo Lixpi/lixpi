@@ -1,21 +1,21 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    CapabilityKind,
-    CapabilityMeta,
-    CapabilityPromptReference,
-    CapabilityReasoningModelVariant,
-    CapabilityRun,
-    CapabilityRunEvent,
+import {
+    type CapabilityJsonValue,
+    type CapabilityKind,
+    type CapabilityMeta,
+    type CapabilityPromptReference,
+    type CapabilityReasoningModelVariant,
+    type CapabilityRun,
+    type CapabilityRunEvent,
 } from '@lixpi/constants'
 
-import { CapabilityActionRegistry } from './capability-action-registry.ts'
+import {
+    type CapabilityActionRegistry,
+} from './capability-action-registry.ts'
 import { CapabilityError } from '../shared/capability-errors.ts'
 import {
+    resolveCapabilities,
     type CapabilityRequesterContext,
     type CapabilityResolverStore,
-    resolveCapabilities,
     type SealedResolvedCapabilityPlan,
 } from './capability-resolver.ts'
 import {

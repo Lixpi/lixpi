@@ -20,11 +20,15 @@ import {
     type WorkspaceGenerationContext,
     type ChatMessageLike,
 } from '../../shared/generation/workspace-generation-context.ts'
-import type { CanvasGenerationSubmitOptions } from '../../shared/generation/canvas-generation-submission.ts'
-import type { CanvasConversationEditorScope } from './canvas-conversation-editors.ts'
-import type {
-    CanvasMediaSegment,
-    CanvasMediaSegmentOptions,
+import {
+    type CanvasGenerationSubmitOptions,
+} from '../../shared/generation/canvas-generation-submission.ts'
+import {
+    type CanvasConversationEditorScope,
+} from './canvas-conversation-editors.ts'
+import {
+    type CanvasMediaSegment,
+    type CanvasMediaSegmentOptions,
 } from '../../shared/generation/canvas-generation-events.ts'
 
 export type CanvasGenerationRequest = Omit<AiInteractionChatSendMessagePayload, 'conversationAssetId'> & {

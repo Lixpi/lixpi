@@ -1,8 +1,10 @@
-'use strict'
+import {
+    type CapabilityMediaExecutionPlan,
+} from '../shared/capability-media-execution-plan.ts'
 
-import type { CapabilityMediaExecutionPlan } from '../shared/capability-media-execution-plan.ts'
-
-import type { CapabilityMediaStrategy } from './capability-media-strategy.ts'
+import {
+    type CapabilityMediaStrategy,
+} from './capability-media-strategy.ts'
 
 export class CapabilityMediaStrategyRegistry {
     private readonly strategies = new Map<string, CapabilityMediaStrategy>()

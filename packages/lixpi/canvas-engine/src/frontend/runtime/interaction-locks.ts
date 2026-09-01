@@ -1,4 +1,6 @@
-import type { Dispose } from '../../shared/index.ts'
+import {
+    type Dispose,
+} from '../../shared/index.ts'
 
 export type InteractionLock = { selection?: boolean }
 export type InteractionLockState = { locked: boolean; selection: boolean }

@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CapabilityArtifactSharedDefinition } from '../shared/capability-artifact.ts'
+import {
+    type CapabilityArtifactSharedDefinition,
+} from '../shared/capability-artifact.ts'
 
 export type CapabilityArtifactBackendDefinition = {
     artifactTypeId: string

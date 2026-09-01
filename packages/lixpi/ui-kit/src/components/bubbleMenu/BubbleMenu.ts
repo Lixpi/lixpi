@@ -1,4 +1,3 @@
-'use strict'
 // =============================================================================
 // CORE BUBBLE MENU
 //
@@ -14,10 +13,10 @@ import {
     applyStyle,
     createDocumentHtml,
 } from '@lixpi/ui-primitives/dom'
-import type {
-    BubbleMenuItem,
-    BubbleMenuOptions,
-    BubbleMenuPositionRequest,
+import {
+    type BubbleMenuItem,
+    type BubbleMenuOptions,
+    type BubbleMenuPositionRequest,
 } from './types.ts'
 
 const noEntranceMotionClass = 'bubble-menu-no-entrance-motion'

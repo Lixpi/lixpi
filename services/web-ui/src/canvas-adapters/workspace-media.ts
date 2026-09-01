@@ -1,5 +1,9 @@
-import type { Asset } from '@lixpi/constants'
-import type { WorkspaceCanvasHost } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+import {
+    type Asset,
+} from '@lixpi/constants'
+import {
+    type WorkspaceCanvasHost,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     buildAssetRenditionPath,

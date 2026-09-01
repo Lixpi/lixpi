@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -9,7 +7,9 @@ import {
     vi,
 } from 'vitest'
 import { PixiMaterialResource } from './pixi-material-resource.ts'
-import type { MaterialProgram } from './resources.ts'
+import {
+    type MaterialProgram,
+} from './resources.ts'
 
 function program(): MaterialProgram {
     const vertex = `

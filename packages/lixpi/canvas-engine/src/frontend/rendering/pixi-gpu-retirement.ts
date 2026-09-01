@@ -1,10 +1,10 @@
-'use strict'
-
-import type {
-    Buffer,
-    WebGPURenderer,
+import {
+    type Buffer,
+    type WebGPURenderer,
 } from 'pixi.js'
-import type { Dispose } from '../../shared/index.ts'
+import {
+    type Dispose,
+} from '../../shared/index.ts'
 
 // Pixi can replace internal Graphics/uniform buffers during a render. Wrap the
 // records allocated by this renderer, leaving native GPUBuffer prototypes and

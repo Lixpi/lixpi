@@ -1,7 +1,13 @@
 import { roundedRectanglePath } from '@lixpi/ui-primitives/svg'
-import type { CanvasEngineRect } from '../../shared/index.ts'
-import type { CanvasDrawingSurface } from './drawing-scope.ts'
-import type { ResourceHandle } from './resources.ts'
+import {
+    type CanvasEngineRect,
+} from '../../shared/index.ts'
+import {
+    type CanvasDrawingSurface,
+} from './drawing-scope.ts'
+import {
+    type ResourceHandle,
+} from './resources.ts'
 
 export type RectangleOverlayOptions = { surface: CanvasDrawingSurface; stroke: string; fill: string; radius: number; width?: number }
 

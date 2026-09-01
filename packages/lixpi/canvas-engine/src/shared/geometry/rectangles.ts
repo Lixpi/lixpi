@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
-    CanvasEngineSize,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
+    type CanvasEngineSize,
 } from './types.ts'
 
 export function fitDimensionsToAspectRatio(dimensions: CanvasEngineSize, aspectRatio: number): CanvasEngineSize {

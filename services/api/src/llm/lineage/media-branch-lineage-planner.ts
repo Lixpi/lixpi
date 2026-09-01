@@ -1,18 +1,16 @@
-'use strict'
-
 import { v4 as uuid } from 'uuid'
 
-import type {
-    AiModelId,
-    BranchForkLineagePlan,
-    BranchLineLineagePlan,
-    BranchOriginLineagePlan,
-    MediaBranchCandidateImage,
-    MediaBranchCandidateSnapshot,
-    MediaBranchVlmResolution,
-    MediaBranchLineagePlan,
-    MediaRunLineageAssignment,
-    WorkspaceContextSnapshot,
+import {
+    type AiModelId,
+    type BranchForkLineagePlan,
+    type BranchLineLineagePlan,
+    type BranchOriginLineagePlan,
+    type MediaBranchCandidateImage,
+    type MediaBranchCandidateSnapshot,
+    type MediaBranchVlmResolution,
+    type MediaBranchLineagePlan,
+    type MediaRunLineageAssignment,
+    type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
 import { MediaGenerationRunPlanner } from './media-generation-run-planner.ts'
 

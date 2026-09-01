@@ -1,13 +1,13 @@
-@import '@lixpi/ui-primitives/styles/transitions';
+@import "@lixpi/ui-primitives/styles/transitions";
 
-@import './branch-reference-resolution.scss';
+@import "./branch-reference-resolution.scss";
 
 .workspace-branch-marker-review-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--canvas-node-footer-icon-size, 34px);
-    height: var(--canvas-node-footer-icon-size, 34px);
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: 0;
     border-radius: 0;
@@ -123,7 +123,6 @@
     top: var(--workspace-branch-marker-header-center, 50%);
 }
 
-
 .workspace-branch-marker-spinner {
     flex: 0 0 14px;
     width: 14px;
@@ -207,11 +206,6 @@
     pointer-events: auto;
     transform: scale(var(--workspace-branch-marker-review-zoom-scale, 1));
     transform-origin: top right;
-}
-
-.workspace-branch-marker-review-action {
-    width: 30px;
-    height: 30px;
 }
 
 .workspace-branch-marker-regeneration-dropdown {

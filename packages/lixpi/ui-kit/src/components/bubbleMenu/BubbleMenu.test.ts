@@ -8,9 +8,9 @@ import {
     vi,
 } from 'vitest'
 import { BubbleMenu } from './BubbleMenu.ts'
-import type {
-    BubbleMenuItem,
-    BubbleMenuPositionRequest,
+import {
+    type BubbleMenuItem,
+    type BubbleMenuPositionRequest,
 } from './types.ts'
 
 it('cancels pending positioning when the menu is destroyed', () => {

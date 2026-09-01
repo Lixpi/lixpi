@@ -1,10 +1,8 @@
-'use strict'
-
 import { roundedRectanglePath } from '@lixpi/ui-primitives/svg'
-import type {
-    CanvasEngineRect,
-    CanvasEngineSize,
-    CanvasViewport,
+import {
+    type CanvasEngineRect,
+    type CanvasEngineSize,
+    type CanvasViewport,
 } from '@lixpi/canvas-engine/shared'
 import {
     selectImageRendition,
@@ -12,11 +10,11 @@ import {
     type MediaDescriptor,
 } from '@lixpi/canvas-engine/frontend/media'
 import { IdleTask } from '@lixpi/canvas-engine/frontend/runtime'
-import type {
-    CanvasDrawingSurface,
-    CanvasLayer,
-    MeshData,
-    ResourceHandle,
+import {
+    type CanvasDrawingSurface,
+    type CanvasLayer,
+    type MeshData,
+    type ResourceHandle,
 } from '@lixpi/canvas-engine/frontend/rendering'
 
 export type ImageSurfaceOptions = {

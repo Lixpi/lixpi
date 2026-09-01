@@ -7,8 +7,6 @@ import {
 import {
     codeBlockNodeSpec as packageCodeBlockNodeSpec,
     codeBlockNodeType as packageCodeBlockNodeType,
-} from '@lixpi/prosemirror'
-import {
     createProseMirrorSchema,
     DOCUMENT_TYPE,
 } from '@lixpi/prosemirror'

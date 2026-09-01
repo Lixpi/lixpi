@@ -1,9 +1,13 @@
-import type { PromptReferenceAtomAttrs } from '@lixpi/constants'
+import {
+    type PromptReferenceAtomAttrs,
+} from '@lixpi/constants'
 import {
     normalizePromptReferenceAttrs,
     PROMPT_REFERENCE_NODE_TYPE,
 } from '@lixpi/prosemirror/shared/prompt-reference'
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
 
 type CapabilityModuleReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'capability-module' }>
 type MediaReference = Extract<PromptReferenceAtomAttrs, { referenceType: 'media' }>

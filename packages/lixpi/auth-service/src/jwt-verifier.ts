@@ -1,11 +1,9 @@
-'use strict'
-
 import jwt from 'jsonwebtoken'
 
 import { createGetKeyFunction } from './jwks-client.ts'
-import type {
-    JwtVerifierConfig,
-    JwtVerificationResult,
+import {
+    type JwtVerifierConfig,
+    type JwtVerificationResult,
 } from './types.ts'
 
 export const verifyJwt = async ({

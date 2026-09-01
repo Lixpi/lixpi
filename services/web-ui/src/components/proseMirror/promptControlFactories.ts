@@ -1,4 +1,6 @@
-import { createAiPromptInputNodeView } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
+import {
+    type createAiPromptInputNodeView,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
 import {
     createGenericAiModelDropdown,
     createGenericAiModelMultiSelect,

@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 import { createHash } from 'node:crypto'
 import { v4 as uuid } from 'uuid'
@@ -18,11 +16,11 @@ import {
     type GenerateRenditionsResponse,
     type GeneratedRenditionResult,
 } from '@lixpi/constants'
-import type { TransactOperation } from '@lixpi/dynamodb-service'
+import {
+    type TransactOperation,
+} from '@lixpi/dynamodb-service'
 
-import BlobModel, {
-    buildBlobReferenceBatchOperations,
-} from '../models/blob.ts'
+import BlobModel, { buildBlobReferenceBatchOperations } from '../models/blob.ts'
 import {
     buildAssetProjectionOperations,
     getAssetRecord,

@@ -1,17 +1,15 @@
-'use strict'
-
 import * as process from 'process'
 
 import { warn } from '@lixpi/debug-tools'
-import type { AxisExtraction } from './types.ts'
+import {
+    type AxisExtraction,
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StyleExtractor,
+    type StageLogger,
+} from './types.ts'
 
 import { getExtractors } from './extractors/registry.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StyleExtractor,
-    StageLogger,
-} from './types.ts'
 
 // Loading this stage must also populate the registry. The deleted fixed
 // orchestrator used to own these side-effect imports, so keep registration

@@ -16,7 +16,7 @@
 // into stored canvas media URLs.
 // =============================================================================
 
-import { applyStyle } from '@lixpi/ui-primitives/dom'
+import { html } from '@lixpi/ui-primitives/dom'
 import {
     isApiEndpoint,
     resolveMediaUrl,
@@ -69,10 +69,13 @@ async function downloadViaFetch(imageUrl: string, filename?: string): Promise<vo
     const resolvedFilename = filename ?? deriveFilename(imageUrl, blob)
 
     const objectUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = objectUrl
-    anchor.download = resolvedFilename
-    applyStyle(anchor, { display: 'none' })
+    const anchor = html`
+        <a
+            href=${objectUrl}
+            download=${resolvedFilename}
+            style=${{ display: 'none' }}
+        ></a>
+    ` as HTMLAnchorElement
 
     document.body.appendChild(anchor)
     anchor.click()
@@ -100,9 +103,12 @@ async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Prom
     // Use a hidden iframe so the current page isn't disrupted.
     // The server responds with Content-Disposition: attachment which
     // triggers the browser's native save dialog.
-    const iframe = document.createElement('iframe')
-    applyStyle(iframe, { display: 'none' })
-    iframe.src = downloadUrl
+    const iframe = html`
+        <iframe
+            src=${downloadUrl}
+            style=${{ display: 'none' }}
+        ></iframe>
+    ` as HTMLIFrameElement
     document.body.appendChild(iframe)
 
     setTimeout(() => {

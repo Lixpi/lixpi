@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'process'
 
 import { GoogleGenAI } from '@google/genai'
@@ -13,10 +11,12 @@ import {
     BaseProvider,
     type BaseProviderDeps,
 } from './base-provider.ts'
-import type { ProviderName } from '@lixpi/constants'
-import type {
-    ProviderState,
-    ChatMessage,
+import {
+    type ProviderName,
+} from '@lixpi/constants'
+import {
+    type ProviderState,
+    type ChatMessage,
 } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
@@ -43,7 +43,9 @@ import {
     shouldExposeCapabilityModelTools,
 } from '../../capability-system/capability-model-tool-executor.ts'
 import { asGoogleTool } from '@lixpi/capability-system/backend'
-import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
+import {
+    type ResolvedImageGenerationReference,
+} from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
 import {
@@ -451,7 +453,7 @@ export class GoogleProvider extends BaseProvider {
                     for (let i = 0; i < imageParts.length - 1; i++) {
                         await this.imagePub.partial(imageParts[i]!, i + 1)
                     }
-                    const final = imageParts[imageParts.length - 1]!
+                    const final = imageParts.at(-1)!
                     await this.imagePub.complete({
                         imageBase64: final,
                         responseId: '',

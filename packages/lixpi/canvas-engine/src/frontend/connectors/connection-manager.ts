@@ -29,18 +29,20 @@ import {
 import { computeConnectorDatum } from './connector-datum.ts'
 import { computeConnectorSpread } from './connector-spread.ts'
 import { HandleConnectionGesture } from './handle-connection-gesture.ts'
-import type { ConnectorRenderDatum } from './connector-renderer.ts'
-import type {
-    EdgeConfig,
-    EdgeAnchor,
-    NodeConfig,
-    AnchorPosition,
+import {
+    type ConnectorRenderDatum,
+} from './connector-renderer.ts'
+import {
+    type EdgeConfig,
+    type EdgeAnchor,
+    type NodeConfig,
+    type AnchorPosition,
 } from './types.ts'
-import type {
-    ConnectionNode,
-    ConnectionEdge,
-    ConnectionManagerConfig,
-    ProximityCandidate,
+import {
+    type ConnectionNode,
+    type ConnectionEdge,
+    type ConnectionManagerConfig,
+    type ProximityCandidate,
 } from './connection-types.ts'
 
 type EdgeNodeGeometry = { x: number; y: number; width: number; height: number }

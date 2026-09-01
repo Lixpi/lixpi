@@ -1,7 +1,7 @@
-'use strict'
-
 import { writable } from '$src/stores/nanoStore.ts'
-import type { AssetDocumentRole } from '@lixpi/constants'
+import {
+    type AssetDocumentRole,
+} from '@lixpi/constants'
 
 export type AssetDocumentSnapshot = {
     assetId: string

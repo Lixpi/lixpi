@@ -4,10 +4,10 @@ import {
     it,
 } from 'vitest'
 
-import type {
-    CapabilityManifest,
-    CapabilityResourceRef,
-    ResolvedCapabilityPlan,
+import {
+    type CapabilityManifest,
+    type CapabilityResourceRef,
+    type ResolvedCapabilityPlan,
 } from '@lixpi/constants'
 
 import {

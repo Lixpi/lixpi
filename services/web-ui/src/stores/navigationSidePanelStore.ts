@@ -1,5 +1,3 @@
-'use strict'
-
 import { atom } from 'nanostores'
 import { persistentJSON } from '@nanostores/persistent'
 

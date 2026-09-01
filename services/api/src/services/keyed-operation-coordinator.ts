@@ -1,5 +1,3 @@
-'use strict'
-
 export type KeyedIdleBatch<T> = {
     key: string
     value: T

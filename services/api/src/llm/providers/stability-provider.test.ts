@@ -1,5 +1,3 @@
-'use strict'
-
 import sharp from 'sharp'
 import {
     afterEach,
@@ -11,7 +9,9 @@ import {
 } from 'vitest'
 
 import { StabilityProvider } from './stability-provider.ts'
-import type { BaseProviderDeps } from './base-provider.ts'
+import {
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const debugTools = vi.hoisted(() => ({

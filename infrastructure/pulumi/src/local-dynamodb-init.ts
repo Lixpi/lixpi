@@ -1,5 +1,3 @@
-'use strict'
-
 // Local DynamoDB Table Initialization
 //
 // This script creates DynamoDB tables for local development using AWS SDK directly.
@@ -59,7 +57,9 @@ async function createTables() {
     console.log('Done!')
 }
 
-createTables().catch((e) => {
+try {
+    await createTables()
+} catch (e) {
     console.error('Failed to create tables:', e)
     process.exit(1)
-})
+}

@@ -1,7 +1,9 @@
-'use strict'
-
-import type { CapabilitySkillPackageInstaller } from '../../../backend/capability-module.ts'
-import type { InstructionSkillStorage } from '../../../backend/instruction-skill.ts'
+import {
+    type CapabilitySkillPackageInstaller,
+} from '../../../backend/capability-module.ts'
+import {
+    type InstructionSkillStorage,
+} from '../../../backend/instruction-skill.ts'
 import { createCharacterImagePromptSkillPackage } from './image-prompt/index.ts'
 import { createReferenceFidelitySkillPackage } from './reference-fidelity/index.ts'
 import { createCharacterSheetLayoutSkillPackage } from './sheet-layout/index.ts'

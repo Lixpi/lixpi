@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -12,11 +10,11 @@ import {
     directCapabilityToolName,
     SealedResolvedCapabilityPlan,
 } from '@lixpi/capability-system/backend'
-import type {
-    AiModelInferenceCapabilities,
-    CapabilityManifest,
-    CapabilityResourceRef,
-    ResolvedCapabilityPlan,
+import {
+    type AiModelInferenceCapabilities,
+    type CapabilityManifest,
+    type CapabilityResourceRef,
+    type ResolvedCapabilityPlan,
 } from '@lixpi/constants'
 
 const openaiMocks = vi.hoisted(() => ({ responsesCreate: vi.fn() }))
@@ -39,7 +37,9 @@ vi.mock('@anthropic-ai/sdk', () => ({
     }),
 }))
 
-import type { BaseProviderDeps } from './base-provider.ts'
+import {
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { AnthropicProvider } from './anthropic-provider.ts'
 import { OpenAIProvider } from './openai-provider.ts'
 

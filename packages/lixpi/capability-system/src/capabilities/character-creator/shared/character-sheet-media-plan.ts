@@ -1,10 +1,10 @@
-'use strict'
-
-import type { CapabilityJsonValue } from '@lixpi/constants'
-import type {
-    CapabilityMediaDagNodePlan,
-    CapabilityMediaDagOutputBinding,
-    CapabilityMediaExecutionPlan,
+import {
+    type CapabilityJsonValue,
+} from '@lixpi/constants'
+import {
+    type CapabilityMediaDagNodePlan,
+    type CapabilityMediaDagOutputBinding,
+    type CapabilityMediaExecutionPlan,
 } from '../../../shared/capability-media-execution-plan.ts'
 
 export type CharacterPanelKind = 'body' | 'head' | 'prop' | 'action'

@@ -6,9 +6,9 @@ import {
     it,
 } from 'vitest'
 
-import type {
-    CharacterFidelityAssessmentRequest,
-    CharacterFidelityObjectCoordinate,
+import {
+    type CharacterFidelityAssessmentRequest,
+    type CharacterFidelityObjectCoordinate,
 } from '@lixpi/constants'
 import {
     assessCharacterFidelity,

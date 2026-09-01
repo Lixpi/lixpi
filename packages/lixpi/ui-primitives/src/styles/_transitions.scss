@@ -1,5 +1,5 @@
-@use 'sass:map';
-@use 'sass:string';
+@use "sass:map";
+@use "sass:string";
 
 $defaultHoverTransitionDuration: var(--default-hover-transition-duration, 150ms) !default;
 
@@ -11,19 +11,30 @@ $defaultHoverTransitionDuration: var(--default-hover-transition-duration, 150ms)
     @return #{$property} #{$duration} cubic-bezier(0.19, 1, 0.22, 1);
 }
 
+@function standardTransition($property, $duration: $defaultHoverTransitionDuration) {
+    @return #{$property} #{$duration} ease;
+}
+
 @function overlayVisibilityTransition($property) {
     @return #{$property} 120ms ease;
 }
 
+@function panelSlideTransition($property) {
+    @return #{$property} var(--side-panel-slide-duration, 1000ms) var(--side-panel-slide-easing, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
 @mixin clickToggleFeedbackAnimation($config: ()) {
-    $settings: map.merge((
-        startColor: inherit,
-        flashColor: inherit,
-        endColor: inherit,
-        duration: 150ms,
-        easing: cubic-bezier(0.85, 0, 0.15, 1),
-        squeezeScale: 0.88
-    ), $config);
+    $settings: map.merge(
+        (
+            startColor: inherit,
+            flashColor: inherit,
+            endColor: inherit,
+            duration: 150ms,
+            easing: cubic-bezier(0.85, 0, 0.15, 1),
+            squeezeScale: 0.88
+        ),
+        $config
+    );
     $animationName: string.unique-id();
 
     @keyframes #{$animationName} {

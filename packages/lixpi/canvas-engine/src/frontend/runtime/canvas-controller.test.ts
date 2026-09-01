@@ -15,11 +15,11 @@ import {
     NodeRegistry,
     type ComponentContext,
 } from './node-registry.ts'
-import type {
-    CanvasIntent,
-    EngineNode,
-    NodeGeometryPolicy,
-    SceneSnapshot,
+import {
+    type CanvasIntent,
+    type EngineNode,
+    type NodeGeometryPolicy,
+    type SceneSnapshot,
 } from '../../shared/index.ts'
 
 const renderers = vi.hoisted(() => [] as any[])

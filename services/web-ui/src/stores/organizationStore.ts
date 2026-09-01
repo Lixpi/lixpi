@@ -1,8 +1,8 @@
-'use strict'
-
 import { writable } from '$src/stores/nanoStore.ts'
 
-import type { AiModel } from '$src/stores/aiModelsStore.ts'
+import {
+    type AiModel,
+} from '$src/stores/aiModelsStore.ts'
 
 type Meta = {
     isLoading: boolean

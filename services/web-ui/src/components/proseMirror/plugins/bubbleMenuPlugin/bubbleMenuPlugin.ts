@@ -3,8 +3,12 @@ import {
     PluginKey,
     NodeSelection,
 } from 'prosemirror-state'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 import {
     BubbleMenu,
     type BubbleMenuPositionRequest,

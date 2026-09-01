@@ -6,17 +6,19 @@ import {
 } from 'vitest'
 
 import {
-    type CapabilityDispatcher,
     directCapabilityToolName,
     SealedResolvedCapabilityPlan,
+    type CapabilityDispatcher,
 } from '@lixpi/capability-system/backend'
-import type {
-    CapabilityManifest,
-    CapabilityResourceRef,
-    ResolvedCapabilityPlan,
+import {
+    type CapabilityManifest,
+    type CapabilityResourceRef,
+    type ResolvedCapabilityPlan,
 } from '@lixpi/constants'
 
-import type { ProviderState } from '../llm/graph/state.ts'
+import {
+    type ProviderState,
+} from '../llm/graph/state.ts'
 import {
     buildAnthropicRequiredCapabilityToolChoice,
     buildGoogleRequiredCapabilityToolConfig,

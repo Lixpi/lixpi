@@ -3,6 +3,13 @@
     "categories": {
         "correctness": "off"
     },
+    "plugins": [
+        "eslint",
+        "import",
+        "promise",
+        "typescript",
+        "unicorn"
+    ],
     "ignorePatterns": [
         "**/node_modules/**",
         "**/dist/**",
@@ -14,6 +21,146 @@
         "**/*.cjs"
     ],
     "rules": {
-        "no-debugger": "error"
-    }
+        "import/consistent-type-specifier-style": [
+            "error",
+            "prefer-inline"
+        ],
+        "import/extensions": [
+            "error",
+            "ignorePackages",
+            {
+                "checkTypeImports": true,
+                "ignorePackages": true,
+                "pattern": {
+                    "ts": "always"
+                }
+            }
+        ],
+        "import/no-commonjs": "error",
+        "import/no-duplicates": [
+            "error",
+            {
+                "preferInline": true
+            }
+        ],
+        "no-debugger": "error",
+        "no-restricted-imports": [
+            "error",
+            {
+                "paths": [
+                    {
+                        "name": "axios",
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "name": "got",
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "name": "ky",
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "name": "needle",
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "name": "node-fetch",
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "name": "react",
+                        "message": "React is prohibited in this repository. Use the repository DOM APIs."
+                    },
+                    {
+                        "name": "react-dom",
+                        "message": "React is prohibited in this repository. Use the repository DOM APIs."
+                    },
+                    {
+                        "name": "superagent",
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "name": "undici",
+                        "message": "Use the native fetch API."
+                    }
+                ],
+                "patterns": [
+                    {
+                        "group": [
+                            "axios/*",
+                            "got/*",
+                            "ky/*",
+                            "needle/*",
+                            "node-fetch/*",
+                            "superagent/*",
+                            "undici/*"
+                        ],
+                        "message": "Use the native fetch API."
+                    },
+                    {
+                        "group": [
+                            "react/*",
+                            "react-dom/*"
+                        ],
+                        "message": "React is prohibited in this repository. Use the repository DOM APIs."
+                    }
+                ]
+            }
+        ],
+        "prefer-object-has-own": "error",
+        "prefer-template": "error",
+        "promise/prefer-await-to-then": "error",
+        "typescript/consistent-type-definitions": [
+            "error",
+            "type"
+        ],
+        "typescript/consistent-type-imports": [
+            "error",
+            {
+                "disallowTypeAnnotations": false,
+                "fixStyle": "inline-type-imports",
+                "prefer": "type-imports"
+            }
+        ],
+        "typescript/no-require-imports": "error",
+        "unicorn/prefer-at": "error",
+        "unicorn/prefer-modern-dom-apis": "error",
+        "unicorn/prefer-module": "error",
+        "unicorn/prefer-structured-clone": "error"
+    },
+    "overrides": [
+        {
+            "files": ["**/*.d.ts"],
+            "rules": {
+                "typescript/consistent-type-definitions": "off"
+            }
+        },
+        {
+            "files": ["services/web-ui/src/**/*.ts"],
+            "excludeFiles": [
+                "**/*.test.ts",
+                "services/web-ui/src/components/proseMirror/plugins/testUtils/**"
+            ],
+            "rules": {
+                "no-restricted-properties": [
+                    "error",
+                    {
+                        "object": "document",
+                        "property": "createElement",
+                        "message": "Use the html tagged template from @lixpi/ui-primitives/dom."
+                    },
+                    {
+                        "object": "document",
+                        "property": "createElementNS",
+                        "message": "Use D3 for SVG UI."
+                    },
+                    {
+                        "property": "setAttribute",
+                        "message": "Use the html template, dataset, ARIA reflection, or direct DOM properties."
+                    }
+                ]
+            }
+        }
+    ]
 }

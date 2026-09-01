@@ -889,17 +889,21 @@ class VideoControls implements VideoControlsInstance {
         this.scrubSeekInFlight = false
     }
 
+    private async resumeAfterScrub(): Promise<void> {
+        try {
+            await this.videoEl.play()
+        } catch (error) {
+            console.warn('[videoControls] resume after seek failed', error)
+        }
+    }
+
     private finishScrubAfterSeek(): void {
         this.scrubPreviewTime = null
         this.scrubSeekTarget = null
         this.scrubAppliedTime = null
         const shouldResume = this.scrubResumeOnRelease
         this.scrubResumeOnRelease = false
-        if (shouldResume && !this.destroyed) {
-            this.videoEl.play().catch((error) => {
-                console.warn('[videoControls] resume after seek failed', error)
-            })
-        }
+        if (shouldResume && !this.destroyed) void this.resumeAfterScrub()
         this.render()
     }
 

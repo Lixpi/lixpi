@@ -1,6 +1,6 @@
-'use strict'
-
-import type { PromptReferenceAtomAttrs } from '@lixpi/constants'
+import {
+    type PromptReferenceAtomAttrs,
+} from '@lixpi/constants'
 
 import {
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,

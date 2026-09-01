@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     getCapabilityUserEventSubject,
     NATS_SUBJECTS,

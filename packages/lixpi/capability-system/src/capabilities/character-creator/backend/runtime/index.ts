@@ -1,5 +1,3 @@
-'use strict'
-
 export * from './character-evidence.ts'
 export * from './character-sheet-compositor.ts'
 export * from './character-sheet-notes.ts'

@@ -4,9 +4,9 @@ import {
     PanOnScrollMode,
     type PanZoomInstance,
 } from '@xyflow/system'
-import type {
-    CanvasViewport,
-    Dispose,
+import {
+    type CanvasViewport,
+    type Dispose,
 } from '../../shared/index.ts'
 import {
     InteractionLocks,

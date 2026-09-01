@@ -1,16 +1,14 @@
-'use strict'
-
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    CapabilityArtifactCanvasNode,
-    ImageCanvasNode,
-    MediaRunLineageAssignment,
-    OperationStatusCanvasNode,
-    VideoCanvasNode,
-    WorkspaceEdge,
+import {
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type ImageCanvasNode,
+    type MediaRunLineageAssignment,
+    type OperationStatusCanvasNode,
+    type VideoCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 
 export type BranchLineageMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode

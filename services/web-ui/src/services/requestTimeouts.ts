@@ -1,3 +1,1 @@
-'use strict'
-
 export const WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS = 120000

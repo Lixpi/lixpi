@@ -1,6 +1,6 @@
-import type {
-    CapabilityJsonValue,
-    MediaGenerationConfigSelectionGroup,
+import {
+    type CapabilityJsonValue,
+    type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 import {
     serializeAiModelSelectionAttr,

@@ -1,9 +1,13 @@
-import type { MediaGenerationProgressState } from '@lixpi/constants'
+import {
+    type MediaGenerationProgressState,
+} from '@lixpi/constants'
 import {
     aiMediaGenerationProgressNodeSpec,
     aiMediaGenerationProgressNodeType,
 } from '@lixpi/prosemirror'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 
 import { html } from '@lixpi/ui-primitives/dom'
 

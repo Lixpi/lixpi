@@ -1,4 +1,4 @@
-@use '@lixpi/ui-primitives/styles/transitions' as *;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
 
 // SidePanel - reusable resizable side panel.
 //
@@ -6,10 +6,6 @@
 // span the full height of the panel as a single unbroken line. Callers can
 // target an additional class passed via `className` to style a specific resize
 // handle separately.
-
-@function panelSlideTransition($property) {
-    @return #{$property} var(--side-panel-slide-duration, 1000ms) var(--side-panel-slide-easing, cubic-bezier(0.22, 1, 0.36, 1));
-}
 
 .side-panel-resize-handle {
     position: absolute;
@@ -27,14 +23,6 @@
 
 .side-panel-overlay {
     --side-panel-overlay-transition: #{panelSlideTransition(opacity)};
-}
-
-.side-panel-slide {
-    transition: var(--side-panel-slide-transition);
-    will-change: transform;
-}
-
-.side-panel-overlay {
     position: absolute;
     z-index: var(--side-panel-overlay-z-index, 80);
     inset: 0;
@@ -45,6 +33,11 @@
     -webkit-backdrop-filter: blur(4px) saturate(108%);
     transition: var(--side-panel-overlay-transition);
     will-change: opacity;
+}
+
+.side-panel-slide {
+    transition: var(--side-panel-slide-transition);
+    will-change: transform;
 }
 
 .side-panel-overlay-open {
@@ -66,7 +59,9 @@
     color: var(--side-panel-toggle-color, #4b5563);
     cursor: pointer;
     pointer-events: auto;
-    transition: var(--side-panel-slide-transition), #{hoverTransition(color, 150ms)};
+    transition:
+        var(--side-panel-slide-transition),
+        #{hoverTransition(color, 150ms)};
     will-change: transform;
 
     svg {
@@ -139,14 +134,14 @@
     justify-content: center;
 
     &::before {
-        content: '';
+        content: "";
         position: absolute;
         top: 0;
         bottom: 0;
         left: 50%;
         transform: translateX(-50%);
         width: var(--side-panel-resize-handle-width, 3px);
-        background-image: var(--side-panel-resize-handle-gradient, linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%));
+        background-image: var(--side-panel-resize-handle-gradient, linear-gradient(135deg, #f5eff9 0%, #e6e9f6 100%));
         border-radius: 2px;
     }
 }

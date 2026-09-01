@@ -3,12 +3,12 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    Asset,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    ImageCanvasNode,
-    WorkspaceEdge,
+import {
+    type Asset,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 
 import {

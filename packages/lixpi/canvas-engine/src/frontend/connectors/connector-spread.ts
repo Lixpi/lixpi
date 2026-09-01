@@ -1,4 +1,6 @@
-import type { CanvasGeometryNode } from '../../shared/index.ts'
+import {
+    type CanvasGeometryNode,
+} from '../../shared/index.ts'
 
 export type SpreadEdge = {
     edgeId: string

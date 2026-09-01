@@ -5,7 +5,7 @@
     "type": "module",
     "description": "Interactive environment setup script for Lixpi development",
     "scripts": {
-        "setup": "node --experimental-transform-types setup-env.ts"
+        "setup": "node setup-env.ts"
     },
     "dependencies": {
         "@clack/prompts": "*",

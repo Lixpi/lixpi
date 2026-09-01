@@ -3,9 +3,9 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    CanvasNode,
-    ImageCanvasNode,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
 } from '@lixpi/constants'
 import { createLixpiCanvasSettings } from '../../frontend/settings/canvas-settings.ts'
 import {

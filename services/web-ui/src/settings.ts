@@ -2,8 +2,12 @@ import {
     mediaGenerationLayoutSettings,
     workspacePersistenceSettings,
 } from '@lixpi/constants'
-import type { BoundedZoomScalingOptions } from '@lixpi/canvas-engine/shared'
-import type { UiKitSlidingDropdownStyles } from '@lixpi/ui-kit'
+import {
+    type BoundedZoomScalingOptions,
+} from '@lixpi/canvas-engine/shared'
+import {
+    type UiKitSlidingDropdownStyles,
+} from '@lixpi/ui-kit'
 import {
     createLixpiCanvasSettings,
     type LixpiCanvasSettings,

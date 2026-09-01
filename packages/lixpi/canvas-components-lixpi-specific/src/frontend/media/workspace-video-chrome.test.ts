@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { VideoCanvasNode } from '@lixpi/constants'
+import {
+    type VideoCanvasNode,
+} from '@lixpi/constants'
 import { createDefaultVideoControlsSettings } from '@lixpi/ui-kit/components/video-controls'
 import {
     WorkspaceVideoChrome,
@@ -164,9 +166,9 @@ describe('WorkspaceVideoChrome', () => {
         sourceHost.append(other)
         options.getVideo = id => id === 'video' ? video : other
         chrome.sync([node, { ...node, nodeId: 'other' }])
-        const originalInsert = sourceHost.insertBefore.bind(sourceHost)
-        vi.spyOn(sourceHost, 'insertBefore').mockImplementation((child, sibling) => {
-            originalInsert(child, sibling)
+        const originalAppend = sourceHost.appendChild.bind(sourceHost)
+        vi.spyOn(sourceHost, 'appendChild').mockImplementation(child => {
+            originalAppend(child)
             if (child === other) throw new Error('host cleanup')
             return child
         })

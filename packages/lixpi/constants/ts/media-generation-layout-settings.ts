@@ -1,5 +1,3 @@
-'use strict'
-
 // Shared canvas layout geometry for generated-media branch lineage. The API
 // canvas projection (services/api/src/services/asset-canvas-projection.ts)
 // and the WebUI canvas (services/web-ui/src/infographics/workspace) must place

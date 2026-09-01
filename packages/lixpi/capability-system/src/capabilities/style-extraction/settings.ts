@@ -1,5 +1,3 @@
-'use strict'
-
 // Style Extraction capability settings. Every tunable this capability owns lives
 // here, in the capability itself. It uses the same nested settings shape as
 // the consuming frontend and backend.

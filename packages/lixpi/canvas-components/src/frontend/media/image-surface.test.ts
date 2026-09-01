@@ -5,24 +5,24 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    EngineMedia,
-    ImageLease,
-    MediaDescriptor,
+import {
+    type EngineMedia,
+    type ImageLease,
+    type MediaDescriptor,
 } from '@lixpi/canvas-engine/frontend/media'
-import type {
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
 import {
     NodeRegistry,
     type ComponentContext,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type {
-    CanvasDrawingSurface,
-    DrawingResources,
-    ResourceHandle,
-    ResourceKind,
+import {
+    type CanvasDrawingSurface,
+    type DrawingResources,
+    type ResourceHandle,
+    type ResourceKind,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import {
     ImageSurface,

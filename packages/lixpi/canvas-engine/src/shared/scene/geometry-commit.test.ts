@@ -11,9 +11,9 @@ import {
     buildNodesById,
     computeWorldPosition,
 } from './node-index.ts'
-import type {
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from './types.ts'
 
 function node(nodeId: string, x = 0, parentId?: string): EngineNode {

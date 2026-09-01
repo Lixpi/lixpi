@@ -13,10 +13,14 @@ import {
     createCollapseExpandIcon,
     type CollapseExpandIconState,
 } from '@lixpi/ui-kit/svg'
-import type { AnimatedSvgIconInstance } from '@lixpi/ui-primitives/svg'
+import {
+    type AnimatedSvgIconInstance,
+} from '@lixpi/ui-primitives/svg'
 import { html } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { MediaGenerationProgressLayoutChange } from '../../shared/generation/progress-state.ts'
+import {
+    type MediaGenerationProgressLayoutChange,
+} from '../../shared/generation/progress-state.ts'
 
 export type MediaGenerationProgressInstance = {
     element: HTMLElement

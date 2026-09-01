@@ -1,13 +1,12 @@
 @use "sass:color";
-@import '@lixpi/ui-primitives/styles/transitions';
-@import '$src/sass/_variables.scss';
-@import '$src/sass/themes/_minimalist-chic.scss';
+@import "@lixpi/ui-primitives/styles/transitions";
+@import "$src/sass/_variables.scss";
 
 $linkTooltipBg: $steelBlue;
 $linkTooltipFg: $offWhite;
 $linkTooltipBorder: color.adjust($steelBlue, $lightness: -10%);
 $linkTooltipHoverBg: $nightBlue;
-$linkTooltipShadow: 0.05rem 0.05rem 7px 0px rgba(0,0,0,0.2);
+$linkTooltipShadow: 0.05rem 0.05rem 7px 0px rgba(0, 0, 0, 0.2);
 
 .link-tooltip {
     position: absolute;
@@ -15,7 +14,10 @@ $linkTooltipShadow: 0.05rem 0.05rem 7px 0px rgba(0,0,0,0.2);
     visibility: hidden;
     opacity: 0;
     transform: translateY(4px);
-    transition: pupOutTransition(opacity, 0.15s), pupOutTransition(transform, 0.15s), visibility 0.15s;
+    transition:
+        pupOutTransition(opacity, 0.15s),
+        pupOutTransition(transform, 0.15s),
+        pupOutTransition(visibility, 0.15s);
 
     &.is-visible {
         visibility: visible;
@@ -39,7 +41,7 @@ $linkTooltipShadow: 0.05rem 0.05rem 7px 0px rgba(0,0,0,0.2);
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: hoverTransition(background-color, 0.15s);
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;

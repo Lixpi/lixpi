@@ -1,4 +1,6 @@
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import {
     ASSET_GENERATION_SEED_HELP_TEXT,
     type Asset,

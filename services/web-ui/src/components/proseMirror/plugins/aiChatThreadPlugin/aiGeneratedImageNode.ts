@@ -107,6 +107,14 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         }
     }
 
+    const updateDisplaySafely = async (): Promise<void> => {
+        try {
+            await updateDisplay()
+        } catch {
+            // The media element's error handler owns the unavailable state.
+        }
+    }
+
     imageElement.onerror = () => {
         titleElement.hidden = true
         applyStyle(imageElement, { display: 'none' })
@@ -117,7 +125,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         }
     }
 
-    updateDisplay().catch(() => {})
+    void updateDisplaySafely()
     unsubscribeAiModelsStore = aiModelsStore.subscribe(() => updateModelChrome())
 
     return {
@@ -128,7 +136,7 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
             }
 
             node = updatedNode
-            updateDisplay()
+            void updateDisplaySafely()
             updateModelChrome()
             return true
         },

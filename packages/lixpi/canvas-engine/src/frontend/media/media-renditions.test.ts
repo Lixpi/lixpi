@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -9,7 +7,9 @@ import {
     mipmappedImageBytes,
     selectImageRendition,
 } from './media-renditions.ts'
-import type { MediaDescriptor } from './types.ts'
+import {
+    type MediaDescriptor,
+} from './types.ts'
 
 describe('image rendition selection', () => {
     const media: MediaDescriptor = {

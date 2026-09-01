@@ -1,16 +1,16 @@
-'use strict'
-
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import {
+    type CapabilityJsonValue,
+} from '@lixpi/constants'
 
 import {
     type CapabilityActionExecutionContext,
-    CapabilityActionRegistry,
+    type CapabilityActionRegistry,
     type CapabilityActionValidationResult,
 } from '../../../backend/capability-action-registry.ts'
 import { CapabilityError } from '../../../shared/capability-errors.ts'
-import type {
-    CapabilityResolvedModelInput,
-    CapabilityStructuredModelPort,
+import {
+    type CapabilityResolvedModelInput,
+    type CapabilityStructuredModelPort,
 } from '../../../backend/capability-model-input.ts'
 import {
     ACTION_TIMELINE_TOOL_ID,

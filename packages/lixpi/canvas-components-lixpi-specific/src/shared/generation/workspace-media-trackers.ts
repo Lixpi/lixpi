@@ -1,12 +1,14 @@
-import type {
-    CanvasState,
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    WorkspaceEdge,
-    MediaGenerationRunMeta,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type WorkspaceEdge,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
-import type { WorkspaceGenerationPlacements } from './workspace-generation-placements.ts'
+import {
+    type WorkspaceGenerationPlacements,
+} from './workspace-generation-placements.ts'
 
 type GeneratedMediaNode = ImageCanvasNode | VideoCanvasNode
 type TrackerScope = { workspaceId: string; sceneKey: string }

@@ -7,7 +7,7 @@ import {
 } from 'vitest'
 
 describe('block-card-tiles-list.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'block-card-tiles-list.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'block-card-tiles-list.scss'), 'utf-8')
 
     it('preserves the extracted list, marker, title, metadata, hover, and action geometry', () => {
         expect(scss).toContain('max-height: 236px;')

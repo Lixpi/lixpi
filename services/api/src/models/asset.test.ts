@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetReference,
-    CanvasState,
+import {
+    type Asset,
+    type AssetReference,
+    type CanvasState,
 } from '@lixpi/constants'
 import {
     beforeEach,

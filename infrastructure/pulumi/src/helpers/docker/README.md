@@ -225,7 +225,7 @@ buildDockerImage({
 In your Dockerfile:
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM node:20
+FROM node:24
 
 # Mount secret (won't be in final image)
 RUN --mount=type=secret,id=API_KEY \

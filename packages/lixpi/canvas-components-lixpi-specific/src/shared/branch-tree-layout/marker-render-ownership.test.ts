@@ -1,10 +1,8 @@
-'use strict'
-
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    MediaBranchLineagePlan,
+import {
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type MediaBranchLineagePlan,
 } from '@lixpi/constants'
 import {
     describe,

@@ -4,7 +4,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 import {
     CanvasPersistenceController,
     type WorkspaceCanvasSnapshot,

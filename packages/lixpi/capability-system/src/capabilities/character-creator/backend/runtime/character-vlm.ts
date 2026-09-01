@@ -1,28 +1,28 @@
-'use strict'
-
-import type {
-    AiModelInferenceCapabilities,
-    ProviderName,
+import {
+    type AiModelInferenceCapabilities,
+    type ProviderName,
 } from '@lixpi/constants'
 
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
-import type {
-    CharacterEvidenceAnalysis,
-    CharacterEvidenceAnalyzerPort,
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterEvidenceAnalysis,
+    type CharacterEvidenceAnalyzerPort,
 } from './evidence-analyzer.ts'
-import type {
-    CharacterEditTargetPolicy,
-    CharacterEvidenceRegion,
-    CharacterRegenerationScope,
+import {
+    type CharacterEditTargetPolicy,
+    type CharacterEvidenceRegion,
+    type CharacterRegenerationScope,
 } from './character-evidence.ts'
-import type {
-    CharacterPanelVlmAssessmentResult,
-    CharacterPanelVlmAssessorPort,
+import {
+    type CharacterPanelVlmAssessmentResult,
+    type CharacterPanelVlmAssessorPort,
 } from './panel-assessor.ts'
-import type {
-    CharacterStructuredVlmPort,
-    CharacterVlmJsonSchema,
-    CharacterVlmMessage,
+import {
+    type CharacterStructuredVlmPort,
+    type CharacterVlmJsonSchema,
+    type CharacterVlmMessage,
 } from './runtime-ports.ts'
 
 type CharacterVlmArgs = {

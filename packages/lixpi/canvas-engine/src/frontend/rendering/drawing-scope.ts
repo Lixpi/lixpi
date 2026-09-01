@@ -1,14 +1,16 @@
-'use strict'
-
-import type {
-    CanvasEngineRect,
-    Dispose,
+import {
+    type CanvasEngineRect,
+    type Dispose,
 } from '../../shared/index.ts'
-import { Lifetime } from '../runtime/lifetime.ts'
-import type { EngineMedia } from '../media/types.ts'
-import type {
-    CanvasLayer,
-    DrawingResources,
+import {
+    type Lifetime,
+} from '../runtime/lifetime.ts'
+import {
+    type EngineMedia,
+} from '../media/types.ts'
+import {
+    type CanvasLayer,
+    type DrawingResources,
 } from './resources.ts'
 import { ScopedDrawingResources } from './scoped-drawing-resources.ts'
 

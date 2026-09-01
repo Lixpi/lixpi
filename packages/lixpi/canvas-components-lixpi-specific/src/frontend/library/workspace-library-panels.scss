@@ -1,14 +1,4 @@
-@import '@lixpi/ui-primitives/styles/transitions';
-
-.workspace-right-panel-media-host {
-    min-height: 0;
-    flex: 1;
-}
-
-.workspace-right-panel-media-host .media-library-panel {
-    width: 100%;
-    height: 100%;
-}
+@import "@lixpi/ui-primitives/styles/transitions";
 
 .media-library-panel {
     container: media-library / inline-size;
@@ -16,15 +6,6 @@
     min-height: 0;
     flex-direction: column;
     color: rgb(255 255 255 / 92%);
-}
-
-.media-library-controls {
-    min-height: 24px;
-}
-
-.media-library-feedback {
-    color: rgb(255 255 255 / 62%);
-    font-size: 12px;
 }
 
 .media-library-body {
@@ -66,7 +47,9 @@
     background: rgb(255 255 255 / 6%);
     color: inherit;
     cursor: pointer;
-    transition: hoverTransition(background-color), hoverTransition(border-color);
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(border-color);
 }
 
 .media-library-detail-back:hover,
@@ -273,7 +256,10 @@
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
-    transition: hoverTransition(background-color), hoverTransition(border-color), hoverTransition(color);
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(border-color),
+        hoverTransition(color);
 }
 
 .capability-library-row-action:hover {
@@ -361,6 +347,7 @@
 
 .media-library-feedback {
     color: rgba(26, 39, 68, 0.56);
+    font-size: 12px;
 }
 
 .media-library-feedback:empty {

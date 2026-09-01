@@ -1,5 +1,3 @@
-'use strict'
-
 export * from './types.ts'
 export * from './geometry-commit.ts'
 export * from './node-geometry.ts'

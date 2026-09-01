@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -22,7 +20,9 @@ vi.mock('../../services/generated-asset-storage.ts', async (importOriginal) => (
 
 import { ImageRouter } from './image-router.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     return {

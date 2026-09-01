@@ -1,4 +1,6 @@
-import type { CanvasPositionedNode } from './types.ts'
+import {
+    type CanvasPositionedNode,
+} from './types.ts'
 
 export type DragPlanInput<Node extends CanvasPositionedNode> = {
     nodes: readonly Node[]

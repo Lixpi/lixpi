@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -12,13 +10,13 @@ import {
 import * as debugTools from '@lixpi/debug-tools'
 
 import { resolveMediaBranch } from './media-branch-resolver.ts'
-import type {
-    ChatMessage,
-    ProviderState,
+import {
+    type ChatMessage,
+    type ProviderState,
 } from './state.ts'
-import type {
-    VlmCallArgs,
-    VlmCallResult,
+import {
+    type VlmCallArgs,
+    type VlmCallResult,
 } from '../structured-vlm/structured-vlm-client.ts'
 
 const portraitUrl = 'nats-obj://workspace-workspace-1-files/portrait-file'

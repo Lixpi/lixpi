@@ -1,9 +1,9 @@
-import type {
-    CanvasAiChatPanelState,
-    CanvasGeneratedOutputDetailsTarget,
-    CanvasNode,
-    CanvasRightSidePanelMode,
-    CanvasState,
+import {
+    type CanvasAiChatPanelState,
+    type CanvasGeneratedOutputDetailsTarget,
+    type CanvasNode,
+    type CanvasRightSidePanelMode,
+    type CanvasState,
 } from '@lixpi/constants'
 
 const RIGHT_SIDE_PANEL_MODES: CanvasRightSidePanelMode[] = ['capabilities', 'artifacts', 'media', 'aiThreads']

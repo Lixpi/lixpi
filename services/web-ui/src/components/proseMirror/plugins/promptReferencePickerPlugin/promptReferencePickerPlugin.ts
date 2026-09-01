@@ -9,19 +9,23 @@ import {
     PluginKey,
     type Transaction,
 } from 'prosemirror-state'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 
 import {
     createSlidingSwitch,
     type SlidingSwitchInstance,
 } from '@lixpi/ui-kit/components/sliding-switch'
 import AuthService from '$src/services/auth-service.ts'
-import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
 import {
-    type FloatingMenuPlacement,
+    type PromptReferenceCatalogClient,
+} from '$src/services/prompt-reference-catalog-client.ts'
+import {
     getTransformedAncestorScale,
     resolveFloatingMenuScreenPosition,
     screenPointToLocal,
+    type FloatingMenuPlacement,
 } from '$src/components/proseMirror/plugins/floatingMenuPosition.ts'
 import {
     applyStyle,
@@ -136,16 +140,19 @@ class PromptReferencePickerMenu {
         private readonly key: PluginKey<PromptReferencePickerState>,
     ) {
         this.list = html`<div className="prompt-reference-picker-list"></div>` as HTMLDivElement
-        const switchSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-        switchSvg.classList.add('prompt-reference-picker-switch')
-        switchSvg.setAttribute('width', '416')
-        switchSvg.setAttribute('height', '32')
-        switchSvg.setAttribute('viewBox', '0 0 416 32')
-        switchSvg.setAttribute('aria-label', 'Reference category')
         const header = mode === 'references'
             ? html`<div className="prompt-reference-picker-header"></div>` as HTMLDivElement
             : null
-        header?.append(switchSvg)
+        const switchSvg = header
+            ? select(header)
+                .append('svg')
+                .attr('class', 'prompt-reference-picker-switch')
+                .attr('width', 416)
+                .attr('height', 32)
+                .attr('viewBox', '0 0 416 32')
+                .attr('aria-label', 'Reference category')
+                .node() as SVGSVGElement
+            : null
         this.menu = html`
             <div
                 className=${`prompt-reference-picker prompt-reference-picker-${mode} nopan nowheel`}
@@ -160,7 +167,7 @@ class PromptReferencePickerMenu {
             </div>
         ` as HTMLDivElement
         this.view.dom.parentElement?.appendChild(this.menu)
-        this.categorySwitch = mode === 'references'
+        this.categorySwitch = switchSvg
             ? createSlidingSwitch(select(switchSvg), {
                 id: 'prompt-reference-category',
                 x: 0,
@@ -255,7 +262,7 @@ class PromptReferencePickerMenu {
         this.cancelPendingSearch()
         this.loading = true
         this.cursor = undefined
-        this.menu.setAttribute('aria-busy', 'true')
+        this.menu.ariaBusy = 'true'
         if (!this.menuVisible || categoryChanged) {
             this.results = []
             this.list.replaceChildren(html`<div className="prompt-reference-picker-status" role="status">Searching…</div>`)
@@ -300,7 +307,7 @@ class PromptReferencePickerMenu {
             ) return
             if (!append) {
                 this.loading = false
-                this.menu.removeAttribute('aria-busy')
+                this.menu.ariaBusy = null
             }
             const existingKeys = new Set(this.results.map(getCatalogItemKey))
             this.results = append
@@ -315,7 +322,7 @@ class PromptReferencePickerMenu {
             if (!state?.active || state.category !== category || state.query !== query) return
             if (!append) {
                 this.loading = false
-                this.menu.removeAttribute('aria-busy')
+                this.menu.ariaBusy = null
             }
             this.results = []
             this.cursor = undefined
@@ -388,15 +395,21 @@ class PromptReferencePickerMenu {
             const rendition = item.referenceType === 'media' && item.mediaKind === 'video'
                 ? 'representativeFrame'
                 : 'thumbnail'
-            void resolveAuthenticatedMediaUrl(
-                `/api/assets/${encodeURIComponent(item.referenceId)}/renditions/${rendition}`,
-                {
-                    apiBaseUrl: import.meta.env.VITE_API_URL || '',
-                    getAuthToken: () => AuthService.getTokenSilently(),
-                },
-            ).then((url) => {
-                if (url) thumbnail.src = url
-            }).catch(() => undefined)
+            const loadThumbnail = async (): Promise<void> => {
+                try {
+                    const url = await resolveAuthenticatedMediaUrl(
+                        `/api/assets/${encodeURIComponent(item.referenceId)}/renditions/${rendition}`,
+                        {
+                            apiBaseUrl: import.meta.env.VITE_API_URL || '',
+                            getAuthToken: () => AuthService.getTokenSilently(),
+                        },
+                    )
+                    if (url) thumbnail.src = url
+                } catch {
+                    // The picker keeps the empty thumbnail when its rendition is unavailable.
+                }
+            }
+            void loadThumbnail()
         }
         return html`
             <button
@@ -477,7 +490,7 @@ class PromptReferencePickerMenu {
         rows.forEach((row, index) => {
             const selected = index === selectedIndex
             row.classList.toggle('is-selected', selected)
-            row.setAttribute('aria-selected', String(selected))
+            row.ariaSelected = String(selected)
         })
     }
 
@@ -539,7 +552,7 @@ class PromptReferencePickerMenu {
         this.positionedTriggerPos = null
         this.menuPlacement = null
         this.activeCategory = null
-        this.menu.removeAttribute('aria-busy')
+        this.menu.ariaBusy = null
         this.menu.classList.remove('prompt-reference-picker-visible')
         this.menu.style.display = 'none'
     }

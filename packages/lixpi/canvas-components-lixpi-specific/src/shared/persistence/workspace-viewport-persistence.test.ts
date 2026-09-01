@@ -4,15 +4,17 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 import { WorkspaceCanvasSession } from './workspace-canvas-session.ts'
 import {
     WorkspaceViewportPersistence,
     type WorkspaceViewportPersistencePorts,
 } from './workspace-viewport-persistence.ts'
-import type {
-    CanvasPersistencePorts,
-    CanvasWriteResult,
+import {
+    type CanvasPersistencePorts,
+    type CanvasWriteResult,
 } from './canvas-persistence-controller.ts'
 import {
     encodeStashedViewport,

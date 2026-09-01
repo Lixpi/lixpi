@@ -1,5 +1,9 @@
-import type { EditorView } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
 import { html } from '@lixpi/ui-primitives/dom'
@@ -29,10 +33,10 @@ import {
     transformModelsToOptions,
     type AiModelMenuContentView,
 } from '$src/components/aiModelControls/index.ts'
-import type {
-    CapabilityJsonValue,
-    DefaultAiModelCapability,
-    MediaGenerationConfigSelectionGroup,
+import {
+    type CapabilityJsonValue,
+    type DefaultAiModelCapability,
+    type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 import {
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
@@ -397,7 +401,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             .attr('height', mediaModeSwitchHeight)
             .attr('viewBox', `0 0 ${mediaModeSwitchWidth} ${mediaModeSwitchHeight}`)
             .node() as SVGSVGElement
-        contentDOM.setAttribute('data-placeholder', options.placeholderText ?? '')
+        contentDOM.dataset.placeholder = options.placeholderText ?? ''
         applyAiModelMenuStyleSettings(dom)
 
         // Build controls adapters that read/write ProseMirror node attrs. Each
@@ -567,9 +571,8 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const syncSubmitValidity = (): void => {
             const invalid = [...capabilityValidity.values()].find(value => !value.valid)
             if (submitButton instanceof HTMLButtonElement) submitButton.disabled = Boolean(invalid)
-            submitButton.setAttribute('aria-disabled', String(Boolean(invalid)))
-            if (invalid?.message) submitButton.setAttribute('aria-description', invalid.message)
-            else submitButton.removeAttribute('aria-description')
+            submitButton.ariaDisabled = String(Boolean(invalid))
+            submitButton.ariaDescription = invalid?.message ?? null
         }
         const getModuleIds = (): string[] => {
             const moduleIds: string[] = []
@@ -843,16 +846,16 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             items: modelMenuItems,
             onShow: () => {
                 modelMenuTrigger.classList.add('is-active')
-                modelMenuTrigger.setAttribute('aria-expanded', 'true')
+                modelMenuTrigger.ariaExpanded = 'true'
                 updateModelMenuControls()
             },
             onHide: () => {
                 modelMenuTrigger.classList.remove('is-active')
-                modelMenuTrigger.setAttribute('aria-expanded', 'false')
+                modelMenuTrigger.ariaExpanded = 'false'
             },
         })
         modelMenu.element.classList.add('ai-prompt-model-menu-info-bubble', 'nopan', 'nowheel')
-        modelMenu.element.setAttribute('aria-label', 'Model settings')
+        modelMenu.element.ariaLabel = 'Model settings'
         modelMenu.element.addEventListener('wheel', handleModelMenuWheel, { passive: false })
 
         const handleDocumentMouseDown = (event: MouseEvent): void => {
@@ -875,7 +878,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         const syncEmptyState = (n: ProseMirrorNode) => {
             const empty = !hasAiPromptInputContent(n)
-            dom.setAttribute('data-empty', String(empty))
+            dom.dataset.empty = String(empty)
         }
 
         syncEmptyState(node)

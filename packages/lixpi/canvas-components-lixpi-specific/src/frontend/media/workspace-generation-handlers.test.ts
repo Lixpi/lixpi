@@ -5,12 +5,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
 import {
     CanvasGenerationEvents,

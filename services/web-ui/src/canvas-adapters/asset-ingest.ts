@@ -1,6 +1,6 @@
-import type {
-    CanvasIngestReply,
-    CanvasUploadRequest,
+import {
+    type CanvasIngestReply,
+    type CanvasUploadRequest,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 import AuthService from '$src/services/auth-service.ts'
 

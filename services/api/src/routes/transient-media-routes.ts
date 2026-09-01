@@ -1,5 +1,3 @@
-'use strict'
-
 import { Router } from 'express'
 
 import NATS_Service from '@lixpi/nats-service'

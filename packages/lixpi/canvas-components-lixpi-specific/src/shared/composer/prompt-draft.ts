@@ -3,7 +3,9 @@ import {
     serializeAiModelSelectionAttr,
     serializeMediaGenerationConfigSelectionAttr,
 } from '@lixpi/prosemirror/shared/model-selection-attrs'
-import type { MediaGenerationConfigSelectionGroup } from '@lixpi/constants'
+import {
+    type MediaGenerationConfigSelectionGroup,
+} from '@lixpi/constants'
 
 export type AiPromptSubmitModelData = {
     mediaGenerationMode?: 'image' | 'video'

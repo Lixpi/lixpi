@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -8,16 +6,18 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    AiModelInferenceCapabilities,
-    ImageReferenceCapabilities,
+import {
+    type AiModelInferenceCapabilities,
+    type ImageReferenceCapabilities,
 } from '@lixpi/constants'
 
 import {
     appendOpenAIImageGenerationReferences,
     OpenAIProvider,
 } from './openai-provider.ts'
-import type { BaseProviderDeps } from './base-provider.ts'
+import {
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const debugTools = vi.hoisted(() => ({

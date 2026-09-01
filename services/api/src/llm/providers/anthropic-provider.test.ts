@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -8,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { AiModelInferenceCapabilities } from '@lixpi/constants'
+import {
+    type AiModelInferenceCapabilities,
+} from '@lixpi/constants'
 
 const debugTools = vi.hoisted(() => ({
     info: vi.fn(),
@@ -39,7 +39,9 @@ vi.mock('@anthropic-ai/bedrock-sdk', () => ({
 }))
 
 import { AnthropicProvider } from './anthropic-provider.ts'
-import type { BaseProviderDeps } from './base-provider.ts'
+import {
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const ANTHROPIC_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {

@@ -7,9 +7,9 @@ import {
     computeConnectorDatum,
     type ConnectorDatumStyle,
 } from './connector-datum.ts'
-import type {
-    EdgeConfig,
-    NodeConfig,
+import {
+    type EdgeConfig,
+    type NodeConfig,
 } from './types.ts'
 
 const nodes = new Map<string, NodeConfig>([

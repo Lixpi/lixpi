@@ -1,10 +1,10 @@
-'use strict'
-
 import {
     NATS_SUBJECTS,
     type PromptReferenceCategory,
 } from '@lixpi/constants'
-import type { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
+import {
+    type CapabilityModuleCatalog,
+} from '@lixpi/capability-system/backend'
 
 import Workspace from '../../models/workspace.ts'
 import Organization from '../../models/organization.ts'

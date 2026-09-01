@@ -1,16 +1,16 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    AiModelInferenceCapabilities,
-    ImageReferenceCapabilities,
-    MediaGenerationRunProgress,
-    MediaGenerationRunMeta,
-    ProviderName,
-    SubjectIdentityClassification,
+import {
+    type CapabilityJsonValue,
+    type AiModelInferenceCapabilities,
+    type ImageReferenceCapabilities,
+    type MediaGenerationRunProgress,
+    type MediaGenerationRunMeta,
+    type ProviderName,
+    type SubjectIdentityClassification,
 } from '@lixpi/constants'
 
-import type { CapabilityMediaExecutionPlan } from '../shared/capability-media-execution-plan.ts'
+import {
+    type CapabilityMediaExecutionPlan,
+} from '../shared/capability-media-execution-plan.ts'
 
 export type CapabilityMediaStrategyOptions = {
     signal?: AbortSignal

@@ -1,13 +1,11 @@
-'use strict'
-
-import type {
-    ProviderName,
+import {
+    type ProviderName,
 } from '@lixpi/constants'
 
-import type {
-    AiModelMetaInfo,
-    ChatMessage,
-    ProviderState,
+import {
+    type AiModelMetaInfo,
+    type ChatMessage,
+    type ProviderState,
 } from '../../../llm/graph/state.ts'
 
 export type ReferenceImage = {

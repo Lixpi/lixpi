@@ -1,4 +1,4 @@
-FROM node:23-alpine
+FROM node:24-alpine
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -13,8 +13,7 @@ RUN pnpm install
 COPY setup-env.ts ./
 COPY templates ./templates
 
-# Set environment for native TypeScript execution and colored output
-ENV NODE_OPTIONS="--experimental-transform-types --disable-warning=ExperimentalWarning"
+# Set environment for colored output
 ENV FORCE_COLOR=1
 
 # Mount point for workspace

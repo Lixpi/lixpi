@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    CapabilityActionRegistry,
-    CapabilityPackageSeedContext,
-    CapabilityToolPackageInstaller,
+import {
+    type CapabilityActionRegistry,
+    type CapabilityPackageSeedContext,
+    type CapabilityToolPackageInstaller,
 } from '../../../backend/index.ts'
 import {
     seedStyleExtractionTool,

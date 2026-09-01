@@ -1,19 +1,21 @@
-import type {
-    CanvasState,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    CapabilityArtifactCanvasNode,
-    MediaDescriptor,
-    MediaGenerationProgressState,
+import {
+    type CanvasState,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type MediaDescriptor,
+    type MediaGenerationProgressState,
 } from '@lixpi/constants'
-import type { CapabilityArtifactFrontendDefinition } from '@lixpi/capability-system/frontend'
+import {
+    type CapabilityArtifactFrontendDefinition,
+} from '@lixpi/capability-system/frontend'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type {
-    BranchMarkerNode,
-    GeneratedOutputCanvasNode,
-    WorkspaceMediaHistoryTarget,
-    WorkspaceBranchHistoryTarget,
+import {
+    type BranchMarkerNode,
+    type GeneratedOutputCanvasNode,
+    type WorkspaceMediaHistoryTarget,
+    type WorkspaceBranchHistoryTarget,
 } from '../../shared/index.ts'
 export type { WorkspaceMediaHistoryTarget, WorkspaceBranchHistoryTarget } from '../../shared/review/workspace-history.ts'
 import { WorkspaceAssetMetadataEditor } from './workspace-asset-editors.ts'

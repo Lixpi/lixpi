@@ -7,14 +7,16 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasAiChatPanelState } from '@lixpi/constants'
-import type {
-    SidePanelConfig,
-    SidePanelInstance,
+import {
+    type CanvasAiChatPanelState,
+} from '@lixpi/constants'
+import {
+    type SidePanelConfig,
+    type SidePanelInstance,
 } from '@lixpi/ui-kit/components/side-panel'
-import type {
-    SlidingSwitchConfig,
-    SlidingSwitchInstance,
+import {
+    type SlidingSwitchConfig,
+    type SlidingSwitchInstance,
 } from '@lixpi/ui-kit/components/sliding-switch'
 import {
     WorkspaceRightPanel,

@@ -2,12 +2,19 @@ import {
     applyNodeGeometry,
     type CanvasEngineRect,
 } from '@lixpi/canvas-engine/shared'
+import {
+    type TypeOnlyValue,
+} from './type-only.ts'
 import { singleValue } from './single.ts'
 import DefaultValue, { namedValue } from './mixed.ts'
+import { v4 as uuidv4 } from 'uuid'
 
 void applyNodeGeometry
 type Rect = CanvasEngineRect
+type ImportedType = TypeOnlyValue
 void (null as Rect | null)
+void (null as ImportedType | null)
 void singleValue
 void DefaultValue
 void namedValue
+void uuidv4

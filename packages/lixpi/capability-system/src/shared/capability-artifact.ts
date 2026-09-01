@@ -1,10 +1,10 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    PromptReferenceType,
+import {
+    type CapabilityJsonValue,
+    type PromptReferenceType,
 } from '@lixpi/constants'
-import type { Schema } from 'prosemirror-model'
+import {
+    type Schema,
+} from 'prosemirror-model'
 
 export type CapabilityArtifactModelInput = {
     text: string

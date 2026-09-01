@@ -12,7 +12,7 @@ function expectSourceToContain(source: string, snippet: string): void {
 }
 
 describe('help-tooltip.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'help-tooltip.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'help-tooltip.scss'), 'utf-8')
 
     it('defines root trigger geometry and interaction states', () => {
         expectSourceToContain(scss, '.help-tooltip')
@@ -38,10 +38,10 @@ describe('help-tooltip.scss', () => {
 
     it('uses a shared, placement-aware arrow that inherits the tooltip surface color', () => {
         expectSourceToContain(scss, '--help-tooltip-arrow-size: 6px;')
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='top']::before")
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='bottom']::before")
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='left']::before")
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='right']::before")
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="top"]::before')
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="bottom"]::before')
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="left"]::before')
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="right"]::before')
         expectSourceToContain(scss, 'var(--help-tooltip-arrow-surface-color)')
     })
 

@@ -1,6 +1,10 @@
 import { vi } from 'vitest'
-import type { EditorView } from 'prosemirror-view'
-import type { EditorState } from 'prosemirror-state'
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    type EditorState,
+} from 'prosemirror-state'
 
 // Mock EditorView for testing bubble menu and image selection
 // This provides the minimal interface needed for most tests

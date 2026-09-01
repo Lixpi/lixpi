@@ -1,5 +1,9 @@
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
-import type { Asset } from '@lixpi/constants'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type Asset,
+} from '@lixpi/constants'
 import { collectProseMirrorText } from '@lixpi/prosemirror'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 

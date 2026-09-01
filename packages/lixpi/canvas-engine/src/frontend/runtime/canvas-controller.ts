@@ -31,10 +31,10 @@ import {
     ConnectorRenderer,
     type ConnectorRendererOptions,
 } from '../connectors/connector-renderer.ts'
-import type {
-    ConnectionEdge,
-    ConnectionPolicy,
-    ConnectionSettings,
+import {
+    type ConnectionEdge,
+    type ConnectionPolicy,
+    type ConnectionSettings,
 } from '../connectors/connection-types.ts'
 import {
     ViewportController,
@@ -67,9 +67,9 @@ import {
     SelectionOverlay,
     type SelectionOverlayOptions,
 } from './selection-overlay.ts'
-import type {
-    CanvasDrawingContext,
-    NodeRegistry,
+import {
+    type CanvasDrawingContext,
+    type NodeRegistry,
 } from './node-registry.ts'
 
 export type CanvasExtension = { id: string; mount: (context: CanvasDrawingContext & { overlayRoot: HTMLElement }) => Dispose }

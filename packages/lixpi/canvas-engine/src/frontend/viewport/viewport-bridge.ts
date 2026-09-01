@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CanvasViewport } from '../../shared/index.ts'
+import {
+    type CanvasViewport,
+} from '../../shared/index.ts'
 import { applyStyle } from '@lixpi/ui-primitives/dom'
 
 export type ViewportTarget = { setViewport: (viewport: CanvasViewport) => void }

@@ -4,7 +4,9 @@ import {
     it,
 } from 'vitest'
 
-import type { ExecutionTrace } from '@lixpi/constants'
+import {
+    type ExecutionTrace,
+} from '@lixpi/constants'
 
 import {
     colorPalette,

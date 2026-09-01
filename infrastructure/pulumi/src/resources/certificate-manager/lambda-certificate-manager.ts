@@ -1,5 +1,3 @@
-'use strict'
-
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
@@ -15,7 +13,7 @@ const formatStageResourceName = (resourceName: string, orgName: string, stageNam
 
 const { ORG_NAME, STAGE } = process.env
 
-export interface LambdaCertificateManagerArgs {
+export type LambdaCertificateManagerArgs = {
     // Certificate configuration
     domains: string[]
     email: string
@@ -50,7 +48,7 @@ export interface LambdaCertificateManagerArgs {
     environment?: Record<string, string>
 }
 
-export interface LambdaCertificateManagerResult {
+export type LambdaCertificateManagerResult = {
     // ECR Repository for container image
     repository: aws.ecr.Repository
 

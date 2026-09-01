@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    MediaReferenceBinding,
-    ProviderSafeMediaIntent,
+import {
+    type MediaReferenceBinding,
+    type ProviderSafeMediaIntent,
 } from '@lixpi/constants'
 
 import { normalizeMediaReferenceVariant } from './media-reference-matcher.ts'

@@ -5,9 +5,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    PromptReferenceCatalogItem,
-    PromptReferenceCatalogPage,
+import {
+    type PromptReferenceCatalogItem,
+    type PromptReferenceCatalogPage,
 } from '@lixpi/constants'
 import { EditorState } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
@@ -296,7 +296,7 @@ describe('promptReferencePickerPlugin', () => {
         const listbox = mount.querySelector('[role="listbox"]')
         expect(listbox?.textContent).toContain('Character Creator')
         expect(listbox?.textContent).not.toContain('Stale Module')
-        expect(listbox?.querySelector('[role="option"]')?.getAttribute('aria-selected')).toBe('true')
+        expect(listbox?.querySelector<HTMLElement>('[role="option"]')?.ariaSelected).toBe('true')
 
         const arrowDown = new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true })
         view.someProp('handleKeyDown', handler => handler(view, arrowDown))
@@ -408,11 +408,11 @@ describe('promptReferencePickerPlugin', () => {
         expect(view.someProp('handleKeyDown', handler => handler(view, arrowDown))).toBe(true)
         expect(listbox.querySelectorAll('[role="option"]')[0]).toBe(initialCharacterRow)
         expect(listbox.querySelectorAll('[role="option"]')[1]).toBe(initialStyleRow)
-        expect(initialStyleRow?.getAttribute('aria-selected')).toBe('true')
+        expect(initialStyleRow?.ariaSelected).toBe('true')
 
         view.dispatch(view.state.tr.insertText('c'))
         expect(listbox.textContent).not.toContain('Searching…')
-        expect(listbox.getAttribute('aria-busy')).toBe('true')
+        expect(listbox.ariaBusy).toBe('true')
         expect(listbox.querySelectorAll('[role="option"]')[0]).toBe(initialCharacterRow)
 
         const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
@@ -424,7 +424,7 @@ describe('promptReferencePickerPlugin', () => {
         pending[1]!.resolve({ items: [characterCreator] })
         await Promise.resolve()
 
-        expect(listbox.getAttribute('aria-busy')).toBeNull()
+        expect(listbox.ariaBusy).toBeNull()
         expect(listbox.style.height).toBe('')
         expect(listbox.style.top).toBe('394px')
         expect(Number.parseFloat(listbox.style.top) + menuHeight).toBe(initialBottom)

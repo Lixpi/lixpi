@@ -7,9 +7,9 @@ import {
     afterEach,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasNode,
+import {
+    type Asset,
+    type CanvasNode,
 } from '@lixpi/constants'
 import {
     createContextPreviewTile as mountContextPreviewTile,

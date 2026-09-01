@@ -2,12 +2,15 @@ import {
     EditorView,
     basicSetup,
 } from 'codemirror'
-import { markdown } from '@codemirror/lang-markdown'
+import {
+    markdown,
+    markdownLanguage,
+} from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { markdownLanguage } from '@codemirror/lang-markdown'
 import { Compartment } from '@codemirror/state'
-import testDoc from '$src/components/proseMirror/themes/cm6-themes/example/doc-example'
-import themes from '$src/components/proseMirror/themes/cm6-themes/example/themes'
+import testDoc from '$src/components/proseMirror/themes/cm6-themes/example/doc-example.ts'
+import themes from '$src/components/proseMirror/themes/cm6-themes/example/themes.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 const elCM = document.querySelector('#codemirror')
 
@@ -31,9 +34,7 @@ let editor = new EditorView({
 const elList = document.querySelector('#theme-list')
 if (elList) {
     for (let i = 0; i < themes.length; ++i) {
-        const elItem = document.createElement('option')
-        elItem.setAttribute('value', i.toString())
-        elItem.textContent = themes[i].name
+        const elItem = html`<option value=${i.toString()}>${themes[i].name}</option>` as HTMLOptionElement
         elList.appendChild(elItem)
     }
 

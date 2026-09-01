@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { fileURLToPath } from 'node:url'
 
 // The client lives in src/client and builds into public/, which the Node server
 // serves in the built image. In development Vite serves it instead, with HMR,
@@ -6,6 +7,11 @@ import { defineConfig } from 'vite'
 export default defineConfig({
     root: 'src/client',
     publicDir: false,
+    resolve: {
+        alias: {
+            '@lixpi/ui-primitives/styles/transitions': fileURLToPath(new URL('../../packages/lixpi/ui-primitives/src/styles/_transitions.scss', import.meta.url)),
+        },
+    },
     build: {
         outDir: '../../public',
         emptyOutDir: true,

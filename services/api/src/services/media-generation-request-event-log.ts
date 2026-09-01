@@ -1,9 +1,7 @@
-'use strict'
-
-import type { MediaGenerationRequestEvent } from '@lixpi/constants'
 import {
     getMediaGenerationUserEventSubject,
     NATS_SUBJECTS,
+    type MediaGenerationRequestEvent,
 } from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 

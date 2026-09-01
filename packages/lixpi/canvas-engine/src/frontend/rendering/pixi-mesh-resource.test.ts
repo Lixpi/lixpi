@@ -1,16 +1,16 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 import {
-    Mesh,
     Texture,
+    type Mesh,
 } from 'pixi.js'
 import { PixiMeshResource } from './pixi-mesh-resource.ts'
-import type { MeshData } from './resources.ts'
+import {
+    type MeshData,
+} from './resources.ts'
 
 function triangle(x = 0): MeshData {
     return { positions: new Float32Array([x, 0, x + 10, 0, x, 10]), uvs: new Float32Array([0, 0, 1, 0, 0, 1]), indices: new Uint32Array([0, 1, 2]), version: x }

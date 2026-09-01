@@ -1,10 +1,12 @@
-import type {
-    Asset,
-    CanvasNode,
-    MediaBranchLineagePlan,
-    MediaRunLineageAssignment,
+import {
+    type Asset,
+    type CanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
-import type { GeneratedOutputCanvasNode } from '../canvas-node/generated-media-node.ts'
+import {
+    type GeneratedOutputCanvasNode,
+} from '../canvas-node/generated-media-node.ts'
 import { getBranchMarkerThreadId } from '../review/workspace-history.ts'
 import { isPersistedMediaGenerationActive } from './progress-state.ts'
 

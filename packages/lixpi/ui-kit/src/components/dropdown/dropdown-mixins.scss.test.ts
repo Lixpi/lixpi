@@ -15,7 +15,7 @@ function expectSourceToContain(source: string, snippet: string): void {
 
 describe('dropdown hover transitions', () => {
     it('uses the shared settings-backed hover transition for every interactive state', () => {
-        const source = readFileSync(resolve(__dirname, '_dropdown-mixins.scss'), 'utf-8')
+        const source = readFileSync(resolve(import.meta.dirname, '_dropdown-mixins.scss'), 'utf-8')
 
         expectSourceToContain(source, 'hoverDuration: $defaultHoverTransitionDuration')
         expectSourceToContain(source, 'hoverTransition(background, map.get($s, hoverDuration))')

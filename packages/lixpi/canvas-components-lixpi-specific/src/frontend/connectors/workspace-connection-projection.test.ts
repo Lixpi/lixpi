@@ -3,18 +3,22 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
-import type {
-    EngineEdge,
-    EngineNode,
+import {
+    type EngineEdge,
+    type EngineNode,
 } from '@lixpi/canvas-engine/shared'
-import type { ConnectionEdge } from '@lixpi/canvas-engine/frontend/connectors'
+import {
+    type ConnectionEdge,
+} from '@lixpi/canvas-engine/frontend/connectors'
 import { WorkspaceConnectionProjection } from './workspace-connection-projection.ts'
 import { createWorkspaceConnectorSettings } from './workspace-connector-settings.ts'
-import type { WorkspaceConnectionNodeData } from './workspace-connection-manager.ts'
+import {
+    type WorkspaceConnectionNodeData,
+} from './workspace-connection-manager.ts'
 
 function node(nodeId: string, type: CanvasNode['type'] = 'document'): EngineNode<WorkspaceConnectionNodeData> {
     const data = { node: { nodeId, type, position: { x: 100, y: 200 }, dimensions: { width: 300, height: 300 } } as CanvasNode }

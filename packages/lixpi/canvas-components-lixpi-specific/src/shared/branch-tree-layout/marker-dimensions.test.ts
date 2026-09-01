@@ -1,13 +1,13 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import { mediaGenerationLayoutSettings } from '@lixpi/constants'
-import type { BranchLineCanvasNode } from '@lixpi/constants'
+import {
+    mediaGenerationLayoutSettings,
+    type BranchLineCanvasNode,
+} from '@lixpi/constants'
 
 import {
     estimateBranchMarkerDimensions,

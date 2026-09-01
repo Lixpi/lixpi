@@ -42,7 +42,7 @@
 }
 
 .workspace-ai-chat-panel-context-chip::before {
-    content: '';
+    content: "";
     position: absolute;
     left: -6px;
     right: -6px;
@@ -85,7 +85,6 @@
     opacity: 1;
 }
 
-
 .workspace-ai-chat-panel-context-chip-remove svg {
     display: block;
     width: 18px;
@@ -123,7 +122,6 @@
         overflow: visible;
         box-sizing: border-box;
     }
-
 }
 
 .workspace-canvas-global-composer-host:has(.prompt-reference-picker-visible) {

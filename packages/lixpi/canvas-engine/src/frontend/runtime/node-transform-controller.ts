@@ -9,12 +9,12 @@ import {
     type ResizeHandle,
 } from '../../shared/index.ts'
 import {
-    GestureController,
+    type GestureController,
     type CanvasGesture,
     type GestureCancelReason,
 } from './gesture-controller.ts'
 import {
-    GeometryOverrides,
+    type GeometryOverrides,
     type GeometryOverrideScope,
 } from './geometry-overrides.ts'
 

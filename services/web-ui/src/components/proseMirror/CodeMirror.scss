@@ -1,16 +1,15 @@
-@import '$src/sass/variables.scss';
-
+@import "$src/sass/variables.scss";
 
 .code-block-wrapper {
-	border-radius: 7px;
-	overflow: hidden;
-	// box-shadow: 1px 3px 7px 0 rgb(0 0 0 / 25%);
+    border-radius: 7px;
+    overflow: hidden;
+    // box-shadow: 1px 3px 7px 0 rgb(0 0 0 / 25%);
     font-weight: 400;
-	margin: 1rem 0;
+    margin: 1rem 0;
     font-size: 13px;
-	// font-family: "Söhne Mono", Monaco, "Andale Mono", "Ubuntu Mono", monospace;
-	.cm-scroller {
-		font-family: "Söhne Mono", Monaco, "Andale Mono", "Ubuntu Mono", monospace  !important;
-		padding: .3rem .3rem;
-	}
+    // font-family: "Söhne Mono", Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+    .cm-scroller {
+        font-family: "Söhne Mono", Monaco, "Andale Mono", "Ubuntu Mono", monospace !important;
+        padding: 0.3rem 0.3rem;
+    }
 }

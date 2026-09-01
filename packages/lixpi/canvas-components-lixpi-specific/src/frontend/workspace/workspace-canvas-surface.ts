@@ -7,12 +7,16 @@ import {
     type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { ViewportSnapshot as Viewport } from '@lixpi/canvas-engine/shared'
+import {
+    type ViewportSnapshot as Viewport,
+} from '@lixpi/canvas-engine/shared'
 import {
     WorkspaceCanvasMembership,
     type WorkspaceCanvasMembershipPorts,
 } from '../../shared/persistence/workspace-canvas-membership.ts'
-import type { WorkspaceCanvasSession } from '../../shared/persistence/workspace-canvas-session.ts'
+import {
+    type WorkspaceCanvasSession,
+} from '../../shared/persistence/workspace-canvas-session.ts'
 import {
     WorkspaceViewportPersistence,
     type WorkspaceViewportPersistencePorts,

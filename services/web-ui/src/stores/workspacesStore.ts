@@ -1,5 +1,3 @@
-'use strict'
-
 import { writable } from '$src/stores/nanoStore.ts'
 
 import {
@@ -7,7 +5,9 @@ import {
     type WorkspaceMeta,
 } from '@lixpi/constants'
 
-import type { ReadonlyDeep } from 'type-fest'
+import {
+    type ReadonlyDeep,
+} from 'type-fest'
 import { deepFreeze } from '$src/helpers/deepfreeze.ts'
 
 type Meta = {

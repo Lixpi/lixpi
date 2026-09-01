@@ -1,4 +1,6 @@
-import type { CapabilityRunEventStreamPayload } from '@lixpi/constants'
+import {
+    type CapabilityRunEventStreamPayload,
+} from '@lixpi/constants'
 
 export type CapabilityRunEventSegment = {
     type: 'capability_run_event'

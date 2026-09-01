@@ -5,11 +5,13 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
-import type { EngineNode } from '@lixpi/canvas-engine/shared'
+import {
+    type EngineNode,
+} from '@lixpi/canvas-engine/shared'
 import {
     createWorkspaceConnectionPolicy,
     type WorkspaceConnectionNodeData,

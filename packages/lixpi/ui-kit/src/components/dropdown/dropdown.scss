@@ -1,14 +1,26 @@
-@use './dropdown-mixins' as *;
+@use "./dropdown-mixins" as *;
 
 // M3 Menu staggered item animation
 @keyframes md3MenuItemFadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes md3MenuSurfaceOpen {
-    from { opacity: 0; transform: scaleY(0.6); }
-    to { opacity: 1; transform: scaleY(1); }
+    from {
+        opacity: 0;
+        transform: scaleY(0.6);
+    }
+    to {
+        opacity: 1;
+        transform: scaleY(1);
+    }
 }
 
 /* Dropdown Plugin Styles */
@@ -16,23 +28,27 @@
     position: relative;
 
     // Trigger button — M3 compact style
-    @include dropdownTriggerStructure((
-        fontSize: 0.8125rem,
-        fontWeight: 500,
-        iconMargin: 0 6px 0 0,
-        triggerPadding: 4px 8px,
-        triggerRadius: 8px,
-        triggerHeight: 28px
-    ));
+    @include dropdownTriggerStructure(
+        (
+            fontSize: 0.8125rem,
+            fontWeight: 500,
+            iconMargin: 0 6px 0 0,
+            triggerPadding: 4px 8px,
+            triggerRadius: 8px,
+            triggerHeight: 28px
+        )
+    );
 
     // Dropdown items — compact proportional to 28px trigger
-    @include dropdownItemsStructure((
-        itemFontSize: 0.75rem,
-        itemHeight: 32px,
-        itemPadding: 0 10px,
-        itemIconSize: 14px,
-        itemIconMargin: 0 6px 0 0
-    ));
+    @include dropdownItemsStructure(
+        (
+            itemFontSize: 0.75rem,
+            itemHeight: 32px,
+            itemPadding: 0 10px,
+            itemIconSize: 14px,
+            itemIconMargin: 0 6px 0 0
+        )
+    );
 
     // Theme variants
     &.theme-light {
@@ -46,13 +62,15 @@
 // Detached dropdown popover (mounted to body or static-position)
 .dropdown-menu-popover {
     // Ultra compact items — proportional to trigger
-    @include dropdownItemsStructure((
-        itemFontSize: 0.7rem,
-        itemHeight: 26px,
-        itemPadding: 0 8px,
-        itemIconSize: 12px,
-        itemIconMargin: 0 6px 0 0
-    ));
+    @include dropdownItemsStructure(
+        (
+            itemFontSize: 0.7rem,
+            itemHeight: 26px,
+            itemPadding: 0 8px,
+            itemIconSize: 12px,
+            itemIconMargin: 0 6px 0 0
+        )
+    );
 
     // Force option icons to be compact even if SVGs have baked-in sizing
     .bubble-body .submenu li :global(svg) {

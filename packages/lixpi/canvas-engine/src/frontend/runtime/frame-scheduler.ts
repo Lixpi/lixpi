@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    CanvasEngineRect,
-    Dispose,
+import {
+    type CanvasEngineRect,
+    type Dispose,
 } from '../../shared/index.ts'
 
 export type FrameInvalidation = { full: boolean; bounds: readonly CanvasEngineRect[] }

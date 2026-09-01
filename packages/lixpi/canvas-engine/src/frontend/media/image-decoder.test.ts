@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -7,9 +5,9 @@ import {
     vi,
 } from 'vitest'
 import { ImageDecoder } from './image-decoder.ts'
-import type {
-    ImageDecodeRequest,
-    ImageDecodeResponse,
+import {
+    type ImageDecodeRequest,
+    type ImageDecodeResponse,
 } from './image-decode-protocol.ts'
 
 class FakeWorker {

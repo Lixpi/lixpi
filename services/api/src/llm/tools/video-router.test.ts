@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -12,7 +10,9 @@ import {
 import * as debugTools from '@lixpi/debug-tools'
 
 import { VideoRouter } from './video-router.ts'
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 function createState(overrides: Partial<ProviderState> = {}): ProviderState {
     return {

@@ -1,8 +1,10 @@
-'use strict'
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
 
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
-
-import type { CharacterRegenerationScope } from './character-evidence.ts'
+import {
+    type CharacterRegenerationScope,
+} from './character-evidence.ts'
 
 export type CharacterPanelRegenerationDecision = {
     mode: 'full-sheet' | 'selected-panels'

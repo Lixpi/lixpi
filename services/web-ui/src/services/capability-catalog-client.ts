@@ -1,5 +1,3 @@
-'use strict'
-
 import { CapabilityCatalogClient } from '@lixpi/capability-system/frontend'
 
 import AuthService from '$src/services/auth-service.ts'

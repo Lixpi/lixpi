@@ -1,6 +1,6 @@
-import type {
-    Node as ProseMirrorNode,
-    Schema,
+import {
+    type Node as ProseMirrorNode,
+    type Schema,
 } from 'prosemirror-model'
 import {
     EditorState,

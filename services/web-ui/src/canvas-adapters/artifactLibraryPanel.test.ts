@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
@@ -8,7 +6,7 @@ import {
     it,
 } from 'vitest'
 
-const canvasSource = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
+const canvasSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
 
 describe('Artifact Library panel contract', () => {
     it('supports attach, scope, review, and sealed generation history', () => {

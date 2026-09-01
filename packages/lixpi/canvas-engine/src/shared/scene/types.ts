@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
-    CanvasEngineSize,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
+    type CanvasEngineSize,
 } from '../geometry/index.ts'
 
 export type CanvasPositionedNode = {

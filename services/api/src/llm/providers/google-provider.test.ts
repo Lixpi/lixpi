@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -12,11 +10,11 @@ import {
     directCapabilityToolName,
     SealedResolvedCapabilityPlan,
 } from '@lixpi/capability-system/backend'
-import type {
-    AiModelInferenceCapabilities,
-    CapabilityManifest,
-    CapabilityResourceRef,
-    ResolvedCapabilityPlan,
+import {
+    type AiModelInferenceCapabilities,
+    type CapabilityManifest,
+    type CapabilityResourceRef,
+    type ResolvedCapabilityPlan,
 } from '@lixpi/constants'
 
 const debugTools = vi.hoisted(() => ({
@@ -27,7 +25,9 @@ const debugTools = vi.hoisted(() => ({
 
 vi.mock('@lixpi/debug-tools', () => debugTools)
 
-import { type BaseProviderDeps } from './base-provider.ts'
+import {
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 import {
     buildVeoReferenceImages,

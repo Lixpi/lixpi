@@ -1,5 +1,3 @@
-'use strict'
-
 import process from 'process'
 
 import NatsService from '@lixpi/nats-service'

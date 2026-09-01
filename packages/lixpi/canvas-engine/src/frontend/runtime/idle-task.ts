@@ -1,6 +1,6 @@
-'use strict'
-
-import type { Dispose } from '../../shared/index.ts'
+import {
+    type Dispose,
+} from '../../shared/index.ts'
 
 export type IdleTaskOptions = {
     callback: () => void

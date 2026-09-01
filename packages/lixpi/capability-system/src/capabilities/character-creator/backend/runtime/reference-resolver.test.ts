@@ -1,5 +1,3 @@
-'use strict'
-
 import sharp from 'sharp'
 import {
     beforeEach,
@@ -12,7 +10,9 @@ import {
 import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
 import { resolveCharacterReferences } from './reference-resolver.ts'
-import type { CharacterReferenceAssetPort } from './runtime-ports.ts'
+import {
+    type CharacterReferenceAssetPort,
+} from './runtime-ports.ts'
 
 const readyAsset = (overrides: Record<string, unknown> = {}) => ({
     assetId: 'asset-1',

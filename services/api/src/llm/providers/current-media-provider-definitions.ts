@@ -1,6 +1,6 @@
-'use strict'
-
-import type { ProviderName } from '@lixpi/constants'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
 
 import { AnthropicProvider } from './anthropic-provider.ts'
 import { BytePlusProvider } from './byteplus-provider.ts'

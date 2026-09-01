@@ -1,4 +1,6 @@
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import { WorkspaceAssetMetadataEditor } from './workspace-asset-editors.ts'
 import {
     WorkspaceAssetDetails,

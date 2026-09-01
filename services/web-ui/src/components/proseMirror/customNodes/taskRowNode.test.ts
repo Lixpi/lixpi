@@ -8,8 +8,6 @@ import {
     taskRowDefaultAttrs as packageTaskRowDefaultAttrs,
     taskRowNodeSpec as packageTaskRowNodeSpec,
     taskRowNodeType as packageTaskRowNodeType,
-} from '@lixpi/prosemirror'
-import {
     createProseMirrorSchema,
     DOCUMENT_TYPE,
 } from '@lixpi/prosemirror'

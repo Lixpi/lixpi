@@ -465,7 +465,9 @@ services:
             # Force color output in the terminal, required for chalk.js to work
             FORCE_COLOR: 1
 
-            # Node.js config
+            # Node 24 strips erasable TypeScript by default, but the API loads
+            # enums and parameter properties from workspace sources. Transform
+            # types is still required and still emits ExperimentalWarning.
             NODE_OPTIONS: '--trace-deprecation --abort-on-uncaught-exception --trace-warnings --disable-warning=ExperimentalWarning --experimental-transform-types'
 
             # Pulumi Config that's also used by the API
@@ -607,7 +609,9 @@ services:
             # Force color output in the terminal, required for chalk.js to work
             FORCE_COLOR: 1
 
-            # Node.js config
+            # Node 24 strips erasable TypeScript by default, but Pulumi loads
+            # @lixpi/constants, which exports runtime enums. Transform types is
+            # still required and still emits ExperimentalWarning.
             NODE_OPTIONS: '--trace-deprecation --abort-on-uncaught-exception --trace-warnings --disable-warning=ExperimentalWarning --experimental-transform-types'
 
             # General config

@@ -2,9 +2,7 @@
 // Explicit workflow event node used by live chat history and read-only
 // projections. Matrix streams persist lineage ids on aiReasoningSection;
 // single-run streams materialize API lineage assignments as standalone events.
-import {
-    createAiLineageEventMarker,
-} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
+import { createAiLineageEventMarker } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEvents.ts'
 import {
     aiLineageEventNodeSpec,
     aiLineageEventNodeType,

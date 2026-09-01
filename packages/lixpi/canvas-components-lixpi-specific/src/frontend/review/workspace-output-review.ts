@@ -1,20 +1,26 @@
-import type {
-    Asset,
-    CanvasNode,
-    CanvasState,
-    CanvasGeometryUpdate,
-    GeneratedOutputReviewRequest,
-    GeneratedOutputReviewResponse,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    CapabilityArtifactCanvasNode,
-    AiModelId,
-    ImageGenerationTrace,
-    VideoGenerationTrace,
+import {
+    type Asset,
+    type CanvasNode,
+    type CanvasState,
+    type CanvasGeometryUpdate,
+    type GeneratedOutputReviewRequest,
+    type GeneratedOutputReviewResponse,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type AiModelId,
+    type ImageGenerationTrace,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
-import type { CapabilityReplaySubmitData } from '@lixpi/capability-system/frontend'
-import type { AiPromptComposerSubmitData } from '../composer/index.ts'
-import type { CanvasGenerationSubmitOptions } from '../../shared/generation/canvas-generation-submission.ts'
+import {
+    type CapabilityReplaySubmitData,
+} from '@lixpi/capability-system/frontend'
+import {
+    type AiPromptComposerSubmitData,
+} from '../composer/index.ts'
+import {
+    type CanvasGenerationSubmitOptions,
+} from '../../shared/generation/canvas-generation-submission.ts'
 import {
     isGeneratedOutputAcceptedForCanvas,
     isGeneratedOutputReadyForReview,

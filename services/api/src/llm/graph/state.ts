@@ -1,33 +1,33 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    CapabilityPromptReference,
-    CapabilityReasoningModelVariant,
-    AiModelInferenceCapabilities,
-    ImageReferenceCapabilities,
-    MediaBranchCandidateSnapshot,
-    MediaBranchVlmResolution,
-    MediaBranchLineagePlan,
-    MediaGenerationConfigSelectionGroup,
-    MediaGenerationConfigControlKey,
-    MediaGenerationRunMeta,
-    MediaGenerationRun,
-    MediaReferenceBinding,
-    ProviderSafeMediaIntent,
-    ProviderName,
-    WorkspaceContextResolution,
-    WorkspaceContextSnapshot,
+import {
+    type CapabilityJsonValue,
+    type CapabilityPromptReference,
+    type CapabilityReasoningModelVariant,
+    type AiModelInferenceCapabilities,
+    type ImageReferenceCapabilities,
+    type MediaBranchCandidateSnapshot,
+    type MediaBranchVlmResolution,
+    type MediaBranchLineagePlan,
+    type MediaGenerationConfigSelectionGroup,
+    type MediaGenerationConfigControlKey,
+    type MediaGenerationRunMeta,
+    type MediaGenerationRun,
+    type MediaReferenceBinding,
+    type ProviderSafeMediaIntent,
+    type ProviderName,
+    type WorkspaceContextResolution,
+    type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
-import type {
-    CapabilityMediaExecutionPlan,
-    SealedResolvedCapabilityPlan,
+import {
+    type CapabilityMediaExecutionPlan,
+    type SealedResolvedCapabilityPlan,
 } from '@lixpi/capability-system/backend'
-import type {
-    ImageGenerationReference,
-    ResolvedImageGenerationReference,
+import {
+    type ImageGenerationReference,
+    type ResolvedImageGenerationReference,
 } from '../image-generation-references.ts'
-import type { ImageReferenceAdaptation } from '../providers/image-reference-adapters.ts'
+import {
+    type ImageReferenceAdaptation,
+} from '../providers/image-reference-adapters.ts'
 
 export type Usage = {
     promptTokens: number

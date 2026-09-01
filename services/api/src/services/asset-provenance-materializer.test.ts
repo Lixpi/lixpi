@@ -1,14 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import type {
-    MediaGenerationProgressState,
-    MediaGenerationRunMeta,
+import {
+    type MediaGenerationProgressState,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
 
 import {

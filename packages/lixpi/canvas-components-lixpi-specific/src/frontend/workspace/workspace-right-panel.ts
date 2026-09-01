@@ -1,7 +1,7 @@
 import { select } from 'd3-selection'
-import type {
-    CanvasAiChatPanelState,
-    CanvasRightSidePanelMode,
+import {
+    type CanvasAiChatPanelState,
+    type CanvasRightSidePanelMode,
 } from '@lixpi/constants'
 import {
     createDocumentHtml,

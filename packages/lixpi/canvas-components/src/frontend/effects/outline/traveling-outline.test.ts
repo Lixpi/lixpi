@@ -1,20 +1,20 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasDrawingSurface,
-    DrawingResources,
-    MeshData,
-    ResourceHandle,
-    ResourceKind,
+import {
+    type CanvasDrawingSurface,
+    type DrawingResources,
+    type MeshData,
+    type ResourceHandle,
+    type ResourceKind,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import { TravelingOutline } from './traveling-outline.ts'
-import type { TravelingOutlineDatum } from './outline-geometry.ts'
+import {
+    type TravelingOutlineDatum,
+} from './outline-geometry.ts'
 
 function createSurface() {
     const controller = new AbortController()

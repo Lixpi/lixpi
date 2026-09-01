@@ -1,10 +1,10 @@
-'use strict'
-
-import type {
-    CanvasEngineSize,
-    Dispose,
+import {
+    type CanvasEngineSize,
+    type Dispose,
 } from '../../shared/index.ts'
-import type { ResourceHandle } from '../rendering/resources.ts'
+import {
+    type ResourceHandle,
+} from '../rendering/resources.ts'
 import {
     ImageDecoder,
     type ImageDecoderOptions,
@@ -14,13 +14,13 @@ import {
     renditionSize,
     selectImageRendition,
 } from './media-renditions.ts'
-import type {
-    EngineMedia,
-    ImageLease,
-    MediaCacheOptions,
-    MediaDescriptor,
-    MediaRendition,
-    MediaSourceResolver,
+import {
+    type EngineMedia,
+    type ImageLease,
+    type MediaCacheOptions,
+    type MediaDescriptor,
+    type MediaRendition,
+    type MediaSourceResolver,
 } from './types.ts'
 
 type ImageResource = { texture: ResourceHandle<'texture'>; release: Dispose }

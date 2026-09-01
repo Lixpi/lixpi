@@ -1,12 +1,12 @@
-'use strict'
-
-import type { Dispose } from '@lixpi/canvas-engine/shared'
-import type {
-    CanvasDrawingSurface,
-    CanvasLayer,
-    DrawingSpace,
-    ResourceHandle,
-    TextureInput,
+import {
+    type Dispose,
+} from '@lixpi/canvas-engine/shared'
+import {
+    type CanvasDrawingSurface,
+    type CanvasLayer,
+    type DrawingSpace,
+    type ResourceHandle,
+    type TextureInput,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import {
     createTravelingSnakeMeshGeometry,

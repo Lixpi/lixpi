@@ -4,9 +4,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
+import {
+    type CanvasNode,
+    type CanvasState,
 } from '@lixpi/constants'
 import {
     WorkspaceConversationProjection,

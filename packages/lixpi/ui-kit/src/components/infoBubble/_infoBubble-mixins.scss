@@ -18,9 +18,7 @@
 // NOTE: Positioning is computed in JS using the anchor's bounding rect.
 // This mixin only establishes layering and positioning mode.
 @mixin infoBubblePlacement($config: ()) {
-    $defaults: (
-        zIndex: 999
-    );
+    $defaults: (zIndex: 999);
 
     $s: map.merge($defaults, $config);
 
@@ -194,7 +192,7 @@
     .bubble-container {
         background: $surfaceBg;
         color: map.get($s, surfaceFg);
-        border: .06rem solid $borderColor;
+        border: 0.06rem solid $borderColor;
 
         .bubble-header {
             padding: 6px 8px;
@@ -210,22 +208,38 @@
 
     // Arrow colors for all sides
     &[data-arrow-side="top"] .bubble-container {
-        &:before { border-color: transparent transparent $borderColor; }
-        &:after { border-color: transparent transparent $surfaceBg; }
+        &:before {
+            border-color: transparent transparent $borderColor;
+        }
+        &:after {
+            border-color: transparent transparent $surfaceBg;
+        }
     }
 
     &[data-arrow-side="bottom"] .bubble-container {
-        &:before { border-color: $borderColor transparent transparent transparent; }
-        &:after { border-color: $surfaceBg transparent transparent transparent; }
+        &:before {
+            border-color: $borderColor transparent transparent transparent;
+        }
+        &:after {
+            border-color: $surfaceBg transparent transparent transparent;
+        }
     }
 
     &[data-arrow-side="left"] .bubble-container {
-        &:before { border-color: transparent $borderColor transparent transparent; }
-        &:after { border-color: transparent $surfaceBg transparent transparent; }
+        &:before {
+            border-color: transparent $borderColor transparent transparent;
+        }
+        &:after {
+            border-color: transparent $surfaceBg transparent transparent;
+        }
     }
 
     &[data-arrow-side="right"] .bubble-container {
-        &:before { border-color: transparent transparent transparent $borderColor; }
-        &:after { border-color: transparent transparent transparent $surfaceBg; }
+        &:before {
+            border-color: transparent transparent transparent $borderColor;
+        }
+        &:after {
+            border-color: transparent transparent transparent $surfaceBg;
+        }
     }
 }

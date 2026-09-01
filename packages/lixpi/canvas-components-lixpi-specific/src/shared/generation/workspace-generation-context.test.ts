@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -12,10 +10,10 @@ import {
     WorkspaceGenerationContext,
     getGeneratedImageTextByNodeIdFromThreadContent,
 } from './workspace-generation-context.ts'
-import type {
-    Asset,
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type Asset,
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 
 const assets = new Map<string, Asset>()

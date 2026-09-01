@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -8,9 +6,13 @@ import {
 
 import { CapabilityMediaStrategyRegistry } from '../../../backend/capability-media-strategy-registry.ts'
 import { CapabilityModuleCatalog } from '../../../backend/capability-module.ts'
-import type { CapabilityMediaExecutionPlan } from '../../../shared/capability-media-execution-plan.ts'
+import {
+    type CapabilityMediaExecutionPlan,
+} from '../../../shared/capability-media-execution-plan.ts'
 import { createCharacterCreatorModule } from './index.ts'
-import type { CharacterCreatorRuntimePorts } from './runtime/runtime-ports.ts'
+import {
+    type CharacterCreatorRuntimePorts,
+} from './runtime/runtime-ports.ts'
 
 const unavailable = async (): Promise<never> => {
     throw new Error('Platform port should not execute during module installation')

@@ -1,5 +1,3 @@
-'use strict'
-
 import { access } from 'node:fs/promises'
 import {
     describe,

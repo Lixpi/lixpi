@@ -1,5 +1,3 @@
-'use strict'
-
 // Vendor token accounting for token-metered video models (Seedance through
 // BytePlus ModelArk). Converts a clip's duration into the vendor's own token
 // count, so the pre-call spend gate can send an upper bound in the unit the

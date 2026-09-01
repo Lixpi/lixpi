@@ -1,15 +1,13 @@
-'use strict'
-
 import { randomUUID } from 'node:crypto'
 
-import type {
-    AssetRequesterContext,
-    AssetDocumentPointer,
-    CanvasGeometryUpdate,
-    CapabilityJsonValue,
-    CapabilityReasoningModelVariant,
-    MediaGenerationRunMeta,
-    Workspace,
+import {
+    type AssetRequesterContext,
+    type AssetDocumentPointer,
+    type CanvasGeometryUpdate,
+    type CapabilityJsonValue,
+    type CapabilityReasoningModelVariant,
+    type MediaGenerationRunMeta,
+    type Workspace,
 } from '@lixpi/constants'
 import {
     ACTION_TIMELINE_ARTIFACT_TYPE_ID,
@@ -30,9 +28,7 @@ import {
     buildAssetCanvasGeometryUpdate,
     projectGeneratedArtifactNode,
 } from '../services/asset-canvas-projection.ts'
-import {
-    enqueueBlobDeletion,
-} from '../services/asset-maintenance-queue.ts'
+import { enqueueBlobDeletion } from '../services/asset-maintenance-queue.ts'
 import { capabilityArtifactBackendRegistry } from './capability-artifacts.ts'
 import { buildActionTimelineLineageAssignment } from './action-timeline-lineage.ts'
 import { createAssetRequesterForWorkspaceUser } from '../services/workspace-reference-scope.ts'

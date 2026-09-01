@@ -1,9 +1,13 @@
-import type { OperationStatusCanvasNode } from '@lixpi/constants'
+import {
+    type OperationStatusCanvasNode,
+} from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { operationStatusDismissIcon } from '@lixpi/ui-kit/svg'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { isMediaGenerationReferenceResolutionOperation } from '../../shared/generation/reference-resolution-presentation.ts'
-import type { WorkspaceNodeShells } from './workspace-node-shells.ts'
+import {
+    type WorkspaceNodeShells,
+} from './workspace-node-shells.ts'
 
 export type OperationStatusNodeActions = {
     verify: (node: OperationStatusCanvasNode, signal: AbortSignal) => Promise<void>

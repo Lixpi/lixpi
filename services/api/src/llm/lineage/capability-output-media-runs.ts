@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    AiModelId,
-    MediaGenerationRun,
+import {
+    type AiModelId,
+    type MediaGenerationRun,
 } from '@lixpi/constants'
 
 import { getAssetRecord } from '../../models/asset.ts'

@@ -1,8 +1,8 @@
-import type {
-    CanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
+import {
+    type CanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
 } from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { imageResizeCornerIcon } from '@lixpi/ui-kit/svg'
@@ -17,7 +17,9 @@ import {
     Lifetime,
     NodeShell,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type { WorkspaceMediaNode } from '../media/workspace-media-nodes.ts'
+import {
+    type WorkspaceMediaNode,
+} from '../media/workspace-media-nodes.ts'
 
 export type WorkspaceResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 export type WorkspaceNodeInteractionOptions = {

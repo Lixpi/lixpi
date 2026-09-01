@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -7,7 +5,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CapabilityActionExecutionContext } from '@lixpi/capability-system/backend'
+import {
+    type CapabilityActionExecutionContext,
+} from '@lixpi/capability-system/backend'
 
 const mocks = vi.hoisted(() => ({
     asset: { get: vi.fn() },

@@ -2,7 +2,9 @@ import {
     GraphicsPath,
     Matrix,
 } from 'pixi.js'
-import type { VectorShape } from './resources.ts'
+import {
+    type VectorShape,
+} from './resources.ts'
 
 export function projectVectorPath(source: string, projection?: VectorShape['projection']): GraphicsPath {
     const path = new GraphicsPath(source)

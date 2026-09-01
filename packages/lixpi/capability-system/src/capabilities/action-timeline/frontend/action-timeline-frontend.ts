@@ -1,20 +1,24 @@
-'use strict'
-
-import type { CapabilityJsonValue } from '@lixpi/constants'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type CapabilityJsonValue,
+} from '@lixpi/constants'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import { Plugin } from 'prosemirror-state'
-import type { NodeView } from 'prosemirror-view'
+import {
+    type NodeView,
+} from 'prosemirror-view'
 
-import type {
-    CapabilityArtifactCanvasHost,
-    CapabilityArtifactCanvasView,
-    CapabilityArtifactFrontendDefinition,
-    CapabilityArtifactInfoHost,
-    CapabilityArtifactInfoView,
-    CapabilityArtifactLibraryHost,
-    CapabilityArtifactLibraryView,
-    CapabilityPromptReferenceHost,
-    CapabilityPromptReferenceView,
+import {
+    type CapabilityArtifactCanvasHost,
+    type CapabilityArtifactCanvasView,
+    type CapabilityArtifactFrontendDefinition,
+    type CapabilityArtifactInfoHost,
+    type CapabilityArtifactInfoView,
+    type CapabilityArtifactLibraryHost,
+    type CapabilityArtifactLibraryView,
+    type CapabilityPromptReferenceHost,
+    type CapabilityPromptReferenceView,
 } from '../../../frontend/capability-artifact-registry.ts'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {

@@ -1,21 +1,18 @@
+// Shared variables, transitions, and global styles. This stylesheet is imported
+// once from the app entry point, so it pulls them in directly.
+@import "$src/sass/_variables.scss";
+@import "@lixpi/ui-primitives/styles/transitions";
 
-// Shared variables, transitions, and the active theme. This global stylesheet is
-// imported once from the app entry point, so it pulls them in directly.
-@import '$src/sass/_variables.scss';
-@import '@lixpi/ui-primitives/styles/transitions';
-@import '$src/sass/themes/_minimalist-chic.scss';
+@import "components/_reset";
+@import "_helpers";
 
-@import 'components/_reset';
-@import '_helpers';
+@import "_typography";
+@import "_markdown";
 
+@import "components/animations";
 
-@import '_typography';
-@import '_markdown';
-
-@import 'components/animations';
-
-@import '$src/components/proseMirror/ProseMirror.scss';
-@import '$src/components/proseMirror/CodeMirror.scss';
+@import "$src/components/proseMirror/ProseMirror.scss";
+@import "$src/components/proseMirror/CodeMirror.scss";
 
 // @import 'components/_fonts';
 
@@ -23,14 +20,13 @@
 // // font-family: 'Lato', sans-serif;  Main font ??? is it??
 // // font-family: 'Raleway', sans-serif;   Main header font
 
-
 html, body {
     overscroll-behavior: none;
     &, > div, #root, #root > div, main {
         width: 100%;
         height: 100%;
     }
-    background: $mainBackgroundColor;
+    background: #fff;
 }
 
 #root {

@@ -137,7 +137,7 @@ export function layoutTree(
         // Parent center = midpoint between first and last child centers; a
         // single child makes the parent inherit that child's center exactly.
         const first = children[0]
-        const last = children[children.length - 1]
+        const last = children.at(-1)!
         const firstCenter = centerYById.get(first.id) ?? bandTop
         const lastCenter = centerYById.get(last.id) ?? bandTop
         centerYById.set(node.id, (firstCenter + lastCenter) / 2)

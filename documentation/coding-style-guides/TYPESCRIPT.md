@@ -2,22 +2,40 @@
 
 This guide applies to every TypeScript file in the repository — `services/api`, `services/nex`, `services/web-ui`, `packages/lixpi`, `infrastructure/pulumi`, and scripts. The [DOM Templating](#dom-templating-web-ui) section is the only web-ui-specific part.
 
+Use `.ts` files only. TSX, JSX, and React are prohibited in this repository. The TypeScript quality runner rejects `.tsx` and `.jsx` files and React imports.
+
 ## Imports
 
-- Always use `.ts` extension when importing files — never `.js`.
-- A named import list with two or more items must be multiline, with one imported item per line. Inline `type` imports count as items. A named import list with one item may stay on one line. dprint enforces this with `importDeclaration.forceMultiLine: "whenMultiple"` through the Dockerized [TypeScript quality runner](../testing/TypeScript/TYPESCRIPT-QUALITY.md).
+- Always use `.ts` extension when importing files — never `.js`. Oxlint enforces file import extensions through the Dockerized [TypeScript quality runner](../testing/TypeScript/TYPESCRIPT-QUALITY.md).
+- A named import list with two or more items must be multiline, with one imported item per line. A single value import stays inline. A single inline `type` import remains multiline. dprint and the TypeScript quality runner enforce this layout.
+- Always use inline `type` specifiers. Do not use top-level `import type`. This keeps type-only imports ready to accept value imports without rewriting the whole declaration. Oxlint enforces `import/consistent-type-specifier-style: "prefer-inline"`.
+- Within a named import list, place every value import first and every inline `type` import last. Do not interleave the two groups. The TypeScript quality runner enforces and fixes this order.
 - Combine type and value imports in a single import block:
 
 ```typescript
 import {
     createJwtVerifier,
-    type JwtVerificationResult
+    type JwtVerificationResult,
 } from '@lixpi/auth-service'
+```
+
+Type-only imports use the same declaration shape:
+
+```typescript
+import {
+    type JwtVerificationResult,
+} from '@lixpi/auth-service'
+```
+
+A single value import, including an aliased import, stays inline:
+
+```typescript
+import { v4 as uuidv4 } from 'uuid'
 ```
 
 ## Type Definitions
 
-- Use `type` instead of `interface` for all type definitions.
+- Use `type` instead of `interface` for all type definitions. Oxlint enforces this in implementation files. Ambient `.d.ts` declarations are exempt because TypeScript declaration merging can require `interface`.
 
 ```typescript
 // Correct
@@ -181,3 +199,5 @@ The only exception is test files (`*.test.ts`) where minimal DOM setup for mocki
 | Nullish coalescing `??` | `\|\|` for default values |
 | `using` / `await using` | Manual resource cleanup (when supported) |
 | Native `fetch` API | `axios` or any HTTP client library |
+
+Oxlint enforces `structuredClone()` and `Object.hasOwn()` through the Dockerized [TypeScript quality runner](../testing/TypeScript/TYPESCRIPT-QUALITY.md).

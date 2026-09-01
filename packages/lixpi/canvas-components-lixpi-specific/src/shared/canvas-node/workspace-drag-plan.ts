@@ -1,4 +1,6 @@
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import { computeDragPlan } from '@lixpi/canvas-engine/shared'
 import { isBranchLineageMarkerNode } from '../branch-tree-layout/branch-lineage-state.ts'
 

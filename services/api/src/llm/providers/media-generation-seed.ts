@@ -1,5 +1,3 @@
-'use strict'
-
 import { randomInt } from 'node:crypto'
 
 // Seeds are no longer a user-facing control. Providers that accept one always

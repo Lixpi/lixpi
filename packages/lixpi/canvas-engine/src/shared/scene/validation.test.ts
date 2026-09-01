@@ -7,9 +7,9 @@ import {
     CanvasDiagnosticError,
     validateScene,
 } from './validation.ts'
-import type {
-    EngineNode,
-    SceneSnapshot,
+import {
+    type EngineNode,
+    type SceneSnapshot,
 } from './types.ts'
 
 function node(nodeId: string, parentId?: string): EngineNode {

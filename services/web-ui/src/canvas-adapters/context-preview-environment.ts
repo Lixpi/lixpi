@@ -1,4 +1,6 @@
-import type { ContextPreviewEnvironment } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type ContextPreviewEnvironment,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import { settings } from '$src/settings.ts'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import AuthService from '$src/services/auth-service.ts'

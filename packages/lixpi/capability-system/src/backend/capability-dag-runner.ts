@@ -1,5 +1,3 @@
-'use strict'
-
 export type CapabilityDagNode = {
     nodeId: string
     dependsOn: readonly string[]

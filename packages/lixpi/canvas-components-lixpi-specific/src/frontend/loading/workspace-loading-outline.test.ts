@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
     vi,
 } from 'vitest'
-import type { GlassMaterialStyle } from '@lixpi/canvas-components/effects/glass'
+import {
+    type GlassMaterialStyle,
+} from '@lixpi/canvas-components/effects/glass'
 import {
     getWorkspaceLoadingPresentation,
     type WorkspaceLoadingSettings,

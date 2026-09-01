@@ -48,7 +48,7 @@ function getBraceBalancedBlock(source: string, selector: string): string {
 }
 
 describe('ai-chat-thread.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'ai-chat-thread.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'ai-chat-thread.scss'), 'utf-8')
 
     it('defines thread and user message wrapper primitives', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
@@ -62,11 +62,11 @@ describe('ai-chat-thread.scss', () => {
     // they take the same one from the shared partial, so they cannot drift.
     it('takes the dark reference palette from the shared partial, declaring no colors of its own', () => {
         const workspaceScss = readFileSync(
-            resolve(__dirname, '../../../../canvas-adapters/workspace-theme.scss'),
+            resolve(import.meta.dirname, '../../../../canvas-adapters/workspace-theme.scss'),
             'utf-8',
         )
 
-        expectSourceToContain(scss, "@import '$src/sass/_prompt-reference-chip.scss';")
+        expectSourceToContain(scss, '@import "$src/sass/_prompt-reference-chip.scss";')
         expectSourceToContain(workspaceScss, '@include prompt-reference-chip-on-dark-surface;')
         expect(getPropertyValue(scss, '.ai-user-message {', '--prompt-reference-color')).toBeUndefined()
         expect(
@@ -90,13 +90,7 @@ describe('ai-chat-thread.scss', () => {
     it('shares the generation-prompt surface style with the prompt timeline item', () => {
         const traceBlock = getBraceBalancedBlock(scss, '.ai-generation-trace-block')
         const promptSurfaceMixin = getBraceBalancedBlock(scss, '@mixin ai-generation-prompt-surface')
-        const timelineSelector = [
-            '.workspace-media-generation-progress',
-            "    .progress-timeline-item[data-item-id='lineage:media-generation-prompt']",
-            '    > .progress-timeline-content',
-            '    > .progress-timeline-details',
-            '    > .progress-timeline-summary {',
-        ].join('\n')
+        const timelineSelector = '.workspace-media-generation-progress .progress-timeline-item[data-item-id="lineage:media-generation-prompt"] > .progress-timeline-content > .progress-timeline-details > .progress-timeline-summary {'
 
         expectSourceToContain(scss, '@mixin ai-generation-prompt-surface {')
         expectSourceToContain(scss, 'border-left: 2px solid rgba(115, 87, 184, 0.34);')
@@ -107,7 +101,7 @@ describe('ai-chat-thread.scss', () => {
             '@include ai-generation-prompt-surface;',
         )
         expect(
-            traceBlock.includes(".progress-timeline-item[data-item-id='lineage:media-generation-prompt']"),
+            traceBlock.includes('.progress-timeline-item[data-item-id="lineage:media-generation-prompt"]'),
             'timeline prompt selector must not be scoped under the generation trace block',
         ).toBe(false)
         expect(

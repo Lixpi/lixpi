@@ -1,15 +1,13 @@
-'use strict'
-
 // Text-driven branch-marker pill sizing shared by the API (authoritative layout
 // estimates) and the WebUI (rendered marker resize). Both sides MUST derive
 // marker dimensions from these functions and the shared metric settings so
 // server-resolved layout reserves exactly the space the client paints.
 
-import { mediaGenerationLayoutSettings } from '@lixpi/constants'
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
+import {
+    mediaGenerationLayoutSettings,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
 } from '@lixpi/constants'
 
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode

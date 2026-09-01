@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     createServer,
     type IncomingMessage,
@@ -403,12 +401,14 @@ class AiModelRegistryServer {
     }
 
     start(): void {
-        const server = createServer((req, res) => {
-            this.handle(req, res).catch(error => {
+        const server = createServer(async (req, res) => {
+            try {
+                await this.handle(req, res)
+            } catch (error) {
                 console.error(`[ai-model-registry] ${req.method} ${req.url} failed:`, error)
                 if (!res.headersSent) AiModelRegistryServer.sendJson(res, 500, { error: String((error as Error).message ?? error) })
                 else res.end()
-            })
+            }
         })
 
         server.listen(this.port, '0.0.0.0', () => {

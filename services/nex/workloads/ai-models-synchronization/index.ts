@@ -1,5 +1,3 @@
-'use strict'
-
 // nex-entry — the AI-models catalog sync, supervised on NATS NEX.
 //
 // The native nexlet launches this file as a long-running `service`:

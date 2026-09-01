@@ -3,19 +3,23 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasNode,
-    MediaPromptReference,
-    BranchOriginCanvasNode,
+import {
+    type Asset,
+    type CanvasNode,
+    type MediaPromptReference,
+    type BranchOriginCanvasNode,
 } from '@lixpi/constants'
-import type { BranchMarkerConversationPreview } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type BranchMarkerConversationPreview,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import {
     WorkspaceReferenceProjection,
     getBranchMarkerPromptText,
     getBranchMarkerReasoningResponseText,
 } from './workspace-reference-projection.ts'
-import type { BranchMarkerPromptPart } from '../branch-tree-layout/marker-prompt-parts.ts'
+import {
+    type BranchMarkerPromptPart,
+} from '../branch-tree-layout/marker-prompt-parts.ts'
 
 const geometry = { position: { x: 10, y: 20 }, dimensions: { width: 300, height: 200 } }
 const canvasNode = (nodeId: string, type: CanvasNode['type'] = 'image', assetId = 'asset'): CanvasNode => ({ ...geometry, nodeId, type, assetId } as CanvasNode)

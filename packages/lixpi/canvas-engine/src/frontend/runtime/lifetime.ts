@@ -1,6 +1,6 @@
-'use strict'
-
-import type { Dispose } from '../../shared/scene/types.ts'
+import {
+    type Dispose,
+} from '../../shared/scene/types.ts'
 
 // A lifetime owns listeners, leases and pending work, including partial mounts.
 export class Lifetime {

@@ -1,7 +1,7 @@
-import type {
-    AiModelId,
-    ImageCanvasNode,
-    VideoCanvasNode,
+import {
+    type AiModelId,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
 
 export function uniqueAiModelIds(modelIds: Array<string | undefined>): AiModelId[] {

@@ -1,6 +1,8 @@
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { Dispose } from '@lixpi/canvas-engine/shared'
+import {
+    type Dispose,
+} from '@lixpi/canvas-engine/shared'
 
 export type CanvasConversationEditorScope = {
     container: HTMLDivElement

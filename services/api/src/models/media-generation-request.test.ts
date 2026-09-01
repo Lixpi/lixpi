@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     ACCESS_LEVEL,
     type MediaGenerationRequest,

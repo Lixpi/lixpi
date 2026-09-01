@@ -1,10 +1,10 @@
-'use strict'
-
-import type {
-    CanvasEngineSize,
-    Dispose,
+import {
+    type CanvasEngineSize,
+    type Dispose,
 } from '../../shared/index.ts'
-import type { ResourceHandle } from '../rendering/resources.ts'
+import {
+    type ResourceHandle,
+} from '../rendering/resources.ts'
 
 export type MediaRendition = { id: string; width?: number; height?: number; mimeType: string }
 export type MediaDescriptor = {

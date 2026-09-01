@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'process'
 
 import {
@@ -7,15 +5,17 @@ import {
     warn,
     err,
 } from '@lixpi/debug-tools'
-import type { ProviderName } from '@lixpi/constants'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
 
 import {
     BaseProvider,
     type BaseProviderDeps,
 } from './base-provider.ts'
-import type {
-    ProviderState,
-    VideoUsage,
+import {
+    type ProviderState,
+    type VideoUsage,
 } from '../graph/state.ts'
 import {
     BYTEPLUS_ARK_BASE_URL,

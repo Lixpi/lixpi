@@ -1,16 +1,18 @@
-'use strict'
-
-import type {
-    AssetMediaComposition,
-    CharacterFidelityAssessmentRequest,
-    CharacterFidelityAssessmentResponse,
-    CharacterFidelityObjectCoordinate,
-    AiModelInferenceCapabilities,
-    ProviderName,
+import {
+    type AssetMediaComposition,
+    type CharacterFidelityAssessmentRequest,
+    type CharacterFidelityAssessmentResponse,
+    type CharacterFidelityObjectCoordinate,
+    type AiModelInferenceCapabilities,
+    type ProviderName,
 } from '@lixpi/constants'
 
-import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
-import type { CharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CapabilityMediaExecutionContext,
+} from '../../../../backend/capability-media-strategy.ts'
+import {
+    type CharacterSheetRenderPlan,
+} from '../../shared/character-sheet-media-plan.ts'
 
 export type CharacterImageReferenceRole =
     | 'edit-target'

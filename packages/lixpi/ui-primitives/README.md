@@ -37,7 +37,7 @@ The gradient entrypoint also supplies six-digit hex normalization, RGB/HSL conve
 @use '@lixpi/ui-primitives/styles/transitions' as *;
 ```
 
-The stylesheet exports hover, pop-out, overlay visibility and click-feedback helpers. The animation module supplies matching JavaScript easing curves and CSS timing strings.
+The stylesheet exports hover, standard, pop-out, overlay visibility, panel slide, and click-feedback helpers. The animation module supplies matching JavaScript easing curves and CSS timing strings.
 
 Run colocated tests through the repository's Docker runner:
 

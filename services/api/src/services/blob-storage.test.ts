@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 import {
     beforeEach,

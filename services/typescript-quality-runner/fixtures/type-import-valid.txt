@@ -1,0 +1,6 @@
+import {
+    type TypeOnlyValue,
+} from './type-only.ts'
+
+type ImportedType = TypeOnlyValue
+void (null as ImportedType | null)

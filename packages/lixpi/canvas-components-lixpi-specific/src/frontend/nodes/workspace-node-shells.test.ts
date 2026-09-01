@@ -6,11 +6,11 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    ImageCanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
+import {
+    type ImageCanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
 } from '@lixpi/constants'
 import {
     WorkspaceNodeShells,

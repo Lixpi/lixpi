@@ -4,12 +4,12 @@ import {
     it,
 } from 'vitest'
 
-import type {
-    CanvasNode,
-    CanvasState,
-    MediaGenerationRequest,
-    MediaGenerationRequestEvent,
-    OperationStatusCanvasNode,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type MediaGenerationRequest,
+    type MediaGenerationRequestEvent,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 
 import {

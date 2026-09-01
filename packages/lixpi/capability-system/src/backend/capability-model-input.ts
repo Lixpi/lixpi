@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    CapabilityReasoningModelVariant,
+import {
+    type CapabilityJsonValue,
+    type CapabilityReasoningModelVariant,
 } from '@lixpi/constants'
 
 export type CapabilityResolvedModelInput =

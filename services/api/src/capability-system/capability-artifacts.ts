@@ -1,8 +1,4 @@
-'use strict'
-
-import {
-    CapabilityArtifactBackendRegistry,
-} from '@lixpi/capability-system/backend'
+import { CapabilityArtifactBackendRegistry } from '@lixpi/capability-system/backend'
 import {
     actionTimelineArtifactDefinition,
     actionTimelineSettings,

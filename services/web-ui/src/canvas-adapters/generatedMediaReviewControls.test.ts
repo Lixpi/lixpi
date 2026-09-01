@@ -7,7 +7,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 function readSourceFile(relativePath: string): string {
-    return readFileSync(resolve(__dirname, relativePath), 'utf-8')
+    return readFileSync(resolve(import.meta.dirname, relativePath), 'utf-8')
 }
 
 function expectSourceToContain(source: string, snippet: string, label: string): void {

@@ -4,7 +4,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { Asset } from '@lixpi/constants'
+import {
+    type Asset,
+} from '@lixpi/constants'
 import { WorkspaceMediaSources } from './workspace-media-sources.ts'
 
 function fixture() {

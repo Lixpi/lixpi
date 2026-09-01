@@ -1,13 +1,11 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    ExecutionTraceHandle,
+import {
+    type CapabilityJsonValue,
+    type ExecutionTraceHandle,
 } from '@lixpi/constants'
 
 import {
     type CapabilityActionExecutionContext,
-    CapabilityActionRegistry,
+    type CapabilityActionRegistry,
     type CapabilityActionValidationResult,
 } from '../../../backend/capability-action-registry.ts'
 import { CapabilityError } from '../../../shared/capability-errors.ts'

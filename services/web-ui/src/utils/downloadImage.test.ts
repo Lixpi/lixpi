@@ -12,16 +12,8 @@ import { downloadImage } from './downloadImage.ts'
 // SETUP
 // =============================================================================
 
-type MockAnchor = {
-    href: string
-    download: string
-    style: { [key: string]: string }
+type MockAnchor = HTMLAnchorElement & {
     click: ReturnType<typeof vi.fn>
-}
-
-type MockIFrame = {
-    style: { [key: string]: string }
-    src: string
 }
 
 let appendChildSpy: ReturnType<typeof vi.spyOn>
@@ -41,17 +33,13 @@ afterEach(() => {
     vi.useRealTimers()
 })
 
-const createMockAnchor = (): MockAnchor => ({
-    href: '',
-    download: '',
-    style: {},
-    click: vi.fn(),
-})
+const createMockAnchor = (): MockAnchor => {
+    const anchor = document.createElement('a') as MockAnchor
+    anchor.click = vi.fn()
+    return anchor
+}
 
-const createMockIFrame = (): MockIFrame => ({
-    style: {},
-    src: '',
-})
+const createMockIFrame = (): HTMLIFrameElement => document.createElement('iframe')
 
 // =============================================================================
 // DATA / BLOB URLs — fetched as blob + anchor download

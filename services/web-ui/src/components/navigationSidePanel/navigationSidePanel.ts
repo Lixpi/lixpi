@@ -3,7 +3,9 @@
 // Renderer: TypeScript `html` DOM. Store access stays behind small store APIs
 // so the panel remains a framework-agnostic DOM component.
 
-import { type WorkspaceMeta } from '@lixpi/constants'
+import {
+    type WorkspaceMeta,
+} from '@lixpi/constants'
 
 import {
     html,

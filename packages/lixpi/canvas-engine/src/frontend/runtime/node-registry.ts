@@ -1,12 +1,14 @@
-import type {
-    CanvasEngineRect,
-    CanvasViewport,
-    Dispose,
-    EngineNode,
-    NodeGeometryPolicy,
-    SceneSnapshot,
+import {
+    type CanvasEngineRect,
+    type CanvasViewport,
+    type Dispose,
+    type EngineNode,
+    type NodeGeometryPolicy,
+    type SceneSnapshot,
 } from '../../shared/index.ts'
-import type { CanvasDrawingSurface } from '../rendering/drawing-scope.ts'
+import {
+    type CanvasDrawingSurface,
+} from '../rendering/drawing-scope.ts'
 
 export type CanvasView = { viewport: CanvasViewport; screenBounds: CanvasEngineRect }
 

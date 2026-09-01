@@ -1,8 +1,8 @@
-import type {
-    ImageGenerationTrace,
-    MediaGenerationProgressState,
-    OperationProgressItem,
-    VideoGenerationTrace,
+import {
+    type ImageGenerationTrace,
+    type MediaGenerationProgressState,
+    type OperationProgressItem,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 import { aiMediaGenerationProgressNodeType } from './node-specs.ts'
 import {

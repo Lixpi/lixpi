@@ -1,5 +1,3 @@
-'use strict'
-
 export type JwtVerifierConfig = {
     jwksUri: string
     audience: string

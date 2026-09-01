@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -136,11 +134,11 @@ describe('provider-neutral image reference contract', () => {
     })
 
     it('resolves references in BaseProvider and gives every image provider the same resolved state field', () => {
-        const baseProviderSource = readFileSync(resolve(__dirname, 'providers/base-provider.ts'), 'utf-8')
+        const baseProviderSource = readFileSync(resolve(import.meta.dirname, 'providers/base-provider.ts'), 'utf-8')
         const providerSources = [
-            readFileSync(resolve(__dirname, 'providers/openai-provider.ts'), 'utf-8'),
-            readFileSync(resolve(__dirname, 'providers/google-provider.ts'), 'utf-8'),
-            readFileSync(resolve(__dirname, 'providers/stability-provider.ts'), 'utf-8'),
+            readFileSync(resolve(import.meta.dirname, 'providers/openai-provider.ts'), 'utf-8'),
+            readFileSync(resolve(import.meta.dirname, 'providers/google-provider.ts'), 'utf-8'),
+            readFileSync(resolve(import.meta.dirname, 'providers/stability-provider.ts'), 'utf-8'),
         ]
 
         expect(baseProviderSource).toContain('await resolveImageGenerationReferences(imageGenerationReferences, this.nats)')

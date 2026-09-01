@@ -1,5 +1,3 @@
-'use strict'
-
 export * from './glass-material.ts'
 export * from './glass-border-geometry.ts'
 export * from './glass-border.ts'

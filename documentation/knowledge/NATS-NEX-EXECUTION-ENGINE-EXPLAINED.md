@@ -224,7 +224,7 @@ When your workload needs a runtime the `scratch` image doesn’t have (Node.js, 
 FROM ghcr.io/synadia-io/nex:0.4.1 AS nex
 
 # …and drop it into a base that has the runtime your workload needs.
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 COPY --from=nex /nex /usr/local/bin/nex
 
 # Your workload code + a native Nexfile whose uri points at the runtime:

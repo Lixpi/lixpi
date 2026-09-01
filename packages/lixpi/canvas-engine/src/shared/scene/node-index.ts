@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CanvasPositionedNode } from './types.ts'
+import {
+    type CanvasPositionedNode,
+} from './types.ts'
 
 export type WorldPoint = { x: number; y: number }
 

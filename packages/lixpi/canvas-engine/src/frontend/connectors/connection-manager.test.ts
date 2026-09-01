@@ -8,10 +8,10 @@ import {
     vi,
 } from 'vitest'
 import { ConnectionManager } from './connection-manager.ts'
-import type {
-    ConnectionManagerConfig,
-    ConnectionNode,
-    ConnectionEdge,
+import {
+    type ConnectionManagerConfig,
+    type ConnectionNode,
+    type ConnectionEdge,
 } from './connection-types.ts'
 import { flattenSvgPath } from '@lixpi/ui-primitives/svg'
 

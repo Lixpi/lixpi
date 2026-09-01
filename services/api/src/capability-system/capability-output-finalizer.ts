@@ -1,11 +1,11 @@
-'use strict'
-
 import { ACTION_TIMELINE_TOOL_ID } from '@lixpi/capability-system'
-import type { CanvasGeometryUpdate } from '@lixpi/constants'
+import {
+    type CanvasGeometryUpdate,
+} from '@lixpi/constants'
 
-import type {
-    PendingCapabilityOutputFinalization,
-    ProviderState,
+import {
+    type PendingCapabilityOutputFinalization,
+    type ProviderState,
 } from '../llm/graph/state.ts'
 import {
     discardStagedActionTimelineArtifact,

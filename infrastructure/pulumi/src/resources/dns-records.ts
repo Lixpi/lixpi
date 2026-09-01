@@ -1,16 +1,12 @@
-'use strict'
-
 import * as aws from '@pulumi/aws'
-import * as pulumi from '@pulumi/pulumi'
+import type * as pulumi from '@pulumi/pulumi'
 import {
     plInfo,
     plWarn,
     plError,
 } from '../pulumiLogger.ts'
 
-import {
-    formatStageResourceName,
-} from '@lixpi/constants'
+import { formatStageResourceName } from '@lixpi/constants'
 
 // Generic interface for different record types
 export type DnsRecordConfig = {

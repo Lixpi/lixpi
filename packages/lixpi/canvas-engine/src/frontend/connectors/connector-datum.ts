@@ -2,14 +2,14 @@ import {
     computePath,
     applyOffset,
 } from './paths.ts'
-import type {
-    EdgeConfig,
-    NodeConfig,
-    AnchorPosition,
+import {
+    type EdgeConfig,
+    type NodeConfig,
+    type AnchorPosition,
 } from './types.ts'
-import type {
-    ConnectorRenderDatum,
-    ConnectorArrow,
+import {
+    type ConnectorRenderDatum,
+    type ConnectorArrow,
 } from './connector-renderer.ts'
 
 function computeWorldAnchorPoint(

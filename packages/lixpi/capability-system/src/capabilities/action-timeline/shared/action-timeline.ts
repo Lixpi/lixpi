@@ -1,13 +1,13 @@
-'use strict'
-
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import {
+    type CapabilityJsonValue,
+} from '@lixpi/constants'
 import {
     Schema,
     type NodeSpec,
 } from 'prosemirror-model'
 
 import {
-    CapabilityArtifactSharedRegistry,
+    type CapabilityArtifactSharedRegistry,
     type CapabilityArtifactSharedDefinition,
 } from '../../../shared/capability-artifact.ts'
 

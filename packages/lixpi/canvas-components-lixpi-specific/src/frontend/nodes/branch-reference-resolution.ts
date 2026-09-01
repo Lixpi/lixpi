@@ -1,9 +1,11 @@
-import type { OperationStatusCanvasNode } from '@lixpi/constants'
+import {
+    type OperationStatusCanvasNode,
+} from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type {
-    BranchPromptReference,
-    BranchPromptReferenceRenderer,
+import {
+    type BranchPromptReference,
+    type BranchPromptReferenceRenderer,
 } from './branch-marker-prompt.ts'
 
 export type BranchReferenceResolutionRequest = {

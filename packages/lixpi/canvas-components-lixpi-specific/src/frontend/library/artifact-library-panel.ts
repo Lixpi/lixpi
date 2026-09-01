@@ -1,17 +1,21 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetMeta,
-    CapabilityJsonValue,
+import {
+    type Asset,
+    type AssetMeta,
+    type CapabilityJsonValue,
 } from '@lixpi/constants'
 
-import type { CapabilityArtifactFrontendRegistry } from '@lixpi/capability-system/frontend'
-import type { CapabilityArtifactSharedRegistry } from '@lixpi/capability-system/shared'
+import {
+    type CapabilityArtifactFrontendRegistry,
+} from '@lixpi/capability-system/frontend'
+import {
+    type CapabilityArtifactSharedRegistry,
+} from '@lixpi/capability-system/shared'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { runLibraryAction } from './library-action.ts'
-import type { WorkspaceLibraryPorts } from './library-ports.ts'
+import {
+    type WorkspaceLibraryPorts,
+} from './library-ports.ts'
 
 type ArtifactLibraryEntry = {
     meta: AssetMeta

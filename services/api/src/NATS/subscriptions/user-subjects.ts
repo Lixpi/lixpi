@@ -1,6 +1,6 @@
-'use strict'
-
-import type { NatsSubjectSubscription } from '@lixpi/nats-service'
+import {
+    type NatsSubjectSubscription,
+} from '@lixpi/nats-service'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 const { USER_SUBJECTS } = NATS_SUBJECTS
 

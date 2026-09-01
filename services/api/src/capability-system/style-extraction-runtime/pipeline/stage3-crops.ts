@@ -1,5 +1,3 @@
-'use strict'
-
 import sharp from 'sharp'
 import { createHash } from 'node:crypto'
 import {
@@ -12,15 +10,15 @@ import {
     parseDataUrl,
     parseNatsObjectRef,
 } from '../../../llm/utils/attachments.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StyleSampleCropRegion,
-    StyleSampleRef,
-    ReferenceImage,
-    SceneRegion,
-    SceneSubject,
-    StageLogger,
+import {
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StyleSampleCropRegion,
+    type StyleSampleRef,
+    type ReferenceImage,
+    type SceneRegion,
+    type SceneSubject,
+    type StageLogger,
 } from './types.ts'
 import BlobModel from '../../../models/blob.ts'
 

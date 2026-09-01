@@ -5,10 +5,10 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasControllerOptions,
-    ComponentContext,
-    NodeView,
+import {
+    type CanvasControllerOptions,
+    type ComponentContext,
+    type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     MediaBoard,

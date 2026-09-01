@@ -5,9 +5,9 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    CapabilityManifest,
-    CapabilityResourceRef,
+import {
+    type CapabilityManifest,
+    type CapabilityResourceRef,
 } from '@lixpi/constants'
 
 import { createInstructionSkillPackage } from './instruction-skill.ts'

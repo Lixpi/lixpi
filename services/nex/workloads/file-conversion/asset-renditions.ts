@@ -1,14 +1,12 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import sharp from 'sharp'
-import type {
-    AssetRenditionName,
-    FailedRenditionResult,
-    GenerateRenditionsRequest,
-    GenerateRenditionsResponse,
-    GeneratedRenditionResult,
+import {
+    type AssetRenditionName,
+    type FailedRenditionResult,
+    type GenerateRenditionsRequest,
+    type GenerateRenditionsResponse,
+    type GeneratedRenditionResult,
 } from '@lixpi/constants'
 import {
     createImageRendition,

@@ -1,18 +1,18 @@
-'use strict'
-
 import NATS_Service from '@lixpi/nats-service'
-import type { StyleDraft } from './types.ts'
+import {
+    type StyleDraft,
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StageLogger,
+} from './types.ts'
 
 import {
     callStructuredVlm,
     type VlmJsonSchema,
 } from '../../../llm/structured-vlm/structured-vlm-client.ts'
-import type { ChatMessage } from '../../../llm/graph/state.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StageLogger,
-} from './types.ts'
+import {
+    type ChatMessage,
+} from '../../../llm/graph/state.ts'
 
 const SYSTEM_PROMPT = `You are a senior visual-style SYNTHESIZER. You receive a structured scene assessment from a media-neutral router plus a set of per-axis extractions from specialist axis extractors. Your sole job is to synthesize a single coherent Style definition that captures the reference's actually-distinctive traits — weighted proportionally to each axis's dominance.
 

@@ -1,4 +1,6 @@
-import type { Dispose } from '../../shared/index.ts'
+import {
+    type Dispose,
+} from '../../shared/index.ts'
 
 // Structural canvas layers must not scroll independently of the viewport.
 // Descendant editors and panel bodies retain their own scroll positions.

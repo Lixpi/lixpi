@@ -1,16 +1,14 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
     vi,
-} from 'vitest'
-import {
     afterEach,
     beforeEach,
 } from 'vitest'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
 import {
     AI_CHAT_THREAD_PLUGIN_KEY,

@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
@@ -21,11 +19,11 @@ function expectSourceNotToContain(source: string, snippet: string): void {
     expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
 }
 
-const panelSource = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts'), 'utf-8')
-const panelStyles = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/workspace-library-panels.scss'), 'utf-8')
-const canvasSource = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
-const workspaceCanvasViewSource = readFileSync(resolve(__dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'), 'utf-8')
-    + readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-surface.ts'), 'utf-8')
+const panelSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts'), 'utf-8')
+const panelStyles = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/workspace-library-panels.scss'), 'utf-8')
+const canvasSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
+const workspaceCanvasViewSource = readFileSync(resolve(import.meta.dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'), 'utf-8')
+    + readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-surface.ts'), 'utf-8')
 
 describe('Media Library panel contract', () => {
     it('is an embedded renderer the right side panel hosts, not a standalone drawer', () => {

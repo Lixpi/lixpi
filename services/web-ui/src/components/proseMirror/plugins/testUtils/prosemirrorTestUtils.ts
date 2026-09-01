@@ -4,7 +4,9 @@ import {
     NodeSelection,
     TextSelection,
 } from 'prosemirror-state'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 
 // Create node builders using prosemirror-test-builder

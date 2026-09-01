@@ -6,11 +6,13 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    AssetMeta,
+import {
+    type Asset,
+    type AssetMeta,
 } from '@lixpi/constants'
-import type { WorkspaceAssetEditorRequest } from '../review/workspace-asset-editors.ts'
+import {
+    type WorkspaceAssetEditorRequest,
+} from '../review/workspace-asset-editors.ts'
 import {
     createMediaLibraryPanel,
     formatMediaFileSize,

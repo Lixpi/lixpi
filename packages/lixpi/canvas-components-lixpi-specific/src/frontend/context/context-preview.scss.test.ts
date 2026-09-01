@@ -21,7 +21,7 @@ function expectRuleToContain(rule: string, snippet: string, selector: string): v
 }
 
 describe('context-preview.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'context-preview.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'context-preview.scss'), 'utf-8')
 
     it('keeps capability description cards wide with media-preview typography', () => {
         const popoverRule = extractFlatRule(scss, '.capability-description-popover')

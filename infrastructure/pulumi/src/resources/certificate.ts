@@ -1,11 +1,7 @@
-'use strict'
-
 import * as aws from '@pulumi/aws'
-import * as pulumi from '@pulumi/pulumi'
+import type * as pulumi from '@pulumi/pulumi'
 
-import {
-    formatStageResourceName,
-} from '@lixpi/constants'
+import { formatStageResourceName } from '@lixpi/constants'
 
 export type CertificateArgs = {
     orgName: string

@@ -7,10 +7,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasNode } from '@lixpi/constants'
-import type {
-    BubbleMenuOptions,
-    BubbleMenuPositionRequest,
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
+import {
+    type BubbleMenuOptions,
+    type BubbleMenuPositionRequest,
 } from '@lixpi/ui-kit/components/bubble-menu'
 import {
     WorkspaceCanvasMenu,

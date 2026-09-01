@@ -7,9 +7,9 @@ import {
     beforeEach,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     WorkspaceConnectionManager,

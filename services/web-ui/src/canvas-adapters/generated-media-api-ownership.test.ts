@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
@@ -8,7 +6,7 @@ import {
     it,
 } from 'vitest'
 
-const source = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
+const source = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
 
 function getFunctionBody(name: string, endMarker: string): string {
     const start = source.indexOf(`private ${name} = (`)
@@ -19,7 +17,7 @@ function getFunctionBody(name: string, endMarker: string): string {
 }
 
 function getExcerpt(startMarker: string, endMarker: string): string {
-    const source = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-generation-handlers.ts'), 'utf-8')
+    const source = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-generation-handlers.ts'), 'utf-8')
     const start = source.indexOf(startMarker)
     const end = source.indexOf(endMarker, start)
     expect(start, `${startMarker} should exist`).toBeGreaterThan(-1)
@@ -37,7 +35,7 @@ function expectSourceNotToContain(value: string, snippet: string, label: string)
 
 describe('generated-media API ownership', () => {
     it('does not promote a source-less preserved regeneration marker through browser-side pending-marker geometry', () => {
-        const settlementSource = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-settlement.ts'), 'utf-8')
+        const settlementSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-settlement.ts'), 'utf-8')
         const start = settlementSource.indexOf('\n    applyMediaBranchLineagePlan(')
         const end = settlementSource.indexOf('\n    resolvePendingBranchMarkersForLineagePlan(', start)
         expect(start).toBeGreaterThan(-1)
@@ -55,7 +53,7 @@ describe('generated-media API ownership', () => {
     })
 
     it('uses the API-declared regeneration target as the only pending UI marker', () => {
-        const handler = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-branch-marker-handoff.ts'), 'utf-8')
+        const handler = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-branch-marker-handoff.ts'), 'utf-8')
 
         expectSourceToContain(handler, 'const regenerationTarget = lineagePlan?.regenerationTarget', 'pending-marker resolver')
         expectSourceToContain(handler, 'node.nodeId === regenerationTarget.lineageParentNodeId', 'pending-marker resolver')
@@ -75,7 +73,7 @@ describe('generated-media API ownership', () => {
     })
 
     it('clears the preserved marker phase by its API lineage parent when the replay settles', () => {
-        const placements = readFileSync(resolve(__dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-placements.ts'), 'utf-8')
+        const placements = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-placements.ts'), 'utf-8')
         expectSourceToContain(placements, 'assignment?.lineageParentNodeId,', 'branch-marker phase lookup')
         expectSourceToContain(placements, 'for (const nodeId of this.getBranchMarkerUiPhaseNodeIdsForRun(threadId, generationRun))', 'phase clearing')
         expectSourceToContain(placements, 'this.phases.delete(nodeId)', 'phase clearing')

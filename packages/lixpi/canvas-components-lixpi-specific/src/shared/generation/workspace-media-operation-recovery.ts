@@ -1,8 +1,8 @@
-import type {
-    CanvasState,
-    MediaGenerationRequest,
-    MediaGenerationRequestEvent,
-    OperationStatusCanvasNode,
+import {
+    type CanvasState,
+    type MediaGenerationRequest,
+    type MediaGenerationRequestEvent,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import {
     applyMediaGenerationRequestEventToOperationNodes,

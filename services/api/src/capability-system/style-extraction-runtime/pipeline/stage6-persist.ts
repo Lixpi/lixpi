@@ -1,5 +1,3 @@
-'use strict'
-
 import { v4 as uuid } from 'uuid'
 import { info } from '@lixpi/debug-tools'
 
@@ -13,11 +11,11 @@ import {
     saveCapability,
     storeCapabilityResource,
 } from '../../../models/capability.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StyleSampleRef,
-    StageLogger,
+import {
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StyleSampleRef,
+    type StageLogger,
 } from './types.ts'
 
 const textEncoder = new TextEncoder()

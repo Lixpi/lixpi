@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -7,7 +5,9 @@ import {
     vi,
 } from 'vitest'
 
-import type { CapabilityRunEvent } from '@lixpi/constants'
+import {
+    type CapabilityRunEvent,
+} from '@lixpi/constants'
 
 import {
     CapabilityRunEventLog,

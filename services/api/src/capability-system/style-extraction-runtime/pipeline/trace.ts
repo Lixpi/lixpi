@@ -1,10 +1,8 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 import { info } from '@lixpi/debug-tools'
-import type {
-    StageLogger,
-    StageTraceEvent,
+import {
+    type StageLogger,
+    type StageTraceEvent,
 } from './types.ts'
 
 export const hashPrompt = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16)

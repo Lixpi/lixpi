@@ -1,4 +1,3 @@
-'use strict'
 export { BubbleMenu } from './BubbleMenu.ts'
 export type {
     BubbleMenuItem,

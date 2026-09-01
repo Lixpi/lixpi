@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -32,9 +30,9 @@ import {
 } from './base-provider.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
-import type {
-    AiModelMetaInfo,
-    ProviderState,
+import {
+    type AiModelMetaInfo,
+    type ProviderState,
 } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'

@@ -549,9 +549,11 @@ describe('SidePanel', () => {
             await flushSlideFrames()
 
             let resolved = false
-            void closed.then(() => {
+            const captureResolution = async (): Promise<void> => {
+                await closed
                 resolved = true
-            })
+            }
+            void captureResolution()
             expect(panel.style.transform).toBe('translate3d(100%, 0, 0)')
             expect(sidePanel.backdropElement.style.transform).toBe('translate3d(100%, 0, 0)')
             expect(sidePanel.toggleElement?.style.getPropertyValue('--side-panel-toggle-closed-travel')).toBe('80px')
@@ -614,9 +616,11 @@ describe('SidePanel', () => {
                 await flushSlideFrames()
 
                 let resolved = false
-                void closed.then(() => {
+                const captureResolution = async (): Promise<void> => {
+                    await closed
                     resolved = true
-                })
+                }
+                void captureResolution()
                 await Promise.resolve()
                 const resolvedBeforeFallback = resolved
 

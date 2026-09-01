@@ -1,5 +1,3 @@
-'use strict'
-
 import { err } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 import {

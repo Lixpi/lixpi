@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     it,
@@ -11,10 +9,10 @@ import {
     imageUsageConfirm,
     videoUsageConfirm,
 } from './usage-event-mapper.ts'
-import type {
-    UsageReport,
-    ImageUsageReport,
-    VideoUsageReport,
+import {
+    type UsageReport,
+    type ImageUsageReport,
+    type VideoUsageReport,
 } from './usage-reporter.ts'
 
 const eventMeta = { organizationId: 'org_1', userId: 'usr_1', workspaceId: 'ws_1' }

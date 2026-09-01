@@ -1,6 +1,6 @@
-'use strict'
-
-import type { MediaRunLineageAssignment } from '@lixpi/constants'
+import {
+    type MediaRunLineageAssignment,
+} from '@lixpi/constants'
 
 type PendingMediaNodeIdAssignment = Pick<
     MediaRunLineageAssignment,

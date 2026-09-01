@@ -76,7 +76,7 @@ export const printPulumiLine = (raw: string) => {
         const key = line // could hash if lines are huge
         if (seenLines.has(key)) continue
         seenLines.add(key)
-        process.stdout.write(colorize(line) + '\n')
+        process.stdout.write(`${colorize(line)}\n`)
     }
 }
 

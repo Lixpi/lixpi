@@ -14,7 +14,9 @@ import {
     type ComponentContext,
     type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type { ConnectionSettings } from '@lixpi/canvas-engine/frontend/connectors'
+import {
+    type ConnectionSettings,
+} from '@lixpi/canvas-engine/frontend/connectors'
 import '@lixpi/canvas-engine/styles/interaction'
 
 type BoxData = { label: string; color: string }

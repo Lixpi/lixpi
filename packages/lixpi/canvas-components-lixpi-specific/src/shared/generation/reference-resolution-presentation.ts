@@ -1,9 +1,9 @@
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    OperationStatusCanvasNode,
+import {
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 
 export type ReferenceResolutionBranchMarker =

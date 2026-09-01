@@ -4,8 +4,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { Asset } from '@lixpi/constants'
-import type { AiPromptComposerSubmitData } from '../composer/canvas-conversation-content.ts'
+import {
+    type Asset,
+} from '@lixpi/constants'
+import {
+    type AiPromptComposerSubmitData,
+} from '../composer/canvas-conversation-content.ts'
 import {
     CanvasGenerationSubmission,
     type CanvasGenerationSubmissionPorts,

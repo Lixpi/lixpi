@@ -6,11 +6,13 @@ import {
     resolveCollisions,
     type CollisionOptions,
 } from '../collision/index.ts'
-import type { CanvasEngineRect } from '../geometry/types.ts'
-import type {
-    EngineNode,
-    NodeGeometryChange,
-    NodeGeometryPolicy,
+import {
+    type CanvasEngineRect,
+} from '../geometry/types.ts'
+import {
+    type EngineNode,
+    type NodeGeometryChange,
+    type NodeGeometryPolicy,
 } from './types.ts'
 
 export type GeometryCommitOptions = {

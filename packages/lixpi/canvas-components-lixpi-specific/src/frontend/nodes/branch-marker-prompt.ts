@@ -1,5 +1,7 @@
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { BranchMarkerPromptPart } from '../../shared/branch-tree-layout/marker-prompt-parts.ts'
+import {
+    type BranchMarkerPromptPart,
+} from '../../shared/branch-tree-layout/marker-prompt-parts.ts'
 
 export type BranchPromptReference = Exclude<BranchMarkerPromptPart, { type: 'text' }>['reference']
 export type BranchPromptReferenceView = { dom: HTMLElement; destroy: () => void }

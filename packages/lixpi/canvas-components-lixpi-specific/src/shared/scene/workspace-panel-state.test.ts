@@ -3,10 +3,10 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    CanvasAiChatPanelState,
-    CanvasNode,
-    CanvasState,
+import {
+    type CanvasAiChatPanelState,
+    type CanvasNode,
+    type CanvasState,
 } from '@lixpi/constants'
 import {
     createDefaultAiChatPanelState,

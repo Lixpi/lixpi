@@ -5,6 +5,7 @@
 node_modules
 package-lock.json
 pnpm-lock.yaml
+!services/typescript-quality-runner/pnpm-lock.yaml
 .pnpm-store
 __pycache__
 

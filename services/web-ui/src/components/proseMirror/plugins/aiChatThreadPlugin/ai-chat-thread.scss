@@ -1,10 +1,11 @@
 // AI Chat Thread Styles
-@import '$src/components/proseMirror/ProseMirrorMixings.scss';
-@import '$src/sass/components/animations';
-@import '$src/sass/_prompt-reference-chip.scss';
-@import '@lixpi/canvas-components-lixpi-specific/styles/context-preview';
-@import '$src/components/executionTrace/execution-trace.scss';
-@import '$src/components/capabilityRun/capability-run.scss';
+@import "$src/components/proseMirror/ProseMirrorMixings.scss";
+@import "$src/sass/components/animations";
+@import "$src/sass/_prompt-reference-chip.scss";
+@import "@lixpi/canvas-components-lixpi-specific/styles/context-preview";
+@import "$src/components/executionTrace/execution-trace.scss";
+@import "$src/components/capabilityRun/capability-run.scss";
+@import "@lixpi/ui-primitives/styles/transitions";
 
 $aiChatThreadMinHeight: 50px;
 $aiChatThreadMediaMaxWidth: 500px;
@@ -174,15 +175,21 @@ $userMessageTextColor: #fff;
         line-height: 1.5;
         word-wrap: break-word;
 
-        @include speechBubbleTail((
-            position: 'right',
-            bubbleColor: $userMessageBubbleSolidColor
-        ));
+        @include speechBubbleTail(
+            (
+                position: "right",
+                bubbleColor: $userMessageBubbleSolidColor
+            )
+        );
     }
 
     .ai-user-message-content {
-        > *:first-child { margin-top: 0; }
-        > *:last-child { margin-bottom: 0; }
+        > *:first-child {
+            margin-top: 0;
+        }
+        > *:last-child {
+            margin-bottom: 0;
+        }
     }
 
     // ===== SUBMIT BUTTON =====
@@ -199,7 +206,6 @@ $userMessageTextColor: #fff;
         transition: hoverTransition(all, 400ms);
         cursor: pointer;
         box-sizing: border-box;
-
 
         // Button state containers
         .button-default,
@@ -222,13 +228,11 @@ $userMessageTextColor: #fff;
         // Hover state overlay
         .button-hover {
             position: absolute;
+            z-index: 2;
             inset: 0; // shorthand for top/left/right/bottom 0
             opacity: 0;
             pointer-events: none;
         }
-
-        // Z-index layering
-        .button-hover { z-index: 2; }
 
         // Icon styles
         .send-icon {
@@ -245,7 +249,6 @@ $userMessageTextColor: #fff;
                 transition: hoverTransition(fill, 150ms);
             }
         }
-
     }
 
     // ===== IMAGE MODEL CONTROLS =====
@@ -264,8 +267,14 @@ $userMessageTextColor: #fff;
         // Keep transition for opacity only to avoid layout shift
         transition: hoverTransition(opacity, 250ms);
 
-        .button-default { opacity: 0; pointer-events: none; }
-        .button-hover { opacity: 1; pointer-events: auto; }
+        .button-default {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .button-hover {
+            opacity: 1;
+            pointer-events: auto;
+        }
     }
 
     // Thread focus state
@@ -273,7 +282,6 @@ $userMessageTextColor: #fff;
         opacity: 1;
         transform: translateY(-2px);
     }
-
 }
 
 $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
@@ -301,7 +309,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         text-overflow: ellipsis;
         white-space: nowrap;
         box-sizing: border-box;
-
     }
 
     // ===== AI RESPONSE MESSAGE =====
@@ -359,10 +366,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 font-size: 0.78rem;
                 font-weight: 600;
                 line-height: 1.2;
-
-                &[hidden] {
-                    display: none;
-                }
             }
 
             .ai-lineage-event-icon {
@@ -380,14 +383,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
                 background: var(--workspace-branch-origin-background-color, #53616c);
                 color: var(--workspace-branch-origin-icon-color, #fff);
                 box-shadow: none;
-
-                svg {
-                    display: block;
-                    width: var(--ai-lineage-event-glyph-size);
-                    height: var(--ai-lineage-event-glyph-size);
-                    fill: currentColor;
-                    transform-origin: center;
-                }
             }
 
             // Match the canvas branch marker compensation: the branch SVG paths
@@ -417,46 +412,58 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             // generation trace + its media read as one grouped block.
             .ai-reasoning-section {
                 position: relative;
-
-                & + .ai-reasoning-section {
-                    margin-top: 0.75rem;
-                    padding-top: 0.75rem;
-                    border-top: 1px solid rgba(42, 45, 47, 0.08);
-                }
-
-                .ai-reasoning-section-lineage-markers {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 0.35rem;
-                    margin: 0 0 0.55rem;
-                }
-
-                .ai-reasoning-section-lineage-markers[hidden] {
-                    display: none;
-                }
-
-                .ai-lineage-event {
-                    margin: 0;
-                }
-
-                .ai-reasoning-section-spinner {
-                    display: none;
-                }
-
-                &.is-empty .ai-reasoning-section-spinner.is-active {
-                    display: block;
-                    width: 14px;
-                    height: 14px;
-                    margin: 0.25rem 0;
-                    border: 2px solid rgba(42, 45, 47, 0.15);
-                    border-top-color: rgba(42, 45, 47, 0.55);
-                    border-radius: 50%;
-                    animation: spin 0.8s linear infinite;
-                }
             }
         }
     }
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-lineage-event[hidden] {
+    display: none;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-lineage-event-icon svg {
+    display: block;
+    width: var(--ai-lineage-event-glyph-size);
+    height: var(--ai-lineage-event-glyph-size);
+    fill: currentColor;
+    transform-origin: center;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section + .ai-reasoning-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(42, 45, 47, 0.08);
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section-lineage-markers {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    margin: 0 0 0.55rem;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section-lineage-markers[hidden] {
+    display: none;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section .ai-lineage-event {
+    margin: 0;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section-spinner {
+    display: none;
+}
+
+.ai-response-message-wrapper .ai-response-message .ai-response-message-content .ai-reasoning-section.is-empty .ai-reasoning-section-spinner.is-active {
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0.25rem 0;
+    border: 2px solid rgba(42, 45, 47, 0.15);
+    border-top-color: rgba(42, 45, 47, 0.55);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
 }
 
 // ========== AI GENERATED IMAGE ==========
@@ -517,7 +524,9 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         max-height: 512px;
         object-fit: contain;
         display: none;
-        transition: filter 0.3s ease, opacity 0.3s ease;
+        transition:
+            standardTransition(filter, 0.3s),
+            standardTransition(opacity, 0.3s);
 
         &.is-visible {
             display: block;
@@ -549,7 +558,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
             font-size: 0.875rem;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: hoverTransition(all, 0.2s);
 
             svg {
                 flex-shrink: 0;
@@ -640,8 +649,12 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         font-style: italic;
         line-height: 1.5;
 
-        > *:first-child { margin-top: 0; }
-        > *:last-child { margin-bottom: 0; }
+        > *:first-child {
+            margin-top: 0;
+        }
+        > *:last-child {
+            margin-bottom: 0;
+        }
 
         p, h1, h2, h3, h4, h5, h6, span, div {
             font-size: 0.78rem !important;
@@ -695,13 +708,13 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
 
         // Fading gradient separator between sections — mirrors the branch lineage
         // node marker separator, tuned dark for the light info-panel background.
-        & + section {
+        + section {
             position: relative;
             margin-top: 0.85rem;
             padding-top: 0.85rem;
 
             &::before {
-                content: '';
+                content: "";
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -715,7 +728,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
         // The reference section follows the prompt box, which is already a visually
         // bounded block — a divider between them reads as clutter, so drop it and
         // tighten the gap since the box edge already provides separation.
-        & + .ai-image-generation-reference-section {
+        + .ai-image-generation-reference-section {
             margin-top: 0.95rem;
             padding-top: 0;
 
@@ -982,10 +995,6 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     }
 }
 
-.workspace-media-generation-progress
-    .progress-timeline-item[data-item-id='lineage:media-generation-prompt']
-    > .progress-timeline-content
-    > .progress-timeline-details
-    > .progress-timeline-summary {
+.workspace-media-generation-progress .progress-timeline-item[data-item-id="lineage:media-generation-prompt"] > .progress-timeline-content > .progress-timeline-details > .progress-timeline-summary {
     @include ai-generation-prompt-surface;
 }

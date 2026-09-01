@@ -1,6 +1,6 @@
-'use strict'
-
-import type { ProviderName } from '@lixpi/constants'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
 import {
     CapabilityError,
     type CapabilityActionExecutionContext,
@@ -10,7 +10,9 @@ import AiModel from '../../models/ai-model.ts'
 import AssetModel from '../../models/asset.ts'
 import BlobModel from '../../models/blob.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
-import type { StyleExtractionInput } from './pipeline/types.ts'
+import {
+    type StyleExtractionInput,
+} from './pipeline/types.ts'
 
 export async function resolveStyleExtractionInput(
     input: Readonly<Record<string, unknown>>,

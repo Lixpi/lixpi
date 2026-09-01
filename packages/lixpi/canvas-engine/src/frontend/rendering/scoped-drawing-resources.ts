@@ -1,25 +1,25 @@
-'use strict'
-
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
-    Dispose,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
+    type Dispose,
 } from '../../shared/index.ts'
-import { Lifetime } from '../runtime/lifetime.ts'
-import type {
-    CanvasLayer,
-    CaptureResource,
-    CaptureSpec,
-    DrawingResources,
-    DrawingSpace,
-    GroupTransform,
-    MaterialBinding,
-    MaterialProgram,
-    MeshData,
-    PaintHandle,
-    ResourceHandle,
-    TextureInput,
-    VectorShape,
+import {
+    type Lifetime,
+} from '../runtime/lifetime.ts'
+import {
+    type CanvasLayer,
+    type CaptureResource,
+    type CaptureSpec,
+    type DrawingResources,
+    type DrawingSpace,
+    type GroupTransform,
+    type MaterialBinding,
+    type MaterialProgram,
+    type MeshData,
+    type PaintHandle,
+    type ResourceHandle,
+    type TextureInput,
+    type VectorShape,
 } from './resources.ts'
 
 // A component can sample borrowed resources, but can only mutate or release

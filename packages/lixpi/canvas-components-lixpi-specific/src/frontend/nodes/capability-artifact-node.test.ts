@@ -6,15 +6,17 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    CapabilityArtifactCanvasNode,
+import {
+    type Asset,
+    type CapabilityArtifactCanvasNode,
 } from '@lixpi/constants'
-import type {
-    CapabilityArtifactCanvasHost,
-    CapabilityArtifactFrontendDefinition,
+import {
+    type CapabilityArtifactCanvasHost,
+    type CapabilityArtifactFrontendDefinition,
 } from '@lixpi/capability-system/frontend'
-import type { CapabilityArtifactSharedDefinition } from '@lixpi/capability-system/shared'
+import {
+    type CapabilityArtifactSharedDefinition,
+} from '@lixpi/capability-system/shared'
 import { WorkspaceNodeShells } from './workspace-node-shells.ts'
 import {
     WorkspaceCapabilityNode,

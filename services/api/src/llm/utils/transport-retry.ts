@@ -1,5 +1,3 @@
-'use strict'
-
 import { warn } from '@lixpi/debug-tools'
 
 // Bounded reconnect for provider transport faults — a request that never

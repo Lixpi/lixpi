@@ -1,11 +1,13 @@
-'use strict'
-
-import type {
-    CapabilityArtifactCanvasNode,
-    CapabilityJsonValue,
+import {
+    type CapabilityArtifactCanvasNode,
+    type CapabilityJsonValue,
 } from '@lixpi/constants'
-import type { Schema } from 'prosemirror-model'
-import type { Plugin } from 'prosemirror-state'
+import {
+    type Schema,
+} from 'prosemirror-model'
+import {
+    type Plugin,
+} from 'prosemirror-state'
 
 export type CapabilityPromptControlHost = {
     container: HTMLElement

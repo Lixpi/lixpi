@@ -250,6 +250,14 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         ensureVideoControls()
     }
 
+    const updateDisplaySafely = async (): Promise<void> => {
+        try {
+            await updateDisplay()
+        } catch {
+            // The media element's error handler owns the unavailable state.
+        }
+    }
+
     videoElement.onerror = () => {
         titleElement.hidden = true
         clearErrorPlaceholder()
@@ -261,7 +269,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
         `)
     }
 
-    updateDisplay().catch(() => {})
+    void updateDisplaySafely()
     unsubscribeAiModelsStore = aiModelsStore.subscribe(() => updateModelChrome())
     syncContainerGeometry()
 
@@ -274,7 +282,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
 
             node = updatedNode
             syncContainerGeometry()
-            updateDisplay().catch(() => {})
+            void updateDisplaySafely()
             updateModelChrome()
             return true
         },

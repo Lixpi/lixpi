@@ -1,5 +1,3 @@
-'use strict'
-
 // Compatibility export for older imports. Prompt text is intentionally never
 // interpreted as media-mode state.
 export const hasExplicitVideoOutputRequest = (_prompt: string): boolean => false

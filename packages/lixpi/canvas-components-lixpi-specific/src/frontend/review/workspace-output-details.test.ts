@@ -7,15 +7,19 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasState,
-    ImageCanvasNode,
-    CapabilityArtifactCanvasNode,
-    MediaGenerationProgressState,
+import {
+    type Asset,
+    type CanvasState,
+    type ImageCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type MediaGenerationProgressState,
 } from '@lixpi/constants'
-import type { BranchMarkerNode } from '../../shared/index.ts'
-import type { MediaGenerationProgressInstance } from '../progress/index.ts'
+import {
+    type BranchMarkerNode,
+} from '../../shared/index.ts'
+import {
+    type MediaGenerationProgressInstance,
+} from '../progress/index.ts'
 import {
     WorkspaceOutputDetails,
     type WorkspaceOutputDetailsPorts,

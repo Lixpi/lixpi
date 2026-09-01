@@ -1,13 +1,17 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { EditorView } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import { Fragment } from 'prosemirror-model'
-import type {
-    CanvasState,
-    CanvasNode,
-    CapabilityJsonValue,
-    ImageGenerationSize,
-    MediaGenerationConfigSelectionGroup,
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    Fragment,
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type CanvasState,
+    type CanvasNode,
+    type CapabilityJsonValue,
+    type ImageGenerationSize,
+    type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'

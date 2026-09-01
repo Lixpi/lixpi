@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -111,7 +109,7 @@ function mount(): { paneEl: HTMLDivElement; instance: NavigationSidePanelInstanc
 // the first — the first is already torn down by the time mount() returns.
 function liveDropdownFor(workspaceId: string) {
     const matches = mocks.dropdownInstances.filter((entry) => entry.config.id === `navigation-side-panel-workspace-menu-${workspaceId}`)
-    const instance = matches[matches.length - 1]
+    const instance = matches.at(-1)
     if (!instance) throw new Error(`no dropdown captured for ${workspaceId}`)
     return instance
 }

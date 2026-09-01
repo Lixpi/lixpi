@@ -1,5 +1,9 @@
-import type { CanvasEngineRect } from '../geometry/index.ts'
-import type { SceneSnapshot } from './types.ts'
+import {
+    type CanvasEngineRect,
+} from '../geometry/index.ts'
+import {
+    type SceneSnapshot,
+} from './types.ts'
 
 export type CanvasDiagnostic = {
     code: 'invalid-geometry' | 'duplicate-node' | 'invalid-parent' | 'cyclic-parent' | 'invalid-port' | 'invalid-edge' | 'unknown-node-type'

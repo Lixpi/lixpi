@@ -1,9 +1,9 @@
 @use "sass:color";
 @use "sass:map";
 @use "sass:math";
-@use '../../styles/tokens' as *;
-@use '@lixpi/ui-primitives/styles/transitions' as *;
-@use '../infoBubble/infoBubble-mixins' as *;
+@use "../../styles/tokens" as *;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+@use "../infoBubble/infoBubble-mixins" as *;
 
 // =============================
 // Dropdown Component — M3-Inspired
@@ -93,32 +93,30 @@
             span {
                 z-index: 1;
                 position: relative;
+            }
 
-                &.selected-option-icon {
-                    :global(svg) {
-                        margin: map.get($s, iconMargin);
-                        width: map.get($s, iconSize);
-                        height: map.get($s, iconSize);
-                    }
-                }
+            span.selected-option-icon :global(svg) {
+                margin: map.get($s, iconMargin);
+                width: map.get($s, iconSize);
+                height: map.get($s, iconSize);
+            }
 
-                &.title {
-                    font-weight: map.get($s, fontWeight);
-                }
+            span.title {
+                font-weight: map.get($s, fontWeight);
+            }
 
-                &.state-indicator {
-                    margin-left: 2px;
+            span.state-indicator {
+                margin-left: 2px;
+            }
 
-                    :global(svg) {
-                        margin: 0;
-                        padding: 0;
-                        transition:
-                            hoverTransition(fill, map.get($s, hoverDuration)),
-                            pupOutTransition(transform, 200ms);
-                        position: relative;
-                        z-index: 1;
-                    }
-                }
+            span.state-indicator :global(svg) {
+                margin: 0;
+                padding: 0;
+                transition:
+                    hoverTransition(fill, map.get($s, hoverDuration)),
+                    pupOutTransition(transform, 200ms);
+                position: relative;
+                z-index: 1;
             }
 
             &:hover:before {
@@ -198,7 +196,7 @@
             li {
                 // Two-color highlight pulled from the shifting gradient palette.
                 // Left uses a slightly darker tone than #FFF5FA.
-                $shiftingGradientSimple: linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%);
+                $shiftingGradientSimple: linear-gradient(135deg, #f5eff9 0%, #e6e9f6 100%);
 
                 margin: 2px 6px;
                 padding: map.get($s, itemPadding);
@@ -248,25 +246,22 @@
                     background-size: 100% 100%;
                 }
 
-                &[data-selected='true'] {
+                &[data-selected="true"] {
                     font-weight: 500;
                     background-image: $shiftingGradientSimple;
                     background-repeat: no-repeat;
                     background-size: 100% 100%;
-
-                    &::after {
-                        opacity: 0;
-                    }
-
-                    &:hover::after,
-                    &:active::after {
-                        opacity: 0;
-                    }
                 }
             }
 
+            li[data-selected="true"]::after,
+            li[data-selected="true"]:hover::after,
+            li[data-selected="true"]:active::after {
+                opacity: 0;
+            }
+
             // Header item styling
-            li[data-type='header'] {
+            li[data-type="header"] {
                 margin: 0;
                 border-radius: 0;
                 cursor: default;
@@ -283,14 +278,14 @@
                     flex-direction: column;
                     line-height: 1.15;
                     gap: 2px;
-
-                    .header-meta {
-                        font-size: 0.75rem;
-                        opacity: 0.6;
-                        text-transform: none;
-                        font-weight: 400;
-                    }
                 }
+            }
+
+            li[data-type="header"] .header-text .header-meta {
+                font-size: 0.75rem;
+                opacity: 0.6;
+                text-transform: none;
+                font-weight: 400;
             }
         }
     }
@@ -379,7 +374,7 @@
             }
 
             // Header item theming
-            li[data-type='header'] {
+            li[data-type="header"] {
                 background: color.adjust(map.get($s, surfaceBg), $lightness: map.get($s, hoverLightnessAdjustment));
 
                 &:hover {
@@ -404,6 +399,7 @@
         accentColor: rgb(100 150 255)
     );
     $s: map.merge($defaults, $config);
+    $shiftingGradientSimple: linear-gradient(135deg, #f5eff9 0%, #e6e9f6 100%);
 
     .bubble-header {
         .tag-filter {
@@ -423,8 +419,6 @@
 
                 .tag-filter-item {
                     // Keep chips consistent with item highlight.
-                    $shiftingGradientSimple: linear-gradient(135deg, #F5EFF9 0%, #E6E9F6 100%);
-
                     display: inline-flex;
                     align-items: center;
                     height: 24px;
@@ -442,48 +436,50 @@
                     opacity: 1;
                     color: map.get($s, surfaceFg);
                     background: transparent;
+                }
 
-                    &::before {
-                        content: "";
-                        display: none;
-                        width: 12px;
-                        margin-right: 6px;
-                        text-align: center;
-                        font-size: 0.75rem;
-                        line-height: 1;
-                    }
+                .tag-filter-item::before {
+                    content: "";
+                    display: none;
+                    width: 12px;
+                    margin-right: 6px;
+                    text-align: center;
+                    font-size: 0.75rem;
+                    line-height: 1;
+                }
 
-                    &:hover {
-                        background-image: $shiftingGradientSimple;
-                        background-repeat: no-repeat;
-                        background-size: 100% 100%;
-                        border-color: color.change(map.get($s, accentColor), $alpha: 0.4);
-                    }
+                .tag-filter-item:hover {
+                    background-image: $shiftingGradientSimple;
+                    background-repeat: no-repeat;
+                    background-size: 100% 100%;
+                    border-color: color.change(map.get($s, accentColor), $alpha: 0.4);
+                }
 
-                    &.active {
-                        background-image: $shiftingGradientSimple;
-                        background-repeat: no-repeat;
-                        background-size: 100% 100%;
-                        border-color: color.change(map.get($s, accentColor), $alpha: 0.6);
-                        color: map.get($s, accentColor);
+                .tag-filter-item.active {
+                    background-image: $shiftingGradientSimple;
+                    background-repeat: no-repeat;
+                    background-size: 100% 100%;
+                    border-color: color.change(map.get($s, accentColor), $alpha: 0.6);
+                    color: map.get($s, accentColor);
+                }
 
-                        &:hover {
-                            background-image: $shiftingGradientSimple;
-                        }
+                .tag-filter-item.active:hover {
+                    background-image: $shiftingGradientSimple;
+                }
 
-                        &::before {
-                            display: inline-block;
-                            content: "✓";
-                        }
-                    }
+                .tag-filter-item.active::before {
+                    display: inline-block;
+                    content: "✓";
+                }
 
-                    &.click-feedback {
-                        @include clickToggleFeedbackAnimation((
+                .tag-filter-item.click-feedback {
+                    @include clickToggleFeedbackAnimation(
+                        (
                             startColor: color.change(map.get($s, surfaceFg), $alpha: 0.65),
                             flashColor: map.get($s, surfaceFg),
                             endColor: color.change(map.get($s, surfaceFg), $alpha: 0.65)
-                        ));
-                    }
+                        )
+                    );
                 }
             }
         }
@@ -496,54 +492,84 @@
 @mixin tagPillDropdownLightTheme($config: ()) {
     $accentViolet: color.adjust($editableElementHoverColor, $hue: 55deg, $saturation: 20%, $lightness: 10%);
 
-    @include dropdownTriggerTheme(map.merge((
-        glyphBase: $offWhite,
-        triggerBg: $accentViolet,
-        hoverGlyphFill: $accentViolet,
-        activeIndicatorFill: $accentViolet,
-        invertIndicatorOnActive: false
-    ), $config));
+    @include dropdownTriggerTheme(
+        map.merge(
+            (
+                glyphBase: $offWhite,
+                triggerBg: $accentViolet,
+                hoverGlyphFill: $accentViolet,
+                activeIndicatorFill: $accentViolet,
+                invertIndicatorOnActive: false
+            ),
+            $config
+        )
+    );
 
-    @include dropdownItemsTheme(map.merge((
-        surfaceBg: $offWhite,
-        surfaceFg: #1d1b20,
-        itemIconColor: #49454f,
-        stateLayerColor: $accentViolet,
-        hoverLightnessAdjustment: -6%
-    ), $config));
+    @include dropdownItemsTheme(
+        map.merge(
+            (
+                surfaceBg: $offWhite,
+                surfaceFg: #1d1b20,
+                itemIconColor: #49454f,
+                stateLayerColor: $accentViolet,
+                hoverLightnessAdjustment: -6%
+            ),
+            $config
+        )
+    );
 
-    @include dropdownTagFilter(map.merge((
-        surfaceBg: $offWhite,
-        surfaceFg: $nightBlue,
-        accentColor: $accentViolet,
-        hoverLightnessAdjustment: -6%
-    ), $config));
+    @include dropdownTagFilter(
+        map.merge(
+            (
+                surfaceBg: $offWhite,
+                surfaceFg: $nightBlue,
+                accentColor: $accentViolet,
+                hoverLightnessAdjustment: -6%
+            ),
+            $config
+        )
+    );
 }
 
 @mixin tagPillDropdownDarkTheme($config: ()) {
     $accentViolet: color.adjust($editableElementHoverColor, $hue: 55deg, $saturation: 20%, $lightness: 10%);
 
-    @include dropdownTriggerTheme(map.merge((
-        glyphBase: $dropdownDarkThemeSubmenuTextColor,
-        triggerBg: #f1edf8,
-        // Don't recolor the chevron just because the dropdown opens/hovered.
-        hoverGlyphFill: null,
-        activeIndicatorFill: null,
-        invertIndicatorOnActive: true
-    ), $config));
+    @include dropdownTriggerTheme(
+        map.merge(
+            (
+                glyphBase: $dropdownDarkThemeSubmenuTextColor,
+                triggerBg: #f1edf8,
+                // Don't recolor the chevron just because the dropdown opens/hovered.
+                hoverGlyphFill: null,
+                activeIndicatorFill: null,
+                invertIndicatorOnActive: true
+            ),
+            $config
+        )
+    );
 
-    @include dropdownItemsTheme(map.merge((
-        surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
-        surfaceFg: $dropdownDarkThemeSubmenuTextColor,
-        itemIconColor: $dropdownDarkThemeIconColor,
-        stateLayerColor: $accentViolet,
-        hoverLightnessAdjustment: -6%
-    ), $config));
+    @include dropdownItemsTheme(
+        map.merge(
+            (
+                surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+                surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+                itemIconColor: $dropdownDarkThemeIconColor,
+                stateLayerColor: $accentViolet,
+                hoverLightnessAdjustment: -6%
+            ),
+            $config
+        )
+    );
 
-    @include dropdownTagFilter(map.merge((
-        surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
-        surfaceFg: $dropdownDarkThemeSubmenuTextColor,
-        accentColor: $accentViolet,
-        hoverLightnessAdjustment: -6%
-    ), $config));
+    @include dropdownTagFilter(
+        map.merge(
+            (
+                surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+                surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+                accentColor: $accentViolet,
+                hoverLightnessAdjustment: -6%
+            ),
+            $config
+        )
+    );
 }

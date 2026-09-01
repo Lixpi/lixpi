@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import {
+    type CapabilityJsonValue,
+} from '@lixpi/constants'
 import {
     assertTimelineTiming,
     parseActionTimelineTiming,

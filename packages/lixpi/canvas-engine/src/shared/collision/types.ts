@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
 } from '../geometry/index.ts'
 
 export type CollisionBox = CanvasEngineRect & {

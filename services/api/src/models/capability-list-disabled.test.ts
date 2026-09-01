@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -8,9 +6,9 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    CapabilityCatalogRecord,
-    CapabilityMeta,
+import {
+    type CapabilityCatalogRecord,
+    type CapabilityMeta,
 } from '@lixpi/constants'
 
 vi.mock('./blob.ts', () => ({ default: {}, buildBlobReferenceBatchOperations: vi.fn() }))

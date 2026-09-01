@@ -1,8 +1,11 @@
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import {
     ASSET_GENERATION_SEED_HELP_TEXT,
     type Asset,
     type AssetMeta,
+    type SubjectIdentityClassification,
 } from '@lixpi/constants'
 import { questionMarkCircleIcon } from '@lixpi/ui-kit/svg'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
@@ -14,10 +17,9 @@ import {
     WorkspaceAssetContentEditor,
     type WorkspaceAssetEditorPorts,
 } from '../review/index.ts'
-import type { SubjectIdentityClassification } from '@lixpi/constants'
-import type {
-    WorkspaceLibraryPorts,
-    LibraryAssetResult,
+import {
+    type WorkspaceLibraryPorts,
+    type LibraryAssetResult,
 } from './library-ports.ts'
 
 export type MediaLibraryPanelInstance = {

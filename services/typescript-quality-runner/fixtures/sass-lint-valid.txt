@@ -1,0 +1,10 @@
+@use '@lixpi/ui-primitives/styles/transitions' as *;
+
+.sample-panel {
+    --sample-panel-transition: #{hoverTransition(color)};
+    transition: var(--sample-panel-transition);
+
+    &:hover {
+        color: #fff;
+    }
+}

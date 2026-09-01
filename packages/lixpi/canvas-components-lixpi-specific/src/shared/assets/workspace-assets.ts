@@ -1,8 +1,8 @@
 import { getPersistedPanelConversationIds } from '../scene/workspace-panel-state.ts'
-import type {
-    Asset,
-    AssetDocumentRole,
-    CanvasState,
+import {
+    type Asset,
+    type AssetDocumentRole,
+    type CanvasState,
 } from '@lixpi/constants'
 
 export type WorkspaceAssetDocument = { assetId: string; role: AssetDocumentRole; version: number; doc: object }

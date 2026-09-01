@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     it,
@@ -17,10 +15,10 @@ import {
     formatTraceModelLabel,
     type ImageGenerationTraceDetailsAttrs,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
-import type {
-    CapabilityGenerationTrace,
-    ImageGenerationTrace,
-    ImageGenerationTraceReference,
+import {
+    type CapabilityGenerationTrace,
+    type ImageGenerationTrace,
+    type ImageGenerationTraceReference,
 } from '@lixpi/constants'
 
 vi.mock('$src/services/auth-service.ts', () => ({

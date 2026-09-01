@@ -1,5 +1,3 @@
-'use strict'
-
 import { Router } from 'express'
 
 import { jwtVerifier } from '../helpers/auth.ts'

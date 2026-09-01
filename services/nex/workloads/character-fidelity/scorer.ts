@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -7,11 +5,11 @@ import { fileURLToPath } from 'node:url'
 import * as ort from 'onnxruntime-web'
 import sharp from 'sharp'
 
-import type {
-    CharacterFaceDetection,
-    CharacterFidelityAssessmentRequest,
-    CharacterFidelityAssessmentResponse,
-    CharacterFidelityObjectCoordinate,
+import {
+    type CharacterFaceDetection,
+    type CharacterFidelityAssessmentRequest,
+    type CharacterFidelityAssessmentResponse,
+    type CharacterFidelityObjectCoordinate,
 } from '@lixpi/constants'
 import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'

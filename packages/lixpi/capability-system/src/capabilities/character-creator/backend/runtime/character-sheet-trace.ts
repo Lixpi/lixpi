@@ -1,8 +1,10 @@
-'use strict'
+import {
+    type CapabilityMediaReviewTrace,
+} from '@lixpi/constants'
 
-import type { CapabilityMediaReviewTrace } from '@lixpi/constants'
-
-import type { CharacterPanelAssessment } from './panel-assessor.ts'
+import {
+    type CharacterPanelAssessment,
+} from './panel-assessor.ts'
 
 export const CHARACTER_SHEET_TRACE_SCHEMA_VERSION = 'character-sheet-trace-v3' as const
 

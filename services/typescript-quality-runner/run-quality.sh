@@ -3,15 +3,18 @@
 set -eu
 
 repository_dir="/usr/src/repository"
-tool_dir="$repository_dir/services/typescript-quality-runner"
+tool_dir="/usr/src/quality-runner"
+runner_dir="$repository_dir/services/typescript-quality-runner"
 dprint_bin="$tool_dir/node_modules/.bin/dprint"
 oxlint_bin="$tool_dir/node_modules/.bin/oxlint"
+import_order_checker="$runner_dir/import-specifier-order.ts"
+stylelint_runner="$tool_dir/stylelint-runner.ts"
 dprint_config="$repository_dir/dprint.json"
 oxlint_config="$repository_dir/.oxlintrc.json"
 
 is_action() {
     case "$1" in
-        check|fix|lint|lint-fix|format|format-check) return 0 ;;
+        validate|fix|lint|lint-fix|format|validate-formatting) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -21,25 +24,35 @@ run_action() {
     shift
 
     case "$action" in
-        check)
+        validate)
             "$dprint_bin" check --config "$dprint_config" "$@"
             "$oxlint_bin" --config "$oxlint_config" --deny-warnings "$@"
+            node "$import_order_checker" check "$@"
+            node "$stylelint_runner" check "$@"
             ;;
         fix)
             "$dprint_bin" fmt --config "$dprint_config" "$@"
             "$oxlint_bin" --config "$oxlint_config" --fix --deny-warnings "$@"
+            node "$import_order_checker" fix "$@"
+            node "$stylelint_runner" fix "$@"
             ;;
         lint)
             "$oxlint_bin" --config "$oxlint_config" --deny-warnings "$@"
+            node "$import_order_checker" check "$@"
+            node "$stylelint_runner" check "$@"
             ;;
         lint-fix)
             "$oxlint_bin" --config "$oxlint_config" --fix --deny-warnings "$@"
+            node "$import_order_checker" fix "$@"
+            node "$stylelint_runner" fix "$@"
             ;;
         format)
             "$dprint_bin" fmt --config "$dprint_config" "$@"
+            node "$import_order_checker" fix "$@"
             ;;
-        format-check)
+        validate-formatting)
             "$dprint_bin" check --config "$dprint_config" "$@"
+            node "$import_order_checker" check "$@"
             ;;
         *)
             echo "Unknown action: $action" >&2
@@ -50,7 +63,7 @@ run_action() {
 
 run_shared() {
     package_filter=""
-    action="check"
+    action="validate"
 
     if [ "$#" -gt 0 ] && is_action "$1"; then
         action="$1"
@@ -102,7 +115,7 @@ run_shared() {
 
 run_domain() {
     domain="$1"
-    action="${2:-check}"
+    action="${2:-validate}"
 
     case "$domain" in
         web-ui)
@@ -118,13 +131,16 @@ run_domain() {
             run_action "$action" services/ai-model-registry/src services/ai-model-registry/vite.config.ts
             ;;
         docs-site)
-            run_action "$action" documentation/site/source-registry.test.ts
+            run_action "$action" documentation/site/assets documentation/site/source-registry.test.ts
             ;;
         infrastructure)
             run_action "$action" infrastructure/init-script/setup-env.ts infrastructure/pulumi/src
             ;;
         random-useful-things)
             run_action "$action" random-useful-things
+            ;;
+        quality-runner)
+            run_action "$action" services/typescript-quality-runner stylelint.config.mjs
             ;;
         *)
             echo "Unknown domain: $domain" >&2
@@ -134,7 +150,7 @@ run_domain() {
 }
 
 run_all() {
-    action="${1:-check}"
+    action="${1:-validate}"
     run_action "$action" \
         services/web-ui/src \
         services/web-ui/vite.config.ts \
@@ -145,10 +161,13 @@ run_all() {
         services/nex/vitest.config.ts \
         services/ai-model-registry/src \
         services/ai-model-registry/vite.config.ts \
+        documentation/site/assets \
         documentation/site/source-registry.test.ts \
         infrastructure/init-script/setup-env.ts \
         infrastructure/pulumi/src \
         random-useful-things \
+        services/typescript-quality-runner \
+        stylelint.config.mjs \
         packages/lixpi/auth-service \
         packages/lixpi/capability-system \
         packages/lixpi/canvas-engine \
@@ -168,7 +187,7 @@ cd "$repository_dir"
 
 domain="${1:-}"
 if [ -z "$domain" ]; then
-    echo "Usage: run-quality.sh {web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|shared|all|self-test} [package] [check|fix|lint|lint-fix|format|format-check]" >&2
+    echo "Usage: run-quality.sh {web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner|shared|all|self-test} [package] [validate|fix|lint|lint-fix|format|validate-formatting]" >&2
     exit 1
 fi
 shift
@@ -178,13 +197,13 @@ case "$domain" in
         run_shared "$@"
         ;;
     all)
-        run_all "${1:-check}"
+        run_all "${1:-validate}"
         ;;
     self-test)
-        sh "$tool_dir/test-quality.sh"
+        sh "$runner_dir/test-quality.sh"
         ;;
-    web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things)
-        run_domain "$domain" "${1:-check}"
+    web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner)
+        run_domain "$domain" "${1:-validate}"
         ;;
     *)
         echo "Unknown domain: $domain" >&2

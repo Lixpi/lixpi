@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     LoadingStatus,
     NATS_SUBJECTS,

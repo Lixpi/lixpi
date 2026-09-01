@@ -1,14 +1,14 @@
-'use strict'
-
-import type {
-    CharacterFidelityObjectCoordinate,
-    ExecutionTrace,
-    ExecutionTraceHandle,
-    ExecutionTraceModelCall,
-    MediaGenerationRunProgress,
-    OperationProgressItem,
+import {
+    type CharacterFidelityObjectCoordinate,
+    type ExecutionTrace,
+    type ExecutionTraceHandle,
+    type ExecutionTraceModelCall,
+    type MediaGenerationRunProgress,
+    type OperationProgressItem,
 } from '@lixpi/constants'
-import type { CapabilityMediaStrategy } from '../../../../backend/capability-media-strategy.ts'
+import {
+    type CapabilityMediaStrategy,
+} from '../../../../backend/capability-media-strategy.ts'
 import { CapabilityMediaDagRunner } from '../../../../backend/capability-media-dag-runner.ts'
 import {
     assertValidCharacterSheetRenderPlan,
@@ -29,7 +29,9 @@ import {
     selectCharacterEvidenceFacts,
     type CharacterEvidenceAnalyzerPort,
 } from './evidence-analyzer.ts'
-import type { CharacterEvidenceProfile } from './character-evidence.ts'
+import {
+    type CharacterEvidenceProfile,
+} from './character-evidence.ts'
 import {
     buildCharacterReferencePack,
     type CharacterReferencePack,
@@ -58,9 +60,9 @@ import {
     describeCharacterPanelAssessmentFailure,
 } from './character-vlm.ts'
 import { selectCharacterPanelsForRegeneration } from './panel-regeneration.ts'
-import type {
-    CharacterCreatorRuntimePorts,
-    CharacterImageReference,
+import {
+    type CharacterCreatorRuntimePorts,
+    type CharacterImageReference,
 } from './runtime-ports.ts'
 
 export type CharacterSheetStrategyDeps = CharacterCreatorRuntimePorts & {

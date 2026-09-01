@@ -4,11 +4,13 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 import { WorkspaceCanvasSessionHub } from './workspace-canvas-session.ts'
-import type {
-    CanvasPersistencePorts,
-    CanvasWriteResult,
+import {
+    type CanvasPersistencePorts,
+    type CanvasWriteResult,
 } from './canvas-persistence-controller.ts'
 
 const state = (): CanvasState => ({ viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] })

@@ -1,7 +1,9 @@
-'use strict'
-
-import type { CapabilitySkillPackageInstaller } from '../../../backend/capability-module.ts'
-import type { InstructionSkillStorage } from '../../../backend/instruction-skill.ts'
+import {
+    type CapabilitySkillPackageInstaller,
+} from '../../../backend/capability-module.ts'
+import {
+    type InstructionSkillStorage,
+} from '../../../backend/instruction-skill.ts'
 import { createStyleExtractionAxesSkillPackage } from './axes/index.ts'
 import { createStyleExtractionRouterSkillPackage } from './router/index.ts'
 import { createStyleExtractionSynthesisSkillPackage } from './synthesis/index.ts'

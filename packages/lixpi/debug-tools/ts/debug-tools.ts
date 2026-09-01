@@ -1,5 +1,3 @@
-'use strict'
-
 import util from 'util'
 import chalk from 'chalk'
 

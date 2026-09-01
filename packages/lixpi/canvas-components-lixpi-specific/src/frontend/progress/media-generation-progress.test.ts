@@ -6,7 +6,9 @@ import {
     vi,
 } from 'vitest'
 
-import type { MediaGenerationProgressState } from '@lixpi/constants'
+import {
+    type MediaGenerationProgressState,
+} from '@lixpi/constants'
 
 import {
     getMediaGenerationProgressCollisionRect,

@@ -1,6 +1,6 @@
 {
     "$schema": "https://dprint.dev/schemas/v0.json",
-    "includes": ["**/*.{ts,tsx}"],
+    "includes": ["**/*.css", "**/*.scss", "**/*.ts"],
     "excludes": [
         "**/node_modules",
         "**/dist",
@@ -19,11 +19,14 @@
         "preferSingleLine": false,
         "module.sortImportDeclarations": "maintain",
         "module.sortExportDeclarations": "maintain",
-        "importDeclaration.forceMultiLine": "whenMultiple",
+        "importDeclaration.forceMultiLine": "never",
         "importDeclaration.sortNamedImports": "maintain",
+        "importDeclaration.sortTypeOnlyImports": "last",
         "exportDeclaration.sortNamedExports": "maintain"
     },
+    "malva": {},
     "plugins": [
-        "./services/typescript-quality-runner/node_modules/@dprint/typescript/plugin.wasm"
+        "/usr/src/quality-runner/node_modules/@dprint/typescript/plugin.wasm",
+        "/usr/src/quality-runner/node_modules/dprint-plugin-malva/plugin.wasm"
     ]
 }

@@ -1,18 +1,22 @@
-import type {
-    AiModelId,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    CanvasNode,
-    CanvasState,
-    MediaBranchCandidateSnapshot,
-    MediaBranchLineagePlan,
-    MediaBranchVlmResolution,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
+import {
+    type AiModelId,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type CanvasNode,
+    type CanvasState,
+    type MediaBranchCandidateSnapshot,
+    type MediaBranchLineagePlan,
+    type MediaBranchVlmResolution,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
 import { getBranchMarkerThreadId } from '../review/workspace-history.ts'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
-import type { BranchMarkerPromptPart } from '../branch-tree-layout/marker-prompt-parts.ts'
+import {
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type BranchMarkerPromptPart,
+} from '../branch-tree-layout/marker-prompt-parts.ts'
 
 export type PendingBranchMarkerRecord = {
     nodeId: string

@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFileSync } from 'node:fs'
 import {
     describe,

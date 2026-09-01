@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -15,9 +13,9 @@ import {
     buildGeneratedMediaTurnProjectionFromThreadContent,
     getGeneratedImageTurnInfoFromThreadContent,
 } from '@lixpi/prosemirror/shared/generated-media-turn-projection'
-import type {
-    ImageGenerationTrace,
-    VideoGenerationTrace,
+import {
+    type ImageGenerationTrace,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 
 function createTrace(): ImageGenerationTrace {

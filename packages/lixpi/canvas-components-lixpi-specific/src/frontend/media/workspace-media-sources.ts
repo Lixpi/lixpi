@@ -1,10 +1,10 @@
-import type {
-    Asset,
-    AssetMediaKind,
+import {
+    type Asset,
+    type AssetMediaKind,
 } from '@lixpi/constants'
-import type {
-    MediaDescriptor,
-    MediaSourceResolver,
+import {
+    type MediaDescriptor,
+    type MediaSourceResolver,
 } from '@lixpi/canvas-engine/frontend/media'
 
 type SourceLease = Awaited<ReturnType<MediaSourceResolver['resolve']>>

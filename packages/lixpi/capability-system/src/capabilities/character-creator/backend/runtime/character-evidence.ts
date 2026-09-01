@@ -1,5 +1,3 @@
-'use strict'
-
 export type CharacterSourceMedium = 'photograph' | 'illustration' | 'render' | 'mixed' | 'unknown'
 export type CharacterEvidenceVisibility = 'observed' | 'inferred'
 export type CharacterTargetAngle = 'front' | 'three-quarter-front' | 'profile' | 'three-quarter-back' | 'back' | 'unspecified'

@@ -1,5 +1,5 @@
-import { questionMarkCircleIcon } from '@lixpi/ui-kit/svg'
 import {
+    questionMarkCircleIcon,
     sendIcon,
     chevronDownIcon,
     gptAvatarIcon,
@@ -1191,6 +1191,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
                 ${svgHost}
             </button>
         ` as HTMLButtonElement
+        button.ariaPressed = String(checked)
 
         const toggleSwitch = createToggleSwitch(select(svgEl), {
             id: `${group.groupId}:${group.selectedModelIds[0] ?? ''}:${control.key}`,
@@ -1200,13 +1201,13 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             height: MEDIA_CONFIG_TOGGLE_DIMENSIONS.height,
             checked,
             onChange: (nextChecked) => {
-                button.setAttribute('aria-pressed', String(nextChecked))
+                button.ariaPressed = String(nextChecked)
                 this.setGroupControlValue(group, control, String(nextChecked))
             },
         })
         const syncValue = (value: string): void => {
             const nextChecked = value === 'true'
-            button.setAttribute('aria-pressed', String(nextChecked))
+            button.ariaPressed = String(nextChecked)
             if (toggleSwitch.getChecked() !== nextChecked) {
                 toggleSwitch.setChecked(nextChecked)
             }
@@ -1216,7 +1217,7 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             event.stopPropagation()
             const nextChecked = !toggleSwitch.getChecked()
             toggleSwitch.setChecked(nextChecked)
-            button.setAttribute('aria-pressed', String(nextChecked))
+            button.ariaPressed = String(nextChecked)
             this.setGroupControlValue(group, control, String(nextChecked))
         })
         this.mountedControls.push({

@@ -1,8 +1,8 @@
-'use strict'
-
 import { CapabilityError } from '@lixpi/capability-system/backend'
 
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 // House token heuristic. Deliberately coarse and deliberately generous: it sizes
 // context-window guards and pre-call spend estimates, so over-counting is safe

@@ -1,5 +1,3 @@
-'use strict'
-
 export * from './types.ts'
 export * from './asset-types.ts'
 export * from './aws-resources.ts'

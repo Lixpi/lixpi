@@ -1,5 +1,3 @@
-'use strict'
-
 import process from 'process'
 
 import yargs from 'yargs'
@@ -100,8 +98,10 @@ const execCommand = async () => {
     }
 }
 
-execCommand().catch((e) => {
+try {
+    await execCommand()
+} catch (e) {
     const msg = (e as Error)?.message?.split('\n')[0] || String(e)
     err('Unexpected Error', msg)
     process.exit(1)
-})
+}

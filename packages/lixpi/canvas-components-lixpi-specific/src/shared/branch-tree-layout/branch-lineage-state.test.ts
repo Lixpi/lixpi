@@ -1,15 +1,13 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
-import type {
-    BranchLineCanvasNode,
-    CanvasNode,
-    ImageCanvasNode,
-    WorkspaceEdge,
+import {
+    type BranchLineCanvasNode,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 
 import { hasActiveGeneratedOutputLineage } from './branch-lineage-state.ts'

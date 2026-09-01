@@ -4,13 +4,15 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
 import { WorkspaceGenerationPlacements } from './workspace-generation-placements.ts'
 import {
     WorkspaceGenerationSettlement,
