@@ -6,7 +6,11 @@ import {
     it,
 } from 'vitest'
 
-const canvasSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
+const canvasSource = [
+    'workspace-canvas.ts',
+    'workspace-canvas-assets.ts',
+    'workspace-canvas-libraries.ts',
+].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`), 'utf-8')).join('\n')
 
 describe('Artifact Library panel contract', () => {
     it('supports attach, scope, review, and sealed generation history', () => {

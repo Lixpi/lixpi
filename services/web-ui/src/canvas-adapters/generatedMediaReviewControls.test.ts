@@ -37,6 +37,7 @@ function extractBlock(source: string, selector: string): string {
 
 describe('generated media review controls', () => {
     const canvasSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts')
+        + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-branch-marker-presentation.ts')
     const scssSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/generated-output-node-chrome.scss')
     const chromeSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/generated-output-node-chrome.ts')
     const branchActionsSource = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-actions.ts')
@@ -67,8 +68,8 @@ describe('generated media review controls', () => {
         const branchControlsBlock = extractBlock(branchScssSource, '.workspace-branch-marker-review-controls')
         const separatorBlock = extractBlock(footerScssSource, '.canvas-node-footer-separator')
 
-        expectSourceToContain(canvasSource, 'controls.setZoomScale(this.getBranchMarkerReviewZoomScale(this.getCurrentViewportZoom()))', 'WorkspaceCanvas.ts')
-        expectSourceToContain(canvasSource, 'updateBranchMarkerReviewControlsZoom(vp.zoom)', 'WorkspaceCanvas.ts')
+        expectSourceToContain(canvasSource, 'controls.setZoomScale(this.ports.getZoomScale())', 'workspace branch presentation')
+        expectSourceToContain(canvasSource, 'this.branchMarkerPresentation.updateZoom(this.getBranchMarkerReviewZoomScale(vp.zoom))', 'WorkspaceCanvas.ts')
         expectSourceToContain(branchActionsSource, 'className="canvas-node-footer-separator"', 'branch-marker-actions.ts')
         expectSourceToContain(actionBlock, 'width: var(--canvas-node-footer-icon-size, 34px)', 'review action CSS')
         expectSourceToContain(actionBlock, 'height: var(--canvas-node-footer-icon-size, 34px)', 'review action CSS')

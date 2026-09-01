@@ -267,6 +267,16 @@ export type AiPromptInputModelMenuSettings = {
 
 export type AiPromptInputSettings = {
     useShiftingGradientBackground: boolean
+    mediaModeSwitch: {
+        styles: {
+            trackBackgroundColor: string
+            indicatorBackgroundColor: string
+            unselectedOptionColor: string
+            hoveredOptionColor: string
+            selectedOptionColor: string
+            indicatorBoxShadow: string
+        }
+    }
     modelMenu: AiPromptInputModelMenuSettings
 }
 
@@ -686,6 +696,18 @@ export const settings: Settings = {
     aiPromptInput: {
         // Enable the shifting gradient background on floating prompt input nodes.
         useShiftingGradientBackground: true,
+        // Image/video generation mode switch appearance.
+        mediaModeSwitch: {
+            styles: {
+                // Match the soft-blue selection treatment used by block card tiles.
+                trackBackgroundColor: 'rgba(95, 143, 207, 0.14)',
+                indicatorBackgroundColor: 'rgba(95, 143, 207, 0.24)',
+                unselectedOptionColor: 'rgba(66, 73, 79, 0.62)',
+                hoveredOptionColor: colorPalette.nightBlue,
+                selectedOptionColor: '#000000',
+                indicatorBoxShadow: 'none',
+            },
+        },
         // Model settings menu presentation. The infoBubble shadow is configured separately from dropdown popovers.
         modelMenu: {
             styles: {

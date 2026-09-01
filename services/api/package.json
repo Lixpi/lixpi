@@ -52,8 +52,9 @@
         "@google/genai": "*",
         "@langchain/langgraph": "*",
         "@langchain/core": "*",
-        "sharp": "*",
-        "type-fest": "*"
+        "prosemirror-model": "*",
+        "prosemirror-state": "*",
+        "sharp": "*"
     },
     "devDependencies": {
         "vitest": "latest",

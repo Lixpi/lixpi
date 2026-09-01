@@ -1,8 +1,4 @@
 import {
-    type Merge,
-    type Except,
-} from 'type-fest'
-import {
     type AssetSubjectIdentity,
     type DepictionMedium,
 } from './asset-types.ts'

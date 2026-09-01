@@ -13,8 +13,14 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { pathToFileURL } from 'url'
 
+const webUiSourceDirectory = resolve(import.meta.dirname, '..')
+
 const packageStylesheetImporter: FileImporter<'async'> = {
     findFileUrl(url) {
+        if (url.startsWith('$src/')) {
+            return pathToFileURL(resolve(webUiSourceDirectory, url.slice(5)))
+        }
+
         const packageImport = url.match(/^@lixpi\/([^/]+)\/(.+)$/)
         if (!packageImport) return null
 
@@ -49,5 +55,19 @@ describe('workspace canvas styles', () => {
         })
 
         expect(result.css).toContain('.workspace-pane')
+    })
+
+    it('compiles inside the complete web UI stylesheet graph', async () => {
+        const result = await compileAsync(resolve(webUiSourceDirectory, 'sass/styles.scss'), {
+            importers: [packageStylesheetImporter],
+            silenceDeprecations: [
+                'color-4-api',
+                'color-functions',
+                'global-builtin',
+                'import',
+            ],
+        })
+
+        expect(result.css).toContain('.execution-trace')
     })
 })

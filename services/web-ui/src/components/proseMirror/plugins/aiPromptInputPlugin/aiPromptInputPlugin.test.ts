@@ -384,11 +384,19 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(track.getAttribute('width')).toBe('76')
         expect(track.getAttribute('height')).toBe('40')
         expect(track.getAttribute('rx')).toBe('20')
-        expect(track.getAttribute('fill')).toBe('rgba(105, 115, 133, 0.09)')
+        expect(settings.aiPromptInput.mediaModeSwitch.styles).toEqual({
+            trackBackgroundColor: 'rgba(95, 143, 207, 0.14)',
+            indicatorBackgroundColor: 'rgba(95, 143, 207, 0.24)',
+            unselectedOptionColor: 'rgba(66, 73, 79, 0.62)',
+            hoveredOptionColor: '#42494f',
+            selectedOptionColor: '#000000',
+            indicatorBoxShadow: 'none',
+        })
+        expect(track.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.trackBackgroundColor)
         expect(indicator.getAttribute('width')).toBe('36')
         expect(indicator.getAttribute('height')).toBe('36')
         expect(indicator.getAttribute('rx')).toBe('18')
-        expect(indicator.getAttribute('fill')).toBe('rgba(255, 255, 255, 0.72)')
+        expect(indicator.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.indicatorBackgroundColor)
         expect(indicator.style.filter).toBe('')
         expect(svg.querySelector('.sliding-switch-indicator-inset-shadow')?.getAttribute('fill')).toBe('transparent')
         expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['video', 'image'])
@@ -404,18 +412,18 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const videoOption = svg.querySelector('.sliding-switch-option-group[data-value="video"]')!
         const imageIconPath = imageOption.querySelector('path')
         const videoIconPath = videoOption.querySelector('path')
-        expect(imageIconPath?.getAttribute('fill')).toBe('#1a2744')
-        expect(videoIconPath?.getAttribute('fill')).toBe('rgba(49, 59, 78, 0.68)')
+        expect(imageIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.unselectedOptionColor)
 
         videoOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }))
-        expect(videoIconPath?.getAttribute('fill')).toBe('#1a2744')
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.hoveredOptionColor)
 
         videoOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
         expect(mockView.state.doc.firstChild!.attrs.mediaGenerationMode).toBe('video')
         expect(imageOption.getAttribute('aria-checked')).toBe('false')
         expect(videoOption.getAttribute('aria-checked')).toBe('true')
-        expect(videoIconPath?.getAttribute('fill')).toBe('#1a2744')
+        expect(videoIconPath?.getAttribute('fill')).toBe(settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor)
     })
 
     it('mounts the icon switch outside the input wrapper when requested and removes it on destroy', () => {
