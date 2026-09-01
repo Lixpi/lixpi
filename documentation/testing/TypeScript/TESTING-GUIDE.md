@@ -45,6 +45,12 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 
 `shared` runs tests colocated inside whichever `packages/lixpi/*` package they belong to — the same colocation rule below applies there too, so a package's tests live right next to its source, not in a separate `tests/` directory. A `packages/lixpi/*` package only needs `vitest` as a devDependency and a `test:run` script once it actually has tests to run.
 
+## GitHub Actions
+
+The `CI` workflow runs `api`, `web-ui`, `nex`, `shared`, and `docs-site` as independent matrix jobs. Each job builds and invokes `lixpi-typescript-test-runner` through `docker-compose.typescript-test-runner.yml`; GitHub's host never installs pnpm, service dependencies, or Vitest.
+
+CI sets non-secret local placeholder values for the Vite variables required by the test-runner Compose service and still uses `--no-deps`, so no application, NATS, auth, or database service starts. Pointing Compose at the one-shot runner file preserves the local image, mounts, dispatcher, and domain boundary without requiring a developer `.env` file or parsing the root application graph. The test matrix and formatting-and-linting matrix feed one stable `Required CI gate` status for branch rules.
+
 Tests use **Vitest**. Globals are enabled, so you can use `describe`, `it`, `expect`, `vi` etc. without importing them, but we **do import them explicitly** for clarity.
 
 ```typescript

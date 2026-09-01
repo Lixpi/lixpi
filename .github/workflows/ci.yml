@@ -1,0 +1,105 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+env:
+    BUILDKIT_PROGRESS: plain
+    COMPOSE_ANSI: never
+
+jobs:
+    quality:
+        name: Formatting and linting / ${{ matrix.name }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: runner-self-test
+                      command: self-test
+                    - name: web-ui
+                      command: web-ui validate
+                    - name: api
+                      command: api validate
+                    - name: nex
+                      command: nex validate
+                    - name: ai-model-registry
+                      command: ai-model-registry validate
+                    - name: quality-runner
+                      command: quality-runner validate
+                    - name: shared
+                      command: shared validate
+                    - name: docs-site
+                      command: docs-site validate
+                    - name: infrastructure
+                      command: infrastructure validate
+                    - name: random-useful-things
+                      command: random-useful-things validate
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v7
+
+            - name: Build TypeScript quality runner
+              run: docker compose -f docker-compose.typescript-quality-runner.yml --profile dev build lixpi-typescript-quality-runner
+
+            - name: Validate ${{ matrix.name }} formatting and lint rules
+              run: docker compose -f docker-compose.typescript-quality-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-quality-runner ${{ matrix.command }}
+
+    tests:
+        name: Tests / ${{ matrix.domain }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                domain:
+                    - api
+                    - web-ui
+                    - nex
+                    - shared
+                    - docs-site
+        env:
+            VITE_MOCK_AUTH: "true"
+            VITE_MOCK_AUTH0_DOMAIN: http://localhost:3000
+            VITE_API_URL: http://localhost:3001
+            VITE_AUTH0_LOGIN_URL: http://localhost:3000/authorize
+            VITE_AUTH0_DOMAIN: localhost
+            VITE_AUTH0_CLIENT_ID: ci
+            VITE_AUTH0_AUDIENCE: https://api.lixpi.test
+            VITE_AUTH0_REDIRECT_URI: http://localhost
+            VITE_STRIPE_PUBLIC_KEY: pk_test_ci
+            VITE_NATS_SERVER: ws://localhost:9222
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v7
+
+            - name: Build TypeScript test runner
+              run: docker compose -f docker-compose.typescript-test-runner.yml --profile dev build lixpi-typescript-test-runner
+
+            - name: Run ${{ matrix.domain }} tests
+              run: docker compose -f docker-compose.typescript-test-runner.yml --profile dev run --rm --no-deps -T lixpi-typescript-test-runner ${{ matrix.domain }}
+
+    gate:
+        name: Required CI gate
+        if: ${{ always() }}
+        needs:
+            - quality
+            - tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Require quality checks and tests
+              env:
+                  QUALITY_RESULT: ${{ needs.quality.result }}
+                  TEST_RESULT: ${{ needs.tests.result }}
+              run: |
+                  test "$QUALITY_RESULT" = "success"
+                  test "$TEST_RESULT" = "success"
