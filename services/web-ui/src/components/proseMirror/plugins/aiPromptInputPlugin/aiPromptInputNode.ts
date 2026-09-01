@@ -560,6 +560,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 bottom: 0,
                 left: 0,
             },
+            trackBackgroundColor: settings.aiPromptInput.mediaModeSwitch.styles.trackBackgroundColor,
+            indicatorBackgroundColor: settings.aiPromptInput.mediaModeSwitch.styles.indicatorBackgroundColor,
+            unselectedOptionColor: settings.aiPromptInput.mediaModeSwitch.styles.unselectedOptionColor,
+            hoveredOptionColor: settings.aiPromptInput.mediaModeSwitch.styles.hoveredOptionColor,
+            selectedOptionColor: settings.aiPromptInput.mediaModeSwitch.styles.selectedOptionColor,
+            indicatorBoxShadow: settings.aiPromptInput.mediaModeSwitch.styles.indicatorBoxShadow,
             reshuffleItemsOnValueChange: {
                 enable: true,
                 selectedElementPosition: 'right',

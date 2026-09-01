@@ -6,7 +6,11 @@ import {
     it,
 } from 'vitest'
 
-const source = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
+const source = [
+    'workspace-canvas.ts',
+    'workspace-branch-marker-presentation.ts',
+    'workspace-canvas-visibility.ts',
+].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`), 'utf-8')).join('\n')
 const scssSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-content.scss'), 'utf-8')
 
 function preflightMethod(name: string, module = 'workspace-preflight-markers'): string {
@@ -27,12 +31,20 @@ function expectSourceNotToContain(sourceText: string, snippet: string, label: st
 }
 
 function extractFunctionBody(functionName: string): string {
-    const signatureIndex = source.indexOf(`private ${functionName} =`)
+    const arrowSignatureIndex = source.indexOf(`private ${functionName} =`)
+    const privateMethodSignatureIndex = source.indexOf(`private ${functionName}(`)
+    const publicMethodSignatureIndex = source.indexOf(`\n    ${functionName}(`)
+    const methodSignatureIndex = [privateMethodSignatureIndex, publicMethodSignatureIndex]
+        .filter(index => index >= 0)
+        .sort((left, right) => left - right)[0] ?? -1
+    const isArrow = arrowSignatureIndex >= 0 && (methodSignatureIndex < 0 || arrowSignatureIndex < methodSignatureIndex)
+    const signatureIndex = isArrow ? arrowSignatureIndex : methodSignatureIndex
     if (signatureIndex < 0) throw new Error(`Missing function: ${functionName}`)
-    const signatureEnd = source.indexOf(')', signatureIndex)
-    if (signatureEnd < 0) throw new Error(`Missing function signature: ${functionName}`)
-    const bodyStart = source.indexOf('=> {', signatureEnd) + 3
-    if (bodyStart < 0) throw new Error(`Missing function body: ${functionName}`)
+    const bodyMarker = isArrow
+        ? source.indexOf('=> {', signatureIndex)
+        : source.indexOf('{', signatureIndex)
+    if (bodyMarker < 0) throw new Error(`Missing function body: ${functionName}`)
+    const bodyStart = bodyMarker + (isArrow ? 3 : 0)
 
     let depth = 0
     for (let index = bodyStart; index < source.length; index += 1) {
@@ -137,15 +149,15 @@ describe('branch marker lifecycle', () => {
     })
 
     it('chooses one structural render owner when preflight and planned markers coexist', () => {
-        const renderNodesBody = extractFunctionBody('getVisibleCanvasNodes')
+        const renderNodesBody = extractFunctionBody('getVisibleNodes')
 
         expect(renderNodesBody).toContain('resolveBranchMarkerRenderOwnership(')
-        expect(renderNodesBody).toContain('branchMarkerRenderOwnership.suppressedNodeIds.has(node.nodeId)')
-        expect(renderNodesBody).toContain("console.info('[CANVAS] branch marker structural ownership'")
+        expect(renderNodesBody).toContain('ownership.suppressedNodeIds.has(node.nodeId)')
+        expect(source).toContain("reportOwnership: details => console.info('[CANVAS] branch marker structural ownership'")
     })
 
     it('keeps shared request progress inside the branch marker surface', () => {
-        const contentBody = extractFunctionBody('createBranchMarkerContent')
+        const contentBody = extractFunctionBody('createContent')
         const progressBody = extractFunctionBody('createBranchMarkerGlobalProgress')
         const chromeSyncBody = extractFunctionBody('syncGeneratedMediaChrome')
         const cleanupBody = extractFunctionBody('cleanupBranchMarkerArtifacts')
@@ -156,7 +168,7 @@ describe('branch marker lifecycle', () => {
         expectSourceToContain(progressBody, 'buildBranchMarkerProgress({', 'branch progress projection')
         expectSourceToContain(progressBody, "showSummaryWhenCollapsedItemIds: ['understand-request']", 'branch reasoning progress')
         expectSourceToContain(contentBody, 'new BranchMarkerContent({', 'branch marker content')
-        expectSourceToContain(contentBody, 'progress: globalProgress ? { element: globalProgress', 'branch marker progress port')
+        expectSourceToContain(contentBody, 'progress: progress ? { element: progress', 'branch marker progress port')
         expectSourceToContain(contentBody, 'headerHeight: node.dimensions.height', 'branch marker progress geometry')
         expectSourceToContain(
             chromeSyncBody,
@@ -193,21 +205,21 @@ describe('branch marker lifecycle', () => {
     })
 
     it('anchors review controls below the complete rendered branch marker surface', () => {
-        const reviewControlsBody = extractFunctionBody('syncBranchMarkerActions')
+        const reviewControlsBody = extractFunctionBody('syncActions')
 
         expectSourceToContain(
             reviewControlsBody,
-            "nodeEl.querySelector<HTMLElement>(':scope > .workspace-branch-marker-content')",
+            "element.querySelector<HTMLElement>(':scope > .workspace-branch-marker-content')",
             'branch review control host',
         )
         expectSourceToContain(
             reviewControlsBody,
-            'const controlsHost = content ?? nodeEl',
+            'const host = content ?? element',
             'branch review control host',
         )
         expectSourceToContain(
             reviewControlsBody,
-            'controlsHost.appendChild(controls.reviewControls)',
+            'host.appendChild(controls.reviewControls)',
             'branch review control host',
         )
     })

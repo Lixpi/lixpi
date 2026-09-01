@@ -94,7 +94,7 @@ function addDescriptor(
 
 export function getBranchMarkerGeneratedMediaNodesForModelCircles(
     markerNode: BranchMarkerNode,
-    nodes: CanvasNode[],
+    nodes: readonly CanvasNode[],
 ): Array<ImageCanvasNode | VideoCanvasNode> {
     return nodes
         .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode => {
@@ -112,7 +112,7 @@ export function getBranchMarkerGeneratedMediaNodesForModelCircles(
 
 export function getBranchMarkerMediaModelCircleDescriptors(
     markerNode: BranchMarkerNode,
-    nodes: CanvasNode[],
+    nodes: readonly CanvasNode[],
 ): BranchMarkerMediaModelCircleDescriptor[] {
     const descriptors: BranchMarkerMediaModelCircleDescriptor[] = []
     const seenKeys = new Set<string>()

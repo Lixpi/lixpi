@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import {
     describe,
     expect,
@@ -19,5 +20,25 @@ describe('Asset document roles', () => {
         ])
         expect(isAssetDocumentRole('capabilityArtifact')).toBe(true)
         expect(isAssetDocumentRole('unknown')).toBe(false)
+    })
+})
+
+describe('@lixpi/constants native TypeScript entrypoint', () => {
+    it('loads under Node without resolving type-only packages at runtime', () => {
+        expect(() => {
+            execFileSync(
+                process.execPath,
+                [
+                    '--experimental-transform-types',
+                    '--input-type=module',
+                    '--eval',
+                    "await import('./index.ts')",
+                ],
+                {
+                    cwd: import.meta.dirname,
+                    stdio: 'pipe',
+                },
+            )
+        }).not.toThrow()
     })
 })

@@ -21,7 +21,11 @@ function expectSourceNotToContain(source: string, snippet: string): void {
 
 const panelSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts'), 'utf-8')
 const panelStyles = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/workspace-library-panels.scss'), 'utf-8')
-const canvasSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts'), 'utf-8')
+const canvasSource = [
+    'workspace-canvas.ts',
+    'workspace-canvas-libraries.ts',
+    'workspace-generated-output-details.ts',
+].map(filename => readFileSync(resolve(import.meta.dirname, `../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/${filename}`), 'utf-8')).join('\n')
 const workspaceCanvasViewSource = readFileSync(resolve(import.meta.dirname, '../components/workspaceCanvasView/workspaceCanvasView.ts'), 'utf-8')
     + readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-surface.ts'), 'utf-8')
 
@@ -89,12 +93,13 @@ describe('Media Library panel contract', () => {
 
     it('drives the right side panel surface from the four top-level modes', () => {
         expectSourceToContain(canvasSource, 'new WorkspaceRightPanel({')
-        expectSourceToContain(canvasSource, 'mountContent: this.mountWorkspaceRightPanelContent,')
+        expectSourceToContain(canvasSource, 'mountContent: this.outputDetails.mountContent,')
         expectSourceToContain(canvasSource, "mode === 'capabilities'")
         expectSourceToContain(canvasSource, "mode === 'artifacts'")
         expectSourceToContain(canvasSource, "mode === 'media'")
         expectSourceToContain(canvasSource, 'private openRightSidePanelToMode =')
-        expectSourceToContain(canvasSource, 'ensureCapabilityLibraryPanel()')
+        expectSourceToContain(canvasSource, 'this.ports.libraries.mount(host, mode)')
+        expectSourceToContain(canvasSource, 'libraries: this.libraries,')
     })
 
     it('supplies the package chrome with the Media Library toggle', () => {
@@ -104,8 +109,8 @@ describe('Media Library panel contract', () => {
 
     it('inserts catalog Assets through the existing centered insertion path', () => {
         expectSourceToContain(canvasSource, 'onInsertAsset: async (item: AssetMeta) => {')
-        expectSourceToContain(canvasSource, 'insertNodeAtViewportCenterInternal(insertion, {}, false)')
-        expectSourceToContain(canvasSource, 'await this.onAssetAttach({ assetId: item.assetId, nodeId, canvasState: nextState })')
+        expectSourceToContain(canvasSource, 'insertNode: node => this.insertNodeAtViewportCenterInternal(node, {}, false)')
+        expectSourceToContain(canvasSource, 'await this.ports.attachAsset({ assetId: item.assetId, nodeId, canvasState: nextState })')
         expectSourceToContain(workspaceCanvasViewSource, 'importUrl: url => this.actions.importUrl(url)')
     })
 

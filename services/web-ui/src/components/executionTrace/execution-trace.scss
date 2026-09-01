@@ -1,4 +1,4 @@
-@use "@lixpi/ui-primitives/styles/transitions" as *;
+@use "@lixpi/ui-primitives/styles/transitions" as transitions;
 
 .execution-trace {
     display: grid;
@@ -279,7 +279,7 @@
     display: inline-block;
     width: 10px;
     transform-origin: 45% 50%;
-    transition: standardTransition(transform, 140ms);
+    transition: transitions.standardTransition(transform, 140ms);
 }
 
 .execution-trace-text[open] .execution-trace-text-summary::before {

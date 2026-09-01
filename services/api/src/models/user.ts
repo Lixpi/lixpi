@@ -3,9 +3,6 @@ import {
     getDynamoDbTableStageName,
     type User,
 } from '@lixpi/constants'
-import {
-    type Partial,
-} from 'type-fest'
 
 const {
     ORG_NAME,

@@ -90,7 +90,7 @@ The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels
 
 `createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` and `mountModelMenuControl()` to portal those controls into adjacent layout chrome; otherwise they remain children of the node view.
 
-The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. It uses the fixed flat appearance owned by the shared sliding switch: a neutral track, white selected circle, and shared icon colors with no shadow or inset highlight. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
+The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. `settings.aiPromptInput.mediaModeSwitch.styles` supplies the soft-blue track and selected circle, inactive and hover icon colors, and shadow setting. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
 
 ```text
 div.ai-prompt-input-wrapper[data-empty]
