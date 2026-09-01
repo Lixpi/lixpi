@@ -14,7 +14,7 @@ oxlint_config="$repository_dir/.oxlintrc.json"
 
 is_action() {
     case "$1" in
-        check|fix|lint|lint-fix|format|format-check) return 0 ;;
+        validate|fix|lint|lint-fix|format|validate-formatting) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -24,7 +24,7 @@ run_action() {
     shift
 
     case "$action" in
-        check)
+        validate)
             "$dprint_bin" check --config "$dprint_config" "$@"
             "$oxlint_bin" --config "$oxlint_config" --deny-warnings "$@"
             node "$import_order_checker" check "$@"
@@ -50,7 +50,7 @@ run_action() {
             "$dprint_bin" fmt --config "$dprint_config" "$@"
             node "$import_order_checker" fix "$@"
             ;;
-        format-check)
+        validate-formatting)
             "$dprint_bin" check --config "$dprint_config" "$@"
             node "$import_order_checker" check "$@"
             ;;
@@ -63,7 +63,7 @@ run_action() {
 
 run_shared() {
     package_filter=""
-    action="check"
+    action="validate"
 
     if [ "$#" -gt 0 ] && is_action "$1"; then
         action="$1"
@@ -115,7 +115,7 @@ run_shared() {
 
 run_domain() {
     domain="$1"
-    action="${2:-check}"
+    action="${2:-validate}"
 
     case "$domain" in
         web-ui)
@@ -150,7 +150,7 @@ run_domain() {
 }
 
 run_all() {
-    action="${1:-check}"
+    action="${1:-validate}"
     run_action "$action" \
         services/web-ui/src \
         services/web-ui/vite.config.ts \
@@ -187,7 +187,7 @@ cd "$repository_dir"
 
 domain="${1:-}"
 if [ -z "$domain" ]; then
-    echo "Usage: run-quality.sh {web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner|shared|all|self-test} [package] [check|fix|lint|lint-fix|format|format-check]" >&2
+    echo "Usage: run-quality.sh {web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner|shared|all|self-test} [package] [validate|fix|lint|lint-fix|format|validate-formatting]" >&2
     exit 1
 fi
 shift
@@ -197,13 +197,13 @@ case "$domain" in
         run_shared "$@"
         ;;
     all)
-        run_all "${1:-check}"
+        run_all "${1:-validate}"
         ;;
     self-test)
         sh "$runner_dir/test-quality.sh"
         ;;
     web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things|quality-runner)
-        run_domain "$domain" "${1:-check}"
+        run_domain "$domain" "${1:-validate}"
         ;;
     *)
         echo "Unknown domain: $domain" >&2

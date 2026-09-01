@@ -20,35 +20,35 @@ docker compose --profile dev --profile main run --rm --no-deps -T --workdir /usr
 The quality runner follows the TypeScript test runner's domain shape. Run a service independently:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner web-ui check
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner api check
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner nex check
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry check
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner quality-runner check
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner web-ui validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner api validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner nex validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner ai-model-registry validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner quality-runner validate
 ```
 
 Run all shared packages or select one package by its directory name:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared check
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-engine check
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared validate
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-engine validate
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner shared canvas-components format
 ```
 
 The runner also exposes `docs-site`, `infrastructure`, `random-useful-things`, and `quality-runner` domains. TypeScript rules apply to every TypeScript file, while Sass and CSS rules apply to every first-party stylesheet. Use `all` when a repository-wide change needs every configured domain:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner all check
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-quality-runner all validate
 ```
 
-The action is optional and defaults to `check`.
+The action is optional and defaults to `validate`.
 
 | Action | Behavior |
 |--------|----------|
-| `check` | Runs `dprint check`, Oxlint, the named-import layout check, and Stylelint. It does not modify source. |
+| `validate` | Validates dprint formatting, Oxlint rules, named-import layout, and Stylelint rules. It does not modify source. |
 | `fix` | Runs `dprint fmt`, applies Oxlint's safe fixes, fixes named-import layout, and applies Stylelint's fixes. |
 | `format` | Runs `dprint fmt` and fixes named-import layout. |
-| `format-check` | Runs `dprint check` and the named-import layout check. |
+| `validate-formatting` | Validates dprint formatting and named-import layout. It does not modify source. |
 | `lint` | Runs Oxlint, the named-import layout check, and Stylelint. |
 | `lint-fix` | Applies Oxlint's and Stylelint's safe fixes and fixes named-import layout. |
 
@@ -122,6 +122,12 @@ dprint uses the `typescript-quality-runner-dprint-cache` volume for its compiled
 The repository configuration lives in [`dprint.json`](../../../dprint.json), [`.oxlintrc.json`](../../../.oxlintrc.json), and [`stylelint.config.mjs`](../../../stylelint.config.mjs). The package and committed lockfile under [`services/typescript-quality-runner`](../../../services/typescript-quality-runner/) pin the toolchain. There is no TypeScript build step and the tools do not emit JavaScript.
 
 Oxlint starts from an explicit rule baseline so adopting the runner does not silently turn unrelated existing findings into repository-wide failures. The quality runner rejects JSX source files, React imports, `debugger`, top-level `import type`, file imports without their TypeScript extension, duplicate module imports, CommonJS imports, `interface` declarations outside ambient `.d.ts` files, legacy own-property checks, JSON serialization used as a deep-clone substitute, restricted HTTP client packages, and restricted raw DOM construction in web-ui implementation files. Add broader rules deliberately and clean their existing findings in the same change.
+
+## GitHub Actions
+
+The `CI` workflow runs the quality-runner self-test and every configured quality domain as independent matrix jobs. Each job builds and invokes `lixpi-typescript-quality-runner` through `docker-compose.typescript-quality-runner.yml`, so dprint, Oxlint, Stylelint, and the repository validation scripts never run on the GitHub host.
+
+CI points Compose at the one-shot runner file directly. This keeps the same image, bind mounts, dispatcher, and domain commands used locally without parsing the unrelated application and deployment services from the root Compose graph. The matrix feeds one stable `Required CI gate` status after every quality and test job passes.
 
 ## Future Oxlint Stylistic Plugin Review
 

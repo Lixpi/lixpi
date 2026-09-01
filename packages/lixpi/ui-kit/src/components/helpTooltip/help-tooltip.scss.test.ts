@@ -38,10 +38,10 @@ describe('help-tooltip.scss', () => {
 
     it('uses a shared, placement-aware arrow that inherits the tooltip surface color', () => {
         expectSourceToContain(scss, '--help-tooltip-arrow-size: 6px;')
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='top']::before")
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='bottom']::before")
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='left']::before")
-        expectSourceToContain(scss, ".help-tooltip-content[data-placement='right']::before")
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="top"]::before')
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="bottom"]::before')
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="left"]::before')
+        expectSourceToContain(scss, '.help-tooltip-content[data-placement="right"]::before')
         expectSourceToContain(scss, 'var(--help-tooltip-arrow-surface-color)')
     })
 
