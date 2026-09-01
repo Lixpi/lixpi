@@ -21,7 +21,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [AI Model Registry](development-workflow/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
 | [Implementation Plans](development-workflow/research-and-development/WRITING-IMPLEMENTATION-PLANS.md) | How one file under `documentation/memory/` carries task decisions, implementation state, evidence, and the next action across sessions |
 | [Spike Reports](development-workflow/research-and-development/SPIKE-REPORT-GUIDELINES.md) | How to investigate code and non-code questions, maintain an evidence-backed report, and continue the same file into implementation |
-| [TypeScript Linting and Formatting](testing/TypeScript/TYPESCRIPT-QUALITY.md) | Docker-only per-service and per-package dprint and Oxlint commands |
+| [TypeScript Linting and Formatting](testing/TypeScript/TYPESCRIPT-QUALITY.md) | Docker-only per-service and per-package Oxfmt, dprint, Oxlint, and Stylelint commands |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
@@ -109,7 +109,7 @@ Shared browser building blocks are documented in [UI Primitives](../packages/lix
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
 | [AI Model Registry](development-workflow/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
-| [TypeScript Linting and Formatting](testing/TypeScript/TYPESCRIPT-QUALITY.md) | Docker-only dprint and Oxlint checks, fixes, cache behavior, and import formatting |
+| [TypeScript Linting and Formatting](testing/TypeScript/TYPESCRIPT-QUALITY.md) | Docker-only Oxfmt, dprint, Oxlint, and Stylelint checks, fixes, cache behavior, and import formatting |
 | [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
 | [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |
 | [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules — mandatory for all TypeScript in the repo |

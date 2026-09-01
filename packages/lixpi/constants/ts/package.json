@@ -19,5 +19,8 @@
     },
     "devDependencies": {
         "vitest": "*"
+    },
+    "dependencies": {
+        "type-fest": "*"
     }
 }

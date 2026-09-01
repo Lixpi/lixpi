@@ -9,6 +9,7 @@
     },
     "dependencies": {
         "@clack/prompts": "*",
+        "@lixpi/debug-tools": "file:../../packages/lixpi/debug-tools/ts",
         "@nats-io/nkeys": "*",
         "chalk": "*"
     }

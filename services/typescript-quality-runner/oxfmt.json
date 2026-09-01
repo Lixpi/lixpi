@@ -1,0 +1,19 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+    "arrowParens": "always",
+    "embeddedLanguageFormatting": "auto",
+    "endOfLine": "lf",
+    "ignorePatterns": [
+        "**/*.css",
+        "**/*.scss",
+        "**/node_modules/**",
+        "packages-vendor/**"
+    ],
+    "objectWrap": "preserve",
+    "printWidth": 320,
+    "semi": false,
+    "singleQuote": true,
+    "tabWidth": 4,
+    "trailingComma": "all",
+    "useTabs": false
+}

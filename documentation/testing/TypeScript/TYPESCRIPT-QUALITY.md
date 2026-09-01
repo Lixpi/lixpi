@@ -1,18 +1,18 @@
 ---
 title: TypeScript and Stylesheet Linting and Formatting
-description: Docker-only dprint, Oxlint, and Stylelint commands for checking or fixing one Lixpi service or shared package at a time.
+description: Docker-only Oxfmt, dprint, Oxlint, and Stylelint commands for checking or fixing one Lixpi service or shared package at a time.
 ---
 
 # TypeScript and Stylesheet Linting and Formatting
 
-The `lixpi-typescript-quality-runner` container owns TypeScript, Sass, and CSS formatting and linting. It uses dprint with its TypeScript and Malva plugins for deterministic formatting, Oxlint for explicitly enabled TypeScript rules, Stylelint with its SCSS plugin for stylesheet rules, and the repository import-layout checker for the exact named-import matrix that dprint cannot express. The container has its own pinned dependencies and does not reuse service, package, or test-runner dependencies.
+The `lixpi-typescript-quality-runner` container owns TypeScript, HTML, Sass, and CSS formatting and linting. It uses Oxfmt for production TypeScript, standalone HTML, and tagged HTML templates; dprint with Malva for stylesheet formatting; Oxlint for TypeScript rules and safe fixes; Stylelint for stylesheet rules; and the repository import/export-layout checker for the exact named-specifier matrix. Oxfmt's TypeScript wrapper preserves deliberately expanded parameters, arguments, types, expressions, arrays, objects, destructuring, and call chains while still formatting embedded HTML. The container has its own dependencies and does not reuse service, package, or test-runner dependencies.
 
 Never run `node`, `npm`, `npx`, `pnpm`, `pnpx`, `dprint`, Oxlint, Stylelint, TypeScript files, package scripts, linters, or formatters on the host. Run every TypeScript and stylesheet quality command through Docker Compose from the repository root.
 
-Update the quality runner's pinned dependencies from inside its Docker image. This command updates both `package.json` and `pnpm-lock.yaml` through the repository bind mount:
+Every direct quality-runner dependency uses `"*"` in `package.json`. Each invocation resolves the latest available versions with `pnpm install --no-lockfile` inside the isolated tool workspace. The pnpm store and every `node_modules` directory are named Docker volumes; the runner never creates a lockfile, package store, or `node_modules` directory in the host checkout. Rebuild the base image only when its Dockerfile changes:
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T --workdir /usr/src/repository/services/typescript-quality-runner --entrypoint pnpm lixpi-typescript-quality-runner add --save-dev dprint-plugin-malva@0.16.0 postcss-scss@4.0.9 stylelint@17.14.1 stylelint-scss@7.2.0
+docker compose --profile dev --profile main build --no-cache lixpi-typescript-quality-runner
 ```
 
 ## Commands
@@ -45,12 +45,12 @@ The action is optional and defaults to `validate`.
 
 | Action | Behavior |
 |--------|----------|
-| `validate` | Validates dprint formatting, Oxlint rules, named-import layout, and Stylelint rules. It does not modify source. |
-| `fix` | Runs `dprint fmt`, applies Oxlint's safe fixes, fixes named-import layout, and applies Stylelint's fixes. |
-| `format` | Runs `dprint fmt` and fixes named-import layout. |
-| `validate-formatting` | Validates dprint formatting and named-import layout. It does not modify source. |
-| `lint` | Runs Oxlint, the named-import layout check, and Stylelint. |
-| `lint-fix` | Applies Oxlint's and Stylelint's safe fixes and fixes named-import layout. |
+| `validate` | Validates Oxfmt and dprint formatting, Oxlint rules, named-import/export layout, and Stylelint rules. It does not modify source. |
+| `fix` | Applies Oxlint fixes, formats production TypeScript and HTML with Oxfmt, formats stylesheets with dprint, fixes named-import/export layout, and applies Stylelint fixes. |
+| `format` | Formats production TypeScript and HTML with Oxfmt, formats stylesheets with dprint, and fixes named-import/export layout. |
+| `validate-formatting` | Validates Oxfmt, dprint, and named-import/export formatting. It does not modify source. |
+| `lint` | Runs Oxlint and Stylelint. |
+| `lint-fix` | Applies Oxlint and Stylelint fixes, then formats changed production TypeScript and HTML. |
 
 Run the runner's fixture test after changing its image, scripts, dprint configuration, Oxlint configuration, or Stylelint configuration:
 
@@ -60,9 +60,9 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 
 The fixture test proves the named-import matrix, native TypeScript execution, Sass four-space formatting, configured Oxlint violations, configured Stylelint violations, shared transition enforcement, React import rejection, and JSX source-file rejection.
 
-## Named Import Layout
+## Named Import And Export Layout
 
-The repository uses dprint plus the quality runner's named-import layout check. A named import list with two or more items uses one item per line:
+The repository uses Oxfmt plus the quality runner's named-import layout check for production TypeScript. A named import list with two or more items uses one item per line:
 
 ```typescript
 import {
@@ -95,6 +95,22 @@ Top-level `import type` declarations are rejected by Oxlint.
 
 When a declaration contains both value and type imports, all values come first and all inline `type` specifiers come last. The quality runner's import-order check rejects interleaved groups and its `fix` or `lint-fix` action moves the type specifiers to the end while preserving the order inside each group.
 
+Named exports use the same layout. A single exported item remains inline, while two or more exported items use one item per line. The same rule applies to `export type` declarations:
+
+```typescript
+export { createCertificateHelper } from './certificate-helper.ts'
+
+export {
+    createLambdaCertificateHelper,
+    createLambdaCertificateManager,
+} from './lambda-certificate-manager.ts'
+
+export type {
+    LambdaCertificateManagerArgs,
+    LambdaCertificateManagerResult,
+} from './lambda-certificate-manager.ts'
+```
+
 ## Sass and CSS Rules
 
 dprint's Malva plugin formats first-party `.scss` and `.css` files with four spaces and the repository's shared formatting settings. Stylelint parses both formats through `postcss-scss` and enforces these parts of [`SASS-AND-CSS.md`](../../coding-style-guides/SASS-AND-CSS.md):
@@ -115,20 +131,16 @@ docker compose --profile dev --profile main build lixpi-ai-model-registry
 
 ## Container and Cache Model
 
-[`docker-compose.typescript-quality-runner.yml`](../../../docker-compose.typescript-quality-runner.yml) defines a separate one-shot service. Its command dispatcher mirrors the test runner, so a normal edit checks or formats only the selected service or package. The current repository is bind-mounted once at `/usr/src/repository`, while the image keeps dprint, its TypeScript and Malva plugins, Oxlint, Stylelint, and the SCSS parser at `/usr/src/quality-runner`. Keeping the tool runtime outside the repository mount prevents source edits from hiding the pinned dependencies and avoids stale single-file bind mounts.
+[`docker-compose.typescript-quality-runner.yml`](../../../docker-compose.typescript-quality-runner.yml) defines a separate one-shot service. Its command dispatcher mirrors the test runner, so a normal edit checks or formats only the selected service or package. Source paths are mounted selectively under `/usr/src/repository`; the repository root and package manifests are never bind-mounted there. Tool manifests, scripts, configuration, and wrappers are mounted separately under `/usr/src/quality-runner`, while tool dependencies use named Docker volumes. This prevents pnpm from writing installation artifacts into the host checkout.
 
-dprint uses the `typescript-quality-runner-dprint-cache` volume for its compiled plugins and incremental file-state cache. Repeated commands skip unchanged files. Oxlint and Stylelint receive only the selected domain paths. The import and Stylelint wrappers are erasable TypeScript files executed directly by Node 24's stable type stripping; there is no generated JavaScript copy.
+dprint uses the `typescript-quality-runner-dprint-cache` volume for its compiled plugins and incremental file-state cache. pnpm uses `typescript-quality-runner-pnpm-store`, and both the tool workspace and its local debug-tools workspace have dedicated `node_modules` volumes. Oxlint and Stylelint receive only the selected domain paths. The formatter, import/export, Oxlint-plugin, and Stylelint wrappers are erasable TypeScript files executed directly by Node 24's stable type stripping; there is no generated JavaScript copy.
 
-The repository configuration lives in [`dprint.json`](../../../dprint.json), [`.oxlintrc.json`](../../../.oxlintrc.json), and [`stylelint.config.mjs`](../../../stylelint.config.mjs). The package and committed lockfile under [`services/typescript-quality-runner`](../../../services/typescript-quality-runner/) pin the toolchain. There is no TypeScript build step and the tools do not emit JavaScript.
+All linter and formatter configuration lives under [`services/typescript-quality-runner`](../../../services/typescript-quality-runner/): [`oxfmt.json`](../../../services/typescript-quality-runner/oxfmt.json), [`dprint.json`](../../../services/typescript-quality-runner/dprint.json), [`oxlint.json`](../../../services/typescript-quality-runner/oxlint.json), and [`stylelint.config.ts`](../../../services/typescript-quality-runner/stylelint.config.ts). The wildcard package manifest is resolved without a lockfile on every invocation. There is no TypeScript build step and the tools do not emit JavaScript.
 
-Oxlint starts from an explicit rule baseline so adopting the runner does not silently turn unrelated existing findings into repository-wide failures. The quality runner rejects JSX source files, React imports, `debugger`, top-level `import type`, file imports without their TypeScript extension, duplicate module imports, CommonJS imports, `interface` declarations outside ambient `.d.ts` files, legacy own-property checks, JSON serialization used as a deep-clone substitute, restricted HTTP client packages, and restricted raw DOM construction in web-ui implementation files. Add broader rules deliberately and clean their existing findings in the same change.
+Oxlint starts from an explicit rule baseline so adopting the runner does not silently turn unrelated existing findings into repository-wide failures. The quality runner rejects JavaScript and JSX source files, React imports, `debugger`, top-level `import type`, file imports without their TypeScript extension, duplicate module imports, CommonJS imports, `interface` declarations outside ambient `.d.ts` files, plain function declarations, unnecessary arrow-body blocks, expression-bodied arrows longer than 150 characters whose body remains on the signature line, unnecessary braces around simple `if` bodies, `if` conditions with more than two logical evaluations that remain inline, simple brace-less `if` bodies that are not on the following indented line, comma-separated declarations and sequence expressions, semicolons that are not ASI guards, inline object destructuring with multiple properties, inline multi-value Map/Set-style initializers, inline multi-attribute D3/SVG chains, legacy own-property checks, JSON serialization used as a deep-clone substitute, restricted HTTP client packages, restricted raw DOM construction in web-ui implementation files, and native console logging outside frontend code and the debug-tools implementation. Named exports follow the same one-versus-many layout as named imports. Fix actions migrate JavaScript source files to TypeScript, remove unused imports without deleting unused local variables, and replace native backend console calls with `@lixpi/debug-tools` imports and calls.
 
 ## GitHub Actions
 
 The `CI` workflow runs the quality-runner self-test and every configured quality domain as independent matrix jobs. Each job builds and invokes `lixpi-typescript-quality-runner` through `docker-compose.typescript-quality-runner.yml`, so dprint, Oxlint, Stylelint, and the repository validation scripts never run on the GitHub host.
 
 CI points Compose at the one-shot runner file directly. This keeps the same image, bind mounts, dispatcher, and domain commands used locally without parsing the unrelated application and deployment services from the root Compose graph. The matrix feeds one stable `Required CI gate` status after every quality and test job passes.
-
-## Future Oxlint Stylistic Plugin Review
-
-Monitor Oxlint's JavaScript plugin support and `@stylistic/eslint-plugin` compatibility for a stable release. Once that integration is stable, re-evaluate the Oxlint plus `@stylistic` approach. Adopt it if measured startup time, fix speed, rule fidelity, maintenance cost, and editor support are better than the dprint rule without weakening deterministic formatting.
