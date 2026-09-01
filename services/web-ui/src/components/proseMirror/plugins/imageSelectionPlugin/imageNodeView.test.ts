@@ -1,6 +1,13 @@
 'use strict'
 
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 import { EditorState } from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'

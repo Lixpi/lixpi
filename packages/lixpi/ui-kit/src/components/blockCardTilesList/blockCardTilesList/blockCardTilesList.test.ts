@@ -1,4 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { createBlockCardTilesList } from './blockCardTilesList.ts'
 
 afterEach(() => {

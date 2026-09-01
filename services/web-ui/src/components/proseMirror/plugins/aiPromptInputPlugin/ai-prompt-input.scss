@@ -7,7 +7,7 @@
 // =============================================================================
 
 @import '$src/sass/_variables.scss';
-@import '$src/sass/_transitions.scss';
+@import '@lixpi/ui-primitives/styles/transitions';
 
 .ai-prompt-input-floating {
     position: absolute;
@@ -347,7 +347,7 @@
 }
 
 .ai-prompt-model-menu-trigger-summary-separator {
-    --workspace-generated-media-chrome-icon-size: 34px;
+    --canvas-node-footer-icon-size: 34px;
 
     height: 34px;
     margin-right: 7px;

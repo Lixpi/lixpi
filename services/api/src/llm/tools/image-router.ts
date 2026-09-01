@@ -1,23 +1,36 @@
 'use strict'
 
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import type NatsService from '@lixpi/nats-service'
 import type {
     CapabilityMediaExecutionContext,
     CapabilityMediaStrategyRegistry,
 } from '@lixpi/capability-system/backend'
-import type { CapabilityJsonValue, MediaGenerationProblem } from '@lixpi/constants'
+import type {
+    CapabilityJsonValue,
+    MediaGenerationProblem,
+} from '@lixpi/constants'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
+import type {
+    ProseMirrorContentHandler,
+    ProseMirrorSnapshotProvider,
+} from '../graph/stream-publisher.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
     buildImageModelPrompt,
     getImageSourceReferenceImages,
     normalizeImageSize,
 } from './image-generation-trace.ts'
-import { buildImageGenerationReferences, type ImageGenerationReference } from '../image-generation-references.ts'
+import {
+    buildImageGenerationReferences,
+    type ImageGenerationReference,
+} from '../image-generation-references.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import { settleGeneratedAssetComposition } from '../../services/generated-asset-storage.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
@@ -89,8 +102,8 @@ export class ImageRouter {
 
         if (!imageProvider || !imageModel || (!prompt && !state.capabilityMediaExecutionPlan)) {
             err(
-                `[ImageRouter] Missing provider, model, or prompt — provider=${imageProvider} ` +
-                `model=${imageModel} promptLen=${prompt.length}`,
+                `[ImageRouter] Missing provider, model, or prompt — provider=${imageProvider} `
+                    + `model=${imageModel} promptLen=${prompt.length}`,
             )
             return {}
         }
@@ -106,17 +119,21 @@ export class ImageRouter {
                 modelId: generationRun.mediaModelId,
                 stage: 'submit',
             })
-            if (problem) warn(`[MediaGenerationProblem] ${JSON.stringify({
-                supportCode: problem.supportCode,
-                category: problem.category,
-                stage: problem.stage,
-                provider: problem.provider,
-                modelId: problem.modelId,
-                providerCode: problem.providerCode,
-                providerReason: problem.providerReason,
-                moderationStage: problem.moderationStage,
-                moderationCategories: problem.moderationCategories,
-            })}`)
+            if (problem) {
+                warn(`[MediaGenerationProblem] ${
+                    JSON.stringify({
+                        supportCode: problem.supportCode,
+                        category: problem.category,
+                        stage: problem.stage,
+                        provider: problem.provider,
+                        modelId: problem.modelId,
+                        providerCode: problem.providerCode,
+                        providerReason: problem.providerReason,
+                        moderationStage: problem.moderationStage,
+                        moderationCategories: problem.moderationCategories,
+                    })
+                }`)
+            }
             await requestService.recordRunStatus({
                 generationRequestId: state.durableGenerationRequestId,
                 workspaceId,
@@ -133,15 +150,18 @@ export class ImageRouter {
             errorCode: string | undefined,
             errorType: string | undefined,
             problem: MediaGenerationProblem | undefined,
-        ): Partial<ProviderState> => state.durableGenerationRequestId && problem ? {
-            error: problem.detail,
-            errorCode: problem.providerCode ?? problem.category,
-            errorType: problem.category,
-        } : {
-            error,
-            ...(errorCode ? { errorCode } : {}),
-            ...(errorType ? { errorType } : {}),
-        }
+        ): Partial<ProviderState> =>
+            state.durableGenerationRequestId && problem
+                ? {
+                    error: problem.detail,
+                    errorCode: problem.providerCode ?? problem.category,
+                    errorType: problem.category,
+                }
+                : {
+                    error,
+                    ...(errorCode ? { errorCode } : {}),
+                    ...(errorType ? { errorType } : {}),
+                }
 
         const instanceKey = generationRun?.mediaRunId
             ? `${workspaceId}:${aiChatThreadId}:${generationRun.mediaRunId}`
@@ -251,26 +271,32 @@ export class ImageRouter {
         // Audited fields: chat provider/model that emitted the generate_image
         // tool call, the resolved image provider+model+size, the user-prompt vs
         // routed-prompt lengths, the reference fingerprints (no base64 dump).
-        info(`[ImageRouter] invocation chain ${JSON.stringify({
-            workspaceId,
-            aiChatThreadId,
-            chatProvider: state.provider,
-            chatModel: state.modelVersion,
-            imageProvider,
-            imageModel,
-            imageSize,
-            originalPromptLen: prompt.length,
-            routedPromptLen: imageModelPrompt.length,
-            referenceImagesCount: referenceImages.length,
-            referenceImages: referenceImages.map(reference => ({
-                role: reference.role,
-                fileName: reference.fileName,
-                fingerprint: fingerprintRef(reference.url),
-            })),
-            capabilityReferenceImagesCount: capabilityReferenceImages.length,
-            capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
-            instanceKey,
-        }, null, 0)}`)
+        info(`[ImageRouter] invocation chain ${
+            JSON.stringify(
+                {
+                    workspaceId,
+                    aiChatThreadId,
+                    chatProvider: state.provider,
+                    chatModel: state.modelVersion,
+                    imageProvider,
+                    imageModel,
+                    imageSize,
+                    originalPromptLen: prompt.length,
+                    routedPromptLen: imageModelPrompt.length,
+                    referenceImagesCount: referenceImages.length,
+                    referenceImages: referenceImages.map(reference => ({
+                        role: reference.role,
+                        fileName: reference.fileName,
+                        fingerprint: fingerprintRef(reference.url),
+                    })),
+                    capabilityReferenceImagesCount: capabilityReferenceImages.length,
+                    capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
+                    instanceKey,
+                },
+                null,
+                0,
+            )
+        }`)
 
         if (referenceImages.length === 0) {
             warn(`[ImageRouter] No reference images attached for ${instanceKey}. If you expected the model to see workspace reference images, check the upstream extractReferenceImages() / messages payload.`)
@@ -284,7 +310,9 @@ export class ImageRouter {
         }): Promise<ProviderState> => {
             if (options.signal?.aborted) throw options.signal.reason ?? new DOMException('Aborted', 'AbortError')
             const provider = this.registry.createTransient(args.passInstanceKey, imageProvider)
-            const stopForAbort = (): void => { void this.registry.stop(args.passInstanceKey) }
+            const stopForAbort = (): void => {
+                void this.registry.stop(args.passInstanceKey)
+            }
             options.signal?.addEventListener('abort', stopForAbort, { once: true })
 
             try {
@@ -388,15 +416,17 @@ const buildCapabilityMediaExecutionContext = (
     if (!plan) throw new Error('CAPABILITY_MEDIA_EXECUTION_PLAN_REQUIRED')
     const promptAuthority = resolveCapabilityAuthoritativePrompt(state, generatedMediaPrompt)
     const editTargetAssetId = resolveCapabilityEditTargetAssetId(state)
-    info(`[ImageRouter] capability media prompt authority ${JSON.stringify({
-        workspaceId: state.workspaceId,
-        aiChatThreadId: state.aiChatThreadId,
-        source: promptAuthority.source,
-        authoritativePromptLength: promptAuthority.prompt.length,
-        generatedMediaPromptLength: generatedMediaPrompt.length,
-        ignoredGeneratedMediaPrompt: promptAuthority.source !== 'generated-media-prompt'
-            && generatedMediaPrompt.trim().length > 0,
-    })}`)
+    info(`[ImageRouter] capability media prompt authority ${
+        JSON.stringify({
+            workspaceId: state.workspaceId,
+            aiChatThreadId: state.aiChatThreadId,
+            source: promptAuthority.source,
+            authoritativePromptLength: promptAuthority.prompt.length,
+            generatedMediaPromptLength: generatedMediaPrompt.length,
+            ignoredGeneratedMediaPrompt: promptAuthority.source !== 'generated-media-prompt'
+                && generatedMediaPrompt.trim().length > 0,
+        })
+    }`)
     return {
         organizationId,
         userId,
@@ -422,12 +452,14 @@ const buildCapabilityMediaExecutionContext = (
             mediaReferenceAliases: (state.providerSafeMediaIntent?.bindings
                 ?? state.mediaReferenceBindings
                 ?? []).map(binding => ({
-                assetId: binding.assetId,
-                alias: binding.alias,
-            })),
-            sourceSubjectIdentityClassifications: [...new Set(
-                (state.mediaReferenceBindings ?? []).map(binding => binding.subjectIdentity.classification),
-            )],
+                    assetId: binding.assetId,
+                    alias: binding.alias,
+                })),
+            sourceSubjectIdentityClassifications: [
+                ...new Set(
+                    (state.mediaReferenceBindings ?? []).map(binding => binding.subjectIdentity.classification),
+                ),
+            ],
             capabilityInstructions: state.capabilityUsagePrompt?.trim()
                 ? [state.capabilityUsagePrompt.trim()]
                 : [],
@@ -457,9 +489,7 @@ const resolveCapabilityEditTargetAssetId = (state: ProviderState): string | unde
     const targetCandidateId = resolution.targetCandidateId
         ?? state.mediaBranchCandidateSnapshot?.activeTargetCandidateId
     if (!targetCandidateId) throw new Error('CAPABILITY_MEDIA_EDIT_TARGET_REQUIRED')
-    const target = state.mediaBranchCandidateSnapshot?.candidates.find(candidate =>
-        candidate.candidateId === targetCandidateId
-    )
+    const target = state.mediaBranchCandidateSnapshot?.candidates.find(candidate => candidate.candidateId === targetCandidateId)
     if (!target) throw new Error('CAPABILITY_MEDIA_EDIT_TARGET_UNKNOWN')
     return target.assetId
 }
@@ -479,13 +509,15 @@ const resolveCapabilityAuthoritativePrompt = (
         if (message.role !== 'user') return []
         if (typeof message.content === 'string') return [message.content.trim()]
         if (!Array.isArray(message.content)) return []
-        return [message.content.flatMap(part => {
-            if (!part || typeof part !== 'object' || Array.isArray(part)) return []
-            const value = part as { type?: unknown; text?: unknown }
-            return value.type === 'input_text' && typeof value.text === 'string'
-                ? [value.text]
-                : []
-        }).join('\n').trim()]
+        return [
+            message.content.flatMap(part => {
+                if (!part || typeof part !== 'object' || Array.isArray(part)) return []
+                const value = part as { type?: unknown; text?: unknown }
+                return value.type === 'input_text' && typeof value.text === 'string'
+                    ? [value.text]
+                    : []
+            }).join('\n').trim(),
+        ]
     }).find(Boolean)
     if (latestUserPrompt) return { prompt: latestUserPrompt, source: 'latest-user-message' }
     return { prompt: generatedMediaPrompt.trim(), source: 'generated-media-prompt' }

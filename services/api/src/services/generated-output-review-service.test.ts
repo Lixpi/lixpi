@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import type { CanvasState } from '@lixpi/constants'
 
 const assetModelMocks = vi.hoisted(() => ({
@@ -283,18 +289,24 @@ describe('GeneratedOutputReviewService', () => {
             nodeId: 'media-1',
             preserveLineageNodeIds: new Set(),
         })
-        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenNthCalledWith(1, expect.objectContaining({
-            assetId: 'asset-1',
-            surfaceId: 'conversation#conversation-1#media#media-run-1',
-        }))
+        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({
+                assetId: 'asset-1',
+                surfaceId: 'conversation#conversation-1#media#media-run-1',
+            }),
+        )
         expect(assetModelMocks.detachCatalogReference).toHaveBeenCalledWith({
             assetId: 'asset-1',
             requester,
         })
-        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            assetId: 'asset-1',
-            nodeId: 'media-1',
-        }))
+        expect(assetModelMocks.detachWorkspaceReference).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+                assetId: 'asset-1',
+                nodeId: 'media-1',
+            }),
+        )
         expect(result).toMatchObject({
             success: true,
             acceptedAssetIds: [],

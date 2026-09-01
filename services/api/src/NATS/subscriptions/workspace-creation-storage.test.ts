@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -20,8 +26,7 @@ vi.mock('../../models/asset.ts', () => ({ default: {} }))
 
 import { workspaceSubjects } from './workspace-subjects.ts'
 
-const getHandler = (subject: string) =>
-    workspaceSubjects.find((subscription) => subscription.subject === subject)!.handler
+const getHandler = (subject: string) => workspaceSubjects.find((subscription) => subscription.subject === subject)!.handler
 
 // =============================================================================
 // WORKSPACE CREATION ORGANIZATION RESOLUTION

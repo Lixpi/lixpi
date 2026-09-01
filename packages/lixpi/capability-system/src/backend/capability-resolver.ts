@@ -226,11 +226,13 @@ export async function resolveCapabilities(
         )
     }
 
-    const resourceRequests = capabilities.flatMap(capability => capability.manifest.resources.map(ref => ({
-        capabilityId: capability.capabilityId,
-        record: catalogById.get(capability.capabilityId)!,
-        ref,
-    })))
+    const resourceRequests = capabilities.flatMap(capability =>
+        capability.manifest.resources.map(ref => ({
+            capabilityId: capability.capabilityId,
+            record: catalogById.get(capability.capabilityId)!,
+            ref,
+        }))
+    )
     if (resourceRequests.length > maxResources) {
         throw new CapabilityError(
             'CAPABILITY_RESOLUTION_LIMIT_EXCEEDED',
@@ -265,8 +267,7 @@ export async function resolveCapabilities(
             `Capability resources exceed the ${maxAggregateResourceBytes} byte aggregate limit`,
         )
     }
-    const aggregateTextResourceBytes = resources.reduce((total, resource) =>
-        isTextResource(resource.ref.mediaType) ? total + resource.bytes.byteLength : total, 0)
+    const aggregateTextResourceBytes = resources.reduce((total, resource) => isTextResource(resource.ref.mediaType) ? total + resource.bytes.byteLength : total, 0)
     if (aggregateTextResourceBytes > maxAggregateTextResourceBytes) {
         throw new CapabilityError(
             'CAPABILITY_RESOLUTION_LIMIT_EXCEEDED',

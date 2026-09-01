@@ -2,7 +2,13 @@
 
 import { createHash } from 'node:crypto'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import AdmZip from 'adm-zip'
 
 import {
@@ -43,7 +49,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('archiver', () => ({
-    ZipArchive: vi.fn(function () {
+    ZipArchive: vi.fn(function() {
         return {
             append: mocks.archiveAppend,
             pipe: mocks.archivePipe,

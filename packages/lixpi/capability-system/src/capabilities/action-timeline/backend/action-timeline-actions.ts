@@ -142,11 +142,12 @@ export function registerActionTimelineActions(
         validateInput: validatePreparedInput,
         validateOutput: validateWrittenOutput,
         authorize: authorizeActionTimeline,
-        execute: async (input, context) => await writeSegments(
-            readValidatedRequest(input.prepared),
-            context,
-            dependencies.model,
-        ),
+        execute: async (input, context) =>
+            await writeSegments(
+                readValidatedRequest(input.prepared),
+                context,
+                dependencies.model,
+            ),
         classifyRetry: () => 'terminal',
         summarizeInput: input => `segments=${arrayLength(asRecord(input.prepared)?.grid)}`,
         summarizeOutput: output => `segments=${arrayLength(asRecord(output)?.segments)}`,
@@ -221,10 +222,13 @@ async function writeSegments(
 
     for (const batch of batches) {
         const requestPrompt = buildBatchPrompt(prepared.input, batch, continuity, prepared.modelInputs)
-        const maxTokens = Math.max(segmentAnswerTokens, Math.min(
-            maxAnswerTokensForModel(context.variant.maxCompletionSize),
-            batchAnswerOverheadTokens + batch.length * segmentAnswerTokens,
-        ))
+        const maxTokens = Math.max(
+            segmentAnswerTokens,
+            Math.min(
+                maxAnswerTokensForModel(context.variant.maxCompletionSize),
+                batchAnswerOverheadTokens + batch.length * segmentAnswerTokens,
+            ),
+        )
         await model.assessInputBudget({
             variant: context.variant,
             systemPrompt: ACTION_TIMELINE_SYSTEM_PROMPT,
@@ -289,9 +293,11 @@ function validateBatchResponse(
         modelInputs,
     )
     const expectedSlots = new Set(batch.map(slot => slot.slotIndex))
-    if (segments.length !== batch.length
+    if (
+        segments.length !== batch.length
         || segments.some(segment => !expectedSlots.has(segment.slotIndex))
-        || new Set(segments.map(segment => segment.slotIndex)).size !== segments.length) {
+        || new Set(segments.map(segment => segment.slotIndex)).size !== segments.length
+    ) {
         throw new Error(`ACTION_TIMELINE_BATCH_SLOTS_INVALID:expected=${[...expectedSlots].join(',')}`)
     }
     assertActionTimelineRuns(segments, authorizedAssetIds)
@@ -357,9 +363,11 @@ function normalizeReferenceTitleRuns(
     if (references.length === 0) return segments.map(segment => ({ ...segment, runs: [...segment.runs] }))
     return segments.map(segment => ({
         ...segment,
-        runs: mergeAdjacentTextRuns(segment.runs.flatMap(run => 'text' in run
-            ? splitTextRunAtReferenceTitles(run.text, references)
-            : [run])),
+        runs: mergeAdjacentTextRuns(segment.runs.flatMap(run =>
+            'text' in run
+                ? splitTextRunAtReferenceTitles(run.text, references)
+                : [run]
+        )),
     }))
 }
 
@@ -379,8 +387,10 @@ function splitTextRunAtReferenceTitles(
                 index = foldedText.indexOf(reference.foldedTitle, index + 1)
             }
             if (index < 0) continue
-            if (!next || index < next.index
-                || index === next.index && reference.title.length > next.reference.title.length) {
+            if (
+                !next || index < next.index
+                || index === next.index && reference.title.length > next.reference.title.length
+            ) {
                 next = { reference, index }
             }
         }
@@ -497,8 +507,8 @@ function buildReferenceMetadata(
         mediaKind: input.kind === 'video-frame'
             ? 'video'
             : input.kind === 'document-text'
-                ? 'document'
-                : input.kind,
+            ? 'document'
+            : input.kind,
         displayName: resolveModelInputTitle(input),
     }]))
 }
@@ -541,7 +551,7 @@ function validatePersistInput(value: unknown): CapabilityActionValidationResult 
 function validatePersistOutput(value: unknown): CapabilityActionValidationResult {
     const record = asRecord(value)
     return record?.outputKind === 'capabilityArtifact'
-        && typeof record.assetId === 'string'
+            && typeof record.assetId === 'string'
         ? { valid: true }
         : { valid: false, message: 'Persisted Action Timeline output is invalid' }
 }

@@ -10,7 +10,10 @@ import {
     type InferenceProfileSummary,
 } from '@aws-sdk/client-bedrock'
 import { fromSSO } from '@aws-sdk/credential-providers'
-import { info, warn } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
 
 // Vendors whose models we can route through AWS Bedrock instead of the vendor's own API.
 // Keep this aligned with the `{VENDOR}_USE_AWS_BEDROCK_INFERENCE` env flags below.
@@ -53,8 +56,7 @@ type BedrockModelCandidate = {
 
 // Matches both current pinned, dateless ids such as `anthropic.claude-sonnet-5`
 // and legacy version-suffixed ids such as `anthropic.claude-haiku-4-5-20251001-v1:0`.
-export const buildBedrockModelIdPattern = (vendor: BedrockVendor, modelNameStem: string): RegExp =>
-    new RegExp(`^${vendor}\\.${modelNameStem}(?:-(\\d{8}))?(?:-v(\\d+)(?::(\\d+))?)?$`, 'i')
+export const buildBedrockModelIdPattern = (vendor: BedrockVendor, modelNameStem: string): RegExp => new RegExp(`^${vendor}\\.${modelNameStem}(?:-(\\d{8}))?(?:-v(\\d+)(?::(\\d+))?)?$`, 'i')
 
 const normalizeModelNameStem = (vendor: BedrockVendor, modelVersion: string): string => {
     const alias = BEDROCK_MODEL_NAME_ALIASES[vendor][modelVersion]
@@ -67,8 +69,7 @@ const normalizeModelNameStem = (vendor: BedrockVendor, modelVersion: string): st
 // Escapes the regex metacharacters that can appear in a normalized model-name stem.
 const escapeForRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const compareCandidates = (a: BedrockModelCandidate, b: BedrockModelCandidate): number =>
-    b.releaseDate - a.releaseDate || b.majorVersion - a.majorVersion || b.minorVersion - a.minorVersion
+const compareCandidates = (a: BedrockModelCandidate, b: BedrockModelCandidate): number => b.releaseDate - a.releaseDate || b.majorVersion - a.majorVersion || b.minorVersion - a.minorVersion
 
 // Owns Bedrock inference configuration: the per-vendor opt-in flags, the region, the
 // credential resolution shared by every Bedrock client, and the catalog-id -> Bedrock-id
@@ -179,10 +180,10 @@ class BedrockInference {
 
         if (candidates.length === 0) {
             throw new Error(
-                `No AWS Bedrock foundation model matches ${vendor} model "${modelVersion}" ` +
-                `(looked for ${vendor}.${stem} with an optional date and -vN suffix in region ${this.region}). ` +
-                `Either the model is not offered on Bedrock, is not enabled for this account, ` +
-                `or the model catalog id needs an alias in bedrock-inference.ts.`,
+                `No AWS Bedrock foundation model matches ${vendor} model "${modelVersion}" `
+                    + `(looked for ${vendor}.${stem} with an optional date and -vN suffix in region ${this.region}). `
+                    + `Either the model is not offered on Bedrock, is not enabled for this account, `
+                    + `or the model catalog id needs an alias in bedrock-inference.ts.`,
             )
         }
 
@@ -197,14 +198,16 @@ class BedrockInference {
         // Newer models are invocable only through a cross-region inference profile whose id
         // carries a geo prefix (e.g. `us.anthropic.claude-…`).
         const profiles = await this.listInferenceProfiles()
-        const profile = profiles.find(candidate => (candidate.models ?? []).some(
-            model => model.modelArn?.endsWith(`/${selected.modelId}`),
-        ))
+        const profile = profiles.find(candidate =>
+            (candidate.models ?? []).some(
+                model => model.modelArn?.endsWith(`/${selected.modelId}`),
+            )
+        )
         const profileId = profile?.inferenceProfileId
         if (!profileId) {
             throw new Error(
-                `AWS Bedrock model ${selected.modelId} requires an inference profile, but no profile ` +
-                `covering it exists in region ${this.region}. Enable cross-region inference for it.`,
+                `AWS Bedrock model ${selected.modelId} requires an inference profile, but no profile `
+                    + `covering it exists in region ${this.region}. Enable cross-region inference for it.`,
             )
         }
 

@@ -2,7 +2,11 @@
 
 import { readFileSync } from 'node:fs'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 const expectSourceToContain = (source: string, snippet: string, label: string): void => {
     expect(source.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)

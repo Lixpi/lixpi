@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     ACTION_TIMELINE_SCHEMA_VERSION,
@@ -35,40 +39,42 @@ describe('Action Timeline shared contract', () => {
         })
     })
 
-    it.each([
+    it.each(
         [
-            'Build a 15-second action timeline with 3-second beats.',
-            { durationMs: 15000, precisionMs: 3000 },
-        ],
-        [
-            'Use 2.5 seconds per beat across a 12.5 second sequence.',
-            { durationMs: 12500, precisionMs: 2500 },
-        ],
-        [
-            'Action timeline: 9s 1.5s',
-            { durationMs: 9000, precisionMs: 1500 },
-        ],
-        [
-            'Make this 8 seconds total with a 2 second cadence.',
-            { durationMs: 8000, precisionMs: 2000 },
-        ],
-        [
-            'Break a 10-second clip into 2-second actions.',
-            { durationMs: 10000, precisionMs: 2000 },
-        ],
-        [
-            'Create a 14 second sequence with each action lasting 3.5 seconds.',
-            { durationMs: 14000, precisionMs: 3500 },
-        ],
-        [
-            'Create 17s duration 2ms details for an imaginary film.',
-            { durationMs: 17000, precisionMs: 2 },
-        ],
-        [
-            'Use a 250ms cadence for a 1.5 minute sequence.',
-            { durationMs: 90000, precisionMs: 250 },
-        ],
-    ] as const)('extracts duration and precision from natural prompt wording: %s', (prompt, expected) => {
+            [
+                'Build a 15-second action timeline with 3-second beats.',
+                { durationMs: 15000, precisionMs: 3000 },
+            ],
+            [
+                'Use 2.5 seconds per beat across a 12.5 second sequence.',
+                { durationMs: 12500, precisionMs: 2500 },
+            ],
+            [
+                'Action timeline: 9s 1.5s',
+                { durationMs: 9000, precisionMs: 1500 },
+            ],
+            [
+                'Make this 8 seconds total with a 2 second cadence.',
+                { durationMs: 8000, precisionMs: 2000 },
+            ],
+            [
+                'Break a 10-second clip into 2-second actions.',
+                { durationMs: 10000, precisionMs: 2000 },
+            ],
+            [
+                'Create a 14 second sequence with each action lasting 3.5 seconds.',
+                { durationMs: 14000, precisionMs: 3500 },
+            ],
+            [
+                'Create 17s duration 2ms details for an imaginary film.',
+                { durationMs: 17000, precisionMs: 2 },
+            ],
+            [
+                'Use a 250ms cadence for a 1.5 minute sequence.',
+                { durationMs: 90000, precisionMs: 250 },
+            ],
+        ] as const,
+    )('extracts duration and precision from natural prompt wording: %s', (prompt, expected) => {
         expect(parseActionTimelineTiming(prompt)).toEqual(expected)
     })
 
@@ -104,10 +110,13 @@ describe('Action Timeline shared contract', () => {
             { slotIndex: 0, runs: [{ text: longText }, { assetId: 'asset-b' }] },
             { slotIndex: 1, runs: [{ assetId: 'asset-b' }, { text: ' then ' }, { assetId: 'asset-a' }] },
         ])
-        const serialized = serializeActionTimelineForModel(document, new Map([
-            ['asset-a', 'Final frame'],
-            ['asset-b', 'Hero "portrait"'],
-        ]))
+        const serialized = serializeActionTimelineForModel(
+            document,
+            new Map([
+                ['asset-a', 'Final frame'],
+                ['asset-b', 'Hero "portrait"'],
+            ]),
+        )
 
         expect(serialized.text).toContain(longText)
         expect(serialized.text).toContain('@Hero "portrait"')

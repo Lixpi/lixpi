@@ -382,11 +382,12 @@ export const capabilitySubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: { pub: { allow: [RUN.STATUS] }, sub: { allow: [] } },
-        handler: async (data: any) => await CapabilityRunModel.getAuthorized({
-            runId: data.runId,
-            workspaceId: data.workspaceId,
-            userId: data.user.userId,
-        }),
+        handler: async (data: any) =>
+            await CapabilityRunModel.getAuthorized({
+                runId: data.runId,
+                workspaceId: data.workspaceId,
+                userId: data.user.userId,
+            }),
     },
     {
         subject: RUN.RESUME,
@@ -403,8 +404,8 @@ export const capabilitySubjects = [
             const startStreamSequence = typeof data.startStreamSequence === 'number'
                 ? data.startStreamSequence
                 : typeof data.cursor === 'string' && Number.isSafeInteger(Number(data.cursor))
-                    ? Number(data.cursor)
-                    : 1
+                ? Number(data.cursor)
+                : 1
             const replay = await CapabilityRunEventLog.fromSingleton().replay({
                 workspaceId: run.workspaceId,
                 runId: run.runId,
@@ -445,11 +446,12 @@ export const capabilitySubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: { pub: { allow: [RUN.GET] }, sub: { allow: [] } },
-        handler: async (data: any) => await CapabilityRunModel.getAuthorized({
-            runId: data.runId,
-            workspaceId: data.workspaceId,
-            userId: data.user.userId,
-        }),
+        handler: async (data: any) =>
+            await CapabilityRunModel.getAuthorized({
+                runId: data.runId,
+                workspaceId: data.workspaceId,
+                userId: data.user.userId,
+            }),
     },
     {
         subject: RUN.REPLAY,

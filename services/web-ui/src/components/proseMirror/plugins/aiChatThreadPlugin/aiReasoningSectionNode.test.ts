@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import {
     aiReasoningSectionNodeSpec,

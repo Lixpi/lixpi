@@ -1,7 +1,15 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
-import { colorPalette, settings, type Settings } from '$src/settings.ts'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
+import {
+    colorPalette,
+    settings,
+    type Settings,
+} from '$src/settings.ts'
 import { workspaceCollisionSettings } from '@lixpi/constants'
 
 // Testing rule: assert config shape and ownership, not exact values.
@@ -11,63 +19,63 @@ import { workspaceCollisionSettings } from '@lixpi/constants'
 type UnknownRecord = Record<string, unknown>
 
 function collectGetterPaths(value: unknown, prefix = ''): string[] {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
 
-	const paths: string[] = []
-	for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
-		const path = prefix ? `${prefix}.${key}` : key
-		if (typeof descriptor.get === 'function') {
-			paths.push(path)
-			continue
-		}
+    const paths: string[] = []
+    for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+        const path = prefix ? `${prefix}.${key}` : key
+        if (typeof descriptor.get === 'function') {
+            paths.push(path)
+            continue
+        }
 
-		if ('value' in descriptor) {
-			paths.push(...collectGetterPaths(descriptor.value, path))
-		}
-	}
+        if ('value' in descriptor) {
+            paths.push(...collectGetterPaths(descriptor.value, path))
+        }
+    }
 
-	return paths
+    return paths
 }
 
 function expectOwnKeys(value: UnknownRecord, keys: string[], path: string): void {
-	for (const key of keys) {
-		expect(Object.hasOwn(value, key), `${path} should expose ${key}`).toBe(true)
-	}
+    for (const key of keys) {
+        expect(Object.hasOwn(value, key), `${path} should expose ${key}`).toBe(true)
+    }
 }
 
 function expectNoOwnKeys(value: Record<string, unknown>, keys: string[]): void {
-	for (const key of keys) {
-		expect(Object.hasOwn(value, key), `settings object should not expose stale key: ${key}`).toBe(false)
-	}
+    for (const key of keys) {
+        expect(Object.hasOwn(value, key), `settings object should not expose stale key: ${key}`).toBe(false)
+    }
 }
 
 function expectStringLeaf(value: unknown, path: string): void {
-	expect(
-		['string', 'number'].includes(typeof value),
-		`${path} should be a style token-compatible leaf (${typeof value})`,
-	).toBe(true)
+    expect(
+        ['string', 'number'].includes(typeof value),
+        `${path} should be a style token-compatible leaf (${typeof value})`,
+    ).toBe(true)
 }
 
 function expectLeafValuePaths(value: unknown, path = ''): void {
-	if (Array.isArray(value)) {
-		expect(value.length).toBeGreaterThan(0, `${path} should be a non-empty array`)
-		value.forEach((item, index) => expectLeafValuePaths(item, `${path}[${index}]`))
-		return
-	}
+    if (Array.isArray(value)) {
+        expect(value.length).toBeGreaterThan(0, `${path} should be a non-empty array`)
+        value.forEach((item, index) => expectLeafValuePaths(item, `${path}[${index}]`))
+        return
+    }
 
-	if (!value || typeof value !== 'object') {
-		expectStringLeaf(value, path)
-		return
-	}
+    if (!value || typeof value !== 'object') {
+        expectStringLeaf(value, path)
+        return
+    }
 
-	for (const [key, nested] of Object.entries(value)) {
-		expectLeafValuePaths(nested, path ? `${path}.${key}` : key)
-	}
+    for (const [key, nested] of Object.entries(value)) {
+        expectLeafValuePaths(nested, path ? `${path}.${key}` : key)
+    }
 }
 
 function expectFiniteNumber(value: unknown, path: string): void {
-	expect(typeof value).toBe('number', `${path} should be a number`)
-	expect(Number.isFinite(value), `${path} should be a finite number`).toBe(true)
+    expect(typeof value).toBe('number', `${path} should be a number`)
+    expect(Number.isFinite(value), `${path} should be a finite number`).toBe(true)
 }
 
 // =============================================================================
@@ -75,341 +83,341 @@ function expectFiniteNumber(value: unknown, path: string): void {
 // =============================================================================
 
 describe('settings - grouped configuration', () => {
-	it('exports expected sections and avoids getter-based static config', () => {
-		const topLevelSettingsSections = [
-			'modelSelectorDropdown',
-			'dropdown',
-			'slidingDropdown',
-			'aiModelControls',
-			'gradient',
-			'helpTooltip',
-			'canvasBubbleMenu',
-			'aiChatThread',
-			'aiPromptInput',
-			'connector',
-			'selection',
-			'workspaceCollision',
-			'mediaNode',
-			'videoControls',
-			'mediaBranchLineage',
-			'mediaLibrary',
-			'contentDescriptor',
-			'workspacePersistence',
-		]
+    it('exports expected sections and avoids getter-based static config', () => {
+        const topLevelSettingsSections = [
+            'modelSelectorDropdown',
+            'dropdown',
+            'slidingDropdown',
+            'aiModelControls',
+            'gradient',
+            'helpTooltip',
+            'canvasBubbleMenu',
+            'aiChatThread',
+            'aiPromptInput',
+            'connector',
+            'selection',
+            'workspaceCollision',
+            'mediaNode',
+            'videoControls',
+            'mediaBranchLineage',
+            'mediaLibrary',
+            'contentDescriptor',
+            'workspacePersistence',
+        ]
 
-		expectOwnKeys(settings, topLevelSettingsSections, 'settings')
-		expect(collectGetterPaths(settings)).toEqual([])
-	})
+        expectOwnKeys(settings, topLevelSettingsSections, 'settings')
+        expect(collectGetterPaths(settings)).toEqual([])
+    })
 
-	it('stores palette values as editable tokens', () => {
-		const paletteKeys = Object.keys(colorPalette)
+    it('stores palette values as editable tokens', () => {
+        const paletteKeys = Object.keys(colorPalette)
 
-		expect(paletteKeys.length).toBeGreaterThan(0)
-		for (const key of paletteKeys) {
-			const token = colorPalette[key as keyof typeof colorPalette]
-			expectStringLeaf(token, `colorPalette.${key}`)
-		}
-	})
+        expect(paletteKeys.length).toBeGreaterThan(0)
+        for (const key of paletteKeys) {
+            const token = colorPalette[key as keyof typeof colorPalette]
+            expectStringLeaf(token, `colorPalette.${key}`)
+        }
+    })
 
-	it('keeps scalar UI settings finite and numerically valid', () => {
-		expectFiniteNumber(settings.rightSidePanel.typography.contentFontSize, 'settings.rightSidePanel.typography.contentFontSize')
-		expectFiniteNumber(settings.aiChatThread.panelSwitch.height, 'settings.aiChatThread.panelSwitch.height')
-		expectFiniteNumber(
-			settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor,
-			'settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor',
-		)
-		expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
-		expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
-		expectFiniteNumber(settings.helpTooltip.interactiveHideDelayMs, 'settings.helpTooltip.interactiveHideDelayMs')
-		expectFiniteNumber(settings.helpTooltip.providerShowDelayMs, 'settings.helpTooltip.providerShowDelayMs')
-		expectFiniteNumber(settings.connector.proximityConnectThreshold, 'settings.connector.proximityConnectThreshold')
-		expectFiniteNumber(settings.connector.menuConnectionSnapRadius, 'settings.connector.menuConnectionSnapRadius')
-		expectFiniteNumber(settings.connector.scaling.strokeWidth, 'settings.connector.scaling.strokeWidth')
-		expectFiniteNumber(settings.connector.scaling.markerSize, 'settings.connector.scaling.markerSize')
-		expectFiniteNumber(settings.connector.scaling.markerOffset.source, 'settings.connector.scaling.markerOffset.source')
-		expectFiniteNumber(settings.connector.scaling.markerOffset.target, 'settings.connector.scaling.markerOffset.target')
-		expectFiniteNumber(settings.connector.scaling.clickAreaWidth, 'settings.connector.scaling.clickAreaWidth')
-		expectFiniteNumber(settings.connector.scaling.zoomScaling.minZoom, 'settings.connector.scaling.zoomScaling.minZoom')
-		expectFiniteNumber(settings.canvasBubbleMenu.zoomScaling.minZoom, 'settings.canvasBubbleMenu.zoomScaling.minZoom')
-		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.iconSize, 'settings.mediaNode.generatedMediaChrome.iconSize')
-		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.gap, 'settings.mediaNode.generatedMediaChrome.gap')
-		expectFiniteNumber(settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom, 'settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom')
-		expectFiniteNumber(settings.mediaNode.resizeHandle.size, 'settings.mediaNode.resizeHandle.size')
-		expectFiniteNumber(settings.mediaNode.resizeHandle.offset, 'settings.mediaNode.resizeHandle.offset')
-		expectFiniteNumber(settings.mediaNode.resizeHandle.minSize, 'settings.mediaNode.resizeHandle.minSize')
-		expectFiniteNumber(settings.mediaNode.resizeHandle.zoomScaling.minZoom, 'settings.mediaNode.resizeHandle.zoomScaling.minZoom')
-		expectFiniteNumber(settings.mediaNode.image.defaultInsertionWidth, 'settings.mediaNode.image.defaultInsertionWidth')
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.radius,
-			'settings.mediaNode.inProgressOutlineAnimation.radius',
-		)
-		expectFiniteNumber(settings.mediaNode.inProgressOutlineAnimation.gap, 'settings.mediaNode.inProgressOutlineAnimation.gap')
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale,
-			'settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.snakeWidth,
-			'settings.mediaNode.inProgressOutlineAnimation.snakeWidth',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.snakeTailWidthFraction,
-			'settings.mediaNode.inProgressOutlineAnimation.snakeTailWidthFraction',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.snakeTailThinLengthFraction,
-			'settings.mediaNode.inProgressOutlineAnimation.snakeTailThinLengthFraction',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.snakeWidthTaperPower,
-			'settings.mediaNode.inProgressOutlineAnimation.snakeWidthTaperPower',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.snakeLengthFraction,
-			'settings.mediaNode.inProgressOutlineAnimation.snakeLengthFraction',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.snakeHeadRoundLengthFraction,
-			'settings.mediaNode.inProgressOutlineAnimation.snakeHeadRoundLengthFraction',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.animationDurationMs,
-			'settings.mediaNode.inProgressOutlineAnimation.animationDurationMs',
-		)
-		expectFiniteNumber(
-			settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom,
-			'settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom',
-		)
-		expectFiniteNumber(settings.mediaBranchLineage.generatedMediaSize, 'settings.mediaBranchLineage.generatedMediaSize')
-		expectFiniteNumber(settings.mediaBranchLineage.rootToFirstMediaGap, 'settings.mediaBranchLineage.rootToFirstMediaGap')
-		expectFiniteNumber(settings.mediaBranchLineage.branchRowGap, 'settings.mediaBranchLineage.branchRowGap')
-		expectFiniteNumber(settings.mediaBranchLineage.mediaToMediaGap, 'settings.mediaBranchLineage.mediaToMediaGap')
-		expectFiniteNumber(settings.mediaBranchLineage.branchFanoutExtraGap, 'settings.mediaBranchLineage.branchFanoutExtraGap')
-		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.size, 'settings.mediaBranchLineage.branchOrigin.size')
-		expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.iconSize, 'settings.mediaBranchLineage.branchOrigin.iconSize')
-		for (const [flowName, flowSettings] of Object.entries(settings.workspaceCollision)) {
-			for (const [nodeType, nodeSettings] of Object.entries(flowSettings.nodeTypes)) {
-				expectFiniteNumber(nodeSettings.iterations, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.iterations`)
-				expectFiniteNumber(nodeSettings.margin, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.margin`)
-				expectFiniteNumber(nodeSettings.overlapThreshold, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.overlapThreshold`)
-			}
-		}
-		expectFiniteNumber(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction')
-		expectFiniteNumber(settings.contentDescriptor.editDebounceMs, 'settings.contentDescriptor.editDebounceMs')
-		expectFiniteNumber(settings.workspacePersistence.debounceMs, 'settings.workspacePersistence.debounceMs')
-		expectFiniteNumber(settings.contentDescriptor.minTextLength, 'settings.contentDescriptor.minTextLength')
-		expectFiniteNumber(settings.aiChatThread.panelSwitch.transitionDurationMs, 'settings.aiChatThread.panelSwitch.transitionDurationMs')
-		expectFiniteNumber(
-			settings.aiChatThread.panelSwitch.transitionMinDurationMs,
-			'settings.aiChatThread.panelSwitch.transitionMinDurationMs',
-		)
-	})
+    it('keeps scalar UI settings finite and numerically valid', () => {
+        expectFiniteNumber(settings.rightSidePanel.typography.contentFontSize, 'settings.rightSidePanel.typography.contentFontSize')
+        expectFiniteNumber(settings.aiChatThread.panelSwitch.height, 'settings.aiChatThread.panelSwitch.height')
+        expectFiniteNumber(
+            settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor,
+            'settings.aiChatThread.panelSwitch.transitionDistanceSpeedupFactor',
+        )
+        expectFiniteNumber(settings.connector.autoAlign.minSlideHeight, 'settings.connector.autoAlign.minSlideHeight')
+        expectFiniteNumber(settings.connector.autoAlign.edgeMargin, 'settings.connector.autoAlign.edgeMargin')
+        expectFiniteNumber(settings.helpTooltip.interactiveHideDelayMs, 'settings.helpTooltip.interactiveHideDelayMs')
+        expectFiniteNumber(settings.helpTooltip.providerShowDelayMs, 'settings.helpTooltip.providerShowDelayMs')
+        expectFiniteNumber(settings.connector.proximityConnectThreshold, 'settings.connector.proximityConnectThreshold')
+        expectFiniteNumber(settings.connector.menuConnectionSnapRadius, 'settings.connector.menuConnectionSnapRadius')
+        expectFiniteNumber(settings.connector.scaling.strokeWidth, 'settings.connector.scaling.strokeWidth')
+        expectFiniteNumber(settings.connector.scaling.markerSize, 'settings.connector.scaling.markerSize')
+        expectFiniteNumber(settings.connector.scaling.markerOffset.source, 'settings.connector.scaling.markerOffset.source')
+        expectFiniteNumber(settings.connector.scaling.markerOffset.target, 'settings.connector.scaling.markerOffset.target')
+        expectFiniteNumber(settings.connector.scaling.clickAreaWidth, 'settings.connector.scaling.clickAreaWidth')
+        expectFiniteNumber(settings.connector.scaling.zoomScaling.minZoom, 'settings.connector.scaling.zoomScaling.minZoom')
+        expectFiniteNumber(settings.canvasBubbleMenu.zoomScaling.minZoom, 'settings.canvasBubbleMenu.zoomScaling.minZoom')
+        expectFiniteNumber(settings.mediaNode.generatedMediaChrome.iconSize, 'settings.mediaNode.generatedMediaChrome.iconSize')
+        expectFiniteNumber(settings.mediaNode.generatedMediaChrome.gap, 'settings.mediaNode.generatedMediaChrome.gap')
+        expectFiniteNumber(settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom, 'settings.mediaNode.generatedMediaChrome.zoomScaling.minZoom')
+        expectFiniteNumber(settings.mediaNode.resizeHandle.size, 'settings.mediaNode.resizeHandle.size')
+        expectFiniteNumber(settings.mediaNode.resizeHandle.offset, 'settings.mediaNode.resizeHandle.offset')
+        expectFiniteNumber(settings.mediaNode.resizeHandle.minSize, 'settings.mediaNode.resizeHandle.minSize')
+        expectFiniteNumber(settings.mediaNode.resizeHandle.zoomScaling.minZoom, 'settings.mediaNode.resizeHandle.zoomScaling.minZoom')
+        expectFiniteNumber(settings.mediaNode.image.defaultInsertionWidth, 'settings.mediaNode.image.defaultInsertionWidth')
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.radius,
+            'settings.mediaNode.inProgressOutlineAnimation.radius',
+        )
+        expectFiniteNumber(settings.mediaNode.inProgressOutlineAnimation.gap, 'settings.mediaNode.inProgressOutlineAnimation.gap')
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale,
+            'settings.mediaNode.inProgressOutlineAnimation.preFrameCircleScale',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.snakeWidth,
+            'settings.mediaNode.inProgressOutlineAnimation.snakeWidth',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.snakeTailWidthFraction,
+            'settings.mediaNode.inProgressOutlineAnimation.snakeTailWidthFraction',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.snakeTailThinLengthFraction,
+            'settings.mediaNode.inProgressOutlineAnimation.snakeTailThinLengthFraction',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.snakeWidthTaperPower,
+            'settings.mediaNode.inProgressOutlineAnimation.snakeWidthTaperPower',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.snakeLengthFraction,
+            'settings.mediaNode.inProgressOutlineAnimation.snakeLengthFraction',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.snakeHeadRoundLengthFraction,
+            'settings.mediaNode.inProgressOutlineAnimation.snakeHeadRoundLengthFraction',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.animationDurationMs,
+            'settings.mediaNode.inProgressOutlineAnimation.animationDurationMs',
+        )
+        expectFiniteNumber(
+            settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom,
+            'settings.mediaNode.inProgressOutlineAnimation.zoomScaling.minZoom',
+        )
+        expectFiniteNumber(settings.mediaBranchLineage.generatedMediaSize, 'settings.mediaBranchLineage.generatedMediaSize')
+        expectFiniteNumber(settings.mediaBranchLineage.rootToFirstMediaGap, 'settings.mediaBranchLineage.rootToFirstMediaGap')
+        expectFiniteNumber(settings.mediaBranchLineage.branchRowGap, 'settings.mediaBranchLineage.branchRowGap')
+        expectFiniteNumber(settings.mediaBranchLineage.mediaToMediaGap, 'settings.mediaBranchLineage.mediaToMediaGap')
+        expectFiniteNumber(settings.mediaBranchLineage.branchFanoutExtraGap, 'settings.mediaBranchLineage.branchFanoutExtraGap')
+        expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.size, 'settings.mediaBranchLineage.branchOrigin.size')
+        expectFiniteNumber(settings.mediaBranchLineage.branchOrigin.iconSize, 'settings.mediaBranchLineage.branchOrigin.iconSize')
+        for (const [flowName, flowSettings] of Object.entries(settings.workspaceCollision)) {
+            for (const [nodeType, nodeSettings] of Object.entries(flowSettings.nodeTypes)) {
+                expectFiniteNumber(nodeSettings.iterations, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.iterations`)
+                expectFiniteNumber(nodeSettings.margin, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.margin`)
+                expectFiniteNumber(nodeSettings.overlapThreshold, `settings.workspaceCollision.${flowName}.nodeTypes.${nodeType}.overlapThreshold`)
+            }
+        }
+        expectFiniteNumber(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction')
+        expectFiniteNumber(settings.contentDescriptor.editDebounceMs, 'settings.contentDescriptor.editDebounceMs')
+        expectFiniteNumber(settings.workspacePersistence.debounceMs, 'settings.workspacePersistence.debounceMs')
+        expectFiniteNumber(settings.contentDescriptor.minTextLength, 'settings.contentDescriptor.minTextLength')
+        expectFiniteNumber(settings.aiChatThread.panelSwitch.transitionDurationMs, 'settings.aiChatThread.panelSwitch.transitionDurationMs')
+        expectFiniteNumber(
+            settings.aiChatThread.panelSwitch.transitionMinDurationMs,
+            'settings.aiChatThread.panelSwitch.transitionMinDurationMs',
+        )
+    })
 
-	it('keeps content descriptor debounce aligned to workspace persistence debounce', () => {
-		expect(settings.contentDescriptor.editDebounceMs).toBe(settings.workspacePersistence.debounceMs)
-	})
+    it('keeps content descriptor debounce aligned to workspace persistence debounce', () => {
+        expect(settings.contentDescriptor.editDebounceMs).toBe(settings.workspacePersistence.debounceMs)
+    })
 
-	it('uses shared API/WebUI workspace collision settings from constants', () => {
-		expect(settings.workspaceCollision).toBe(workspaceCollisionSettings)
-	})
+    it('uses shared API/WebUI workspace collision settings from constants', () => {
+        expect(settings.workspaceCollision).toEqual(workspaceCollisionSettings)
+    })
 
-	it('keeps all feature flags as booleans', () => {
-		const booleanEntries = [
-			['modelSelectorDropdown.useModalityFilter', settings.modelSelectorDropdown.useModalityFilter],
-			['aiPromptInput.useShiftingGradientBackground', settings.aiPromptInput.useShiftingGradientBackground],
-			['mediaNode.useZoomCompensatedResizeHandleScaling', settings.mediaNode.useZoomCompensatedResizeHandleScaling],
-			['connector.useZoomCompensatedScaling', settings.connector.useZoomCompensatedScaling],
-		]
+    it('keeps all feature flags as booleans', () => {
+        const booleanEntries = [
+            ['modelSelectorDropdown.useModalityFilter', settings.modelSelectorDropdown.useModalityFilter],
+            ['aiPromptInput.useShiftingGradientBackground', settings.aiPromptInput.useShiftingGradientBackground],
+            ['mediaNode.useZoomCompensatedResizeHandleScaling', settings.mediaNode.useZoomCompensatedResizeHandleScaling],
+            ['connector.useZoomCompensatedScaling', settings.connector.useZoomCompensatedScaling],
+        ]
 
-		for (const [path, value] of booleanEntries) {
-			expect(typeof value, `${path} should be boolean`).toBe('boolean')
-		}
-	})
+        for (const [path, value] of booleanEntries) {
+            expect(typeof value, `${path} should be boolean`).toBe('boolean')
+        }
+    })
 
-	it('keeps style buckets containing style tokens and design scalars', () => {
-		expectFiniteNumber(settings.gradient.styles.shiftingColors.length, 'settings.gradient.styles.shiftingColors.length')
-		expect(settings.gradient.styles.shiftingColors.length, 'settings.gradient.styles.shiftingColors.length').toBe(4)
+    it('keeps style buckets containing style tokens and design scalars', () => {
+        expectFiniteNumber(settings.gradient.styles.shiftingColors.length, 'settings.gradient.styles.shiftingColors.length')
+        expect(settings.gradient.styles.shiftingColors.length, 'settings.gradient.styles.shiftingColors.length').toBe(4)
 
-		const styleGroups = {
-			'settings.dropdown.styles': settings.dropdown.styles,
-			'settings.slidingDropdown.styles': settings.slidingDropdown.styles,
-			'settings.aiModelControls.styles': settings.aiModelControls.styles,
-			'settings.aiChatThread.styles': settings.aiChatThread.styles,
-			'settings.aiPromptInput.modelMenu.styles': settings.aiPromptInput.modelMenu.styles,
-			'settings.aiChatThread.panelSwitch.styles': settings.aiChatThread.panelSwitch.styles,
-			'settings.aiChatThread.contextPreview.styles': settings.aiChatThread.contextPreview.styles,
-			'settings.connector.styles': settings.connector.styles,
-			'settings.selection.styles': settings.selection.styles,
-			'settings.mediaNode.styles': settings.mediaNode.styles,
-			'settings.mediaNode.generatedMediaChrome.styles': settings.mediaNode.generatedMediaChrome.styles,
-			'settings.mediaNode.inProgressOutlineAnimation.styles': settings.mediaNode.inProgressOutlineAnimation.styles,
-			'settings.mediaBranchLineage.branchOrigin.styles': settings.mediaBranchLineage.branchOrigin.styles,
-		}
+        const styleGroups = {
+            'settings.dropdown.styles': settings.dropdown.styles,
+            'settings.slidingDropdown.styles': settings.slidingDropdown.styles,
+            'settings.aiModelControls.styles': settings.aiModelControls.styles,
+            'settings.aiChatThread.styles': settings.aiChatThread.styles,
+            'settings.aiPromptInput.modelMenu.styles': settings.aiPromptInput.modelMenu.styles,
+            'settings.aiChatThread.contextPreview.styles': settings.aiChatThread.contextPreview.styles,
+            'settings.connector.styles': settings.connector.styles,
+            'settings.selection.styles': settings.selection.styles,
+            'settings.mediaNode.styles': settings.mediaNode.styles,
+            'settings.mediaNode.generatedMediaChrome.styles': settings.mediaNode.generatedMediaChrome.styles,
+            'settings.mediaNode.inProgressOutlineAnimation.styles': settings.mediaNode.inProgressOutlineAnimation.styles,
+            'settings.mediaBranchLineage.branchOrigin.styles': settings.mediaBranchLineage.branchOrigin.styles,
+        }
 
-		for (const [path, group] of Object.entries(styleGroups)) {
-			expect(typeof group, `${path} should be object`).toBe('object')
-			expectLeafValuePaths(group, path)
-		}
-	})
+        for (const [path, group] of Object.entries(styleGroups)) {
+            expect(typeof group, `${path} should be object`).toBe('object')
+            expectLeafValuePaths(group, path)
+        }
+    })
 
-	it('keeps the model menu compact and readable', () => {
-		expect(settings.aiPromptInput.modelMenu.styles.infoBubbleWidth).toBe('410px')
-		expect(settings.aiPromptInput.modelMenu.styles.controlLabelFontSize).toBe('12px')
-	})
+    it('keeps the model menu compact and readable', () => {
+        expect(settings.aiPromptInput.modelMenu.styles.infoBubbleWidth).toBe('410px')
+        expect(settings.aiPromptInput.modelMenu.styles.controlLabelFontSize).toBe('12px')
+    })
 
-	it('keeps model selector sizing separate from media configuration dropdown sizing', () => {
-		const modelDropdown = settings.aiModelControls.styles.modelDropdown
-		const mediaDropdown = settings.aiModelControls.styles.dimensionsDropdown
+    it('keeps model selector sizing separate from media configuration dropdown sizing', () => {
+        const modelDropdown = settings.aiModelControls.styles.modelDropdown
+        const mediaDropdown = settings.aiModelControls.styles.dimensionsDropdown
 
-		for (const [name, value] of Object.entries(modelDropdown)) {
-			expectFiniteNumber(value, `settings.aiModelControls.styles.modelDropdown.${name}`)
-		}
-		expect(modelDropdown.width).toBeGreaterThan(mediaDropdown.width)
-		expect(modelDropdown.iconSize).toBeGreaterThan(0)
-		expect(modelDropdown.iconLabelGap).toBeGreaterThan(0)
-	})
+        for (const [name, value] of Object.entries(modelDropdown)) {
+            expectFiniteNumber(value, `settings.aiModelControls.styles.modelDropdown.${name}`)
+        }
+        expect(modelDropdown.width).toBeGreaterThan(mediaDropdown.width)
+        expect(modelDropdown.iconSize).toBeGreaterThan(0)
+        expect(modelDropdown.iconLabelGap).toBeGreaterThan(0)
+    })
 
-	it('keeps video controls scalar values numerically valid', () => {
-		const videoControlNumbers = [
-			['videoControls.height', settings.videoControls.height],
-			['videoControls.canvas.horizontalInset', settings.videoControls.canvas.horizontalInset],
-			['videoControls.canvas.compactHorizontalInset', settings.videoControls.canvas.compactHorizontalInset],
-			['videoControls.canvas.compactWidthThreshold', settings.videoControls.canvas.compactWidthThreshold],
-			['videoControls.canvas.bottomInset', settings.videoControls.canvas.bottomInset],
-			['videoControls.canvas.zoomScaling.minZoom', settings.videoControls.canvas.zoomScaling.minZoom],
-			['videoControls.chat.horizontalInset', settings.videoControls.chat.horizontalInset],
-			['videoControls.chat.bottomInset', settings.videoControls.chat.bottomInset],
-			['videoControls.chat.controlsScale', settings.videoControls.chat.controlsScale],
-			['videoControls.chat.minWidth', settings.videoControls.chat.minWidth],
-			['videoControls.chat.fallbackWidth', settings.videoControls.chat.fallbackWidth],
-			['videoControls.layout.padding', settings.videoControls.layout.padding],
-			['videoControls.layout.gap', settings.videoControls.layout.gap],
-			['videoControls.layout.buttonSize', settings.videoControls.layout.buttonSize],
-			['videoControls.layout.iconSize', settings.videoControls.layout.iconSize],
-			['videoControls.layout.barRadius', settings.videoControls.layout.barRadius],
-			['videoControls.layout.buttonRadius', settings.videoControls.layout.buttonRadius],
-			['videoControls.layout.railHeight', settings.videoControls.layout.railHeight],
-			['videoControls.layout.scrubberHandleRadius', settings.videoControls.layout.scrubberHandleRadius],
-			['videoControls.layout.volumeHandleRadius', settings.videoControls.layout.volumeHandleRadius],
-			['videoControls.layout.backgroundHighlightInset', settings.videoControls.layout.backgroundHighlightInset],
-			['videoControls.layout.timeWidth', settings.videoControls.layout.timeWidth],
-			['videoControls.layout.speedSliderWidth', settings.videoControls.layout.speedSliderWidth],
-			['videoControls.layout.compactSpeedSliderWidth', settings.videoControls.layout.compactSpeedSliderWidth],
-			['videoControls.layout.speedSliderMinWidth', settings.videoControls.layout.speedSliderMinWidth],
-			['videoControls.layout.speedValueWidth', settings.videoControls.layout.speedValueWidth],
-			['videoControls.layout.speedValueSliderGap', settings.videoControls.layout.speedValueSliderGap],
-			['videoControls.layout.volumeSliderWidth', settings.videoControls.layout.volumeSliderWidth],
-			['videoControls.layout.volumeSliderMinWidth', settings.videoControls.layout.volumeSliderMinWidth],
-			['videoControls.layout.minSeekWidth', settings.videoControls.layout.minSeekWidth],
-			['videoControls.layout.speedScaleTickHeight', settings.videoControls.layout.speedScaleTickHeight],
-			['videoControls.typography.timeFontSize', settings.videoControls.typography.timeFontSize],
-			['videoControls.typography.timeFontWeight', settings.videoControls.typography.timeFontWeight],
-			['videoControls.speed.minRate', settings.videoControls.speed.minRate],
-			['videoControls.speed.maxRate', settings.videoControls.speed.maxRate],
-			['videoControls.speed.pointerStep', settings.videoControls.speed.pointerStep],
-			['videoControls.speed.keyboardStep', settings.videoControls.speed.keyboardStep],
-			['videoControls.speed.displayPrecision', settings.videoControls.speed.displayPrecision],
-			['videoControls.speed.defaultRate', settings.videoControls.speed.defaultRate],
-			['videoControls.speed.guideRate', settings.videoControls.speed.guideRate],
-			['videoControls.responsive.speedSliderMinResponsiveWidth', settings.videoControls.responsive.speedSliderMinResponsiveWidth],
-			['videoControls.responsive.speedSliderFullResponsiveWidth', settings.videoControls.responsive.speedSliderFullResponsiveWidth],
-			['videoControls.responsive.volumeSliderMinResponsiveWidth', settings.videoControls.responsive.volumeSliderMinResponsiveWidth],
-			['videoControls.responsive.volumeSliderFullResponsiveWidth', settings.videoControls.responsive.volumeSliderFullResponsiveWidth],
-			['videoControls.styles.backgroundStrokeWidth', settings.videoControls.styles.backgroundStrokeWidth],
-			['videoControls.styles.glassHighlightStrokeWidth', settings.videoControls.styles.glassHighlightStrokeWidth],
-			['videoControls.styles.liquidGlassFilter.displacementScale', settings.videoControls.styles.liquidGlassFilter.displacementScale],
-			['videoControls.styles.liquidGlassFilter.numOctaves', settings.videoControls.styles.liquidGlassFilter.numOctaves],
-			['videoControls.styles.liquidGlassFilter.seed', settings.videoControls.styles.liquidGlassFilter.seed],
-			['videoControls.styles.speedScaleTickWidth', settings.videoControls.styles.speedScaleTickWidth],
-		] as const
+    it('keeps video controls scalar values numerically valid', () => {
+        const videoControlNumbers = [
+            ['videoControls.height', settings.videoControls.height],
+            ['videoControls.canvas.horizontalInset', settings.videoControls.canvas.horizontalInset],
+            ['videoControls.canvas.compactHorizontalInset', settings.videoControls.canvas.compactHorizontalInset],
+            ['videoControls.canvas.compactWidthThreshold', settings.videoControls.canvas.compactWidthThreshold],
+            ['videoControls.canvas.bottomInset', settings.videoControls.canvas.bottomInset],
+            ['videoControls.canvas.zoomScaling.minZoom', settings.videoControls.canvas.zoomScaling.minZoom],
+            ['videoControls.chat.horizontalInset', settings.videoControls.chat.horizontalInset],
+            ['videoControls.chat.bottomInset', settings.videoControls.chat.bottomInset],
+            ['videoControls.chat.controlsScale', settings.videoControls.chat.controlsScale],
+            ['videoControls.chat.minWidth', settings.videoControls.chat.minWidth],
+            ['videoControls.chat.fallbackWidth', settings.videoControls.chat.fallbackWidth],
+            ['videoControls.layout.padding', settings.videoControls.layout.padding],
+            ['videoControls.layout.gap', settings.videoControls.layout.gap],
+            ['videoControls.layout.buttonSize', settings.videoControls.layout.buttonSize],
+            ['videoControls.layout.iconSize', settings.videoControls.layout.iconSize],
+            ['videoControls.layout.barRadius', settings.videoControls.layout.barRadius],
+            ['videoControls.layout.buttonRadius', settings.videoControls.layout.buttonRadius],
+            ['videoControls.layout.railHeight', settings.videoControls.layout.railHeight],
+            ['videoControls.layout.scrubberHandleRadius', settings.videoControls.layout.scrubberHandleRadius],
+            ['videoControls.layout.volumeHandleRadius', settings.videoControls.layout.volumeHandleRadius],
+            ['videoControls.layout.backgroundHighlightInset', settings.videoControls.layout.backgroundHighlightInset],
+            ['videoControls.layout.timeWidth', settings.videoControls.layout.timeWidth],
+            ['videoControls.layout.speedSliderWidth', settings.videoControls.layout.speedSliderWidth],
+            ['videoControls.layout.compactSpeedSliderWidth', settings.videoControls.layout.compactSpeedSliderWidth],
+            ['videoControls.layout.speedSliderMinWidth', settings.videoControls.layout.speedSliderMinWidth],
+            ['videoControls.layout.speedValueWidth', settings.videoControls.layout.speedValueWidth],
+            ['videoControls.layout.speedValueSliderGap', settings.videoControls.layout.speedValueSliderGap],
+            ['videoControls.layout.volumeSliderWidth', settings.videoControls.layout.volumeSliderWidth],
+            ['videoControls.layout.volumeSliderMinWidth', settings.videoControls.layout.volumeSliderMinWidth],
+            ['videoControls.layout.minSeekWidth', settings.videoControls.layout.minSeekWidth],
+            ['videoControls.layout.speedScaleTickHeight', settings.videoControls.layout.speedScaleTickHeight],
+            ['videoControls.typography.timeFontSize', settings.videoControls.typography.timeFontSize],
+            ['videoControls.typography.timeFontWeight', settings.videoControls.typography.timeFontWeight],
+            ['videoControls.speed.minRate', settings.videoControls.speed.minRate],
+            ['videoControls.speed.maxRate', settings.videoControls.speed.maxRate],
+            ['videoControls.speed.pointerStep', settings.videoControls.speed.pointerStep],
+            ['videoControls.speed.keyboardStep', settings.videoControls.speed.keyboardStep],
+            ['videoControls.speed.displayPrecision', settings.videoControls.speed.displayPrecision],
+            ['videoControls.speed.defaultRate', settings.videoControls.speed.defaultRate],
+            ['videoControls.speed.guideRate', settings.videoControls.speed.guideRate],
+            ['videoControls.responsive.speedSliderMinResponsiveWidth', settings.videoControls.responsive.speedSliderMinResponsiveWidth],
+            ['videoControls.responsive.speedSliderFullResponsiveWidth', settings.videoControls.responsive.speedSliderFullResponsiveWidth],
+            ['videoControls.responsive.volumeSliderMinResponsiveWidth', settings.videoControls.responsive.volumeSliderMinResponsiveWidth],
+            ['videoControls.responsive.volumeSliderFullResponsiveWidth', settings.videoControls.responsive.volumeSliderFullResponsiveWidth],
+            ['videoControls.styles.backgroundStrokeWidth', settings.videoControls.styles.backgroundStrokeWidth],
+            ['videoControls.styles.glassHighlightStrokeWidth', settings.videoControls.styles.glassHighlightStrokeWidth],
+            ['videoControls.styles.liquidGlassFilter.displacementScale', settings.videoControls.styles.liquidGlassFilter.displacementScale],
+            ['videoControls.styles.liquidGlassFilter.numOctaves', settings.videoControls.styles.liquidGlassFilter.numOctaves],
+            ['videoControls.styles.liquidGlassFilter.seed', settings.videoControls.styles.liquidGlassFilter.seed],
+            ['videoControls.styles.speedScaleTickWidth', settings.videoControls.styles.speedScaleTickWidth],
+        ] as const
 
-		for (const [path, value] of videoControlNumbers) {
-			expectFiniteNumber(value, path)
-		}
+        for (const [path, value] of videoControlNumbers) {
+            expectFiniteNumber(value, path)
+        }
 
-		expect(Array.isArray(settings.videoControls.speed.guideRates), 'videoControls.speed.guideRates should be an array').toBe(true)
-		for (let index = 0; index < settings.videoControls.speed.guideRates.length; index += 1) {
-			expectFiniteNumber(settings.videoControls.speed.guideRates[index], `videoControls.speed.guideRates[${index}]`)
-		}
+        expect(Array.isArray(settings.videoControls.speed.guideRates), 'videoControls.speed.guideRates should be an array').toBe(true)
+        for (let index = 0; index < settings.videoControls.speed.guideRates.length; index += 1) {
+            expectFiniteNumber(settings.videoControls.speed.guideRates[index], `videoControls.speed.guideRates[${index}]`)
+        }
 
-		expect(settings.videoControls.speed.guideRates.length).toBeGreaterThan(0)
-		expect(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction').toBeGreaterThan(0)
-		expect(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction').toBeLessThan(1)
-	})
+        expect(settings.videoControls.speed.guideRates.length).toBeGreaterThan(0)
+        expect(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction').toBeGreaterThan(0)
+        expect(settings.mediaLibrary.panelWidthFraction, 'settings.mediaLibrary.panelWidthFraction').toBeLessThan(1)
+    })
 
-	it('keeps migrated keys nested, not duplicated at stale roots', () => {
-		expectNoOwnKeys(settings.dropdown, ['popoverBoxShadow'])
-		expectNoOwnKeys(settings.gradient, ['shiftingColors'])
-		expectNoOwnKeys(settings.aiChatThread, [
-			'responseMessageBubbleColor',
-			'nodeBoxShadow',
-			'nodeBorder',
-			'panelSectionDividerBorder',
-		])
-		expectNoOwnKeys(settings.aiChatThread.panelSwitch, ['activeTabBoxShadow', 'activeTabInsetShadow'])
-		expectNoOwnKeys(settings.connector, ['lineDefaultColor', 'lineFocusColor', 'lineClickAreaWidth'])
-		expectNoOwnKeys(settings.selection, [
-			'marqueeBorderColor',
-			'marqueeBackgroundColor',
-			'overlayBorderColor',
-			'overlayBackgroundColor',
-			'outlineColor',
-		])
-		expectNoOwnKeys(settings.mediaNode.image, ['defaultBoxShadow', 'selectedBoxShadow', 'borderRadius', 'modelBadgeBoxShadow'])
-		expectNoOwnKeys(settings.mediaNode, ['generationBorder'])
-		expectNoOwnKeys(settings.mediaNode.inProgressOutlineAnimation, ['trackColor', 'trackAlpha', 'snakeTailAlpha', 'snakeColors'])
-	})
+    it('keeps migrated keys nested, not duplicated at stale roots', () => {
+        expectNoOwnKeys(settings, ['slidingSwitch'])
+        expectNoOwnKeys(settings.dropdown, ['popoverBoxShadow'])
+        expectNoOwnKeys(settings.gradient, ['shiftingColors'])
+        expectNoOwnKeys(settings.aiChatThread, [
+            'responseMessageBubbleColor',
+            'nodeBoxShadow',
+            'nodeBorder',
+            'panelSectionDividerBorder',
+        ])
+        expectNoOwnKeys(settings.aiChatThread.panelSwitch, ['styles', 'activeTabBoxShadow', 'activeTabInsetShadow'])
+        expectNoOwnKeys(settings.connector, ['lineDefaultColor', 'lineFocusColor', 'lineClickAreaWidth'])
+        expectNoOwnKeys(settings.selection, [
+            'marqueeBorderColor',
+            'marqueeBackgroundColor',
+            'overlayBorderColor',
+            'overlayBackgroundColor',
+            'outlineColor',
+        ])
+        expectNoOwnKeys(settings.mediaNode.image, ['defaultBoxShadow', 'selectedBoxShadow', 'borderRadius', 'modelBadgeBoxShadow'])
+        expectNoOwnKeys(settings.mediaNode, ['generationBorder'])
+        expectNoOwnKeys(settings.mediaNode.inProgressOutlineAnimation, ['trackColor', 'trackAlpha', 'snakeTailAlpha', 'snakeColors'])
+    })
 
-	it('keeps model menu style controls isolated from legacy layout props', () => {
-		expectNoOwnKeys(settings.aiPromptInput.modelMenu, [
-			'openPromptZIndex',
-			'infoBubbleZIndex',
-			'triggerSize',
-			'triggerIconSize',
-			'triggerTransition',
-			'infoBubbleWidth',
-			'infoBubbleMaxWidth',
-			'infoBubbleMobileMaxWidth',
-			'infoBubblePadding',
-			'contentGap',
-			'sectionGap',
-			'sectionDividerPaddingTop',
-			'sectionDividerWidth',
-			'sectionHeadingGap',
-			'sectionHeadingJustifyContent',
-			'sectionTitleFontSize',
-			'sectionTitleFontWeight',
-			'sectionTitleLineHeight',
-			'controlsGridTemplateColumns',
-			'controlsMobileGridTemplateColumns',
-			'controlsGap',
-			'controlsMaxWidth',
-			'controlsMobileMaxWidth',
-			'controlGap',
-			'controlLabelInset',
-			'controlLabelFontSize',
-			'controlLabelFontWeight',
-			'controlLabelLineHeight',
-			'dropdownButtonMaxWidth',
-			'dropdownButtonMobileMaxWidth',
-			'nestedDropdownGap',
-			'helpTooltipTriggerSize',
-			'helpTooltipIconSize',
-			'helpTooltipTriggerFocusOutlineOffset',
-			'helpTooltipOffset',
-			'helpTooltipViewportMargin',
-			'helpTooltipWidth',
-			'helpTooltipMaxWidth',
-			'helpTooltipPadding',
-			'helpTooltipFontSize',
-			'helpTooltipFontWeight',
-			'helpTooltipLineHeight',
-			'helpTooltipContentZIndex',
-		])
-	})
+    it('keeps model menu style controls isolated from legacy layout props', () => {
+        expectNoOwnKeys(settings.aiPromptInput.modelMenu, [
+            'openPromptZIndex',
+            'infoBubbleZIndex',
+            'triggerSize',
+            'triggerIconSize',
+            'triggerTransition',
+            'infoBubbleWidth',
+            'infoBubbleMaxWidth',
+            'infoBubbleMobileMaxWidth',
+            'infoBubblePadding',
+            'contentGap',
+            'sectionGap',
+            'sectionDividerPaddingTop',
+            'sectionDividerWidth',
+            'sectionHeadingGap',
+            'sectionHeadingJustifyContent',
+            'sectionTitleFontSize',
+            'sectionTitleFontWeight',
+            'sectionTitleLineHeight',
+            'controlsGridTemplateColumns',
+            'controlsMobileGridTemplateColumns',
+            'controlsGap',
+            'controlsMaxWidth',
+            'controlsMobileMaxWidth',
+            'controlGap',
+            'controlLabelInset',
+            'controlLabelFontSize',
+            'controlLabelFontWeight',
+            'controlLabelLineHeight',
+            'dropdownButtonMaxWidth',
+            'dropdownButtonMobileMaxWidth',
+            'nestedDropdownGap',
+            'helpTooltipTriggerSize',
+            'helpTooltipIconSize',
+            'helpTooltipTriggerFocusOutlineOffset',
+            'helpTooltipOffset',
+            'helpTooltipViewportMargin',
+            'helpTooltipWidth',
+            'helpTooltipMaxWidth',
+            'helpTooltipPadding',
+            'helpTooltipFontSize',
+            'helpTooltipFontWeight',
+            'helpTooltipLineHeight',
+            'helpTooltipContentZIndex',
+        ])
+    })
 
-	it('satisfies the Settings type', () => {
-		const configuredSettings: Settings = settings
-		expect(configuredSettings).toBe(settings)
-	})
+    it('satisfies the Settings type', () => {
+        const configuredSettings: Settings = settings
+        expect(configuredSettings).toBe(settings)
+    })
 })

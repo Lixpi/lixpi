@@ -63,19 +63,25 @@ export function getAiLineageEventsForProjection(
     const branchLineNodeId = String(attrs.branchLineNodeId ?? '')
     const events: AiLineageEventDescriptor[] = []
 
-    if ((projectionScope === 'conversation' || projectionScope === 'branch-origin')
+    if (
+        (projectionScope === 'conversation' || projectionScope === 'branch-origin')
         && branchOriginNodeId
-        && (projectionScope === 'branch-origin' || isFirstReasoningSection(attrs))) {
+        && (projectionScope === 'branch-origin' || isFirstReasoningSection(attrs))
+    ) {
         events.push({ kind: 'branch-origin', branchOriginNodeId })
     }
 
-    if ((projectionScope === 'conversation' || projectionScope === 'branch-fork' || projectionScope === 'media-run')
-        && branchForkNodeId) {
+    if (
+        (projectionScope === 'conversation' || projectionScope === 'branch-fork' || projectionScope === 'media-run')
+        && branchForkNodeId
+    ) {
         events.push({ kind: 'branch-fork', branchForkNodeId })
     }
 
-    if ((projectionScope === 'conversation' || projectionScope === 'media-run')
-        && branchLineNodeId) {
+    if (
+        (projectionScope === 'conversation' || projectionScope === 'media-run')
+        && branchLineNodeId
+    ) {
         events.push({ kind: 'branch-line', branchLineNodeId })
     }
 

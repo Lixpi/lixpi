@@ -1,7 +1,18 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NATS_SUBJECTS, STREAM_STATUS, getAiInteractionResponseSubject } from '@lixpi/constants'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    NATS_SUBJECTS,
+    STREAM_STATUS,
+    getAiInteractionResponseSubject,
+} from '@lixpi/constants'
 import AiInteractionService from '$src/services/ai-interaction-service.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
@@ -75,6 +86,7 @@ describe('AiInteractionService', () => {
         getTokenSilentlyMock.mockResolvedValue('auth-token')
         userGetMock.mockReturnValue(userId)
         natsGetSubscriptionsMock.mockReturnValue([])
+        natsSubscribeMock.mockImplementation(() => ({ unsubscribe: vi.fn() }))
         natsRequestMock.mockResolvedValue({ events: [] })
 
         service = new AiInteractionService({
@@ -101,7 +113,7 @@ describe('AiInteractionService', () => {
         await flushPromises()
 
         expect(getDataMock).toHaveBeenCalledWith('nats')
-        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
+        expect(natsGetSubscriptionsMock).not.toHaveBeenCalled()
         expect(natsSubscribeMock).toHaveBeenCalledWith(responseSubject, expect.any(Function))
         expect(natsRequestMock).toHaveBeenCalledWith(
             AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
@@ -363,6 +375,7 @@ describe('AiInteractionService', () => {
 
         expect(receiveSegmentMock).toHaveBeenCalledWith({
             type: 'capability_generation_trace',
+            workspaceId,
             capabilityGenerationTrace,
             aiProvider: 'Anthropic',
             conversationAssetId,
@@ -631,8 +644,7 @@ describe('AiInteractionService', () => {
     })
 
     it('disconnects from the thread response subject and clears runtime provider state', () => {
-        const unsubscribeMock = vi.fn()
-        natsGetSubscriptionsMock.mockReturnValue([{ unsubscribe: unsubscribeMock }])
+        const unsubscribeMock = natsSubscribeMock.mock.results[0].value.unsubscribe
 
         service.updateRunProvider(conversationAssetId, 'provider-x')
         service.shouldProcessPipelinePayload({
@@ -642,9 +654,64 @@ describe('AiInteractionService', () => {
         service.disconnect()
 
         expect(unsubscribeMock).toHaveBeenCalled()
-        expect(natsGetSubscriptionsMock).toHaveBeenCalledWith([responseSubject])
+        expect(natsGetSubscriptionsMock).not.toHaveBeenCalled()
         expect(service.currentAiProvider).toBeNull()
         expect(service.providersByRunKey.size).toBe(0)
         expect(service.pipelineEventIds.size).toBe(0)
+    })
+
+    it('releases only its subscription when another view uses the same conversation', async () => {
+        const first = natsSubscribeMock.mock.results[0].value
+        const other = new AiInteractionService({ workspaceId, conversationAssetId, organizationId })
+        await flushPromises()
+        const second = natsSubscribeMock.mock.results[1].value
+
+        expect(first.unsubscribe).not.toHaveBeenCalled()
+        service.disconnect()
+        service.disconnect()
+        expect(first.unsubscribe).toHaveBeenCalledTimes(1)
+        expect(second.unsubscribe).not.toHaveBeenCalled()
+        other.disconnect()
+        expect(second.unsubscribe).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores queued live callbacks and replay responses after disconnect', async () => {
+        let resolveReplay!: (value: unknown) => void
+        natsRequestMock.mockImplementationOnce(() =>
+            new Promise(resolve => {
+                resolveReplay = resolve
+            })
+        )
+        const replay = service.resumePipelineEventStream()
+        await flushPromises()
+        const callback = natsSubscribeMock.mock.calls[0][1]
+        service.disconnect()
+        callback({ error: 'queued live error' })
+        resolveReplay({ events: [{ payload: { error: 'late replay error' }, streamSequence: 1 }] })
+        await replay
+        expect(onErrorMock).not.toHaveBeenCalled()
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
+    })
+
+    it('does not start replay after disconnect while authorization is pending', async () => {
+        let authorize!: (token: string) => void
+        getTokenSilentlyMock.mockImplementationOnce(() =>
+            new Promise(resolve => {
+                authorize = resolve
+            })
+        )
+        natsRequestMock.mockClear()
+        const replay = service.resumePipelineEventStream()
+        service.disconnect()
+        authorize('token')
+        await replay
+        await service.resumePipelineEventStream()
+        expect(natsRequestMock).not.toHaveBeenCalled()
+    })
+
+    it('rejects another workspace before forwarding a segment', () => {
+        service.onChatMessageResponse({ workspaceId: 'another-workspace', error: 'wrong workspace' })
+        expect(onErrorMock).not.toHaveBeenCalled()
+        expect(receiveSegmentMock).not.toHaveBeenCalled()
     })
 })

@@ -27,8 +27,8 @@ export type TreeLayoutNode = {
 }
 
 export type LayoutTreeOptions = {
-    depthGap: number              // LR: horizontal gap between depth columns
-    siblingGap: number            // LR: vertical gap between sibling bands
+    depthGap: number // LR: horizontal gap between depth columns
+    siblingGap: number // LR: vertical gap between sibling bands
     branchFanoutDepthGap?: number // LR: extra depth gap for each child after the first
     getBranchFanoutDepthGap?: (node: TreeLayoutNode, children: TreeLayoutNode[]) => number
 }
@@ -44,7 +44,7 @@ export type LayoutTreeResult = {
 
 export function layoutTree(
     nodes: TreeLayoutNode[],
-    options: LayoutTreeOptions
+    options: LayoutTreeOptions,
 ): LayoutTreeResult {
     if (nodes.length === 0) {
         return { positions: new Map(), rootId: '', bounds: { width: 0, height: 0 } }

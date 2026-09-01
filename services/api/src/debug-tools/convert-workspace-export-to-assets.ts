@@ -2,11 +2,18 @@
 
 import { createHash } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { access, readFile, writeFile } from 'node:fs/promises'
+import {
+    access,
+    readFile,
+    writeFile,
+} from 'node:fs/promises'
 
 import AdmZip from 'adm-zip'
 import { v4 as uuid } from 'uuid'
-import { DOCUMENT_TYPE, HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
+import {
+    DOCUMENT_TYPE,
+    HeadlessProseMirrorEngine,
+} from '@lixpi/prosemirror'
 
 import {
     ASSET_REQUIRED_RENDITIONS,
@@ -109,10 +116,13 @@ for (const fileId of files.keys()) {
     if (rootByRelatedFileId.has(fileId)) continue
     rootFileIds.add(fileId)
     const file = files.get(fileId)
-    relatedFileIdsByRoot.set(fileId, new Set([
+    relatedFileIdsByRoot.set(
         fileId,
-        ...renditionLinkFields.flatMap((field) => file?.[field] ?? []),
-    ]))
+        new Set([
+            fileId,
+            ...renditionLinkFields.flatMap((field) => file?.[field] ?? []),
+        ]),
+    )
 }
 for (const node of canvasNodes) {
     const nodeFileId = typeof node.fileId === 'string' ? node.fileId : undefined
@@ -185,12 +195,14 @@ const addReference = (assetId: string, nodeIds: string[] = [], surfaceIds: strin
 const normalizeLegacyDescriptor = (value: unknown): ContentDescriptor | undefined => {
     if (!value || typeof value !== 'object') return undefined
     const candidate = value as Partial<ContentDescriptor>
-    if (!['analyzing', 'ready', 'failed'].includes(candidate.status ?? '')
+    if (
+        !['analyzing', 'ready', 'failed'].includes(candidate.status ?? '')
         || typeof candidate.summary !== 'string'
         || !Array.isArray(candidate.entityTags)
         || candidate.entityTags.some((tag) => typeof tag !== 'string')
         || !Array.isArray(candidate.styleTags)
-        || candidate.styleTags.some((tag) => typeof tag !== 'string')) return undefined
+        || candidate.styleTags.some((tag) => typeof tag !== 'string')
+    ) return undefined
     return {
         status: candidate.status!,
         summary: candidate.summary,
@@ -204,10 +216,11 @@ const normalizeLegacyDescriptor = (value: unknown): ContentDescriptor | undefine
     }
 }
 
-const newestLegacyDescriptor = (nodes: any[]): ContentDescriptor | undefined => nodes
-    .map((node) => normalizeLegacyDescriptor(node?.descriptor))
-    .filter((descriptor): descriptor is ContentDescriptor => Boolean(descriptor))
-    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+const newestLegacyDescriptor = (nodes: any[]): ContentDescriptor | undefined =>
+    nodes
+        .map((node) => normalizeLegacyDescriptor(node?.descriptor))
+        .filter((descriptor): descriptor is ContentDescriptor => Boolean(descriptor))
+        .sort((left, right) => right.updatedAt - left.updatedAt)[0]
 
 const remapLegacyJson = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(remapLegacyJson)
@@ -217,8 +230,8 @@ const remapLegacyJson = (value: unknown): unknown => {
     const legacyStorageId = typeof source.fileId === 'string'
         ? source.fileId
         : typeof source.referenceId === 'string'
-            ? source.referenceId
-            : undefined
+        ? source.referenceId
+        : undefined
     if (legacyStorageId && legacyIdToAssetId.has(legacyStorageId)) {
         const assetId = legacyIdToAssetId.get(legacyStorageId)!
         target.assetId = assetId
@@ -229,20 +242,22 @@ const remapLegacyJson = (value: unknown): unknown => {
         if ('frameUrl' in source) target.frameUrl = `/api/assets/${assetId}/renditions/representativeFrame`
     }
     for (const [key, child] of Object.entries(source)) {
-        if ([
-            'fileId',
-            'posterFileId',
-            'frameFileId',
-            'src',
-            'posterSrc',
-            'referenceId',
-            'workspaceId',
-            'descriptor',
-            'imageUrl',
-            'videoUrl',
-            'posterUrl',
-            'frameUrl',
-        ].includes(key)) continue
+        if (
+            [
+                'fileId',
+                'posterFileId',
+                'frameFileId',
+                'src',
+                'posterSrc',
+                'referenceId',
+                'workspaceId',
+                'descriptor',
+                'imageUrl',
+                'videoUrl',
+                'posterUrl',
+                'frameUrl',
+            ].includes(key)
+        ) continue
         if (['aiChatThreadId', 'conversationAssetId', 'threadId', 'documentId'].includes(key) && typeof child === 'string') {
             const mapped = legacyIdToAssetId.get(child)
             target[key === 'aiChatThreadId' ? 'conversationAssetId' : key] = mapped ?? child
@@ -356,10 +371,13 @@ for (const rootFileId of rootFileIds) {
     const kind: AssetMediaKind = file.kind
         ?? (nodeType === 'video' || nodeType === 'audio' || nodeType === 'mediaDocument' ? (nodeType === 'mediaDocument' ? 'document' : nodeType) : 'image')
     const mimeType = file.mimeType ?? (
-        kind === 'video' ? 'video/mp4'
-            : kind === 'audio' ? 'audio/mpeg'
-                : kind === 'document' ? 'application/pdf'
-                    : 'image/png'
+        kind === 'video'
+            ? 'video/mp4'
+            : kind === 'audio'
+            ? 'audio/mpeg'
+            : kind === 'document'
+            ? 'application/pdf'
+            : 'image/png'
     )
     const assetId = legacyIdToAssetId.get(rootFileId)!
     const renditionNames: AssetRenditionName[] = ['original', 'canonical', 'preview', 'thumbnail', 'poster', 'representativeFrame']
@@ -374,11 +392,15 @@ for (const rootFileId of rootFileIds) {
         }
         const renditionFile = files.get(fileId)
         const renditionMimeType = renditionFile?.mimeType
-            ?? (name === 'original' ? mimeType
-                : name === 'canonical' ? file.canonicalMimeType ?? mimeType
-                    : name === 'preview' ? (kind === 'video' ? 'video/mp4' : 'image/webp')
-                        : name === 'thumbnail' ? 'image/webp'
-                            : 'image/png')
+            ?? (name === 'original'
+                ? mimeType
+                : name === 'canonical'
+                ? file.canonicalMimeType ?? mimeType
+                : name === 'preview'
+                ? (kind === 'video' ? 'video/mp4' : 'image/webp')
+                : name === 'thumbnail'
+                ? 'image/webp'
+                : 'image/png')
         const blobHash = registerBlob(bytes, renditionMimeType)
         renditions[name] = {
             name,
@@ -422,19 +444,21 @@ for (const rootFileId of rootFileIds) {
             renditions,
         },
         ...(descriptor ? { descriptor } : {}),
-        ...(generatedBy ? {
-            lineage: {
-                ...(sourceConversationAssetId ? { sourceConversationAssetId } : {}),
-                ...(parentAssetId ? { parentAssetId } : {}),
-                sourceAssetIds: [...new Set(sourceNodeIds.flatMap((nodeId: string) => legacyNodeIdToAssetId.get(nodeId) ?? []))],
-                ...(generatedBy.generationRequestId ? { generationRequestId: generatedBy.generationRequestId } : {}),
-                ...(generatedBy.reasoningRunId ? { reasoningRunId: generatedBy.reasoningRunId } : {}),
-                ...(generatedBy.mediaRunId ? { mediaRunId: generatedBy.mediaRunId } : {}),
-                ...(generatedBy.reasoningModelId ? { reasoningModelId: generatedBy.reasoningModelId } : {}),
-                ...(generatedBy.mediaModelId ? { mediaModelId: generatedBy.mediaModelId } : {}),
-                ...(generatedBy.promptFingerprint ? { promptFingerprint: generatedBy.promptFingerprint } : {}),
-            },
-        } : {}),
+        ...(generatedBy
+            ? {
+                lineage: {
+                    ...(sourceConversationAssetId ? { sourceConversationAssetId } : {}),
+                    ...(parentAssetId ? { parentAssetId } : {}),
+                    sourceAssetIds: [...new Set(sourceNodeIds.flatMap((nodeId: string) => legacyNodeIdToAssetId.get(nodeId) ?? []))],
+                    ...(generatedBy.generationRequestId ? { generationRequestId: generatedBy.generationRequestId } : {}),
+                    ...(generatedBy.reasoningRunId ? { reasoningRunId: generatedBy.reasoningRunId } : {}),
+                    ...(generatedBy.mediaRunId ? { mediaRunId: generatedBy.mediaRunId } : {}),
+                    ...(generatedBy.reasoningModelId ? { reasoningModelId: generatedBy.reasoningModelId } : {}),
+                    ...(generatedBy.mediaModelId ? { mediaModelId: generatedBy.mediaModelId } : {}),
+                    ...(generatedBy.promptFingerprint ? { promptFingerprint: generatedBy.promptFingerprint } : {}),
+                },
+            }
+            : {}),
         states: {
             lifecycle: 'active',
             media: requiredReady ? 'ready' : 'degraded',
@@ -501,11 +525,13 @@ const outputManifest = {
 const assetIds = new Set(assets.map((asset) => asset.assetId))
 if (assetIds.size !== assets.length) throw new Error('Converter produced duplicate Asset IDs')
 for (const asset of assets) {
-    for (const lineageId of [
-        asset.lineage?.sourceConversationAssetId,
-        asset.lineage?.parentAssetId,
-        ...(asset.lineage?.sourceAssetIds ?? []),
-    ]) {
+    for (
+        const lineageId of [
+            asset.lineage?.sourceConversationAssetId,
+            asset.lineage?.parentAssetId,
+            ...(asset.lineage?.sourceAssetIds ?? []),
+        ]
+    ) {
         if (lineageId && !assetIds.has(lineageId)) throw new Error(`Converter produced dangling lineage Asset ID ${lineageId}`)
     }
     for (const [role, pointer] of Object.entries(asset.documents)) {
@@ -517,8 +543,8 @@ for (const asset of assets) {
                 documentType: role === 'content'
                     ? DOCUMENT_TYPE.ASSET_CONTENT
                     : role === 'conversation'
-                        ? DOCUMENT_TYPE.ASSET_CONVERSATION
-                        : DOCUMENT_TYPE.ASSET_PROVENANCE,
+                    ? DOCUMENT_TYPE.ASSET_CONVERSATION
+                    : DOCUMENT_TYPE.ASSET_PROVENANCE,
                 doc: JSON.parse(bytes.toString('utf8')),
                 version: pointer.version,
             })

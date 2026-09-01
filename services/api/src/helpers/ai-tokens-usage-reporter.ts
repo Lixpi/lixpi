@@ -1,13 +1,18 @@
 'use strict'
 
 import { Decimal } from 'decimal.js'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import type {
     TokensUsage,
-    TokensUsageEvent
+    TokensUsageEvent,
 } from '@lixpi/constants'
-
 
 export const reportAiTokensUsage = ({
     eventMeta,
@@ -29,8 +34,6 @@ export const reportAiTokensUsage = ({
     aiRequestReceivedAt,
     aiRequestFinishedAt,
 }: TokensUsage) => {
-
-
     const resaleMargin = new Decimal(aiModelMetaInfo.pricing.resaleMargin)
     const pricePer = new Decimal(aiModelMetaInfo.pricing.text.pricePer)
 
@@ -54,7 +57,6 @@ export const reportAiTokensUsage = ({
         textPromptPriceResale: textPromptPriceResale.toString(),
         textCompletionPriceResale: textCompletionPriceResale.toString(),
 
-
         prompt: {
             usageTokens: promptTokens,
             cachedTokens: promptCachedTokens,
@@ -76,9 +78,5 @@ export const reportAiTokensUsage = ({
                 soldToClientFor: new Decimal(this.prompt.soldToClientFor).add(new Decimal(this.completion.soldToClientFor)).toString(),
             }
         },
-
-
-
-
-
+    }
 }

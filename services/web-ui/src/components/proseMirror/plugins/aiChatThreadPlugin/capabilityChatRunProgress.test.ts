@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import type { CapabilityRunEvent } from '@lixpi/constants'
 import type { EditorView } from 'prosemirror-view'
 

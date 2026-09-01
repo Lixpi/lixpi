@@ -22,4 +22,3 @@ The live implementation is documented in [Style Extraction Tool](../library/STYL
 
 - [Tools and Skills](../library/TOOLS-AND-SKILLS.md)
 - [Style Extraction Pipeline](../library/STYLE-EXTRACTION-PIPELINE.md)
-- [Historical Style Extraction build phases](../knowledge/archive/style-extraction-build-phases.md)

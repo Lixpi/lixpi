@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import type {
     CapabilityManifest,
@@ -64,11 +69,14 @@ function makePlan(
             manifestBlobHash: `hash-${capabilityId}`,
         })),
     }
-    return new SealedResolvedCapabilityPlan(serializable, capabilityIds.map(capabilityId => ({
-        capabilityId,
-        ref,
-        bytes: new TextEncoder().encode(JSON.stringify({ type: 'object', properties })),
-    })))
+    return new SealedResolvedCapabilityPlan(
+        serializable,
+        capabilityIds.map(capabilityId => ({
+            capabilityId,
+            ref,
+            bytes: new TextEncoder().encode(JSON.stringify({ type: 'object', properties })),
+        })),
+    )
 }
 
 function makeState(plan: SealedResolvedCapabilityPlan): ProviderState {

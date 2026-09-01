@@ -37,8 +37,10 @@ export async function resolveCapabilityModelInputs(request: {
         workspaceId: request.context.workspaceId,
         userId: request.context.userId,
     })
-    if ('error' in workspace || workspace.deletingAt
-        || workspace.organizationId !== request.context.organizationId) {
+    if (
+        'error' in workspace || workspace.deletingAt
+        || workspace.organizationId !== request.context.organizationId
+    ) {
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Capability Workspace is unavailable')
     }
     const organization = await Organization.getOrganization({
@@ -51,8 +53,10 @@ export async function resolveCapabilityModelInputs(request: {
     const requester = createAssetRequesterForWorkspaceUser(workspace, request.context.userId, true)
     return await Promise.all(request.assetIds.map(async (assetId) => {
         const asset = await AssetModel.get({ assetId, requester })
-        if ('error' in asset || asset.states.lifecycle !== 'active'
-            || !isAssetAvailableInWorkspaceScope(asset, workspace)) {
+        if (
+            'error' in asset || asset.states.lifecycle !== 'active'
+            || !isAssetAvailableInWorkspaceScope(asset, workspace)
+        ) {
             throw new CapabilityError(
                 'CAPABILITY_ACTION_INPUT_INVALID',
                 `Referenced Asset ${assetId} is missing, inactive, or unavailable`,
@@ -120,7 +124,8 @@ export function assessCapabilityModelInputBudget(
     const textCharacters = request.systemPrompt.length
         + request.userPrompt.length
         + JSON.stringify(request.schema).length
-        + request.inputs.reduce((total, input) => total + input.marker.length
+        + request.inputs.reduce((total, input) =>
+            total + input.marker.length
             + (input.kind === 'document-text' ? input.title.length + input.text.length : 0), 0)
     const textTokens = Math.ceil(textCharacters / 3)
     const mediaTokens = request.inputs.reduce((total, input) => {
@@ -138,8 +143,10 @@ export function assessCapabilityModelInputBudget(
         enableThinking: true,
     })
     const contextWindow = request.variant.contextWindow
-    if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0
-        || inputTokens + reservedCompletionTokens > contextWindow) {
+    if (
+        !Number.isSafeInteger(contextWindow) || contextWindow <= 0
+        || inputTokens + reservedCompletionTokens > contextWindow
+    ) {
         throw new CapabilityError(
             'MODEL_INPUT_CONTEXT_EXCEEDED',
             `${request.variant.reasoningModelId} cannot fit the complete translated request in its context window`,

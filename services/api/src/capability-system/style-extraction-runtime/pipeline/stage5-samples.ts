@@ -1,7 +1,10 @@
 'use strict'
 
 import sharp from 'sharp'
-import { warn, err } from '@lixpi/debug-tools'
+import {
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 
 import { parseDataUrl } from '../../../llm/utils/attachments.ts'
@@ -22,7 +25,11 @@ const ANTI_LEAKAGE_INSTRUCTION = 'Render only the content-neutral probe declared
 const fetchSourceCropBytes = async (organizationId: string, sample: StyleSampleRef): Promise<Buffer | undefined> => {
     if (sample.kind !== 'source-crop' || !sample.blobHash) return undefined
     if (sample.imageUrl?.startsWith('data:')) {
-        try { return Buffer.from(parseDataUrl(sample.imageUrl).base64, 'base64') } catch { return undefined }
+        try {
+            return Buffer.from(parseDataUrl(sample.imageUrl).base64, 'base64')
+        } catch {
+            return undefined
+        }
     }
     const nats = NATS_Service.getInstance()
     if (!nats) return undefined
@@ -210,7 +217,7 @@ export const generateSamples = async (state: StyleExtractionState, logger: Stage
             }, {
                 inputSummary: `kind=${subject.kind} subject=${subject.prompt.slice(0, 80)}`,
                 outputSummarizer: (sample) => sample ? `idx=${sample.idx} blobHash=${sample.blobHash}` : 'no sample',
-            }),
+            })
         ))
 
         const samples: StyleSampleRef[] = []

@@ -90,7 +90,7 @@ The section-specific flags `useMultipleReasoningModels`, `useMultipleImageModels
 
 `createAiPromptInputNodeView()` creates the editable wrapper, optional context tray, controls row, model settings trigger, model settings `BubbleMenu`, model configuration rows, and injected submit button. A host may provide `mountMediaModeSwitch()` and `mountModelMenuControl()` to portal those controls into adjacent layout chrome; otherwise they remain children of the node view.
 
-The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. The instance receives its restrained blue track and stronger light-blue selected circle from `settings.slidingSwitch.styles`. The inactive icon uses a translucent `colorPalette.nightBlue`, reaches the solid color on hover, and renders black when selected. It omits the shared indicator inset shadow so no highlight crescent is drawn. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
+The media-mode control is a 76x40 ui-kit sliding switch. Its two 36x36 option values render `imageIcon` and `videoIcon` without visible text, so the sliding indicator and each value are perfect circles. It uses the fixed flat appearance owned by the shared sliding switch: a neutral track, white selected circle, and shared icon colors with no shadow or inset highlight. The selected mode stays on the right. Its complete slide-and-swap timeline takes 150 ms, with the swap starting during the final 30% of the initial movement. Each option keeps its explicit generation-mode ARIA label for keyboard and screen-reader use.
 
 ```text
 div.ai-prompt-input-wrapper[data-empty]
@@ -181,7 +181,7 @@ The NodeView mirrors empty state with `data-empty="true"` or `data-empty="false"
 
 ## Workspace Surfaces
 
-`WorkspaceCanvas.ts` mounts this plugin in the bottom-center canvas composer. One pill in the right control rail contains the Image / Video switch followed by the current model-configuration control. The Media Library and upload/image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
+The package-owned workspace composer mounts this plugin through the host editor port in the bottom-center canvas composer. One pill in the right control rail contains the Image / Video switch followed by the current model-configuration control. The Media Library and upload/image controls occupy the in-flow left control rail. Every submit creates its own hidden standalone chat thread and pending branch-lineage marker. The composer always remains a send surface, including while other runs are active. The marker shows a persistent pause/stop button at its right-center until every planned media branch in that generation request has finished. Activating it cancels the request and removes the request's persisted canvas projection.
 
 ## Styling
 
@@ -233,5 +233,5 @@ Settings hooks:
 - `$src/services/ai-prompt-input-controller.ts`: routes submitted prompt content to AI chat threads, creates threads for non-thread targets, queues pending messages, and tracks thread receiving state for transcript projection.
 - `$src/components/aiModelControls/`: reusable model, media, and submit controls shared by prompt surfaces. Model selectors use `settings.aiModelControls.styles.modelDropdown`. Dimension controls use `settings.aiModelControls.styles.dimensionsDropdown`, while their glyph geometry uses `settings.aiModelControls.styles.dimensionsGlyph`; fixed ratios receive equal visual area so portrait and landscape options have matching weight.
 - `$src/components/proseMirror/plugins/aiChatThreadPlugin/`: thread log and streaming response plugin.
-- `$src/infographics/workspace/WorkspaceCanvas.ts`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
+- `@lixpi/canvas-components-lixpi-specific/frontend/workspace`: mounts the bottom-center prompt composer, creates standalone message runs, and renders per-marker stop controls.
 - `$src/components/proseMirror/components/editor.ts`: creates the `aiPromptInput` schema and plugin stack.

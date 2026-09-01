@@ -67,9 +67,11 @@ export const createECRRepository = (config: ECRRepositoryConfig): aws.ecr.Reposi
     })
 }
 
-export const buildDockerImage = (config: DockerImageBuildConfig & {
-    repository?: aws.ecr.Repository
-}): DockerImageBuildResult | { image: dockerBuild.Image; imageTag: string } => {
+export const buildDockerImage = (
+    config: DockerImageBuildConfig & {
+        repository?: aws.ecr.Repository
+    },
+): DockerImageBuildResult | { image: dockerBuild.Image; imageTag: string } => {
     const {
         imageName,
         dockerBuildContext,
@@ -104,9 +106,11 @@ export const buildDockerImage = (config: DockerImageBuildConfig & {
             ...additionalTags,
         ]
 
-    const authToken = repository ? aws.ecr.getAuthorizationTokenOutput({
-        registryId: repository.registryId,
-    }) : undefined
+    const authToken = repository
+        ? aws.ecr.getAuthorizationTokenOutput({
+            registryId: repository.registryId,
+        })
+        : undefined
 
     const image = new dockerBuild.Image(`${imageName}-image-${imageTag}`, {
         context: {
@@ -133,7 +137,7 @@ export const buildDockerImage = (config: DockerImageBuildConfig & {
                 address: repository!.repositoryUrl,
                 username: authToken.userName,
                 password: authToken.password,
-            }]
+            }],
         }),
     }, {
         replaceOnChanges: ['*'],

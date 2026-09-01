@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 import { select } from 'd3-selection'
 
 const mockState = vi.hoisted(() => ({
@@ -197,10 +204,12 @@ import {
 type MediaGenerationConfigSelectionGroup = {
     groupId: string
     modelIds: string[]
-    values: Partial<Record<
-        'imageSize' | 'aspectRatio' | 'resolution' | 'duration' | 'outputFormat' | 'generateAudio' | 'watermark' | 'quality' | 'background',
-        string
-    >>
+    values: Partial<
+        Record<
+            'imageSize' | 'aspectRatio' | 'resolution' | 'duration' | 'outputFormat' | 'generateAudio' | 'watermark' | 'quality' | 'background',
+            string
+        >
+    >
 }
 
 function resetMocks(): void {
@@ -357,16 +366,20 @@ describe('createMediaGenerationConfigMatrixView', () => {
 
         expect(view.dom.dataset.visible).toBe('true')
         expect(view.dom.querySelectorAll('.ai-media-config-group')).toHaveLength(2)
-        expect(Array.from(view.dom.querySelectorAll('.ai-media-config-group')).map((group) => (
-            group.getAttribute('data-model-id')
-        ))).toEqual(['google:imagen-4', 'openai:gpt-image-1'])
+        expect(
+            Array.from(view.dom.querySelectorAll('.ai-media-config-group')).map((group) => (
+                group.getAttribute('data-model-id')
+            )),
+        ).toEqual(['google:imagen-4', 'openai:gpt-image-1'])
         const imageSizeDropdowns = mockState.slidingDropdownConfigs.filter((config) => (
             config.id.endsWith(':imageSize')
         ))
-        expect(new Set(imageSizeDropdowns.map(config => config.id))).toEqual(new Set([
-            'image:google/openai:google:imagen-4:imageSize',
-            'image:google/openai:openai:gpt-image-1:imageSize',
-        ]))
+        expect(new Set(imageSizeDropdowns.map(config => config.id))).toEqual(
+            new Set([
+                'image:google/openai:google:imagen-4:imageSize',
+                'image:google/openai:openai:gpt-image-1:imageSize',
+            ]),
+        )
         expect(mockState.dropdownConfigs).toHaveLength(0)
 
         const imageSizeDropdown = latestSlidingDropdownConfig((config) => (

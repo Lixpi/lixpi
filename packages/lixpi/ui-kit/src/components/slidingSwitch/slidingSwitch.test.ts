@@ -1,5 +1,15 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { select, selection } from 'd3-selection'
+import {
+    describe,
+    it,
+    expect,
+    afterEach,
+    beforeEach,
+    vi,
+} from 'vitest'
+import {
+    select,
+    selection,
+} from 'd3-selection'
 import { createTagPill } from '../tagPill/tagPill.ts'
 import {
     createSlidingSwitch,
@@ -37,12 +47,19 @@ const segmentX = (index: number) => 2 + index * 100
 function mount(
     selectedValue: View = 'list',
     onChange = vi.fn(),
-    config: Partial<Parameters<typeof createSlidingSwitch>[1]> = {}
+    config: Partial<Parameters<typeof createSlidingSwitch>[1]> = {},
 ) {
     const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
     document.body.appendChild(svg)
     const slidingSwitch = createSlidingSwitch<View>(select(svg), {
-        id: 'view-mode', x: 0, y: 0, width: WIDTH, height: 26, options, selectedValue, onChange,
+        id: 'view-mode',
+        x: 0,
+        y: 0,
+        width: WIDTH,
+        height: 26,
+        options,
+        selectedValue,
+        onChange,
         ...config,
     })
     return { svg, slidingSwitch, onChange }
@@ -126,7 +143,22 @@ describe('createSlidingSwitch', () => {
         expect(labels(svg)[1]!.getAttribute('fill')).not.toBe('#1a2744')
     })
 
-    it('uses caller-provided track, indicator, and default option colors', () => {
+    it('renders the shared flat white appearance by default', () => {
+        const { svg } = mount('list')
+
+        expect(svg.querySelector('.sliding-switch-track')?.getAttribute('fill')).toBe('rgba(105, 115, 133, 0.09)')
+        expect(svg.querySelector('.sliding-switch-indicator')?.getAttribute('fill')).toBe('rgba(255, 255, 255, 0.72)')
+        expect(svg.querySelector('.sliding-switch-indicator')?.getAttribute('style')).toBeNull()
+        expect(svg.querySelector('.sliding-switch-indicator-inset-shadow')?.getAttribute('fill')).toBe('transparent')
+        expect(labels(svg)[0]!.getAttribute('fill')).toBe('#1a2744')
+        expect(labels(svg)[1]!.getAttribute('fill')).toBe('rgba(49, 59, 78, 0.68)')
+
+        hitRects(svg)[1]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+
+        expect(labels(svg)[1]!.getAttribute('fill')).toBe('#1a2744')
+    })
+
+    it('supports explicit appearance customization for reusable consumers', () => {
         const { svg } = mount('list', vi.fn(), {
             trackBackgroundColor: '#123456',
             indicatorBackgroundColor: '#abcdef',
@@ -242,7 +274,6 @@ describe('createSlidingSwitch', () => {
         const { slidingSwitch, onChange } = mount('list')
         const option = { value: 'grid' as View }
         const event = { defaultPrevented: true } as Event
-
         ;(slidingSwitch as any).selectOption(option, event)
 
         expect(slidingSwitch.getValue()).toBe('list')
@@ -351,19 +382,20 @@ describe('createSlidingSwitch', () => {
             options: options.map((option) => ({ ...option, closable: option.value === 'grid' })),
             selectedValue: 'list',
             onClose,
-            renderOption: (parent, state) => createTagPill(parent, {
-                id: state.id,
-                x: state.x,
-                y: state.y,
-                width: state.width,
-                height: state.height,
-                label: state.option.label,
-                selected: state.selected,
-                hovered: state.hovered,
-                closable: state.closable,
-                closeAriaLabel: state.option.closeAriaLabel,
-                onClose: (_id, event) => state.onClose(event),
-            }),
+            renderOption: (parent, state) =>
+                createTagPill(parent, {
+                    id: state.id,
+                    x: state.x,
+                    y: state.y,
+                    width: state.width,
+                    height: state.height,
+                    label: state.option.label,
+                    selected: state.selected,
+                    hovered: state.hovered,
+                    closable: state.closable,
+                    closeAriaLabel: state.option.closeAriaLabel,
+                    onClose: (_id, event) => state.onClose(event),
+                }),
         })
 
         expect(svg.querySelectorAll('.tag-pill-group')).toHaveLength(3)

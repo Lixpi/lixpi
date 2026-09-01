@@ -1,6 +1,11 @@
 'use strict'
 
-import { describe, it, expect, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    vi,
+} from 'vitest'
 import {
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
@@ -9,7 +14,10 @@ import {
     cacheImageGenerationTrace,
     type AiCollapsibleBlockNodeViewOptions,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
-import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
+import type {
+    ImageGenerationTrace,
+    VideoGenerationTrace,
+} from '@lixpi/constants'
 
 vi.mock('$src/services/auth-service.ts', () => ({
     default: {
@@ -260,5 +268,4 @@ describe('aiCollapsibleBlockNodeView', () => {
         const referenceGrid = nodeView.dom.querySelector('.ai-image-generation-reference-grid')
         expect(referenceGrid?.querySelector('.ai-image-generation-reference')?.getAttribute('data-role')).toBe('target')
     })
-
 })

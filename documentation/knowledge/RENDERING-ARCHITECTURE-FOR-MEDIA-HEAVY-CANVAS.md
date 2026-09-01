@@ -1,5 +1,7 @@
 # Rendering Architecture for a Media-Heavy AI Canvas
 
+This research snapshot preserves the architecture comparisons and hypotheses that informed the canvas work. Its vendor claims and capacity estimates are not live benchmarks or the implementation contract. Use the [Canvas Engine manual](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) for rendering behavior and resource ownership.
+
 This document is the technical foundation for the choice of rendering stack in Lixpi as it evolves from a node-based AI chat board into a full **AI visual-media production canvas** — hundreds to thousands of images, videos, and generative artifacts on a single infinite surface, with interactive mask region selection and per-frame editing piped back to AI models.
 
 It explains, with primary sources, what every leading platform (Figma, FigJam, Google Stitch, Krea, Visual Electric, Recraft, ComfyUI, Miro) actually uses under the hood, why those choices matter, where each technique breaks, and the concrete architecture Lixpi should adopt.

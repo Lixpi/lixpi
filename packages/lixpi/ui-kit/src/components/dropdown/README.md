@@ -16,7 +16,7 @@ A factory function that creates dropdown UI controls. Used by AI Chat Thread for
 - No arrow on dropdown popover (M3 menus are borderless elevated surfaces)
 - Chevron rotates 180° when open (smooth cubic-bezier transition)
 - Trigger, option row, and icon alignment is owned by the component stylesheet and does not depend on application utility classes
-- Hover + selected states use a simple two-color CSS gradient based on the shifting gradient palette; its relationship to the animated gradient system is documented in [Visual Effects](../../../../../documentation/canvas/VISUAL-EFFECTS.md)
+- Hover + selected states use a simple two-color CSS gradient based on the shifting gradient palette; its relationship to the animated gradient system is documented in [Visual Effects](../../../../../packages/lixpi/ui-primitives/docs/GRADIENTS.md)
 - Chevron color is CSS-driven (not auto-recolored on open/hover)
 
 **Key features:**

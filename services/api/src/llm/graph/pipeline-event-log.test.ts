@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import { PipelineEventLog } from './pipeline-event-log.ts'

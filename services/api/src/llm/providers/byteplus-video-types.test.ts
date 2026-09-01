@@ -1,6 +1,12 @@
 'use strict'
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE,
@@ -74,10 +80,12 @@ describe('buildSeedanceContent', () => {
 
 describe('createVideoGenerationTask', () => {
     it('POSTs the payload to the tasks endpoint with bearer auth and parses the task id', async () => {
-        const fetchMock = vi.fn(async () => new Response(
-            JSON.stringify({ id: 'task_abc', status: 'queued' }),
-            { status: 200 },
-        ))
+        const fetchMock = vi.fn(async () =>
+            new Response(
+                JSON.stringify({ id: 'task_abc', status: 'queued' }),
+                { status: 200 },
+            )
+        )
         vi.stubGlobal('fetch', fetchMock)
 
         const payload: CreateVideoGenerationTaskPayload = {
@@ -108,10 +116,12 @@ describe('createVideoGenerationTask', () => {
     })
 
     it('throws a BytePlusModelArkError preserving error.code and HTTP status on failure', async () => {
-        const fetchMock = vi.fn(async () => new Response(
-            JSON.stringify({ error: { code: 'InvalidParameter', message: 'bad ratio' } }),
-            { status: 400 },
-        ))
+        const fetchMock = vi.fn(async () =>
+            new Response(
+                JSON.stringify({ error: { code: 'InvalidParameter', message: 'bad ratio' } }),
+                { status: 400 },
+            )
+        )
         vi.stubGlobal('fetch', fetchMock)
 
         await expect(createVideoGenerationTask(config, { model: 'm', content: [] }))
@@ -121,10 +131,12 @@ describe('createVideoGenerationTask', () => {
 
 describe('retrieveVideoGenerationTask', () => {
     it('GETs the task by id with bearer auth and returns the status + content', async () => {
-        const fetchMock = vi.fn(async () => new Response(
-            JSON.stringify({ id: 'task_abc', status: 'succeeded', content: { video_url: 'https://cdn/x.mp4' }, usage: { total_tokens: 184320 } }),
-            { status: 200 },
-        ))
+        const fetchMock = vi.fn(async () =>
+            new Response(
+                JSON.stringify({ id: 'task_abc', status: 'succeeded', content: { video_url: 'https://cdn/x.mp4' }, usage: { total_tokens: 184320 } }),
+                { status: 200 },
+            )
+        )
         vi.stubGlobal('fetch', fetchMock)
 
         const task = await retrieveVideoGenerationTask(config, 'task_abc')
@@ -171,8 +183,7 @@ describe('downloadLastFrame', () => {
 })
 
 describe('pollVideoGenerationTask', () => {
-    const statusTask = (status: string): RetrieveVideoGenerationTaskResponse =>
-        ({ id: 'task_abc', status: status as any })
+    const statusTask = (status: string): RetrieveVideoGenerationTaskResponse => ({ id: 'task_abc', status: status as any })
 
     it('polls until succeeded, emitting a keepalive on each non-terminal poll', async () => {
         const statuses = ['queued', 'running', 'succeeded']

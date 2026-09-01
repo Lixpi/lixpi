@@ -9,7 +9,6 @@ import {
 } from '@lixpi/constants'
 import { warn } from '@lixpi/debug-tools'
 
-
 // CROSS-REPO WIRE CONTRACT — the metrics.* subjects and check/confirm shapes are
 // shared with the hosted metering backend (a separate service, out of this repo).
 // Do NOT change without explicit user allowance, and mirror any change on both

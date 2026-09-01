@@ -5,14 +5,13 @@ import * as pulumi from '@pulumi/pulumi'
 
 import {
     buildDockerImage,
-    type DockerImageBuildResult
+    type DockerImageBuildResult,
 } from '../../helpers/docker/build-helpers.ts'
 
 import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
 // Local helper function (avoiding import issues in Pulumi context)
-const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string =>
-    `${resourceName}-${orgName}-${stageName}`
+const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`
 
 const { ORG_NAME, STAGE } = process.env
 
@@ -83,7 +82,7 @@ export interface LambdaCertificateManagerResult {
 }
 
 export const createLambdaCertificateManager = async (
-    args: LambdaCertificateManagerArgs
+    args: LambdaCertificateManagerArgs,
 ): Promise<LambdaCertificateManagerResult> => {
     const {
         domains,
@@ -111,7 +110,7 @@ export const createLambdaCertificateManager = async (
         dockerfilePath,
         platforms: ['linux/amd64'],
         push: true,
-    }) as DockerImageBuildResult;
+    }) as DockerImageBuildResult
 
     // Lambda execution role
     const lambdaRole = new aws.iam.Role(`${formattedFunctionName}-role`, {
@@ -166,40 +165,46 @@ export const createLambdaCertificateManager = async (
                     Resource: 'arn:aws:route53:::hostedzone/*',
                 },
                 // Storage-specific permissions
-                ...(storageType === 'secrets-manager' ? [
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            'secretsmanager:CreateSecret',
-                            'secretsmanager:UpdateSecret',
-                            'secretsmanager:PutSecretValue',
-                            'secretsmanager:GetSecretValue',
-                        ],
-                        Resource: `arn:aws:secretsmanager:*:*:secret:${storageConfig.secretsManagerPrefix}-*`,
-                    }
-                ] : []),
-                ...(storageType === 's3' ? [
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            's3:PutObject',
-                            's3:GetObject',
-                            's3:DeleteObject',
-                        ],
-                        Resource: pulumi.interpolate`${storageConfig.s3Bucket}/${storageConfig.s3Prefix || 'certificates'}/*`,
-                    }
-                ] : []),
-                ...(storageType === 'efs' ? [
-                    {
-                        Effect: 'Allow',
-                        Action: [
-                            'elasticfilesystem:CreateAccessPoint',
-                            'elasticfilesystem:DescribeAccessPoints',
-                            'elasticfilesystem:DescribeFileSystems',
-                        ],
-                        Resource: '*',
-                    }
-                ] : []),
+                ...(storageType === 'secrets-manager'
+                    ? [
+                        {
+                            Effect: 'Allow',
+                            Action: [
+                                'secretsmanager:CreateSecret',
+                                'secretsmanager:UpdateSecret',
+                                'secretsmanager:PutSecretValue',
+                                'secretsmanager:GetSecretValue',
+                            ],
+                            Resource: `arn:aws:secretsmanager:*:*:secret:${storageConfig.secretsManagerPrefix}-*`,
+                        },
+                    ]
+                    : []),
+                ...(storageType === 's3'
+                    ? [
+                        {
+                            Effect: 'Allow',
+                            Action: [
+                                's3:PutObject',
+                                's3:GetObject',
+                                's3:DeleteObject',
+                            ],
+                            Resource: pulumi.interpolate`${storageConfig.s3Bucket}/${storageConfig.s3Prefix || 'certificates'}/*`,
+                        },
+                    ]
+                    : []),
+                ...(storageType === 'efs'
+                    ? [
+                        {
+                            Effect: 'Allow',
+                            Action: [
+                                'elasticfilesystem:CreateAccessPoint',
+                                'elasticfilesystem:DescribeAccessPoints',
+                                'elasticfilesystem:DescribeFileSystems',
+                            ],
+                            Resource: '*',
+                        },
+                    ]
+                    : []),
             ],
         }),
     })
@@ -210,8 +215,8 @@ export const createLambdaCertificateManager = async (
     })
 
     // Prepare Lambda environment variables with proper Pulumi Output handling
-    const lambdaEnvironment = hostedZoneId ?
-        pulumi.all([hostedZoneId]).apply(([zoneId]) => ({
+    const lambdaEnvironment = hostedZoneId
+        ? pulumi.all([hostedZoneId]).apply(([zoneId]) => ({
             // Core certificate manager environment
             CADDY_LOCAL_MODE: 'false', // Force production mode in Lambda
             DOMAINS: domains.join(','),
@@ -220,20 +225,25 @@ export const createLambdaCertificateManager = async (
             // AWS_REGION is automatically provided by Lambda runtime - don't set it explicitly
 
             // Storage-specific environment
-            ...(storageType === 'secrets-manager' ? {
-                SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
-            } : {}),
-            ...(storageType === 's3' ? {
-                S3_BUCKET: storageConfig.s3Bucket?.toString() || '',
-                S3_PREFIX: storageConfig.s3Prefix || 'certificates',
-            } : {}),
+            ...(storageType === 'secrets-manager'
+                ? {
+                    SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
+                }
+                : {}),
+            ...(storageType === 's3'
+                ? {
+                    S3_BUCKET: storageConfig.s3Bucket?.toString() || '',
+                    S3_PREFIX: storageConfig.s3Prefix || 'certificates',
+                }
+                : {}),
 
             // Route53 configuration for DNS challenges
             AWS_HOSTED_ZONE_ID: zoneId || '', // Specific hosted zone ID for DNS challenges
 
             // Override any user-provided environment
             ...environment,
-        })) : {
+        }))
+        : {
             // Core certificate manager environment
             CADDY_LOCAL_MODE: 'false', // Force production mode in Lambda
             DOMAINS: domains.join(','),
@@ -242,13 +252,17 @@ export const createLambdaCertificateManager = async (
             // AWS_REGION is automatically provided by Lambda runtime - don't set it explicitly
 
             // Storage-specific environment
-            ...(storageType === 'secrets-manager' ? {
-                SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
-            } : {}),
-            ...(storageType === 's3' ? {
-                S3_BUCKET: storageConfig.s3Bucket?.toString() || '',
-                S3_PREFIX: storageConfig.s3Prefix || 'certificates',
-            } : {}),
+            ...(storageType === 'secrets-manager'
+                ? {
+                    SECRETS_PREFIX: storageConfig.secretsManagerPrefix || 'caddy-cert',
+                }
+                : {}),
+            ...(storageType === 's3'
+                ? {
+                    S3_BUCKET: storageConfig.s3Bucket?.toString() || '',
+                    S3_PREFIX: storageConfig.s3Prefix || 'certificates',
+                }
+                : {}),
 
             // Route53 configuration for DNS challenges
             AWS_HOSTED_ZONE_ID: '', // Auto-detect hosted zone ID
@@ -379,7 +393,7 @@ export const createLambdaCertificateHelper = (
         s3Bucket?: pulumi.Input<string>
         s3Prefix?: string
         efsFileSystemId?: pulumi.Input<string>
-    }
+    },
 ): import('./certificate-helper.ts').CertificateHelper => {
     switch (storageType) {
         case 'secrets-manager':

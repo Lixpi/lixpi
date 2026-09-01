@@ -1,4 +1,4 @@
-@use '../../styles/transitions' as *;
+@use '@lixpi/ui-primitives/styles/transitions' as *;
 
 .canvas-node-footer {
     display: flex;
@@ -13,14 +13,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
+    width: var(--canvas-node-footer-icon-size, 34px);
+    height: var(--canvas-node-footer-icon-size, 34px);
+    flex: 0 0 var(--canvas-node-footer-icon-size, 34px);
     padding: 0;
     border: 0;
     outline: 0;
     background: transparent;
-    color: var(--workspace-media-info-button-color, #4d5963);
+    color: var(--canvas-node-footer-color, #4d5963);
     cursor: pointer;
     pointer-events: auto;
     transition: hoverTransition(color);
@@ -42,7 +42,7 @@
 .canvas-node-footer-progress-button:hover,
 .canvas-node-footer-progress-button:focus-visible,
 .canvas-node-footer-progress-button.is-selected {
-    color: var(--workspace-media-info-button-hover-color, #181e23);
+    color: var(--canvas-node-footer-hover-color, #181e23);
 }
 
 .canvas-node-footer-info-button:focus,
@@ -60,8 +60,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    width: var(--canvas-node-footer-icon-size, 34px);
+    height: var(--canvas-node-footer-icon-size, 34px);
     transform: scale(0.8823529);
     transform-origin: center;
 }
@@ -112,11 +112,11 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
+    width: var(--canvas-node-footer-icon-size, 34px);
     height: 1px;
     border-radius: 999px;
     background: var(
-        --workspace-branch-marker-separator-gradient,
+        --canvas-node-footer-separator-gradient,
         linear-gradient(90deg, rgb(255 255 255 / 0%) 0%, rgb(255 255 255 / 18%) 10%, rgb(255 255 255 / 34%) 26%, rgb(255 255 255 / 62%) 50%, rgb(255 255 255 / 34%) 74%, rgb(255 255 255 / 18%) 90%, rgb(255 255 255 / 0%) 100%)
     );
     filter: invert(1);

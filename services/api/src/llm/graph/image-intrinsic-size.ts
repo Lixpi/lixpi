@@ -3,8 +3,10 @@
 // Intrinsic pixel size read straight from the PNG IHDR / JPEG SOF header bytes
 // without an image-library dependency.
 export function readImageIntrinsicSize(buffer: Buffer): { width: number; height: number } | null {
-    if (buffer.length >= 24
-        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    if (
+        buffer.length >= 24
+        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    ) {
         const width = buffer.readUInt32BE(16)
         const height = buffer.readUInt32BE(20)
         return width > 0 && height > 0 ? { width, height } : null

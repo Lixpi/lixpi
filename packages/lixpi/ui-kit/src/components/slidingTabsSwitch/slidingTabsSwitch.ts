@@ -66,22 +66,23 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
             optionRole: 'tab',
             selectedAriaAttribute: 'aria-selected',
             observeParentResize: true,
-            renderOption: (optionParent, state) => createTagPill(optionParent, {
-                id: state.id,
-                x: state.x,
-                y: state.y,
-                width: state.width,
-                height: state.height,
-                label: state.option.label,
-                selected: state.selected,
-                hovered: state.hovered,
-                disabled: state.disabled,
-                closable: state.closable,
-                surface: 'content',
-                closeVisibility: 'hover',
-                closeAriaLabel: state.option.closeAriaLabel,
-                onClose: (_id, event) => state.onClose(event),
-            }),
+            renderOption: (optionParent, state) =>
+                createTagPill(optionParent, {
+                    id: state.id,
+                    x: state.x,
+                    y: state.y,
+                    width: state.width,
+                    height: state.height,
+                    label: state.option.label,
+                    selected: state.selected,
+                    hovered: state.hovered,
+                    disabled: state.disabled,
+                    closable: state.closable,
+                    surface: 'content',
+                    closeVisibility: 'hover',
+                    closeAriaLabel: state.option.closeAriaLabel,
+                    onClose: (_id, event) => state.onClose(event),
+                }),
         }
 
         if (this.config.height !== undefined) switchConfig.height = this.config.height
@@ -130,7 +131,7 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
 
 export function createSlidingTabsSwitch<Value extends string = string>(
     parent: any,
-    config: SlidingTabsSwitchConfig<Value>
+    config: SlidingTabsSwitchConfig<Value>,
 ): SlidingTabsSwitchInstance<Value> {
     return new SlidingTabsSwitch(parent, config)
 }

@@ -28,8 +28,7 @@ type RuntimeStageInput = {
 }
 
 export type StyleExtractionRuntimePort = {
-    initialize: (input: Readonly<Record<string, unknown>>, context: CapabilityActionExecutionContext) =>
-        Promise<StyleExtractionRuntimeState>
+    initialize: (input: Readonly<Record<string, unknown>>, context: CapabilityActionExecutionContext) => Promise<StyleExtractionRuntimeState>
     route: (input: RuntimeStageInput) => Promise<{
         update: Partial<StyleExtractionRuntimeState>
         applicableAxes: string[]
@@ -41,8 +40,7 @@ export type StyleExtractionRuntimePort = {
     materializeSourceCrops: (input: RuntimeStageInput) => Promise<Partial<StyleExtractionRuntimeState>>
     synthesizeStyle: (input: RuntimeStageInput) => Promise<Partial<StyleExtractionRuntimeState>>
     generateSamples: (input: RuntimeStageInput) => Promise<Partial<StyleExtractionRuntimeState>>
-    persistStyle: (input: RuntimeStageInput & { allowedActionKeys: ReadonlySet<string> }) =>
-        Promise<Partial<StyleExtractionRuntimeState>>
+    persistStyle: (input: RuntimeStageInput & { allowedActionKeys: ReadonlySet<string> }) => Promise<Partial<StyleExtractionRuntimeState>>
 }
 
 export type StyleExtractionActionDependencies = {
@@ -102,11 +100,12 @@ export function registerStyleExtractionActions(
             requireInstructions(input.instructions, 'axis extraction instructions')
             return await extractorLimiter.run(
                 context.signal,
-                async () => await dependencies.runtime.extractAxis({
-                    state,
-                    axis: readString(input.axis, 'axis'),
-                    context,
-                }),
+                async () =>
+                    await dependencies.runtime.extractAxis({
+                        state,
+                        axis: readString(input.axis, 'axis'),
+                        context,
+                    }),
             )
         },
         classifyRetry: () => 'terminal',
@@ -119,10 +118,11 @@ export function registerStyleExtractionActions(
         validateInput: validateStateInput,
         validateOutput: validateCropsOutput,
         authorize: authorizeStyleExtraction,
-        execute: async (input, context) => await dependencies.runtime.materializeSourceCrops({
-            state: readState(input.state),
-            context,
-        }),
+        execute: async (input, context) =>
+            await dependencies.runtime.materializeSourceCrops({
+                state: readState(input.state),
+                context,
+            }),
         classifyRetry: () => 'terminal',
         summarizeInput: input => `references=${arrayLength(asRecord(input.state)?.references)}`,
         summarizeOutput: output => `crops=${arrayLength(asRecord(output)?.sourceCrops)}`,
@@ -245,10 +245,8 @@ export function registerStyleExtractionActions(
                     'Structured visual configuration:',
                     new TextDecoder().decode(configuration.bytes),
                 ].join('\n\n'),
-                referenceImages: samples.map(sample =>
-                    `data:${sample.ref.mediaType};base64,${Buffer.from(sample.bytes).toString('base64')}`),
-                referenceImageTraceUrls: samples.map(sample =>
-                    `/api/capabilities/${encodeURIComponent(context.rootCapabilityId)}/resources/${encodeURIComponent(sample.ref.resourceId)}?manifestBlobHash=${encodeURIComponent(manifestBlobHash)}`),
+                referenceImages: samples.map(sample => `data:${sample.ref.mediaType};base64,${Buffer.from(sample.bytes).toString('base64')}`),
+                referenceImageTraceUrls: samples.map(sample => `/api/capabilities/${encodeURIComponent(context.rootCapabilityId)}/resources/${encodeURIComponent(sample.ref.resourceId)}?manifestBlobHash=${encodeURIComponent(manifestBlobHash)}`),
             }
         },
         classifyRetry: () => 'terminal',
@@ -322,9 +320,11 @@ function mergeState(
 
 function readState(value: unknown): StyleExtractionRuntimeState {
     const state = asRecord(value)
-    if (!state || !asRecord(state.input) || !Array.isArray(state.references)
+    if (
+        !state || !asRecord(state.input) || !Array.isArray(state.references)
         || !asRecord(state.axisExtractions) || !Array.isArray(state.failedAxes)
-        || !Array.isArray(state.sourceCrops) || !Array.isArray(state.samples)) {
+        || !Array.isArray(state.sourceCrops) || !Array.isArray(state.samples)
+    ) {
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Style Extraction state is invalid')
     }
     return value as StyleExtractionRuntimeState
@@ -343,9 +343,11 @@ function readResource(value: unknown, label: string): {
 } {
     const resource = asRecord(value)
     const ref = asRecord(resource?.ref)
-    if (!(resource?.bytes instanceof Uint8Array)
+    if (
+        !(resource?.bytes instanceof Uint8Array)
         || typeof ref?.resourceId !== 'string'
-        || typeof ref.mediaType !== 'string') {
+        || typeof ref.mediaType !== 'string'
+    ) {
         throw new CapabilityError('CAPABILITY_RESOURCE_INVALID', `${label} are missing`)
     }
     return { bytes: resource.bytes, ref: ref as { resourceId: string; mediaType: string } }
@@ -398,10 +400,10 @@ function validateVisualStyleInput(value: Readonly<Record<string, unknown>>): Cap
 function validateVisualStyleOutput(value: unknown): CapabilityActionValidationResult {
     const output = asRecord(value)
     return output?.mediaGenerationMode === 'visual-style'
-        && output.preserveUserPrompt === false
-        && typeof output.visualInstructions === 'string'
-        && Array.isArray(output.referenceImages)
-        && Array.isArray(output.referenceImageTraceUrls)
+            && output.preserveUserPrompt === false
+            && typeof output.visualInstructions === 'string'
+            && Array.isArray(output.referenceImages)
+            && Array.isArray(output.referenceImageTraceUrls)
         ? { valid: true }
         : { valid: false, message: 'visual style output is invalid' }
 }

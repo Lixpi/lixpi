@@ -12,7 +12,7 @@ import { LOG_RETENTION_DAYS } from '../constants/logging.ts'
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
 export type EcsEc2ClusterInfrastructureArgs = {
@@ -34,7 +34,7 @@ export type EcsEc2ClusterInfrastructureArgs = {
 }
 
 export const createEcsEc2Cluster = async (
-    args: EcsEc2ClusterInfrastructureArgs
+    args: EcsEc2ClusterInfrastructureArgs,
 ) => {
     const {
         vpc,
@@ -135,7 +135,7 @@ export const createEcsEc2Cluster = async (
         ingress: [
             // Allow all traffic from within the security group
             {
-                protocol: '-1',  // All protocols
+                protocol: '-1', // All protocols
                 fromPort: 0,
                 toPort: 0,
                 self: true,
@@ -145,7 +145,7 @@ export const createEcsEc2Cluster = async (
         egress: [
             // Allow all outbound traffic
             {
-                protocol: '-1',  // All protocols
+                protocol: '-1', // All protocols
                 fromPort: 0,
                 toPort: 0,
                 cidrBlocks: ['0.0.0.0/0'],
@@ -226,9 +226,9 @@ chmod 700 /data/jetstream
         },
         // Add network interface configuration to ensure public IP assignment
         networkInterfaces: [{
-            associatePublicIpAddress: true,  // This ensures EC2 instances get public IPs
+            associatePublicIpAddress: true, // This ensures EC2 instances get public IPs
             deviceIndex: 0,
-            securityGroups: [ecsSecurityGroup.id],   // Changed from 'groups' to 'securityGroups'
+            securityGroups: [ecsSecurityGroup.id], // Changed from 'groups' to 'securityGroups'
             deleteOnTermination: true,
         }],
         userData: userData.apply(data => Buffer.from(data).toString('base64')),
@@ -276,7 +276,7 @@ chmod 700 /data/jetstream
     // Create auto scaling group with instance protection enabled
     const autoScalingGroup = new aws.autoscaling.Group('ecsAutoScalingGroup', {
         name: formatStageResourceName('ECS-ASG', ORG_NAME, STAGE),
-        vpcZoneIdentifiers: publicSubnetIds,  // Changed from privateSubnetIds to publicSubnetIds
+        vpcZoneIdentifiers: publicSubnetIds, // Changed from privateSubnetIds to publicSubnetIds
         minSize: minCapacity,
         maxSize: maxCapacity,
         desiredCapacity: desiredCapacity,
@@ -291,12 +291,12 @@ chmod 700 /data/jetstream
         },
         // Force instance refresh when launch template changes
         instanceRefresh: {
-            strategy: "Rolling",
+            strategy: 'Rolling',
             preferences: {
                 minHealthyPercentage: 50,
                 instanceWarmup: 300,
             },
-            triggers: ["tag"],  // Trigger refresh on tag changes
+            triggers: ['tag'], // Trigger refresh on tag changes
         },
         terminationPolicies: ['OldestInstance', 'Default'],
         tags: [
@@ -378,6 +378,6 @@ chmod 700 /data/jetstream
             instanceRoleArn: ecsInstanceRole.arn,
             instanceProfileArn: instanceProfile.arn,
             logGroupName: logGroup.name,
-        }
+        },
     }
 }

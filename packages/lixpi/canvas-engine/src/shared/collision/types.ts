@@ -7,6 +7,7 @@ import type {
 
 export type CollisionBox = CanvasEngineRect & {
     id: string
+    fixed?: boolean
     margin?: number
     overlapThreshold?: number
 }

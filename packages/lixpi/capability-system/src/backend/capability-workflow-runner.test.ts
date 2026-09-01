@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     type CapabilityManifest,
@@ -163,9 +168,15 @@ function makePersistence(): CapabilityRunPersistence & { runs: CapabilityRun[]; 
     return {
         runs,
         events,
-        createRun: vi.fn(async run => { runs.push(structuredClone(run)) }),
-        updateRun: vi.fn(async run => { runs.push(structuredClone(run)) }),
-        appendEvent: vi.fn(async event => { events.push(structuredClone(event)) }),
+        createRun: vi.fn(async run => {
+            runs.push(structuredClone(run))
+        }),
+        updateRun: vi.fn(async run => {
+            runs.push(structuredClone(run))
+        }),
+        appendEvent: vi.fn(async event => {
+            events.push(structuredClone(event))
+        }),
     }
 }
 

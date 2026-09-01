@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     normalizeAiModelSelectionAttr,
@@ -85,7 +89,7 @@ describe('normalizeMediaGenerationConfigSelectionAttr', () => {
 })
 
 describe('parseBooleanAttr', () => {
-    it('accepts real booleans and \"true\" strings only', () => {
+    it('accepts real booleans and "true" strings only', () => {
         expect(parseBooleanAttr(true)).toBe(true)
         expect(parseBooleanAttr('true')).toBe(true)
         expect(parseBooleanAttr('false')).toBe(false)

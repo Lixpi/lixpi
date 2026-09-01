@@ -1,7 +1,18 @@
 'use strict'
 
-import { readFile, writeFile, rename, mkdir, readdir, unlink, copyFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import {
+    readFile,
+    writeFile,
+    rename,
+    mkdir,
+    readdir,
+    unlink,
+    copyFile,
+} from 'node:fs/promises'
+import {
+    dirname,
+    join,
+} from 'node:path'
 
 // The parameter tree is the AI Model Registry's source of truth. There is no
 // separate database or index: the directory layout defines the registry shape.

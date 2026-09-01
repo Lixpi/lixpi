@@ -367,11 +367,13 @@ async function main(): Promise<void> {
         }) as AnyRecord | undefined
 
         const threads = args.threadId
-            ? [await dynamo.getItem({
-                tableName: tableName('AI_CHAT_THREADS'),
-                key: { workspaceId: args.workspaceId, threadId: args.threadId },
-                origin: `inspect-replaced-media-history:thread(${args.workspaceId}:${args.threadId})`,
-            }) as AnyRecord | undefined].filter((thread): thread is AnyRecord => Boolean(thread))
+            ? [
+                await dynamo.getItem({
+                    tableName: tableName('AI_CHAT_THREADS'),
+                    key: { workspaceId: args.workspaceId, threadId: args.threadId },
+                    origin: `inspect-replaced-media-history:thread(${args.workspaceId}:${args.threadId})`,
+                }) as AnyRecord | undefined,
+            ].filter((thread): thread is AnyRecord => Boolean(thread))
             : ((await dynamo.queryItems({
                 tableName: tableName('AI_CHAT_THREADS'),
                 keyConditions: { workspaceId: args.workspaceId },
@@ -386,32 +388,34 @@ async function main(): Promise<void> {
             const match = findThreadRecord(canvasRecord, indexedThreadRecords)
             return compareRecords(canvasRecord, match.record, match.matchKind)
         })
-        const staleThreadRecords = threadRecords.filter(threadRecord =>
-            !comparisons.some(comparison => comparison.thread === threadRecord)
-        )
+        const staleThreadRecords = threadRecords.filter(threadRecord => !comparisons.some(comparison => comparison.thread === threadRecord))
         const fileIds = collectFileIds(canvasRecords, threadRecords)
 
-        console.log(JSON.stringify({
-            inspectedAt: new Date().toISOString(),
-            args,
-            workspace: workspace
-                ? {
-                    found: true,
-                    workspaceId: workspace.workspaceId,
-                    name: workspace.name,
-                    updatedAt: workspace.updatedAt,
-                    canvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
-                }
-                : { found: false },
-            threadCount: threads.length,
-            canvasGeneratedMediaCount: canvasRecords.length,
-            threadGeneratedMediaCount: threadRecords.length,
-            mismatchCount: comparisons.filter(comparison => comparison.status !== 'ok').length,
-            staleThreadRecordCount: staleThreadRecords.length,
-            comparisons,
-            staleThreadRecords,
-            objectStore: await inspectObjectStore(nats, args.workspaceId, fileIds),
-        }, null, 2))
+        console.log(JSON.stringify(
+            {
+                inspectedAt: new Date().toISOString(),
+                args,
+                workspace: workspace
+                    ? {
+                        found: true,
+                        workspaceId: workspace.workspaceId,
+                        name: workspace.name,
+                        updatedAt: workspace.updatedAt,
+                        canvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
+                    }
+                    : { found: false },
+                threadCount: threads.length,
+                canvasGeneratedMediaCount: canvasRecords.length,
+                threadGeneratedMediaCount: threadRecords.length,
+                mismatchCount: comparisons.filter(comparison => comparison.status !== 'ok').length,
+                staleThreadRecordCount: staleThreadRecords.length,
+                comparisons,
+                staleThreadRecords,
+                objectStore: await inspectObjectStore(nats, args.workspaceId, fileIds),
+            },
+            null,
+            2,
+        ))
     } finally {
         await nats.disconnect()
     }

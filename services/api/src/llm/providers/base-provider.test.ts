@@ -1,7 +1,18 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { STREAM_STATUS, type MediaGenerationRunMeta, type ProviderName } from '@lixpi/constants'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    STREAM_STATUS,
+    type MediaGenerationRunMeta,
+    type ProviderName,
+} from '@lixpi/constants'
 
 import * as debugTools from '@lixpi/debug-tools'
 
@@ -15,14 +26,20 @@ vi.mock('../../capability-system/capability-output-finalizer.ts', () => ({
     discardPendingCapabilityOutputsForState: capabilityOutputFinalizerMocks.discard,
 }))
 
-import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import {
+    BaseProvider,
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 import { StreamPublisher } from '../graph/stream-publisher.ts'
-import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
+import type {
+    AiModelMetaInfo,
+    ProviderState,
+} from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 
-type Published = { subject: string, payload: any }
+type Published = { subject: string; payload: any }
 
 const makeFakeNats = () => {
     const published: Published[] = []
@@ -185,7 +202,6 @@ describe('BaseProvider image fanout errors', () => {
             { proseMirrorContentMirror: sharedMirror },
         )
         ;(provider as any).pipelineProseMirrorContentHandler = sharedMirror
-
         ;(provider as any).publishPipelineProseMirrorContent({
             status: STREAM_STATUS.IMAGE_PARTIAL,
             aiProvider: 'Anthropic',
@@ -231,7 +247,6 @@ describe('BaseProvider image fanout errors', () => {
             'Anthropic',
         )
         ;(provider as any).pipelineProseMirrorContentHandler = sharedMirror
-
         ;(provider as any).publishPipelineProseMirrorContent({
             status: STREAM_STATUS.STREAMING,
             aiProvider: 'Anthropic',
@@ -294,9 +309,7 @@ describe('BaseProvider image fanout errors', () => {
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
-        const imageErrorEvents = nats.published.filter((item) =>
-            item.payload.content.status === STREAM_STATUS.IMAGE_ERROR
-        )
+        const imageErrorEvents = nats.published.filter((item) => item.payload.content.status === STREAM_STATUS.IMAGE_ERROR)
         expect(imageErrorEvents).toHaveLength(1)
         expect(imageErrorEvents[0]?.payload.content).toMatchObject({
             status: STREAM_STATUS.IMAGE_ERROR,
@@ -428,10 +441,13 @@ describe('BaseProvider request validation', () => {
             capabilityMediaExecutionPlan: plan,
         })
 
-        expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
-            generatedImagePrompt: 'Create a character sheet.',
-            capabilityMediaExecutionPlan: plan,
-        }), expect.anything())
+        expect(invoke).toHaveBeenCalledWith(
+            expect.objectContaining({
+                generatedImagePrompt: 'Create a character sheet.',
+                capabilityMediaExecutionPlan: plan,
+            }),
+            expect.anything(),
+        )
     })
 
     it('preserves video configuration and the reasoning model negative prompt in provider state', async () => {
@@ -456,10 +472,13 @@ describe('BaseProvider request validation', () => {
             generatedVideoNegativePrompt: 'no subtitles',
         })
 
-        expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
-            videoGenerationConfig: { generateAudio: 'false', outputFormat: 'mov' },
-            generatedVideoNegativePrompt: 'no subtitles',
-        }), expect.anything())
+        expect(invoke).toHaveBeenCalledWith(
+            expect.objectContaining({
+                videoGenerationConfig: { generateAudio: 'false', outputFormat: 'mov' },
+                generatedVideoNegativePrompt: 'no subtitles',
+            }),
+            expect.anything(),
+        )
     })
 
     it('denies metrics admission before resolving or persisting media lineage', async () => {
@@ -712,10 +731,18 @@ describe('BaseProvider routing', () => {
             }]
         })
         ;(provider as any).streamPublisher = {
-            drainPendingWrites: vi.fn(async () => { order.push('drain') }),
-            finishProseMirrorConversation: vi.fn(async () => { order.push('finish-conversation') }),
-            canvasGeometryResolved: vi.fn(() => { order.push('publish') }),
-            end: vi.fn(() => { order.push('end') }),
+            drainPendingWrites: vi.fn(async () => {
+                order.push('drain')
+            }),
+            finishProseMirrorConversation: vi.fn(async () => {
+                order.push('finish-conversation')
+            }),
+            canvasGeometryResolved: vi.fn(() => {
+                order.push('publish')
+            }),
+            end: vi.fn(() => {
+                order.push('end')
+            }),
         }
         const state = {
             workspaceId: 'ws-1',
@@ -999,9 +1026,7 @@ describe('BaseProvider fanout', () => {
 
         expect(result).toEqual({ generatedImages: ['final-image-base64'] })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
-        const topLevelErrors = nats.published.filter((item) =>
-            item.payload?.content?.status === STREAM_STATUS.ERROR,
-        )
+        const topLevelErrors = nats.published.filter((item) => item.payload?.content?.status === STREAM_STATUS.ERROR)
         expect(topLevelErrors).toHaveLength(0)
     })
 
@@ -1081,9 +1106,7 @@ describe('BaseProvider fanout', () => {
         expect(result).toMatchObject({ error: 'Image model unavailable' })
         expect(runImageRouter).toHaveBeenCalledTimes(2)
 
-        const topLevelErrors = nats.published.filter((item) =>
-            item.payload?.content?.status === STREAM_STATUS.ERROR,
-        )
+        const topLevelErrors = nats.published.filter((item) => item.payload?.content?.status === STREAM_STATUS.ERROR)
         expect(topLevelErrors).toHaveLength(1)
         expect(topLevelErrors[0]?.payload.content).toMatchObject({
             status: STREAM_STATUS.ERROR,
@@ -1115,8 +1138,8 @@ describe('BaseProvider fanout', () => {
         }))
 
         expect(result).toEqual({ generatedImages: ['fallback-image'] })
-        expect((deps.runImageRouter as any)).toHaveBeenCalledTimes(1)
-        expect((deps.runVideoRouter as any)).not.toHaveBeenCalled()
+        expect(deps.runImageRouter as any).toHaveBeenCalledTimes(1)
+        expect(deps.runVideoRouter as any).not.toHaveBeenCalled()
     })
 
     it('fans out to both selected media modalities when both prompts are present', async () => {
@@ -1142,8 +1165,8 @@ describe('BaseProvider fanout', () => {
             errorCode: undefined,
             errorType: undefined,
         })
-        expect((deps.runVideoRouter as any)).toHaveBeenCalledTimes(2)
-        expect((deps.runImageRouter as any)).toHaveBeenCalledTimes(2)
+        expect(deps.runVideoRouter as any).toHaveBeenCalledTimes(2)
+        expect(deps.runImageRouter as any).toHaveBeenCalledTimes(2)
     })
 })
 

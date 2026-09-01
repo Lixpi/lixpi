@@ -3,14 +3,17 @@
 import jwt from 'jsonwebtoken'
 
 import { createGetKeyFunction } from './jwks-client.ts'
-import type { JwtVerifierConfig, JwtVerificationResult } from './types.ts'
+import type {
+    JwtVerifierConfig,
+    JwtVerificationResult,
+} from './types.ts'
 
 export const verifyJwt = async ({
     getKey,
     token,
     audience,
     issuer,
-    algorithms = ['RS256']
+    algorithms = ['RS256'],
 }: {
     getKey: (header: any, callback: (err: Error | null, key?: string) => void) => void
     token: string
@@ -27,7 +30,7 @@ export const verifyJwt = async ({
             {
                 audience,
                 issuer,
-                algorithms
+                algorithms,
             },
             (error, decoded) => {
                 if (error) {
@@ -38,7 +41,7 @@ export const verifyJwt = async ({
                 if (decoded) {
                     resolve({ decoded })
                 }
-            }
+            },
         )
     })
 }
@@ -53,10 +56,10 @@ export const createJwtVerifier = (config: JwtVerifierConfig) => {
                 token,
                 audience: config.audience,
                 issuer: config.issuer,
-                algorithms: config.algorithms ?? ['RS256']
+                algorithms: config.algorithms ?? ['RS256'],
             })
         },
 
-        getKey
+        getKey,
     }
 }

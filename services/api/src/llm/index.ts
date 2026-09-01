@@ -11,8 +11,14 @@ import { ProviderRegistry } from './providers/provider-registry.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './providers/current-media-provider-definitions.ts'
 import { ImageRouter } from './tools/image-router.ts'
 import { VideoRouter } from './tools/video-router.ts'
-import { MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './orchestration/media-generation-matrix.ts'
-import { capabilityActionRegistry, getCapabilityDispatcher } from '../capability-system/capability-runtime.ts'
+import {
+    MediaGenerationMatrixOrchestrator,
+    type MatrixRequestData,
+} from './orchestration/media-generation-matrix.ts'
+import {
+    capabilityActionRegistry,
+    getCapabilityDispatcher,
+} from '../capability-system/capability-runtime.ts'
 import { createDefaultCapabilityModuleCatalog } from '../installed-capabilities.ts'
 import type { MetricsClient } from '../metrics/metrics-client.ts'
 import { createCharacterCreatorRuntimePorts } from '../capability-system/character-creator-platform-adapter.ts'
@@ -69,10 +75,8 @@ export const createLlmModule = (deps: LlmModuleDeps): LlmModule => {
 
     return {
         capabilityModuleCatalog: capabilityModules,
-        process: (instanceKey, providerName, requestData) =>
-            registry.process(instanceKey, providerName, requestData),
-        processMediaGenerationMatrix: (requestData) =>
-            mediaGenerationMatrixOrchestrator.process(requestData),
+        process: (instanceKey, providerName, requestData) => registry.process(instanceKey, providerName, requestData),
+        processMediaGenerationMatrix: (requestData) => mediaGenerationMatrixOrchestrator.process(requestData),
         stop: (instanceKey) => registry.stop(instanceKey),
         stopMediaGenerationMatrix: (params) => mediaGenerationMatrixOrchestrator.stop(params),
         shutdown: () => registry.shutdown(),

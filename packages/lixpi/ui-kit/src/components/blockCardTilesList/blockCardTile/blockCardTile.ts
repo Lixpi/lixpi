@@ -1,4 +1,4 @@
-import { html } from '../../../dom/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type BlockCardTileAction = {
     ariaLabel: string

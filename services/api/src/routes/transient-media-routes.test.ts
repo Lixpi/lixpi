@@ -1,9 +1,15 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => {
-    const handlers: Array<{ path: string, middleware: Array<(req: any, res: any, next: any) => unknown> }> = []
+    const handlers: Array<{ path: string; middleware: Array<(req: any, res: any, next: any) => unknown> }> = []
     const getObject = vi.fn(async () => Buffer.from('partial-media'))
     const getWorkspace = vi.fn(async () => ({ organizationId: 'org-1' }))
     const verify = vi.fn(async () => ({ decoded: { sub: 'user-1' } }))

@@ -1,7 +1,13 @@
 'use strict'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import AiModel from '../../models/ai-model.ts'
 
@@ -14,12 +20,12 @@ export const aiModelSubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [ AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS ] },
-            sub: { allow: [] }
+            pub: { allow: [AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS] },
+            sub: { allow: [] },
         },
         handler: async (data, msg) => {
-            return await AiModel.getAvailableAiModels();
-        }
+            return await AiModel.getAvailableAiModels()
+        },
     },
 
     {
@@ -31,12 +37,11 @@ export const aiModelSubjects = [
         type: 'subscribe',
         payloadType: 'json',
         permissions: {
-            sub: { allow: [AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED] }
+            sub: { allow: [AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED] },
         },
         handler: async (data, msg) => {
             info(`AI models sync completed -> new=${data?.totalNew ?? 0} updated=${data?.totalUpdated ?? 0} deleted=${data?.totalDeleted ?? 0} ranAt=${data?.ranAt ?? 'n/a'}`)
-        }
+        },
     },
-
     // END AI Models ---------------------------------------------------------------------------------------------------
 ]

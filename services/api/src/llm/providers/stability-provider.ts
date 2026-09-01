@@ -4,17 +4,33 @@ import * as process from 'process'
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    BedrockRuntimeClient,
+    InvokeModelCommand,
+} from '@aws-sdk/client-bedrock-runtime'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
-import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import {
+    BaseProvider,
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { bedrockInference } from './bedrock-inference.ts'
 import type { ProviderName } from '@lixpi/constants'
-import type { ProviderState, ChatMessage } from '../graph/state.ts'
+import type {
+    ProviderState,
+    ChatMessage,
+} from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { SMITHY_TRANSPORT_FAULT_NAMES } from '../utils/transport-retry.ts'
-import { STABILITY_SEED_MAX, resolveReportedSeed } from './media-generation-seed.ts'
+import {
+    STABILITY_SEED_MAX,
+    resolveReportedSeed,
+} from './media-generation-seed.ts'
 
 const MODEL_ENDPOINT_MAP: Record<string, string> = {
     'stability-ultra': '/v2beta/stable-image/generate/ultra',
@@ -88,9 +104,9 @@ const resizeReferenceForStability = async (
         const outHeight = resizedMetadata.height ?? resizedHeight
 
         info(
-            `${logPrefix} Resized ${label} reference image ` +
-            `${width}x${height} (${pixels} px) -> ${outWidth}x${outHeight} ` +
-            `(${outWidth * outHeight} px) for Stability limit ${MAX_STABILITY_REFERENCE_PIXELS}`,
+            `${logPrefix} Resized ${label} reference image `
+                + `${width}x${height} (${pixels} px) -> ${outWidth}x${outHeight} `
+                + `(${outWidth * outHeight} px) for Stability limit ${MAX_STABILITY_REFERENCE_PIXELS}`,
         )
 
         return {
@@ -170,13 +186,15 @@ export class StabilityProvider extends BaseProvider {
 
         const aspectRatio = resolveAspectRatio(imageSize)
         const allRefs = [...(state.resolvedImageGenerationReferences ?? [])]
-        info(`[Stability:${this.instanceKey}] reference images ${JSON.stringify(allRefs.map(reference => ({
-            role: reference.role,
-            fileName: reference.fileName,
-            byteLength: reference.byteLength,
-            mediaType: reference.mediaType,
-            sha256: reference.sha256,
-        })))}`)
+        info(`[Stability:${this.instanceKey}] reference images ${
+            JSON.stringify(allRefs.map(reference => ({
+                role: reference.role,
+                fileName: reference.fileName,
+                byteLength: reference.byteLength,
+                mediaType: reference.mediaType,
+                sha256: reference.sha256,
+            })))
+        }`)
 
         const logPrefix = `[Stability:${this.instanceKey}]`
         let routingMode: StabilityRoutingMode = 'generate'
@@ -326,22 +344,23 @@ export class StabilityProvider extends BaseProvider {
         }
 
         info(
-            `[Stability:${this.instanceKey}] API request endpoint=${endpoint} model=${modelVersion} ` +
-            `aspect=${aspectRatio} refs=${referenceCount} mode=${routingMode} promptLen=${prompt.length}`,
+            `[Stability:${this.instanceKey}] API request endpoint=${endpoint} model=${modelVersion} `
+                + `aspect=${aspectRatio} refs=${referenceCount} mode=${routingMode} promptLen=${prompt.length}`,
         )
 
         // Single non-streaming request; nothing is published until it returns.
         const response = await this.retryTransport(
-                'image',
-            async () => await fetch(`https://api.stability.ai${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    authorization: `Bearer ${apiKey}`,
-                    accept: 'application/json',
-                },
-                body: formData,
-                signal: this.signal,
-            }),
+            'image',
+            async () =>
+                await fetch(`https://api.stability.ai${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        authorization: `Bearer ${apiKey}`,
+                        accept: 'application/json',
+                    },
+                    body: formData,
+                    signal: this.signal,
+                }),
         )
 
         info(`[Stability:${this.instanceKey}] API response status=${response.status}`)
@@ -352,7 +371,7 @@ export class StabilityProvider extends BaseProvider {
                 if (response.headers.get('content-type')?.startsWith('application/json')) {
                     errorBody = await response.json()
                 }
-            } catch { }
+            } catch {}
             const errors: string[] = errorBody.errors ?? [String(response.status)]
             const errorName: string = errorBody.name ?? 'api_error'
             err(`[Stability:${this.instanceKey}] API error name=${errorName} errors=${errors}`)
@@ -365,8 +384,8 @@ export class StabilityProvider extends BaseProvider {
         const generationSeed = resolveReportedSeed(result.seed, requestedSeed)
 
         info(
-            `[Stability:${this.instanceKey}] Generation complete finishReason=${finishReason} ` +
-            `seed=${generationSeed} imageLen=${imageBase64.length}`,
+            `[Stability:${this.instanceKey}] Generation complete finishReason=${finishReason} `
+                + `seed=${generationSeed} imageLen=${imageBase64.length}`,
         )
 
         return { imageBase64, finishReason, generationSeed }
@@ -412,9 +431,9 @@ export class StabilityProvider extends BaseProvider {
             body.image = primaryRef!.bytes.toString('base64')
             body.strength = strength
             warn(
-                `${logPrefix} Bedrock has no equivalent of the Stability control/* endpoints; ` +
-                `${routingMode} degraded to image-to-image strength=${strength}` +
-                (styleRef ? ' and the separate style reference was dropped' : ''),
+                `${logPrefix} Bedrock has no equivalent of the Stability control/* endpoints; `
+                    + `${routingMode} degraded to image-to-image strength=${strength}`
+                    + (styleRef ? ' and the separate style reference was dropped' : ''),
             )
         } else {
             body.mode = 'text-to-image'
@@ -425,22 +444,23 @@ export class StabilityProvider extends BaseProvider {
         }
 
         info(
-            `${logPrefix} Bedrock request modelId=${modelId} catalogModel=${modelVersion} ` +
-            `mode=${body.mode} aspect=${aspectRatio} promptLen=${prompt.length}`,
+            `${logPrefix} Bedrock request modelId=${modelId} catalogModel=${modelVersion} `
+                + `mode=${body.mode} aspect=${aspectRatio} promptLen=${prompt.length}`,
         )
 
         // Single non-streaming invocation; nothing is published until it returns.
         const response = await this.retryTransport(
-                'bedrock',
-            async () => await this.bedrockClient.send(
-                new InvokeModelCommand({
-                    modelId,
-                    contentType: 'application/json',
-                    accept: 'application/json',
-                    body: JSON.stringify(body),
-                }),
-                { abortSignal: this.signal },
-            ),
+            'bedrock',
+            async () =>
+                await this.bedrockClient.send(
+                    new InvokeModelCommand({
+                        modelId,
+                        contentType: 'application/json',
+                        accept: 'application/json',
+                        body: JSON.stringify(body),
+                    }),
+                    { abortSignal: this.signal },
+                ),
         )
 
         if (!response.body) throw new Error('Stability Bedrock invocation returned an empty body')
@@ -456,8 +476,8 @@ export class StabilityProvider extends BaseProvider {
         }
 
         info(
-            `${logPrefix} Bedrock generation complete filtered=${!!rawFinishReason} ` +
-            `seed=${generationSeed} imageLen=${imageBase64.length}`,
+            `${logPrefix} Bedrock generation complete filtered=${!!rawFinishReason} `
+                + `seed=${generationSeed} imageLen=${imageBase64.length}`,
         )
 
         return { imageBase64, finishReason, generationSeed }

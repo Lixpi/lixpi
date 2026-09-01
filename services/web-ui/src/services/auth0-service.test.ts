@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const getTokenSilentlyMock = vi.hoisted(() => vi.fn())
 const isAuthenticatedMock = vi.hoisted(() => vi.fn())

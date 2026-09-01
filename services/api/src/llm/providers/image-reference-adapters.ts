@@ -60,17 +60,21 @@ const adaptByBudget = ({
     capabilities,
     requiresIdentity,
 }: ImageReferenceAdapterInput): ImageReferenceAdaptation => {
-    if (requiresIdentity && (!capabilities.conditioningModes.includes('identity')
-        || capabilities.maxIdentityReferenceImages === 0)) {
+    if (
+        requiresIdentity && (!capabilities.conditioningModes.includes('identity')
+            || capabilities.maxIdentityReferenceImages === 0)
+    ) {
         throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
     }
 
     const hasCanonicalAnchor = references.some(reference => reference.role === 'canonical-anchor')
     const sorted = references
         .map((reference, index) => ({ reference, index }))
-        .sort((left, right) => getRolePriority(left.reference.role, hasCanonicalAnchor)
-            - getRolePriority(right.reference.role, hasCanonicalAnchor)
-            || left.index - right.index)
+        .sort((left, right) =>
+            getRolePriority(left.reference.role, hasCanonicalAnchor)
+                - getRolePriority(right.reference.role, hasCanonicalAnchor)
+            || left.index - right.index
+        )
     const included: ResolvedImageGenerationReference[] = []
     const omitted: ImageReferenceAdaptation['omitted'] = []
     let identityCount = 0
@@ -100,15 +104,19 @@ const adaptByBudget = ({
     }
 
     const suppliedIdentityReference = references.some(reference => IDENTITY_ROLES.has(reference.role))
-    if (requiresIdentity
+    if (
+        requiresIdentity
         && suppliedIdentityReference
-        && !included.some(reference => IDENTITY_ROLES.has(reference.role))) {
+        && !included.some(reference => IDENTITY_ROLES.has(reference.role))
+    ) {
         throw new Error('IMAGE_REFERENCE_IDENTITY_BUDGET_EXHAUSTED')
     }
     const suppliedPoseReference = references.some(reference => reference.role === 'pose-reference')
-    if (requiresIdentity
+    if (
+        requiresIdentity
         && suppliedPoseReference
-        && !included.some(reference => reference.role === 'pose-reference')) {
+        && !included.some(reference => reference.role === 'pose-reference')
+    ) {
         throw new Error('IMAGE_REFERENCE_POSE_CONDITIONING_UNAVAILABLE')
     }
 

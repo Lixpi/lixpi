@@ -51,10 +51,12 @@ router.post('/byteplus/callback', authenticateRequest, async (req: any, res: any
 })
 
 router.get('/byteplus/callback', async (req: any, res: any) => {
-    if (typeof req.query?.state !== 'string'
+    if (
+        typeof req.query?.state !== 'string'
         || typeof req.query?.bytedToken !== 'string'
         || req.query.bytedToken.length > 4096
-        || req.query.resultCode !== '10000') {
+        || req.query.resultCode !== '10000'
+    ) {
         return res.status(400).send('Provider verification did not complete successfully.')
     }
     try {

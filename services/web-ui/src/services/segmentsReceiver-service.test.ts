@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 
 type SegmentChunk = {

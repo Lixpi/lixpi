@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     createDefaultMediaGenerationRunProgress,
     mediaGenerationLayoutSettings,
@@ -14,7 +20,7 @@ import {
     estimateBranchMarkerDimensions,
     getGeneratedOutputChromeCollisionInsets,
     getPendingGeneratedMediaNodeId,
-} from '@lixpi/canvas-engine'
+} from '@lixpi/canvas-components-lixpi-specific/shared'
 
 const mocks = vi.hoisted(() => ({
     detachWorkspaceReference: vi.fn(),
@@ -209,44 +215,49 @@ const projectMedia = (
     mediaIndex: number,
     pendingBeforeFirstFrame: boolean,
     aspectRatio = 1,
-): CanvasState => projectGeneratedAssetNode({
-    canvasState,
-    assetId: `asset-${mediaIndex + 1}`,
-    kind: 'image',
-    aspectRatio,
-    generationRun: generationRunFor(mediaIndex),
-    conversationAssetId: 'thread-1',
-    pendingBeforeFirstFrame,
-}).canvasState
+): CanvasState =>
+    projectGeneratedAssetNode({
+        canvasState,
+        assetId: `asset-${mediaIndex + 1}`,
+        kind: 'image',
+        aspectRatio,
+        generationRun: generationRunFor(mediaIndex),
+        conversationAssetId: 'thread-1',
+        pendingBeforeFirstFrame,
+    }).canvasState
 
 const projectVideo = (
     canvasState: CanvasState,
     pendingBeforeFirstFrame: boolean,
     aspectRatio = 1,
-): CanvasState => projectGeneratedAssetNode({
-    canvasState,
-    assetId: 'asset-video-1',
-    kind: 'video',
-    aspectRatio,
-    generationRun: videoGenerationRun(),
-    conversationAssetId: 'thread-1',
-    pendingBeforeFirstFrame,
-}).canvasState
+): CanvasState =>
+    projectGeneratedAssetNode({
+        canvasState,
+        assetId: 'asset-video-1',
+        kind: 'video',
+        aspectRatio,
+        generationRun: videoGenerationRun(),
+        conversationAssetId: 'thread-1',
+        pendingBeforeFirstFrame,
+    }).canvasState
 
-const canonicalGenerationTree = (canvasState: CanvasState): unknown[] => canvasState.nodes
-    .filter((node) => node.type === 'branchOrigin'
-        || node.type === 'branchFork'
-        || ((node.type === 'image' || node.type === 'video') && node.generatedBy?.generationRequestId === 'request-1'))
-    .sort((left, right) => left.nodeId.localeCompare(right.nodeId))
-    .map((node) => ({
-        nodeId: node.nodeId,
-        type: node.type,
-        position: node.position,
-        dimensions: node.dimensions,
-        ...((node.type === 'image' || node.type === 'video')
-            ? { mediaGenerationPhase: node.mediaGenerationPhase }
-            : {}),
-    }))
+const canonicalGenerationTree = (canvasState: CanvasState): unknown[] =>
+    canvasState.nodes
+        .filter((node) =>
+            node.type === 'branchOrigin'
+            || node.type === 'branchFork'
+            || ((node.type === 'image' || node.type === 'video') && node.generatedBy?.generationRequestId === 'request-1')
+        )
+        .sort((left, right) => left.nodeId.localeCompare(right.nodeId))
+        .map((node) => ({
+            nodeId: node.nodeId,
+            type: node.type,
+            position: node.position,
+            dimensions: node.dimensions,
+            ...((node.type === 'image' || node.type === 'video')
+                ? { mediaGenerationPhase: node.mediaGenerationPhase }
+                : {}),
+        }))
 
 const nodeCenterY = (node: CanvasNode): number => node.position.y + node.dimensions.height / 2
 
@@ -447,7 +458,7 @@ describe('asset canvas projection', () => {
         expect(nodeCenterY(fork)).toBeCloseTo(nodeCenterY(origin), 6)
         expect(Math.abs(nodeCenterY(outputs[1]!) - nodeCenterY(outputs[0]!))).toBeCloseTo(
             mediaGenerationLayoutSettings.generatedMediaSize
-                * mediaGenerationLayoutSettings.preFrameCircleScale
+                    * mediaGenerationLayoutSettings.preFrameCircleScale
                 + mediaGenerationLayoutSettings.branchRowGap,
             6,
         )
@@ -834,8 +845,7 @@ describe('asset canvas projection', () => {
         expect(forward.nodes).toEqual(expect.arrayContaining([
             expect.objectContaining({ dimensions: { width: 800, height: 800 }, mediaGenerationPhase: 'ready' }),
         ]))
-        const readyNodes = forward.nodes.filter((node) =>
-            (node.type === 'image') && node.mediaGenerationPhase === 'ready')
+        const readyNodes = forward.nodes.filter((node) => (node.type === 'image') && node.mediaGenerationPhase === 'ready')
         expect(readyNodes).toHaveLength(2)
         for (const node of readyNodes) {
             expect(node.dimensions).toEqual({ width: 800, height: 800 })

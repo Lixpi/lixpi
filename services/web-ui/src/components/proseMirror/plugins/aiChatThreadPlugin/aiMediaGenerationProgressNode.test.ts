@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import { createProseMirrorSchema, DOCUMENT_TYPE } from '@lixpi/prosemirror'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from '@lixpi/prosemirror'
 
 import { aiMediaGenerationProgressNodeView } from './aiMediaGenerationProgressNode.ts'
 

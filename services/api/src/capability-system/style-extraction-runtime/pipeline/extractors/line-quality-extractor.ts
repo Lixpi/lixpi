@@ -38,8 +38,7 @@ const extractor: StyleExtractor = {
     description: 'Extracts the line treatment: presence, weight, variation, color, outline behavior, interior linework.',
     minDominance: 0.3,
     applicableTo: (scene) => (scene.axisDominance['line-quality'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

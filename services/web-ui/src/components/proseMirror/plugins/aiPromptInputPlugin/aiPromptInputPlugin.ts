@@ -1,12 +1,24 @@
-import { Plugin, EditorState, Transaction, TextSelection } from 'prosemirror-state'
-import { EditorView, Decoration, DecorationSet } from 'prosemirror-view'
+import {
+    Plugin,
+    EditorState,
+    Transaction,
+    TextSelection,
+} from 'prosemirror-state'
+import {
+    EditorView,
+    Decoration,
+    DecorationSet,
+} from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type {
     CapabilityJsonValue,
     MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
-import { AI_PROMPT_INPUT_PLUGIN_KEY, SUBMIT_AI_PROMPT_META } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
+import {
+    AI_PROMPT_INPUT_PLUGIN_KEY,
+    SUBMIT_AI_PROMPT_META,
+} from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPluginConstants.ts'
 import {
     aiPromptInputNodeType,
     createAiPromptInputNodeView,
@@ -209,21 +221,27 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
             useMultipleReasoningModels: aiReasoningModels.length > 1,
             useMultipleImageModels: aiImageModels.length > 1,
             useMultipleVideoModels: aiVideoModels.length > 1,
-            reasoningOptions: reasoningGenerationConfigGroups.length > 0 ? {
-                configGroups: reasoningGenerationConfigGroups,
-            } : undefined,
-            imageOptions: attrs.mediaGenerationMode === 'image' ? {
-                aiImageModels,
-                imageGenerationSize: attrs.imageGenerationSize,
-                ...(imageGenerationConfigGroups.length > 0 ? { configGroups: imageGenerationConfigGroups } : {}),
-            } : undefined,
-            videoOptions: attrs.mediaGenerationMode === 'video' ? {
-                aiVideoModels,
-                videoAspectRatio: attrs.videoAspectRatio,
-                videoResolution: attrs.videoResolution,
-                videoDuration: attrs.videoDuration,
-                ...(videoGenerationConfigGroups.length > 0 ? { configGroups: videoGenerationConfigGroups } : {}),
-            } : undefined,
+            reasoningOptions: reasoningGenerationConfigGroups.length > 0
+                ? {
+                    configGroups: reasoningGenerationConfigGroups,
+                }
+                : undefined,
+            imageOptions: attrs.mediaGenerationMode === 'image'
+                ? {
+                    aiImageModels,
+                    imageGenerationSize: attrs.imageGenerationSize,
+                    ...(imageGenerationConfigGroups.length > 0 ? { configGroups: imageGenerationConfigGroups } : {}),
+                }
+                : undefined,
+            videoOptions: attrs.mediaGenerationMode === 'video'
+                ? {
+                    aiVideoModels,
+                    videoAspectRatio: attrs.videoAspectRatio,
+                    videoResolution: attrs.videoResolution,
+                    videoDuration: attrs.videoDuration,
+                    ...(videoGenerationConfigGroups.length > 0 ? { configGroups: videoGenerationConfigGroups } : {}),
+                }
+                : undefined,
             capabilityInputs: attrs.capabilityInputs,
         }
     }
@@ -275,7 +293,7 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                             Decoration.node(pos, pos + node.nodeSize, {
                                 class: 'empty-node-placeholder',
                                 'data-placeholder': placeholderText,
-                            })
+                            }),
                         )
                     }
                 })

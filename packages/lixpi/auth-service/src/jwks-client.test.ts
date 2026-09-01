@@ -1,31 +1,44 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const getSigningKey = vi.hoisted(() => vi.fn())
-const createJwksClientMock = vi.hoisted(() => vi.fn(() => ({
-    getSigningKey,
-})))
+const createJwksClientMock = vi.hoisted(() =>
+    vi.fn(() => ({
+        getSigningKey,
+    }))
+)
 
 vi.mock('jwks-rsa', () => ({
     default: createJwksClientMock,
 }))
 
-import { createGetKeyFunction, createJwksClient } from './jwks-client.ts'
+import {
+    createGetKeyFunction,
+    createJwksClient,
+} from './jwks-client.ts'
 
 type GetKeyFunction = (
     header: { kid: string },
     callback: (err: Error | null, key?: string) => void,
 ) => void
 
-const invokeGetKey = (getKey: GetKeyFunction, kid = 'test-kid') => new Promise<{ error: Error | null; key: string | undefined }>((resolve) => {
-    getKey({ kid }, (error, key) => {
-        resolve({
-            error: error ? (error as Error) : null,
-            key,
+const invokeGetKey = (getKey: GetKeyFunction, kid = 'test-kid') =>
+    new Promise<{ error: Error | null; key: string | undefined }>((resolve) => {
+        getKey({ kid }, (error, key) => {
+            resolve({
+                error: error ? (error as Error) : null,
+                key,
+            })
         })
     })
-})
 
 // =============================================================================
 // JWKS CLIENT FACTORY

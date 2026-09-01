@@ -1,9 +1,18 @@
 'use strict'
 
 import { access } from 'node:fs/promises'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 
-import { runProcess, withTempDir } from './transcoders/run-process.ts'
+import {
+    runProcess,
+    withTempDir,
+} from './transcoders/run-process.ts'
 
 describe('runProcess', () => {
     it('resolves when process exits successfully', async () => {

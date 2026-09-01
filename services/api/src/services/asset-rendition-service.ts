@@ -28,7 +28,10 @@ import {
     getAssetRecord,
     publishAssetEvent,
 } from '../models/asset.ts'
-import { enqueueBlobDeletion, enqueueRenditionRetry } from './asset-maintenance-queue.ts'
+import {
+    enqueueBlobDeletion,
+    enqueueRenditionRetry,
+} from './asset-maintenance-queue.ts'
 import { getBlobObjectKey } from './blob-storage.ts'
 
 const { ORG_NAME, STAGE } = process.env
@@ -316,7 +319,8 @@ const AssetRenditionService = {
         const requestedRenditions = getRequestedRenditions(asset).filter((name) =>
             name === 'original'
                 ? retryAttempt === 0
-                : asset.media!.renditions[name]?.status !== 'ready')
+                : asset.media!.renditions[name]?.status !== 'ready'
+        )
         if (requestedRenditions.length === 0) return asset
         const jobId = uuid()
         const renditionSetKey = [...requestedRenditions].sort().join('+')

@@ -6,7 +6,7 @@ This guide defines best practices for creating consistent, readable Mermaid diag
 
 - [Color Palette Reference](#color-palette-reference)
 - [Theme Configuration](#theme-configuration)
-- [Flowchart / Graph Diagrams](#flowchart--graph-diagrams)
+- [Flowchart / Graph Diagrams](#flowchart-graph-diagrams)
 - [Sequence Diagrams](#sequence-diagrams)
 - [State Diagrams](#state-diagrams)
 - [General Best Practices](#general-best-practices)

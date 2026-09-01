@@ -13,7 +13,7 @@ This guide applies to `.scss` files and TypeScript code that creates or selects 
 
 ## Transitions
 
-- All transition timing and easing must come from `services/web-ui/src/sass/_transitions.scss`. Import that file and reuse its shared Sass helpers or mixins; never hand-write custom transition durations or curves in component CSS.
+- All transition timing and easing must come from `@lixpi/ui-primitives/styles/transitions` (`packages/lixpi/ui-primitives/src/styles/_transitions.scss`). Import that file and reuse its shared Sass helpers or mixins; never hand-write custom transition durations or curves in component CSS.
 - Hover and hover-equivalent focus state changes must use `hoverTransition(...)`. Do not write raw hover transitions such as `transition: background 150ms ease`.
 - If a component needs a transition pattern that is not covered by the existing helpers or mixins, add or update the shared transition API in `_transitions.scss` first, then reuse it from the component stylesheet.
 

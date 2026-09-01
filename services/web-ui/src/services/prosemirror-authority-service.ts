@@ -4,7 +4,15 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { Transaction } from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { Mapping, Step, getAssetDocumentEventSubject, type AssetDocumentRole, type AssetDocResumeResult, type AssetStepStreamEvent, type SubmitResult } from '@lixpi/prosemirror'
+import {
+    Mapping,
+    Step,
+    getAssetDocumentEventSubject,
+    type AssetDocumentRole,
+    type AssetDocResumeResult,
+    type AssetStepStreamEvent,
+    type SubmitResult,
+} from '@lixpi/prosemirror'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'
@@ -59,11 +67,13 @@ export class ProseMirrorAuthorityService {
     submitLocalTransaction(transaction: Transaction): void {
         if (this.options.receiveOnly || !this.leaseId || this.applyingAuthorityStep) return
         if (!transaction.docChanged || transaction.getMeta('skipDispatch')) return
-        transaction.steps.forEach((step, index) => this.pendingLocalSteps.push({
-            msgId: `asset-pm-${this.clientId}-${uuidv4()}`,
-            step,
-            beforeDoc: transaction.docs[index] as ProseMirrorNode,
-        }))
+        transaction.steps.forEach((step, index) =>
+            this.pendingLocalSteps.push({
+                msgId: `asset-pm-${this.clientId}-${uuidv4()}`,
+                step,
+                beforeDoc: transaction.docs[index] as ProseMirrorNode,
+            })
+        )
         this.scheduleSubmit()
     }
 
@@ -128,7 +138,9 @@ export class ProseMirrorAuthorityService {
             this.sharedLeaseKey = leaseKey
             this.leaseId = sharedLease.leaseId
             this.notifyLeaseState({ readOnly: false })
-            this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
+            this.leaseRenewalTimer = setInterval(() => {
+                void this.renewLease()
+            }, 10000)
             return
         }
         const result = await this.assetService.acquireLease(this.options.assetId, this.options.workspaceId, this.clientId)
@@ -145,7 +157,9 @@ export class ProseMirrorAuthorityService {
                 this.sharedLeaseKey = leaseKey
                 this.leaseId = concurrentlyAcquired.leaseId
                 this.notifyLeaseState({ readOnly: false })
-                this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
+                this.leaseRenewalTimer = setInterval(() => {
+                    void this.renewLease()
+                }, 10000)
                 return
             }
             const asset = await this.assetService.get(this.options.assetId, this.options.workspaceId)
@@ -166,14 +180,18 @@ export class ProseMirrorAuthorityService {
             await this.releaseLeaseSilently(result.leaseId, this.clientId)
             if (this.disconnected) return
             this.notifyLeaseState({ readOnly: false })
-            this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
+            this.leaseRenewalTimer = setInterval(() => {
+                void this.renewLease()
+            }, 10000)
             return
         }
         sharedWorkspaceLeases.set(leaseKey, { leaseId: result.leaseId, holderId: this.clientId, references: 1 })
         this.sharedLeaseKey = leaseKey
         this.leaseId = result.leaseId
         this.notifyLeaseState({ readOnly: false })
-        this.leaseRenewalTimer = setInterval(() => { void this.renewLease() }, 10000)
+        this.leaseRenewalTimer = setInterval(() => {
+            void this.renewLease()
+        }, 10000)
     }
 
     private async renewLease(): Promise<void> {
@@ -242,9 +260,11 @@ export class ProseMirrorAuthorityService {
                     role: this.options.role,
                 })
                 if (result.liveSubject !== expectedLiveSubject) throw new Error('ASSET_DOCUMENT_LIVE_SUBJECT_MISMATCH')
-                if (result.snapshot
+                if (
+                    result.snapshot
                     && result.snapshot.version > this.localVersion
-                    && acceptSnapshot) {
+                    && acceptSnapshot
+                ) {
                     const snapshot = await this.assetService.fetchDocumentSnapshot(result.snapshot)
                     if (snapshot.version > this.localVersion && this.pendingLocalSteps.length === 0) {
                         this.applySnapshot(snapshot.doc, snapshot.version)

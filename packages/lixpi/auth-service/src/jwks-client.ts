@@ -14,7 +14,7 @@ export const createJwksClient = (config: JwksClientConfig) => {
         jwksUri: config.jwksUri,
         cache: config.cache ?? true,
         rateLimit: config.rateLimit ?? true,
-        jwksRequestsPerMinute: config.jwksRequestsPerMinute ?? 10
+        jwksRequestsPerMinute: config.jwksRequestsPerMinute ?? 10,
     })
 }
 

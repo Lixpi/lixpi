@@ -1,6 +1,32 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+// @vitest-environment happy-dom
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 import { BubbleMenu } from './BubbleMenu.ts'
-import type { BubbleMenuItem, BubbleMenuPositionRequest } from './types.ts'
+import type {
+    BubbleMenuItem,
+    BubbleMenuPositionRequest,
+} from './types.ts'
+
+it('cancels pending positioning when the menu is destroyed', () => {
+    const request = vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(91)
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame')
+    const { menu, parentEl } = createBubbleMenu()
+    menu.show('text', createMockPosition({ width: 0, height: 0 }))
+    expect(request).toHaveBeenCalledOnce()
+    menu.destroy()
+    expect(cancel).toHaveBeenCalledWith(91)
+    menu.show('text', createMockPosition())
+    expect(menu.element.isConnected).toBe(false)
+    parentEl.remove()
+    request.mockRestore()
+    cancel.mockRestore()
+})
 
 // =============================================================================
 // HELPERS
@@ -15,8 +41,14 @@ function createMockItem(contexts: string[], label = 'btn'): BubbleMenuItem {
 
 function createMockPosition(overrides: Partial<DOMRect> = {}): BubbleMenuPositionRequest {
     const rect = {
-        left: 100, right: 300, top: 50, bottom: 100,
-        width: 200, height: 50, x: 100, y: 50,
+        left: 100,
+        right: 300,
+        top: 50,
+        bottom: 100,
+        width: 200,
+        height: 50,
+        x: 100,
+        y: 50,
         toJSON: () => ({}),
     }
     return {

@@ -3,7 +3,7 @@
 import { writable } from '$src/stores/nanoStore.ts'
 
 import {
-    LoadingStatus
+    LoadingStatus,
 } from '@lixpi/constants'
 
 import type { ReadonlyDeep } from 'type-fest'
@@ -42,10 +42,10 @@ const nats: ReadonlyDeep<NatsStore> = deepFreeze({
         organizationService: null,
         workspaceService: null,
         assetService: null,
-    }
+    },
 })
 
-const store = writable({...nats})
+const store = writable({ ...nats })
 
 export const servicesStore = {
     ...store,
@@ -70,23 +70,26 @@ export const servicesStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): void => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): void =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    setDataValues: (values: Partial<Services> = {}): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            ...values
-        }
-    })),
+    setDataValues: (values: Partial<Services> = {}): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                ...values,
+            },
+        })),
 
-    resetStore: (): void => store.update(state => ({
-        ...nats
-    })),
+    resetStore: (): void =>
+        store.update(state => ({
+            ...nats,
+        })),
 }

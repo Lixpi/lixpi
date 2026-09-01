@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import mockAuthService from '$src/services/auth0-mock-service.ts'
 
@@ -14,7 +21,7 @@ vi.mock('$src/stores/authStore.ts', () => ({
     },
 }))
 
-vi.mock('$src/utils/domTemplates.ts', () => ({
+vi.mock('@lixpi/ui-primitives/dom', () => ({
     applyStyle: vi.fn(),
 }))
 
@@ -24,8 +31,7 @@ const STORAGE_KEY = 'localauth0_token'
 // Only the payload matters here — the mock service never verifies the signature.
 const makeToken = (expSecondsFromNow: number): string => {
     const now = Math.floor(Date.now() / 1000)
-    const base64url = (obj: object) =>
-        btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    const base64url = (obj: object) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
     const header = base64url({ typ: 'JWT', alg: 'none' })
     const payload = base64url({ exp: now + expSecondsFromNow })
     return `${header}.${payload}.sig`

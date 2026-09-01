@@ -8,5 +8,5 @@ export type {
     JwtVerifierConfig,
     JwtVerificationResult,
     NKeyVerificationResult,
-    ServiceAuthConfig
+    ServiceAuthConfig,
 } from './types.ts'

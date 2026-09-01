@@ -5,7 +5,13 @@ import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import chalk from 'chalk'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
@@ -18,7 +24,10 @@ import { jwtAuthMiddleware } from './NATS/middleware/nats-auth-middleware.ts'
 import { userSubjects } from './NATS/subscriptions/user-subjects.ts'
 import { subscriptionSubjects } from './NATS/subscriptions/subscription-subjects.ts'
 import { aiModelSubjects } from './NATS/subscriptions/ai-model-subjects.ts'
-import { aiInteractionSubjects, setLlmModule } from './NATS/subscriptions/ai-interaction-subjects.ts'
+import {
+    aiInteractionSubjects,
+    setLlmModule,
+} from './NATS/subscriptions/ai-interaction-subjects.ts'
 import { mediaDescriptorSubjects } from './NATS/subscriptions/media-descriptor-subjects.ts'
 import { workspaceSubjects } from './NATS/subscriptions/workspace-subjects.ts'
 import { assetSubjects } from './NATS/subscriptions/asset-subjects.ts'
@@ -43,7 +52,11 @@ import { CapabilityRunEventRelay } from './services/capability-run-event-log.ts'
 import { getCapabilityDispatcher } from './capability-system/capability-runtime.ts'
 import { asCapabilityArguments } from './capability-system/capability-state-resolver.ts'
 
-import { MetricsClient, metricsConfigFromEnv, type MetricsNats } from './metrics/metrics-client.ts'
+import {
+    MetricsClient,
+    metricsConfigFromEnv,
+    type MetricsNats,
+} from './metrics/metrics-client.ts'
 
 const env = process.env
 
@@ -63,10 +76,8 @@ if (env.ENVIRONMENT !== 'local' && env.MOCK_AUTH0 === 'true') {
 global.dynamoDBService = new DynamoDBService({
     region: env.AWS_REGION,
     ssoProfile: env.AWS_PROFILE,
-    ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }),    // For local development only
+    ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }), // For local development only
 })
-
-
 
 // AI models synchronization runs hourly on the NATS NEX execution-engine node
 // (services/nex). The API reads the AI_MODELS_LIST table live (model::AiModel
@@ -209,7 +220,7 @@ const apiNatsService = await NATS_Service.init({
     middleware: [
         jwtAuthMiddleware, // global middleware, applies to all subscriptions
     ],
-    subscriptions
+    subscriptions,
 })
 
 await startAssetMaintenanceWorker(apiNatsService)
@@ -277,8 +288,6 @@ setCapabilityRunDispatcher({
 })
 setLlmModule(llmModule)
 
-
-
 const app = express()
 const httpServer = createServer(app)
 
@@ -286,7 +295,7 @@ app.set('trust proxy', true)
 
 const corsOptions = {
     origin: env.ORIGIN_HOST_URL,
-    credentials: true
+    credentials: true,
 }
 
 app.use(express.json({ limit: '100mb' }))
@@ -303,8 +312,6 @@ app.use('/api/transient-media', transientMediaRoutes)
 app.use('/api/workspaces', workspaceExportRoutes)
 app.use('/api/capabilities', capabilityRoutes)
 app.use('/api/provider-verification', providerVerificationRoutes)
-
-
 
 // Health check endpoint
 app.get('/health-check', (req, res) => {
@@ -323,10 +330,9 @@ httpServer.listen(3000, '0.0.0.0', () => {
     infoStr([
         chalk.green('Server is running on: '),
         chalk.blue('http://localhost:3000'),
-        '\n\n\n'
+        '\n\n\n',
     ])
 })
-
 
 // Graceful shutdown (for your application termination handlers)
 process.on('SIGINT', async () => {
@@ -336,7 +342,7 @@ process.on('SIGINT', async () => {
     } catch (e) {
         err('LLM module shutdown failed:', e)
     }
-    await await NATS_Service.getInstance()!.drain()    // Drains subscriptions and closes connection
+    await await NATS_Service.getInstance()!.drain() // Drains subscriptions and closes connection
     process.exit(0)
 })
 

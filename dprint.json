@@ -1,0 +1,29 @@
+{
+    "$schema": "https://dprint.dev/schemas/v0.json",
+    "includes": ["**/*.{ts,tsx}"],
+    "excludes": [
+        "**/node_modules",
+        "**/dist",
+        "**/coverage",
+        "packages-vendor"
+    ],
+    "incremental": true,
+    "indentWidth": 4,
+    "lineWidth": 1000,
+    "newLineKind": "lf",
+    "useTabs": false,
+    "typescript": {
+        "quoteStyle": "preferSingle",
+        "semiColons": "asi",
+        "trailingCommas": "onlyMultiLine",
+        "preferSingleLine": false,
+        "module.sortImportDeclarations": "maintain",
+        "module.sortExportDeclarations": "maintain",
+        "importDeclaration.forceMultiLine": "whenMultiple",
+        "importDeclaration.sortNamedImports": "maintain",
+        "exportDeclaration.sortNamedExports": "maintain"
+    },
+    "plugins": [
+        "./services/typescript-quality-runner/node_modules/@dprint/typescript/plugin.wasm"
+    ]
+}

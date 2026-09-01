@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     searchAvailable: vi.fn(),
@@ -64,9 +70,11 @@ const moduleItems = [
 const moduleCatalog = {
     listModules: vi.fn((query = '') => moduleItems.filter(item => item.normalizedName.startsWith(query))),
     getModuleMeta: vi.fn((moduleId: string) => moduleItems.find(item => item.moduleId === moduleId)),
-    resolveEntry: vi.fn((moduleId: string) => moduleItems.some(item => item.moduleId === moduleId)
-        ? { capabilityId: `global.${moduleId}`, kind: 'tool' as const }
-        : undefined),
+    resolveEntry: vi.fn((moduleId: string) =>
+        moduleItems.some(item => item.moduleId === moduleId)
+            ? { capabilityId: `global.${moduleId}`, kind: 'tool' as const }
+            : undefined
+    ),
 }
 const workspace = {
     workspaceId: 'workspace-1',
@@ -301,8 +309,7 @@ describe('PromptReferenceCatalogService', () => {
         mocks.searchAvailable.mockResolvedValue({
             items: [{ assetId: canvasArtifact.assetId }, { assetId: libraryArtifact.assetId }],
         })
-        mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) =>
-            assetId === canvasArtifact.assetId ? canvasArtifact : libraryArtifact)
+        mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) => assetId === canvasArtifact.assetId ? canvasArtifact : libraryArtifact)
         mocks.loadCurrentSnapshot.mockImplementation(async (asset: { assetId: string }) => ({
             organizationId: 'organization-1',
             assetId: asset.assetId,
@@ -420,8 +427,7 @@ describe('PromptReferenceCatalogService', () => {
             referenceId: 'asset-stale',
             updatedAt: 10,
         }])
-        mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) =>
-            assetId === 'asset-stale' ? { error: 'ASSET_NOT_FOUND' } : portraitAsset)
+        mocks.getAsset.mockImplementation(async ({ assetId }: { assetId: string }) => assetId === 'asset-stale' ? { error: 'ASSET_NOT_FOUND' } : portraitAsset)
         mocks.searchAvailable.mockResolvedValue({ items: [portrait] })
 
         const page = await new PromptReferenceCatalogService(moduleCatalog as any).list({

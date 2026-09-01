@@ -1,13 +1,25 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type { EditorView, NodeView } from 'prosemirror-view'
+import type {
+    EditorView,
+    NodeView,
+} from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
-import { imageResizeCornerIcon, brokenImageIcon } from '@lixpi/ui-kit/svg'
+import {
+    imageResizeCornerIcon,
+    brokenImageIcon,
+} from '@lixpi/ui-kit/svg'
 import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import AuthService from '$src/services/auth-service.ts'
-import { html, applyStyle } from '$src/utils/domTemplates.ts'
+import {
+    html,
+    applyStyle,
+} from '@lixpi/ui-primitives/dom'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import { settings } from '$src/settings.ts'
-import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
+import {
+    applyMediaModelBadgeStyleProperties,
+    resolveMediaModelBadgeConfig,
+} from '$src/components/mediaModelBadge/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 
 type ImageAlignment = 'left' | 'center' | 'right'
@@ -233,9 +245,12 @@ export class ImageNodeView implements NodeView {
 
     private renderGeneratedImageModelBadge(): void {
         if (!this.modelChromeElement) return
-        renderMediaModelBadge(this.modelChromeElement, resolveMediaModelBadgeConfig({
-            modelId: this.node.attrs.mediaModelId,
-        }))
+        renderMediaModelBadge(
+            this.modelChromeElement,
+            resolveMediaModelBadgeConfig({
+                modelId: this.node.attrs.mediaModelId,
+            }),
+        )
     }
 
     private createResizeHandle(corner: ResizeCorner): HTMLElement {
@@ -334,7 +349,7 @@ export class ImageNodeView implements NodeView {
 
             const tr = this.view.state.tr.setNodeMarkup(pos, null, {
                 ...this.node.attrs,
-                width: widthPercent
+                width: widthPercent,
             })
 
             // Re-select the node after resize to keep it selected

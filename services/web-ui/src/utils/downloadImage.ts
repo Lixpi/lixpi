@@ -16,7 +16,7 @@
 // into stored canvas media URLs.
 // =============================================================================
 
-import { applyStyle } from '$src/utils/domTemplates.ts'
+import { applyStyle } from '@lixpi/ui-primitives/dom'
 import {
     isApiEndpoint,
     resolveMediaUrl,

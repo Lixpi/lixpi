@@ -1,18 +1,26 @@
 'use strict'
 
 import jsonWebToken from 'jsonwebtoken'
-import { fromPublic, fromSeed } from '@nats-io/nkeys'
-import { encodeUser, encodeAuthorizationResponse } from '@nats-io/jwt'
+import {
+    fromPublic,
+    fromSeed,
+} from '@nats-io/nkeys'
+import {
+    encodeUser,
+    encodeAuthorizationResponse,
+} from '@nats-io/jwt'
 
 import type { NatsService } from '@lixpi/nats-service'
 import { getNatsUserSubjectToken } from '@lixpi/constants'
-import { info, err as logError } from '@lixpi/debug-tools'
+import {
+    info,
+    err as logError,
+} from '@lixpi/debug-tools'
 import {
     createJwtVerifier,
     verifyNKeySignedJWT as verifyNKeyJwt,
-    type ServiceAuthConfig
+    type ServiceAuthConfig,
 } from '@lixpi/auth-service'
-
 
 type AuthenticatedNatsClient = {
     // Lixpi identity that will appear as the subject of the issued NATS user JWT.
@@ -98,7 +106,7 @@ const appendUniquePermissionSubjects = ({
 const getPermissionsForUser = (
     userId: string,
     subscriptions: any[],
-    servicePermissions?: ServiceAuthConfig['permissions']
+    servicePermissions?: ServiceAuthConfig['permissions'],
 ) => {
     // If service-specific permissions are provided, use them
     if (servicePermissions) {
@@ -110,14 +118,14 @@ const getPermissionsForUser = (
     const resolvedPermissions: ResolvedNatsPermissions = {
         pub: {
             allow: [
-                '_INBOX.>'
-            ]
+                '_INBOX.>',
+            ],
         },
         sub: {
             allow: [
-                '_INBOX.>'
-            ]
-        }
+                '_INBOX.>',
+            ],
+        },
     }
     const seenPublicationSubjects = new Set(resolvedPermissions.pub.allow)
     const seenSubscriptionSubjects = new Set(resolvedPermissions.sub.allow)
@@ -126,7 +134,7 @@ const getPermissionsForUser = (
         if (subscription.permissions) {
             const {
                 pub: publicationPermissions,
-                sub: subscriptionPermissions
+                sub: subscriptionPermissions,
             } = subscription.permissions
 
             appendUniquePermissionSubjects({
@@ -178,13 +186,13 @@ export { verifyNKeySignedJWT } from '@lixpi/auth-service'
 const authenticateRegisteredServiceFromSelfIssuedJwt = async (
     token: string,
     serviceConfig: ServiceAuthConfig,
-    defaultNatsAccount: string
+    defaultNatsAccount: string,
 ): Promise<AuthenticatedNatsClient> => {
     info(`Auth callout: Verifying self-issued JWT from service (issuer: ${serviceConfig.publicKey.substring(0, 10)}...)`)
 
     const serviceJwtVerification = await verifyNKeyJwt({
         token,
-        publicKey: serviceConfig.publicKey
+        publicKey: serviceConfig.publicKey,
     })
 
     if (serviceJwtVerification.error) {
@@ -212,7 +220,7 @@ const authenticateRegisteredServiceFromSelfIssuedJwt = async (
     return {
         userId,
         targetNatsAccount: serviceConfig.account ?? defaultNatsAccount,
-        servicePermissions: serviceConfig.permissions
+        servicePermissions: serviceConfig.permissions,
     }
 }
 
@@ -229,7 +237,7 @@ const authenticateRegisteredServiceFromSelfIssuedJwt = async (
 const authenticateRegularUserFromAuth0Jwt = async (
     token: string,
     auth0JwtVerifier: ReturnType<typeof createJwtVerifier>,
-    defaultNatsAccount: string
+    defaultNatsAccount: string,
 ): Promise<AuthenticatedNatsClient> => {
     info('Auth callout: Verifying Auth0 JWT...')
 
@@ -269,7 +277,7 @@ const authenticateRegularUserFromAuth0Jwt = async (
 // authenticateRegisteredServiceFromSelfIssuedJwt.
 const findServiceConfigForSelfIssuedJwt = (
     tokenFromConnectOptions: string,
-    serviceAuthConfigs: ServiceAuthConfig[]
+    serviceAuthConfigs: ServiceAuthConfig[],
 ): ServiceAuthConfig | undefined => {
     // This is intentionally a decode-only step. We only use the unverified
     // issuer claim to decide whether this token should go through the internal
@@ -277,8 +285,9 @@ const findServiceConfigForSelfIssuedJwt = (
     const decodedToken = jsonWebToken.decode(tokenFromConnectOptions, { complete: true })
 
     return serviceAuthConfigs.find(
-        serviceConfig => decodedToken && typeof decodedToken !== 'string' &&
-            decodedToken.payload.iss === serviceConfig.publicKey
+        serviceConfig =>
+            decodedToken && typeof decodedToken !== 'string'
+            && decodedToken.payload.iss === serviceConfig.publicKey,
     )
 }
 
@@ -297,11 +306,11 @@ const authenticateClientUsingAuthTokenPath = async ({
     tokenFromConnectOptions,
     auth0JwtVerifier,
     serviceAuthConfigs,
-    defaultNatsAccount
+    defaultNatsAccount,
 }: {
-    tokenFromConnectOptions: string,
-    auth0JwtVerifier: ReturnType<typeof createJwtVerifier>,
-    serviceAuthConfigs: ServiceAuthConfig[],
+    tokenFromConnectOptions: string
+    auth0JwtVerifier: ReturnType<typeof createJwtVerifier>
+    serviceAuthConfigs: ServiceAuthConfig[]
     defaultNatsAccount: string
 }): Promise<AuthenticatedNatsClient> => {
     // This is the original auth-callout path:
@@ -317,14 +326,14 @@ const authenticateClientUsingAuthTokenPath = async ({
         return authenticateRegisteredServiceFromSelfIssuedJwt(
             tokenFromConnectOptions,
             serviceConfig,
-            defaultNatsAccount
+            defaultNatsAccount,
         )
     }
 
     return authenticateRegularUserFromAuth0Jwt(
         tokenFromConnectOptions,
         auth0JwtVerifier,
-        defaultNatsAccount
+        defaultNatsAccount,
     )
 }
 
@@ -341,7 +350,7 @@ const authenticateClientUsingAuthTokenPath = async ({
 // means "the request tried to use raw NKey auth but did not provide enough data
 // to verify it safely".
 const extractRawNKeyChallengeFields = (
-    authorizationRequest: NatsAuthCalloutRequest
+    authorizationRequest: NatsAuthCalloutRequest,
 ): RawNKeyChallengeFields | undefined => {
     const connectOptions = authorizationRequest.nats?.connect_opts
 
@@ -363,7 +372,7 @@ const extractRawNKeyChallengeFields = (
     return {
         clientPublicNKey,
         clientSignature,
-        challengeNonce
+        challengeNonce,
     }
 }
 
@@ -382,14 +391,14 @@ const extractRawNKeyChallengeFields = (
 const authenticateClientUsingRawNKeyChallengePath = ({
     rawNKeyChallengeFields,
     serviceAuthConfigs,
-    defaultNatsAccount
+    defaultNatsAccount,
 }: {
-    rawNKeyChallengeFields: RawNKeyChallengeFields,
-    serviceAuthConfigs: ServiceAuthConfig[],
+    rawNKeyChallengeFields: RawNKeyChallengeFields
+    serviceAuthConfigs: ServiceAuthConfig[]
     defaultNatsAccount: string
 }): AuthenticatedNatsClient => {
     const serviceConfig = serviceAuthConfigs.find(
-        config => config.publicKey === rawNKeyChallengeFields.clientPublicNKey
+        config => config.publicKey === rawNKeyChallengeFields.clientPublicNKey,
     )
 
     if (!serviceConfig) {
@@ -404,7 +413,7 @@ const authenticateClientUsingRawNKeyChallengePath = ({
     const clientPublicNKeyVerifier = fromPublic(rawNKeyChallengeFields.clientPublicNKey)
     const isSignatureValid = clientPublicNKeyVerifier.verify(
         Buffer.from(rawNKeyChallengeFields.challengeNonce),
-        decodeBase64Url(rawNKeyChallengeFields.clientSignature)
+        decodeBase64Url(rawNKeyChallengeFields.clientSignature),
     )
 
     if (!isSignatureValid) {
@@ -416,7 +425,7 @@ const authenticateClientUsingRawNKeyChallengePath = ({
     return {
         userId: serviceConfig.userId,
         targetNatsAccount: serviceConfig.account ?? defaultNatsAccount,
-        servicePermissions: serviceConfig.permissions
+        servicePermissions: serviceConfig.permissions,
     }
 }
 
@@ -435,11 +444,11 @@ const authenticateClientFromAuthorizationRequest = async ({
     authorizationRequest,
     auth0JwtVerifier,
     serviceAuthConfigs,
-    defaultNatsAccount
+    defaultNatsAccount,
 }: {
-    authorizationRequest: NatsAuthCalloutRequest,
-    auth0JwtVerifier: ReturnType<typeof createJwtVerifier>,
-    serviceAuthConfigs: ServiceAuthConfig[],
+    authorizationRequest: NatsAuthCalloutRequest
+    auth0JwtVerifier: ReturnType<typeof createJwtVerifier>
+    serviceAuthConfigs: ServiceAuthConfig[]
     defaultNatsAccount: string
 }): Promise<AuthenticatedNatsClient> => {
     // Keep routing between auth modes in one place:
@@ -453,7 +462,7 @@ const authenticateClientFromAuthorizationRequest = async ({
             tokenFromConnectOptions,
             auth0JwtVerifier,
             serviceAuthConfigs,
-            defaultNatsAccount
+            defaultNatsAccount,
         })
     }
 
@@ -462,7 +471,7 @@ const authenticateClientFromAuthorizationRequest = async ({
         return authenticateClientUsingRawNKeyChallengePath({
             rawNKeyChallengeFields,
             serviceAuthConfigs,
-            defaultNatsAccount
+            defaultNatsAccount,
         })
     }
 
@@ -482,10 +491,10 @@ const authenticateClientFromAuthorizationRequest = async ({
 const decryptAuthorizationRequest = ({
     encryptedAuthorizationRequest,
     requestMessage,
-    authorizationRequestCurveKeyPair
+    authorizationRequestCurveKeyPair,
 }: {
-    encryptedAuthorizationRequest: Uint8Array,
-    requestMessage: any,
+    encryptedAuthorizationRequest: Uint8Array
+    requestMessage: any
     authorizationRequestCurveKeyPair: ReturnType<typeof fromSeed>
 }): NatsAuthCalloutRequest => {
     // INFO: `senderPublicCurveKey` is the same value NATS config calls `xkey`.
@@ -499,7 +508,7 @@ const decryptAuthorizationRequest = ({
 
     const decryptedAuthorizationRequestJwt = authorizationRequestCurveKeyPair.open(
         encryptedAuthorizationRequest,
-        senderPublicCurveKey
+        senderPublicCurveKey,
     )
 
     if (!decryptedAuthorizationRequestJwt) {
@@ -508,7 +517,7 @@ const decryptAuthorizationRequest = ({
 
     const decodedAuthorizationRequest = jsonWebToken.decode(
         new TextDecoder().decode(decryptedAuthorizationRequestJwt),
-        { json: true }
+        { json: true },
     ) as NatsAuthCalloutRequest | null
 
     if (!decodedAuthorizationRequest?.nats) {
@@ -533,11 +542,11 @@ const createAuthorizationResponseJwt = async ({
     authorizationRequest,
     authenticatedClient,
     subscriptions,
-    authorizationIssuerKeyPair
+    authorizationIssuerKeyPair,
 }: {
-    authorizationRequest: NatsAuthCalloutRequest,
-    authenticatedClient: AuthenticatedNatsClient,
-    subscriptions: any[],
+    authorizationRequest: NatsAuthCalloutRequest
+    authenticatedClient: AuthenticatedNatsClient
+    subscriptions: any[]
     authorizationIssuerKeyPair: ReturnType<typeof fromSeed>
 }): Promise<string> => {
     const sessionUserPublicNKey = authorizationRequest.nats?.user_nkey
@@ -554,7 +563,7 @@ const createAuthorizationResponseJwt = async ({
     const permissions = getPermissionsForUser(
         authenticatedClient.userId,
         subscriptions,
-        authenticatedClient.servicePermissions
+        authenticatedClient.servicePermissions,
     )
 
     // NATS expects the callout to return a user JWT for the ephemeral user nkey
@@ -570,8 +579,8 @@ const createAuthorizationResponseJwt = async ({
             version: 2,
         },
         {
-            aud: authenticatedClient.targetNatsAccount
-        }
+            aud: authenticatedClient.targetNatsAccount,
+        },
     )
 
     return encodeAuthorizationResponse(
@@ -581,11 +590,11 @@ const createAuthorizationResponseJwt = async ({
         {
             jwt: userJwt,
             type: 'auth_response',
-            version: 2
+            version: 2,
         },
         {
-            signer: authorizationIssuerKeyPair
-        }
+            signer: authorizationIssuerKeyPair,
+        },
     )
 }
 
@@ -612,19 +621,19 @@ export const startNatsAuthCalloutService = async ({
     jwksUri,
     jwtAlgorithms = ['RS256'],
     natsAuthAccount,
-    serviceAuthConfigs = []
-  }: {
-    natsService: NatsService,
-    subscriptions: any[],
-    nKeyIssuerSeed: string,
+    serviceAuthConfigs = [],
+}: {
+    natsService: NatsService
+    subscriptions: any[]
+    nKeyIssuerSeed: string
     xKeyIssuerSeed: string
-    jwtAudience: string,
-    jwtIssuer: string,
-    jwksUri: string,
+    jwtAudience: string
+    jwtIssuer: string
+    jwksUri: string
     jwtAlgorithms?: string[]
     natsAuthAccount: string
     serviceAuthConfigs?: ServiceAuthConfig[]
-  }) => {
+}) => {
     if (!nKeyIssuerSeed) {
         throw new Error('Issuer seed for NATS auth callout not provided!')
     }
@@ -641,37 +650,41 @@ export const startNatsAuthCalloutService = async ({
         jwksUri,
         audience: jwtAudience,
         issuer: jwtIssuer,
-        algorithms: jwtAlgorithms
+        algorithms: jwtAlgorithms,
     })
 
+    natsService.reply(
+        '$SYS.REQ.USER.AUTH',
+        async (_unusedRequestPayload: any, requestMessage: any) => {
+            try {
+                const authorizationRequest = decryptAuthorizationRequest({
+                    encryptedAuthorizationRequest: requestMessage.data,
+                    requestMessage,
+                    authorizationRequestCurveKeyPair,
+                })
 
-    natsService.reply('$SYS.REQ.USER.AUTH', async (_unusedRequestPayload: any, requestMessage: any) => {
-        try {
-            const authorizationRequest = decryptAuthorizationRequest({
-                encryptedAuthorizationRequest: requestMessage.data,
-                requestMessage,
-                authorizationRequestCurveKeyPair
-            })
+                const authenticatedClient = await authenticateClientFromAuthorizationRequest({
+                    authorizationRequest,
+                    auth0JwtVerifier,
+                    serviceAuthConfigs,
+                    defaultNatsAccount: natsAuthAccount,
+                })
 
-            const authenticatedClient = await authenticateClientFromAuthorizationRequest({
-                authorizationRequest,
-                auth0JwtVerifier,
-                serviceAuthConfigs,
-                defaultNatsAccount: natsAuthAccount
-            })
+                return createAuthorizationResponseJwt({
+                    authorizationRequest,
+                    authenticatedClient,
+                    subscriptions,
+                    authorizationIssuerKeyPair,
+                })
+            } catch (caughtError: any) {
+                logError(`Auth Callout Error: ${caughtError.message}`, caughtError)
 
-            return createAuthorizationResponseJwt({
-                authorizationRequest,
-                authenticatedClient,
-                subscriptions,
-                authorizationIssuerKeyPair
-            })
-        } catch (caughtError: any) {
-            logError(`Auth Callout Error: ${caughtError.message}`, caughtError)
-
-            return ''    // Return an empty JWT which will be treated as an auth failure
-        }
-    }, {}, 'buffer')
+                return '' // Return an empty JWT which will be treated as an auth failure
+            }
+        },
+        {},
+        'buffer',
+    )
 
     info('NATS Auth Callout Service started successfully')
 }

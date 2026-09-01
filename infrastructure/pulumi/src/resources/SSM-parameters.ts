@@ -8,7 +8,7 @@ import { formatStageResourceName } from '@lixpi/constants'
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
 export const createSsmParameters = () => {

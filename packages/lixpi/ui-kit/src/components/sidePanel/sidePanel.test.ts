@@ -1,5 +1,29 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { createSidePanel, type SidePanelConfig } from './sidePanel.ts'
+// @vitest-environment happy-dom
+import {
+    describe,
+    it,
+    expect,
+    vi,
+    afterEach,
+} from 'vitest'
+import {
+    createSidePanel,
+    type SidePanelConfig,
+} from './sidePanel.ts'
+
+it('restores body styles after overlapping panel drags are disposed out of order', () => {
+    document.body.style.cursor = 'crosshair'
+    const first = createSidePanel(buildConfig())
+    const second = createSidePanel(buildConfig())
+    pointerdown(first.element, 500, { pointerId: 1 })
+    pointerdown(second.element, 400, { pointerId: 2 })
+    first.destroy()
+    expect(document.body.style.cursor).toBe('ew-resize')
+    expect(document.body.style.userSelect).toBe('none')
+    second.destroy()
+    expect(document.body.style.cursor).toBe('crosshair')
+    expect(document.body.style.userSelect).toBe('')
+})
 
 function buildConfig(overrides: Partial<SidePanelConfig> = {}): SidePanelConfig {
     return {
@@ -525,7 +549,9 @@ describe('SidePanel', () => {
             await flushSlideFrames()
 
             let resolved = false
-            void closed.then(() => { resolved = true })
+            void closed.then(() => {
+                resolved = true
+            })
             expect(panel.style.transform).toBe('translate3d(100%, 0, 0)')
             expect(sidePanel.backdropElement.style.transform).toBe('translate3d(100%, 0, 0)')
             expect(sidePanel.toggleElement?.style.getPropertyValue('--side-panel-toggle-closed-travel')).toBe('80px')
@@ -557,17 +583,21 @@ describe('SidePanel', () => {
         }> {
             let fallbackCallback: (() => void) | null = null
             let scheduledDelay = 0
-            const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((
-                handler: TimerHandler,
-                timeout?: number,
-                ...args: unknown[]
-            ): number => {
-                scheduledDelay = Number(timeout)
-                fallbackCallback = typeof handler === 'function'
-                    ? () => { handler(...args) }
-                    : () => undefined
-                return 1
-            }) as typeof window.setTimeout)
+            const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(
+                ((
+                    handler: TimerHandler,
+                    timeout?: number,
+                    ...args: unknown[]
+                ): number => {
+                    scheduledDelay = Number(timeout)
+                    fallbackCallback = typeof handler === 'function'
+                        ? () => {
+                            handler(...args)
+                        }
+                        : () => undefined
+                    return 1
+                }) as typeof window.setTimeout,
+            )
             const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout').mockImplementation(() => undefined)
             const sidePanel = createSidePanel(buildConfig({
                 animation: {
@@ -584,7 +614,9 @@ describe('SidePanel', () => {
                 await flushSlideFrames()
 
                 let resolved = false
-                void closed.then(() => { resolved = true })
+                void closed.then(() => {
+                    resolved = true
+                })
                 await Promise.resolve()
                 const resolvedBeforeFallback = resolved
 

@@ -3,16 +3,19 @@
 import NatsService from '@lixpi/nats-service'
 import { configureUiKit } from '@lixpi/ui-kit'
 
-import RouterService from '$src/services/router-service.js'
+import RouterService from '$src/services/router-service.ts'
 import AuthService from '$src/services/auth-service.ts'
 import UserService from '$src/services/user-service.ts'
-import SubscriptionService from '$src/services/subscription-service.js'
+import SubscriptionService from '$src/services/subscription-service.ts'
 import OrganizationService from '$src/services/organization-service.js'
 import AiModelService from '$src/services/ai-model-service.ts'
 import WorkspaceService from '$src/services/workspace-service.ts'
 import AssetService from '$src/services/asset-service.ts'
 
-import { mountApp } from '$src/app.ts'
+import {
+    mountApp,
+    type AppInstance,
+} from '$src/app.ts'
 
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
@@ -26,17 +29,17 @@ configureUiKit(settings)
 // Init services and then start the app
 async function initializeServicesSequentially() {
     try {
-        await AuthService.init();
-        const authToken = await AuthService.getTokenSilently();
+        await AuthService.init()
+        const authToken = await AuthService.getTokenSilently()
 
         if (!authToken) {
-            throw new Error('No auth token');
+            throw new Error('No auth token')
         }
 
         console.log('import.meta.env.VITE_NATS_SERVER:', {
             natsServer: VITE_NATS_SERVER,
-            fullEnv: import.meta.env
-        });
+            fullEnv: import.meta.env,
+        })
 
         const natsInstance = await NatsService.init({
             servers: [VITE_NATS_SERVER],
@@ -50,8 +53,8 @@ async function initializeServicesSequentially() {
             // When the server rejects our credentials, force a fresh token so the
             // subsequent getToken() no longer returns the stale, cached one.
             onAuthError: () => AuthService.getTokenSilently(true),
-        });
-        const aiModelService = new AiModelService(natsInstance);
+        })
+        const aiModelService = new AiModelService(natsInstance)
 
         servicesStore.setDataValues({
             nats: natsInstance,
@@ -60,37 +63,51 @@ async function initializeServicesSequentially() {
             aiModelService,
             assetService: new AssetService(),
             workspaceService: new WorkspaceService(),
-            organizationService: new OrganizationService()
-        });
+            organizationService: new OrganizationService(),
+        })
 
         // Fetch registered user
-        servicesStore.getData('userService')!.getUser();
+        servicesStore.getData('userService')!.getUser()
 
         // Fetch organization details
         servicesStore.getData('organizationService')!.getOrganization({
-            organizationId: userStore.getData('organizations')[0]
-        });
+            organizationId: userStore.getData('organizations')[0],
+        })
 
         // Fetch available AI models
-        aiModelService.getAvailableAiModels();
+        aiModelService.getAvailableAiModels()
 
         // Fetch user workspaces
-        servicesStore.getData('workspaceService')!.getUserWorkspaces();
+        servicesStore.getData('workspaceService')!.getUserWorkspaces()
 
-        await RouterService.init();
+        await RouterService.init()
     } catch (error) {
-        console.error('Error during service initialization', error);
-        throw error; // Re-throw to handle it in the caller
+        console.error('Error during service initialization', error)
+        throw error // Re-throw to handle it in the caller
     }
 }
 
-initializeServicesSequentially()
-    .then(() => {
-        // console.log('All services initialized successfully');
+export async function shutdownApplication(): Promise<void> {
+    const mounted = await application
+    await mounted?.destroy()
+}
+
+async function initializeApplication(): Promise<AppInstance | null> {
+    try {
+        await initializeServicesSequentially()
         const target = document.getElementById('app')
         if (!target) throw new Error('Application mount target #app not found')
-        mountApp(target)
-    })
-    .catch(error => {
-        console.error('Application failed to start', error);
-    });
+        const workspaceService = servicesStore.getData('workspaceService')!
+        return mountApp(target, async () => await workspaceService.canvasSessions.close())
+    } catch (error) {
+        console.error('Application failed to start', error)
+        try {
+            await servicesStore.getData('workspaceService')?.canvasSessions.close()
+        } catch (closeError) {
+            console.error('Canvas session shutdown after startup failure failed', closeError)
+        }
+        return null
+    }
+}
+
+const application = initializeApplication()

@@ -10,6 +10,7 @@ The icon-only controls use ARIA labels and opt into the shared help-tooltip prov
 import { createCanvasNodeFooter } from '@lixpi/ui-kit/components/canvas-node-footer'
 
 const footer = createCanvasNodeFooter({
+    icons: { info: infoMarkup, progress: rippleArtwork },
     infoLabel: 'Media details and generation history',
     progressActive: true,
     selected: false,
@@ -18,4 +19,4 @@ const footer = createCanvasNodeFooter({
 })
 ```
 
-Import `@lixpi/ui-kit/styles/canvas-node-footer` once in each rendering surface that uses the component.
+Import `@lixpi/ui-kit/styles/canvas-node-footer` and `@lixpi/ui-kit/styles/progress-ripple` once in each rendering surface. Icon markup and the three ripple paths come from the caller's artwork catalog. The component does not import an icon package.

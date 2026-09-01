@@ -13,28 +13,36 @@ import {
 // advisory only and never authoritative.
 export type FileTypeResolution =
     | {
-          rejected: false
-          mimeType: string       // sniffed mime of the original
-          kind: MediaKind
-          modelSafe: boolean
-          canonicalMime: string  // transcode target (== mimeType when modelSafe)
-      }
+        rejected: false
+        mimeType: string // sniffed mime of the original
+        kind: MediaKind
+        modelSafe: boolean
+        canonicalMime: string // transcode target (== mimeType when modelSafe)
+    }
     | {
-          rejected: true
-          reason: string         // user-facing rejection message
-      }
+        rejected: true
+        reason: string // user-facing rejection message
+    }
 
 // Human-readable rejection messages keyed by deny-list class. Lets the route
 // tell the user WHY a file was refused rather than a generic "unsupported".
 const EXECUTABLE_MIME = new Set([
-    'application/x-msdownload', 'application/x-executable', 'application/x-mach-binary',
-    'application/x-elf', 'application/vnd.microsoft.portable-executable', 'application/x-msi',
+    'application/x-msdownload',
+    'application/x-executable',
+    'application/x-mach-binary',
+    'application/x-elf',
+    'application/vnd.microsoft.portable-executable',
+    'application/x-msi',
 ])
 const SCRIPT_MIME = new Set(['application/x-sh', 'application/x-shellscript', 'text/x-shellscript'])
 const ARCHIVE_MIME = new Set([
-    'application/zip', 'application/x-tar', 'application/gzip',
-    'application/x-rar-compressed', 'application/x-7z-compressed',
-    'application/java-archive', 'application/x-apple-diskimage',
+    'application/zip',
+    'application/x-tar',
+    'application/gzip',
+    'application/x-rar-compressed',
+    'application/x-7z-compressed',
+    'application/java-archive',
+    'application/x-apple-diskimage',
 ])
 
 const denyReasonFor = (mime: string): string => {

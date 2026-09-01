@@ -25,7 +25,10 @@ import {
     type BlobRecord,
     type BlobReference,
 } from '@lixpi/constants'
-import { isTransactionConditionalCheckFailure, type TransactOperation } from '@lixpi/dynamodb-service'
+import {
+    isTransactionConditionalCheckFailure,
+    type TransactOperation,
+} from '@lixpi/dynamodb-service'
 import { PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
 
 import BlobModel, { buildBlobReferenceBatchOperations } from './blob.ts'
@@ -56,17 +59,13 @@ export const publishAssetEvent = (subject: string, asset: Asset): void => {
     }
 }
 
-export const buildAssetScopeAndOwnerKey = (scope: AssetScope, scopeOwnerId: string): string =>
-    `${scope}#${scopeOwnerId}`
+export const buildAssetScopeAndOwnerKey = (scope: AssetScope, scopeOwnerId: string): string => `${scope}#${scopeOwnerId}`
 
-export const buildAssetPrincipalScopeKey = (principalId: string): string =>
-    `principal#${principalId}`
+export const buildAssetPrincipalScopeKey = (principalId: string): string => `principal#${principalId}`
 
-export const buildAssetCatalogReferenceKey = (scope: AssetScope, scopeOwnerId: string): string =>
-    `catalog#${scope}#${scopeOwnerId}`
+export const buildAssetCatalogReferenceKey = (scope: AssetScope, scopeOwnerId: string): string => `catalog#${scope}#${scopeOwnerId}`
 
-export const buildAssetWorkspaceReferenceKey = (workspaceId: string): string =>
-    `workspace#${workspaceId}`
+export const buildAssetWorkspaceReferenceKey = (workspaceId: string): string => `workspace#${workspaceId}`
 
 const derivePrimaryCategory = (asset: Asset): AssetPrimaryCategory => {
     if (asset.media) return asset.media.kind
@@ -75,17 +74,17 @@ const derivePrimaryCategory = (asset: Asset): AssetPrimaryCategory => {
     return 'document'
 }
 
-export const normalizeAssetTitle = (title: string): string =>
-    title.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
+export const normalizeAssetTitle = (title: string): string => title.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
 
 export const buildAssetSearchKey = (
     primaryCategory: Exclude<AssetPrimaryCategory, 'conversation'>,
     normalizedTitle: string,
     assetId: string,
     artifactTypeId?: string,
-): string => primaryCategory === 'capabilityArtifact'
-    ? `capabilityArtifact#${artifactTypeId ?? ''}#${normalizedTitle}#${assetId}`
-    : `${primaryCategory}#${normalizedTitle}#${assetId}`
+): string =>
+    primaryCategory === 'capabilityArtifact'
+        ? `capabilityArtifact#${artifactTypeId ?? ''}#${normalizedTitle}#${assetId}`
+        : `${primaryCategory}#${normalizedTitle}#${assetId}`
 
 const isValidDescriptor = (descriptor: unknown): descriptor is NonNullable<Asset['descriptor']> => {
     if (!descriptor || typeof descriptor !== 'object') return false
@@ -142,10 +141,12 @@ export const buildAssetMeta = (asset: Asset, scopeAndOwner?: string): AssetMeta 
         subjectIdentityClassification: asset.subjectIdentity.classification,
         ...(asset.descriptor?.entityTags ? { entityTags: asset.descriptor.entityTags } : {}),
         ...(asset.descriptor?.styleTags ? { styleTags: asset.descriptor.styleTags } : {}),
-        ...(asset.artifact ? {
-            artifactTypeId: asset.artifact.artifactTypeId,
-            artifactSchemaVersion: asset.artifact.schemaVersion,
-        } : {}),
+        ...(asset.artifact
+            ? {
+                artifactTypeId: asset.artifact.artifactTypeId,
+                artifactSchemaVersion: asset.artifact.schemaVersion,
+            }
+            : {}),
         createdAt: asset.createdAt,
         updatedAt: asset.updatedAt,
     }
@@ -165,11 +166,13 @@ export const buildAssetSearchRecord = (asset: Asset, scopeAndOwner?: string): As
 
 const buildAssetSearchDelete = (asset: Asset, scopeAndOwner: string): TransactOperation[] => {
     const record = buildAssetSearchRecord(asset, scopeAndOwner)
-    return record ? [{
-        type: 'delete',
-        tableName: assetsSearchTableName(),
-        key: { scopeAndOwner, searchKey: record.searchKey },
-    }] : []
+    return record
+        ? [{
+            type: 'delete',
+            tableName: assetsSearchTableName(),
+            key: { scopeAndOwner, searchKey: record.searchKey },
+        }]
+        : []
 }
 
 export const getAssetRecord = async (
@@ -248,8 +251,7 @@ const getAuthorizedAsset = async ({
     if (!asset || (!includeDeleting && asset.states.lifecycle === 'deleting')) return { error: 'NOT_FOUND' }
     if (!requester.organizationIds.includes(asset.organizationId)) return { error: 'PERMISSION_DENIED' }
     if (canReadBaseScope(asset, requester)) return asset
-    const workspaceReferences = await Promise.all(requester.workspaceIds.map(async (workspaceId) =>
-        await getReference(assetId, buildAssetWorkspaceReferenceKey(workspaceId))))
+    const workspaceReferences = await Promise.all(requester.workspaceIds.map(async (workspaceId) => await getReference(assetId, buildAssetWorkspaceReferenceKey(workspaceId))))
     if (workspaceReferences.some(Boolean)) return asset
     const access = await getAccess(assetId, requester.userId)
     if (!access) return { error: 'PERMISSION_DENIED' }
@@ -353,8 +355,7 @@ const decodeCursor = (cursor?: string): AssetListCursor => {
     }
 }
 
-const encodeCursor = (cursor: AssetListCursor): string =>
-    Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
+const encodeCursor = (cursor: AssetListCursor): string => Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
 
 type AssetSearchCursor = AssetListCursor & {
     query: string
@@ -372,34 +373,44 @@ const decodeSearchCursor = (
     if (!cursor) return { partitions: {}, query, categories }
     try {
         const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as AssetSearchCursor
-        if (!parsed || typeof parsed !== 'object' || !parsed.partitions
+        if (
+            !parsed || typeof parsed !== 'object' || !parsed.partitions
             || typeof parsed.partitions !== 'object' || Array.isArray(parsed.partitions)
             || parsed.query !== query
-            || JSON.stringify(parsed.categories) !== JSON.stringify(categories)) {
+            || JSON.stringify(parsed.categories) !== JSON.stringify(categories)
+        ) {
             throw new Error('INVALID_ASSET_SEARCH_CURSOR')
         }
         for (const [cursorKey, lastKey] of Object.entries(parsed.partitions)) {
             const expected = allowedCursorKeys.get(cursorKey)
-            if (!expected || !lastKey || typeof lastKey !== 'object' || Array.isArray(lastKey)
+            if (
+                !expected || !lastKey || typeof lastKey !== 'object' || Array.isArray(lastKey)
                 || lastKey.scopeAndOwner !== expected.scopeAndOwner
                 || typeof lastKey.searchKey !== 'string'
-                || !lastKey.searchKey.startsWith(expected.searchPrefix)) {
+                || !lastKey.searchKey.startsWith(expected.searchPrefix)
+            ) {
                 throw new Error('INVALID_ASSET_SEARCH_CURSOR')
             }
         }
-        if (parsed.completed && (!Array.isArray(parsed.completed)
-            || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))) {
+        if (
+            parsed.completed && (!Array.isArray(parsed.completed)
+                || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))
+        ) {
             throw new Error('INVALID_ASSET_SEARCH_CURSOR')
         }
-        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 2000
-            || parsed.buffered.some((key) => {
-                if (!key || typeof key !== 'object' || Array.isArray(key)
-                    || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string') return true
-                return ![...allowedCursorKeys.values()].some((expected) => (
-                    key.scopeAndOwner === expected.scopeAndOwner
-                    && key.searchKey.startsWith(expected.searchPrefix)
-                ))
-            }))) {
+        if (
+            parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 2000
+                || parsed.buffered.some((key) => {
+                    if (
+                        !key || typeof key !== 'object' || Array.isArray(key)
+                        || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string'
+                    ) return true
+                    return ![...allowedCursorKeys.values()].some((expected) => (
+                        key.scopeAndOwner === expected.scopeAndOwner
+                        && key.searchKey.startsWith(expected.searchPrefix)
+                    ))
+                }))
+        ) {
             throw new Error('INVALID_ASSET_SEARCH_CURSOR')
         }
         return parsed
@@ -491,10 +502,12 @@ const assertSingleAssetMembershipMutation = ({
 
     const beforeTargetMembership = before.get(assetId)?.has(nodeId) ?? false
     const afterTargetMembership = after.get(assetId)?.has(nodeId) ?? false
-    if (operation === 'attach'
+    if (
+        operation === 'attach'
         && allowExistingTargetMembership
         && beforeTargetMembership
-        && afterTargetMembership) return
+        && afterTargetMembership
+    ) return
 
     const beforeNode = beforeNodes.find((node) => node.nodeId === nodeId)
     const afterNode = afterNodes.find((node) => node.nodeId === nodeId)
@@ -529,10 +542,14 @@ const getAssetProjectionScopeKeys = async (
     const accessRows = await listAccess(asset.assetId)
     const excludedPrincipalIds = new Set(options.excludePrincipalIds ?? [])
     const scopeKeys = [
-        ...(options.includeBaseScope ?? Boolean(await getReference(
-            asset.assetId,
-            buildAssetCatalogReferenceKey(asset.scope, asset.scopeOwnerId),
-        )) ? [buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId)] : []),
+        ...(options.includeBaseScope ?? Boolean(
+                await getReference(
+                    asset.assetId,
+                    buildAssetCatalogReferenceKey(asset.scope, asset.scopeOwnerId),
+                ),
+            )
+            ? [buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId)]
+            : []),
         ...accessRows
             .filter((row) => row.principalId !== asset.ownerUserId && !excludedPrincipalIds.has(row.principalId))
             .map((row) => buildAssetPrincipalScopeKey(row.principalId)),
@@ -557,11 +574,13 @@ export const buildAssetProjectionOperations = async (
                 tableName: assetsMetaTableName(),
                 item: buildAssetMeta(asset, scopeAndOwner),
             },
-            ...(searchRecord ? [{
-                type: 'put' as const,
-                tableName: assetsSearchTableName(),
-                item: searchRecord,
-            }] : []),
+            ...(searchRecord
+                ? [{
+                    type: 'put' as const,
+                    tableName: assetsSearchTableName(),
+                    item: searchRecord,
+                }]
+                : []),
         ]
     })
 }
@@ -654,48 +673,57 @@ const getWorkspaceMutationOperations = async ({
     ]
 }
 
-type CreateAssetInput = Pick<
-    Asset,
-    | 'organizationId'
-    | 'title'
-    | 'scope'
-    | 'scopeOwnerId'
-    | 'originWorkspaceId'
-    | 'ownerUserId'
-> & Partial<Pick<
-    Asset,
-    | 'assetId'
-    | 'documents'
-    | 'media'
-    | 'composition'
-    | 'artifact'
-    | 'lineage'
-    | 'generatedOutputReview'
-    | 'descriptor'
-    | 'depictionMedium'
-    | 'subjectIdentity'
-    | 'states'
-    | 'importedFromAssetId'
->> & {
-    workspaceReference?: Pick<AssetReference, 'workspaceId' | 'nodeIds' | 'surfaceIds'>
-}
+type CreateAssetInput =
+    & Pick<
+        Asset,
+        | 'organizationId'
+        | 'title'
+        | 'scope'
+        | 'scopeOwnerId'
+        | 'originWorkspaceId'
+        | 'ownerUserId'
+    >
+    & Partial<
+        Pick<
+            Asset,
+            | 'assetId'
+            | 'documents'
+            | 'media'
+            | 'composition'
+            | 'artifact'
+            | 'lineage'
+            | 'generatedOutputReview'
+            | 'descriptor'
+            | 'depictionMedium'
+            | 'subjectIdentity'
+            | 'states'
+            | 'importedFromAssetId'
+        >
+    >
+    & {
+        workspaceReference?: Pick<AssetReference, 'workspaceId' | 'nodeIds' | 'surfaceIds'>
+    }
 
 export const assertAssetComponents = (asset: Asset): void => {
     if (!DEPICTION_MEDIA.includes(asset.depictionMedium)) throw new Error('INVALID_ASSET_DEPICTION_MEDIUM')
-    if (!asset.subjectIdentity
+    if (
+        !asset.subjectIdentity
         || !SUBJECT_IDENTITY_CLASSIFICATIONS.includes(asset.subjectIdentity.classification)
         || !['user-attestation', 'automatic-lineage', 'inherited-lineage'].includes(asset.subjectIdentity.source)
-        || !Array.isArray(asset.subjectIdentity.providerVerifications)) {
+        || !Array.isArray(asset.subjectIdentity.providerVerifications)
+    ) {
         throw new Error('INVALID_ASSET_SUBJECT_IDENTITY')
     }
     for (const verification of asset.subjectIdentity.providerVerifications) {
-        if (!verification.providerAccountScope
+        if (
+            !verification.providerAccountScope
             || !verification.subjectHandle
             || !['provider-hosted-session', 'provider-direct-upload'].includes(verification.strategy)
             || !['valid', 'expired', 'revoked'].includes(verification.status)
             || !['not-allowed', 'same-provider-account', 'documented-lineage'].includes(verification.derivativeReuse)
             || !verification.policyProfileVersion
-            || !Number.isSafeInteger(verification.verifiedAt)) {
+            || !Number.isSafeInteger(verification.verifiedAt)
+        ) {
             throw new Error('INVALID_ASSET_PROVIDER_IDENTITY_VERIFICATION')
         }
     }
@@ -703,15 +731,19 @@ export const assertAssetComponents = (asset: Asset): void => {
         throw new Error('ASSET_COMPONENT_REQUIRED')
     }
     for (const [role, pointer] of Object.entries(asset.documents)) {
-        if (!isAssetDocumentRole(role)
+        if (
+            !isAssetDocumentRole(role)
             || !pointer
             || pointer.role !== role
-            || !/^[a-f0-9]{64}$/.test(pointer.blobHash)) {
+            || !/^[a-f0-9]{64}$/.test(pointer.blobHash)
+        ) {
             throw new Error(`INVALID_ASSET_DOCUMENT_POINTER:${role}`)
         }
-        if (!Number.isSafeInteger(pointer.version) || pointer.version < 0
+        if (
+            !Number.isSafeInteger(pointer.version) || pointer.version < 0
             || !Number.isSafeInteger(pointer.byteSize) || pointer.byteSize < 0
-            || !pointer.schemaVersion) throw new Error(`INVALID_ASSET_DOCUMENT_POINTER:${role}`)
+            || !pointer.schemaVersion
+        ) throw new Error(`INVALID_ASSET_DOCUMENT_POINTER:${role}`)
         if (role === 'provenance' && !Number.isSafeInteger(pointer.sealedAt)) {
             throw new Error('UNSEALED_ASSET_PROVENANCE')
         }
@@ -745,11 +777,15 @@ export const assertAssetComponents = (asset: Asset): void => {
         const original = asset.media.renditions.original
         if (original?.status !== 'ready' || !original.blobHash) throw new Error('ASSET_ORIGINAL_RENDITION_REQUIRED')
         for (const [name, rendition] of Object.entries(asset.media.renditions)) {
-            if (!['original', 'canonical', 'preview', 'thumbnail', 'poster', 'representativeFrame'].includes(name)
+            if (
+                !['original', 'canonical', 'preview', 'thumbnail', 'poster', 'representativeFrame'].includes(name)
                 || !rendition
-                || rendition.name !== name) throw new Error(`INVALID_ASSET_RENDITION:${name}`)
-            if (rendition.status === 'ready'
-                && (!rendition.blobHash || !rendition.mimeType || !Number.isSafeInteger(rendition.byteSize))) {
+                || rendition.name !== name
+            ) throw new Error(`INVALID_ASSET_RENDITION:${name}`)
+            if (
+                rendition.status === 'ready'
+                && (!rendition.blobHash || !rendition.mimeType || !Number.isSafeInteger(rendition.byteSize))
+            ) {
                 throw new Error(`INVALID_ASSET_RENDITION:${name}`)
             }
         }
@@ -766,25 +802,29 @@ export const assertAssetComponents = (asset: Asset): void => {
         if (lineageIds.some((lineageId) => lineageId === asset.assetId)) throw new Error('SELF_REFERENTIAL_ASSET_LINEAGE')
     }
     if (asset.composition) {
-        if (asset.composition.schemaVersion !== 'asset-media-composition-v1'
+        if (
+            asset.composition.schemaVersion !== 'asset-media-composition-v1'
             || !asset.composition.kind.trim()
             || !asset.composition.capabilityId.trim()
             || !Array.isArray(asset.composition.sourceAssetIds)
             || !Array.isArray(asset.composition.components)
             || asset.composition.components.length === 0
-            || asset.composition.components.length > 32) {
+            || asset.composition.components.length > 32
+        ) {
             throw new Error('INVALID_ASSET_MEDIA_COMPOSITION')
         }
         const componentIds = new Set<string>()
         for (const component of asset.composition.components) {
-            if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
+            if (
+                !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
                 || componentIds.has(component.componentId)
                 || !component.role.trim()
                 || !component.title.trim()
                 || !/^[a-f0-9]{64}$/u.test(component.blobHash)
                 || component.mimeType !== 'image/png'
                 || !Number.isSafeInteger(component.byteSize)
-                || component.byteSize <= 0) {
+                || component.byteSize <= 0
+            ) {
                 throw new Error('INVALID_ASSET_MEDIA_COMPOSITION_COMPONENT')
             }
             componentIds.add(component.componentId)
@@ -837,10 +877,13 @@ const AssetModel = {
         const assetId = requestedAssetId ?? uuid()
         let resolvedDocuments = documents
         if (Object.keys(resolvedDocuments).length === 0 && (media || lineage)) {
-            const snapshotBytes = Buffer.from(JSON.stringify({
-                type: 'doc',
-                content: [{ type: 'paragraph' }],
-            }), 'utf8')
+            const snapshotBytes = Buffer.from(
+                JSON.stringify({
+                    type: 'doc',
+                    content: [{ type: 'paragraph' }],
+                }),
+                'utf8',
+            )
             const snapshotBlob = await BlobModel.store({
                 organizationId,
                 bytes: snapshotBytes,
@@ -879,9 +922,11 @@ const AssetModel = {
                 updatedAt: now,
             }
             : undefined
-        if (initialWorkspaceReference
+        if (
+            initialWorkspaceReference
             && (initialWorkspaceReference.workspaceId !== originWorkspaceId
-                || (initialWorkspaceReference.nodeIds.length === 0 && initialWorkspaceReference.surfaceIds.length === 0))) {
+                || (initialWorkspaceReference.nodeIds.length === 0 && initialWorkspaceReference.surfaceIds.length === 0))
+        ) {
             throw new Error('INVALID_INITIAL_WORKSPACE_REFERENCE')
         }
         const asset: Asset = {
@@ -946,11 +991,13 @@ const AssetModel = {
                     expressionAttributeNames: { '#assetId': 'assetId' },
                 },
                 { type: 'put', tableName: assetsMetaTableName(), item: buildAssetMeta(asset) },
-                ...(buildAssetSearchRecord(asset) ? [{
-                    type: 'put' as const,
-                    tableName: assetsSearchTableName(),
-                    item: buildAssetSearchRecord(asset)!,
-                }] : []),
+                ...(buildAssetSearchRecord(asset)
+                    ? [{
+                        type: 'put' as const,
+                        tableName: assetsSearchTableName(),
+                        item: buildAssetSearchRecord(asset)!,
+                    }]
+                    : []),
                 { type: 'put', tableName: assetsAccessListTableName(), item: ownerAccess },
                 { type: 'put', tableName: assetReferencesTableName(), item: catalogReference },
                 ...(initialWorkspaceReference
@@ -1070,10 +1117,14 @@ const AssetModel = {
         const normalizedQuery = normalizeAssetTitle(query)
         const uniqueCategories = [...new Set(categories)]
         const partitions = [...new Set([...scopeAndOwners, buildAssetPrincipalScopeKey(principalId)])]
-        const allowedCursorKeys = new Map(partitions.flatMap((partition) => uniqueCategories.map((category) => [
-            `${partition}|${category}`,
-            { scopeAndOwner: partition, searchPrefix: `${category}#${normalizedQuery}` },
-        ] as const)))
+        const allowedCursorKeys = new Map(partitions.flatMap((partition) =>
+            uniqueCategories.map((category) =>
+                [
+                    `${partition}|${category}`,
+                    { scopeAndOwner: partition, searchPrefix: `${category}#${normalizedQuery}` },
+                ] as const
+            )
+        ))
         const decoded = decodeSearchCursor(cursor, normalizedQuery, uniqueCategories, allowedCursorKeys)
         const bufferedRows = await Promise.all((decoded.buffered ?? []).map(async (key) =>
             await dynamoDBService.getItem({
@@ -1081,33 +1132,36 @@ const AssetModel = {
                 key,
                 consistentRead: true,
                 origin: 'Asset.searchAvailable.buffered',
-            }) as AssetSearchRecord | undefined))
-        const requests = partitions.flatMap((partition) => uniqueCategories.map(async (category) => {
-            const cursorKey = `${partition}|${category}`
-            if (decoded.completed?.includes(cursorKey)) {
-                return { cursorKey, items: [] as AssetSearchRecord[], completed: true, lastKey: undefined }
-            }
-            const result = await dynamoDBService.queryItems({
-                tableName: assetsSearchTableName(),
-                keyConditions: { scopeAndOwner: partition },
-                sortKeyCondition: {
-                    key: 'searchKey',
-                    operator: 'begins_with',
-                    value: `${category}#${normalizedQuery}`,
-                },
-                exclusiveStartKey: decoded.partitions[cursorKey],
-                limit,
-                scanIndexForward: true,
-                consistentRead: true,
-                origin: `Asset.searchAvailable(${cursorKey})`,
+            }) as AssetSearchRecord | undefined
+        ))
+        const requests = partitions.flatMap((partition) =>
+            uniqueCategories.map(async (category) => {
+                const cursorKey = `${partition}|${category}`
+                if (decoded.completed?.includes(cursorKey)) {
+                    return { cursorKey, items: [] as AssetSearchRecord[], completed: true, lastKey: undefined }
+                }
+                const result = await dynamoDBService.queryItems({
+                    tableName: assetsSearchTableName(),
+                    keyConditions: { scopeAndOwner: partition },
+                    sortKeyCondition: {
+                        key: 'searchKey',
+                        operator: 'begins_with',
+                        value: `${category}#${normalizedQuery}`,
+                    },
+                    exclusiveStartKey: decoded.partitions[cursorKey],
+                    limit,
+                    scanIndexForward: true,
+                    consistentRead: true,
+                    origin: `Asset.searchAvailable(${cursorKey})`,
+                })
+                return {
+                    cursorKey,
+                    items: (result?.items ?? []) as AssetSearchRecord[],
+                    completed: !result?.lastEvaluatedKey,
+                    lastKey: result?.lastEvaluatedKey as Record<string, unknown> | undefined,
+                }
             })
-            return {
-                cursorKey,
-                items: (result?.items ?? []) as AssetSearchRecord[],
-                completed: !result?.lastEvaluatedKey,
-                lastKey: result?.lastEvaluatedKey as Record<string, unknown> | undefined,
-            }
-        }))
+        )
         const pages = await Promise.all(requests)
         const allowedOrganizationIds = new Set(organizationIds)
         const candidates = bufferedRows.filter((row): row is AssetSearchRecord => row !== undefined)
@@ -1120,33 +1174,45 @@ const AssetModel = {
         }
         const byAssetId = new Map<string, AssetSearchRecord>()
         for (const item of candidates) {
-            if (!allowedOrganizationIds.has(item.organizationId)
+            if (
+                !allowedOrganizationIds.has(item.organizationId)
                 || item.lifecycleStatus !== 'active'
                 || (!['document', 'capabilityArtifact'].includes(item.primaryCategory)
-                    && !['ready', 'degraded'].includes(item.mediaStatus))) continue
+                    && !['ready', 'degraded'].includes(item.mediaStatus))
+            ) continue
             const existing = byAssetId.get(item.assetId)
             if (!existing || item.scopeAndOwner.startsWith('principal#')) byAssetId.set(item.assetId, item)
         }
         const sorted = [...byAssetId.values()].sort((left, right) =>
             left.normalizedTitle.localeCompare(right.normalizedTitle)
             || right.updatedAt - left.updatedAt
-            || left.assetId.localeCompare(right.assetId))
+            || left.assetId.localeCompare(right.assetId)
+        )
         const items = sorted.slice(0, limit)
         const buffered = sorted.slice(limit)
         const hasMore = Object.keys(nextPartitions).length > 0 || buffered.length > 0
         return {
             items,
-            ...(hasMore ? {
-                cursor: Buffer.from(JSON.stringify({
-                    partitions: nextPartitions,
-                    query: normalizedQuery,
-                    categories: uniqueCategories,
-                    completed: [...completed],
-                    ...(buffered.length ? {
-                        buffered: buffered.map(({ scopeAndOwner, searchKey }) => ({ scopeAndOwner, searchKey })),
-                    } : {}),
-                } satisfies AssetSearchCursor), 'utf8').toString('base64url'),
-            } : {}),
+            ...(hasMore
+                ? {
+                    cursor: Buffer.from(
+                        JSON.stringify(
+                            {
+                                partitions: nextPartitions,
+                                query: normalizedQuery,
+                                categories: uniqueCategories,
+                                completed: [...completed],
+                                ...(buffered.length
+                                    ? {
+                                        buffered: buffered.map(({ scopeAndOwner, searchKey }) => ({ scopeAndOwner, searchKey })),
+                                    }
+                                    : {}),
+                            } satisfies AssetSearchCursor,
+                        ),
+                        'utf8',
+                    ).toString('base64url'),
+                }
+                : {}),
         }
     },
 
@@ -1309,9 +1375,11 @@ const AssetModel = {
                 consistentRead: true,
                 origin: 'Asset.changeScope.validateTargetWorkspace',
             }) as { organizationId?: string; deletingAt?: number } | undefined
-            if (!targetWorkspace
+            if (
+                !targetWorkspace
                 || targetWorkspace.organizationId !== authorized.organizationId
-                || targetWorkspace.deletingAt) return { error: 'INVALID_SCOPE_OWNER' }
+                || targetWorkspace.deletingAt
+            ) return { error: 'INVALID_SCOPE_OWNER' }
         }
 
         const references = await listReferences(assetId)
@@ -1334,7 +1402,8 @@ const AssetModel = {
                     key: { workspaceId },
                     consistentRead: true,
                     origin: 'Asset.changeScope.validateOrganizationWorkspace',
-                }) as { organizationId?: string } | undefined))
+                }) as { organizationId?: string } | undefined
+            ))
             if (workspaces.some((workspace) => workspace?.organizationId !== scopeOwnerId)) {
                 return { error: 'SCOPE_WOULD_BREAK_REFERENCE' }
             }
@@ -1375,11 +1444,13 @@ const AssetModel = {
                     expressionAttributeValues: { ':expectedRevision': expectedRevision },
                 },
                 { type: 'delete', tableName: assetsMetaTableName(), key: { scopeAndOwner: oldScopeKey, assetId } },
-                ...(oldSearchRecord ? [{
-                    type: 'delete' as const,
-                    tableName: assetsSearchTableName(),
-                    key: { scopeAndOwner: oldScopeKey, searchKey: oldSearchRecord.searchKey },
-                }] : []),
+                ...(oldSearchRecord
+                    ? [{
+                        type: 'delete' as const,
+                        tableName: assetsSearchTableName(),
+                        key: { scopeAndOwner: oldScopeKey, searchKey: oldSearchRecord.searchKey },
+                    }]
+                    : []),
                 ...await buildAssetProjectionOperations(next, { includeBaseScope: true }),
                 { type: 'delete', tableName: assetReferencesTableName(), key: { assetId, referenceKey: oldCatalogKey } },
                 { type: 'put', tableName: assetReferencesTableName(), item: newCatalogReference },
@@ -1445,16 +1516,20 @@ const AssetModel = {
                     ...(existing ? { expressionAttributeValues: { ':expectedUpdatedAt': existing.updatedAt } } : {}),
                 },
                 ...projectionOperations,
-                ...(!existing ? [{
-                    type: 'put',
-                    tableName: assetsMetaTableName(),
-                    item: buildAssetMeta(next, buildAssetPrincipalScopeKey(principalId)),
-                } as TransactOperation] : []),
-                ...(!existing && buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId)) ? [{
-                    type: 'put',
-                    tableName: assetsSearchTableName(),
-                    item: buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))!,
-                } as TransactOperation] : []),
+                ...(!existing
+                    ? [{
+                        type: 'put',
+                        tableName: assetsMetaTableName(),
+                        item: buildAssetMeta(next, buildAssetPrincipalScopeKey(principalId)),
+                    } as TransactOperation]
+                    : []),
+                ...(!existing && buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))
+                    ? [{
+                        type: 'put',
+                        tableName: assetsSearchTableName(),
+                        item: buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))!,
+                    } as TransactOperation]
+                    : []),
             ],
             origin: 'Asset.grantAccess',
         })
@@ -1508,14 +1583,16 @@ const AssetModel = {
                     tableName: assetsMetaTableName(),
                     key: { scopeAndOwner: buildAssetPrincipalScopeKey(principalId), assetId },
                 },
-                ...(buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId)) ? [{
-                    type: 'delete' as const,
-                    tableName: assetsSearchTableName(),
-                    key: {
-                        scopeAndOwner: buildAssetPrincipalScopeKey(principalId),
-                        searchKey: buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))!.searchKey,
-                    },
-                }] : []),
+                ...(buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))
+                    ? [{
+                        type: 'delete' as const,
+                        tableName: assetsSearchTableName(),
+                        key: {
+                            scopeAndOwner: buildAssetPrincipalScopeKey(principalId),
+                            searchKey: buildAssetSearchRecord(next, buildAssetPrincipalScopeKey(principalId))!.searchKey,
+                        },
+                    }]
+                    : []),
                 ...await buildAssetProjectionOperations(next, { excludePrincipalIds: [principalId] }),
             ],
             origin: 'Asset.revokeAccess',
@@ -1596,12 +1673,14 @@ const AssetModel = {
             const asset = await getAssetRecord(assetId)
             const now = Date.now()
             const current = asset?.editLease
-            if (!asset || asset.states.lifecycle === 'deleting'
+            if (
+                !asset || asset.states.lifecycle === 'deleting'
                 || !current
                 || current.workspaceId !== workspaceId
                 || current.leaseId !== leaseId
                 || current.expiresAt <= now
-                || !current.holders.some((holder) => holder.holderId === holderId && holder.expiresAt > now)) {
+                || !current.holders.some((holder) => holder.holderId === holderId && holder.expiresAt > now)
+            ) {
                 return { error: 'LEASE_INVALID' }
             }
             const holderExpiresAt = now + ASSET_EDIT_LEASE_DURATION_MS
@@ -1661,14 +1740,16 @@ const AssetModel = {
                     expressionAttributeNames: { '#editLease': 'editLease' },
                     expressionAttributeValues: {
                         ':expectedEditLease': current,
-                        ...(holders.length > 0 ? {
-                            ':editLease': {
-                                ...current,
-                                holders,
-                                renewedAt: now,
-                                expiresAt: Math.max(...holders.map((holder) => holder.expiresAt)),
-                            },
-                        } : {}),
+                        ...(holders.length > 0
+                            ? {
+                                ':editLease': {
+                                    ...current,
+                                    holders,
+                                    renewedAt: now,
+                                    expiresAt: Math.max(...holders.map((holder) => holder.expiresAt)),
+                                },
+                            }
+                            : {}),
                     },
                     logConditionalCheckFailures: false,
                     origin: 'Asset.releaseLease',
@@ -1750,8 +1831,10 @@ const AssetModel = {
     }): Promise<Asset | { error: 'CONVERSATION_BUSY' }> => {
         for (let attempt = 0; attempt < 5; attempt += 1) {
             const asset = await getAssetRecord(assetId)
-            if (!asset || asset.organizationId !== organizationId || !asset.documents.conversation
-                || asset.states.lifecycle === 'deleting') {
+            if (
+                !asset || asset.organizationId !== organizationId || !asset.documents.conversation
+                || asset.states.lifecycle === 'deleting'
+            ) {
                 throw new Error('CONVERSATION_ASSET_NOT_FOUND')
             }
             if (asset.states.conversation === 'receiving') return { error: 'CONVERSATION_BUSY' }
@@ -1839,8 +1922,8 @@ const AssetModel = {
         const nextSurfaceIds = [...new Set([...(existing?.surfaceIds ?? []), ...(surfaceId ? [surfaceId] : [])])]
         const referenceUnchanged = Boolean(
             existing
-            && nextNodeIds.length === (existing.nodeIds ?? []).length
-            && nextSurfaceIds.length === (existing.surfaceIds ?? []).length
+                && nextNodeIds.length === (existing.nodeIds ?? []).length
+                && nextSurfaceIds.length === (existing.surfaceIds ?? []).length,
         )
         if (existing && referenceUnchanged) {
             if (activateOnAttach) return { error: 'ASSET_ACTIVATION_REQUIRES_NEW_REFERENCE' }
@@ -2432,9 +2515,11 @@ const AssetModel = {
             origin: 'Asset.removeWorkspaceSurfaceReferencesByPrefix',
         })
         const references = ((result?.items ?? []) as AssetReference[])
-            .filter((reference) => reference.type === 'workspace'
+            .filter((reference) =>
+                reference.type === 'workspace'
                 && reference.workspaceId === workspaceId
-                && reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix)))
+                && reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix))
+            )
         let removed = 0
         for (const reference of references) {
             for (const surfaceId of reference.surfaceIds?.filter((value) => value.startsWith(surfacePrefix)) ?? []) {
@@ -2466,9 +2551,11 @@ const AssetModel = {
             origin: 'Asset.removeSurfaceReferencesByPrefixSystem',
         })
         const references = ((result?.items ?? []) as AssetReference[])
-            .filter((reference) => reference.type === 'workspace'
+            .filter((reference) =>
+                reference.type === 'workspace'
                 && reference.workspaceId
-                && reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix)))
+                && reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix))
+            )
         let removed = 0
         for (const reference of references) {
             const asset = await getAssetRecord(reference.assetId)
@@ -2552,13 +2639,12 @@ const AssetModel = {
             states: referenceCount === 0
                 ? { ...asset.states, lifecycle: 'deleting' }
                 : asset.states.lifecycle === 'deleting'
-                    ? { ...asset.states, lifecycle: 'active' }
-                    : asset.states,
+                ? { ...asset.states, lifecycle: 'active' }
+                : asset.states,
             revision: asset.revision + 1,
             updatedAt: now,
         }
-        const hasCatalog = references.some((reference) =>
-            reference.referenceKey === buildAssetCatalogReferenceKey(asset.scope, asset.scopeOwnerId))
+        const hasCatalog = references.some((reference) => reference.referenceKey === buildAssetCatalogReferenceKey(asset.scope, asset.scopeOwnerId))
         const expectedScopeKeys = new Set([
             ...(hasCatalog ? [buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId)] : []),
             ...accessRows

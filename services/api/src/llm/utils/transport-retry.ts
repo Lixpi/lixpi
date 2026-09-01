@@ -122,13 +122,19 @@ export const withTransportRetry = async <T>(args: {
     for (;;) {
         let published = false
         try {
-            return await args.attempt({ markPublished: () => { published = true } })
+            return await args.attempt({
+                markPublished: () => {
+                    published = true
+                },
+            })
         } catch (error) {
             attemptsMade += 1
-            if (published
+            if (
+                published
                 || args.signal?.aborted
                 || args.shouldStop?.()
-                || !isTransportFault(error, args.faultNames)) throw error
+                || !isTransportFault(error, args.faultNames)
+            ) throw error
             const delayMs = Math.min(RETRY_BASE_DELAY_MS * (2 ** (attemptsMade - 1)), RETRY_MAX_DELAY_MS)
             if (Date.now() + delayMs >= deadline) throw error
             warn(`[${args.label}] provider transport fault on attempt ${attemptsMade}; reconnecting in ${delayMs}ms: ${(error as Error)?.message ?? error}`)

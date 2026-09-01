@@ -1,6 +1,12 @@
-import { chevronDownIcon, checkMarkIcon } from '@lixpi/ui-kit/svg'
-import { createInfoBubble, type InfoBubbleInstance } from '@lixpi/ui-kit/components/info-bubble'
-import { html } from '$src/utils/domTemplates.ts'
+import {
+    chevronDownIcon,
+    checkMarkIcon,
+} from '@lixpi/ui-kit/svg'
+import {
+    createInfoBubble,
+    type InfoBubbleInstance,
+} from '@lixpi/ui-kit/components/info-bubble'
+import { html } from '@lixpi/ui-primitives/dom'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { settings } from '$src/settings.ts'
 import {
@@ -55,9 +61,7 @@ function modelHasGenerationModality(model: any, modality: 'image_generation' | '
 }
 
 function filterReasoningModels(models: any[]): any[] {
-    return models.filter((model: any) =>
-        !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation')
-    )
+    return models.filter((model: any) => !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation'))
 }
 
 function filterImageModels(models: any[]): any[] {
@@ -268,8 +272,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         const nextSelection = controlSelection.length > 0
             ? controlSelection
             : shouldAutoSelectFirst
-                ? [autoSelectOption.aiModel]
-                : []
+            ? [autoSelectOption.aiModel]
+            : []
 
         const changed = !sameModelIds(this.getControlSelection(), nextSelection)
         this.selectedModelIds = nextSelection
@@ -304,8 +308,8 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
         const nextTitle = showEmptySelectionError
             ? this.config.emptySelectionErrorTitle || settings.dropdown.errorState.fallbackTitle
             : selectedOptions.length === 0
-                ? this.config.placeholderTitle
-                : `${selectedOptions.length} ${selectedOptions.length === 1 ? 'model' : 'models'}`
+            ? this.config.placeholderTitle
+            : `${selectedOptions.length} ${selectedOptions.length === 1 ? 'model' : 'models'}`
         const nextColor = showEmptySelectionError ? settings.dropdown.errorState.textColor : ''
         const nextSelectionSignature = [
             showEmptySelectionError,
@@ -406,7 +410,7 @@ class ModelMultiSelect implements ModelMultiSelectInstance {
 
 export function createGenericAiModelMultiSelect(
     controls: AiModelMultiSelectControls,
-    dropdownId: string
+    dropdownId: string,
 ): ModelMultiSelectInstance {
     return new ModelMultiSelect({
         id: dropdownId,
@@ -422,7 +426,7 @@ export function createGenericAiModelMultiSelect(
 
 export function createGenericImageModelMultiSelect(
     controls: ImageModelMultiSelectControls,
-    dropdownId: string
+    dropdownId: string,
 ): ModelMultiSelectInstance {
     return new ModelMultiSelect({
         id: dropdownId,
@@ -438,7 +442,7 @@ export function createGenericImageModelMultiSelect(
 
 export function createGenericVideoModelMultiSelect(
     controls: VideoModelMultiSelectControls,
-    dropdownId: string
+    dropdownId: string,
 ): ModelMultiSelectInstance {
     return new ModelMultiSelect({
         id: dropdownId,

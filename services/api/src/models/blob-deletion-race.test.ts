@@ -1,4 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     putContentAddressedBlob: vi.fn(),
@@ -72,10 +78,12 @@ describe('Blob deletion and store race', () => {
         getItem.mockResolvedValue(deletingBlob)
         updateItem.mockRejectedValue({ name: 'ConditionalCheckFailedException' })
 
-        expect(await BlobModel.deleteZeroReferenceBlob({
-            organizationId: 'org',
-            blobHash: 'hash',
-        })).toBe(false)
+        expect(
+            await BlobModel.deleteZeroReferenceBlob({
+                organizationId: 'org',
+                blobHash: 'hash',
+            }),
+        ).toBe(false)
         expect(mocks.deleteContentAddressedBlob).not.toHaveBeenCalled()
     })
 
@@ -103,10 +111,12 @@ describe('Blob deletion and store race', () => {
         transactWrite.mockResolvedValue(undefined)
         mocks.deleteContentAddressedBlob.mockResolvedValue(undefined)
 
-        expect(await BlobModel.deleteZeroReferenceBlob({
-            organizationId: 'org',
-            blobHash: 'hash',
-        })).toBe(true)
+        expect(
+            await BlobModel.deleteZeroReferenceBlob({
+                organizationId: 'org',
+                blobHash: 'hash',
+            }),
+        ).toBe(true)
 
         expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
             conditionExpression: '#referenceCount = :zero AND (attribute_not_exists(#deletionClaim) OR #updatedAt <= :staleBefore)',

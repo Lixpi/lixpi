@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 
 import { uiKitSettings } from '../../runtime-settings.ts'
 import { createPureDropdown } from './index.ts'
@@ -383,7 +390,6 @@ describe('pureDropdown — wheel behavior', () => {
 
         expect(preventSpy).toHaveBeenCalled()
     })
-
 })
 
 describe('pureDropdown — error state', () => {

@@ -1,8 +1,15 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import { channels, getVideoMaxReferenceImages } from './state.ts'
+import {
+    channels,
+    getVideoMaxReferenceImages,
+} from './state.ts'
 
 describe('state defaults and helpers', () => {
     it('defaults channel values for newly initialized fields', () => {

@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import { createProseMirrorSchema, DOCUMENT_TYPE } from './schema-builder.ts'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from './schema-builder.ts'
 import {
     getPromptReferenceStableId,
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
@@ -11,12 +18,14 @@ import {
 } from './prompt-reference.ts'
 
 describe('prompt_reference', () => {
-    it.each([
-        [{ referenceType: 'media', assetId: 'asset-1', nodeId: 'node-1', mediaKind: 'image', displayName: 'Portrait' }, 'asset-1'],
-        [{ referenceType: 'capability-module', moduleId: 'character-creator', displayName: 'Character Creator' }, 'character-creator'],
-        [{ referenceType: 'tool', capabilityId: 'tool-1', displayName: 'Tool' }, 'tool-1'],
-        [{ referenceType: 'skill', capabilityId: 'skill-1', displayName: 'Skill' }, 'skill-1'],
-    ] as const)('normalizes every reference union member', (input, stableId) => {
+    it.each(
+        [
+            [{ referenceType: 'media', assetId: 'asset-1', nodeId: 'node-1', mediaKind: 'image', displayName: 'Portrait' }, 'asset-1'],
+            [{ referenceType: 'capability-module', moduleId: 'character-creator', displayName: 'Character Creator' }, 'character-creator'],
+            [{ referenceType: 'tool', capabilityId: 'tool-1', displayName: 'Tool' }, 'tool-1'],
+            [{ referenceType: 'skill', capabilityId: 'skill-1', displayName: 'Skill' }, 'skill-1'],
+        ] as const,
+    )('normalizes every reference union member', (input, stableId) => {
         const attrs = normalizePromptReferenceAttrs(input)
         expect(attrs).not.toBeNull()
         expect(getPromptReferenceStableId(toPromptReference(attrs!))).toBe(stableId)
@@ -76,12 +85,14 @@ describe('prompt_reference', () => {
         expect(dom[1]['data-prompt-reference-display-name']).toBe('Old cosmetic name')
     })
 
-    it.each([
-        { referenceType: 'media', assetId: 'asset-1', mediaKind: 'image', displayName: 'Portrait' },
-        { referenceType: 'capability-module', moduleId: 'character-creator', displayName: 'Character Creator' },
-        { referenceType: 'tool', capabilityId: 'tool-1', displayName: 'Style Extraction' },
-        { referenceType: 'skill', capabilityId: 'skill-1', displayName: 'Reference Fidelity' },
-    ] as const)('renders only the cosmetic name in fallback DOM', (attrs) => {
+    it.each(
+        [
+            { referenceType: 'media', assetId: 'asset-1', mediaKind: 'image', displayName: 'Portrait' },
+            { referenceType: 'capability-module', moduleId: 'character-creator', displayName: 'Character Creator' },
+            { referenceType: 'tool', capabilityId: 'tool-1', displayName: 'Style Extraction' },
+            { referenceType: 'skill', capabilityId: 'skill-1', displayName: 'Reference Fidelity' },
+        ] as const,
+    )('renders only the cosmetic name in fallback DOM', (attrs) => {
         const schema = createProseMirrorSchema(DOCUMENT_TYPE.AI_PROMPT_INPUT)
         const nodeType = schema.nodes[PROMPT_REFERENCE_NODE_TYPE]
         const node = nodeType.create(attrs)

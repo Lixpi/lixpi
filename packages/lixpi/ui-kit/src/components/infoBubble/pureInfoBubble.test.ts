@@ -1,6 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 
-import { createInfoBubble, infoBubbleStateManager } from './index.ts'
+import {
+    createInfoBubble,
+    infoBubbleStateManager,
+} from './index.ts'
 
 type Rect = {
     left: number
@@ -49,18 +59,22 @@ function createBubble(id = 'bubble') {
     const bubbleContainer = infoBubble.dom.querySelector('.bubble-container') as HTMLElement
 
     anchor.getBoundingClientRect = vi.fn(() => createRect())
-    bubbleWrapper.getBoundingClientRect = vi.fn(() => createRect({
-        width: 160,
-        height: 100,
-        right: 160,
-        bottom: 100,
-    }))
-    bubbleContainer.getBoundingClientRect = vi.fn(() => createRect({
-        width: 160,
-        height: 100,
-        right: 160,
-        bottom: 100,
-    }))
+    bubbleWrapper.getBoundingClientRect = vi.fn(() =>
+        createRect({
+            width: 160,
+            height: 100,
+            right: 160,
+            bottom: 100,
+        })
+    )
+    bubbleContainer.getBoundingClientRect = vi.fn(() =>
+        createRect({
+            width: 160,
+            height: 100,
+            right: 160,
+            bottom: 100,
+        })
+    )
 
     return { anchor, infoBubble }
 }
@@ -165,17 +179,21 @@ describe('createInfoBubble', () => {
             })
             const bubbleWrapper = infoBubble.dom.querySelector('.bubble-wrapper') as HTMLElement
 
-            anchor.getBoundingClientRect = vi.fn(() => createRect({
-                top: 400,
-                bottom: 424,
-                y: 400,
-            }))
-            bubbleWrapper.getBoundingClientRect = vi.fn(() => createRect({
-                width: 160,
-                height: 180,
-                right: 160,
-                bottom: 180,
-            }))
+            anchor.getBoundingClientRect = vi.fn(() =>
+                createRect({
+                    top: 400,
+                    bottom: 424,
+                    y: 400,
+                })
+            )
+            bubbleWrapper.getBoundingClientRect = vi.fn(() =>
+                createRect({
+                    width: 160,
+                    height: 180,
+                    right: 160,
+                    bottom: 180,
+                })
+            )
 
             infoBubble.open()
 

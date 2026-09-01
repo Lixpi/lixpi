@@ -16,7 +16,7 @@ import type {
     CapabilityPromptReferenceHost,
     CapabilityPromptReferenceView,
 } from '../../../frontend/capability-artifact-registry.ts'
-import { createCapabilityHtml } from '../../../frontend/dom-template.ts'
+import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     ACTION_TIMELINE_ARTIFACT_TYPE_ID,
     ACTION_TIMELINE_TOOL_ID,
@@ -315,13 +315,15 @@ export const actionTimelineFrontendDefinition: CapabilityArtifactFrontendDefinit
 }
 
 export function createActionTimelineEditorPlugins(): Plugin[] {
-    return [new Plugin({
-        props: {
-            nodeViews: {
-                actionTimelineSegment: node => new ActionTimelineSegmentNodeView(node),
+    return [
+        new Plugin({
+            props: {
+                nodeViews: {
+                    actionTimelineSegment: node => new ActionTimelineSegmentNodeView(node),
+                },
             },
-        },
-    })]
+        }),
+    ]
 }
 
 class ActionTimelineSegmentNodeView implements NodeView {
@@ -330,7 +332,7 @@ class ActionTimelineSegmentNodeView implements NodeView {
     private readonly time: HTMLElement
 
     constructor(node: ProseMirrorNode) {
-        const html = createCapabilityHtml(document)
+        const html = createDocumentHtml(document)
         this.dom = html`<section className="action-timeline-segment">
             <header className="action-timeline-time" contenteditable="false"></header>
             <div className="action-timeline-segment-content"></div>
@@ -356,7 +358,7 @@ class ActionTimelineSegmentNodeView implements NodeView {
 }
 
 function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): CapabilityArtifactCanvasView {
-    const html = createCapabilityHtml(host.container.ownerDocument)
+    const html = createDocumentHtml(host.container.ownerDocument)
     const root = html`<div className="action-timeline-body">
         <div className="action-timeline-summary"><strong>Action Timeline</strong><span></span></div>
         <div className="action-timeline-thumbnails"></div>
@@ -389,12 +391,12 @@ function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): Cap
         }
         if (host.mountEditor) {
             if (editor) editor.updateDocument(document)
-            else editor = host.mountEditor({
-                container: editorContainer,
-                document,
-                schema: createActionTimelineDocumentSchema(),
-                plugins: createActionTimelineEditorPlugins(),
-            })
+            else {editor = host.mountEditor({
+                    container: editorContainer,
+                    document,
+                    schema: createActionTimelineDocumentSchema(),
+                    plugins: createActionTimelineEditorPlugins(),
+                })}
         } else {
             renderStaticTimeline(editorContainer, document, host, view => referenceViews.push(view))
         }
@@ -419,7 +421,7 @@ function renderStaticTimeline(
     host: CapabilityArtifactCanvasHost,
     registerReferenceView: (view: { destroy: () => void }) => void,
 ): void {
-    const html = createCapabilityHtml(container.ownerDocument)
+    const html = createDocumentHtml(container.ownerDocument)
     container.replaceChildren()
     const doc = document as JsonNode
     for (const segment of doc.content ?? []) {
@@ -434,7 +436,7 @@ function renderStaticTimeline(
 }
 
 function createActionTimelineInfoView(host: CapabilityArtifactInfoHost): CapabilityArtifactInfoView {
-    const html = createCapabilityHtml(host.container.ownerDocument)
+    const html = createDocumentHtml(host.container.ownerDocument)
     const doc = host.document as JsonNode
     const segments = doc.content?.length ?? 0
     const references = collectActionTimelineReferencedAssetIds(host.document).length
@@ -457,7 +459,7 @@ function createActionTimelineInfoView(host: CapabilityArtifactInfoHost): Capabil
 }
 
 function createActionTimelinePromptReferenceView(host: CapabilityPromptReferenceHost): CapabilityPromptReferenceView {
-    const html = createCapabilityHtml(host.container.ownerDocument)
+    const html = createDocumentHtml(host.container.ownerDocument)
     const segmentCount = numberValue(host.displayMetadata.segmentCount)
     const root = html`<span className="action-timeline-reference">${host.title}${segmentCount > 0 ? ` · ${segmentCount} segments` : ''}</span>` as HTMLSpanElement
     host.container.appendChild(root)
@@ -465,7 +467,7 @@ function createActionTimelinePromptReferenceView(host: CapabilityPromptReference
 }
 
 function createActionTimelineLibraryView(host: CapabilityArtifactLibraryHost): CapabilityArtifactLibraryView {
-    const html = createCapabilityHtml(host.container.ownerDocument)
+    const html = createDocumentHtml(host.container.ownerDocument)
     const durationMs = numberValue(host.displayMetadata.durationMs)
     const segmentCount = numberValue(host.displayMetadata.segmentCount)
     const root = html`<button type="button" className="action-timeline-library-row">

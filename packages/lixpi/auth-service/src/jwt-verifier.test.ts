@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { generateKeyPairSync } from 'node:crypto'
 import jwt from 'jsonwebtoken'
 
@@ -17,15 +24,16 @@ const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     },
 })
 
-const createJwtToken = (claims: Record<string, unknown>) => jwt.sign(
-    { sub: 'user-123', ...claims },
-    privateKey,
-    {
-        audience: 'lixpi-audience',
-        issuer: 'https://auth.test/',
-        algorithm: 'RS256',
-    },
-)
+const createJwtToken = (claims: Record<string, unknown>) =>
+    jwt.sign(
+        { sub: 'user-123', ...claims },
+        privateKey,
+        {
+            audience: 'lixpi-audience',
+            issuer: 'https://auth.test/',
+            algorithm: 'RS256',
+        },
+    )
 
 // =============================================================================
 // VERIFY JWT
@@ -35,7 +43,10 @@ vi.mock('./jwks-client.ts', () => ({
     createGetKeyFunction: createGetKeyFunctionMock,
 }))
 
-import { createJwtVerifier, verifyJwt } from './jwt-verifier.ts'
+import {
+    createJwtVerifier,
+    verifyJwt,
+} from './jwt-verifier.ts'
 
 describe('verifyJwt', () => {
     it('returns an error for missing token', async () => {
@@ -101,10 +112,11 @@ describe('createJwtVerifier', () => {
 
     const getValidToken = () => createJwtToken({ scope: 'write' })
 
-    const makeGetKey = (resolvedKey: string) => vi.fn((
-        _header: unknown,
-        callback: (error: Error | null, key?: string) => void,
-    ) => callback(null, resolvedKey))
+    const makeGetKey = (resolvedKey: string) =>
+        vi.fn((
+            _header: unknown,
+            callback: (error: Error | null, key?: string) => void,
+        ) => callback(null, resolvedKey))
 
     beforeEach(() => {
         createGetKeyFunctionMock.mockReset()

@@ -2,24 +2,25 @@
 
 import { warn } from '@lixpi/debug-tools'
 
-import type { AiModelMetaInfo, ChatMessage } from '../graph/state.ts'
+import type {
+    AiModelMetaInfo,
+    ChatMessage,
+} from '../graph/state.ts'
 import type { ProviderName } from '@lixpi/constants'
 
 export const TOOL_NAME = 'generate_image'
 
-const TOOL_DESCRIPTION =
-    'Generate still visual media from the user request and authorized references. ' +
-    'Call this tool for a still visual request. Preserve the request scope and reference roles; ' +
-    'do not add unrequested semantic or aesthetic content. The prompt must be safe and moderation-compliant.'
+const TOOL_DESCRIPTION = 'Generate still visual media from the user request and authorized references. '
+    + 'Call this tool for a still visual request. Preserve the request scope and reference roles; '
+    + 'do not add unrequested semantic or aesthetic content. The prompt must be safe and moderation-compliant.'
 
 const BASE_PARAMETERS = {
     type: 'object',
     properties: {
         prompt: {
             type: 'string',
-            description:
-                'The exact still-media prompt derived from the user request and authorized reference roles. ' +
-                'It must preserve requested scope, avoid invented content, and be moderation-compliant.',
+            description: 'The exact still-media prompt derived from the user request and authorized reference roles. '
+                + 'It must preserve requested scope, avoid invented content, and be moderation-compliant.',
         },
     },
     required: ['prompt'],
@@ -55,8 +56,8 @@ export const buildImagePromptLimitInstruction = (
     const maxLen = getImagePromptMaxChars(imageModelMetaInfo, imageProvider)
     if (!maxLen) return undefined
     return (
-        `IMPORTANT: The generate_image tool prompt MUST NOT exceed ${maxLen} characters. ` +
-        'Stay under the limit during generation. Do not emit an overlong prompt that would need truncation.'
+        `IMPORTANT: The generate_image tool prompt MUST NOT exceed ${maxLen} characters. `
+        + 'Stay under the limit during generation. Do not emit an overlong prompt that would need truncation.'
     )
 }
 
@@ -89,9 +90,9 @@ const buildToolDescription = (
     const maxChars = getImagePromptMaxChars(imageModelMetaInfo, imageProvider)
     if (!maxChars) return TOOL_DESCRIPTION
     return (
-        `${TOOL_DESCRIPTION} ` +
-        `CRITICAL CONSTRAINT: The prompt MUST NOT exceed ${maxChars} characters. ` +
-        'Prioritize the most impactful visual details when approaching the limit.'
+        `${TOOL_DESCRIPTION} `
+        + `CRITICAL CONSTRAINT: The prompt MUST NOT exceed ${maxChars} characters. `
+        + 'Prioritize the most impactful visual details when approaching the limit.'
     )
 }
 
@@ -107,9 +108,8 @@ const buildToolParameters = (
             prompt: {
                 type: 'string',
                 maxLength: maxChars,
-                description:
-                    `The exact still-media prompt derived from the request and authorized references, with a maximum of ${maxChars} characters. ` +
-                    'It must avoid invented content and be moderation-compliant.',
+                description: `The exact still-media prompt derived from the request and authorized references, with a maximum of ${maxChars} characters. `
+                    + 'It must avoid invented content and be moderation-compliant.',
             },
         },
         required: ['prompt'],
@@ -221,22 +221,19 @@ export const extractReferenceImages = (messages: ChatMessage[]): string[] => {
             if (blockType === 'input_image') {
                 const url = (block as any).image_url
                 if (typeof url === 'string') pushImage(url)
-            }
-            // Anthropic format: image with source
+            } // Anthropic format: image with source
             else if (blockType === 'image') {
                 const source = (block as any).source ?? {}
                 if (source.type === 'base64' && source.data) {
                     const mediaType = source.media_type ?? 'image/png'
                     pushImage(`data:${mediaType};base64,${source.data}`)
                 }
-            }
-            // Google format: inline_data
+            } // Google format: inline_data
             else if (blockType === 'inline_data') {
                 const mime = (block as any).mime_type ?? 'image/png'
                 const data = (block as any).data
                 if (data) pushImage(`data:${mime};base64,${data}`)
-            }
-            // Google SDK format: inlineData
+            } // Google SDK format: inlineData
             else if ((block as any).inlineData) {
                 const inline = (block as any).inlineData
                 const mime = inline.mimeType ?? 'image/png'

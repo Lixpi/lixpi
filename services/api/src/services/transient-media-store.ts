@@ -26,11 +26,9 @@ export type TransientMediaMimeType = keyof typeof MIME_TYPE_EXTENSIONS
 
 const TRANSIENT_MEDIA_TTL_NANOS = 60 * 60 * 1000000000
 
-export const getTransientMediaBucketName = (organizationId: string): string =>
-    `transient-media-${organizationId}-files`
+export const getTransientMediaBucketName = (organizationId: string): string => `transient-media-${organizationId}-files`
 
-export const isTransientMediaObjectKey = (objectKey: string): boolean =>
-    /^partial-[a-f0-9]{64}\.[a-z0-9]+$/.test(objectKey)
+export const isTransientMediaObjectKey = (objectKey: string): boolean => /^partial-[a-f0-9]{64}\.[a-z0-9]+$/.test(objectKey)
 
 export const getTransientMediaMimeType = (objectKey: string): string | undefined => {
     if (!isTransientMediaObjectKey(objectKey)) return undefined

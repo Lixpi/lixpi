@@ -217,26 +217,32 @@ export async function finalizeActionTimelineArtifact(request: {
     const asset = await getAssetRecord(request.assetId)
     if (!asset) throw new Error(`ACTION_TIMELINE_STAGED_ASSET_NOT_FOUND:${request.assetId}`)
     const lineage = asset.lineage
-    if (asset.organizationId !== request.organizationId
+    if (
+        asset.organizationId !== request.organizationId
         || asset.originWorkspaceId !== request.workspaceId
         || lineage?.sourceConversationAssetId !== request.conversationAssetId
-        || asset.artifact?.artifactTypeId !== ACTION_TIMELINE_ARTIFACT_TYPE_ID) {
+        || asset.artifact?.artifactTypeId !== ACTION_TIMELINE_ARTIFACT_TYPE_ID
+    ) {
         throw new Error(`ACTION_TIMELINE_STAGED_ASSET_MISMATCH:${request.assetId}`)
     }
     if (asset.states.lifecycle !== 'creating') {
         throw new Error(`ACTION_TIMELINE_STAGED_ASSET_NOT_CREATING:${request.assetId}`)
     }
-    if (lineage.generationRequestId !== request.generationRun.generationRequestId
+    if (
+        lineage.generationRequestId !== request.generationRun.generationRequestId
         || lineage.reasoningRunId !== request.generationRun.reasoningRunId
-        || lineage.reasoningModelId !== request.variant.reasoningModelId) {
+        || lineage.reasoningModelId !== request.variant.reasoningModelId
+    ) {
         throw new Error(`ACTION_TIMELINE_STAGED_LINEAGE_MISMATCH:${request.assetId}`)
     }
 
     const prompt = requireCapabilityInputString(request.input.prompt, 'ACTION_TIMELINE_PROMPT_REQUIRED')
-    const referenceAssetIds = [...new Set(requireCapabilityInputStringArray(
-        request.input.referenceAssetIds,
-        'ACTION_TIMELINE_REFERENCE_ASSET_IDS_INVALID',
-    ))]
+    const referenceAssetIds = [
+        ...new Set(requireCapabilityInputStringArray(
+            request.input.referenceAssetIds,
+            'ACTION_TIMELINE_REFERENCE_ASSET_IDS_INVALID',
+        )),
+    ]
     if (!sameStringArray(referenceAssetIds, lineage.sourceAssetIds)) {
         throw new Error(`ACTION_TIMELINE_STAGED_REFERENCES_MISMATCH:${request.assetId}`)
     }

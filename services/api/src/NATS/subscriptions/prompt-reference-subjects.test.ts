@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
@@ -123,16 +129,17 @@ describe('prompt-reference transport', () => {
             cursor: 'opaque',
         }))
 
-        await expect(handler(LIST)({
-            user: { userId: 'user-1' },
-            workspaceId: 'workspace-1',
-            category: 'internal-tools',
-        })).resolves.toEqual({ error: 'INVALID_PROMPT_REFERENCE_CATEGORY' })
+        await expect(
+            handler(LIST)({
+                user: { userId: 'user-1' },
+                workspaceId: 'workspace-1',
+                category: 'internal-tools',
+            }),
+        ).resolves.toEqual({ error: 'INVALID_PROMPT_REFERENCE_CATEGORY' })
     })
 
     it('does not grant browsers direct access to accepted-use recording', () => {
-        const accepted = promptReferenceSubjects.find(candidate =>
-            candidate.subject === NATS_SUBJECTS.PROMPT_REFERENCE_SUBJECTS.RECORD_ACCEPTED_USE)!
+        const accepted = promptReferenceSubjects.find(candidate => candidate.subject === NATS_SUBJECTS.PROMPT_REFERENCE_SUBJECTS.RECORD_ACCEPTED_USE)!
         expect(accepted.permissions.pub.allow).toEqual([])
     })
 })

@@ -3,8 +3,14 @@
 import sharp from 'sharp'
 
 import type NatsService from '@lixpi/nats-service'
-import { info, warn } from '@lixpi/debug-tools'
-import type { AiModelInferenceCapabilities, AiModelInputKind } from '@lixpi/constants'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
+import type {
+    AiModelInferenceCapabilities,
+    AiModelInputKind,
+} from '@lixpi/constants'
 
 // Anthropic's 5MB limit applies to the base64-encoded string. Base64 inflates
 // raw bytes by ~4/3, so 5242880 * 3/4 = 3932160. Use 3.75MB for safety.
@@ -33,7 +39,9 @@ export const assertMessageInputKindsSupported = (
             const type = (block as Record<string, unknown>).type
             const inputKind: AiModelInputKind | undefined = type === 'input_audio'
                 ? 'audio'
-                : type === 'input_image' ? 'image' : undefined
+                : type === 'input_image'
+                ? 'image'
+                : undefined
             if (inputKind && !capabilities.supportedInputKinds.includes(inputKind)) {
                 throw new Error(`MODEL_INPUT_KIND_UNSUPPORTED:${provider}:${modelVersion}:${inputKind}`)
             }
@@ -42,8 +50,10 @@ export const assertMessageInputKindsSupported = (
 }
 
 const detectImageMime = (data: Buffer): string => {
-    if (data.length > 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 &&
-        data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a) {
+    if (
+        data.length > 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47
+        && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a
+    ) {
         return 'image/png'
     }
     if (data.length > 2 && data[0] === 0xff && data[1] === 0xd8) {
@@ -52,15 +62,17 @@ const detectImageMime = (data: Buffer): string => {
     if (data.length > 4 && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38) {
         return 'image/gif'
     }
-    if (data.length > 12 &&
-        data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 &&
-        data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) {
+    if (
+        data.length > 12
+        && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46
+        && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50
+    ) {
         return 'image/webp'
     }
     return 'image/png'
 }
 
-export const parseNatsObjectRef = (ref: string): { bucket: string, key: string } | undefined => {
+export const parseNatsObjectRef = (ref: string): { bucket: string; key: string } | undefined => {
     if (!ref.startsWith('nats-obj://')) return undefined
     const path = ref.slice('nats-obj://'.length)
     const slash = path.indexOf('/')
@@ -68,7 +80,7 @@ export const parseNatsObjectRef = (ref: string): { bucket: string, key: string }
     return { bucket: path.slice(0, slash), key: path.slice(slash + 1) }
 }
 
-export const parseDataUrl = (dataUrl: string): { mediaType: string, base64: string } => {
+export const parseDataUrl = (dataUrl: string): { mediaType: string; base64: string } => {
     const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl)
     if (!m) throw new Error(`Invalid data URL format: ${dataUrl.slice(0, 50)}...`)
     return { mediaType: m[1]!, base64: m[2]! }
@@ -79,7 +91,7 @@ export const parseDataUrl = (dataUrl: string): { mediaType: string, base64: stri
 const normalizeAttachmentData = async (
     data: Buffer,
     mimeType: string,
-): Promise<{ data: Buffer, mimeType: string }> => {
+): Promise<{ data: Buffer; mimeType: string }> => {
     if (SAFE_MIMES.has(mimeType)) return { data, mimeType }
 
     try {
@@ -103,7 +115,7 @@ const normalizeAttachmentData = async (
 const downscaleImageIfNeeded = async (
     data: Buffer,
     mimeType: string,
-): Promise<{ data: Buffer, mimeType: string }> => {
+): Promise<{ data: Buffer; mimeType: string }> => {
     if (data.length <= MAX_IMAGE_BYTES) return { data, mimeType }
 
     info(`Image exceeds ${MAX_IMAGE_BYTES} bytes (${data.length} bytes), downscaling...`)
@@ -148,7 +160,7 @@ const downscaleImageIfNeeded = async (
                 if (composited.length <= MAX_IMAGE_BYTES) {
                     return { data: composited, mimeType: 'image/jpeg' }
                 }
-            } catch { }
+            } catch {}
         }
     } else {
         for (const quality of [92, 85, 78, 70, 60]) {
@@ -172,7 +184,7 @@ const downscaleImageIfNeeded = async (
             if (out.length <= MAX_IMAGE_BYTES) {
                 return { data: out, mimeType: 'image/jpeg' }
             }
-        } catch { }
+        } catch {}
     }
 
     warn(`Could not downscale image below ${MAX_IMAGE_BYTES} bytes, returning best effort`)
@@ -191,7 +203,7 @@ const downscaleImageIfNeeded = async (
 const normalizeAndDownscale = async (
     data: Buffer,
     mimeType: string,
-): Promise<{ data: Buffer, mimeType: string }> => {
+): Promise<{ data: Buffer; mimeType: string }> => {
     const norm = await normalizeAttachmentData(data, mimeType)
     return downscaleImageIfNeeded(norm.data, norm.mimeType)
 }

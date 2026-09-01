@@ -231,9 +231,9 @@ function isMediaGenerationTraceProjectionNode(node: ProseMirrorJsonNode): boolea
     return node.type === 'aiCollapsibleBlock'
         && Boolean(
             attrs.imageGenerationTrace
-            || attrs.videoGenerationTrace
-            || attrs.capabilityGenerationTrace
-            || attrs.imageGenerationTraceId,
+                || attrs.videoGenerationTrace
+                || attrs.capabilityGenerationTrace
+                || attrs.imageGenerationTraceId,
         )
 }
 
@@ -241,8 +241,10 @@ function containerHasMatchingGenerationTrace(
     container: ProseMirrorJsonNode,
     locator: GeneratedMediaTurnLocator,
 ): boolean {
-    if (isMediaGenerationTraceProjectionNode(container)
-        && getGenerationTraceMediaRunId(container) === locator.mediaRunId) return true
+    if (
+        isMediaGenerationTraceProjectionNode(container)
+        && getGenerationTraceMediaRunId(container) === locator.mediaRunId
+    ) return true
     return Boolean(container.content?.some((child) => containerHasMatchingGenerationTrace(child, locator)))
 }
 
@@ -289,8 +291,8 @@ function getLineageEventIdentity(node: ProseMirrorJsonNode): string {
     const id = kind === 'branch-origin'
         ? attrs.branchOriginNodeId
         : kind === 'branch-line'
-            ? attrs.branchLineNodeId
-            : attrs.branchForkNodeId
+        ? attrs.branchLineNodeId
+        : attrs.branchForkNodeId
     return `${kind}:${typeof id === 'string' ? id : ''}`
 }
 
@@ -331,8 +333,8 @@ function createProjectionNodeFilter(
     const shouldFilterLineageEvents = Boolean(lineageIds && hasAnyLineageIds(lineageIds))
     const shouldFilterGenerationTraces = Boolean(
         limitToLocatorMedia
-        && locator.mediaRunId
-        && containerHasMatchingGenerationTrace(container, locator),
+            && locator.mediaRunId
+            && containerHasMatchingGenerationTrace(container, locator),
     )
     const seenLineageEventIds = new Set<string>()
 
@@ -498,8 +500,8 @@ function createProjectedGenerationProgress(
         const promptIndex = branchResolutionIndex >= 0
             ? branchResolutionIndex + 1
             : understandRequestIndex >= 0
-                ? understandRequestIndex + 1
-                : 0
+            ? understandRequestIndex + 1
+            : 0
         items.splice(promptIndex, 0, {
             id: MEDIA_GENERATION_PROMPT_PROGRESS_ITEM_ID,
             title: 'Prompt for media generation model written by reasoning model',
@@ -526,9 +528,11 @@ function insertGenerationProgressTimelineForProjection(
     locator: GeneratedMediaTurnLocator,
 ): boolean {
     const children = node.content ?? []
-    const generatedMediaIndex = children.findIndex(child => Boolean(
-        getProjectedMediaGenerationProgress(child, locator),
-    ))
+    const generatedMediaIndex = children.findIndex(child =>
+        Boolean(
+            getProjectedMediaGenerationProgress(child, locator),
+        )
+    )
     if (generatedMediaIndex >= 0) {
         const generationProgress = getProjectedMediaGenerationProgress(children[generatedMediaIndex]!, locator)
         if (!generationProgress) return false
@@ -537,8 +541,8 @@ function insertGenerationProgressTimelineForProjection(
         const insertAt = invocationIndex >= 0
             ? invocationIndex
             : fallbackInvocationIndex >= 0
-                ? fallbackInvocationIndex
-                : generatedMediaIndex
+            ? fallbackInvocationIndex
+            : generatedMediaIndex
         const preambleNodes = children
             .slice(0, insertAt)
             .filter(child => child.type !== 'aiLineageEvent')
@@ -654,8 +658,8 @@ function relocateLineageEventsToResolverAudit(node: ProseMirrorJsonNode): void {
         const insertAt = firstTraceIndex >= 0
             ? firstTraceIndex + 1
             : firstMediaIndex === -1
-                ? rest.length
-                : firstMediaIndex
+            ? rest.length
+            : firstMediaIndex
         node.content = [...rest.slice(0, insertAt), ...lineageEvents, ...rest.slice(insertAt)]
     }
 
@@ -879,7 +883,7 @@ function getFirstGenerationTrace(container: ProseMirrorJsonNode): {
 export function getGeneratedImageTurnInfoFromThreadContent(
     threadContent: unknown,
     responseMessageIdOrLocator: string | GeneratedMediaTurnLocator | undefined,
-    reasoningModelId?: string
+    reasoningModelId?: string,
 ): GeneratedImageTurnInfo | null {
     const root = parseProseMirrorJsonContent(threadContent)
     if (!root) return null

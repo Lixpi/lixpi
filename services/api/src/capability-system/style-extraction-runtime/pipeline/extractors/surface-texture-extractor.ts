@@ -42,8 +42,7 @@ const extractor: StyleExtractor = {
     description: 'Extracts surface texture only when visibly present: substrate, grain, mark morphology, edge behavior, density, scale, repeatability, application guidance, and a list of what to avoid.',
     minDominance: 0.3,
     applicableTo: (scene) => (scene.axisDominance['surface-texture'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

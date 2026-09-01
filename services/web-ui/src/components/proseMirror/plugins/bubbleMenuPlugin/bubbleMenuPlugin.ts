@@ -1,8 +1,21 @@
-import { Plugin, PluginKey, NodeSelection } from 'prosemirror-state'
+import {
+    Plugin,
+    PluginKey,
+    NodeSelection,
+} from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import type { EditorView } from 'prosemirror-view'
-import { BubbleMenu, type BubbleMenuPositionRequest } from '@lixpi/ui-kit/components/bubble-menu'
-import { buildBubbleMenuItems, getSelectionContext, updateImageButtonStates, type MenuItemElement, type SelectionContext } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
+import {
+    BubbleMenu,
+    type BubbleMenuPositionRequest,
+} from '@lixpi/ui-kit/components/bubble-menu'
+import {
+    buildBubbleMenuItems,
+    getSelectionContext,
+    updateImageButtonStates,
+    type MenuItemElement,
+    type SelectionContext,
+} from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
 
 export const bubbleMenuPluginKey = new PluginKey('bubbleMenu')
 

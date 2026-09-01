@@ -1,7 +1,16 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { STREAM_STATUS, type MediaGenerationRunMeta } from '@lixpi/constants'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    STREAM_STATUS,
+    type MediaGenerationRunMeta,
+} from '@lixpi/constants'
 
 const assetStorageMocks = vi.hoisted(() => ({
     attachGeneratedAssetNode: vi.fn(),
@@ -62,15 +71,40 @@ const generationRun = {
 } as MediaGenerationRunMeta
 
 const mp4Sample = Buffer.from([
-    0x00, 0x00, 0x00, 0x20,
-    0x66, 0x74, 0x79, 0x70,
-    0x6d, 0x70, 0x34, 0x20,
-    0x00, 0x00, 0x00, 0x00,
-    0x69, 0x6d, 0x6f, 0x76, 0x00, 0x00, 0x00, 0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x20,
+    0x66,
+    0x74,
+    0x79,
+    0x70,
+    0x6d,
+    0x70,
+    0x34,
+    0x20,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x69,
+    0x6d,
+    0x6f,
+    0x76,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
 ])
 const pngSample = Buffer.from([
-    0x89, 0x50, 0x4e, 0x47,
-    0x0d, 0x0a, 0x1a, 0x0a,
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
 ])
 
 function createPublisher(options: { onPipelineContent?: (content: Record<string, unknown>) => void } = {}) {

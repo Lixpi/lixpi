@@ -1,10 +1,16 @@
-import { chevronDownIcon, chevronUpIcon } from '../svgIcons.ts'
+import {
+    chevronDownIcon,
+    chevronUpIcon,
+} from '../svgIcons.ts'
 import {
     createAnimatedSvgIcon,
     type AnimatedIconSpec,
     type AnimatedSvgIconInstance,
-} from './animatedSvgIcon.ts'
-import { easeClickToggleFeedback, easePupOut } from '../../animation/index.ts'
+} from '@lixpi/ui-primitives/svg'
+import {
+    easeClickToggleFeedback,
+    easePupOut,
+} from '@lixpi/ui-primitives/animation'
 
 // Expand / collapse affordance for a whole disclosure region. It is assembled
 // from the very same chevrons the nested sections use, so the region control

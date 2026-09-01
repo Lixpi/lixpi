@@ -1,9 +1,21 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 
-import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from './usage-event-mapper.ts'
-import type { UsageReport, ImageUsageReport, VideoUsageReport } from './usage-reporter.ts'
+import {
+    tokenUsageConfirm,
+    imageUsageConfirm,
+    videoUsageConfirm,
+} from './usage-event-mapper.ts'
+import type {
+    UsageReport,
+    ImageUsageReport,
+    VideoUsageReport,
+} from './usage-reporter.ts'
 
 const eventMeta = { organizationId: 'org_1', userId: 'usr_1', workspaceId: 'ws_1' }
 const head = {

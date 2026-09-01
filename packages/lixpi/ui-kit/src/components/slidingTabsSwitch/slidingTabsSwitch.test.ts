@@ -1,6 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { select, selection } from 'd3-selection'
-import { createSlidingTabsSwitch, type SlidingTabsSwitchConfig } from './slidingTabsSwitch.ts'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
+import {
+    select,
+    selection,
+} from 'd3-selection'
+import {
+    createSlidingTabsSwitch,
+    type SlidingTabsSwitchConfig,
+} from './slidingTabsSwitch.ts'
 
 // Keep transition behavior synchronous in happy-dom.
 const makeChain = (): any => {
@@ -26,7 +38,7 @@ function mount(
     selectedValue: Tab = 'list',
     onChange = vi.fn(),
     onClose = vi.fn(),
-    config: Partial<SlidingTabsSwitchConfig<Tab>> = {}
+    config: Partial<SlidingTabsSwitchConfig<Tab>> = {},
 ) {
     const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
     document.body.appendChild(svg)
@@ -81,7 +93,7 @@ describe('createSlidingTabsSwitch', () => {
         expect(onClose).toHaveBeenCalledExactlyOnceWith(
             'grid',
             'chat-tabs',
-            expect.objectContaining({ value: 'grid', label: 'Grid' })
+            expect.objectContaining({ value: 'grid', label: 'Grid' }),
         )
         expect(tabsSwitch.getValue()).toBe('list')
     })
@@ -112,7 +124,15 @@ describe('createSlidingTabsSwitch', () => {
         expect(() => tabsSwitch.render()).not.toThrow()
     })
 
-    it('forwards shadow configuration to underlying switch', () => {
+    it('keeps the shared flat indicator appearance', () => {
+        const { svg, tabsSwitch } = mount()
+
+        expect(svg.querySelector('.sliding-switch-indicator')?.getAttribute('fill')).toBe('rgba(255, 255, 255, 0.72)')
+        expect(svg.querySelector('.sliding-switch-indicator-inset-shadow')?.getAttribute('fill')).toBe('transparent')
+        expect(tabsSwitch.getOuterHeight()).toBe(26)
+    })
+
+    it('forwards explicit shadow customization to the underlying switch', () => {
         const { tabsSwitch } = mount('list', vi.fn(), vi.fn(), {
             activeTabBoxShadow: '0 0 8px rgba(0, 0, 0, 0.25)',
             activeTabInsetShadow: {

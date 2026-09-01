@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     type CapabilityKind,
@@ -220,10 +224,11 @@ describe('validateCapabilityDependencyGraph', () => {
     })
 
     it('enforces dependency depth and resolved Capability count', () => {
-        const manifests = Array.from({ length: 4 }, (_, index) => makeSkillManifest(
-            `skill-${index}`,
-            index < 3 ? [{ capabilityId: `skill-${index + 1}`, kind: 'skill' as CapabilityKind }] : [],
-        ))
+        const manifests = Array.from({ length: 4 }, (_, index) =>
+            makeSkillManifest(
+                `skill-${index}`,
+                index < 3 ? [{ capabilityId: `skill-${index + 1}`, kind: 'skill' as CapabilityKind }] : [],
+            ))
 
         const codes = validateCapabilityDependencyGraph(manifests, {
             rootCapabilityIds: ['skill-0'],

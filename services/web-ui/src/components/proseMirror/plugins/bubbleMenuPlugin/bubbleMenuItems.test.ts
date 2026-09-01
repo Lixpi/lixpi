@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 import { NodeSelection } from 'prosemirror-state'
 import { getSelectionContext } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuItems.ts'
 import {

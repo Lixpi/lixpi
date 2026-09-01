@@ -1,9 +1,21 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import type { EditorView } from 'prosemirror-view'
-import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
-import { type CanvasNode, type CanvasState } from '@lixpi/constants'
+import {
+    Schema,
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type CanvasNode,
+    type CanvasState,
+} from '@lixpi/constants'
 import { USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import {
     serializeAiModelSelectionAttr,
@@ -231,6 +243,22 @@ const baseNode: CanvasNode = {
 }
 
 describe('AiPromptInputController', () => {
+    it('keeps a replacement editor registered when an older view releases its binding', async () => {
+        const { controller } = createController()
+        const previous = createThreadEditorEntry({ threadId: 'shared' })
+        const replacement = createThreadEditorEntry({ threadId: 'shared' })
+        controller.registerThreadEditor('shared', { editorView: previous.editorView })
+        controller.registerThreadEditor('shared', { editorView: replacement.editorView })
+        controller.unregisterThreadEditor('shared', previous.editorView)
+        controller.setTarget({ nodeId: 'target', type: 'aiChatThread', referenceId: 'shared' })
+        await controller.submitMessage({
+            contentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'next prompt' }] }],
+            aiReasoningModels: ['reasoning-model'],
+        })
+        expect(previous.dispatch).not.toHaveBeenCalled()
+        expect(replacement.dispatch).toHaveBeenCalledTimes(1)
+        controller.destroy()
+    })
     beforeEach(() => {
         vi.clearAllMocks()
     })

@@ -54,9 +54,11 @@ export class GeneratedOutputReviewService {
         requester: AssetRequesterContext
     }): Promise<GeneratedOutputReviewResponse | { error: string }> {
         if (!requester.editableWorkspaceIds.includes(request.workspaceId)) return { error: 'PERMISSION_DENIED' }
-        if (request.action === 'supersede'
+        if (
+            request.action === 'supersede'
             && request.scope === 'output-node'
-            && request.preserveLineage !== true) {
+            && request.preserveLineage !== true
+        ) {
             return { error: 'MEDIA_NODE_PROMPT_REGENERATION_NOT_SUPPORTED' }
         }
 
@@ -110,8 +112,10 @@ export class GeneratedOutputReviewService {
             if (orphanRemoval.removedNodeIds.length === 0) return { error: 'GENERATED_OUTPUT_NOT_FOUND' }
 
             const canvasGeometry: CanvasGeometryUpdate = {
-                generationRequestId: workspace.canvasState.nodes.find((node) => node.nodeId === request.nodeId
-                    && (node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'))?.generationRequestId,
+                generationRequestId: workspace.canvasState.nodes.find((node) =>
+                    node.nodeId === request.nodeId
+                    && (node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine')
+                )?.generationRequestId,
                 layoutRevision: persisted.canvasStateUpdatedAt,
                 nodes: orphanRemoval.geometryNodes,
                 nodeSnapshots: persisted.canvasState.nodes,
@@ -177,9 +181,11 @@ export class GeneratedOutputReviewService {
                 assetId: asset.assetId,
                 requester,
                 status: request.action === 'accept' ? 'accepted' : 'superseded',
-                ...(request.action === 'supersede' ? {
-                    regenerationMode: request.preserveLineage ? 'existing-prompt' : 'regenerate-prompt',
-                } : {}),
+                ...(request.action === 'supersede'
+                    ? {
+                        regenerationMode: request.preserveLineage ? 'existing-prompt' : 'regenerate-prompt',
+                    }
+                    : {}),
             })
             if ('error' in reviewed) return reviewed
             reviewedAssets.push(reviewed)
@@ -197,9 +203,11 @@ export class GeneratedOutputReviewService {
                 }
             }
             const preservedLineageNodeIds = request.action === 'supersede' && request.preserveLineage
-                ? new Set(request.scope === 'branch-lineage'
-                    ? [request.nodeId]
-                    : prepared.affectedNodes.flatMap(node => node.generatedBy?.lineageParentNodeId ?? []))
+                ? new Set(
+                    request.scope === 'branch-lineage'
+                        ? [request.nodeId]
+                        : prepared.affectedNodes.flatMap(node => node.generatedBy?.lineageParentNodeId ?? []),
+                )
                 : new Set<string>()
             const removedNodeIds = new Set<string>()
             const removedEdgeIds = new Set<string>()
@@ -293,18 +301,14 @@ export class GeneratedOutputReviewService {
 
         const geometryNodeIds = new Set(mutation.geometryNodes.map(node => node.nodeId))
         const affectedNodeIds = new Set(mutation.affectedNodes.map(node => node.nodeId))
-        const nodeSnapshots = persisted.canvasState.nodes.filter((node) =>
-            geometryNodeIds.has(node.nodeId) || affectedNodeIds.has(node.nodeId)
-        )
+        const nodeSnapshots = persisted.canvasState.nodes.filter((node) => geometryNodeIds.has(node.nodeId) || affectedNodeIds.has(node.nodeId))
         const snapshotNodeIds = new Set(nodeSnapshots.map(node => node.nodeId))
         const canvasGeometry: CanvasGeometryUpdate = {
             generationRequestId: mutation.affectedNodes[0]?.generatedBy?.generationRequestId,
             layoutRevision: persisted.canvasStateUpdatedAt,
             nodes: mutation.geometryNodes,
             nodeSnapshots,
-            edgeSnapshots: persisted.canvasState.edges.filter((edge) =>
-                snapshotNodeIds.has(edge.sourceNodeId) || snapshotNodeIds.has(edge.targetNodeId)
-            ),
+            edgeSnapshots: persisted.canvasState.edges.filter((edge) => snapshotNodeIds.has(edge.sourceNodeId) || snapshotNodeIds.has(edge.targetNodeId)),
             removedNodeIds: mutation.removedNodeIds,
             removedEdgeIds: mutation.removedEdgeIds,
         }

@@ -1,8 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import type { ExecutionTraceHandle, ExecutionTraceModelCall } from '@lixpi/constants'
+import type {
+    ExecutionTraceHandle,
+    ExecutionTraceModelCall,
+} from '@lixpi/constants'
 
-import { createCapabilityTraceRecorder, hasTraceContent } from './capability-trace-recorder.ts'
+import {
+    createCapabilityTraceRecorder,
+    hasTraceContent,
+} from './capability-trace-recorder.ts'
 
 function makeHandle(overrides: Partial<ExecutionTraceHandle> = {}): ExecutionTraceHandle {
     return {

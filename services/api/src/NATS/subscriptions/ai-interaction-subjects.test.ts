@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     getAiInteractionResponseSubject,
@@ -118,15 +124,18 @@ vi.mock('@lixpi/capability-system/backend', async (importOriginal) => ({
     resolveCapabilities: mocks.capabilities.resolve,
 }))
 
-import { aiInteractionSubjects, setLlmModule } from './ai-interaction-subjects.ts'
+import {
+    aiInteractionSubjects,
+    setLlmModule,
+} from './ai-interaction-subjects.ts'
 
 const SUBJECTS = NATS_SUBJECTS.AI_INTERACTION_SUBJECTS
-const getHandler = (subject: string) =>
-    aiInteractionSubjects.find((subscription) => subscription.subject === subject)!.handler
+const getHandler = (subject: string) => aiInteractionSubjects.find((subscription) => subscription.subject === subject)!.handler
 
-const flushPromises = (): Promise<void> => new Promise((resolve) => {
-    setTimeout(resolve, 0)
-})
+const flushPromises = (): Promise<void> =>
+    new Promise((resolve) => {
+        setTimeout(resolve, 0)
+    })
 
 const requester = {
     userId: 'user-1',
@@ -276,14 +285,15 @@ const makeModule = () => ({
     stop: mocks.llmModule.stop,
     stopMediaGenerationMatrix: mocks.llmModule.stopMediaGenerationMatrix,
     capabilityModuleCatalog: {
-        routePrompt: (prompt: string) => prompt.includes('shot plan')
-            ? {
-                capabilityId: 'global.action-timeline',
-                kind: 'tool',
-                input: {},
-                missingInputFields: ['durationMs', 'precisionMs'],
-            }
-            : undefined,
+        routePrompt: (prompt: string) =>
+            prompt.includes('shot plan')
+                ? {
+                    capabilityId: 'global.action-timeline',
+                    kind: 'tool',
+                    input: {},
+                    missingInputFields: ['durationMs', 'precisionMs'],
+                }
+                : undefined,
     },
 })
 
@@ -649,10 +659,12 @@ describe('AI interaction message routing', () => {
         mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) => (
             assetId === contextImageNode.assetId ? contextImageAsset : conversationAsset
         ))
-        mocks.llmModule.process.mockRejectedValueOnce(new MediaBranchAmbiguityError({
-            candidateAssetIds: [contextImageNode.assetId],
-            rationale: 'The referent is unclear.',
-        }))
+        mocks.llmModule.process.mockRejectedValueOnce(
+            new MediaBranchAmbiguityError({
+                candidateAssetIds: [contextImageNode.assetId],
+                rationale: 'The referent is unclear.',
+            }),
+        )
 
         await getHandler(SUBJECTS.CHAT_SEND_MESSAGE)({
             ...baseMessageData,
@@ -1184,10 +1196,14 @@ describe('AI interaction message routing', () => {
         })
         await flushPromises()
 
-        expect(mocks.llmModule.process).toHaveBeenCalledWith('workspace-1:conv-1', expect.anything(), expect.objectContaining({
-            imageModelMetaInfo: null,
-            videoModelMetaInfo: null,
-        }))
+        expect(mocks.llmModule.process).toHaveBeenCalledWith(
+            'workspace-1:conv-1',
+            expect.anything(),
+            expect.objectContaining({
+                imageModelMetaInfo: null,
+                videoModelMetaInfo: null,
+            }),
+        )
         expect(mocks.warn).toHaveBeenCalledWith('Image model not found: google:missing-image, proceeding without image routing')
         expect(mocks.warn).not.toHaveBeenCalledWith('Video model not found: openai:missing-video, proceeding without video routing')
     })
@@ -1249,9 +1265,11 @@ describe('AI interaction message routing', () => {
 
     it('starts durable cancellation without waiting for provider shutdown', async () => {
         let finishMatrixStop!: () => void
-        mocks.llmModule.stopMediaGenerationMatrix.mockReturnValueOnce(new Promise<void>((resolve) => {
-            finishMatrixStop = resolve
-        }))
+        mocks.llmModule.stopMediaGenerationMatrix.mockReturnValueOnce(
+            new Promise<void>((resolve) => {
+                finishMatrixStop = resolve
+            }),
+        )
 
         const stopRequest = getHandler(SUBJECTS.CHAT_STOP_MESSAGE)({
             user: { userId: 'user-1' },

@@ -1,4 +1,9 @@
 'use strict'
+import {
+    WorkspaceCanvasSessionHub,
+    normalizeWorkspaceCanvasState,
+} from '@lixpi/canvas-components-lixpi-specific/shared'
+import { createWorkspacePersistencePorts } from '$src/canvas-adapters/workspace-persistence.ts'
 
 import {
     NATS_SUBJECTS,
@@ -16,68 +21,8 @@ import { servicesStore } from '$src/stores/servicesStore.ts'
 import { workspacesStore } from '$src/stores/workspacesStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 
-type CanvasSaveQueue = {
-    inFlight: boolean
-    pendingRequest: CanvasStateSaveRequest | null
-    staleRetryCount: number
-    authoritativeEpoch: number
-}
-
-type CanvasStateSaveRequest = {
-    canvasState: CanvasState
-    persistViewport: boolean
-    sequence: number
-}
-
-type CanvasStateUpdateResponse = {
-    success?: boolean
-    workspaceId?: string
-    updatedAt?: number
-    canvasStateUpdatedAt?: number
-    error?: string
-    currentUpdatedAt?: number
-    currentCanvasStateUpdatedAt?: number
-}
-
-class CanvasWriteLock {
-    private locked = false
-    private readonly waiters: Array<() => void> = []
-
-    public async run<Result>(operation: () => Promise<Result>): Promise<Result> {
-        await this.acquire()
-        try {
-            return await operation()
-        } finally {
-            this.release()
-        }
-    }
-
-    private async acquire(): Promise<void> {
-        if (!this.locked) {
-            this.locked = true
-            return
-        }
-
-        await new Promise<void>((resolve) => this.waiters.push(() => resolve()))
-    }
-
-    private release(): void {
-        const next = this.waiters.shift()
-        if (next) {
-            next()
-            return
-        }
-        this.locked = false
-    }
-}
-
 class WorkspaceService {
-    private readonly canvasSaveQueues = new Map<string, CanvasSaveQueue>()
-    private readonly canvasWriteLocks = new Map<string, CanvasWriteLock>()
-    private canvasSaveRequestSequence = 0
-    private static readonly MAX_CANVAS_SAVE_STALE_RETRIES = 3
-
-    constructor() {}
+    readonly canvasSessions = new WorkspaceCanvasSessionHub(createWorkspacePersistencePorts)
 
     public async getWorkspace({ workspaceId }: { workspaceId: string }): Promise<void> {
         if (RouterService.getRouteParams().workspaceId !== workspaceId) return
@@ -86,7 +31,7 @@ class WorkspaceService {
         try {
             const workspace: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.GET_WORKSPACE, {
                 token: await AuthService.getTokenSilently(),
-                workspaceId
+                workspaceId,
             }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
 
             if (RouterService.getRouteParams().workspaceId !== workspaceId) return
@@ -100,15 +45,11 @@ class WorkspaceService {
             const normalizedWorkspace = {
                 ...workspace,
                 canvasStateUpdatedAt: workspace.canvasStateUpdatedAt ?? workspace.updatedAt,
-                canvasState: {
-                    ...workspace.canvasState,
-                    edges: workspace.canvasState?.edges ?? []
-                }
+                canvasState: normalizeWorkspaceCanvasState(workspace.canvasState),
             }
 
             workspaceStore.setDataValues(normalizedWorkspace)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
-
         } catch (error) {
             if (RouterService.getRouteParams().workspaceId !== workspaceId) return
 
@@ -141,7 +82,7 @@ class WorkspaceService {
         try {
             const workspace: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.CREATE_WORKSPACE, {
                 token: await AuthService.getTokenSilently(),
-                name
+                name,
             })
 
             if (workspace.error) {
@@ -155,8 +96,8 @@ class WorkspaceService {
                 canvasStateUpdatedAt: workspace.canvasStateUpdatedAt ?? workspace.updatedAt,
                 canvasState: {
                     ...workspace.canvasState,
-                    edges: workspace.canvasState?.edges ?? []
-                }
+                    edges: workspace.canvasState?.edges ?? [],
+                },
             }
 
             workspaceStore.setDataValues(normalizedWorkspace)
@@ -167,14 +108,13 @@ class WorkspaceService {
                 workspaceId: workspace.workspaceId,
                 name: workspace.name,
                 createdAt: workspace.createdAt,
-                updatedAt: workspace.updatedAt
+                updatedAt: workspace.updatedAt,
             }])
 
             RouterService.navigateTo('/workspace/:workspaceId', {
                 params: { workspaceId: workspace.workspaceId },
-                shouldFetchData: true
+                shouldFetchData: true,
             })
-
         } catch (error) {
             console.error('Failed to create workspace:', error)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
@@ -187,7 +127,7 @@ class WorkspaceService {
             const result: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.UPDATE_WORKSPACE, {
                 token: await AuthService.getTokenSilently(),
                 workspaceId,
-                name
+                name,
             })
 
             if (!result.error) {
@@ -199,233 +139,30 @@ class WorkspaceService {
         }
     }
 
-    public updateCanvasState({
-        workspaceId,
-        canvasState,
-        persistViewport = false,
-    }: {
+    public updateCanvasState({ workspaceId, canvasState, persistViewport = false }: {
         workspaceId: string
         canvasState: CanvasState
         persistViewport?: boolean
     }): void {
-        const queue = this.getCanvasSaveQueue(workspaceId)
-        queue.pendingRequest = {
-            canvasState,
-            persistViewport: persistViewport || queue.pendingRequest?.persistViewport === true,
-            sequence: ++this.canvasSaveRequestSequence,
-        }
-        queue.staleRetryCount = 0
-
-        if (!queue.inFlight) {
-            void this.flushCanvasStateSaveQueue(workspaceId, queue)
-        }
+        this.canvasSessions.get(workspaceId).persistence.update(canvasState, persistViewport)
     }
 
-    public async runCanvasMembershipMutation<Result>({
-        workspaceId,
-        mutation,
-    }: {
+    public async runCanvasMembershipMutation<Result>({ workspaceId, mutation }: {
         workspaceId: string
         mutation: () => Promise<Result>
     }): Promise<Result> {
-        return await this.getCanvasWriteLock(workspaceId).run(async () => {
-            const includedCanvasSaveSequence = this.canvasSaveRequestSequence
-            const result = await mutation()
-            this.discardCanvasSavesIncludedInMembershipMutation(workspaceId, includedCanvasSaveSequence)
-            return result
-        })
+        return await this.canvasSessions.get(workspaceId).persistence.runMembershipMutation(mutation)
     }
 
-    public adoptAuthoritativeCanvasState({
-        workspaceId,
-        canvasState,
-        canvasStateUpdatedAt,
-    }: {
+    public adoptAuthoritativeCanvasState({ workspaceId, canvasState, canvasStateUpdatedAt }: {
         workspaceId: string
         canvasState: CanvasState
         canvasStateUpdatedAt: number
     }): void {
-        const currentCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-        if (typeof currentCanvasStateUpdatedAt === 'number'
-            && currentCanvasStateUpdatedAt > canvasStateUpdatedAt) return
-
-        const queue = this.canvasSaveQueues.get(workspaceId)
-        // An authoritative state carries the server's viewport, which lags the
-        // user's live pan/zoom. Dropping a queued viewport save here would lose
-        // that pan/zoom permanently, so re-queue it on top of the adopted state.
-        const pendingViewport = queue?.pendingRequest?.persistViewport
-            ? queue.pendingRequest.canvasState.viewport
-            : null
-        if (queue) {
-            queue.authoritativeEpoch += 1
-            queue.pendingRequest = null
-            queue.staleRetryCount = 0
-            if (pendingViewport) {
-                queue.pendingRequest = {
-                    canvasState: { ...canvasState, viewport: pendingViewport },
-                    persistViewport: true,
-                    sequence: ++this.canvasSaveRequestSequence,
-                }
-            }
-        }
-
-        workspaceStore.updateCanvasState(pendingViewport ? { ...canvasState, viewport: pendingViewport } : canvasState)
-        workspaceStore.setDataValues({
-            canvasStateUpdatedAt,
-            updatedAt: canvasStateUpdatedAt,
+        this.canvasSessions.get(workspaceId).persistence.adoptAuthoritative({
+            canvasState,
+            version: { updatedAt: canvasStateUpdatedAt, canvasStateUpdatedAt },
         })
-        workspaceStore.setMetaValues({ requiresSave: false })
-        workspacesStore.updateWorkspace(workspaceId, { updatedAt: canvasStateUpdatedAt })
-
-        if (queue?.pendingRequest && !queue.inFlight) {
-            void this.flushCanvasStateSaveQueue(workspaceId, queue)
-        }
-    }
-
-    private getCanvasSaveQueue(workspaceId: string): CanvasSaveQueue {
-        const existing = this.canvasSaveQueues.get(workspaceId)
-        if (existing) return existing
-
-        const queue = { inFlight: false, pendingRequest: null, staleRetryCount: 0, authoritativeEpoch: 0 }
-        this.canvasSaveQueues.set(workspaceId, queue)
-        return queue
-    }
-
-    private getCanvasWriteLock(workspaceId: string): CanvasWriteLock {
-        const existing = this.canvasWriteLocks.get(workspaceId)
-        if (existing) return existing
-
-        const lock = new CanvasWriteLock()
-        this.canvasWriteLocks.set(workspaceId, lock)
-        return lock
-    }
-
-    private discardCanvasSavesIncludedInMembershipMutation(
-        workspaceId: string,
-        includedCanvasSaveSequence: number,
-    ): void {
-        const queue = this.canvasSaveQueues.get(workspaceId)
-        if (queue?.pendingRequest && queue.pendingRequest.sequence <= includedCanvasSaveSequence) {
-            queue.pendingRequest = null
-            queue.staleRetryCount = 0
-        }
-        if (!queue?.pendingRequest) workspaceStore.setMetaValues({ requiresSave: false })
-    }
-
-    private async flushCanvasStateSaveQueue(workspaceId: string, queue: CanvasSaveQueue): Promise<void> {
-        queue.inFlight = true
-
-        try {
-            await this.getCanvasWriteLock(workspaceId).run(async () => {
-                await this.flushCanvasStateSaveQueueUnlocked(workspaceId, queue)
-            })
-        } finally {
-            queue.inFlight = false
-            if (queue.pendingRequest) {
-                void this.flushCanvasStateSaveQueue(workspaceId, queue)
-            } else {
-                this.canvasSaveQueues.delete(workspaceId)
-            }
-        }
-    }
-
-    private async flushCanvasStateSaveQueueUnlocked(workspaceId: string, queue: CanvasSaveQueue): Promise<void> {
-        let activeRequestEpoch = queue.authoritativeEpoch
-        let staleRefetchRequeueUsed = false
-
-        try {
-            while (queue.pendingRequest) {
-                const request = queue.pendingRequest
-                queue.pendingRequest = null
-                activeRequestEpoch = queue.authoritativeEpoch
-                const storedCanvasStateUpdatedAt = workspaceStore.getData('canvasStateUpdatedAt')
-                const expectedCanvasStateUpdatedAt = Number.isFinite(storedCanvasStateUpdatedAt)
-                    ? storedCanvasStateUpdatedAt
-                    : workspaceStore.getData('updatedAt')
-
-                const result: CanvasStateUpdateResponse = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE, {
-                    token: await AuthService.getTokenSilently(),
-                    workspaceId,
-                    canvasState: request.canvasState,
-                    ...(request.persistViewport ? { persistViewport: true } : {}),
-                    ...(Number.isFinite(expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt } : {}),
-                })
-
-                if (activeRequestEpoch !== queue.authoritativeEpoch) continue
-
-                if (result.error === 'STALE_CANVAS_STATE') {
-                    const routeStillOwnsWorkspace = RouterService.getRouteParams().workspaceId === workspaceId
-                    const canRetryWithCurrentToken = typeof result.currentCanvasStateUpdatedAt === 'number'
-                    if (routeStillOwnsWorkspace && canRetryWithCurrentToken && queue.staleRetryCount < WorkspaceService.MAX_CANVAS_SAVE_STALE_RETRIES) {
-                        queue.staleRetryCount += 1
-                        if (typeof result.currentUpdatedAt === 'number') {
-                            workspaceStore.setDataValues({ updatedAt: result.currentUpdatedAt })
-                            workspacesStore.updateWorkspace(workspaceId, { updatedAt: result.currentUpdatedAt })
-                        }
-                        workspaceStore.setDataValues({ canvasStateUpdatedAt: result.currentCanvasStateUpdatedAt })
-                        if (queue.pendingRequest) {
-                            queue.pendingRequest = {
-                                ...queue.pendingRequest,
-                                persistViewport: queue.pendingRequest.persistViewport || request.persistViewport,
-                            }
-                        } else {
-                            queue.pendingRequest = request
-                        }
-                        continue
-                    }
-
-                    queue.pendingRequest = null
-                    queue.staleRetryCount = 0
-                    workspaceStore.setMetaValues({ requiresSave: false })
-                    if (routeStillOwnsWorkspace) {
-                        await this.getWorkspace({ workspaceId })
-                        // Server-side generation runs bump canvasStateUpdatedAt
-                        // continuously, so a viewport save can exhaust its stale
-                        // retries through no conflict of its own. The refetch
-                        // above yields a fresh token — re-queue the viewport on
-                        // top of the refetched state instead of dropping it.
-                        if (request.persistViewport && !staleRefetchRequeueUsed) {
-                            staleRefetchRequeueUsed = true
-                            const refetchedCanvasState = workspaceStore.getData('canvasState')
-                            if (refetchedCanvasState) {
-                                queue.pendingRequest = {
-                                    canvasState: { ...refetchedCanvasState, viewport: request.canvasState.viewport },
-                                    persistViewport: true,
-                                    sequence: ++this.canvasSaveRequestSequence,
-                                }
-                                workspaceStore.updateCanvasState(queue.pendingRequest.canvasState)
-                                continue
-                            }
-                        }
-                    }
-                    queue.pendingRequest = null
-                    return
-                }
-
-                if (result.error) {
-                    console.error('Failed to update canvas state:', result.error)
-                    workspaceStore.setMetaValues({ requiresSave: true })
-                    return
-                }
-
-                if (typeof result.updatedAt === 'number') {
-                    workspaceStore.setDataValues({ updatedAt: result.updatedAt })
-                    workspacesStore.updateWorkspace(workspaceId, { updatedAt: result.updatedAt })
-                }
-                if (typeof result.canvasStateUpdatedAt === 'number') {
-                    workspaceStore.setDataValues({ canvasStateUpdatedAt: result.canvasStateUpdatedAt })
-                }
-
-                queue.staleRetryCount = 0
-                if (!queue.pendingRequest) {
-                    workspaceStore.setMetaValues({ requiresSave: false })
-                }
-            }
-        } catch (error) {
-            if (activeRequestEpoch !== queue.authoritativeEpoch) return
-            console.error('Failed to update canvas state:', error)
-            workspaceStore.setMetaValues({ requiresSave: true })
-        }
     }
 
     public async deleteWorkspace({ workspaceId }: { workspaceId: string }): Promise<void> {
@@ -434,13 +171,14 @@ class WorkspaceService {
 
             const result: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.DELETE_WORKSPACE, {
                 token: await AuthService.getTokenSilently(),
-                workspaceId
+                workspaceId,
             })
 
             const { workspaceId: deletedWorkspaceId, success } = result
 
-            if (!success)
+            if (!success) {
                 throw new Error('Failed to delete workspace')
+            }
 
             const currentWorkspaceIndex = workspacesStore.getData().findIndex(workspace => workspace.workspaceId === deletedWorkspaceId)
 
@@ -457,7 +195,7 @@ class WorkspaceService {
                 if (prevWorkspaceId) {
                     RouterService.navigateTo('/workspace/:workspaceId', {
                         params: { workspaceId: prevWorkspaceId },
-                        shouldFetchData: true
+                        shouldFetchData: true,
                     })
                 } else {
                     RouterService.navigateTo('/', { params: {} })
@@ -465,7 +203,6 @@ class WorkspaceService {
             }
 
             workspacesStore.setMetaValues({ loadingStatus: LoadingStatus.success })
-
         } catch (error) {
             console.error('Failed to delete workspace:', error)
             workspacesStore.setMetaValues({ loadingStatus: LoadingStatus.error })

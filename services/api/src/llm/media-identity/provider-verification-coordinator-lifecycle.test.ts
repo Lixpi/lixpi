@@ -2,7 +2,14 @@
 
 import { createHash } from 'node:crypto'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import type {
     Asset,
@@ -117,17 +124,18 @@ const request = (requiredVerificationAssetIds = ['asset-1']): MediaGenerationReq
     statusUpdatedAt: NOW - 1_000,
 })
 
-const stateToken = (): string => createProviderVerificationState({
-    sessionId: 'session-1',
-    generationRequestId: 'request-1',
-    workspaceId: 'workspace-1',
-    userId: 'user-1',
-    provider: 'BytePlus',
-    assetId: 'asset-1',
-    assetRevision: 3,
-    nonce: 'nonce-1',
-    expiresAt: NOW + 60_000,
-})
+const stateToken = (): string =>
+    createProviderVerificationState({
+        sessionId: 'session-1',
+        generationRequestId: 'request-1',
+        workspaceId: 'workspace-1',
+        userId: 'user-1',
+        provider: 'BytePlus',
+        assetId: 'asset-1',
+        assetRevision: 3,
+        nonce: 'nonce-1',
+        expiresAt: NOW + 60_000,
+    })
 
 const updatedAsset = (verification: ProviderIdentityVerification): Asset => ({
     assetId: 'asset-1',
@@ -170,10 +178,18 @@ describe('ProviderVerificationCoordinator lifecycle', () => {
         mocks.transition.mockResolvedValue(undefined)
         mocks.appendEvent.mockResolvedValue(undefined)
         mocks.updateOperationNode.mockResolvedValue(undefined)
-        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-            subject_handle: 'provider-subject-handle',
-            expires_at: 1_900_000_000,
-        }), { status: 200 })))
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({
+                        subject_handle: 'provider-subject-handle',
+                        expires_at: 1_900_000_000,
+                    }),
+                    { status: 200 },
+                )
+            ),
+        )
         mocks.addProviderVerification.mockImplementation(async ({ verification }) => updatedAsset(verification))
     })
 

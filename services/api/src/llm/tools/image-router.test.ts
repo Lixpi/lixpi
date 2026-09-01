@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
@@ -260,9 +267,11 @@ describe('ImageRouter', () => {
         const controller = new AbortController()
         const stop = vi.fn(async () => undefined)
         let completeProcessing: ((state: ProviderState) => void) | undefined
-        const process = vi.fn(() => new Promise<ProviderState>((resolve) => {
-            completeProcessing = resolve
-        }))
+        const process = vi.fn(() =>
+            new Promise<ProviderState>((resolve) => {
+                completeProcessing = resolve
+            })
+        )
         const createTransient = vi.fn(() => ({ process }))
         const router = new ImageRouter({ createTransient, stop } as any)
 
@@ -375,29 +384,33 @@ describe('ImageRouter', () => {
             const result = await router.execute(state)
 
             expect(get).toHaveBeenCalledWith(plan)
-            expect(execute).toHaveBeenCalledWith(expect.objectContaining({
-                organizationId: 'org-1',
-                userId: 'user-1',
-                workspaceId: 'workspace-1',
-                conversationAssetId: 'thread-1',
-                reasoningModel: expect.objectContaining({ provider: 'Anthropic' }),
-                imageModel: expect.objectContaining({ provider: 'Google' }),
-                sharedState: {
-                    authoritativePrompt: 'Create a combie character out of this photo.',
-                    editTargetAssetId: 'asset-1',
-                    mediaReferenceAliases: [{ assetId: 'asset-1', alias: 'REFERENCE_1' }],
-                    sourceSubjectIdentityClassifications: ['self'],
-                    capabilityInstructions: ['Apply the sibling visual-style Capability.'],
-                    capabilityReferences: [{
-                        imageUrl: 'data:image/png;base64,U1RZTEU=',
-                        traceUrl: '/api/capabilities/style/resources/sample-1',
-                    }],
-                    capabilityOutputs: [
-                        { capabilityId: 'character-creator', runId: 'character-run', output: {} },
-                        { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
-                    ],
-                },
-            }), plan, expect.objectContaining({}))
+            expect(execute).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    organizationId: 'org-1',
+                    userId: 'user-1',
+                    workspaceId: 'workspace-1',
+                    conversationAssetId: 'thread-1',
+                    reasoningModel: expect.objectContaining({ provider: 'Anthropic' }),
+                    imageModel: expect.objectContaining({ provider: 'Google' }),
+                    sharedState: {
+                        authoritativePrompt: 'Create a combie character out of this photo.',
+                        editTargetAssetId: 'asset-1',
+                        mediaReferenceAliases: [{ assetId: 'asset-1', alias: 'REFERENCE_1' }],
+                        sourceSubjectIdentityClassifications: ['self'],
+                        capabilityInstructions: ['Apply the sibling visual-style Capability.'],
+                        capabilityReferences: [{
+                            imageUrl: 'data:image/png;base64,U1RZTEU=',
+                            traceUrl: '/api/capabilities/style/resources/sample-1',
+                        }],
+                        capabilityOutputs: [
+                            { capabilityId: 'character-creator', runId: 'character-run', output: {} },
+                            { capabilityId: 'visual-style', runId: 'style-run', output: { style: 'watercolor' } },
+                        ],
+                    },
+                }),
+                plan,
+                expect.objectContaining({}),
+            )
             expect(complete).toHaveBeenCalledWith(expect.objectContaining({
                 revisedPrompt: 'Create a combie character out of this photo.',
             }))

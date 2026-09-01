@@ -194,7 +194,7 @@ Image editing is **provider-agnostic** and driven by canvas edges rather than pr
 ```
 
 {% callout type="note" %}
-Generated-media size and branch-lineage spacing are controlled by `settings.mediaBranchLineage`; the "Edit in New Thread" horizontal-chain geometry is controlled by `settings.aiChatThread`. The full placement, collision, and lineage rules are owned by [Branch Lineage](./BRANCH-LINEAGE.md) and [Collision Resolution](../canvas/COLLISION-RESOLUTION.md).
+Generated-media size and branch-lineage spacing are controlled by `settings.mediaBranchLineage`; the "Edit in New Thread" horizontal-chain geometry is controlled by `settings.aiChatThread`. The full placement, collision, and lineage rules are owned by [Branch Lineage](./BRANCH-LINEAGE.md) and [Collision Resolution](../../packages/lixpi/canvas-engine/docs/COLLISION-RESOLUTION.md).
 {% /callout %}
 
 ### Editor Preservation During Generation
@@ -220,7 +220,7 @@ Image generation publishes live pipeline events on the same per-thread receive s
 | `IMAGE_PARTIAL` (non-empty) | Up to three Object-Store-backed partial URLs update the same pending node. NATS carries only the small authenticated URL; superseded and terminal objects are deleted. Partials are not durable Asset renditions. Gemini thought images use the same event. |
 | `IMAGE_COMPLETE` | Settles final bytes into the preassigned Asset and sends `{ imageUrl, assetId, responseId, revisedPrompt, imageModelId, canvasGeometry }`. The API-owned geometry finalizes the node and lineage. |
 
-On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; `pixiMediaLayer.ts` renders the partial pixels and supplies the active image bounds to the reusable `PixiTravelingOutlineRenderer`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers. In matrix fanout, each image model run carries a distinct `mediaRunId`, and its partial/final events publish through that run's response queue. The API preserves ordering for one run while allowing sibling image variants to render their partials as soon as their own object-store write and canvas projection finish.
+On the workspace canvas, `IMAGE_PARTIAL` updates one generated image node in place and marks it as generating; the Lixpi package's `WorkspaceMediaLayer` sends partial frames to the reusable image surface and supplies active bounds to `TravelingOutline`, and `IMAGE_COMPLETE` is the event that clears that outline. These events **bypass** the markdown stream parser — `AiInteractionService` routes them straight to the canvas/media handlers. In matrix fanout, each image model run carries a distinct `mediaRunId`, and its partial/final events publish through that run's response queue. The API preserves ordering for one run while allowing sibling image variants to render their partials as soon as their own object-store write and canvas projection finish.
 
 In the AI chat history, generated-image atom nodes are authored by the API-side ProseMirror assembler and rendered by `imageSelectionPlugin/ImageNodeView`. They carry the same generated-media provider badge used by canvas media chrome and in-chat generated videos. The badge resolves from `mediaModelId`; canvas rendering remains owned by PIXI and the canvas chrome layer.
 
@@ -243,10 +243,13 @@ services/api/src/llm/
     ├── load-prompts.ts             # get_system_prompt(include_image_generation)
     └── image_generation_instructions.txt   # exhaustive-prompt + reference-handling instructions
 
-services/web-ui/src/infographics/workspace/
-├── WorkspaceCanvas.ts              # commitCanvasStatePreservingEditors, partialImageTracker, Edit-in-New-Thread
-├── pixiMediaLayer.ts               # partial pixel rendering + PixiTravelingOutlineRenderer bounds
-└── rendering/                      # media node renderers
+packages/lixpi/canvas-components-lixpi-specific/src/frontend/
+├── workspace/workspace-canvas.ts   # workspace composition and host callbacks
+└── media/                         # generation handlers, media nodes and progress projection
+
+packages/lixpi/canvas-components/src/frontend/
+├── media/                         # image surfaces and native playback
+└── effects/outline/               # traveling outlines over the public drawing API
 ```
 
 ## Related Pages
@@ -257,4 +260,4 @@ services/web-ui/src/infographics/workspace/
 - [Video Generation](./VIDEO-GENERATION.md) — the sibling video branch (Google VEO) that extends this pipeline.
 - [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the VLM analysis descriptor generated images request after the final frame is stored.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving reusable copies of finished images.
-- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the PIXI media layer and DOM chrome overlay that render image nodes and provenance.
+- [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — generic rendering and resource contracts. Product media and provenance composition are documented in the Lixpi canvas package.

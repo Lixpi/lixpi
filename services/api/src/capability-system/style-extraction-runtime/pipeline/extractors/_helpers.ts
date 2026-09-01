@@ -1,11 +1,21 @@
 'use strict'
 
 import NATS_Service from '@lixpi/nats-service'
-import type { AxisExtraction, SceneAssessment } from '../types.ts'
+import type {
+    AxisExtraction,
+    SceneAssessment,
+} from '../types.ts'
 
-import { callStructuredVlm, type VlmJsonSchema } from '../../../../llm/structured-vlm/structured-vlm-client.ts'
+import {
+    callStructuredVlm,
+    type VlmJsonSchema,
+} from '../../../../llm/structured-vlm/structured-vlm-client.ts'
 import type { ChatMessage } from '../../../../llm/graph/state.ts'
-import type { StyleExtractionState, StyleExtractor, StageLogger } from '../types.ts'
+import type {
+    StyleExtractionState,
+    StyleExtractor,
+    StageLogger,
+} from '../types.ts'
 
 // Returns a user-message array attaching the scene-assessment summary as text
 // and every reference image as an input_image block. The VLM client resolves

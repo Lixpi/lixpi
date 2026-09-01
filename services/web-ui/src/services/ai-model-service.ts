@@ -1,6 +1,9 @@
 'use strict'
 
-import { NATS_SUBJECTS, LoadingStatus } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    LoadingStatus,
+} from '@lixpi/constants'
 import type NatsService from '@lixpi/nats-service'
 
 const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS
@@ -17,7 +20,9 @@ export default class AiModelService {
         this.catalogSyncSubscription = natsClient
             ? natsClient.subscribe(
                 AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED,
-                () => { void this.getAvailableAiModels() },
+                () => {
+                    void this.getAvailableAiModels()
+                },
             )
             : null
     }
@@ -30,7 +35,7 @@ export default class AiModelService {
             if (!natsClient) throw new Error('AI model catalog requires an active NATS connection')
 
             const availableModels: any = await natsClient.request(AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS, {
-                token: await AuthService.getTokenSilently()
+                token: await AuthService.getTokenSilently(),
             })
 
             if (Array.isArray(availableModels)) {
@@ -41,12 +46,10 @@ export default class AiModelService {
                 aiModelsStore.setAiModels([])
             }
             aiModelsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
-
         } catch (error) {
             console.error('Failed to load AI models data:', error)
             aiModelsStore.setMetaValues({ loadingStatus: LoadingStatus.error })
         }
-
     }
 
     public destroy(): void {

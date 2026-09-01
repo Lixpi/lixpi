@@ -12,12 +12,11 @@ export const userSubjects: NatsSubjectSubscription[] = [
         type: 'reply',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [ USER_SUBJECTS.GET_USER ] },
-            sub: { allow: [] }
+            pub: { allow: [USER_SUBJECTS.GET_USER] },
+            sub: { allow: [] },
         },
         handler: async (data, msg) => {
             const userId = data.user.userId
-
 
             if (!userId) {
                 // err('Error: `userId` must be provided when fetching user!')
@@ -25,6 +24,6 @@ export const userSubjects: NatsSubjectSubscription[] = [
             }
 
             return await User.get(userId)
-        }
+        },
     },
 ]

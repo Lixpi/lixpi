@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import { EditorState } from 'prosemirror-state'
 
 import {
@@ -9,7 +13,10 @@ import {
     buildStreamingSegmentTransaction,
     createStreamingMarks,
 } from './stream-assembly.ts'
-import { createProseMirrorSchema, DOCUMENT_TYPE } from './schema-builder.ts'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from './schema-builder.ts'
 
 type SegmentTargetInfo = {
     endOfNodePos: number

@@ -49,35 +49,43 @@ export async function buildCharacterReferencePack(args: {
     for (const [sourceIndex, source] of args.sources.entries()) {
         const isEditTarget = source.sourceKind === 'composition-component'
             && source.assetId === args.editTargetAssetId
-        if (isEditTarget && (args.evidence.editTargetPolicy === 'identity-only'
-            || args.evidence.editTargetPolicy === 'discard')) {
+        if (
+            isEditTarget && (args.evidence.editTargetPolicy === 'identity-only'
+                || args.evidence.editTargetPolicy === 'discard')
+        ) {
             continue
         }
         if (!isEditTarget) originalSourceIndex += 1
         const alias = aliases.get(source.assetId)
-        entries.push(await storeReference({
-            source,
-            role: isEditTarget ? 'edit-target' : 'original-source',
-            slot: isEditTarget
-                ? `EDIT_TARGET_${alias ? `${alias}_` : ''}${source.componentId ?? sourceIndex + 1}`
-                : alias ?? `source-${originalSourceIndex}`,
-            bytes: await fitWithinPixelLimit(source.bytes, args.capabilities.maxOutputPixels),
-            store: args.store,
-        }))
+        entries.push(
+            await storeReference({
+                source,
+                role: isEditTarget ? 'edit-target' : 'original-source',
+                slot: isEditTarget
+                    ? `EDIT_TARGET_${alias ? `${alias}_` : ''}${source.componentId ?? sourceIndex + 1}`
+                    : alias ?? `source-${originalSourceIndex}`,
+                bytes: await fitWithinPixelLimit(source.bytes, args.capabilities.maxOutputPixels),
+                store: args.store,
+            }),
+        )
     }
 
     if (args.evidence.editTargetPolicy === 'identity-only') {
-        const identityPanel = args.sources.find(source => source.sourceKind === 'composition-component'
+        const identityPanel = args.sources.find(source =>
+            source.sourceKind === 'composition-component'
             && source.assetId === args.editTargetAssetId
-            && source.componentId === 'head-front-neutral')
+            && source.componentId === 'head-front-neutral'
+        )
         if (identityPanel) {
-            entries.push(await storeReference({
-                source: identityPanel,
-                role: 'edit-target-identity',
-                slot: 'EDIT_TARGET_IDENTITY_FACE',
-                bytes: await cropStandardHeadPanelIdentity(identityPanel.bytes),
-                store: args.store,
-            }))
+            entries.push(
+                await storeReference({
+                    source: identityPanel,
+                    role: 'edit-target-identity',
+                    slot: 'EDIT_TARGET_IDENTITY_FACE',
+                    bytes: await cropStandardHeadPanelIdentity(identityPanel.bytes),
+                    store: args.store,
+                }),
+            )
         }
     }
 
@@ -88,26 +96,30 @@ export async function buildCharacterReferencePack(args: {
         const source = args.sources.find(candidate => candidate.assetId === faceFact.sourceAssetId)
         if (source && faceFact.sourceRegion) {
             const alias = aliases.get(source.assetId)
-            entries.push(await storeReference({
-                source,
-                role: 'face-crop',
-                slot: alias ? `${alias}_FACE_CROP` : 'face-crop',
-                bytes: await cropLossless(source.bytes, faceFact.sourceRegion),
-                store: args.store,
-            }))
+            entries.push(
+                await storeReference({
+                    source,
+                    role: 'face-crop',
+                    slot: alias ? `${alias}_FACE_CROP` : 'face-crop',
+                    bytes: await cropLossless(source.bytes, faceFact.sourceRegion),
+                    store: args.store,
+                }),
+            )
         }
     }
     if (bodyFact) {
         const source = args.sources.find(candidate => candidate.assetId === bodyFact.sourceAssetId)
         if (source && bodyFact.sourceRegion) {
             const alias = aliases.get(source.assetId)
-            entries.push(await storeReference({
-                source,
-                role: 'body-outfit-crop',
-                slot: alias ? `${alias}_BODY_OUTFIT_CROP` : 'body-outfit-crop',
-                bytes: await cropLossless(source.bytes, bodyFact.sourceRegion),
-                store: args.store,
-            }))
+            entries.push(
+                await storeReference({
+                    source,
+                    role: 'body-outfit-crop',
+                    slot: alias ? `${alias}_BODY_OUTFIT_CROP` : 'body-outfit-crop',
+                    bytes: await cropLossless(source.bytes, bodyFact.sourceRegion),
+                    store: args.store,
+                }),
+            )
         }
     }
     const propFact = bestObservedRegion(args.evidence, 'prop')
@@ -115,13 +127,15 @@ export async function buildCharacterReferencePack(args: {
         const source = args.sources.find(candidate => candidate.assetId === propFact.sourceAssetId)
         if (source && propFact.sourceRegion) {
             const alias = aliases.get(source.assetId)
-            entries.push(await storeReference({
-                source,
-                role: 'prop-crop',
-                slot: alias ? `${alias}_PROP_CROP` : 'prop-crop',
-                bytes: await cropLossless(source.bytes, propFact.sourceRegion),
-                store: args.store,
-            }))
+            entries.push(
+                await storeReference({
+                    source,
+                    role: 'prop-crop',
+                    slot: alias ? `${alias}_PROP_CROP` : 'prop-crop',
+                    bytes: await cropLossless(source.bytes, propFact.sourceRegion),
+                    store: args.store,
+                }),
+            )
         }
     }
     return { entries }
@@ -207,20 +221,26 @@ const fitWithinPixelLimit = async (bytes: Buffer, pixelLimit: number): Promise<B
 const bestObservedRegion = (
     evidence: CharacterEvidenceProfile,
     region: CharacterEvidenceRegion,
-): CharacterEvidenceProfile['facts'][number] | undefined => evidence.facts
-    .filter(fact => fact.visibility === 'observed'
-        && fact.sourceRegion
-        && (fact.region === region
-            || (!fact.region && fact.feature.toLocaleLowerCase().includes(region))))
-    .sort((left, right) => requestAuthorityPriority(right.requestAuthority)
-        - requestAuthorityPriority(left.requestAuthority)
-        || right.confidence - left.confidence)[0]
+): CharacterEvidenceProfile['facts'][number] | undefined =>
+    evidence.facts
+        .filter(fact =>
+            fact.visibility === 'observed'
+            && fact.sourceRegion
+            && (fact.region === region
+                || (!fact.region && fact.feature.toLocaleLowerCase().includes(region)))
+        )
+        .sort((left, right) =>
+            requestAuthorityPriority(right.requestAuthority)
+                - requestAuthorityPriority(left.requestAuthority)
+            || right.confidence - left.confidence
+        )[0]
 
 const requestAuthorityPriority = (
     authority: CharacterEvidenceProfile['facts'][number]['requestAuthority'],
 ): number => authority === 'assigned' ? 2 : authority === 'supporting' ? 1 : 0
 
-const normalizeReferenceSlot = (value: string): string => value
-    .trim()
-    .replace(/[^A-Za-z0-9_-]+/gu, '_')
-    .replace(/^_+|_+$/gu, '')
+const normalizeReferenceSlot = (value: string): string =>
+    value
+        .trim()
+        .replace(/[^A-Za-z0-9_-]+/gu, '_')
+        .replace(/^_+|_+$/gu, '')

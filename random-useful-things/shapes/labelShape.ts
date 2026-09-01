@@ -15,7 +15,7 @@ export function createLabelShape(params: LabelShapeParams): NodeConfig {
         radius = 16,
         text,
         className = '',
-        disabled = false
+        disabled = false,
     } = params
 
     return {
@@ -30,8 +30,8 @@ export function createLabelShape(params: LabelShapeParams): NodeConfig {
         content: {
             type: 'text',
             text,
-            className: 'label-text'
+            className: 'label-text',
         },
-        disabled
+        disabled,
     }
 }

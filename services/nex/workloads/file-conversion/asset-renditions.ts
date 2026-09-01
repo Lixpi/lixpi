@@ -103,12 +103,13 @@ const errorCodeFor = (name: AssetRenditionName, error: unknown): string => {
         .slice(0, 96) || `${name.toUpperCase()}_GENERATION_FAILED`
 }
 
-const escapeXml = (value: string): string => value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
+const escapeXml = (value: string): string =>
+    value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;')
 
 const renderTextDocumentPoster = async (buffer: Buffer): Promise<Buffer> => {
     const words = buffer.toString('utf8').replaceAll(/\s+/g, ' ').trim().split(' ')
@@ -179,13 +180,15 @@ export const generateAssetRenditions = async (
             modelBuffer = await makeCanonical(request, original)
             modelMimeType = request.canonicalMimeType
             if (requested.has('canonical')) {
-                renditions.push(await writeRendition({
-                    storage,
-                    bucketName: request.bucketName,
-                    name: 'canonical',
-                    mimeType: modelMimeType,
-                    data: modelBuffer,
-                }))
+                renditions.push(
+                    await writeRendition({
+                        storage,
+                        bucketName: request.bucketName,
+                        name: 'canonical',
+                        mimeType: modelMimeType,
+                        data: modelBuffer,
+                    }),
+                )
             }
         } catch (error) {
             if (requested.has('canonical')) {
@@ -221,22 +224,26 @@ export const generateAssetRenditions = async (
         if (metadata.width) response.width = metadata.width
         if (metadata.height) response.height = metadata.height
         if (metadata.width && metadata.height) response.aspectRatio = metadata.width / metadata.height
-        for (const config of [
-            { name: 'preview' as const, maxWidth: 2048, maxHeight: 2048, quality: 86 },
-            { name: 'thumbnail' as const, maxWidth: 512, maxHeight: 512, quality: 78 },
-        ]) {
+        for (
+            const config of [
+                { name: 'preview' as const, maxWidth: 2048, maxHeight: 2048, quality: 86 },
+                { name: 'thumbnail' as const, maxWidth: 512, maxHeight: 512, quality: 78 },
+            ]
+        ) {
             if (!requested.has(config.name)) continue
             try {
                 const generated = await createImageRendition({ buffer: modelBuffer, ...config })
-                renditions.push(await writeRendition({
-                    storage,
-                    bucketName: request.bucketName,
-                    name: config.name,
-                    mimeType: 'image/webp',
-                    data: generated.data,
-                    width: generated.width,
-                    height: generated.height,
-                }))
+                renditions.push(
+                    await writeRendition({
+                        storage,
+                        bucketName: request.bucketName,
+                        name: config.name,
+                        mimeType: 'image/webp',
+                        data: generated.data,
+                        width: generated.width,
+                        height: generated.height,
+                    }),
+                )
             } catch (error) {
                 renditions.push(failed(config.name, errorCodeFor(config.name, error)))
             }
@@ -262,14 +269,16 @@ export const generateAssetRenditions = async (
         if (requested.has('preview')) {
             try {
                 const preview = await createVideoPreview(modelBuffer)
-                renditions.push(await writeRendition({
-                    storage,
-                    bucketName: request.bucketName,
-                    name: 'preview',
-                    mimeType: 'video/mp4',
-                    data: preview,
-                    durationSeconds: probe.durationSeconds ?? undefined,
-                }))
+                renditions.push(
+                    await writeRendition({
+                        storage,
+                        bucketName: request.bucketName,
+                        name: 'preview',
+                        mimeType: 'video/mp4',
+                        data: preview,
+                        durationSeconds: probe.durationSeconds ?? undefined,
+                    }),
+                )
             } catch (error) {
                 renditions.push(failed('preview', errorCodeFor('preview', error)))
             }
@@ -286,13 +295,15 @@ export const generateAssetRenditions = async (
             if (requested.has('poster')) {
                 if (poster) {
                     try {
-                        renditions.push(await writeRendition({
-                            storage,
-                            bucketName: request.bucketName,
-                            name: 'poster',
-                            mimeType: 'image/png',
-                            data: poster,
-                        }))
+                        renditions.push(
+                            await writeRendition({
+                                storage,
+                                bucketName: request.bucketName,
+                                name: 'poster',
+                                mimeType: 'image/png',
+                                data: poster,
+                            }),
+                        )
                     } catch (error) {
                         renditions.push(failed('poster', errorCodeFor('poster', error)))
                     }
@@ -312,15 +323,17 @@ export const generateAssetRenditions = async (
                         maxHeight: 512,
                         quality: 78,
                     })
-                    renditions.push(await writeRendition({
-                        storage,
-                        bucketName: request.bucketName,
-                        name: 'thumbnail',
-                        mimeType: 'image/webp',
-                        data: thumbnail.data,
-                        width: thumbnail.width,
-                        height: thumbnail.height,
-                    }))
+                    renditions.push(
+                        await writeRendition({
+                            storage,
+                            bucketName: request.bucketName,
+                            name: 'thumbnail',
+                            mimeType: 'image/webp',
+                            data: thumbnail.data,
+                            width: thumbnail.width,
+                            height: thumbnail.height,
+                        }),
+                    )
                 } catch (error) {
                     renditions.push(failed('thumbnail', errorCodeFor('thumbnail', error)))
                 }
@@ -330,13 +343,15 @@ export const generateAssetRenditions = async (
             try {
                 const frame = await extractRepresentativeFrame(modelBuffer, (probe.durationSeconds ?? 0) / 2)
                 if (frame) {
-                    renditions.push(await writeRendition({
-                        storage,
-                        bucketName: request.bucketName,
-                        name: 'representativeFrame',
-                        mimeType: 'image/png',
-                        data: frame,
-                    }))
+                    renditions.push(
+                        await writeRendition({
+                            storage,
+                            bucketName: request.bucketName,
+                            name: 'representativeFrame',
+                            mimeType: 'image/png',
+                            data: frame,
+                        }),
+                    )
                 } else {
                     renditions.push(failed('representativeFrame', 'REPRESENTATIVE_FRAME_EXTRACTION_FAILED'))
                 }
@@ -372,14 +387,16 @@ export const generateAssetRenditions = async (
     if (requested.has('poster')) {
         if (poster) {
             try {
-                renditions.push(await writeRendition({
-                    storage,
-                    bucketName: request.bucketName,
-                    name: 'poster',
-                    mimeType: 'image/png',
-                    data: poster,
-                    pageCount: pageCount ?? undefined,
-                }))
+                renditions.push(
+                    await writeRendition({
+                        storage,
+                        bucketName: request.bucketName,
+                        name: 'poster',
+                        mimeType: 'image/png',
+                        data: poster,
+                        pageCount: pageCount ?? undefined,
+                    }),
+                )
             } catch (error) {
                 renditions.push(failed('poster', errorCodeFor('poster', error)))
             }
@@ -398,15 +415,17 @@ export const generateAssetRenditions = async (
                     maxHeight: 512,
                     quality: 78,
                 })
-                renditions.push(await writeRendition({
-                    storage,
-                    bucketName: request.bucketName,
-                    name: 'thumbnail',
-                    mimeType: 'image/webp',
-                    data: thumbnail.data,
-                    width: thumbnail.width,
-                    height: thumbnail.height,
-                }))
+                renditions.push(
+                    await writeRendition({
+                        storage,
+                        bucketName: request.bucketName,
+                        name: 'thumbnail',
+                        mimeType: 'image/webp',
+                        data: thumbnail.data,
+                        width: thumbnail.width,
+                        height: thumbnail.height,
+                    }),
+                )
             } catch (error) {
                 renditions.push(failed('thumbnail', errorCodeFor('thumbnail', error)))
             }

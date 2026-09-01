@@ -4,7 +4,10 @@ import { createHash } from 'node:crypto'
 
 import type NatsService from '@lixpi/nats-service'
 
-import { parseDataUrl, resolveImageUrls } from './utils/attachments.ts'
+import {
+    parseDataUrl,
+    resolveImageUrls,
+} from './utils/attachments.ts'
 
 export type ImageGenerationReferenceRole =
     | 'capability-reference'
@@ -104,8 +107,8 @@ export const resolveImageGenerationReferences = async (
         const dataUrl = resolvedBlock?.image_url
         if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
             throw new Error(
-                `Image generation reference ${reference.fileName} (${reference.role}) ` +
-                'could not be resolved to inline image bytes',
+                `Image generation reference ${reference.fileName} (${reference.role}) `
+                    + 'could not be resolved to inline image bytes',
             )
         }
 

@@ -1,9 +1,20 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { STREAM_STATUS } from '@lixpi/constants'
-import type { Asset, MediaBranchCandidateImage, WorkspaceContextSnapshot } from '@lixpi/constants'
+import type {
+    Asset,
+    MediaBranchCandidateImage,
+    WorkspaceContextSnapshot,
+} from '@lixpi/constants'
 import { buildActionTimelineDocument } from '@lixpi/capability-system'
 
 import * as debugTools from '@lixpi/debug-tools'
@@ -36,7 +47,10 @@ vi.mock('../../services/asset-requester-context.ts', () => ({
 
 import { resolveWorkspaceContext } from './workspace-context-resolver.ts'
 import type { ProviderState } from './state.ts'
-import type { VlmCallArgs, VlmCallResult } from '../structured-vlm/structured-vlm-client.ts'
+import type {
+    VlmCallArgs,
+    VlmCallResult,
+} from '../structured-vlm/structured-vlm-client.ts'
 
 const tinyPngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
@@ -453,18 +467,23 @@ describe('resolveWorkspaceContext', () => {
             ],
         })
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'team-video'
-                    ? { ...node, isEdgeForced: false }
-                    : node),
-            },
-            mediaBranchCandidateSnapshot: {
-                ...createState().mediaBranchCandidateSnapshot!,
-                candidates: [baseCandidates[0]!,],
-            },
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: baseWorkspaceSnapshot.nodes.map((node) =>
+                        node.nodeId === 'team-video'
+                            ? { ...node, isEdgeForced: false }
+                            : node
+                    ),
+                },
+                mediaBranchCandidateSnapshot: {
+                    ...createState().mediaBranchCandidateSnapshot!,
+                    candidates: [baseCandidates[0]!],
+                },
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchCandidateSnapshot?.candidates).toEqual([])
     })
@@ -478,9 +497,10 @@ describe('resolveWorkspaceContext', () => {
         const state = createState({
             workspaceContextSnapshot: {
                 ...baseWorkspaceSnapshot,
-                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'team-video'
-                    ? { ...node, isEdgeForced: false }
-                    : node
+                nodes: baseWorkspaceSnapshot.nodes.map((node) =>
+                    node.nodeId === 'team-video'
+                        ? { ...node, isEdgeForced: false }
+                        : node
                 ),
             },
             mediaBranchCandidateSnapshot: {
@@ -513,14 +533,19 @@ describe('resolveWorkspaceContext', () => {
             ],
         })
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'goat-image'
-                    ? { ...node, isExplicitChip: true }
-                    : node),
-            },
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: baseWorkspaceSnapshot.nodes.map((node) =>
+                        node.nodeId === 'goat-image'
+                            ? { ...node, isExplicitChip: true }
+                            : node
+                    ),
+                },
+            }),
+            deps,
+        )
 
         expect(callLlm).not.toHaveBeenCalled()
         expect(update.workspaceContextResolution?.selections).toEqual([
@@ -540,20 +565,25 @@ describe('resolveWorkspaceContext', () => {
             roleHints: ['base-context', 'active-target'],
         }
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'goat-image'
-                    ? { ...node, isExplicitChip: true }
-                    : node),
-            },
-            mediaBranchCandidateSnapshot: {
-                ...createState().mediaBranchCandidateSnapshot!,
-                activeTargetCandidateId: browserCandidate.candidateId,
-                explicitReferenceCandidateIds: [browserCandidate.candidateId],
-                candidates: [browserCandidate],
-            },
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: baseWorkspaceSnapshot.nodes.map((node) =>
+                        node.nodeId === 'goat-image'
+                            ? { ...node, isExplicitChip: true }
+                            : node
+                    ),
+                },
+                mediaBranchCandidateSnapshot: {
+                    ...createState().mediaBranchCandidateSnapshot!,
+                    activeTargetCandidateId: browserCandidate.candidateId,
+                    explicitReferenceCandidateIds: [browserCandidate.candidateId],
+                    candidates: [browserCandidate],
+                },
+            }),
+            deps,
+        )
 
         expect(callLlm).not.toHaveBeenCalled()
         expect(update.mediaBranchCandidateSnapshot?.candidates).toHaveLength(1)
@@ -570,14 +600,19 @@ describe('resolveWorkspaceContext', () => {
     it('keeps non-media explicit chips exclusive too and yields no media candidates', async () => {
         const { deps, callLlm } = createDeps({ selections: [] })
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'cubist-doc'
-                    ? { ...node, isExplicitChip: true }
-                    : node),
-            },
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: baseWorkspaceSnapshot.nodes.map((node) =>
+                        node.nodeId === 'cubist-doc'
+                            ? { ...node, isExplicitChip: true }
+                            : node
+                    ),
+                },
+            }),
+            deps,
+        )
 
         expect(callLlm).not.toHaveBeenCalled()
         expect(update.workspaceContextResolution?.selections).toEqual([
@@ -602,12 +637,15 @@ describe('resolveWorkspaceContext', () => {
             }],
         }
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: artifactSnapshot,
-            mediaBranchCandidateSnapshot: undefined,
-            imageModelVersion: undefined,
-            videoModelVersion: undefined,
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: artifactSnapshot,
+                mediaBranchCandidateSnapshot: undefined,
+                imageModelVersion: undefined,
+                videoModelVersion: undefined,
+            }),
+            deps,
+        )
         const textBlocks = getInputTextBlocks(update)
         const artifactBlock = textBlocks.find(text => text.includes('workspace_capability_artifact'))
         const citedDocumentBlock = textBlocks.find(text => text.includes('workspace_artifact_document_reference'))
@@ -647,24 +685,27 @@ describe('resolveWorkspaceContext', () => {
             },
         }]
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: [{
-                    nodeId: 'timeline-node',
-                    type: 'capabilityArtifact',
-                    artifactTypeId: 'action-timeline',
-                    assetId: 'asset-timeline',
-                    title: 'Travel Timeline',
-                    isExplicitChip: true,
-                    isEdgeForced: false,
-                }],
-            },
-            mediaBranchCandidateSnapshot: undefined,
-            imageModelVersion: undefined,
-            videoModelVersion: undefined,
-            mediaReferenceBindings: bindings,
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: [{
+                        nodeId: 'timeline-node',
+                        type: 'capabilityArtifact',
+                        artifactTypeId: 'action-timeline',
+                        assetId: 'asset-timeline',
+                        title: 'Travel Timeline',
+                        isExplicitChip: true,
+                        isEdgeForced: false,
+                    }],
+                },
+                mediaBranchCandidateSnapshot: undefined,
+                imageModelVersion: undefined,
+                videoModelVersion: undefined,
+                mediaReferenceBindings: bindings,
+            }),
+            deps,
+        )
         const textBlocks = getInputTextBlocks(update)
 
         expect(textBlocks.some(text => text.includes('REFERENCE_1'))).toBe(true)
@@ -675,19 +716,22 @@ describe('resolveWorkspaceContext', () => {
         const { deps, callLlm, publisher } = createDeps({ selections: [] })
         deps.getAsset = vi.fn(async () => ({ error: 'ASSET_NOT_FOUND' })) as any
 
-        await expect(resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: [{
-                    nodeId: 'timeline-node',
-                    type: 'capabilityArtifact',
-                    artifactTypeId: 'action-timeline',
-                    assetId: 'asset-timeline',
-                    isExplicitChip: true,
-                    isEdgeForced: false,
-                }],
-            },
-        }), deps)).rejects.toThrow('WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-timeline')
+        await expect(resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: [{
+                        nodeId: 'timeline-node',
+                        type: 'capabilityArtifact',
+                        artifactTypeId: 'action-timeline',
+                        assetId: 'asset-timeline',
+                        isExplicitChip: true,
+                        isEdgeForced: false,
+                    }],
+                },
+            }),
+            deps,
+        )).rejects.toThrow('WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:asset-timeline')
 
         expect(callLlm).not.toHaveBeenCalled()
         expect(publisher.contextRelevanceError).toHaveBeenCalledWith(
@@ -702,18 +746,23 @@ describe('resolveWorkspaceContext', () => {
             ],
         })
 
-        const update = await resolveWorkspaceContext(createState({
-            workspaceContextSnapshot: {
-                ...baseWorkspaceSnapshot,
-                nodes: baseWorkspaceSnapshot.nodes.map((node) => node.nodeId === 'team-video'
-                    ? { ...node, isEdgeForced: false }
-                    : node),
-            },
-            mediaBranchCandidateSnapshot: {
-                ...createState().mediaBranchCandidateSnapshot!,
-                explicitReferenceCandidateIds: ['goat-image'],
-            },
-        }), deps)
+        const update = await resolveWorkspaceContext(
+            createState({
+                workspaceContextSnapshot: {
+                    ...baseWorkspaceSnapshot,
+                    nodes: baseWorkspaceSnapshot.nodes.map((node) =>
+                        node.nodeId === 'team-video'
+                            ? { ...node, isEdgeForced: false }
+                            : node
+                    ),
+                },
+                mediaBranchCandidateSnapshot: {
+                    ...createState().mediaBranchCandidateSnapshot!,
+                    explicitReferenceCandidateIds: ['goat-image'],
+                },
+            }),
+            deps,
+        )
 
         expect(callLlm).not.toHaveBeenCalled()
         expect(update.workspaceContextResolution?.selections).toEqual([])

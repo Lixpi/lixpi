@@ -3,7 +3,7 @@
 import { writable } from '$src/stores/nanoStore.ts'
 
 import {
-    LoadingStatus
+    LoadingStatus,
 } from '@lixpi/constants'
 
 import type { Router } from '$src/services/router-service.ts'
@@ -31,13 +31,13 @@ const router: ReadonlyDeep<RouterStore> = deepFreeze({
             hash: '',
             routeParams: {},
             routeQuery: {},
-            isInitializationStep: false
+            isInitializationStep: false,
         },
-        history: []
-    }
+        history: [],
+    },
 })
 
-const store = writable({...router})
+const store = writable({ ...router })
 
 export const routerStore = {
     ...store,
@@ -62,23 +62,26 @@ export const routerStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): void => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): void =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    setDataValues: (values: Partial<Router> = {}): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            ...values
-        }
-    })),
+    setDataValues: (values: Partial<Router> = {}): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                ...values,
+            },
+        })),
 
-    resetStore: (): void => store.update(state => ({
-        ...router
-    })),
+    resetStore: (): void =>
+        store.update(state => ({
+            ...router,
+        })),
 }

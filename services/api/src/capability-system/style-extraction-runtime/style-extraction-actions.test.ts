@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     type CapabilityManifest,
@@ -128,9 +133,15 @@ function persistence(): CapabilityRunPersistence & { events: CapabilityRunEvent[
     return {
         events,
         runs,
-        createRun: async run => { runs.push(structuredClone(run)) },
-        updateRun: async run => { runs.push(structuredClone(run)) },
-        appendEvent: async event => { events.push(structuredClone(event)) },
+        createRun: async run => {
+            runs.push(structuredClone(run))
+        },
+        updateRun: async run => {
+            runs.push(structuredClone(run))
+        },
+        appendEvent: async event => {
+            events.push(structuredClone(event))
+        },
     }
 }
 
@@ -368,9 +379,10 @@ describe('Style Extraction actions', () => {
                     notes: '',
                 },
             }),
-            runExtractorAxis: async (_state, axis) => axis === 'mood'
-                ? { axisExtractions: {}, failedAxes: [{ axis, error: 'axis failed' }] }
-                : { axisExtractions: {}, failedAxes: [] },
+            runExtractorAxis: async (_state, axis) =>
+                axis === 'mood'
+                    ? { axisExtractions: {}, failedAxes: [{ axis, error: 'axis failed' }] }
+                    : { axisExtractions: {}, failedAxes: [] },
             materializeSourceCrops: async () => ({ sourceCrops: [] }),
             synthesizeStyle: synthesis,
             generateSamples: async () => ({ samples: [] }),

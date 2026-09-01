@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     directCapabilityToolName,
     SealedResolvedCapabilityPlan,
@@ -38,7 +45,7 @@ import { OpenAIProvider } from './openai-provider.ts'
 
 function asyncStream<T>(items: T[]): AsyncIterable<T> {
     return {
-        [Symbol.asyncIterator]: async function* () {
+        [Symbol.asyncIterator]: async function*() {
             for (const item of items) yield item
         },
     }
@@ -276,10 +283,13 @@ describe('Capability provider adapters', () => {
         }
         anthropicMocks.messagesStream
             .mockReturnValueOnce(Object.assign(asyncStream([]), { finalMessage: vi.fn(async () => firstFinal) }))
-            .mockReturnValueOnce(Object.assign(asyncStream([{
-                type: 'content_block_delta',
-                delta: { type: 'text_delta', text: 'Found it.' },
-            }]), { finalMessage: vi.fn(async () => secondFinal) }))
+            .mockReturnValueOnce(Object.assign(
+                asyncStream([{
+                    type: 'content_block_delta',
+                    delta: { type: 'text_delta', text: 'Found it.' },
+                }]),
+                { finalMessage: vi.fn(async () => secondFinal) },
+            ))
         const search = vi.fn(async () => ({ items: [] }))
         const provider = new AnthropicProvider('instance', deps(search))
         const publisher = configure(provider)
@@ -325,10 +335,13 @@ describe('Capability provider adapters', () => {
         }
         anthropicMocks.messagesStream
             .mockReturnValueOnce(Object.assign(asyncStream([]), { finalMessage: vi.fn(async () => firstFinal) }))
-            .mockReturnValueOnce(Object.assign(asyncStream([{
-                type: 'content_block_delta',
-                delta: { type: 'text_delta', text: 'The action timeline is ready.' },
-            }]), { finalMessage: vi.fn(async () => secondFinal) }))
+            .mockReturnValueOnce(Object.assign(
+                asyncStream([{
+                    type: 'content_block_delta',
+                    delta: { type: 'text_delta', text: 'The action timeline is ready.' },
+                }]),
+                { finalMessage: vi.fn(async () => secondFinal) },
+            ))
         const use = vi.fn(async () => ({
             ...capabilityRunResult(),
             output: { outputKind: 'capabilityArtifact', assetId: 'asset-1' },

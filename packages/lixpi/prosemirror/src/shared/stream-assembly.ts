@@ -1,6 +1,12 @@
 import type { MarkdownParsedSegment } from '@lixpi/constants'
-import type { Mark, Schema } from 'prosemirror-model'
-import type { EditorState, Transaction } from 'prosemirror-state'
+import type {
+    Mark,
+    Schema,
+} from 'prosemirror-model'
+import type {
+    EditorState,
+    Transaction,
+} from 'prosemirror-state'
 import type { Step } from 'prosemirror-transform'
 
 export type StreamingSegmentTarget = {

@@ -35,6 +35,7 @@ export function resolveCollisions(
         const nodeMargin = getNonNegativeFiniteNumber(node.margin, safeMargin)
         return {
             id: node.id,
+            fixed: node.fixed ?? false,
             x: getFiniteNumber(node.x, 0) - nodeMargin,
             y: getFiniteNumber(node.y, 0) - nodeMargin,
             width: getNonNegativeFiniteNumber(node.width, 0) + nodeMargin * 2,
@@ -55,6 +56,7 @@ export function resolveCollisions(
                 const boxA = boxes[i]
                 const boxB = boxes[j]
                 if (!boxA || !boxB) continue
+                if (boxA.fixed && boxB.fixed) continue
 
                 if (excludePairs && (excludePairs.has(`${boxA.id}-${boxB.id}`) || excludePairs.has(`${boxB.id}-${boxA.id}`))) {
                     continue
@@ -87,20 +89,20 @@ export function resolveCollisions(
                     }
                     if (shouldResolvePair && !shouldResolvePair(originalA, originalB)) continue
 
-                    boxA.moved = true
-                    boxB.moved = true
+                    boxA.moved ||= !boxA.fixed
+                    boxB.moved ||= !boxB.fixed
                     moved = true
 
                     if (px < py) {
                         const sx = dx > 0 ? 1 : -1
-                        const moveAmount = (px / 2) * sx
-                        boxA.x += moveAmount
-                        boxB.x -= moveAmount
+                        const moveAmount = px * sx / (boxA.fixed || boxB.fixed ? 1 : 2)
+                        if (!boxA.fixed) boxA.x += moveAmount
+                        if (!boxB.fixed) boxB.x -= moveAmount
                     } else {
                         const sy = dy > 0 ? 1 : -1
-                        const moveAmount = (py / 2) * sy
-                        boxA.y += moveAmount
-                        boxB.y -= moveAmount
+                        const moveAmount = py * sy / (boxA.fixed || boxB.fixed ? 1 : 2)
+                        if (!boxA.fixed) boxA.y += moveAmount
+                        if (!boxB.fixed) boxB.y -= moveAmount
                     }
                 }
             }

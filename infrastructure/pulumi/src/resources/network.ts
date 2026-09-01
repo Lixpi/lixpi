@@ -10,12 +10,10 @@ import {
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
-
 export const createNetworkInfrastructure = async () => {
-
     // Validate AWS region explicitly
     const awsRegion = aws.config.region
     if (!awsRegion) {
@@ -148,11 +146,11 @@ export const createNetworkInfrastructure = async () => {
 
         publicSubnets: [
             publicSubnetAZ1,
-            publicSubnetAZ2
+            publicSubnetAZ2,
         ],
         privateSubnets: [
             privateSubnetAZ1,
-            privateSubnetAZ2
+            privateSubnetAZ2,
         ],
 
         internetGateway: igw,

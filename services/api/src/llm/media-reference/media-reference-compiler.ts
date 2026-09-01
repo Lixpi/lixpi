@@ -35,14 +35,14 @@ const buildSemanticDescriptor = (asset: Asset): string => {
         .join('; ')
 }
 
-const filenameStem = (originalName: string | undefined): string | undefined => originalName
-    ?.replace(/\.[^.]+$/u, '')
-    .trim()
+const filenameStem = (originalName: string | undefined): string | undefined =>
+    originalName
+        ?.replace(/\.[^.]+$/u, '')
+        .trim()
 
 const GENERATED_MEDIA_PLACEHOLDER_VARIANT = /^generated(?: \d+)?$/u
 
-const isForbiddenDisplayNameVariant = (variant: string): boolean =>
-    Boolean(variant) && !GENERATED_MEDIA_PLACEHOLDER_VARIANT.test(variant)
+const isForbiddenDisplayNameVariant = (variant: string): boolean => Boolean(variant) && !GENERATED_MEDIA_PLACEHOLDER_VARIANT.test(variant)
 
 export const createMediaReferenceBindings = ({
     assets,
@@ -55,10 +55,14 @@ export const createMediaReferenceBindings = ({
     if (uniqueAssets.length > MEDIA_REFERENCE_MAX_BINDINGS) throw new Error('MEDIA_REFERENCE_BINDING_LIMIT_EXCEEDED')
     return uniqueAssets.map((asset, index) => {
         const originalStem = filenameStem(asset.media?.originalName)
-        const forbiddenNameVariants = [...new Set([
-            asset.title,
-            ...(originalStem ? [originalStem] : []),
-        ].map(normalizeMediaReferenceVariant).filter(isForbiddenDisplayNameVariant))]
+        const forbiddenNameVariants = [
+            ...new Set(
+                [
+                    asset.title,
+                    ...(originalStem ? [originalStem] : []),
+                ].map(normalizeMediaReferenceVariant).filter(isForbiddenDisplayNameVariant),
+            ),
+        ]
         return {
             assetId: asset.assetId,
             assetRevision: asset.revision,
@@ -157,8 +161,7 @@ const replaceFreeFormMatches = ({
                 bindings,
                 promptRange: { from: offset + start, to: offset + end },
             })
-            const persistedResolution = resolvedReferences.find(resolution =>
-                normalizeMediaReferenceVariant(resolution.originalText) === normalizeMediaReferenceVariant(phrase))
+            const persistedResolution = resolvedReferences.find(resolution => normalizeMediaReferenceVariant(resolution.originalText) === normalizeMediaReferenceVariant(phrase))
             const persistedResolutionIsCurrentCandidate = persistedResolution && (
                 (match.kind === 'unique' && match.binding?.assetId === persistedResolution.assetId)
                 || (match.kind === 'ambiguous' && match.unresolved?.candidates

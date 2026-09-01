@@ -125,18 +125,23 @@ const deleteAccessProjections = async (asset: Asset, accessRows: AssetAccessList
             key: { assetId: asset.assetId, principalId: access.principalId },
         },
         ...(access.principalId !== asset.ownerUserId
-            ? [{
-                type: 'delete' as const,
-                tableName: assetsMetaTableName(),
-                key: { scopeAndOwner: buildAssetPrincipalScopeKey(access.principalId), assetId: asset.assetId },
-            }, ...(buildAssetSearchRecord(asset, buildAssetPrincipalScopeKey(access.principalId)) ? [{
-                type: 'delete' as const,
-                tableName: assetsSearchTableName(),
-                key: {
-                    scopeAndOwner: buildAssetPrincipalScopeKey(access.principalId),
-                    searchKey: buildAssetSearchRecord(asset, buildAssetPrincipalScopeKey(access.principalId))!.searchKey,
+            ? [
+                {
+                    type: 'delete' as const,
+                    tableName: assetsMetaTableName(),
+                    key: { scopeAndOwner: buildAssetPrincipalScopeKey(access.principalId), assetId: asset.assetId },
                 },
-            }] : [])]
+                ...(buildAssetSearchRecord(asset, buildAssetPrincipalScopeKey(access.principalId))
+                    ? [{
+                        type: 'delete' as const,
+                        tableName: assetsSearchTableName(),
+                        key: {
+                            scopeAndOwner: buildAssetPrincipalScopeKey(access.principalId),
+                            searchKey: buildAssetSearchRecord(asset, buildAssetPrincipalScopeKey(access.principalId))!.searchKey,
+                        },
+                    }]
+                    : []),
+            ]
             : []),
     ])
     for (let index = 0; index < operations.length; index += 100) {
@@ -190,14 +195,16 @@ const AssetMaintenance = {
                     assetId,
                 },
             },
-            ...(buildAssetSearchRecord(asset) ? [{
-                type: 'delete' as const,
-                tableName: assetsSearchTableName(),
-                key: {
-                    scopeAndOwner: buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId),
-                    searchKey: buildAssetSearchRecord(asset)!.searchKey,
-                },
-            }] : []),
+            ...(buildAssetSearchRecord(asset)
+                ? [{
+                    type: 'delete' as const,
+                    tableName: assetsSearchTableName(),
+                    key: {
+                        scopeAndOwner: buildAssetScopeAndOwnerKey(asset.scope, asset.scopeOwnerId),
+                        searchKey: buildAssetSearchRecord(asset)!.searchKey,
+                    },
+                }]
+                : []),
             {
                 type: 'delete' as const,
                 tableName: assetsTableName(),

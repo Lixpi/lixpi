@@ -4,7 +4,11 @@ import { Decimal } from 'decimal.js'
 
 import { warn } from '@lixpi/debug-tools'
 
-import type { AiModelMetaInfo, EventMeta, Usage } from '../graph/state.ts'
+import type {
+    AiModelMetaInfo,
+    EventMeta,
+    Usage,
+} from '../graph/state.ts'
 
 // Match Python `Decimal` behavior (default 28-digit precision, ROUND_HALF_EVEN).
 // decimal.js defaults to 20-digit precision; bumping it here so pricing
@@ -90,8 +94,7 @@ export type VideoUsageReport = {
     }
 }
 
-const dec = (v: unknown, fallback: string = '0'): Decimal =>
-    new Decimal(v == null ? fallback : String(v))
+const dec = (v: unknown, fallback: string = '0'): Decimal => new Decimal(v == null ? fallback : String(v))
 
 export class UsageReporter {
     // Currently logs only. Swap the return value for natsService.publish('usage.tokens.ai', report) when ready.

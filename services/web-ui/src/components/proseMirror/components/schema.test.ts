@@ -1,11 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     marks as packageMarks,
     nodes as packageNodes,
     schema as packageSchema,
 } from '@lixpi/prosemirror'
-import { marks, nodes, schema } from '$src/components/proseMirror/components/schema.ts'
+import {
+    marks,
+    nodes,
+    schema,
+} from '$src/components/proseMirror/components/schema.ts'
 
 describe('schema module — pass-through exports', () => {
     it('re-exports marks, nodes, and schema objects by reference', () => {

@@ -1,8 +1,18 @@
 // Path building utilities wrapping XYFlow edge utilities
 // Provides both XYFlow standard paths and custom path types
 
-import { getBezierPath, getStraightPath, getSmoothStepPath, Position } from '@xyflow/system'
-import type { PathType, ComputedPath, AnchorPosition, NodeConfig } from './types.ts'
+import {
+    getBezierPath,
+    getStraightPath,
+    getSmoothStepPath,
+    Position,
+} from '@xyflow/system'
+import type {
+    PathType,
+    ComputedPath,
+    AnchorPosition,
+    NodeConfig,
+} from './types.ts'
 
 // Simple node bounds type for path obstacle avoidance
 type NodeBounds = {
@@ -16,11 +26,16 @@ type NodeBounds = {
 // Convert our simplified anchor position to XYFlow's Position enum
 function toXYFlowPosition(position: AnchorPosition): Position {
     switch (position) {
-        case 'left': return Position.Left
-        case 'right': return Position.Right
-        case 'top': return Position.Top
-        case 'bottom': return Position.Bottom
-        case 'center': return Position.Bottom  // Default to bottom for center
+        case 'left':
+            return Position.Left
+        case 'right':
+            return Position.Right
+        case 'top':
+            return Position.Top
+        case 'bottom':
+            return Position.Bottom
+        case 'center':
+            return Position.Bottom // Default to bottom for center
     }
 }
 
@@ -31,7 +46,7 @@ function buildHorizontalBezierPath(
     sourceX: number,
     sourceY: number,
     targetX: number,
-    targetY: number
+    targetY: number,
 ): string {
     // Place both control points at the horizontal midpoint
     const midX = (sourceX + targetX) / 2
@@ -57,7 +72,7 @@ function findSafeVerticalLane(
     targetX: number,
     targetY: number,
     obstacleNodes: NodeBounds[],
-    margin: number = 15
+    margin: number = 15,
 ): number {
     const minY = Math.min(sourceY, targetY)
     const maxY = Math.max(sourceY, targetY)
@@ -86,7 +101,7 @@ function findSafeVerticalLane(
     for (const node of nodesInYRange) {
         forbiddenRanges.push({
             left: node.x - margin,
-            right: node.x + node.width + margin
+            right: node.x + node.width + margin,
         })
     }
 
@@ -129,7 +144,7 @@ function findSafeVerticalLane(
     for (let i = 0; i < mergedRanges.length - 1; i++) {
         validRanges.push({
             left: mergedRanges[i].right,
-            right: mergedRanges[i + 1].left
+            right: mergedRanges[i + 1].left,
         })
     }
 
@@ -167,7 +182,7 @@ function horizontalLineIntersectsNodes(
     x2: number,
     y: number,
     nodes: NodeBounds[],
-    margin: number = 10
+    margin: number = 10,
 ): NodeBounds | null {
     const minX = Math.min(x1, x2)
     const maxX = Math.max(x1, x2)
@@ -191,7 +206,7 @@ function findSafeHorizontalLane(
     node: NodeBounds,
     sourceY: number,
     targetY: number,
-    margin: number = 15
+    margin: number = 15,
 ): number {
     const nodeTop = node.y - margin
     const nodeBottom = node.y + node.height + margin
@@ -208,7 +223,7 @@ function findSafeHorizontalLane(
 // Build an SVG path with rounded corners from a sequence of orthogonal points
 function buildMultiSegmentPath(
     points: Array<{ x: number; y: number }>,
-    borderRadius: number = 8
+    borderRadius: number = 8,
 ): string {
     if (points.length < 2) return ''
     if (points.length === 2) {
@@ -235,23 +250,23 @@ function buildMultiSegmentPath(
         // Direction from prev to curr
         const dirFromPrev = {
             x: curr.x === prev.x ? 0 : (curr.x > prev.x ? 1 : -1),
-            y: curr.y === prev.y ? 0 : (curr.y > prev.y ? 1 : -1)
+            y: curr.y === prev.y ? 0 : (curr.y > prev.y ? 1 : -1),
         }
         // Direction from curr to next
         const dirToNext = {
             x: next.x === curr.x ? 0 : (next.x > curr.x ? 1 : -1),
-            y: next.y === curr.y ? 0 : (next.y > curr.y ? 1 : -1)
+            y: next.y === curr.y ? 0 : (next.y > curr.y ? 1 : -1),
         }
 
         // Curve start (approaching the corner)
         const curveStart = {
             x: curr.x - dirFromPrev.x * r,
-            y: curr.y - dirFromPrev.y * r
+            y: curr.y - dirFromPrev.y * r,
         }
         // Curve end (leaving the corner)
         const curveEnd = {
             x: curr.x + dirToNext.x * r,
-            y: curr.y + dirToNext.y * r
+            y: curr.y + dirToNext.y * r,
         }
 
         segments.push(`L ${curveStart.x},${curveStart.y}`)
@@ -282,13 +297,13 @@ function buildOrthogonalPath(
     sourceNodeId?: string,
     targetNodeId?: string,
     laneIndex: number = 0,
-    laneCount: number = 1
+    laneCount: number = 1,
 ): string {
     // If no bend points provided (or empty), compute an orthogonal path
     if (!bendPoints || bendPoints.length === 0) {
         // Filter out source and target nodes from obstacles
         const filteredObstacles = obstacleNodes?.filter(
-            n => n.id !== sourceNodeId && n.id !== targetNodeId
+            n => n.id !== sourceNodeId && n.id !== targetNodeId,
         ) ?? []
 
         const verticalDist = Math.abs(targetY - sourceY)
@@ -307,7 +322,7 @@ function buildOrthogonalPath(
         // Higher laneIndex (lower source on screen) = vertical segment closer to target
         // This prevents lines from crossing each other
         if (laneCount > 1) {
-            const laneSpacing = 15  // Pixels between adjacent lanes
+            const laneSpacing = 15 // Pixels between adjacent lanes
             const goingRight = targetX > sourceX
 
             // Calculate offset: laneIndex 0 (topmost source) is furthest from target
@@ -350,26 +365,26 @@ function buildOrthogonalPath(
                 return buildMultiSegmentPath(
                     [
                         { x: sourceX, y: sourceY },
-                        { x: nodeLeft, y: sourceY },      // Go horizontal to just before node
-                        { x: nodeLeft, y: detourY },      // Go vertical to detour height
-                        { x: nodeRight, y: detourY },     // Go horizontal past the node
-                        { x: nodeRight, y: targetY },     // Go vertical to target Y
-                        { x: targetX, y: targetY }
+                        { x: nodeLeft, y: sourceY }, // Go horizontal to just before node
+                        { x: nodeLeft, y: detourY }, // Go vertical to detour height
+                        { x: nodeRight, y: detourY }, // Go horizontal past the node
+                        { x: nodeRight, y: targetY }, // Go vertical to target Y
+                        { x: targetX, y: targetY },
                     ],
-                    borderRadius
+                    borderRadius,
                 )
             } else {
                 // We're going left, so go around the left side of the node
                 return buildMultiSegmentPath(
                     [
                         { x: sourceX, y: sourceY },
-                        { x: nodeRight, y: sourceY },     // Go horizontal to just after node
-                        { x: nodeRight, y: detourY },     // Go vertical to detour height
-                        { x: nodeLeft, y: detourY },      // Go horizontal past the node
-                        { x: nodeLeft, y: targetY },      // Go vertical to target Y
-                        { x: targetX, y: targetY }
+                        { x: nodeRight, y: sourceY }, // Go horizontal to just after node
+                        { x: nodeRight, y: detourY }, // Go vertical to detour height
+                        { x: nodeLeft, y: detourY }, // Go horizontal past the node
+                        { x: nodeLeft, y: targetY }, // Go vertical to target Y
+                        { x: targetX, y: targetY },
                     ],
-                    borderRadius
+                    borderRadius,
                 )
             }
         }
@@ -385,13 +400,13 @@ function buildOrthogonalPath(
                 return buildMultiSegmentPath(
                     [
                         { x: sourceX, y: sourceY },
-                        { x: nodeLeft, y: sourceY },      // Go horizontal to just before node
-                        { x: nodeLeft, y: detourY },      // Go vertical to detour height
-                        { x: nodeRight, y: detourY },     // Go horizontal past the node
-                        { x: nodeRight, y: targetY },     // Go vertical to target Y
-                        { x: targetX, y: targetY }
+                        { x: nodeLeft, y: sourceY }, // Go horizontal to just before node
+                        { x: nodeLeft, y: detourY }, // Go vertical to detour height
+                        { x: nodeRight, y: detourY }, // Go horizontal past the node
+                        { x: nodeRight, y: targetY }, // Go vertical to target Y
+                        { x: targetX, y: targetY },
                     ],
-                    borderRadius
+                    borderRadius,
                 )
             } else {
                 return buildMultiSegmentPath(
@@ -401,9 +416,9 @@ function buildOrthogonalPath(
                         { x: nodeRight, y: detourY },
                         { x: nodeLeft, y: detourY },
                         { x: nodeLeft, y: targetY },
-                        { x: targetX, y: targetY }
+                        { x: targetX, y: targetY },
                     ],
-                    borderRadius
+                    borderRadius,
                 )
             }
         }
@@ -437,9 +452,9 @@ function buildOrthogonalPath(
                     { x: sourceX, y: sourceY },
                     { x: safeMidX, y: sourceY },
                     { x: safeMidX, y: targetY },
-                    { x: targetX, y: targetY }
+                    { x: targetX, y: targetY },
                 ],
-                borderRadius
+                borderRadius,
             )
         }
 
@@ -447,7 +462,7 @@ function buildOrthogonalPath(
             borderRadius,
             Math.abs(midX - sourceX) / 2,
             Math.abs(targetX - midX) / 2,
-            Math.abs(targetY - sourceY) / 2
+            Math.abs(targetY - sourceY) / 2,
         )
 
         if (r < 1 || Math.abs(targetY - sourceY) < 1) {
@@ -464,7 +479,7 @@ function buildOrthogonalPath(
             `Q ${midX},${sourceY} ${midX},${sourceY + r * dirY}`,
             `L ${midX},${targetY - r * dirY}`,
             `Q ${midX},${targetY} ${midX + r * dirX},${targetY}`,
-            `L ${targetX},${targetY}`
+            `L ${targetX},${targetY}`,
         ].join(' ')
     }
 
@@ -472,7 +487,7 @@ function buildOrthogonalPath(
     const points = [
         { x: sourceX, y: sourceY },
         ...bendPoints,
-        { x: targetX, y: targetY }
+        { x: targetX, y: targetY },
     ]
 
     // Build path with rounded corners at each bend point
@@ -497,23 +512,23 @@ function buildOrthogonalPath(
         // Direction vectors
         const dirFromPrev = {
             x: curr.x - prev.x === 0 ? 0 : (curr.x - prev.x) / Math.abs(curr.x - prev.x),
-            y: curr.y - prev.y === 0 ? 0 : (curr.y - prev.y) / Math.abs(curr.y - prev.y)
+            y: curr.y - prev.y === 0 ? 0 : (curr.y - prev.y) / Math.abs(curr.y - prev.y),
         }
         const dirToNext = {
             x: next.x - curr.x === 0 ? 0 : (next.x - curr.x) / Math.abs(next.x - curr.x),
-            y: next.y - curr.y === 0 ? 0 : (next.y - curr.y) / Math.abs(next.y - curr.y)
+            y: next.y - curr.y === 0 ? 0 : (next.y - curr.y) / Math.abs(next.y - curr.y),
         }
 
         // Start point of curve (offset from corner towards prev)
         const curveStart = {
             x: curr.x - dirFromPrev.x * maxRadius,
-            y: curr.y - dirFromPrev.y * maxRadius
+            y: curr.y - dirFromPrev.y * maxRadius,
         }
 
         // End point of curve (offset from corner towards next)
         const curveEnd = {
             x: curr.x + dirToNext.x * maxRadius,
-            y: curr.y + dirToNext.y * maxRadius
+            y: curr.y + dirToNext.y * maxRadius,
         }
 
         // Line to curve start, then quadratic bezier around the corner
@@ -546,7 +561,7 @@ export function computePath(
     sourceNodeId?: string,
     targetNodeId?: string,
     laneIndex: number = 0,
-    laneCount: number = 1
+    laneCount: number = 1,
 ): ComputedPath {
     switch (pathType) {
         case 'bezier': {
@@ -557,7 +572,7 @@ export function computePath(
                 targetX,
                 targetY,
                 targetPosition: toXYFlowPosition(targetPosition),
-                curvature
+                curvature,
             })
             return { path, labelX, labelY, offsetX, offsetY }
         }
@@ -567,7 +582,7 @@ export function computePath(
                 sourceX,
                 sourceY,
                 targetX,
-                targetY
+                targetY,
             })
             return { path, labelX, labelY, offsetX, offsetY }
         }
@@ -580,8 +595,8 @@ export function computePath(
                 targetX,
                 targetY,
                 targetPosition: toXYFlowPosition(targetPosition),
-                borderRadius: 8,  // Default border radius
-                offset: 20        // Default orthogonal offset
+                borderRadius: 8, // Default border radius
+                offset: 20, // Default orthogonal offset
             })
             return { path, labelX, labelY, offsetX, offsetY }
         }
@@ -604,15 +619,22 @@ export function computePath(
                     x: n.x,
                     y: n.y,
                     width: n.width,
-                    height: n.height
+                    height: n.height,
                 }))
                 : []
 
             const path = buildOrthogonalPath(
-                sourceX, sourceY, targetX, targetY,
-                borderRadius, bendPoints,
-                obstacleNodes, sourceNodeId, targetNodeId,
-                laneIndex, laneCount
+                sourceX,
+                sourceY,
+                targetX,
+                targetY,
+                borderRadius,
+                bendPoints,
+                obstacleNodes,
+                sourceNodeId,
+                targetNodeId,
+                laneIndex,
+                laneCount,
             )
             // For orthogonal paths, compute label position as midpoint
             const labelX = (sourceX + targetX) / 2
@@ -628,7 +650,7 @@ export function computePath(
                 sourceX,
                 sourceY,
                 targetX,
-                targetY
+                targetY,
             })
             return { path, labelX, labelY, offsetX, offsetY }
     }
@@ -640,11 +662,11 @@ export function computeLabelPosition(
     sourceX: number,
     sourceY: number,
     targetX: number,
-    targetY: number
+    targetY: number,
 ): { x: number; y: number } {
     return {
         x: (sourceX + targetX) / 2,
-        y: (sourceY + targetY) / 2
+        y: (sourceY + targetY) / 2,
     }
 }
 
@@ -652,10 +674,10 @@ export function computeLabelPosition(
 export function applyOffset(
     x: number,
     y: number,
-    offset?: { x?: number; y?: number }
+    offset?: { x?: number; y?: number },
 ): { x: number; y: number } {
     return {
         x: x + (offset?.x ?? 0),
-        y: y + (offset?.y ?? 0)
+        y: y + (offset?.y ?? 0),
     }
 }

@@ -1,7 +1,11 @@
 'use strict'
 
 import { readFileSync } from 'node:fs'
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 
 const source = readFileSync(new URL('./Nexfile', import.meta.url), 'utf-8')
 

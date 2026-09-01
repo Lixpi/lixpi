@@ -1,7 +1,17 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LoadingStatus, type WorkspaceMeta } from '@lixpi/constants'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    LoadingStatus,
+    type WorkspaceMeta,
+} from '@lixpi/constants'
 
 // =============================================================================
 // MOCKED COLLABORATORS
@@ -29,7 +39,7 @@ vi.mock('$src/services/router-service.ts', () => ({
 }))
 
 vi.mock('$src/services/workspace-service.ts', () => ({
-    default: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    default: vi.fn().mockImplementation(function(this: Record<string, unknown>) {
         this.createWorkspace = mocks.createWorkspace
         this.deleteWorkspace = mocks.deleteWorkspace
         this.getWorkspace = mocks.getWorkspace
@@ -53,13 +63,19 @@ vi.mock('@lixpi/ui-kit/components/dropdown', () => ({
     }),
 }))
 
-import { createNavigationSidePanel, type NavigationSidePanelInstance } from '$src/components/navigationSidePanel/navigationSidePanel.ts'
+import {
+    createNavigationSidePanel,
+    type NavigationSidePanelInstance,
+} from '$src/components/navigationSidePanel/navigationSidePanel.ts'
 import { workspacesStore } from '$src/stores/workspacesStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { routerStore } from '$src/stores/routerStore.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 import { authStore } from '$src/stores/authStore.ts'
-import { navigationSidePanelStore, userInfoPanelStore } from '$src/stores/navigationSidePanelStore.ts'
+import {
+    navigationSidePanelStore,
+    userInfoPanelStore,
+} from '$src/stores/navigationSidePanelStore.ts'
 import { settings } from '$src/settings.ts'
 
 function makeWorkspace(overrides: Partial<WorkspaceMeta> & { tags?: string[] } = {}): WorkspaceMeta {

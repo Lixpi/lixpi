@@ -1,10 +1,26 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    LoadingStatus,
+    NATS_SUBJECTS,
+} from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => {
-    const workspaceData: { updatedAt: number; canvasStateUpdatedAt?: number } = { updatedAt: 10, canvasStateUpdatedAt: 5 }
+    const workspaceData: { workspaceId: string; updatedAt: number; canvasStateUpdatedAt?: number; canvasState: any; requiresSave: boolean } = {
+        workspaceId: 'workspace-1',
+        updatedAt: 10,
+        canvasStateUpdatedAt: 5,
+        canvasState: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] },
+        requiresSave: false,
+    }
     let routeWorkspaceId = 'workspace-1'
 
     return {
@@ -13,6 +29,7 @@ const mocks = vi.hoisted(() => {
         request: vi.fn(),
         getTokenSilently: vi.fn(),
         setDataValues: vi.fn((values: Record<string, any>) => {
+            if (values.canvasState) workspaceData.canvasState = values.canvasState
             if (typeof values.updatedAt === 'number') {
                 workspaceData.updatedAt = values.updatedAt
             }
@@ -20,7 +37,9 @@ const mocks = vi.hoisted(() => {
                 workspaceData.canvasStateUpdatedAt = values.canvasStateUpdatedAt
             }
         }),
-        setMetaValues: vi.fn(),
+        setMetaValues: vi.fn((values: { requiresSave?: boolean }) => {
+            if (typeof values.requiresSave === 'boolean') workspaceData.requiresSave = values.requiresSave
+        }),
         beginWorkspaceLoad: vi.fn(),
         updateWorkspace: vi.fn(),
     }
@@ -50,11 +69,14 @@ vi.mock('$src/stores/servicesStore.ts', () => ({
 vi.mock('$src/stores/workspaceStore.ts', () => ({
     workspaceStore: {
         getData: vi.fn((key: string) => {
+            if (key === 'workspaceId') return mocks.workspaceData.workspaceId
+            if (key === 'canvasState') return mocks.workspaceData.canvasState
             if (key === 'updatedAt') return mocks.workspaceData.updatedAt
             if (key === 'canvasStateUpdatedAt') return mocks.workspaceData.canvasStateUpdatedAt
             return undefined
         }),
         setDataValues: mocks.setDataValues,
+        getMeta: vi.fn(() => mocks.workspaceData.requiresSave),
         setMetaValues: mocks.setMetaValues,
         beginWorkspaceLoad: mocks.beginWorkspaceLoad,
     },
@@ -101,7 +123,11 @@ describe('WorkspaceService canvas save queue', () => {
     it('serializes canvas saves and sends the latest pending state with the acknowledged canvas save token', async () => {
         let resolveFirstSave: ((value: unknown) => void) | null = null
         mocks.request
-            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstSave = resolve }))
+            .mockImplementationOnce(() =>
+                new Promise((resolve) => {
+                    resolveFirstSave = resolve
+                })
+            )
             .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 12, canvasStateUpdatedAt: 7 })
 
         const service = new WorkspaceService()
@@ -142,7 +168,11 @@ describe('WorkspaceService canvas save queue', () => {
     it('forwards persistViewport across stale retry and preserves it on queued follow-up saves', async () => {
         let resolveFirstSave: ((value: unknown) => void) | null = null
         mocks.request
-            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstSave = resolve }))
+            .mockImplementationOnce(() =>
+                new Promise((resolve) => {
+                    resolveFirstSave = resolve
+                })
+            )
             .mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
             .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 12, canvasStateUpdatedAt: 7 })
 
@@ -236,38 +266,29 @@ describe('WorkspaceService canvas save queue', () => {
         }))
     })
 
-    it('refreshes the current workspace when the server reports stale canvas state', async () => {
+    it('refreshes through the snapshot port when the server reports stale canvas state', async () => {
         mocks.request.mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE' })
-
+            .mockResolvedValueOnce({ workspaceId: 'workspace-1', updatedAt: 20, canvasState: makeCanvasState('authoritative') })
         const service = new WorkspaceService()
-        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
-            .mockResolvedValue(undefined)
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
-
-        await vi.waitFor(() => {
-            expect(mocks.request).toHaveBeenCalledTimes(1)
-        })
-        await vi.waitFor(() => {
-            expect(getWorkspaceSpy).toHaveBeenCalledTimes(1)
-        })
-        expect(getWorkspaceSpy).toHaveBeenCalledWith({ workspaceId: 'workspace-1' })
+        await service.canvasSessions.drain()
+        expect(mocks.request).toHaveBeenCalledTimes(2)
+        expect(mocks.request.mock.calls[1][0]).toBe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE)
+        expect(mocks.setDataValues).toHaveBeenCalledWith({ canvasState: makeCanvasState('authoritative') })
         expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
     })
 
-    it('does not refetch the workspace when stale canvas state belongs to a different route', async () => {
+    it('refreshes a detached session without patching the newly active workspace', async () => {
         mocks.routeWorkspaceId = 'workspace-2'
         mocks.request.mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE' })
-
+            .mockResolvedValueOnce({ workspaceId: 'workspace-1', updatedAt: 20, canvasState: makeCanvasState('authoritative') })
         const service = new WorkspaceService()
-        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
-            .mockResolvedValue(undefined)
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
-
-        await vi.waitFor(() => {
-            expect(mocks.request).toHaveBeenCalledTimes(1)
-        })
-        expect(getWorkspaceSpy).not.toHaveBeenCalled()
-        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
+        await service.canvasSessions.drain()
+        expect(mocks.request).toHaveBeenCalledTimes(2)
+        expect(mocks.setDataValues).not.toHaveBeenCalled()
+        expect(mocks.setMetaValues).not.toHaveBeenCalled()
+        expect(mocks.updateWorkspace).toHaveBeenCalledWith('workspace-1', { updatedAt: 20 })
     })
 
     it('does not include an optimistic canvas save token when none is available', async () => {
@@ -298,7 +319,11 @@ describe('WorkspaceService canvas save queue', () => {
     it('retries queued canvas updates after a non-stale error, then marks save complete on success', async () => {
         let resolveFirstSave: ((value: unknown) => void) | null = null
         mocks.request
-            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstSave = resolve }))
+            .mockImplementationOnce(() =>
+                new Promise((resolve) => {
+                    resolveFirstSave = resolve
+                })
+            )
             .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 20, canvasStateUpdatedAt: 19 })
 
         const service = new WorkspaceService()
@@ -359,62 +384,42 @@ describe('WorkspaceService canvas save queue', () => {
         })
     })
 
-    it('does not retry a stale save with a refreshed token when the route no longer owns the workspace', async () => {
+    it('retries accepted writes after navigation without adopting their versions into another workspace', async () => {
         mocks.routeWorkspaceId = 'workspace-2'
         mocks.request.mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
-
+            .mockResolvedValueOnce({ success: true, workspaceId: 'workspace-1', updatedAt: 12, canvasStateUpdatedAt: 7 })
         const service = new WorkspaceService()
-        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
-            .mockResolvedValue(undefined)
-
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
-
-        await vi.waitFor(() => {
-            expect(mocks.request).toHaveBeenCalledTimes(1)
-        })
-        expect(getWorkspaceSpy).not.toHaveBeenCalled()
-        expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
+        await service.canvasSessions.drain()
+        expect(mocks.request).toHaveBeenCalledTimes(2)
+        expect(mocks.request.mock.calls[1][1].expectedCanvasStateUpdatedAt).toBe(6)
+        expect(mocks.setDataValues).not.toHaveBeenCalled()
+        expect(mocks.setMetaValues).not.toHaveBeenCalled()
     })
 
-    it('falls back to a full workspace refetch after exhausting the stale-retry budget', async () => {
+    it('falls back to a snapshot refetch after exhausting the stale-retry budget', async () => {
         mocks.request
             .mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11, currentCanvasStateUpdatedAt: 6 })
             .mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 12, currentCanvasStateUpdatedAt: 7 })
             .mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 13, currentCanvasStateUpdatedAt: 8 })
             .mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 14, currentCanvasStateUpdatedAt: 9 })
-
+            .mockResolvedValueOnce({ workspaceId: 'workspace-1', updatedAt: 20, canvasState: makeCanvasState('authoritative') })
         const service = new WorkspaceService()
-        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
-            .mockResolvedValue(undefined)
-
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
-
-        await vi.waitFor(() => {
-            // 1 initial attempt + 3 retries (MAX_CANVAS_SAVE_STALE_RETRIES) = 4 requests
-            expect(mocks.request).toHaveBeenCalledTimes(4)
-        })
-        await vi.waitFor(() => {
-            expect(getWorkspaceSpy).toHaveBeenCalledTimes(1)
-        })
-        expect(getWorkspaceSpy).toHaveBeenCalledWith({ workspaceId: 'workspace-1' })
+        await service.canvasSessions.drain()
+        expect(mocks.request).toHaveBeenCalledTimes(5)
+        expect(mocks.request.mock.calls[4][0]).toBe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE)
         expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
     })
 
-    it('does not retry with a refreshed token when the server omits currentCanvasStateUpdatedAt', async () => {
+    it('refetches when a stale response omits the canvas version', async () => {
         mocks.request.mockResolvedValueOnce({ error: 'STALE_CANVAS_STATE', currentUpdatedAt: 11 })
-
+            .mockResolvedValueOnce({ workspaceId: 'workspace-1', updatedAt: 20, canvasState: makeCanvasState('authoritative') })
         const service = new WorkspaceService()
-        const getWorkspaceSpy = vi.spyOn(service as unknown as { getWorkspace: (args: { workspaceId: string }) => Promise<void> }, 'getWorkspace')
-            .mockResolvedValue(undefined)
-
         service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('stale-node') })
-
-        await vi.waitFor(() => {
-            expect(mocks.request).toHaveBeenCalledTimes(1)
-        })
-        await vi.waitFor(() => {
-            expect(getWorkspaceSpy).toHaveBeenCalledTimes(1)
-        })
+        await service.canvasSessions.drain()
+        expect(mocks.request).toHaveBeenCalledTimes(2)
+        expect(mocks.request.mock.calls[1][0]).toBe(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE)
     })
 
     it('resets the stale-retry budget once a subsequent save succeeds', async () => {
@@ -549,36 +554,23 @@ describe('WorkspaceService canvas save queue', () => {
         }))
     })
 
-    it('drops pending saves already represented by a successful membership mutation', async () => {
-        type CanvasSaveQueueInternals = {
-            pendingRequest: {
-                canvasState: unknown
-                persistViewport: boolean
-                sequence: number
-            } | null
-        }
-        type WorkspaceServiceInternals = {
-            canvasSaveRequestSequence: number
-            getCanvasSaveQueue: (workspaceId: string) => CanvasSaveQueueInternals
-        }
-
+    it('drops queued saves included in the next serialized membership mutation', async () => {
         const service = new WorkspaceService()
-        const internals = service as unknown as WorkspaceServiceInternals
-        const queue = internals.getCanvasSaveQueue('workspace-1')
-        internals.canvasSaveRequestSequence = 4
-        queue.pendingRequest = {
-            canvasState: makeCanvasState('already-in-membership-mutation'),
-            persistViewport: false,
-            sequence: 4,
-        }
-
-        const result = await service.runCanvasMembershipMutation({
+        const first = Promise.withResolvers<void>()
+        const firstMutation = service.runCanvasMembershipMutation({
+            workspaceId: 'workspace-1',
+            mutation: async () => await first.promise,
+        })
+        const secondMutation = service.runCanvasMembershipMutation({
             workspaceId: 'workspace-1',
             mutation: async () => 'attached',
         })
-
-        expect(result).toBe('attached')
-        expect(queue.pendingRequest).toBeNull()
+        service.updateCanvasState({ workspaceId: 'workspace-1', canvasState: makeCanvasState('included-in-membership') })
+        first.resolve()
+        await firstMutation
+        expect(await secondMutation).toBe('attached')
+        await service.canvasSessions.drain()
+        expect(mocks.request).not.toHaveBeenCalled()
         expect(mocks.setMetaValues).toHaveBeenCalledWith({ requiresSave: false })
     })
 })

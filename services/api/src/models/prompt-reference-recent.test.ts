@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import PromptReferenceRecentModel, {
     buildPromptReferenceKey,
@@ -66,25 +72,31 @@ describe('PromptReferenceRecentModel', () => {
             now: 50,
         })
 
-        expect(dynamo.transactWrite).toHaveBeenNthCalledWith(1, expect.objectContaining({
-            origin: 'PromptReferenceRecent.recordAccepted',
-            operations: [
-                expect.objectContaining({
-                    type: 'put',
-                    item: expect.objectContaining({ referenceKey: 'media#asset-1', updatedAt: 51 }),
-                }),
-                expect.objectContaining({
-                    type: 'put',
-                    item: expect.objectContaining({ referenceKey: 'capability-module#character-creator', updatedAt: 52 }),
-                }),
-            ],
-        }))
-        expect(dynamo.transactWrite).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            origin: 'PromptReferenceRecent.trimOverflow',
-            operations: expect.arrayContaining([
-                expect.objectContaining({ type: 'delete', key: { userId: 'user-1', referenceKey: 'media#asset-100' } }),
-                expect.objectContaining({ type: 'delete', key: { userId: 'user-1', referenceKey: 'media#asset-101' } }),
-            ]),
-        }))
+        expect(dynamo.transactWrite).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({
+                origin: 'PromptReferenceRecent.recordAccepted',
+                operations: [
+                    expect.objectContaining({
+                        type: 'put',
+                        item: expect.objectContaining({ referenceKey: 'media#asset-1', updatedAt: 51 }),
+                    }),
+                    expect.objectContaining({
+                        type: 'put',
+                        item: expect.objectContaining({ referenceKey: 'capability-module#character-creator', updatedAt: 52 }),
+                    }),
+                ],
+            }),
+        )
+        expect(dynamo.transactWrite).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+                origin: 'PromptReferenceRecent.trimOverflow',
+                operations: expect.arrayContaining([
+                    expect.objectContaining({ type: 'delete', key: { userId: 'user-1', referenceKey: 'media#asset-100' } }),
+                    expect.objectContaining({ type: 'delete', key: { userId: 'user-1', referenceKey: 'media#asset-101' } }),
+                ]),
+            }),
+        )
     })
 })

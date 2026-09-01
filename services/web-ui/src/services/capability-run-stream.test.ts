@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import { STREAM_STATUS, type CapabilityRunEventStreamPayload } from '@lixpi/constants'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
+import {
+    STREAM_STATUS,
+    type CapabilityRunEventStreamPayload,
+} from '@lixpi/constants'
 
 import { toCapabilityRunEventSegment } from '$src/services/capability-run-stream.ts'
 

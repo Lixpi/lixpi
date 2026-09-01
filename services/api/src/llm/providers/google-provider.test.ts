@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     directCapabilityToolName,
     SealedResolvedCapabilityPlan,
@@ -60,11 +67,12 @@ vi.mock('../../services/video-frame-extraction.ts', () => ({
     extractVideoFramesViaWorkload: extractFramesMock.extractVideoFramesViaWorkload,
 }))
 
-const makeAsyncStream = <T>(chunks: T[]) => ({
-    [Symbol.asyncIterator]: async function* () {
-        for (const chunk of chunks) yield chunk
-    },
-}) as unknown as AsyncIterable<unknown>
+const makeAsyncStream = <T>(chunks: T[]) =>
+    ({
+        [Symbol.asyncIterator]: async function*() {
+            for (const chunk of chunks) yield chunk
+        },
+    }) as unknown as AsyncIterable<unknown>
 
 const GOOGLE_INFERENCE_CAPABILITIES: AiModelInferenceCapabilities = {
     thinkingMode: 'google-budget',
@@ -254,15 +262,16 @@ describe('getGoogleImageResponseSummary', () => {
 })
 
 describe('GoogleProvider construction', () => {
-    const createDeps = (): BaseProviderDeps => ({
-        natsService: { publish: vi.fn() } as any,
-        storeWorkspaceImage: vi.fn(),
-        storeWorkspaceVideo: vi.fn(),
-        usageReporter: {} as any,
-        runImageRouter: vi.fn(),
-        runVideoRouter: vi.fn(),
-        mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
-    }) as unknown as BaseProviderDeps
+    const createDeps = (): BaseProviderDeps =>
+        ({
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+            mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
+        }) as unknown as BaseProviderDeps
 
     beforeEach(() => {
         process.env.GOOGLE_API_KEY = 'test-key'
@@ -281,19 +290,19 @@ describe('GoogleProvider construction', () => {
         expect(() => new GoogleProvider('ws-1:thread-1', createDeps()))
             .toThrow('GOOGLE_API_KEY environment variable is required')
     })
-
 })
 
 describe('GoogleProvider internals', () => {
-    const createDeps = (): BaseProviderDeps => ({
-        natsService: { publish: vi.fn() } as any,
-        storeWorkspaceImage: vi.fn(),
-        storeWorkspaceVideo: vi.fn(),
-        usageReporter: {} as any,
-        runImageRouter: vi.fn(),
-        runVideoRouter: vi.fn(),
-        mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
-    }) as unknown as BaseProviderDeps
+    const createDeps = (): BaseProviderDeps =>
+        ({
+            natsService: { publish: vi.fn() } as any,
+            storeWorkspaceImage: vi.fn(),
+            storeWorkspaceVideo: vi.fn(),
+            usageReporter: {} as any,
+            runImageRouter: vi.fn(),
+            runVideoRouter: vi.fn(),
+            mediaProviderDefinition: CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google,
+        }) as unknown as BaseProviderDeps
 
     beforeEach(() => {
         process.env.GOOGLE_API_KEY = 'test-key'

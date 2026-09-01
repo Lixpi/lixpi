@@ -1,11 +1,18 @@
 'use strict'
 
-import { writeFile, readFile, readdir } from 'node:fs/promises'
+import {
+    writeFile,
+    readFile,
+    readdir,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { warn } from '@lixpi/debug-tools'
 
-import { runProcess, withTempDir } from './run-process.ts'
+import {
+    runProcess,
+    withTempDir,
+} from './run-process.ts'
 
 // Convert an office/exotic document (DOC, DOCX, PPT, PPTX, ODT, RTF, …) to PDF
 // via LibreOffice headless. PDF preserves layout AND embedded imagery — the form
@@ -23,9 +30,13 @@ export const convertDocumentToPdf = async (buffer: Buffer, originalName: string)
         await writeFile(inPath, buffer)
 
         await runProcess('soffice', [
-            '--headless', '--norestore', '--nologo',
-            '--convert-to', 'pdf',
-            '--outdir', outDir,
+            '--headless',
+            '--norestore',
+            '--nologo',
+            '--convert-to',
+            'pdf',
+            '--outdir',
+            outDir,
             inPath,
         ], { timeoutMs: 120000 })
 
@@ -50,8 +61,16 @@ export const renderPdfFirstPagePoster = async (pdfBuffer: Buffer): Promise<Buffe
             await writeFile(inPath, pdfBuffer)
 
             await runProcess('pdftocairo', [
-                '-png', '-f', '1', '-l', '1', '-singlefile', '-scale-to', '1024',
-                inPath, outPrefix,
+                '-png',
+                '-f',
+                '1',
+                '-l',
+                '1',
+                '-singlefile',
+                '-scale-to',
+                '1024',
+                inPath,
+                outPrefix,
             ], { timeoutMs: 60000 })
 
             return readFile(`${outPrefix}.png`)

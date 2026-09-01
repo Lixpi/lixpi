@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -29,8 +36,7 @@ import { aiModelSubjects } from './ai-model-subjects.ts'
 
 const SUBJECTS = NATS_SUBJECTS.AI_MODELS_SUBJECTS
 
-const getSubscription = (subject: string) =>
-    aiModelSubjects.find((subscription) => subscription.subject === subject)!
+const getSubscription = (subject: string) => aiModelSubjects.find((subscription) => subscription.subject === subject)!
 
 describe('AI model subject registration', () => {
     it('registers exactly the GET_AVAILABLE_MODELS and MODELS_SYNC_COMPLETED subjects', () => {

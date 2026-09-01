@@ -1,6 +1,9 @@
 'use strict'
 
-import { NATS_SUBJECTS, LoadingStatus } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    LoadingStatus,
+} from '@lixpi/constants'
 
 const { USER_SUBJECTS } = NATS_SUBJECTS
 
@@ -17,16 +20,14 @@ export default class UserService {
 
         try {
             const user: any = await servicesStore.getData('nats')!.request(USER_SUBJECTS.GET_USER, {
-                token: await AuthService.getTokenSilently()
+                token: await AuthService.getTokenSilently(),
             })
 
             userStore.setDataValues(user)
             userStore.setMetaValues({ loadingStatus: LoadingStatus.success })
-
         } catch (error) {
             console.error('Failed to load user:', error)
             userStore.setMetaValues({ loadingStatus: LoadingStatus.error })
         }
-
     }
 }

@@ -31,13 +31,13 @@ plugins/
 	README.md                   # this file (shared patterns)
 ```
 
-**Shared utilities:** `$src/utils/domTemplates.ts` provides the `html` templating helper (htm).
+**Shared utilities:** `@lixpi/ui-primitives/dom` provides the `html` templating helper (htm).
 
 ## Core patterns we follow
 
 - Node spec + NodeView live together. Each NodeView builds its DOM with templates and owns its events. No random DOM poking from the plugin class.
 - UI is decoration-first. Visual states come from classes via `DecorationSet` (placeholders, keyboard feedback, boundary highlights, etc.). NodeViews render structure; decorations toggle classes.
-- Templating uses `htm` via our `html` helper from `$src/utils/domTemplates.ts`. No JSX, no VDOM. Tagged templates → direct DOM.
+- Templating uses `htm` via our `html` helper from `@lixpi/ui-primitives/dom`. No JSX, no VDOM. Tagged templates → direct DOM.
 - The plugin class does orchestration only: selection checks, content extraction, transactions, streaming insertions, state flags.
 - **Reuse primitives**: For common UI patterns (dropdowns, modals, tooltips), use or create reusable primitives in `primitives/` rather than duplicating code across plugins. Primitives exist outside the document schema as UI controls.
 - Keep code small and obvious. If it feels like "framework", you're over-engineering it.
@@ -300,10 +300,10 @@ return {
 
 ## Templating & NodeViews
 
-**All DOM creation in `.ts` files must use the `html` tagged template** from `$src/utils/domTemplates.ts`. This applies to ProseMirror NodeViews, plugins, shared components (dropdowns, bubble menus, loading placeholders, info bubbles), and canvas code. Never use `document.createElement` or manual attribute/style assignment for building UI.
+**All DOM creation in `.ts` files must use the `html` tagged template** from `@lixpi/ui-primitives/dom`. This applies to ProseMirror NodeViews, plugins, shared components (dropdowns, bubble menus, loading placeholders, info bubbles), and canvas code. Never use `document.createElement` or manual attribute/style assignment for building UI.
 
 ```ts
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 const el = html`
 	<div className="btn" onclick=${onClick}>
@@ -318,7 +318,7 @@ Rules:
 - Styles: pass a **named variable** to `style=${styleObj}` — never inline the object literal. Keep it minimal; most styling belongs in SCSS.
 - To apply multiple style properties to an **existing** element, import `applyStyle` and call it instead of setting properties one by one:
   ```ts
-  import { applyStyle } from '$src/utils/domTemplates.ts'
+  import { applyStyle } from '@lixpi/ui-primitives/dom'
 
   applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px` })
   ```

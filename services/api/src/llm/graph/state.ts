@@ -225,11 +225,13 @@ export type ProviderState = {
     capabilityInputs?: Record<string, Record<string, CapabilityJsonValue>> | undefined
     resolvedCapabilityPlan?: SealedResolvedCapabilityPlan | undefined
     capabilityInvocationDepth?: number | undefined
-    capabilityToolResults?: Array<{
-        capabilityId: string
-        runId: string
-        output: Record<string, CapabilityJsonValue>
-    }> | undefined
+    capabilityToolResults?:
+        | Array<{
+            capabilityId: string
+            runId: string
+            output: Record<string, CapabilityJsonValue>
+        }>
+        | undefined
     capabilityOutputAssetIds?: string[] | undefined
     capabilityOutputMediaAssetIds?: string[] | undefined
     pendingCapabilityOutputFinalizations?: PendingCapabilityOutputFinalization[] | undefined
@@ -259,8 +261,7 @@ export type ProviderState = {
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
-const keep = <T>(curr: T | undefined, next: T | undefined): T | undefined =>
-    next !== undefined ? next : curr
+const keep = <T>(curr: T | undefined, next: T | undefined): T | undefined => next !== undefined ? next : curr
 
 export const channels: Record<keyof ProviderState, { reducer: typeof keep; default?: () => any }> = {
     messages: { reducer: keep, default: () => [] },

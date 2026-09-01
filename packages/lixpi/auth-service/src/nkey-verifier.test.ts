@@ -1,18 +1,25 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import nkeys from '@nats-io/nkeys'
 
 import { verifyNKeySignedJWT } from './nkey-verifier.ts'
 
-    type SigningPair = ReturnType<typeof nkeys.fromSeed>
+type SigningPair = ReturnType<typeof nkeys.fromSeed>
 
 const toBase64Url = (value: string) => Buffer.from(value, 'utf8').toString('base64url')
 
-    const createSignedToken = ({
-        claims,
-        publicKey,
-        signingPair,
+const createSignedToken = ({
+    claims,
+    publicKey,
+    signingPair,
 }: {
     claims: Record<string, unknown>
     publicKey: string

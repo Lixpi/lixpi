@@ -2,7 +2,10 @@
 
 import { createHash } from 'node:crypto'
 
-import type { CapabilityKind, CapabilityJsonValue } from '@lixpi/constants'
+import type {
+    CapabilityKind,
+    CapabilityJsonValue,
+} from '@lixpi/constants'
 
 import type { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
 
@@ -87,9 +90,11 @@ export function getAttachedCapabilityModelTools(
     if (!plan) return []
     return plan.serializable.rootCapabilityIds.flatMap(capabilityId => {
         const capability = plan.getManifest(capabilityId)
-        if (capability?.kind !== 'tool'
+        if (
+            capability?.kind !== 'tool'
             || (capability.manifest.tool?.executionPolicy !== 'model-choice'
-                && capability.manifest.tool?.executionPolicy !== 'model-required')) return []
+                && capability.manifest.tool?.executionPolicy !== 'model-required')
+        ) return []
         const schema = plan.getResource(capabilityId, capability.manifest.tool.inputSchema.resourceId)
         if (!schema) return []
         try {
@@ -127,8 +132,10 @@ function isOpenAIStrictSchemaCompatible(value: unknown): boolean {
         if (propertyEntries.some(([, child]) => !isOpenAIStrictSchemaCompatible(child))) return false
     }
     if (schema.items && !isOpenAIStrictSchemaCompatible(schema.items)) return false
-    if (Array.isArray(schema.anyOf)
-        && schema.anyOf.some(child => !isOpenAIStrictSchemaCompatible(child))) return false
+    if (
+        Array.isArray(schema.anyOf)
+        && schema.anyOf.some(child => !isOpenAIStrictSchemaCompatible(child))
+    ) return false
     return true
 }
 
@@ -136,10 +143,12 @@ function projectOpenAISchemaMap(value: unknown): unknown {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return projectOpenAIInputSchema(value)
     }
-    return Object.fromEntries(Object.entries(value).map(([name, schema]) => [
-        name,
-        projectOpenAIInputSchema(schema),
-    ]))
+    return Object.fromEntries(
+        Object.entries(value).map(([name, schema]) => [
+            name,
+            projectOpenAIInputSchema(schema),
+        ]),
+    )
 }
 
 function projectOpenAIInputSchema(value: unknown): unknown {

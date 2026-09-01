@@ -1,10 +1,18 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import type { CapabilityRunEvent } from '@lixpi/constants'
 
-import { CapabilityRunEventLog, getCapabilityRunEventSubject } from './capability-run-event-log.ts'
+import {
+    CapabilityRunEventLog,
+    getCapabilityRunEventSubject,
+} from './capability-run-event-log.ts'
 
 const event: CapabilityRunEvent = {
     runId: 'run-1',

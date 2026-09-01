@@ -67,6 +67,12 @@ Avoid:
 
 The docs build can validate heading IDs and anchor fragments when a human explicitly asks for that check. Do not run it as a default agent step.
 
+## Package Documentation
+
+Rendering-engine manuals live in `packages/lixpi/canvas-engine/docs/`; reusable canvas surface and effect manuals live in `packages/lixpi/canvas-components/docs/`. Lixpi workspace composition belongs in `packages/lixpi/canvas-components-lixpi-specific/docs/`. Shared DOM, SVG and gradient guidance belongs in `ui-primitives`; generic control guidance belongs in `ui-kit`. Each package README introduces its contracts and links to its manuals. Central canvas pages describe product behavior and persistence, then link to those package entry points.
+
+The [site source registry](site/source-registry.mjs) records authored source paths and output routes. Register package documentation explicitly; do not copy manuals into `documentation/` or ingest an entire package source tree. Keep package links relative to the original file. The same resolver validates and renders links, including package assets and heading fragments.
+
 ## Moving or Renaming Pages
 
 
@@ -75,7 +81,7 @@ When reorganizing documentation:
 1. Map old pages to their new homes before deleting anything.
 2. Search for old paths and old page titles across the repo.
 3. Update links in docs, source comments, package READMEs, and tests.
-4. Use static link review unless the user explicitly asks for the docs build.
+4. Use static link review, or the Dockerized documentation link tests when tests are explicitly requested. Run a docs build only when separately requested.
 5. If a source-shape test asserts a documentation path, update the test with the new path.
 
 Do not leave references to deleted pages. Keep links defensible from static review unless a requested docs build validates the rendered site.

@@ -1,6 +1,10 @@
 import sharp from 'sharp'
 import { readFile } from 'node:fs/promises'
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import type {
     CharacterFidelityAssessmentRequest,
@@ -14,7 +18,8 @@ import {
 
 const sourceKey = `partial-${'a'.repeat(64)}.png`
 const candidateKey = `partial-${'b'.repeat(64)}.png`
-const PHOTO_FIXTURE_BASE64 = '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'
+const PHOTO_FIXTURE_BASE64 =
+    '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'
 
 const coordinate = (objectKey: string, byteLength: number, organizationId = 'org-1'): CharacterFidelityObjectCoordinate => ({
     organizationId,
@@ -24,14 +29,15 @@ const coordinate = (objectKey: string, byteLength: number, organizationId = 'org
     byteLength,
 })
 
-const portraitFixture = async (accent: string): Promise<Buffer> => await sharp({
-    create: { width: 320, height: 320, channels: 3, background: '#d8c2a6' },
-})
-    .composite([
-        { input: Buffer.from(`<svg width="320" height="320"><ellipse cx="160" cy="150" rx="92" ry="118" fill="${accent}"/><circle cx="125" cy="130" r="12" fill="#121820"/><circle cx="195" cy="130" r="12" fill="#121820"/><path d="M115 205 Q160 235 205 205" fill="none" stroke="#121820" stroke-width="10"/></svg>`), left: 0, top: 0 },
-    ])
-    .png()
-    .toBuffer()
+const portraitFixture = async (accent: string): Promise<Buffer> =>
+    await sharp({
+        create: { width: 320, height: 320, channels: 3, background: '#d8c2a6' },
+    })
+        .composite([
+            { input: Buffer.from(`<svg width="320" height="320"><ellipse cx="160" cy="150" rx="92" ry="118" fill="${accent}"/><circle cx="125" cy="130" r="12" fill="#121820"/><circle cx="195" cy="130" r="12" fill="#121820"/><path d="M115 205 Q160 235 205 205" fill="none" stroke="#121820" stroke-width="10"/></svg>`), left: 0, top: 0 },
+        ])
+        .png()
+        .toBuffer()
 
 const request = (
     source: Buffer,
@@ -49,9 +55,10 @@ const request = (
     ...overrides,
 })
 
-const storage = (source: Buffer, candidate: Buffer) => ({
-    getObject: async (_bucket: string, objectKey: string) => objectKey === sourceKey ? source : objectKey === candidateKey ? candidate : null,
-}) as any
+const storage = (source: Buffer, candidate: Buffer) =>
+    ({
+        getObject: async (_bucket: string, objectKey: string) => objectKey === sourceKey ? source : objectKey === candidateKey ? candidate : null,
+    }) as any
 
 describe('character fidelity scorer', () => {
     it('verifies pinned artifacts and loads both models through WASM', async () => {

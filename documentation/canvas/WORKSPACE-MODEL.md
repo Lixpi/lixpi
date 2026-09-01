@@ -217,7 +217,7 @@ Organization/user-scoped Assets attached elsewhere survive. Blob deletion is con
 ## Related documentation
 
 - [Data Storage](../platform/DATA-STORAGE.md)
-- [Rendering Engine](./RENDERING-ENGINE.md)
-- [Edges & Connections](./EDGES-AND-CONNECTIONS.md)
+- [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md)
+- [Edges & Connections](../../packages/lixpi/canvas-engine/docs/EDGES-AND-CONNECTIONS.md)
 - [Branch Lineage](../media-generation/BRANCH-LINEAGE.md)
 - [Chat Panel & Sessions](../ai-chat/CHAT-PANEL-AND-SESSIONS.md)

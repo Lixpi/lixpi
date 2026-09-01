@@ -1,0 +1,12 @@
+@import '$src/sass/_variables.scss';
+@import '$src/sass/_prompt-reference-chip.scss';
+
+.workspace-pane {
+    --workspace-analysis-color: #{$steelBlue};
+    --workspace-handle-color: #{$nightBlue};
+}
+
+.workspace-branch-marker-content,
+.workspace-branch-reference-resolution {
+    @include prompt-reference-chip-on-dark-surface;
+}

@@ -1,9 +1,15 @@
 'use strict'
 
-import type { AiModelInferenceCapabilities, ProviderName } from '@lixpi/constants'
+import type {
+    AiModelInferenceCapabilities,
+    ProviderName,
+} from '@lixpi/constants'
 
 import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
-import type { CharacterEvidenceAnalysis, CharacterEvidenceAnalyzerPort } from './evidence-analyzer.ts'
+import type {
+    CharacterEvidenceAnalysis,
+    CharacterEvidenceAnalyzerPort,
+} from './evidence-analyzer.ts'
 import type {
     CharacterEditTargetPolicy,
     CharacterEvidenceRegion,
@@ -293,10 +299,12 @@ const buildPanelMessages = (
             { type: 'input_text', text: `Shared Capability reference ${index + 1}. Apply only according to the shared Capability instructions.` },
             { type: 'input_image', image_url: imageUrl, detail: 'high' },
         ]),
-        ...(request.poseReferenceDataUrl ? [
-            { type: 'input_text', text: 'Exact grayscale spatial template for this panel. Compare structure only; ignore its identity and design.' },
-            { type: 'input_image', image_url: request.poseReferenceDataUrl, detail: 'high' },
-        ] : []),
+        ...(request.poseReferenceDataUrl
+            ? [
+                { type: 'input_text', text: 'Exact grayscale spatial template for this panel. Compare structure only; ignore its identity and design.' },
+                { type: 'input_image', image_url: request.poseReferenceDataUrl, detail: 'high' },
+            ]
+            : []),
         { type: 'input_text', text: 'Candidate to assess.' },
         { type: 'input_image', image_url: request.candidateDataUrl, detail: 'high' },
     ],
@@ -381,8 +389,16 @@ const buildEvidenceSchema = (
                         conflictGroupId: { type: ['string', 'null'] },
                     },
                     required: [
-                        'feature', 'value', 'region', 'requestAuthority', 'visibility', 'sourceAssetId', 'sourceRegion',
-                        'targetAngles', 'confidence', 'conflictGroupId',
+                        'feature',
+                        'value',
+                        'region',
+                        'requestAuthority',
+                        'visibility',
+                        'sourceAssetId',
+                        'sourceRegion',
+                        'targetAngles',
+                        'confidence',
+                        'conflictGroupId',
                     ],
                 },
             },
@@ -414,10 +430,20 @@ const buildEvidenceSchema = (
             },
         },
         required: [
-            'medium', 'editTargetPolicy', 'editTargetApprovedRegions', 'editTargetRejectedRegions',
-            'regenerationScope', 'affectedPanelIds', 'promptDirectives', 'promptChangedFeatures',
-            'facts', 'palette', 'costumeNotes', 'materialNotes',
-            'distinguishingDetailNotes', 'sourceCoverage',
+            'medium',
+            'editTargetPolicy',
+            'editTargetApprovedRegions',
+            'editTargetRejectedRegions',
+            'regenerationScope',
+            'affectedPanelIds',
+            'promptDirectives',
+            'promptChangedFeatures',
+            'facts',
+            'palette',
+            'costumeNotes',
+            'materialNotes',
+            'distinguishingDetailNotes',
+            'sourceCoverage',
         ],
     },
 })
@@ -481,16 +507,18 @@ const normalizeEditTargetPolicy = (value: unknown): CharacterEditTargetPolicy =>
 
 const normalizeEvidenceRegions = (value: unknown): CharacterEvidenceRegion[] => {
     if (!Array.isArray(value)) return []
-    return [...new Set(value.flatMap(region => (
-        region === 'face'
-        || region === 'body'
-        || region === 'outfit'
-        || region === 'hands'
-        || region === 'feet'
-        || region === 'prop'
-            ? [region]
-            : []
-    )))]
+    return [
+        ...new Set(value.flatMap(region => (
+            region === 'face'
+                || region === 'body'
+                || region === 'outfit'
+                || region === 'hands'
+                || region === 'feet'
+                || region === 'prop'
+                ? [region]
+                : []
+        ))),
+    ]
 }
 
 const normalizeRegenerationScope = (value: unknown): CharacterRegenerationScope => {
@@ -498,9 +526,10 @@ const normalizeRegenerationScope = (value: unknown): CharacterRegenerationScope 
     throw new Error('CHARACTER_EVIDENCE_REGENERATION_SCOPE_INVALID')
 }
 
-const normalizeStringList = (value: unknown): string[] => Array.isArray(value)
-    ? [...new Set(value.flatMap(item => typeof item === 'string' && item.trim() ? [item.trim()] : []))]
-    : []
+const normalizeStringList = (value: unknown): string[] =>
+    Array.isArray(value)
+        ? [...new Set(value.flatMap(item => typeof item === 'string' && item.trim() ? [item.trim()] : []))]
+        : []
 
 const normalizePanelDimensions = (
     value: unknown,
@@ -574,9 +603,11 @@ const normalizePanelDimensions = (
     const receivedDimensionNames = normalizedDimensions.map(dimension => dimension.dimension)
     const missingDimensions = expectedDimensions.filter(dimension => !receivedDimensionNames.includes(dimension))
     const unexpectedDimensions = receivedDimensionNames.filter(dimension => !expectedDimensions.includes(dimension))
-    const duplicateDimensions = [...new Set(receivedDimensionNames.filter((dimension, index) => (
-        receivedDimensionNames.indexOf(dimension) !== index
-    )))]
+    const duplicateDimensions = [
+        ...new Set(receivedDimensionNames.filter((dimension, index) => (
+            receivedDimensionNames.indexOf(dimension) !== index
+        ))),
+    ]
     if (missingDimensions.length > 0 || unexpectedDimensions.length > 0 || duplicateDimensions.length > 0) {
         const issues = [
             missingDimensions.length > 0 ? `missing ${missingDimensions.join(', ')}` : '',
@@ -630,9 +661,11 @@ const coercePanelDimensionCollection = (
     ]))
     const entries = Object.entries(value).flatMap(([dimensionKey, dimensionValue]) => {
         const expectedDimension = expectedByNormalizedName.get(normalizeDimensionToken(dimensionKey))
-        if (!expectedDimension || (!isRecord(dimensionValue)
-            && typeof dimensionValue !== 'number'
-            && typeof dimensionValue !== 'string')) return []
+        if (
+            !expectedDimension || (!isRecord(dimensionValue)
+                && typeof dimensionValue !== 'number'
+                && typeof dimensionValue !== 'string')
+        ) return []
         const normalizedValue = isRecord(dimensionValue)
             ? dimensionValue
             : { score: dimensionValue, mismatchCodes: [] }
@@ -656,9 +689,11 @@ const summarizeDimensionPayloadShape = (value: unknown): Readonly<Record<string,
         return {
             kind: 'array',
             entryCount: value.length,
-            entryShapes: value.slice(0, 12).map(entry => isRecord(entry)
-                ? Object.keys(entry)
-                : [describeValueType(entry)]),
+            entryShapes: value.slice(0, 12).map(entry =>
+                isRecord(entry)
+                    ? Object.keys(entry)
+                    : [describeValueType(entry)]
+            ),
         }
     }
     if (isRecord(value)) {
@@ -685,11 +720,12 @@ const normalizeRequestedDimensionName = (
         ?? value.trim()
 }
 
-const normalizeDimensionToken = (value: string): string => value
-    .trim()
-    .toLocaleLowerCase('en-US')
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+const normalizeDimensionToken = (value: string): string =>
+    value
+        .trim()
+        .toLocaleLowerCase('en-US')
+        .replace(/[^a-z0-9]+/gu, '-')
+        .replace(/^-|-$/gu, '')
 
 const normalizePanelDimensionScore = (value: unknown): number | undefined => {
     if (typeof value === 'number') {

@@ -108,13 +108,17 @@ export class MediaBranchLineagePlanner {
         const promptText = snapshot?.promptText ?? input.workspaceContextSnapshot?.promptText ?? ''
         const promptFingerprint = snapshot?.promptFingerprint
         const referenceCandidates = this.getReferenceCandidates(referenceResolution, snapshot)
-        const referenceAssetIds = Array.from(new Set([
-            ...(input.referenceAssetIds ?? []),
-            ...referenceCandidates.map(candidate => candidate.assetId),
-        ]))
-        const referenceNodeIds = Array.from(new Set(
-            referenceCandidates.flatMap(candidate => candidate.nodeId ? [candidate.nodeId] : []),
-        ))
+        const referenceAssetIds = Array.from(
+            new Set([
+                ...(input.referenceAssetIds ?? []),
+                ...referenceCandidates.map(candidate => candidate.assetId),
+            ]),
+        )
+        const referenceNodeIds = Array.from(
+            new Set(
+                referenceCandidates.flatMap(candidate => candidate.nodeId ? [candidate.nodeId] : []),
+            ),
+        )
         const providedReferenceNodeIds = this.getProvidedReferenceNodeIds(input.workspaceContextSnapshot)
         const sourceContextNodeIds = referenceResolution?.sourceContextNodeIds ?? []
         const createdAt = input.createdAt ?? Date.now()
@@ -535,7 +539,6 @@ export class MediaBranchLineagePlanner {
             ? `branch-line-${generationRequestId}-r${run.reasoningIndex}-${run.mediaType}-${run.mediaIndex}`
             : `branch-line-${generationRequestId}-reasoning-${run.reasoningIndex}`
     }
-
 }
 
 type MediaMarkerArgs = {

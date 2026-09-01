@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import { codeBlockNodeSpec as packageCodeBlockNodeSpec, codeBlockNodeType as packageCodeBlockNodeType } from '@lixpi/prosemirror'
-import { createProseMirrorSchema, DOCUMENT_TYPE } from '@lixpi/prosemirror'
+import {
+    codeBlockNodeSpec as packageCodeBlockNodeSpec,
+    codeBlockNodeType as packageCodeBlockNodeType,
+} from '@lixpi/prosemirror'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from '@lixpi/prosemirror'
 import {
     codeBlockNodeSpec,
     codeBlockNodeType,

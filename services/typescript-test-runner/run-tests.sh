@@ -28,7 +28,7 @@
 # Usage (assumes .env is symlinked via ./set-env.sh at the repo root; add
 # --env-file .env.<your-env> to each command instead if you haven't run it):
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui
-#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/utils/zoomScaling.test.ts
+#   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/canvas-adapters/workspace-canvas.test.ts
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex
 #   docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared
@@ -96,7 +96,7 @@ run_shared() {
 }
 
 case "$domain" in
-    api|web-ui|nex)
+    api|web-ui|nex|docs-site)
         run_domain "$domain" "$@"
         ;;
     shared)
@@ -109,7 +109,7 @@ case "$domain" in
         run_shared
         ;;
     *)
-        echo "Usage: run-tests.sh {api|web-ui|nex|shared|all} [vitest args]" >&2
+        echo "Usage: run-tests.sh {api|web-ui|nex|docs-site|shared|all} [vitest args]" >&2
         exit 1
         ;;
 esac

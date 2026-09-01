@@ -1,6 +1,9 @@
 'use strict'
 
-import { info, warn } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import Workspace from '../../models/workspace.ts'
@@ -43,9 +46,10 @@ export const workspaceSubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: { pub: { allow: [WORKSPACE_SUBJECTS.GET_USER_WORKSPACES] }, sub: { allow: [] } },
-        handler: async (data: any) => data.user.userId
-            ? await Workspace.getUserWorkspaces({ userId: data.user.userId })
-            : { error: 'UNAUTHORIZED' },
+        handler: async (data: any) =>
+            data.user.userId
+                ? await Workspace.getUserWorkspaces({ userId: data.user.userId })
+                : { error: 'UNAUTHORIZED' },
     },
     {
         subject: WORKSPACE_SUBJECTS.UPDATE_WORKSPACE,

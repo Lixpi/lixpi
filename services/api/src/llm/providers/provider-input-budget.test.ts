@@ -1,20 +1,25 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { CapabilityError } from '@lixpi/capability-system/backend'
 
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 
-const state = (contextWindow?: number) => ({
-    modelVersion: 'reasoning-model',
-    maxCompletionSize: 100,
-    aiModelMetaInfo: {
-        model: 'reasoning-model',
+const state = (contextWindow?: number) =>
+    ({
         modelVersion: 'reasoning-model',
-        ...(contextWindow !== undefined ? { contextWindow } : {}),
-    },
-}) as any
+        maxCompletionSize: 100,
+        aiModelMetaInfo: {
+            model: 'reasoning-model',
+            modelVersion: 'reasoning-model',
+            ...(contextWindow !== undefined ? { contextWindow } : {}),
+        },
+    }) as any
 
 describe('provider translated-request context admission', () => {
     it('rejects complete oversized text without mutating or clipping it', () => {

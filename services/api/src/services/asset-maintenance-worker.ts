@@ -3,7 +3,11 @@
 import * as process from 'node:process'
 
 import NATS_Service from '@lixpi/nats-service'
-import { getDynamoDbTableStageName, NATS_SUBJECTS, type MediaGenerationRunMeta } from '@lixpi/constants'
+import {
+    getDynamoDbTableStageName,
+    NATS_SUBJECTS,
+    type MediaGenerationRunMeta,
+} from '@lixpi/constants'
 
 import BlobModel from '../models/blob.ts'
 import { retireSupersededCapabilityBlobReferences } from '../models/capability.ts'
@@ -31,9 +35,13 @@ const listOrganizationIds = async (): Promise<string[]> => {
         consistentRead: true,
         origin: 'AssetMaintenance.listOrganizationIdsForBlobSweep',
     })
-    return [...new Set((result?.items ?? [])
-        .map((item: { organizationId?: unknown }) => item.organizationId)
-        .filter((organizationId: unknown): organizationId is string => typeof organizationId === 'string' && Boolean(organizationId)))]
+    return [
+        ...new Set(
+            (result?.items ?? [])
+                .map((item: { organizationId?: unknown }) => item.organizationId)
+                .filter((organizationId: unknown): organizationId is string => typeof organizationId === 'string' && Boolean(organizationId)),
+        ),
+    ]
 }
 
 type AssetMaintenanceMessage = {
@@ -203,11 +211,13 @@ const dispatchMaintenanceMessage = async ({
     }
     if (subject === NATS_SUBJECTS.ASSET_MAINTENANCE_SUBJECTS.CLEANUP_ASSET_SURFACE) {
         if (!data.assetId || !data.surfaceId) throw new Error('INVALID_ASSET_SURFACE_CLEANUP_PAYLOAD')
-        if (await isCurrentDocumentSurface({
-            organizationId: data.organizationId,
-            embeddedAssetId: data.assetId,
-            surfaceId: data.surfaceId,
-        })) return
+        if (
+            await isCurrentDocumentSurface({
+                organizationId: data.organizationId,
+                embeddedAssetId: data.assetId,
+                surfaceId: data.surfaceId,
+            })
+        ) return
         await AssetModel.removeAssetSurfaceReferenceSystem({
             organizationId: data.organizationId,
             assetId: data.assetId,
@@ -252,7 +262,9 @@ export const startAssetMaintenanceWorker = async (natsService: NATS_Service): Pr
         } catch (error) {
             console.error('Asset maintenance worker poll failed:', error)
         }
-        const timer = setTimeout(() => { void poll() }, 250)
+        const timer = setTimeout(() => {
+            void poll()
+        }, 250)
         if (typeof timer === 'object' && 'unref' in timer) timer.unref()
     }
     void poll()

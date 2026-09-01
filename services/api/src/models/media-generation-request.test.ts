@@ -1,7 +1,16 @@
 'use strict'
 
-import { ACCESS_LEVEL, type MediaGenerationRequest } from '@lixpi/constants'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    ACCESS_LEVEL,
+    type MediaGenerationRequest,
+} from '@lixpi/constants'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const { workspaceGetMock } = vi.hoisted(() => ({
     workspaceGetMock: vi.fn(),

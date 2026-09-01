@@ -37,12 +37,11 @@
         "@lixpi/capability-system": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/canvas-engine": "workspace:*",
+        "@lixpi/canvas-components": "workspace:*",
+        "@lixpi/canvas-components-lixpi-specific": "workspace:*",
         "@lixpi/nats-service": "workspace:*",
         "@lixpi/prosemirror": "workspace:*",
         "@lixpi/ui-kit": "workspace:*",
-        "pixi.js": "*",
-        "rbush": "*",
-        "@types/rbush": "*",
         "elkjs": "*",
         "@auth0/auth0-spa-js": "*",
         "@codemirror/autocomplete": "*",
@@ -61,7 +60,6 @@
         "@nanostores/persistent": "*",
         "codemirror": "*",
         "crelt": "*",
-        "htm": "*",
         "nanostores": "*",
         "prosemirror-commands": "*",
         "prosemirror-dropcursor": "*",
@@ -74,7 +72,8 @@
         "prosemirror-schema-basic": "*",
         "prosemirror-schema-list": "*",
         "prosemirror-state": "*",
-        "prosemirror-view": "*"
+        "prosemirror-view": "*",
+        "@lixpi/ui-primitives": "workspace:*"
     },
     "packageManager": "pnpm@11.6.0"
 }

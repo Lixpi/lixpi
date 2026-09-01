@@ -24,14 +24,11 @@ const parseUrl = (url: string): { parsed: URL; isAbsolute: boolean } | null => {
     }
 }
 
-const stringifyUrl = (parsed: URL, isAbsolute: boolean): string =>
-    isAbsolute ? parsed.toString() : `${parsed.pathname}${parsed.search}${parsed.hash}`
+const stringifyUrl = (parsed: URL, isAbsolute: boolean): string => isAbsolute ? parsed.toString() : `${parsed.pathname}${parsed.search}${parsed.hash}`
 
-export const buildAssetRenditionPath = (assetId: string, rendition: string): string =>
-    `/api/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(rendition)}`
+export const buildAssetRenditionPath = (assetId: string, rendition: string): string => `/api/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(rendition)}`
 
-export const buildAssetUploadPath = (workspaceId: string): string =>
-    `/api/assets/workspaces/${encodeURIComponent(workspaceId)}`
+export const buildAssetUploadPath = (workspaceId: string): string => `/api/assets/workspaces/${encodeURIComponent(workspaceId)}`
 
 export const isApiEndpoint = (url: string): boolean => Boolean(parseUrl(url)?.parsed.pathname.startsWith('/api/'))
 

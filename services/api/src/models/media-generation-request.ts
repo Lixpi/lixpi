@@ -75,12 +75,13 @@ export const getMediaGenerationRequest = async ({
 }: {
     generationRequestId: string
     workspaceId: string
-}): Promise<MediaGenerationRequest | undefined> => await dynamoDBService.getItem({
-    tableName: requestsTableName(),
-    key: { generationRequestId, workspaceId },
-    consistentRead: true,
-    origin: 'MediaGenerationRequest.get',
-}) as MediaGenerationRequest | undefined
+}): Promise<MediaGenerationRequest | undefined> =>
+    await dynamoDBService.getItem({
+        tableName: requestsTableName(),
+        key: { generationRequestId, workspaceId },
+        consistentRead: true,
+        origin: 'MediaGenerationRequest.get',
+    }) as MediaGenerationRequest | undefined
 
 export const getAuthorizedMediaGenerationRequest = async ({
     generationRequestId,
@@ -211,10 +212,12 @@ export const listWorkspaceMediaGenerationRequests = async (workspaceId: string):
 
 export const deleteWorkspaceMediaGenerationRequests = async (workspaceId: string): Promise<MediaGenerationRequest[]> => {
     const metas = await listWorkspaceMediaGenerationRequests(workspaceId)
-    const requests = (await Promise.all(metas.map(meta => getMediaGenerationRequest({
-        generationRequestId: meta.generationRequestId,
-        workspaceId,
-    })))).filter((request): request is MediaGenerationRequest => Boolean(request))
+    const requests = (await Promise.all(metas.map(meta =>
+        getMediaGenerationRequest({
+            generationRequestId: meta.generationRequestId,
+            workspaceId,
+        })
+    ))).filter((request): request is MediaGenerationRequest => Boolean(request))
     for (const request of requests) {
         const access = await dynamoDBService.queryItems({
             tableName: accessTableName(),

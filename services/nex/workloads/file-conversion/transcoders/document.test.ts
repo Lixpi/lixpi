@@ -1,10 +1,23 @@
 'use strict'
 
 import { join } from 'node:path'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    mkdir,
+    writeFile,
+} from 'node:fs/promises'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 
-import { convertDocumentToPdf, renderPdfFirstPagePoster, getPdfPageCount } from './document.ts'
+import {
+    convertDocumentToPdf,
+    renderPdfFirstPagePoster,
+    getPdfPageCount,
+} from './document.ts'
 
 const runProcessMock = vi.fn()
 

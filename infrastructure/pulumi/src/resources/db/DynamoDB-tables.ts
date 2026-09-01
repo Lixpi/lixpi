@@ -4,7 +4,10 @@ import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-import { formatStageResourceName, getDynamoDbTableStageName } from '@lixpi/constants'
+import {
+    formatStageResourceName,
+    getDynamoDbTableStageName,
+} from '@lixpi/constants'
 
 const { ORG_NAME, STAGE, ENVIRONMENT } = process.env
 
@@ -303,20 +306,23 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
     }
     const definitions = getTableDefinitions()
 
-    const create = (definition: TableDefinition): aws.dynamodb.Table => new aws.dynamodb.Table(
-        definition.name,
-        {
-            ...definition,
-            billingMode: 'PAY_PER_REQUEST',
-            ...(enableDeletionProtection ? { deletionProtectionEnabled: true } : {}),
-            ...(enableStreams ? {
-                streamEnabled: true,
-                streamViewType: 'NEW_AND_OLD_IMAGES',
-            } : {}),
-            tags: { Name: definition.name },
-        } as aws.dynamodb.TableArgs,
-        resourceOpts,
-    )
+    const create = (definition: TableDefinition): aws.dynamodb.Table =>
+        new aws.dynamodb.Table(
+            definition.name,
+            {
+                ...definition,
+                billingMode: 'PAY_PER_REQUEST',
+                ...(enableDeletionProtection ? { deletionProtectionEnabled: true } : {}),
+                ...(enableStreams
+                    ? {
+                        streamEnabled: true,
+                        streamViewType: 'NEW_AND_OLD_IMAGES',
+                    }
+                    : {}),
+                tags: { Name: definition.name },
+            } as aws.dynamodb.TableArgs,
+            resourceOpts,
+        )
 
     const tables = Object.fromEntries(
         Object.entries(definitions).map(([logicalName, definition]) => [logicalName, create(definition)]),
@@ -329,17 +335,19 @@ export const createDynamoDbTables = async (opts?: { provider?: aws.Provider }) =
     // delete them. Use `retain` only to hold a pre-removal stack deliberately.
     // Local stacks never recreate these inert resources.
     const legacyTables = !opts?.provider && legacyStorageRemovalStage !== 'remove'
-        ? Object.fromEntries(Object.entries(getLegacyStorageDefinitions()).map(([logicalName, definition]) => [
-            logicalName,
-            new aws.dynamodb.Table(definition.name, {
-                ...definition,
-                billingMode: 'PAY_PER_REQUEST',
-                deletionProtectionEnabled: enableDeletionProtection && legacyStorageRemovalStage === 'retain',
-                streamEnabled: true,
-                streamViewType: 'NEW_AND_OLD_IMAGES',
-                tags: { Name: definition.name },
-            } as aws.dynamodb.TableArgs),
-        ])) as Record<string, aws.dynamodb.Table>
+        ? Object.fromEntries(
+            Object.entries(getLegacyStorageDefinitions()).map(([logicalName, definition]) => [
+                logicalName,
+                new aws.dynamodb.Table(definition.name, {
+                    ...definition,
+                    billingMode: 'PAY_PER_REQUEST',
+                    deletionProtectionEnabled: enableDeletionProtection && legacyStorageRemovalStage === 'retain',
+                    streamEnabled: true,
+                    streamViewType: 'NEW_AND_OLD_IMAGES',
+                    tags: { Name: definition.name },
+                } as aws.dynamodb.TableArgs),
+            ]),
+        ) as Record<string, aws.dynamodb.Table>
         : {}
 
     const allTables = { ...tables, ...legacyTables }

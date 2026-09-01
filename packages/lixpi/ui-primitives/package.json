@@ -1,0 +1,35 @@
+{
+    "name": "@lixpi/ui-primitives",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./dom": "./src/dom/index.ts",
+        "./svg": "./src/svg/index.ts",
+        "./animation": "./src/animation/index.ts",
+        "./gradients": "./src/gradients/index.ts",
+        "./styles/transitions": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/styles/_transitions.scss",
+            "style": "./src/styles/_transitions.scss",
+            "default": "./src/styles/_transitions.scss"
+        }
+    },
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "dependencies": {
+        "d3-selection": "*",
+        "d3-transition": "*",
+        "htm": "*"
+    },
+    "devDependencies": {
+        "@types/d3-selection": "*",
+        "@types/d3-transition": "*",
+        "happy-dom": "*",
+        "vitest": "*"
+    },
+    "license": "MIT"
+}

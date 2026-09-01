@@ -1,11 +1,21 @@
 'use strict'
 
-import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+    beforeEach,
+} from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 import type { AiModelInferenceCapabilities } from '@lixpi/constants'
 
-import { callStructuredVlm, type VlmCallArgs } from './structured-vlm-client.ts'
+import {
+    callStructuredVlm,
+    type VlmCallArgs,
+} from './structured-vlm-client.ts'
 
 const openAiCreate = vi.fn()
 const anthropicStream = vi.fn()

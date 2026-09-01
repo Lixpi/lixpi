@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import { Schema } from 'prosemirror-model'
 import {
     aiLineageEventNodeSpec,
@@ -15,12 +19,13 @@ const lineageEventSchema = new Schema({
     marks: {},
 })
 
-const createLineageEventNode = (attrs: Record<string, unknown> = {}) => lineageEventSchema.nodes.aiLineageEvent.create({
-    kind: 'branch-fork',
-    branchOriginNodeId: '',
-    branchForkNodeId: '',
-    ...attrs,
-})
+const createLineageEventNode = (attrs: Record<string, unknown> = {}) =>
+    lineageEventSchema.nodes.aiLineageEvent.create({
+        kind: 'branch-fork',
+        branchOriginNodeId: '',
+        branchForkNodeId: '',
+        ...attrs,
+    })
 
 describe('aiLineageEventNodeSpec', () => {
     it('serializes event metadata to DOM attrs and classes', () => {

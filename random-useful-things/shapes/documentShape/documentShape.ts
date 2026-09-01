@@ -3,8 +3,14 @@
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { setupContextGradient, drawContextSelection } from '$src/infographics/shapes/documentShape/documentContextSelection.ts'
-import { drawDocumentThreadShape, setupThreadGradient } from '$src/infographics/shapes/documentShape/documentThreadShape.ts'
+import {
+    setupContextGradient,
+    drawContextSelection,
+} from '$src/infographics/shapes/documentShape/documentContextSelection.ts'
+import {
+    drawDocumentThreadShape,
+    setupThreadGradient,
+} from '$src/infographics/shapes/documentShape/documentThreadShape.ts'
 import { drawDocumentContentBlock } from '$src/infographics/shapes/documentShape/documentContentBlock.ts'
 
 // Creates the context shape SVG from scratch using modular primitives
@@ -12,7 +18,7 @@ import { drawDocumentContentBlock } from '$src/infographics/shapes/documentShape
 export function createContextShapeSVG({
     withGradient = true,
     withBackgroundAnimatedGradient = true,
-    instanceId = 'default'
+    instanceId = 'default',
 }: {
     withGradient?: boolean
     withBackgroundAnimatedGradient?: boolean
@@ -51,7 +57,7 @@ export function createContextShapeSVG({
     drawDocumentThreadShape(g, {
         text: 'THREAD',
         gradientId: withGradient ? threadGradientId : undefined,
-        colors
+        colors,
     })
 
     // Draw bottom content block (lines + squares below context box)

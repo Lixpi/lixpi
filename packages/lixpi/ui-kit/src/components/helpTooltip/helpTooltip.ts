@@ -1,6 +1,7 @@
-import { applyStyle, html } from '../../dom/domTemplates.ts'
-import { questionMarkCircleIcon } from '../../svg/svgIcons.ts'
-import { uiKitSettings } from '../../runtime-settings.ts'
+import {
+    applyStyle,
+    createDocumentHtml,
+} from '@lixpi/ui-primitives/dom'
 
 let nextHelpTooltipId = 0
 
@@ -59,6 +60,9 @@ const helpTooltipCssVariableNames = [
 
 // Small TypeScript-html tooltip primitive for ProseMirror and other imperative DOM surfaces.
 export type HelpTooltipConfig = {
+    document?: Document
+    portalRoot?: HTMLElement
+    hideDelayMs?: number
     label: string
     text?: string
     content?: HelpTooltipContent
@@ -89,6 +93,8 @@ export type HelpTooltipInstance = {
 }
 
 export type HelpTooltipProviderConfig = {
+    portalRoot?: HTMLElement
+    showDelayMs?: number
     root?: Document | HTMLElement
     shouldShow?: (trigger: HelpTooltipTriggerElement) => boolean
 }
@@ -98,6 +104,11 @@ export type HelpTooltipProviderInstance = {
 }
 
 class HelpTooltip implements HelpTooltipInstance {
+    private readonly document: Document
+    private readonly view: Window
+    private readonly html: ReturnType<typeof createDocumentHtml>
+    private readonly portalRoot: HTMLElement
+    private destroyed = false
     readonly dom: HTMLElement
 
     private readonly trigger: HelpTooltipTriggerElement
@@ -114,6 +125,10 @@ class HelpTooltip implements HelpTooltipInstance {
     private contentResizeObserver: ResizeObserver | null = null
 
     constructor(private readonly config: HelpTooltipConfig) {
+        this.document = config.portalRoot?.ownerDocument ?? config.triggerElement?.ownerDocument ?? config.document ?? document
+        this.view = this.document.defaultView ?? window
+        this.html = createDocumentHtml(this.document)
+        this.portalRoot = config.portalRoot ?? this.document.body
         this.ownsTrigger = !config.triggerElement
         this.dom = this.render()
         this.trigger = config.triggerElement
@@ -126,19 +141,19 @@ class HelpTooltip implements HelpTooltipInstance {
     private render(): HTMLElement {
         const rootClassName = `help-tooltip${this.config.className ? ` ${this.config.className}` : ''}`
         const contentClassName = `help-tooltip-content${this.config.contentClassName ? ` ${this.config.contentClassName}` : ''}${this.config.interactive ? ' help-tooltip-content-interactive' : ''}`
-        const content = html`
+        const content = this.html`
             <span id=${this.tooltipId} className=${contentClassName} role="tooltip">
                 ${this.config.content ?? this.config.text ?? ''}
             </span>
         ` as HTMLElement
 
         if (this.config.triggerElement) {
-            return html`
+            return this.html`
                 <span className=${rootClassName} contenteditable="false">${content}</span>
             ` as HTMLElement
         }
 
-        return html`
+        return this.html`
             <span className=${rootClassName} contenteditable="false">
                 ${this.renderTrigger()}
                 ${content}
@@ -149,7 +164,7 @@ class HelpTooltip implements HelpTooltipInstance {
     private renderTrigger(): HTMLElement {
         const triggerClassName = this.config.triggerClassName ? ` ${this.config.triggerClassName}` : ''
         if (this.config.triggerContent) {
-            return html`
+            return this.html`
                 <span
                     className=${`help-tooltip-trigger help-tooltip-trigger-custom${triggerClassName}`}
                     tabindex="0"
@@ -164,7 +179,7 @@ class HelpTooltip implements HelpTooltipInstance {
             ` as HTMLElement
         }
 
-        return html`
+        return this.html`
             <button
                 type="button"
                 className=${`help-tooltip-trigger${triggerClassName}`}
@@ -174,7 +189,7 @@ class HelpTooltip implements HelpTooltipInstance {
                 onmousedown=${this.stopControlEvent}
                 onclick=${this.stopControlEvent}
             >
-                <span className="help-tooltip-mark" innerHTML=${this.config.icon ?? questionMarkCircleIcon}></span>
+                <span className="help-tooltip-mark" innerHTML=${this.config.icon ?? '?'}></span>
             </button>
         ` as HTMLButtonElement
     }
@@ -230,7 +245,7 @@ class HelpTooltip implements HelpTooltipInstance {
     private syncContentCssVariables(): void {
         if (this.config.inheritContentStyles === false) return
 
-        const computedStyle = getComputedStyle(this.ownsTrigger ? this.dom : this.trigger)
+        const computedStyle = this.view.getComputedStyle(this.ownsTrigger ? this.dom : this.trigger)
         const cssVariableNames = this.config.contentCssVariableNames
             ? [...helpTooltipCssVariableNames, ...this.config.contentCssVariableNames]
             : helpTooltipCssVariableNames
@@ -244,10 +259,10 @@ class HelpTooltip implements HelpTooltipInstance {
     }
 
     private mountContent(): void {
-        if (this.content.parentElement === document.body) return
+        if (this.content.parentElement === this.portalRoot) return
 
         this.syncContentCssVariables()
-        document.body.appendChild(this.content)
+        this.portalRoot.appendChild(this.content)
         this.observeContentSize()
     }
 
@@ -266,7 +281,7 @@ class HelpTooltip implements HelpTooltipInstance {
     }
 
     private getCssPixelValue(propertyName: string, fallback: number): number {
-        const value = Number.parseFloat(getComputedStyle(this.content).getPropertyValue(propertyName))
+        const value = Number.parseFloat(this.view.getComputedStyle(this.content).getPropertyValue(propertyName))
         return Number.isFinite(value) ? value : fallback
     }
 
@@ -275,11 +290,11 @@ class HelpTooltip implements HelpTooltipInstance {
     }
 
     private getViewportBounds(): HelpTooltipViewportBounds {
-        const viewport = window.visualViewport
+        const viewport = this.view.visualViewport
         const left = viewport?.offsetLeft ?? 0
         const top = viewport?.offsetTop ?? 0
-        const width = viewport?.width ?? window.innerWidth
-        const height = viewport?.height ?? window.innerHeight
+        const width = viewport?.width ?? this.view.innerWidth
+        const height = viewport?.height ?? this.view.innerHeight
 
         return {
             left,
@@ -380,7 +395,7 @@ class HelpTooltip implements HelpTooltipInstance {
         contentTop: number,
     ): void {
         const arrowSize = this.getCssPixelValue('--help-tooltip-arrow-size', DEFAULT_HELP_TOOLTIP_ARROW_SIZE)
-        const contentStyle = getComputedStyle(this.content)
+        const contentStyle = this.view.getComputedStyle(this.content)
         const borderRadius = Math.max(
             Number.parseFloat(contentStyle.borderTopLeftRadius) || 0,
             Number.parseFloat(contentStyle.borderTopRightRadius) || 0,
@@ -411,31 +426,34 @@ class HelpTooltip implements HelpTooltipInstance {
         )
         const surfaceColor = contentStyle.backgroundColor
 
-        this.content.style.setProperty('--help-tooltip-arrow-cross-position', `${
-            placement === 'top' || placement === 'bottom'
-                ? arrowCenterX - contentLeft
-                : arrowCenterY - contentTop
-        }px`)
+        this.content.style.setProperty(
+            '--help-tooltip-arrow-cross-position',
+            `${
+                placement === 'top' || placement === 'bottom'
+                    ? arrowCenterX - contentLeft
+                    : arrowCenterY - contentTop
+            }px`,
+        )
         this.content.style.setProperty('--help-tooltip-arrow-surface-color', surfaceColor)
     }
 
     private addViewportListeners(): void {
         if (this.isTrackingViewport) return
 
-        window.addEventListener('resize', this.positionTooltip)
-        window.visualViewport?.addEventListener('resize', this.positionTooltip)
-        window.visualViewport?.addEventListener('scroll', this.positionTooltip)
-        document.addEventListener('scroll', this.positionTooltip, true)
+        this.view.addEventListener('resize', this.positionTooltip)
+        this.view.visualViewport?.addEventListener('resize', this.positionTooltip)
+        this.view.visualViewport?.addEventListener('scroll', this.positionTooltip)
+        this.document.addEventListener('scroll', this.positionTooltip, true)
         this.isTrackingViewport = true
     }
 
     private removeViewportListeners(): void {
         if (!this.isTrackingViewport) return
 
-        window.removeEventListener('resize', this.positionTooltip)
-        window.visualViewport?.removeEventListener('resize', this.positionTooltip)
-        window.visualViewport?.removeEventListener('scroll', this.positionTooltip)
-        document.removeEventListener('scroll', this.positionTooltip, true)
+        this.view.removeEventListener('resize', this.positionTooltip)
+        this.view.visualViewport?.removeEventListener('resize', this.positionTooltip)
+        this.view.visualViewport?.removeEventListener('scroll', this.positionTooltip)
+        this.document.removeEventListener('scroll', this.positionTooltip, true)
         this.isTrackingViewport = false
     }
 
@@ -464,7 +482,7 @@ class HelpTooltip implements HelpTooltipInstance {
         }
         if (this.showTimer !== null) return
 
-        this.showTimer = window.setTimeout(() => {
+        this.showTimer = this.view.setTimeout(() => {
             this.showTimer = null
             this.displayTooltip()
         }, showDelayMs)
@@ -473,19 +491,19 @@ class HelpTooltip implements HelpTooltipInstance {
     private clearShowTimer(): void {
         if (this.showTimer === null) return
 
-        window.clearTimeout(this.showTimer)
+        this.view.clearTimeout(this.showTimer)
         this.showTimer = null
     }
 
     private clearHideTimer(): void {
         if (this.hideTimer === null) return
 
-        window.clearTimeout(this.hideTimer)
+        this.view.clearTimeout(this.hideTimer)
         this.hideTimer = null
     }
 
     private canShowTooltip(): boolean {
-        return !this.isActivationSuppressedUntilExit && (this.config.shouldShow?.() ?? true)
+        return !this.destroyed && !this.isActivationSuppressedUntilExit && (this.config.shouldShow?.() ?? true)
     }
 
     private requestHideTooltip = (): void => {
@@ -495,14 +513,14 @@ class HelpTooltip implements HelpTooltipInstance {
         }
 
         this.clearHideTimer()
-        this.hideTimer = window.setTimeout(() => {
+        this.hideTimer = this.view.setTimeout(() => {
             this.hideTimer = null
-            const activeElement = document.activeElement
+            const activeElement = this.document.activeElement
             const hasFocus = activeElement ? this.trigger.contains(activeElement) || this.content.contains(activeElement) : false
             if (!this.isTriggerActive && !this.isContentActive && !hasFocus) {
                 this.hideTooltip()
             }
-        }, uiKitSettings.helpTooltip.interactiveHideDelayMs)
+        }, this.config.hideDelayMs ?? 80)
     }
 
     private handleTriggerPointerEnter = (): void => {
@@ -604,6 +622,8 @@ class HelpTooltip implements HelpTooltipInstance {
     }
 
     destroy(): void {
+        if (this.destroyed) return
+        this.destroyed = true
         this.hideTooltip()
         this.removeTriggerListeners()
         this.content.remove()
@@ -710,7 +730,8 @@ class HelpTooltipProvider implements HelpTooltipProviderInstance {
             describeTrigger: source !== '' && source !== 'aria-label' && source !== 'aria-description',
             preferredPlacement: this.resolvePlacement(trigger),
             placementOrder: helpTooltipSimplePlacementOrder,
-            showDelayMs: uiKitSettings.helpTooltip.providerShowDelayMs,
+            showDelayMs: this.config.showDelayMs ?? 1000,
+            portalRoot: this.config.portalRoot,
             shouldShow: () => this.shouldShowTrigger(trigger),
             contentClassName: 'help-tooltip-content-simple',
             inheritContentStyles: false,

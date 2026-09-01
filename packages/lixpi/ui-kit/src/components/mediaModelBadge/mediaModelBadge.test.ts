@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     applyMediaModelBadgeStyleProperties,
@@ -78,7 +83,7 @@ describe('applyMediaModelBadgeStyleProperties', () => {
             nameLineHeight: '1.5',
         })
 
-        expect(host.style.getPropertyValue('--workspace-generated-media-chrome-icon-size')).toBe('24px')
+        expect(host.style.getPropertyValue('--canvas-node-footer-icon-size')).toBe('24px')
         expect(host.style.getPropertyValue('--workspace-media-model-badge-provider-color')).toBe('#66717c')
         expect(host.style.getPropertyValue('--workspace-media-model-badge-name-font-size')).toBe('14px')
     })

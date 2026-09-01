@@ -63,8 +63,8 @@ export function collectProseMirrorPromptReferences(
         const attrs = candidate.type === PROMPT_REFERENCE_NODE_TYPE
             ? normalizePromptReferenceAttrs(candidate.attrs)
             : candidate.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
-                ? normalizeLegacyCapabilityReferenceAttrs(candidate.attrs)
-                : null
+            ? normalizeLegacyCapabilityReferenceAttrs(candidate.attrs)
+            : null
         if (attrs) references.push(attrs)
         for (const child of candidate.content ?? []) visit(child)
     }
@@ -174,9 +174,11 @@ function findBranchMarkerFallbackResponseSection(
     if (!section) return null
     const markerGenerationRequestId = descriptor.generationRequestId
     const sectionGenerationRequestId = section.attrs?.generationRequestId
-    if (!markerGenerationRequestId
+    if (
+        !markerGenerationRequestId
         || !sectionGenerationRequestId
-        || markerGenerationRequestId === sectionGenerationRequestId) {
+        || markerGenerationRequestId === sectionGenerationRequestId
+    ) {
         return section
     }
 

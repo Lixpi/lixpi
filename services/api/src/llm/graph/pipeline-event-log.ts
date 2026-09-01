@@ -143,7 +143,6 @@ export class PipelineEventLog {
         })
         return streamName
     }
-
 }
 
 export function getPipelineEventSubject(workspaceId: string, pipelineId: string): string {

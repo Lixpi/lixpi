@@ -1,6 +1,11 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     resolveCollisions,
@@ -39,6 +44,18 @@ function expectNoOverlaps(nodes: CollisionBox[]): void {
 // =============================================================================
 
 describe('resolveCollisions', () => {
+    it('moves the complete overlap onto the movable box beside a fixed obstacle', () => {
+        const boxes = [
+            { id: 'fixed', x: 0, y: 0, width: 100, height: 100, fixed: true },
+            { id: 'moving', x: 90, y: 0, width: 100, height: 100 },
+        ]
+        const result = resolveCollisions(boxes, { margin: 0, overlapThreshold: 0 })
+        expect(result.nodes.has('fixed')).toBe(false)
+        expect(result.nodes.get('moving')).toEqual({ x: 100, y: 0 })
+        expectNoOverlaps(applyCollisionResult(boxes, result))
+        expect(resolveCollisions(boxes.map(box => ({ ...box, fixed: true }))).hasChanges).toBe(false)
+    })
+
     it('returns no changes for separated boxes', () => {
         const result = resolveCollisions([
             { id: 'left', x: 0, y: 0, width: 100, height: 100 },

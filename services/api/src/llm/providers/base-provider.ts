@@ -1,10 +1,18 @@
 'use strict'
 
 import { v4 as uuid } from 'uuid'
-import { StateGraph, END, START } from '@langchain/langgraph'
+import {
+    StateGraph,
+    END,
+    START,
+} from '@langchain/langgraph'
 
 import type NatsService from '@lixpi/nats-service'
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import {
     STREAM_STATUS,
     type CapabilityJsonValue,
@@ -17,8 +25,16 @@ import {
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
 
 import { LLM_TIMEOUT_MS } from '../config.ts'
-import { channels, type AiModelMetaInfo, type ProviderState } from '../graph/state.ts'
-import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
+import {
+    channels,
+    type AiModelMetaInfo,
+    type ProviderState,
+} from '../graph/state.ts'
+import {
+    StreamPublisher,
+    type ProseMirrorContentHandler,
+    type ProseMirrorSnapshotProvider,
+} from '../graph/stream-publisher.ts'
 import { ImagePublisher } from '../graph/image-publisher.ts'
 import { VideoPublisher } from '../graph/video-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
@@ -30,9 +46,16 @@ import { buildImageGenerationTrace } from '../tools/image-generation-trace.ts'
 import { buildVideoGenerationTrace } from '../tools/video-generation-trace.ts'
 import { resolveWorkspaceContext } from '../graph/workspace-context-resolver.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
-import { tokenUsageConfirm, imageUsageConfirm, videoUsageConfirm } from '../usage/usage-event-mapper.ts'
+import {
+    tokenUsageConfirm,
+    imageUsageConfirm,
+    videoUsageConfirm,
+} from '../usage/usage-event-mapper.ts'
 import { resolveCheckMetering } from '../usage/usage-estimator.ts'
-import { logUsageCheck, logUsageConfirm } from '../usage/usage-log.ts'
+import {
+    logUsageCheck,
+    logUsageConfirm,
+} from '../usage/usage-log.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {
@@ -81,12 +104,13 @@ export type BaseProviderDeps = {
     mediaProviderDefinition: MediaProviderDefinition
 }
 
-type FanoutRouterResult = Pick<ProviderState,
-    'error' |
-    'errorCode' |
-    'errorType' |
-    'generatedImages' |
-    'generatedVideos'
+type FanoutRouterResult = Pick<
+    ProviderState,
+    | 'error'
+    | 'errorCode'
+    | 'errorType'
+    | 'generatedImages'
+    | 'generatedVideos'
 >
 
 type MediaRouterOptions = {
@@ -106,8 +130,7 @@ const LIVE_MIRRORED_MEDIA_STATUSES: ReadonlySet<StreamStatus> = new Set([
     STREAM_STATUS.VIDEO_ERROR,
 ])
 
-const catalogModelIdFor = (model: AiModelMetaInfo): string =>
-    `${model.provider}:${model.model}`
+const catalogModelIdFor = (model: AiModelMetaInfo): string => `${model.provider}:${model.model}`
 
 const isUserStopReason = (reason: unknown): boolean => {
     const candidate = reason as { message?: unknown }
@@ -200,15 +223,17 @@ export abstract class BaseProvider {
         // `false`, so these nodes run in-graph and feed the same state directly.
         const graph = new StateGraph<ProviderState>({ channels: channels as any })
             .addNode('validateRequest', async (s: ProviderState) => this.validateRequest(s))
-            .addNode('resolveWorkspaceContext', async (s: ProviderState) => s.preflightResolved ? {} : resolveWorkspaceContext(s, {
-                natsService: this.nats,
-                publisher: this.publisher,
-                abortSignal: this.signal,
-            }))
+            .addNode('resolveWorkspaceContext', async (s: ProviderState) =>
+                s.preflightResolved ? {} : resolveWorkspaceContext(s, {
+                    natsService: this.nats,
+                    publisher: this.publisher,
+                    abortSignal: this.signal,
+                }))
             .addNode('resolveCapabilities', async (s: ProviderState) => s.preflightResolved ? {} : resolveCapabilitiesForState(s, this.signal))
-            .addNode('executeRequiredCapabilities', async (s: ProviderState) => s.preflightResolved
-                ? {}
-                : executeRequiredCapabilitiesForState(s, this.capabilityDispatcher, this.signal))
+            .addNode('executeRequiredCapabilities', async (s: ProviderState) =>
+                s.preflightResolved
+                    ? {}
+                    : executeRequiredCapabilitiesForState(s, this.capabilityDispatcher, this.signal))
             .addNode('resolveMediaBranch', async (s: ProviderState) => (
                 s.preflightResolved
                     ? {}
@@ -298,28 +323,30 @@ export abstract class BaseProvider {
         const resolvedImageGenerationReferences = imageReferenceAdaptation?.included
             ?? rawResolvedImageGenerationReferences
         if (resolvedImageGenerationReferences) {
-            info(`[ImageGenerationReferences:${this.instanceKey}] resolved ${JSON.stringify({
-                provider: this.providerName,
-                modelVersion: requestData.aiModelMetaInfo?.modelVersion,
-                referenceCount: resolvedImageGenerationReferences.length,
-                references: resolvedImageGenerationReferences.map(reference => ({
-                    role: reference.role,
-                    fileName: reference.fileName,
-                    byteLength: reference.byteLength,
-                    mediaType: reference.mediaType,
-                    sha256: reference.sha256,
-                })),
-            })}`)
+            info(`[ImageGenerationReferences:${this.instanceKey}] resolved ${
+                JSON.stringify({
+                    provider: this.providerName,
+                    modelVersion: requestData.aiModelMetaInfo?.modelVersion,
+                    referenceCount: resolvedImageGenerationReferences.length,
+                    references: resolvedImageGenerationReferences.map(reference => ({
+                        role: reference.role,
+                        fileName: reference.fileName,
+                        byteLength: reference.byteLength,
+                        mediaType: reference.mediaType,
+                        sha256: reference.sha256,
+                    })),
+                })
+            }`)
         }
         const ownsServerProseMirrorStream = Boolean(
             requestData.proseMirrorInitialDoc
-            && requestData.generationRun?.requestKind !== 'media-generation-matrix',
+                && requestData.generationRun?.requestKind !== 'media-generation-matrix',
         )
         const deferProseMirrorEnd = ownsServerProseMirrorStream && Boolean(
             requestData.enableImageGeneration
-            || requestData.enableVideoGeneration
-            || requestData.imageModelMetaInfo
-            || requestData.videoModelMetaInfo,
+                || requestData.enableVideoGeneration
+                || requestData.imageModelMetaInfo
+                || requestData.videoModelMetaInfo,
         )
         this.pipelineProseMirrorContentHandler = typeof requestData.proseMirrorContentHandler === 'function'
             ? requestData.proseMirrorContentHandler as ProseMirrorContentHandler
@@ -496,9 +523,11 @@ export abstract class BaseProvider {
                 }
             }
             if (!cancelledByUser) {
-                this.streamPublisher.error(initialState.durableGenerationRequestId
-                    ? 'The provider could not complete this generation attempt.'
-                    : message)
+                this.streamPublisher.error(
+                    initialState.durableGenerationRequestId
+                        ? 'The provider could not complete this generation attempt.'
+                        : message,
+                )
             }
             if (!cancelledByUser && ownsDurableMediaRequestLifecycle) {
                 this.streamPublisher.completeKnownMediaGenerationRequests()
@@ -553,14 +582,14 @@ export abstract class BaseProvider {
         const selectedVideoModality = Boolean(state.generatedVideoPrompt)
         const hasSelectedModality = selectedImageModality || selectedVideoModality
         const imageModelId = state.imageModelVersion
-            && state.imageProviderName
-            && (selectedImageModality || (!hasSelectedModality && !state.videoModelVersion))
+                && state.imageProviderName
+                && (selectedImageModality || (!hasSelectedModality && !state.videoModelVersion))
             ? this.mediaGenerationRunPlanner.buildMediaModelId(state.imageProviderName, state.imageModelMetaInfo?.model, state.imageModelVersion)
             : undefined
         const videoModelId = state.capabilityUsageMode !== 'character-creator'
-            && state.videoModelVersion
-            && state.videoProviderName
-            && (selectedVideoModality || (!hasSelectedModality && !state.imageModelVersion))
+                && state.videoModelVersion
+                && state.videoProviderName
+                && (selectedVideoModality || (!hasSelectedModality && !state.imageModelVersion))
             ? this.mediaGenerationRunPlanner.buildMediaModelId(state.videoProviderName, state.videoModelMetaInfo?.model, state.videoModelVersion)
             : undefined
         const preassignedMediaRuns = capabilityOutputMediaAssetIds.length > 0
@@ -623,15 +652,21 @@ export abstract class BaseProvider {
                 lineagePlan,
             })
         }
-        info(`[BaseProvider] media branch lineage planned ${JSON.stringify({
-            workspaceId: state.workspaceId,
-            aiChatThreadId: state.aiChatThreadId,
-            generationRequestId: lineagePlan.generationRequestId,
-            branchId: lineagePlan.branchId,
-            branchOriginNodeId: lineagePlan.branchOrigin?.nodeId,
-            branchForkCount: lineagePlan.branchForks.length,
-            runAssignmentCount: lineagePlan.runAssignments.length,
-        }, null, 0)}`)
+        info(`[BaseProvider] media branch lineage planned ${
+            JSON.stringify(
+                {
+                    workspaceId: state.workspaceId,
+                    aiChatThreadId: state.aiChatThreadId,
+                    generationRequestId: lineagePlan.generationRequestId,
+                    branchId: lineagePlan.branchId,
+                    branchOriginNodeId: lineagePlan.branchOrigin?.nodeId,
+                    branchForkCount: lineagePlan.branchForks.length,
+                    runAssignmentCount: lineagePlan.runAssignments.length,
+                },
+                null,
+                0,
+            )
+        }`)
 
         return {
             mediaBranchLineagePlan: lineagePlan,
@@ -771,15 +806,17 @@ export abstract class BaseProvider {
             try {
                 await discardPendingCapabilityOutputsForState(state)
                 state.pendingCapabilityOutputFinalizations = []
-                this.streamPublisher?.error(state.durableGenerationRequestId
-                    ? 'The provider could not complete this generation attempt.'
-                    : message)
+                this.streamPublisher?.error(
+                    state.durableGenerationRequestId
+                        ? 'The provider could not complete this generation attempt.'
+                        : message,
+                )
                 if (state.generationRun?.requestKind !== 'media-generation-matrix') {
                     this.streamPublisher?.completeKnownMediaGenerationRequests()
                 }
                 this.streamPublisher?.end()
                 await this.streamPublisher?.drainPendingWrites()
-            } catch { }
+            } catch {}
             return {
                 ...update,
                 streamActive: false,
@@ -893,11 +930,12 @@ export abstract class BaseProvider {
         const imageResult = await this.deps.runImageRouter(providerSafeState, {
             onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
             getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
-            onCapabilityMediaTrace: trace => this.publishCapabilityReviewTrace(
-                providerSafeState,
-                { capabilityMediaTrace: trace },
-                providerSafeState.generationRun,
-            ),
+            onCapabilityMediaTrace: trace =>
+                this.publishCapabilityReviewTrace(
+                    providerSafeState,
+                    { capabilityMediaTrace: trace },
+                    providerSafeState.generationRun,
+                ),
         })
         if (imageResult.error) {
             this.streamPublisher?.imageGenerationError(imageResult.error, providerSafeState.generationRun)
@@ -1114,11 +1152,12 @@ export abstract class BaseProvider {
             const imageResult = await this.deps.runImageRouter(fanoutState, {
                 onProseMirrorContent: content => this.publishPipelineProseMirrorContent(content),
                 getProseMirrorSnapshot: () => this.getPipelineProseMirrorSnapshot(),
-                onCapabilityMediaTrace: trace => this.publishCapabilityReviewTrace(
-                    fanoutState,
-                    { capabilityMediaTrace: trace },
-                    generationRun,
-                ),
+                onCapabilityMediaTrace: trace =>
+                    this.publishCapabilityReviewTrace(
+                        fanoutState,
+                        { capabilityMediaTrace: trace },
+                        generationRun,
+                    ),
             })
             if (imageResult.error) {
                 this.streamPublisher?.imageGenerationError(imageResult.error, generationRun)
@@ -1137,9 +1176,7 @@ export abstract class BaseProvider {
             return { generatedImages }
         }
 
-        const firstError = results.find((result): result is FanoutRouterResult & { error: string } =>
-            typeof result.error === 'string' && result.error.length > 0
-        )
+        const firstError = results.find((result): result is FanoutRouterResult & { error: string } => typeof result.error === 'string' && result.error.length > 0)
         if (!firstError) return {}
         this.streamPublisher?.error(firstError.error, firstError.errorCode, firstError.errorType)
         return {
@@ -1258,9 +1295,7 @@ export abstract class BaseProvider {
             return { generatedVideos }
         }
 
-        const firstError = results.find((result): result is FanoutRouterResult & { error: string } =>
-            typeof result.error === 'string' && result.error.length > 0
-        )
+        const firstError = results.find((result): result is FanoutRouterResult & { error: string } => typeof result.error === 'string' && result.error.length > 0)
         if (!firstError) return {}
         this.streamPublisher?.error(firstError.error, firstError.errorCode, firstError.errorType)
         return {
@@ -1423,10 +1458,16 @@ export abstract class BaseProvider {
         try {
             const inheritedSeed = await resolveInheritedGenerationSeed({ assetId, maxValue })
             if (inheritedSeed !== undefined) {
-                info(`[BaseProvider] reusing inherited generation seed ${JSON.stringify({
-                    assetId,
-                    inheritedSeed,
-                }, null, 0)}`)
+                info(`[BaseProvider] reusing inherited generation seed ${
+                    JSON.stringify(
+                        {
+                            assetId,
+                            inheritedSeed,
+                        },
+                        null,
+                        0,
+                    )
+                }`)
                 return inheritedSeed
             }
         } catch (error) {

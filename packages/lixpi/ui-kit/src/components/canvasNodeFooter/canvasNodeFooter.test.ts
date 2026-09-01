@@ -1,6 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+// @vitest-environment happy-dom
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { createCanvasNodeFooter } from './index.ts'
+
+const icons = { info: '<span>i</span>', progress: { viewBox: { x: 0, y: 0, width: 10, height: 10 }, paths: ['M0 0 H10 V10 Z', 'M0 0 H10 V10 Z', 'M0 0 H10 V10 Z'] as const } }
 
 afterEach(() => {
     vi.useRealTimers()
@@ -14,6 +23,7 @@ describe('canvas node footer', () => {
         const review = document.createElement('button')
         review.className = 'test-review'
         const footer = createCanvasNodeFooter({
+            icons,
             infoLabel: 'Artifact details and generation history',
             progressActive: true,
             selected: false,
@@ -46,6 +56,7 @@ describe('canvas node footer', () => {
         const onParentClick = vi.fn()
         const parent = document.createElement('div')
         const footer = createCanvasNodeFooter({
+            icons,
             infoLabel: 'Generation history',
             progressActive: true,
             selected: false,
@@ -65,6 +76,7 @@ describe('canvas node footer', () => {
     it('hides terminal progress and reflects details selection on both entry controls', () => {
         vi.useFakeTimers()
         const footer = createCanvasNodeFooter({
+            icons,
             infoLabel: 'Generation history',
             progressActive: true,
             selected: false,
@@ -87,6 +99,7 @@ describe('canvas node footer', () => {
     it('omits separators for empty sections and destroys its animation and DOM', () => {
         vi.useFakeTimers()
         const footer = createCanvasNodeFooter({
+            icons,
             infoLabel: 'Generation history',
             progressActive: true,
             selected: false,

@@ -1,7 +1,10 @@
 'use strict'
 
 import type { MediaGenerationRequestEvent } from '@lixpi/constants'
-import { getMediaGenerationUserEventSubject, NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    getMediaGenerationUserEventSubject,
+    NATS_SUBJECTS,
+} from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 
 const MAX_MEDIA_GENERATION_REQUEST_EVENT_BYTES = 64 * 1024
@@ -14,19 +17,15 @@ export type MediaGenerationRequestEventEnvelope = {
 }
 
 const sanitizeToken = (value: string): string => value.replace(/[^A-Za-z0-9_-]/g, '_')
-const getMediaGenerationRequestEventSubjectPrefix = (workspaceId: string, generationRequestId: string): string =>
-    `${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.EVENTS}.${sanitizeToken(workspaceId)}.${sanitizeToken(generationRequestId)}`
-export const getMediaGenerationRequestEventSubject = (workspaceId: string, generationRequestId: string): string =>
-    `${getMediaGenerationRequestEventSubjectPrefix(workspaceId, generationRequestId)}.events`
+const getMediaGenerationRequestEventSubjectPrefix = (workspaceId: string, generationRequestId: string): string => `${NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.EVENTS}.${sanitizeToken(workspaceId)}.${sanitizeToken(generationRequestId)}`
+export const getMediaGenerationRequestEventSubject = (workspaceId: string, generationRequestId: string): string => `${getMediaGenerationRequestEventSubjectPrefix(workspaceId, generationRequestId)}.events`
 export const getMediaGenerationRequestProgressSubject = (
     workspaceId: string,
     generationRequestId: string,
     generationRun: number,
 ): string => `${getMediaGenerationRequestEventSubjectPrefix(workspaceId, generationRequestId)}.progress.${generationRun}`
-export const getMediaGenerationRequestReplaySubject = (workspaceId: string, generationRequestId: string): string =>
-    `${getMediaGenerationRequestEventSubjectPrefix(workspaceId, generationRequestId)}.>`
-export const getMediaGenerationRequestEventStreamName = (workspaceId: string): string =>
-    `MEDIA_GENERATION_REQUEST_EVENTS_${sanitizeToken(workspaceId)}`
+export const getMediaGenerationRequestReplaySubject = (workspaceId: string, generationRequestId: string): string => `${getMediaGenerationRequestEventSubjectPrefix(workspaceId, generationRequestId)}.>`
+export const getMediaGenerationRequestEventStreamName = (workspaceId: string): string => `MEDIA_GENERATION_REQUEST_EVENTS_${sanitizeToken(workspaceId)}`
 
 export class MediaGenerationRequestEventLog {
     constructor(private readonly natsService: NATS_Service) {}

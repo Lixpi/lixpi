@@ -3,10 +3,16 @@ import 'd3-transition'
 
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { easePupOut } from '../../animation/easings.ts'
-import { applyStyle, html } from '../../dom/domTemplates.ts'
-import { type UiKitSlidingDropdownStyles, uiKitSettings } from '../../runtime-settings.ts'
-import { appendSvgPathIcon } from '../../svg/svgIconPaths.ts'
+import { easePupOut } from '@lixpi/ui-primitives/animation'
+import {
+    applyStyle,
+    html,
+} from '@lixpi/ui-primitives/dom'
+import {
+    type UiKitSlidingDropdownStyles,
+    uiKitSettings,
+} from '../../runtime-settings.ts'
+import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 import { chevronDownIcon } from '../../svg/svgIcons.ts'
 import {
     type SlidingSwitchIndicatorInsetShadow,
@@ -583,9 +589,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         return Math.max(
             CHEVRON_GAP + CHEVRON_SIZE,
             -PADDING
-            + this.maximumIndicatorBorderWidth() / 2
-            + CHEVRON_GAP
-            + CHEVRON_SIZE,
+                + this.maximumIndicatorBorderWidth() / 2
+                + CHEVRON_GAP
+                + CHEVRON_SIZE,
         )
     }
 
@@ -691,10 +697,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const scaleX = this.portalScaleX
         const scaleY = this.portalScaleY
         const centerX = hostRect.left + (
-            this.x
-            + this.visualOverflowPadding.left
-            + this.chevronCenterX()
-        ) * scaleX
+                    this.x
+                    + this.visualOverflowPadding.left
+                    + this.chevronCenterX()
+                ) * scaleX
         const centerY = hostRect.top + (this.y + this.height / 2) * scaleY
         const portalWidth = CHEVRON_SIZE * scaleX
         const portalHeight = CHEVRON_SIZE * scaleY
@@ -913,7 +919,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const disabled = option.disabled ?? false
         const color = disabled
             ? this.styles.option.disabledTextColor
-            : selected || hovered ? this.styles.option.activeTextColor : this.styles.option.textColor
+            : selected || hovered
+            ? this.styles.option.activeTextColor
+            : this.styles.option.textColor
         return {
             id: `${this.id}:${option.value}`,
             option,
@@ -1035,9 +1043,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             ?? this.fallbackOptionContentRightEdge(option)
         return Math.ceil(
             contentRightEdge
-            + this.optionHorizontalPadding
-            + PADDING
-            + this.maximumIndicatorBorderWidth() / 2,
+                + this.optionHorizontalPadding
+                + PADDING
+                + this.maximumIndicatorBorderWidth() / 2,
         )
     }
 
@@ -1813,7 +1821,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const index = this.indexOf(value)
         if (index < 0 || this.options[index]?.disabled) return
         if (value === this.currentValue) {
-            if (!this.animating) this.renderInternal()
+            if (!this.animating) {
+                this.measureOptionContentRightEdges()
+                this.renderInternal()
+            }
             return
         }
         this.interruptTapeSnapAnimation()

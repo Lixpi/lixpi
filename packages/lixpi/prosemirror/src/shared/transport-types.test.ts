@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     ASSET_PROSEMIRROR_STEP_SUBJECT_PREFIX,

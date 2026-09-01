@@ -18,19 +18,24 @@ export class CapabilityArtifactBackendRegistry {
         if (definition.artifactTypeId !== definition.shared.artifactTypeId) {
             throw new Error(`CAPABILITY_ARTIFACT_BACKEND_ID_MISMATCH:${definition.artifactTypeId}`)
         }
-        if (!Number.isFinite(definition.initialCanvasDimensions.width)
+        if (
+            !Number.isFinite(definition.initialCanvasDimensions.width)
             || definition.initialCanvasDimensions.width <= 0
             || !Number.isFinite(definition.initialCanvasDimensions.height)
-            || definition.initialCanvasDimensions.height <= 0) {
+            || definition.initialCanvasDimensions.height <= 0
+        ) {
             throw new Error(`CAPABILITY_ARTIFACT_BACKEND_DIMENSIONS_INVALID:${definition.artifactTypeId}`)
         }
         if (this.definitions.has(definition.artifactTypeId)) {
             throw new Error(`CAPABILITY_ARTIFACT_BACKEND_ALREADY_REGISTERED:${definition.artifactTypeId}`)
         }
-        this.definitions.set(definition.artifactTypeId, Object.freeze({
-            ...definition,
-            initialCanvasDimensions: Object.freeze({ ...definition.initialCanvasDimensions }),
-        }))
+        this.definitions.set(
+            definition.artifactTypeId,
+            Object.freeze({
+                ...definition,
+                initialCanvasDimensions: Object.freeze({ ...definition.initialCanvasDimensions }),
+            }),
+        )
     }
 
     get(artifactTypeId: string): CapabilityArtifactBackendDefinition | undefined {

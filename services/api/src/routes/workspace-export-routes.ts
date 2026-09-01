@@ -7,11 +7,17 @@ import AdmZip from 'adm-zip'
 import { ZipArchive } from 'archiver'
 import { Router } from 'express'
 import multer from 'multer'
-import { v4 as uuid, validate as isUuid } from 'uuid'
+import {
+    v4 as uuid,
+    validate as isUuid,
+} from 'uuid'
 
 import NATS_Service from '@lixpi/nats-service'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
-import { DOCUMENT_TYPE, HeadlessProseMirrorEngine } from '@lixpi/prosemirror'
+import {
+    DOCUMENT_TYPE,
+    HeadlessProseMirrorEngine,
+} from '@lixpi/prosemirror'
 import {
     ASSET_REQUIRED_RENDITIONS,
     getDynamoDbTableStageName,
@@ -127,13 +133,14 @@ const getWorkspaceReferenceAssetIds = async (workspaceId: string): Promise<strin
         .map((reference) => reference.assetId)
 }
 
-const getAssetLineageIds = (asset: Asset): string[] => asset.lineage
-    ? [
-        asset.lineage.sourceConversationAssetId,
-        asset.lineage.parentAssetId,
-        ...asset.lineage.sourceAssetIds,
-    ].filter((assetId): assetId is string => Boolean(assetId))
-    : []
+const getAssetLineageIds = (asset: Asset): string[] =>
+    asset.lineage
+        ? [
+            asset.lineage.sourceConversationAssetId,
+            asset.lineage.parentAssetId,
+            ...asset.lineage.sourceAssetIds,
+        ].filter((assetId): assetId is string => Boolean(assetId))
+        : []
 
 const collectExportAssets = async ({
     initialAssetIds,
@@ -177,8 +184,7 @@ const buildPortableWorkspaceReferences = async ({
     for (const asset of assets) {
         const references = await AssetModel.listReferences(asset.assetId)
         allReferencesByAssetId.set(asset.assetId, references)
-        const workspaceReference = references.find((reference) =>
-            reference.type === 'workspace' && reference.workspaceId === workspaceId)
+        const workspaceReference = references.find((reference) => reference.type === 'workspace' && reference.workspaceId === workspaceId)
         if (workspaceReference) {
             referencesByAssetId.set(asset.assetId, {
                 ...workspaceReference,
@@ -242,13 +248,14 @@ const getAssetBlobHashes = (asset: Asset): string[] => {
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
 const isSha256 = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
-const getDocumentType = (role: AssetDocumentRole): string => role === 'content'
-    ? DOCUMENT_TYPE.ASSET_CONTENT
-    : role === 'conversation'
+const getDocumentType = (role: AssetDocumentRole): string =>
+    role === 'content'
+        ? DOCUMENT_TYPE.ASSET_CONTENT
+        : role === 'conversation'
         ? DOCUMENT_TYPE.ASSET_CONVERSATION
         : role === 'provenance'
-            ? DOCUMENT_TYPE.ASSET_PROVENANCE
-            : 'capabilityArtifact'
+        ? DOCUMENT_TYPE.ASSET_PROVENANCE
+        : 'capabilityArtifact'
 
 const buildPortableAssets = async (assets: Asset[], exportedAt: number): Promise<{
     assets: Asset[]
@@ -295,11 +302,13 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
     if (!candidate.workspace?.canvasState || !Array.isArray(candidate.assets) || !Array.isArray(candidate.references) || !Array.isArray(candidate.blobs)) {
         throw new Error('INVALID_REVISION_2_MANIFEST')
     }
-    if (typeof candidate.workspace.name !== 'string'
+    if (
+        typeof candidate.workspace.name !== 'string'
         || !Array.isArray(candidate.workspace.canvasState.nodes)
         || !Array.isArray(candidate.workspace.canvasState.edges)
         || !Number.isSafeInteger(candidate.workspace.createdAt)
-        || !Number.isSafeInteger(candidate.workspace.updatedAt)) {
+        || !Number.isSafeInteger(candidate.workspace.updatedAt)
+    ) {
         throw new Error('INVALID_REVISION_2_WORKSPACE')
     }
     const assetIds = new Set<string>()
@@ -309,24 +318,28 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
         if (!asset.organizationId || typeof asset.title !== 'string' || !asset.title.trim()) {
             throw new Error(`INVALID_ASSET:${asset.assetId}`)
         }
-        if (!asset.documents
+        if (
+            !asset.documents
             || !asset.states
             || !Number.isSafeInteger(asset.revision)
             || asset.revision < 1
             || !Number.isSafeInteger(asset.referenceCount)
             || asset.referenceCount < 1
             || !Number.isSafeInteger(asset.createdAt)
-            || !Number.isSafeInteger(asset.updatedAt)) {
+            || !Number.isSafeInteger(asset.updatedAt)
+        ) {
             throw new Error(`INVALID_ASSET_STATE:${asset.assetId}`)
         }
-        if (!['workspace', 'user', 'organization'].includes(asset.scope)
+        if (
+            !['workspace', 'user', 'organization'].includes(asset.scope)
             || !asset.scopeOwnerId
             || !asset.originWorkspaceId
             || !asset.ownerUserId
             || !['creating', 'active', 'deleting', 'failed'].includes(asset.states.lifecycle)
             || !['none', 'processing', 'ready', 'degraded', 'failed', 'cancelled'].includes(asset.states.media)
             || !['none', 'idle', 'receiving', 'paused', 'completed', 'failed'].includes(asset.states.conversation)
-            || !['none', 'building', 'sealed', 'failed', 'cancelled'].includes(asset.states.provenance)) {
+            || !['none', 'building', 'sealed', 'failed', 'cancelled'].includes(asset.states.provenance)
+        ) {
             throw new Error(`INVALID_ASSET_COMPONENT_STATE:${asset.assetId}`)
         }
         if (asset.states.lifecycle === 'deleting') throw new Error(`DELETING_ASSET_NOT_PORTABLE:${asset.assetId}`)
@@ -343,12 +356,14 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
             throw new Error(`INVALID_ASSET_PROVENANCE_STATE:${asset.assetId}`)
         }
         if (asset.media) {
-            if (!['image', 'video', 'audio', 'document'].includes(asset.media.kind)
+            if (
+                !['image', 'video', 'audio', 'document'].includes(asset.media.kind)
                 || typeof asset.media.originalName !== 'string'
                 || typeof asset.media.sourceMimeType !== 'string'
                 || typeof asset.media.modelSafe !== 'boolean'
                 || !asset.media.renditions
-                || asset.states.media === 'none') {
+                || asset.states.media === 'none'
+            ) {
                 throw new Error(`INVALID_ASSET_MEDIA:${asset.assetId}`)
             }
             const original = asset.media.renditions.original
@@ -359,28 +374,32 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
             throw new Error(`INVALID_ASSET_MEDIA_STATE:${asset.assetId}`)
         }
         if (asset.lineage) {
-            if (!Array.isArray(asset.lineage.sourceAssetIds)
+            if (
+                !Array.isArray(asset.lineage.sourceAssetIds)
                 || asset.lineage.sourceAssetIds.some((assetId) => !isUuid(assetId))
                 || (asset.lineage.sourceConversationAssetId && !isUuid(asset.lineage.sourceConversationAssetId))
-                || (asset.lineage.parentAssetId && !isUuid(asset.lineage.parentAssetId))) {
+                || (asset.lineage.parentAssetId && !isUuid(asset.lineage.parentAssetId))
+            ) {
                 throw new Error(`INVALID_ASSET_LINEAGE:${asset.assetId}`)
             }
             if (getAssetLineageIds(asset).includes(asset.assetId)) {
                 throw new Error(`SELF_REFERENTIAL_ASSET_LINEAGE:${asset.assetId}`)
             }
         }
-        if (asset.descriptor && (
-            !['analyzing', 'ready', 'failed'].includes(asset.descriptor.status)
-            || typeof asset.descriptor.summary !== 'string'
-            || !Array.isArray(asset.descriptor.entityTags)
-            || asset.descriptor.entityTags.some((tag) => typeof tag !== 'string')
-            || !Array.isArray(asset.descriptor.styleTags)
-            || asset.descriptor.styleTags.some((tag) => typeof tag !== 'string')
-            || asset.descriptor.source !== 'analysis'
-            || typeof asset.descriptor.version !== 'string'
-            || !asset.descriptor.version
-            || !Number.isSafeInteger(asset.descriptor.updatedAt)
-        )) throw new Error(`INVALID_ASSET_DESCRIPTOR:${asset.assetId}`)
+        if (
+            asset.descriptor && (
+                !['analyzing', 'ready', 'failed'].includes(asset.descriptor.status)
+                || typeof asset.descriptor.summary !== 'string'
+                || !Array.isArray(asset.descriptor.entityTags)
+                || asset.descriptor.entityTags.some((tag) => typeof tag !== 'string')
+                || !Array.isArray(asset.descriptor.styleTags)
+                || asset.descriptor.styleTags.some((tag) => typeof tag !== 'string')
+                || asset.descriptor.source !== 'analysis'
+                || typeof asset.descriptor.version !== 'string'
+                || !asset.descriptor.version
+                || !Number.isSafeInteger(asset.descriptor.updatedAt)
+            )
+        ) throw new Error(`INVALID_ASSET_DESCRIPTOR:${asset.assetId}`)
         assetIds.add(asset.assetId)
         sourceOrganizationIds.add(asset.organizationId)
     }
@@ -421,9 +440,11 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
         const artifactDefinition = asset.artifact
             ? capabilityArtifactBackendRegistry.get(asset.artifact.artifactTypeId)
             : undefined
-        if (asset.artifact && (!artifactDefinition
-            || asset.documents.capabilityArtifact?.schemaVersion !== asset.artifact.schemaVersion
-            || artifactDefinition.shared.schemaVersion !== asset.artifact.schemaVersion)) {
+        if (
+            asset.artifact && (!artifactDefinition
+                || asset.documents.capabilityArtifact?.schemaVersion !== asset.artifact.schemaVersion
+                || artifactDefinition.shared.schemaVersion !== asset.artifact.schemaVersion)
+        ) {
             throw new Error(`INVALID_ASSET_ARTIFACT:${asset.assetId}`)
         }
         for (const [role, pointer] of Object.entries(asset.documents)) {
@@ -464,8 +485,10 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
                 if (!assetIds.has(referencedAssetId)) {
                     throw new Error(`MISSING_EMBEDDED_ASSET:${asset.assetId}:${referencedAssetId}`)
                 }
-                if ((role === 'content' || role === 'conversation' || role === 'capabilityArtifact')
-                    && referencedAssetId === asset.assetId) {
+                if (
+                    (role === 'content' || role === 'conversation' || role === 'capabilityArtifact')
+                    && referencedAssetId === asset.assetId
+                ) {
                     throw new Error(`SELF_REFERENTIAL_ASSET_DOCUMENT:${asset.assetId}:${role}`)
                 }
             }
@@ -480,21 +503,25 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
             }
         }
         for (const [name, rendition] of Object.entries(asset.media?.renditions ?? {})) {
-            if (!['original', 'canonical', 'preview', 'thumbnail', 'poster', 'representativeFrame'].includes(name)
+            if (
+                !['original', 'canonical', 'preview', 'thumbnail', 'poster', 'representativeFrame'].includes(name)
                 || rendition?.name !== name
                 || !['pending', 'ready', 'failed'].includes(rendition.status)
-                || !Number.isSafeInteger(rendition.updatedAt)) {
+                || !Number.isSafeInteger(rendition.updatedAt)
+            ) {
                 throw new Error(`INVALID_RENDITION:${asset.assetId}:${name}`)
             }
             if (rendition?.status === 'ready' && (!rendition.blobHash || !blobHashes.has(rendition.blobHash))) {
                 throw new Error(`MISSING_RENDITION_BLOB:${asset.assetId}:${rendition.name}`)
             }
             if (rendition?.status === 'ready') {
-                if (!isSha256(rendition.blobHash)
+                if (
+                    !isSha256(rendition.blobHash)
                     || typeof rendition.mimeType !== 'string'
                     || !rendition.mimeType
                     || !Number.isSafeInteger(rendition.byteSize)
-                    || rendition.byteSize! < 0) {
+                    || rendition.byteSize! < 0
+                ) {
                     throw new Error(`INVALID_RENDITION:${asset.assetId}:${name}`)
                 }
                 const blob = candidate.blobs.find((entry) => entry.blobHash === rendition.blobHash)
@@ -516,13 +543,15 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
         if (referenceKeys.has(key)) throw new Error(`DUPLICATE_REFERENCE:${key}`)
         referenceKeys.add(key)
         if (reference.type !== 'workspace' || !reference.workspaceId) throw new Error(`INVALID_PORTABLE_REFERENCE:${key}`)
-        if (reference.referenceKey !== `workspace#${reference.workspaceId}`
+        if (
+            reference.referenceKey !== `workspace#${reference.workspaceId}`
             || referenceAssetIds.has(reference.assetId)
             || !Array.isArray(reference.nodeIds)
             || !Array.isArray(reference.surfaceIds)
             || reference.nodeIds.some((nodeId) => typeof nodeId !== 'string' || !nodeId)
             || reference.surfaceIds.some((surfaceId) => typeof surfaceId !== 'string' || !surfaceId)
-            || (reference.nodeIds.length === 0 && reference.surfaceIds.length === 0)) {
+            || (reference.nodeIds.length === 0 && reference.surfaceIds.length === 0)
+        ) {
             throw new Error(`INVALID_PORTABLE_REFERENCE:${key}`)
         }
         referenceAssetIds.add(reference.assetId)
@@ -534,8 +563,8 @@ const validateRevision2Manifest = (manifest: unknown, zip: AdmZip): Revision2Man
         const expectedPrefix = requirement.role === 'content'
             ? `document#${requirement.hostAssetId}#content`
             : requirement.role === 'capabilityArtifact'
-                ? `capabilityArtifact#${requirement.hostAssetId}`
-                : `conversation#${requirement.hostAssetId}#media#`
+            ? `capabilityArtifact#${requirement.hostAssetId}`
+            : `conversation#${requirement.hostAssetId}#media#`
         const hasSurface = requirement.role === 'content' || requirement.role === 'capabilityArtifact'
             ? reference?.surfaceIds?.includes(expectedPrefix)
             : reference?.surfaceIds?.some((surfaceId) => surfaceId.startsWith(expectedPrefix))
@@ -610,17 +639,18 @@ const remapAssetIdsInJson = (value: unknown, assetIdMap: Map<string, string>): u
     return target
 }
 
-const remapSurfaceId = (surfaceId: string, assetIdMap: Map<string, string>): string =>
-    surfaceId.split('#').map((part) => assetIdMap.get(part) ?? part).join('#')
+const remapSurfaceId = (surfaceId: string, assetIdMap: Map<string, string>): string => surfaceId.split('#').map((part) => assetIdMap.get(part) ?? part).join('#')
 
 const normalizeImportedAsset = (source: Asset): Asset => {
     const renditions = source.media
-        ? Object.fromEntries(Object.entries(source.media.renditions).map(([name, rendition]) => [
-            name,
-            rendition?.status === 'pending'
-                ? { ...rendition, status: 'failed', errorCode: 'IMPORT_PENDING_RENDITION_NOT_PORTABLE' }
-                : rendition,
-        ])) as NonNullable<Asset['media']>['renditions']
+        ? Object.fromEntries(
+            Object.entries(source.media.renditions).map(([name, rendition]) => [
+                name,
+                rendition?.status === 'pending'
+                    ? { ...rendition, status: 'failed', errorCode: 'IMPORT_PENDING_RENDITION_NOT_PORTABLE' }
+                    : rendition,
+            ]),
+        ) as NonNullable<Asset['media']>['renditions']
         : undefined
     const media = source.media ? { ...source.media, renditions } : undefined
     const originalReady = media?.renditions.original?.status === 'ready'
@@ -634,12 +664,12 @@ const normalizeImportedAsset = (source: Asset): Asset => {
     const mediaState = !media
         ? 'none'
         : requiredReady
-            ? 'ready'
-            : originalReady
-                ? 'degraded'
-                : source.states.media === 'cancelled'
-                    ? 'cancelled'
-                    : 'failed'
+        ? 'ready'
+        : originalReady
+        ? 'degraded'
+        : source.states.media === 'cancelled'
+        ? 'cancelled'
+        : 'failed'
     return {
         ...source,
         ...(media ? { media } : {}),
@@ -823,16 +853,18 @@ router.post('/:workspaceId/import', authenticateRequest, validateWorkspaceAccess
                 }
             }
             const sourceReference = manifest.references.find((reference) => reference.assetId === sourceAsset.assetId)
-            const lineage = normalized.lineage ? {
-                ...normalized.lineage,
-                ...(normalized.lineage.sourceConversationAssetId
-                    ? { sourceConversationAssetId: assetIdMap.get(normalized.lineage.sourceConversationAssetId) }
-                    : {}),
-                ...(normalized.lineage.parentAssetId
-                    ? { parentAssetId: assetIdMap.get(normalized.lineage.parentAssetId) }
-                    : {}),
-                sourceAssetIds: normalized.lineage.sourceAssetIds.map((sourceAssetId) => assetIdMap.get(sourceAssetId)!),
-            } : undefined
+            const lineage = normalized.lineage
+                ? {
+                    ...normalized.lineage,
+                    ...(normalized.lineage.sourceConversationAssetId
+                        ? { sourceConversationAssetId: assetIdMap.get(normalized.lineage.sourceConversationAssetId) }
+                        : {}),
+                    ...(normalized.lineage.parentAssetId
+                        ? { parentAssetId: assetIdMap.get(normalized.lineage.parentAssetId) }
+                        : {}),
+                    sourceAssetIds: normalized.lineage.sourceAssetIds.map((sourceAssetId) => assetIdMap.get(sourceAssetId)!),
+                }
+                : undefined
             await AssetModel.create({
                 ...normalized,
                 assetId,
@@ -844,13 +876,15 @@ router.post('/:workspaceId/import', authenticateRequest, validateWorkspaceAccess
                 documents,
                 importedFromAssetId: sourceAsset.assetId,
                 ...(lineage ? { lineage } : {}),
-                ...(sourceReference ? {
-                    workspaceReference: {
-                        workspaceId,
-                        nodeIds: sourceReference.nodeIds,
-                        surfaceIds: sourceReference.surfaceIds?.map((surfaceId) => remapSurfaceId(surfaceId, assetIdMap)),
-                    },
-                } : {}),
+                ...(sourceReference
+                    ? {
+                        workspaceReference: {
+                            workspaceId,
+                            nodeIds: sourceReference.nodeIds,
+                            surfaceIds: sourceReference.surfaceIds?.map((surfaceId) => remapSurfaceId(surfaceId, assetIdMap)),
+                        },
+                    }
+                    : {}),
             })
             createdAssetIds.push(assetId)
             if (normalized.media && normalized.states.media !== 'ready') importedMediaAssetIds.push(assetId)
@@ -921,9 +955,11 @@ router.post('/:workspaceId/import', authenticateRequest, validateWorkspaceAccess
                 continue
             }
             const previousAsset = await AssetModel.get({ assetId: previousAssetId, requester })
-            if (!('error' in previousAsset)
+            if (
+                !('error' in previousAsset)
                 && previousAsset.scope === 'workspace'
-                && previousAsset.scopeOwnerId === workspaceId) {
+                && previousAsset.scopeOwnerId === workspaceId
+            ) {
                 const detached = await AssetModel.removeWorkspaceCatalogForImport({
                     assetId: previousAssetId,
                     workspaceId,

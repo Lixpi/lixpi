@@ -1,13 +1,17 @@
 'use strict'
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { EditorState } from 'prosemirror-state'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import {
     aiGeneratedVideoNodeSpec,
     aiGeneratedVideoNodeView,
-    getAiGeneratedVideoCallbacks,
-    setAiGeneratedVideoCallbacks,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import AuthService from '$src/services/auth-service.ts'
 
@@ -122,15 +126,6 @@ describe('aiGeneratedVideoNodeSpec', () => {
         const attrs = parseRule.getAttrs!(el as unknown as HTMLElement) as Record<string, any>
 
         expect(attrs.variantIndex).toBeNull()
-    })
-})
-
-describe('aiGeneratedVideoNode callbacks', () => {
-    it('shares a mutable callback registry via setter/getter', () => {
-        const callbacks = { onAddToCanvas: vi.fn() }
-
-        setAiGeneratedVideoCallbacks(callbacks)
-        expect(getAiGeneratedVideoCallbacks()).toBe(callbacks)
     })
 })
 

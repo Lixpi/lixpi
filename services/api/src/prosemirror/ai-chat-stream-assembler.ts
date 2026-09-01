@@ -194,21 +194,23 @@ export function settlePersistedGenerationNode(
     )
     if (discardCancelledMedia) return { node: null, changed: true }
 
-    const childSettlements = node.content?.map(child =>
-        settlePersistedGenerationNode(child, generationRequestId, requestScoped)
-    )
+    const childSettlements = node.content?.map(child => settlePersistedGenerationNode(child, generationRequestId, requestScoped))
     const childrenChanged = Boolean(childSettlements?.some(result => result.changed))
     const nextChildren = childSettlements?.flatMap(result => result.node ? [result.node] : [])
     let nextAttrs = node.attrs
     let attrsChanged = false
 
-    if ((node.type === aiResponseMessageNodeType && (responseRequestMatch || requestScoped))
-        || (node.type === aiReasoningSectionNodeType && requestScoped)) {
+    if (
+        (node.type === aiResponseMessageNodeType && (responseRequestMatch || requestScoped))
+        || (node.type === aiReasoningSectionNodeType && requestScoped)
+    ) {
         const isInitialRenderAnimation = node.type === aiResponseMessageNodeType
             ? false
             : node.attrs?.isInitialRenderAnimation
-        if (node.attrs?.isReceivingAnimation !== false
-            || (node.type === aiResponseMessageNodeType && node.attrs?.isInitialRenderAnimation !== false)) {
+        if (
+            node.attrs?.isReceivingAnimation !== false
+            || (node.type === aiResponseMessageNodeType && node.attrs?.isInitialRenderAnimation !== false)
+        ) {
             nextAttrs = {
                 ...node.attrs,
                 ...(node.type === aiResponseMessageNodeType ? { isInitialRenderAnimation } : {}),
@@ -583,10 +585,14 @@ export class AiChatProseMirrorStreamAssembler {
             if (messageInfo.found && messageInfo.nodePos !== undefined && messageInfo.contentEndPos !== undefined) {
                 const responseMessage = this.engine.state.doc.nodeAt(messageInfo.nodePos)
                 if (responseMessage?.type.name === aiResponseMessageNodeType) {
-                    transaction.setNodeMarkup(messageInfo.nodePos, undefined, this.buildResponseMessageAttrsForGenerationRun(
-                        generationRun,
-                        responseMessage.attrs,
-                    ))
+                    transaction.setNodeMarkup(
+                        messageInfo.nodePos,
+                        undefined,
+                        this.buildResponseMessageAttrsForGenerationRun(
+                            generationRun,
+                            responseMessage.attrs,
+                        ),
+                    )
                 }
                 transaction.insert(messageInfo.contentEndPos, sectionNode)
             } else {
@@ -798,8 +804,8 @@ export class AiChatProseMirrorStreamAssembler {
         const id = event.kind === 'branch-origin'
             ? event.branchOriginNodeId
             : event.kind === 'branch-line'
-                ? event.branchLineNodeId
-                : event.branchForkNodeId
+            ? event.branchLineNodeId
+            : event.branchForkNodeId
         return `${event.kind}:${id ?? ''}`
     }
 
@@ -813,9 +819,11 @@ export class AiChatProseMirrorStreamAssembler {
     }
 
     private upsertGenerationTrace(content: AiStreamContent): void {
-        if (!content.imageGenerationTrace
+        if (
+            !content.imageGenerationTrace
             && !content.videoGenerationTrace
-            && !content.capabilityGenerationTrace) return
+            && !content.capabilityGenerationTrace
+        ) return
         if (!this.isStarted) this.start()
 
         this.enqueue(async () => {
@@ -838,18 +846,18 @@ export class AiChatProseMirrorStreamAssembler {
                     imageGenerationTraceId: null,
                 }
                 : content.videoGenerationTrace
-                    ? {
+                ? {
                     title: 'Video generation details',
                     isOpen: false,
                     isStreaming: false,
                     videoGenerationTrace: content.videoGenerationTrace,
-                    }
-                    : {
-                        title: `${content.capabilityGenerationTrace!.capabilityName} generation details`,
-                        isOpen: false,
-                        isStreaming: false,
-                        capabilityGenerationTrace: content.capabilityGenerationTrace,
-                    }
+                }
+                : {
+                    title: `${content.capabilityGenerationTrace!.capabilityName} generation details`,
+                    isOpen: false,
+                    isStreaming: false,
+                    capabilityGenerationTrace: content.capabilityGenerationTrace,
+                }
             // A reasoning run can fan out into several media runs. Each media run
             // owns a different final prompt and trace, so key the trace block by
             // the full run instead of letting sibling variants overwrite it.
@@ -942,12 +950,14 @@ export class AiChatProseMirrorStreamAssembler {
                 assetId: content.assetId,
                 responseId: content.responseId,
                 ...(isPartial ? { partialIndex: content.partialIndex ?? 0, partialOnly: true } : {}),
-            }) ?? (!isPartial ? this.findGeneratedImageInResponse(responseContext, {
-                mediaRunId: content.generationRun?.mediaRunId,
-                assetId: content.assetId,
-                responseId: content.responseId,
-                partialOnly: true,
-            }) : null)
+            }) ?? (!isPartial
+                ? this.findGeneratedImageInResponse(responseContext, {
+                    mediaRunId: content.generationRun?.mediaRunId,
+                    assetId: content.assetId,
+                    responseId: content.responseId,
+                    partialOnly: true,
+                })
+                : null)
 
             const transaction = this.engine.state.tr
             const stalePartialRanges: Array<{ from: number; to: number }> = []
@@ -1532,10 +1542,12 @@ export class AiChatProseMirrorStreamAssembler {
                     exactResult = result
                     return
                 }
-                if (!child.attrs?.mediaRunId
+                if (
+                    !child.attrs?.mediaRunId
                     && !child.attrs?.imageGenerationTrace
                     && !child.attrs?.videoGenerationTrace
-                    && !child.attrs?.capabilityGenerationTrace) {
+                    && !child.attrs?.capabilityGenerationTrace
+                ) {
                     templateResult = result
                 }
             })

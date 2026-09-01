@@ -4,7 +4,7 @@ import 'd3-transition'
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
 import { xIcon } from '../../svg/svgIcons.ts'
-import { appendSvgPathIcon } from '../../svg/svgIconPaths.ts'
+import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 
 export type SlidingSwitchOption<Value extends string = string> = {
     label: string
@@ -39,7 +39,7 @@ export type SlidingSwitchOptionRenderInstance<Value extends string = string> = {
 
 export type SlidingSwitchOptionRenderer<Value extends string = string> = (
     parent: any,
-    state: SlidingSwitchOptionRenderState<Value>
+    state: SlidingSwitchOptionRenderState<Value>,
 ) => SlidingSwitchOptionRenderInstance<Value> | void
 
 export type SlidingSwitchIndicatorInsetShadow = {
@@ -295,7 +295,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         const speedup = 1 + (travelDistance - 1) * this.transitionConfig.distanceSpeedupFactor
         return Math.max(
             this.transitionConfig.minDurationMs,
-            Math.round(this.transitionConfig.durationMs / speedup)
+            Math.round(this.transitionConfig.durationMs / speedup),
         )
     }
 
@@ -573,7 +573,11 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         const disabled = option.disabled ?? false
         const color = disabled
             ? COLORS.optionTextDisabled
-            : selected ? this.selectedOptionColor : hovered ? this.hoveredOptionColor : this.unselectedOptionColor
+            : selected
+            ? this.selectedOptionColor
+            : hovered
+            ? this.hoveredOptionColor
+            : this.unselectedOptionColor
         return {
             id: `${this.id}:${option.value}`,
             option,
@@ -819,7 +823,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
         this.group.attr(
             'transform',
-            `translate(${this.x + this.visualOverflowPadding.left}, ${this.y + this.visualOverflowPadding.top})`
+            `translate(${this.x + this.visualOverflowPadding.left}, ${this.y + this.visualOverflowPadding.top})`,
         )
 
         this.track
@@ -964,7 +968,7 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
 
 export function createSlidingSwitch<Value extends string = string>(
     parent: any,
-    config: SlidingSwitchConfig<Value>
+    config: SlidingSwitchConfig<Value>,
 ): SlidingSwitchInstance<Value> {
     return new SlidingSwitch(parent, config)
 }

@@ -1,10 +1,10 @@
 # SidePanel
 
-Reusable resizable side panel for canvas-hosted UI.
+Reusable resizable side panel for application layouts and overlays.
 
 ## Renderer
 
-TypeScript `html` DOM with no PIXI dependency. The component is built to mount into any canvas-hosted side panel system. It owns the drag-to-resize gesture, touch swipe-to-close gesture when configured, the body cursor and text-selection management during resize, the visible resize-handle line, the translucent glass backdrop, the optional background overlay, the optional open/collapse toggle button, and the drawer open/close animation. The resize-handle line is a single unbroken line spanning the full panel height.
+TypeScript `html` DOM with no canvas dependency. The host supplies a root and content. The component owns the drag-to-resize gesture, touch swipe-to-close gesture when configured, cursor and text-selection leases during resize, the visible resize-handle line, the translucent glass backdrop, the optional background overlay, the optional open/collapse toggle button, and the drawer open/close animation. The resize-handle line is a single unbroken line spanning the full panel height.
 
 The resize gesture is driven by Pointer Events, so it works with mouse, touch, and pen. The resize handle sets `touch-action: none` and captures the pointer for the duration of a drag, so the drag keeps tracking on touch devices and past the window edge.
 
@@ -61,6 +61,8 @@ The component owns the panel width state, clamps it through the configured const
 
 ### Config
 
+- `root`: optional owning surface; its document receives pointer listeners and temporary body styles. Overlapping resize gestures retain separate style leases and release them on completion or disposal.
+
 - `side`: `'left' | 'right'` — which screen edge the panel hugs.
 - `offset`: distance in px from the panel edge to the resize handle center.
 - `grabWidth`: screen-pixel width of the invisible drag hit target.
@@ -104,7 +106,7 @@ Base presentation lives in [`side-panel.scss`](./side-panel.scss):
 
 - The resize handle: `.side-panel-resize-handle` and `.side-panel-resize-handle-line`, driven by `--side-panel-resize-handle-gradient` and `--side-panel-resize-handle-width`. The line spans the full panel height.
 - The toggle: `.side-panel-toggle` (+ `.side-panel-toggle-left` / `.side-panel-toggle-right` / `.side-panel-toggle-open`), driven by `--side-panel-toggle-closed-travel` only when the toggle motion is `slide`.
-- The glass backdrop: `.side-panel-backdrop` (+ `.side-panel-backdrop-left` / `.side-panel-backdrop-right`). Width comes from `--side-panel-backdrop-width`, the tint from `--side-panel-backdrop-fill` / `--side-panel-backdrop-fill-opaque`.
+- The glass backdrop: `.side-panel-backdrop` (+ `.side-panel-backdrop-left` / `.side-panel-backdrop-right`). Width comes from `--side-panel-backdrop-width`, the tint from `--side-panel-backdrop-fill` / `--side-panel-backdrop-fill-opaque`. `--side-panel-backdrop-bottom-outset` and `--side-panel-backdrop-inline-outset` extend it beyond the host edges when the host reserves padding; both default to zero.
 - The background overlay: `.side-panel-overlay` (+ `.side-panel-overlay-left` / `.side-panel-overlay-right` / `.side-panel-overlay-open`), driven by `--side-panel-overlay-fill` / `--side-panel-overlay-fill-opaque` and a lower-intensity blur/saturate glass filter.
 - Swipe-to-close state: `.side-panel-touch-drag` and `.side-panel-touch-dragging`.
 - The slide animation: `.side-panel-slide` provides the transform transition; `--side-panel-slide-duration` and `--side-panel-slide-easing` are set from component config for the active open/close direction, and the component applies the current transform inline to the panel element, backdrop, and toggle.

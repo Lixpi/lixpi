@@ -10,13 +10,13 @@ export type ThreadShapeParams = {
     y: number
     width: number
     height: number
-    lineCount?: number           // Number of content lines (default: 3)
-    linePadding?: { x?: number; y?: number }  // Padding around lines
-    lineSpacingScale?: number    // Multiplier for vertical line spacing
-    label?: string               // Optional label text instead of lines
-    labelClassName?: string      // Optional class for the label text element
-    className?: string           // Additional CSS class
-    disabled?: boolean           // Visual disabled state
+    lineCount?: number // Number of content lines (default: 3)
+    linePadding?: { x?: number; y?: number } // Padding around lines
+    lineSpacingScale?: number // Multiplier for vertical line spacing
+    label?: string // Optional label text instead of lines
+    labelClassName?: string // Optional class for the label text element
+    className?: string // Additional CSS class
+    disabled?: boolean // Visual disabled state
 }
 
 // Icon shape configuration
@@ -24,8 +24,8 @@ export type IconShapeParams = {
     id: string
     x: number
     y: number
-    size: number                 // Width and height of square container
-    icon: string                 // SVG string
+    size: number // Width and height of square container
+    icon: string // SVG string
     className?: string
     disabled?: boolean
 }
@@ -37,7 +37,7 @@ export type LabelShapeParams = {
     y: number
     width: number
     height: number
-    radius?: number              // Corner radius (default: 16)
+    radius?: number // Corner radius (default: 16)
     text: string
     className?: string
     disabled?: boolean

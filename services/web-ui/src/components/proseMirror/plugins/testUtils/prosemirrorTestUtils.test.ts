@@ -1,7 +1,15 @@
 'use strict'
 
-import { describe, it, expect, beforeEach } from 'vitest'
-import { NodeSelection, TextSelection } from 'prosemirror-state'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+} from 'vitest'
+import {
+    NodeSelection,
+    TextSelection,
+} from 'prosemirror-state'
 import {
     doc,
     p,
@@ -18,24 +26,28 @@ import {
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 
-const imageThenPromptDoc = doc(p('Hello world'), thread(response(p('First thread response'))), aiImg({
-    imageData: 'data:image/png;base64,test',
-    alignment: 'left',
-    textWrap: 'none',
-    width: null,
-    isPartial: false,
-    fileId: 'test-file-id',
-    revisedPrompt: 'Test prompt',
-    responseId: 'test-response-id',
-    aiModel: 'dall-e-3',
-}))
+const imageThenPromptDoc = doc(
+    p('Hello world'),
+    thread(response(p('First thread response'))),
+    aiImg({
+        imageData: 'data:image/png;base64,test',
+        alignment: 'left',
+        textWrap: 'none',
+        width: null,
+        isPartial: false,
+        fileId: 'test-file-id',
+        revisedPrompt: 'Test prompt',
+        responseId: 'test-response-id',
+        aiModel: 'dall-e-3',
+    }),
+)
 
 const nestedThreadDoc = doc(
     thread(
         response(p('First response')),
         response(p('Second response')),
     ),
-    p('After thread')
+    p('After thread'),
 )
 
 describe('prosemirrorTestUtils — node lookup', () => {

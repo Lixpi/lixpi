@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     workspacePersistenceSettings,
@@ -27,4 +31,3 @@ describe('workspacePersistenceSettings', () => {
         expect(workspacePersistenceSettings).toEqual(expectedSettings)
     })
 })
-

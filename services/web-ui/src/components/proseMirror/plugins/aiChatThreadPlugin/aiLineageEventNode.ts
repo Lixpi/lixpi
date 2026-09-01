@@ -17,13 +17,14 @@ export {
 }
 
 export const aiLineageEventNodeView = (node) => {
-    const buildMarker = () => createAiLineageEventMarker({
-        kind: normalizeAiLineageEventKind(node.attrs.kind),
-        branchOriginNodeId: node.attrs.branchOriginNodeId || '',
-        branchForkNodeId: node.attrs.branchForkNodeId || '',
-        branchLineNodeId: node.attrs.branchLineNodeId || '',
-        reasoningModelId: node.attrs.reasoningModelId || '',
-    })
+    const buildMarker = () =>
+        createAiLineageEventMarker({
+            kind: normalizeAiLineageEventKind(node.attrs.kind),
+            branchOriginNodeId: node.attrs.branchOriginNodeId || '',
+            branchForkNodeId: node.attrs.branchForkNodeId || '',
+            branchLineNodeId: node.attrs.branchLineNodeId || '',
+            reasoningModelId: node.attrs.reasoningModelId || '',
+        })
 
     let dom = buildMarker()
 

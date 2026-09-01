@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { redo } from 'prosemirror-history'
 import { schema as baseSchema } from '$src/components/proseMirror/components/schema.ts'
 import { insertAiChatThread } from '$src/components/proseMirror/components/commands.js'

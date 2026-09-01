@@ -1,20 +1,21 @@
 import { brokenImageIcon } from '@lixpi/ui-kit/svg'
 import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
-import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
+import {
+    html,
+    applyStyle,
+} from '@lixpi/ui-primitives/dom'
+import {
+    buildAssetRenditionPath,
+    resolveAuthenticatedMediaUrl,
+} from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
-import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
+import {
+    applyMediaModelBadgeStyleProperties,
+    resolveMediaModelBadgeConfig,
+} from '$src/components/mediaModelBadge/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type {
-    CanvasGeometryUpdate,
-    CapabilityRunEvent,
-    MediaBranchVlmResolution,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
-    WorkspaceContextResolution,
-} from '@lixpi/constants'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeType,
@@ -23,98 +24,6 @@ import {
 export {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeType,
-}
-
-export type AiGeneratedImageCallbacks = {
-    onCapabilityRunEventToCanvas?: (data: {
-        threadId: string
-        event: CapabilityRunEvent
-    }) => void
-    onAddToCanvas?: (data: {
-        imageUrl: string
-        assetId: string
-        responseId: string
-        revisedPrompt: string
-        aiModel: string
-    }) => void
-    onImagePartialToCanvas?: (data: {
-        threadId: string
-        imageUrl: string
-        assetId: string
-        partialIndex: number
-        aiProvider: string
-        canvasGeometry?: CanvasGeometryUpdate
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onImageCompleteToCanvas?: (data: {
-        threadId: string
-        imageUrl: string
-        assetId: string
-        responseId: string
-        revisedPrompt: string
-        aiModel: string
-        imageModelProvider: string
-        imageModelId?: string
-        responseMessageId: string
-        canvasGeometry?: CanvasGeometryUpdate
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onImageGenerationTraceToCanvas?: (data: {
-        threadId: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onMediaBranchResolvedToCanvas?: (data: {
-        threadId: string
-        resolution: MediaBranchVlmResolution
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onMediaLineagePlannedToCanvas?: (data: {
-        threadId: string
-        lineagePlan: MediaBranchLineagePlan
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onMediaGenerationSkippedToCanvas?: (data: {
-        threadId: string
-        generationRequestId: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onMediaGenerationRequestCompleteToCanvas?: (data: {
-        threadId: string
-        generationRequestId: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    // Applies API-resolved authoritative node geometry (positions/dimensions)
-    // pushed over the chat stream — the client never recomputes this layout.
-    onCanvasGeometryResolvedToCanvas?: (data: {
-        threadId: string
-        canvasGeometry: CanvasGeometryUpdate
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onWorkspaceContextResolvedToCanvas?: (data: {
-        threadId: string
-        resolution: WorkspaceContextResolution
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onMediaBranchResolutionErrorToCanvas?: (data: {
-        threadId: string
-        error: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onImageErrorToCanvas?: (data: {
-        threadId: string
-        error: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-}
-
-let globalCallbacks: AiGeneratedImageCallbacks = {}
-
-export function setAiGeneratedImageCallbacks(callbacks: AiGeneratedImageCallbacks) {
-    globalCallbacks = callbacks
-}
-
-export function getAiGeneratedImageCallbacks(): AiGeneratedImageCallbacks {
-    return globalCallbacks
 }
 
 export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => number | undefined) => {
@@ -158,9 +67,12 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     wrapper.addEventListener('click', handleClick)
 
     const updateModelChrome = (): void => {
-        renderMediaModelBadge(modelChromeElement, resolveMediaModelBadgeConfig({
-            modelId: node.attrs.mediaModelId,
-        }))
+        renderMediaModelBadge(
+            modelChromeElement,
+            resolveMediaModelBadgeConfig({
+                modelId: node.attrs.mediaModelId,
+            }),
+        )
     }
 
     const updateDisplay = async () => {

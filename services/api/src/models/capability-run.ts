@@ -2,7 +2,11 @@
 
 import * as process from 'node:process'
 
-import { getDynamoDbTableStageName, type CapabilityRun, type CapabilityRunStatus } from '@lixpi/constants'
+import {
+    getDynamoDbTableStageName,
+    type CapabilityRun,
+    type CapabilityRunStatus,
+} from '@lixpi/constants'
 
 const { ORG_NAME, STAGE } = process.env
 const capabilityRunsTableName = (): string => getDynamoDbTableStageName('CAPABILITY_RUNS', ORG_NAME, STAGE)

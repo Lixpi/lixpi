@@ -1,4 +1,11 @@
-import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    afterEach,
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { select } from 'd3-selection'
 
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'

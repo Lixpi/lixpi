@@ -1,9 +1,23 @@
 'use strict'
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { NodeSelection } from 'prosemirror-state'
-import { doc, p, img, createStateWithNodeSelection } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
-import { createMockImageWrapper, createMockEditorView } from '$src/components/proseMirror/plugins/testUtils/testHelpers.ts'
+import {
+    doc,
+    p,
+    img,
+    createStateWithNodeSelection,
+} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+import {
+    createMockImageWrapper,
+    createMockEditorView,
+} from '$src/components/proseMirror/plugins/testUtils/testHelpers.ts'
 import { BubbleMenuView } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/bubbleMenuPlugin.ts'
 
 function findNodeSelectionPos(document: any, nodeType: string): number {
@@ -46,7 +60,7 @@ const {
         const updateMenuItemMock = vi.fn()
         const getSelectionContextMock = vi.fn(() => 'none' as const)
         const updateImageButtonStatesMock = vi.fn()
-        const createBubbleMenuMock = vi.fn(function (opts: any) {
+        const createBubbleMenuMock = vi.fn(function(opts: any) {
             const bubbleMenu = {
                 element: document.createElement('div'),
                 isVisible: false,
@@ -198,7 +212,6 @@ describe('BubbleMenuView', () => {
         const menu = new BubbleMenuView({ view })
 
         menu.showLinkInput()
-
         ;(menu as any).getPositionRequest = vi.fn(() => ({
             targetRect: new DOMRect(10, 20, 30, 40),
             placement: 'above',

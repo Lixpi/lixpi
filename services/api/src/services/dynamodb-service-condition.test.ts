@@ -1,22 +1,25 @@
 'use strict'
 
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-const workspaceModelSource = (): string =>
-    readFileSync(new URL('../models/workspace.ts', import.meta.url), 'utf8')
+const workspaceModelSource = (): string => readFileSync(new URL('../models/workspace.ts', import.meta.url), 'utf8')
 
 function expectSourceToContain(source: string, snippet: string, label = 'source'): void {
     expect(
         source.includes(snippet),
-        `${label} should contain:\n${snippet}`
+        `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string, label = 'source'): void {
     expect(
         source.includes(snippet),
-        `${label} should not contain:\n${snippet}`
+        `${label} should not contain:\n${snippet}`,
     ).toBe(false)
 }
 
@@ -31,17 +34,17 @@ describe('Workspace model canvas state update contract', () => {
         expectSourceToContain(
             source,
             "return '(#canvasStateUpdatedAt = :expectedCanvasStateUpdatedAt OR (attribute_not_exists(#canvasStateUpdatedAt) AND #updatedAt = :expectedCanvasStateUpdatedAt)) AND attribute_not_exists(#deletingAt)'",
-            'getCanvasStateWriteCondition'
+            'getCanvasStateWriteCondition',
         )
         expectSourceToContain(
             source,
             "return '(attribute_not_exists(#canvasStateUpdatedAt) AND attribute_not_exists(#updatedAt)) AND attribute_not_exists(#deletingAt)'",
-            'getCanvasStateWriteCondition'
+            'getCanvasStateWriteCondition',
         )
         expectSourceNotToContain(
             source,
             'const currentFiles = workspace?.files || []',
-            'Workspace model'
+            'Workspace model',
         )
     })
 
@@ -51,22 +54,22 @@ describe('Workspace model canvas state update contract', () => {
         expectSourceToContain(
             source,
             'const maxAttempts = 5',
-            'Workspace.mutateCanvasState'
+            'Workspace.mutateCanvasState',
         )
         expectSourceToContain(
             source,
             'if (isTransactionConditionalCheckFailure(error)) continue',
-            'Workspace.mutateCanvasState'
+            'Workspace.mutateCanvasState',
         )
         expectSourceToContain(
             source,
             'throw new Error(`Failed to mutate workspace canvas state after concurrent updates: ${workspaceId}`)',
-            'Workspace.mutateCanvasState'
+            'Workspace.mutateCanvasState',
         )
         expectSourceNotToContain(
             source,
             'files: updatedFiles',
-            'Workspace model'
+            'Workspace model',
         )
     })
 })

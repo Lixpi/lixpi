@@ -23,8 +23,7 @@ export type CapabilityTraceRecorder = {
     }) => ExecutionTrace | undefined
 }
 
-const handleIdentity = (handle: ExecutionTraceHandle): string =>
-    `${handle.kind}:${handle.id}:${handle.role ?? ''}`
+const handleIdentity = (handle: ExecutionTraceHandle): string => `${handle.kind}:${handle.id}:${handle.role ?? ''}`
 
 export function createCapabilityTraceRecorder(): CapabilityTraceRecorder {
     let reasoning = ''
@@ -68,11 +67,11 @@ export function createCapabilityTraceRecorder(): CapabilityTraceRecorder {
 export function hasTraceContent(trace: ExecutionTrace): boolean {
     return Boolean(
         trace.reasoning
-        || trace.handles?.length
-        || trace.modelCalls?.length
-        || trace.facts?.length
-        || trace.inputSummary
-        || trace.outputSummary
-        || trace.errorMessage,
+            || trace.handles?.length
+            || trace.modelCalls?.length
+            || trace.facts?.length
+            || trace.inputSummary
+            || trace.outputSummary
+            || trace.errorMessage,
     )
 }

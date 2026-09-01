@@ -4,12 +4,18 @@ import {
     type PromptReferenceCategory,
 } from '@lixpi/constants'
 import { PROMPT_REFERENCE_NODE_TYPE } from '@lixpi/prosemirror'
-import { Plugin, PluginKey, type Transaction } from 'prosemirror-state'
+import {
+    Plugin,
+    PluginKey,
+    type Transaction,
+} from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 
-import { createSlidingSwitch, type SlidingSwitchInstance } from '@lixpi/ui-kit/components/sliding-switch'
+import {
+    createSlidingSwitch,
+    type SlidingSwitchInstance,
+} from '@lixpi/ui-kit/components/sliding-switch'
 import AuthService from '$src/services/auth-service.ts'
-import { settings } from '$src/settings.ts'
 import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
 import {
     type FloatingMenuPlacement,
@@ -17,7 +23,10 @@ import {
     resolveFloatingMenuScreenPosition,
     screenPointToLocal,
 } from '$src/components/proseMirror/plugins/floatingMenuPosition.ts'
-import { applyStyle, html } from '$src/utils/domTemplates.ts'
+import {
+    applyStyle,
+    html,
+} from '@lixpi/ui-primitives/dom'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 import {
     capabilityArtifactFrontendRegistry,
@@ -163,8 +172,6 @@ class PromptReferencePickerMenu {
                 role: 'radiogroup',
                 optionRole: 'radio',
                 selectedAriaAttribute: 'aria-checked',
-                indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
-                indicatorInsetShadow: settings.slidingSwitch.styles.indicatorInsetShadow,
                 onChange: category => this.changeCategory(category),
             })
             : null
@@ -203,9 +210,11 @@ class PromptReferencePickerMenu {
         }
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
-            if (event.key === 'ArrowDown'
+            if (
+                event.key === 'ArrowDown'
                 && state.selectedIndex === this.results.length - 1
-                && this.cursor) {
+                && this.cursor
+            ) {
                 void this.loadMore(state.category, state.query)
                 return true
             }
@@ -285,8 +294,10 @@ class PromptReferencePickerMenu {
         try {
             const page = await this.catalog.list({ category, query, cursor, limit: PAGE_LIMIT })
             const state = this.key.getState(this.view.state)
-            if (requestSequence !== this.requestSequence || !state?.active
-                || state.category !== category || state.query !== query) return
+            if (
+                requestSequence !== this.requestSequence || !state?.active
+                || state.category !== category || state.query !== query
+            ) return
             if (!append) {
                 this.loading = false
                 this.menu.removeAttribute('aria-busy')
@@ -341,10 +352,10 @@ class PromptReferencePickerMenu {
                     type="button"
                     className="prompt-reference-picker-load-more"
                     onmousedown=${(event: MouseEvent) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        void this.loadMore(state.category, state.query)
-                    }}
+                event.preventDefault()
+                event.stopPropagation()
+                void this.loadMore(state.category, state.query)
+            }}
                 >Load more</button>
             ` as HTMLButtonElement
             rows.push(loadMore)
@@ -362,7 +373,9 @@ class PromptReferencePickerMenu {
             : item.summary
         const badge = item.referenceType === 'media'
             ? item.mediaKind
-            : item.referenceType === 'capability-module' ? 'Capability' : item.referenceType
+            : item.referenceType === 'capability-module'
+            ? 'Capability'
+            : item.referenceType
         const thumbnail = media && item.thumbnailAvailable
             ? html`
                 <img
@@ -394,20 +407,20 @@ class PromptReferencePickerMenu {
                 data-help-tooltip="aria-label"
                 aria-label=${`${label}: ${summary}`}
                 onmousedown=${(event: MouseEvent) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    if (this.loading) return
-                    const currentItem = this.results.find(result => getCatalogItemKey(result) === itemKey)
-                    if (currentItem) this.insert(currentItem)
-                }}
+            event.preventDefault()
+            event.stopPropagation()
+            if (this.loading) return
+            const currentItem = this.results.find(result => getCatalogItemKey(result) === itemKey)
+            if (currentItem) this.insert(currentItem)
+        }}
                 onmousemove=${() => {
-                    if (this.loading) return
-                    const current = this.key.getState(this.view.state)
-                    const index = this.results.findIndex(result => getCatalogItemKey(result) === itemKey)
-                    if (current?.active && current.selectedIndex !== index) {
-                        this.view.dispatch(this.view.state.tr.setMeta(this.key, { type: 'select', selectedIndex: index }))
-                    }
-                }}
+            if (this.loading) return
+            const current = this.key.getState(this.view.state)
+            const index = this.results.findIndex(result => getCatalogItemKey(result) === itemKey)
+            if (current?.active && current.selectedIndex !== index) {
+                this.view.dispatch(this.view.state.tr.setMeta(this.key, { type: 'select', selectedIndex: index }))
+            }
+        }}
             >
                 ${thumbnail}
                 <span className="prompt-reference-picker-copy">
@@ -432,20 +445,20 @@ class PromptReferencePickerMenu {
             data-help-tooltip="aria-label"
             aria-label=${item.title}
             onmousedown=${(event: MouseEvent) => {
-                event.preventDefault()
-                event.stopPropagation()
-                if (this.loading) return
-                const currentItem = this.results.find(result => getCatalogItemKey(result) === itemKey)
-                if (currentItem) this.insert(currentItem)
-            }}
+            event.preventDefault()
+            event.stopPropagation()
+            if (this.loading) return
+            const currentItem = this.results.find(result => getCatalogItemKey(result) === itemKey)
+            if (currentItem) this.insert(currentItem)
+        }}
             onmousemove=${() => {
-                if (this.loading) return
-                const current = this.key.getState(this.view.state)
-                const index = this.results.findIndex(result => getCatalogItemKey(result) === itemKey)
-                if (current?.active && current.selectedIndex !== index) {
-                    this.view.dispatch(this.view.state.tr.setMeta(this.key, { type: 'select', selectedIndex: index }))
-                }
-            }}
+            if (this.loading) return
+            const current = this.key.getState(this.view.state)
+            const index = this.results.findIndex(result => getCatalogItemKey(result) === itemKey)
+            if (current?.active && current.selectedIndex !== index) {
+                this.view.dispatch(this.view.state.tr.setMeta(this.key, { type: 'select', selectedIndex: index }))
+            }
+        }}
         >
             <span className="prompt-reference-picker-glyph prompt-reference-picker-glyph-capability-artifact" aria-hidden="true" innerHTML=${getCapabilityArtifactIcon(item.artifactTypeId)}></span>
             <span className="prompt-reference-picker-copy prompt-reference-picker-artifact-host"></span>
@@ -560,9 +573,11 @@ function createPromptReferencePickerPlugin(
                 if ($from.parent.type.name === 'code_block') return false
                 const characterBefore = from > 0 ? view.state.doc.textBetween(from - 1, from, '') : ''
                 if ($from.parentOffset !== 0 && !/\s/.test(characterBefore)) return false
-                view.dispatch(view.state.tr
-                    .insertText(trigger, from, to)
-                    .setMeta(key, { type: 'open', triggerPos: from }))
+                view.dispatch(
+                    view.state.tr
+                        .insertText(trigger, from, to)
+                        .setMeta(key, { type: 'open', triggerPos: from }),
+                )
                 return true
             },
             handleKeyDown: (_view, event) => menu?.handleKeyDown(event) ?? false,
@@ -580,11 +595,9 @@ function createPromptReferencePickerPlugin(
     })
 }
 
-export const createAtPromptReferencePickerPlugin = (catalog: PromptReferenceCatalogClient): Plugin =>
-    createPromptReferencePickerPlugin(catalog, 'references')
+export const createAtPromptReferencePickerPlugin = (catalog: PromptReferenceCatalogClient): Plugin => createPromptReferencePickerPlugin(catalog, 'references')
 
-export const createSlashCapabilityModulePickerPlugin = (catalog: PromptReferenceCatalogClient): Plugin =>
-    createPromptReferencePickerPlugin(catalog, 'modules')
+export const createSlashCapabilityModulePickerPlugin = (catalog: PromptReferenceCatalogClient): Plugin => createPromptReferencePickerPlugin(catalog, 'modules')
 
 export function promptReferenceCatalogItemToAtomAttrs(item: PromptReferenceCatalogItem): Record<string, string> {
     if (item.referenceType === 'media') {

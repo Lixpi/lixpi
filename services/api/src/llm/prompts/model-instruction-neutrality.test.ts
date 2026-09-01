@@ -1,9 +1,16 @@
 'use strict'
 
-import { readFileSync, readdirSync } from 'node:fs'
+import {
+    readFileSync,
+    readdirSync,
+} from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 type InstructionSource = {
     path: string
@@ -68,12 +75,14 @@ describe('static model instructions', () => {
             ...STATIC_INSTRUCTION_FILES.map(readInstructionSource),
             ...STATIC_INSTRUCTION_DIRECTORIES.flatMap(collectInstructionSources),
         ]
-        const violations = sources.flatMap(source => FORBIDDEN_PATTERNS.flatMap(rule =>
-            [...source.text.matchAll(rule.pattern)].map(match => {
-                const line = source.text.slice(0, match.index).split('\n').length
-                return `${source.path}:${line} ${rule.reason}: ${match[0]}`
-            }),
-        ))
+        const violations = sources.flatMap(source =>
+            FORBIDDEN_PATTERNS.flatMap(rule =>
+                [...source.text.matchAll(rule.pattern)].map(match => {
+                    const line = source.text.slice(0, match.index).split('\n').length
+                    return `${source.path}:${line} ${rule.reason}: ${match[0]}`
+                })
+            )
+        )
 
         expect(violations, violations.join('\n')).toEqual([])
     })

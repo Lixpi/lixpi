@@ -1,6 +1,11 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     getMediaGenerationUserEventSubject,
@@ -52,10 +57,12 @@ describe('MediaGenerationRequestEventLog', () => {
             expect.objectContaining({ msgID: 'event-3' }),
         )
         expect(nats.publish).toHaveBeenCalledWith(
-            `${getMediaGenerationUserEventSubject(
-                'user-1',
-                NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.STATUS,
-            )}.workspace_1.request-1`,
+            `${
+                getMediaGenerationUserEventSubject(
+                    'user-1',
+                    NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.STATUS,
+                )
+            }.workspace_1.request-1`,
             expect.objectContaining({
                 event: expect.objectContaining({ eventId: 'event-3' }),
                 streamSequence: 7,

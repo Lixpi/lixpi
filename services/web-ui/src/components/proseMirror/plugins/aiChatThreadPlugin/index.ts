@@ -14,8 +14,6 @@ export {
     aiGeneratedImageNodeType,
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView,
-    setAiGeneratedImageCallbacks,
-    getAiGeneratedImageCallbacks
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 
 // Export aiGeneratedVideo node for schema and NodeView registration
@@ -23,29 +21,27 @@ export {
     aiGeneratedVideoNodeType,
     aiGeneratedVideoNodeSpec,
     aiGeneratedVideoNodeView,
-    setAiGeneratedVideoCallbacks,
-    getAiGeneratedVideoCallbacks
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 
 // Export aiCollapsibleBlock node for schema and NodeView registration
 export {
     aiCollapsibleBlockNodeType,
     aiCollapsibleBlockNodeSpec,
-    aiCollapsibleBlockNodeView
+    aiCollapsibleBlockNodeView,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
 
 // Export aiReasoningSection node (per-model slice of a multi-model response)
 export {
     aiReasoningSectionNodeType,
     aiReasoningSectionNodeSpec,
-    aiReasoningSectionNodeView
+    aiReasoningSectionNodeView,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiReasoningSectionNode.ts'
 
 // Export aiLineageEvent node for projection-time workflow markers
 export {
     aiLineageEventNodeType,
     aiLineageEventNodeSpec,
-    aiLineageEventNodeView
+    aiLineageEventNodeView,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiLineageEventNode.ts'
 
 export {

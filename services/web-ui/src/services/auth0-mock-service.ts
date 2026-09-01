@@ -1,7 +1,7 @@
 'use strict'
 
 import { authStore } from '$src/stores/authStore.ts'
-import { applyStyle } from '$src/utils/domTemplates.ts'
+import { applyStyle } from '@lixpi/ui-primitives/dom'
 
 const AUTH0_DOMAIN = import.meta.env.VITE_MOCK_AUTH0_DOMAIN
 const AUTH0_CLIENT_ID = 'mock-client-id'
@@ -53,7 +53,7 @@ class Auth0MockService {
                 const user = {
                     userId: 'local|test-user-001',
                     name: 'Test User',
-                    email: 'test@local.dev'
+                    email: 'test@local.dev',
                 }
                 authStore.setMetaValues({ isLoading: false, isAuthenticated: true })
                 authStore.setDataValues({ user })
@@ -75,7 +75,7 @@ class Auth0MockService {
             redirect_uri: AUTH0_REDIRECT_URI,
             scope: 'openid profile email',
             response_type: 'token',
-            bypass: 'true'
+            bypass: 'true',
         }).toString()
         window.location.href = authUrl
     }

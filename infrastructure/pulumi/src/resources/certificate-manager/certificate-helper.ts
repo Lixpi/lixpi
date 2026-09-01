@@ -32,9 +32,8 @@ export const createCertificateHelper = (
         s3Bucket?: pulumi.Input<string>
         s3Prefix?: string
         efsFileSystemId?: pulumi.Input<string>
-    }
+    },
 ): CertificateHelper => {
-
     switch (storageType) {
         case 'secrets-manager':
             const secretName = `${storageConfig.secretsManagerPrefix}-${domain.replace(/\*/g, 'wildcard').replace(/\./g, '-')}`
@@ -95,7 +94,7 @@ export const createCertificateHelper = (
                         echo "❌ Downloaded certificate is invalid"
                         return 1
                     fi
-                `
+                `,
             }
 
         case 's3':
@@ -150,7 +149,7 @@ export const createCertificateHelper = (
                         echo "❌ Downloaded certificate is invalid"
                         return 1
                     fi
-                `
+                `,
             }
 
         case 'efs':
@@ -204,7 +203,7 @@ export const createCertificateHelper = (
                         echo "❌ Copied certificate is invalid"
                         return 1
                     fi
-                `
+                `,
             }
     }
 }

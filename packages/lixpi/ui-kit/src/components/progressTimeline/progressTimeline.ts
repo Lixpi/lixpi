@@ -1,9 +1,13 @@
-import { html } from '../../dom/domTemplates.ts'
-import { chevronDownIcon, chevronUpIcon } from '../../svg/svgIcons.ts'
+import { html } from '@lixpi/ui-primitives/dom'
+import {
+    chevronDownIcon,
+    chevronUpIcon,
+} from '../../svg/svgIcons.ts'
+import { progressRippleArtwork } from '../../svg/progressRippleArtwork.ts'
 import {
     createProgressRippleIcon,
     type ProgressRippleIconInstance,
-} from './progressRippleIcon.ts'
+} from '@lixpi/ui-kit/components/progress-ripple'
 
 export type ProgressTimelineItemStatus =
     | 'pending'
@@ -276,18 +280,22 @@ class ProgressTimeline implements ProgressTimelineInstance {
                     data-source-kind=${item.source.kind}
                 >
                     <span className="progress-timeline-source-kind">${getSourceKindLabel(item.source.kind)}</span>
-                    ${item.source.icon
-                        ? html`
+                    ${
+                item.source.icon
+                    ? html`
                             <span
                                 className="progress-timeline-source-icon"
                                 innerHTML=${item.source.icon}
                                 aria-hidden="true"
                             ></span>
                         `
-                        : null}
-                    ${item.source.name
-                        ? html`<span className="progress-timeline-source-name">${item.source.name}</span>`
-                        : null}
+                    : null
+            }
+                    ${
+                item.source.name
+                    ? html`<span className="progress-timeline-source-name">${item.source.name}</span>`
+                    : null
+            }
                 </span>
             `
             : null
@@ -295,9 +303,11 @@ class ProgressTimeline implements ProgressTimelineInstance {
             ? html`
                 <span className="progress-timeline-heading">
                     <span className="progress-timeline-title">${item.title}</span>
-                    ${item.meta
-                        ? html`<small className="progress-timeline-meta" data-timeline-meta-key=${itemKey}>${item.meta}</small>`
-                        : null}
+                    ${
+                item.meta
+                    ? html`<small className="progress-timeline-meta" data-timeline-meta-key=${itemKey}>${item.meta}</small>`
+                    : null
+            }
                 </span>
             `
             : source
@@ -325,9 +335,9 @@ class ProgressTimeline implements ProgressTimelineInstance {
                 </span>
             `
         const collapsedSummary = item.summary
-            && item.showSummaryWhenCollapsed
-            && !isExpanded
-            && !isFocusedContext
+                && item.showSummaryWhenCollapsed
+                && !isExpanded
+                && !isFocusedContext
             ? html`
                 <small
                     className="progress-timeline-summary progress-timeline-summary-collapsed"
@@ -338,14 +348,16 @@ class ProgressTimeline implements ProgressTimelineInstance {
         const details = isExpanded
             ? html`
                 <span id=${detailsId} className="progress-timeline-details">
-                    ${item.summary && !item.hideSummaryWhenExpanded && !isFocusedContext
-                        ? html`
+                    ${
+                item.summary && !item.hideSummaryWhenExpanded && !isFocusedContext
+                    ? html`
                             <small
                                 className="progress-timeline-summary"
                                 data-timeline-summary-key=${itemKey}
                             >${item.summary}</small>
                         `
-                        : null}
+                    : null
+            }
                     ${this.resolveItemDetail(itemKey, item)}
                     ${children}
                 </span>
@@ -470,26 +482,27 @@ class ProgressTimeline implements ProgressTimelineInstance {
         const collectFocusedItems = (
             candidates: ProgressTimelineItem[],
             parentPath: string[] = [],
-        ): ProgressTimelineItem[] => candidates.flatMap((item) => {
-            const itemPath = [...parentPath, item.id]
-            const itemKey = itemPath.join('/')
-            const children = collectFocusedItems(item.children ?? [], itemPath)
-            const isDirectlyVisible = FOCUSED_STATUSES.has(item.status)
-            const preserveTopLevelItem = this.config.preserveTopLevelItemsInFocusedView
-                && parentPath.length === 0
-            if (!isDirectlyVisible && children.length === 0) {
-                return preserveTopLevelItem ? [item] : []
-            }
-            if (!isDirectlyVisible) contextItemKeys.add(itemKey)
-            return [{
-                ...item,
-                ...(children.length > 0
-                    ? { children }
-                    : preserveTopLevelItem
+        ): ProgressTimelineItem[] =>
+            candidates.flatMap((item) => {
+                const itemPath = [...parentPath, item.id]
+                const itemKey = itemPath.join('/')
+                const children = collectFocusedItems(item.children ?? [], itemPath)
+                const isDirectlyVisible = FOCUSED_STATUSES.has(item.status)
+                const preserveTopLevelItem = this.config.preserveTopLevelItemsInFocusedView
+                    && parentPath.length === 0
+                if (!isDirectlyVisible && children.length === 0) {
+                    return preserveTopLevelItem ? [item] : []
+                }
+                if (!isDirectlyVisible) contextItemKeys.add(itemKey)
+                return [{
+                    ...item,
+                    ...(children.length > 0
+                        ? { children }
+                        : preserveTopLevelItem
                         ? {}
                         : { children: undefined }),
-            }]
-        })
+                }]
+            })
         const focusedItems = collectFocusedItems(this.items)
         return {
             items: focusedItems,
@@ -507,7 +520,7 @@ class ProgressTimeline implements ProgressTimelineInstance {
         this.renderedRippleIconKeys.add(itemKey)
         const existing = this.rippleIconsByItemKey.get(itemKey)
         if (existing) return existing.element
-        const rippleIcon = createProgressRippleIcon()
+        const rippleIcon = createProgressRippleIcon({ artwork: progressRippleArtwork })
         this.rippleIconsByItemKey.set(itemKey, rippleIcon)
         return rippleIcon.element
     }

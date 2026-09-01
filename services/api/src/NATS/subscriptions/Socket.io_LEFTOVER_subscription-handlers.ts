@@ -1,7 +1,13 @@
 'use strict'
 
 import chalk from 'chalk'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import SocketIoConnectionsManager from '../socket.io-connections-manager.ts'
 
@@ -9,15 +15,14 @@ import {
     USER_SUBJECTS,
     USER_SUBSCRIPTION_SUBJECTS,
     LoadingStatus,
-    PaymentProcessingStatus
+    PaymentProcessingStatus,
 } from '@lixpi/constants'
 
 import type {
-    SocketIoResponse
+    SocketIoResponse,
 } from '@lixpi/constants'
 
 export const notifyClientOfBalanceTopUp = async (data) => {
-
     console.log('notifyClientOfBalanceTopUp', data)
 
     const socketIoConnectionsManager = SocketIoConnectionsManager.getInstance({})
@@ -29,12 +34,12 @@ export const notifyClientOfBalanceTopUp = async (data) => {
         event: USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE_RESPONSE,
         data: {
             meta: {
-                paymentProcessingStatus: PaymentProcessingStatus.success
+                paymentProcessingStatus: PaymentProcessingStatus.success,
             },
             data: {
                 balance,
-                netBalance
-            }
+                netBalance,
+            },
         } as SocketIoResponse,
     })
 
@@ -43,14 +48,12 @@ export const notifyClientOfBalanceTopUp = async (data) => {
         chalk.green(USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE_RESPONSE),
         ', ',
         chalk.grey('userId::'),
-        userId
+        userId,
     ])
 }
 
 export const notifyClientOfCreditsUse = async (data) => {
-
     console.log('notifyClientOfCreditsUse', data)
-
 
     const socketIoConnectionsManager = SocketIoConnectionsManager.getInstance({})
 
@@ -67,8 +70,8 @@ export const notifyClientOfCreditsUse = async (data) => {
             },
             data: {
                 balance,
-                netBalance
-            }
+                netBalance,
+            },
         } as SocketIoResponse,
     })
 
@@ -77,8 +80,6 @@ export const notifyClientOfCreditsUse = async (data) => {
         chalk.green(USER_SUBSCRIPTION_SUBJECTS.USE_CREDITS_RESPONSE),
         ', ',
         chalk.grey('userId::'),
-        userId
+        userId,
     ])
 }
-
-

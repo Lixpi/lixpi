@@ -15,11 +15,13 @@ type KeyedIdleBatchEntry<T> = {
 export class KeyedIdleBatchScheduler<T> {
     private readonly entries = new Map<string, KeyedIdleBatchEntry<T>>()
 
-    constructor(private readonly config: {
-        delayMs: number
-        onFlush: (batch: KeyedIdleBatch<T>) => Promise<void>
-        onError: (error: unknown, batch: KeyedIdleBatch<T>) => void
-    }) {}
+    constructor(
+        private readonly config: {
+            delayMs: number
+            onFlush: (batch: KeyedIdleBatch<T>) => Promise<void>
+            onError: (error: unknown, batch: KeyedIdleBatch<T>) => void
+        },
+    ) {}
 
     schedule(key: string, value: T): void {
         const existing = this.entries.get(key)

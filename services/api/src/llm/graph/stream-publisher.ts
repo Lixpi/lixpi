@@ -2,7 +2,10 @@
 
 import { randomUUID } from 'node:crypto'
 import type NatsService from '@lixpi/nats-service'
-import { err, info } from '@lixpi/debug-tools'
+import {
+    err,
+    info,
+} from '@lixpi/debug-tools'
 import {
     getAiInteractionCanonicalResponseSubject,
     STREAM_STATUS,
@@ -294,8 +297,10 @@ export class StreamPublisher {
         generationRun?: MediaGenerationRunMeta,
         private readonly options: StreamPublisherOptions = {},
     ) {
-        if (options.enableProseMirrorStream
-            && (!options.organizationId || !options.assetLeaseId || !options.assetLeaseHolderId)) {
+        if (
+            options.enableProseMirrorStream
+            && (!options.organizationId || !options.assetLeaseId || !options.assetLeaseHolderId)
+        ) {
             throw new Error('Conversation Asset streaming requires organizationId, assetLeaseId, and assetLeaseHolderId')
         }
         this.currentGenerationRun = generationRun
@@ -390,15 +395,17 @@ export class StreamPublisher {
     }
 
     private isCancelledMediaFailure(content: ChunkPayload['content']): boolean {
-        if (content.status !== STREAM_STATUS.IMAGE_ERROR
+        if (
+            content.status !== STREAM_STATUS.IMAGE_ERROR
             && content.status !== STREAM_STATUS.VIDEO_ERROR
-            && content.status !== STREAM_STATUS.ERROR) return false
+            && content.status !== STREAM_STATUS.ERROR
+        ) return false
         const generationRequestId = content.generationRun?.generationRequestId
             ?? this.currentGenerationRun?.generationRequestId
         return Boolean(
             generationRequestId
-            && (this.cancellingMediaGenerationRequestIds.has(generationRequestId)
-                || this.cancelledMediaGenerationRequestIds.has(generationRequestId)),
+                && (this.cancellingMediaGenerationRequestIds.has(generationRequestId)
+                    || this.cancelledMediaGenerationRequestIds.has(generationRequestId)),
         )
     }
 
@@ -455,19 +462,25 @@ export class StreamPublisher {
                 eventId: pipelineEventId,
                 payload: pipelinePayload as unknown as Record<string, any>,
             })
-            this.nats.publish(getAiInteractionCanonicalResponseSubject(
-                this.options.organizationId ?? this.workspaceId,
-                this.aiChatThreadId,
-            ), {
-                ...pipelinePayload,
-                pipelineStreamSeq: event.streamSequence,
-            })
+            this.nats.publish(
+                getAiInteractionCanonicalResponseSubject(
+                    this.options.organizationId ?? this.workspaceId,
+                    this.aiChatThreadId,
+                ),
+                {
+                    ...pipelinePayload,
+                    pipelineStreamSeq: event.streamSequence,
+                },
+            )
         } catch (error) {
             err('[StreamPublisher] Failed to persist pipeline event before live publish:', error)
-            this.nats.publish(getAiInteractionCanonicalResponseSubject(
-                this.options.organizationId ?? this.workspaceId,
-                this.aiChatThreadId,
-            ), pipelinePayload)
+            this.nats.publish(
+                getAiInteractionCanonicalResponseSubject(
+                    this.options.organizationId ?? this.workspaceId,
+                    this.aiChatThreadId,
+                ),
+                pipelinePayload,
+            )
         }
     }
 
@@ -722,12 +735,14 @@ export class StreamPublisher {
                     this.canvasGeometryResolved(canvasGeometry)
                 } finally {
                     if (shouldPublishCompletion) {
-                        info(`[StreamPublisher] media generation request complete ${JSON.stringify({
-                            workspaceId: this.workspaceId,
-                            aiChatThreadId: this.aiChatThreadId,
-                            generationRequestId,
-                            generationRun: this.currentGenerationRun,
-                        })}`)
+                        info(`[StreamPublisher] media generation request complete ${
+                            JSON.stringify({
+                                workspaceId: this.workspaceId,
+                                aiChatThreadId: this.aiChatThreadId,
+                                generationRequestId,
+                                generationRun: this.currentGenerationRun,
+                            })
+                        }`)
                         this.publishChatContent({
                             status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
                             aiProvider: this.provider,

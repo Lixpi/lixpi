@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     type Asset,
     type MediaBranchLineagePlan,
@@ -12,7 +18,7 @@ import {
 import {
     getMediaGenerationOperationNodeId,
     getPendingGeneratedMediaNodeId,
-} from '@lixpi/canvas-engine'
+} from '@lixpi/canvas-components-lixpi-specific/shared'
 
 const mocks = vi.hoisted(() => ({
     mediaRequestModel: {
@@ -239,11 +245,13 @@ beforeEach(() => {
 
 describe('media generation checkpoint safety', () => {
     it('accepts structured prompt, stable references, and model configuration', () => {
-        expect(() => assertSafeMediaGenerationCheckpoint({
-            promptDocument: { type: 'doc', content: [{ type: 'text', text: 'Animate REFERENCE_1' }] },
-            selectedReferences: [{ assetId: 'asset-1', nodeId: 'node-1' }],
-            modelSelection: { mediaModelIds: ['Google:veo-3.1'] },
-        })).not.toThrow()
+        expect(() =>
+            assertSafeMediaGenerationCheckpoint({
+                promptDocument: { type: 'doc', content: [{ type: 'text', text: 'Animate REFERENCE_1' }] },
+                selectedReferences: [{ assetId: 'asset-1', nodeId: 'node-1' }],
+                modelSelection: { mediaModelIds: ['Google:veo-3.1'] },
+            })
+        ).not.toThrow()
     })
 
     it.each([

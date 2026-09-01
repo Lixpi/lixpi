@@ -132,7 +132,8 @@ export class AiPromptInputController {
         }
     }
 
-    unregisterThreadEditor(threadId: string): void {
+    unregisterThreadEditor(threadId: string, expectedEditorView?: EditorView): void {
+        if (expectedEditorView && this.threadEditors.get(threadId)?.editorView !== expectedEditorView) return
         this.threadEditors.delete(threadId)
     }
 
@@ -280,7 +281,7 @@ export class AiPromptInputController {
 
         const messageNode = userMessageType.create(
             { id: createId(), createdAt: Date.now(), referenceNodeIds: pending.referenceNodeIds ?? [] },
-            messageContent
+            messageContent,
         )
 
         // Insert the message at the end of the thread (before the closing token)
@@ -293,10 +294,9 @@ export class AiPromptInputController {
         const pendingUseMultipleImageModels = Boolean(pending.useMultipleImageModels)
         const pendingUseMultipleVideoModels = Boolean(pending.useMultipleVideoModels)
         // Multi disabled → collapse the section's selection to its first model.
-        const collapseForMode = (models: string[], useMultiple: boolean): string[] =>
-            useMultiple ? models : models.slice(0, 1)
+        const collapseForMode = (models: string[], useMultiple: boolean): string[] => useMultiple ? models : models.slice(0, 1)
         const pendingReasoningModels = serializeAiModelSelectionAttr(
-            collapseForMode(pending.aiReasoningModels, pendingUseMultipleReasoningModels)
+            collapseForMode(pending.aiReasoningModels, pendingUseMultipleReasoningModels),
         )
         const pendingImageModels = pending.imageOptions
             ? serializeAiModelSelectionAttr(collapseForMode(pending.imageOptions.aiImageModels, pendingUseMultipleImageModels))
@@ -349,18 +349,22 @@ export class AiPromptInputController {
                 useMultipleReasoningModels: pendingUseMultipleReasoningModels,
                 useMultipleImageModels: pendingUseMultipleImageModels,
                 useMultipleVideoModels: pendingUseMultipleVideoModels,
-                ...(pending.imageOptions ? {
-                    ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
-                    imageGenerationSize: pending.imageOptions.imageGenerationSize,
-                    ...(pendingImageConfigGroups !== undefined ? { imageGenerationConfigGroups: pendingImageConfigGroups } : {}),
-                } : {}),
-                ...(pending.videoOptions ? {
-                    ...(pendingVideoModels !== undefined ? { aiVideoModels: pendingVideoModels } : {}),
-                    videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
-                    videoResolution: pending.videoOptions.videoResolution || '',
-                    videoDuration: pending.videoOptions.videoDuration || '',
-                    ...(pendingVideoConfigGroups !== undefined ? { videoGenerationConfigGroups: pendingVideoConfigGroups } : {}),
-                } : {}),
+                ...(pending.imageOptions
+                    ? {
+                        ...(pendingImageModels !== undefined ? { aiImageModels: pendingImageModels } : {}),
+                        imageGenerationSize: pending.imageOptions.imageGenerationSize,
+                        ...(pendingImageConfigGroups !== undefined ? { imageGenerationConfigGroups: pendingImageConfigGroups } : {}),
+                    }
+                    : {}),
+                ...(pending.videoOptions
+                    ? {
+                        ...(pendingVideoModels !== undefined ? { aiVideoModels: pendingVideoModels } : {}),
+                        videoAspectRatio: pending.videoOptions.videoAspectRatio || '',
+                        videoResolution: pending.videoOptions.videoResolution || '',
+                        videoDuration: pending.videoOptions.videoDuration || '',
+                        ...(pendingVideoConfigGroups !== undefined ? { videoGenerationConfigGroups: pendingVideoConfigGroups } : {}),
+                    }
+                    : {}),
                 capabilityInputs: pendingCapabilityInputs,
             })
         }
@@ -406,10 +410,9 @@ export class AiPromptInputController {
         const threadUseMultipleReasoningModels = Boolean(useMultipleReasoningModels)
         const threadUseMultipleImageModels = Boolean(useMultipleImageModels)
         const threadUseMultipleVideoModels = Boolean(useMultipleVideoModels)
-        const collapseForMode = (models: string[], useMultiple: boolean): string[] =>
-            useMultiple ? models : models.slice(0, 1)
+        const collapseForMode = (models: string[], useMultiple: boolean): string[] => useMultiple ? models : models.slice(0, 1)
         const threadReasoningModels = serializeAiModelSelectionAttr(
-            collapseForMode(aiReasoningModels, threadUseMultipleReasoningModels)
+            collapseForMode(aiReasoningModels, threadUseMultipleReasoningModels),
         )
         const threadImageModels = imageOptions
             ? serializeAiModelSelectionAttr(collapseForMode(imageOptions.aiImageModels, threadUseMultipleImageModels))
@@ -451,11 +454,11 @@ export class AiPromptInputController {
                         {
                             type: 'aiUserMessage',
                             attrs: { id: createId(), createdAt: Date.now(), referenceNodeIds: referenceNodeIds ?? [] },
-                            content: contentJSON.length > 0 ? contentJSON : [{ type: 'paragraph' }]
-                        }
-                    ]
-                }
-            ]
+                            content: contentJSON.length > 0 ? contentJSON : [{ type: 'paragraph' }],
+                        },
+                    ],
+                },
+            ],
         }
 
         // Create the thread on the backend
@@ -465,7 +468,7 @@ export class AiPromptInputController {
                 threadId,
                 content: initialContent,
                 aiModel: aiReasoningModels[0] ?? '',
-                owner: { type: 'standalone' }
+                owner: { type: 'standalone' },
             })
 
             if (!thread) {
@@ -495,7 +498,7 @@ export class AiPromptInputController {
             this.target = {
                 nodeId: `node-${threadId}`,
                 type: 'aiChatThread',
-                referenceId: threadId
+                referenceId: threadId,
             }
             this.onAiChatThreadCreated?.({ threadId })
         } catch (error) {

@@ -14,7 +14,7 @@ export function createThreadShape(params: ThreadShapeParams): NodeConfig {
         label,
         labelClassName,
         className = '',
-        disabled = false
+        disabled = false,
     } = params
 
     // const notchDepth = Math.max(11, Math.min(Math.min(width * 0.14, height * 0.82), width - 12))
@@ -46,7 +46,7 @@ export function createThreadShape(params: ThreadShapeParams): NodeConfig {
         `Q ${tipX + controlOffset * tipSharpness} ${bottomY} ${tipX + tipProtrusion} ${tipY + tipPointRoundness}`,
         `Q ${tipX + tipProtrusion - tipPointRoundness * 0.3} ${tipY} ${tipX + tipProtrusion} ${tipY - tipPointRoundness}`,
         `Q ${tipX + controlOffset * tipSharpness} ${topY} ${bodyLeftX} ${topY}`,
-        'Z'
+        'Z',
     ].join(' ')
 
     const content = label
@@ -56,7 +56,7 @@ export function createThreadShape(params: ThreadShapeParams): NodeConfig {
             className: labelClassName ?? 'thread-chip-label',
             align: 'middle' as const,
             dx: 0,
-            dy: 0
+            dy: 0,
         }
         : undefined
 
@@ -72,7 +72,7 @@ export function createThreadShape(params: ThreadShapeParams): NodeConfig {
         content,
         disabled,
         anchorOverrides: {
-            left: { x: tipX + tipProtrusion + (notchDepth - tipProtrusion) * 0.4, y: tipY }
-        }
+            left: { x: tipX + tipProtrusion + (notchDepth - tipProtrusion) * 0.4, y: tipY },
+        },
     }
 }

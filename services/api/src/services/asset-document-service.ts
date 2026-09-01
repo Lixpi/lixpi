@@ -38,7 +38,10 @@ import BlobModel, {
     buildBlobReferenceRemovalOperations,
 } from '../models/blob.ts'
 import { AssetProseMirrorStepTransport } from '../prosemirror/asset-prosemirror-step-transport.ts'
-import { enqueueAssetSurfaceCleanup, enqueueBlobDeletion } from './asset-maintenance-queue.ts'
+import {
+    enqueueAssetSurfaceCleanup,
+    enqueueBlobDeletion,
+} from './asset-maintenance-queue.ts'
 import { ensureAssetDocumentEventRelay } from './asset-document-event-relay.ts'
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'
 import {
@@ -81,8 +84,7 @@ const getAssetDocumentSettlementKey = ({
     organizationId,
     assetId,
     role,
-}: Pick<AssetDocumentSettlementRequest, 'organizationId' | 'assetId' | 'role'>): string =>
-    `${organizationId}:${assetId}:${role}`
+}: Pick<AssetDocumentSettlementRequest, 'organizationId' | 'assetId' | 'role'>): string => `${organizationId}:${assetId}:${role}`
 
 const getSettlementErrorFields = (error: unknown): { errorName: string; errorMessage: string } => ({
     errorName: error instanceof Error ? error.name : 'UnknownError',
@@ -96,9 +98,10 @@ const getDocumentType = (role: AssetDocumentRole) => {
     return 'capabilityArtifact'
 }
 
-const getArtifactDefinition = (asset: Asset) => asset.artifact
-    ? capabilityArtifactBackendRegistry.require(asset.artifact.artifactTypeId).shared
-    : undefined
+const getArtifactDefinition = (asset: Asset) =>
+    asset.artifact
+        ? capabilityArtifactBackendRegistry.require(asset.artifact.artifactTypeId).shared
+        : undefined
 
 const getHeadlessEngineConfig = (
     asset: Asset,
@@ -180,11 +183,15 @@ const buildResumeEventPage = ({
 
 const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promise<AssetDocSnapshot | null> => {
     const settledSnapshot = await loadSnapshot(asset, role)
-    const events = await AssetProseMirrorStepTransport.fromSingleton().replay({
-        organizationId: asset.organizationId,
-        assetId: asset.assetId,
-        role,
-    }, 1, 10000)
+    const events = await AssetProseMirrorStepTransport.fromSingleton().replay(
+        {
+            organizationId: asset.organizationId,
+            assetId: asset.assetId,
+            role,
+        },
+        1,
+        10000,
+    )
     if (!settledSnapshot && events.length === 0) return null
     const engine = new HeadlessProseMirrorEngine({
         ...getHeadlessEngineConfig(asset, role, settledSnapshot?.doc, settledSnapshot?.version ?? 0),
@@ -209,12 +216,10 @@ const loadCurrentSnapshot = async (asset: Asset, role: AssetDocumentRole): Promi
 const verifyLease = (asset: Asset, workspaceId: string, leaseId: string, holderId?: string): boolean =>
     Boolean(
         asset.editLease
-        && asset.editLease.workspaceId === workspaceId
-        && asset.editLease.leaseId === leaseId
-        && asset.editLease.expiresAt > Date.now()
-        && (!holderId || asset.editLease.holders.some(holder =>
-            holder.holderId === holderId && holder.expiresAt > Date.now()
-        )),
+            && asset.editLease.workspaceId === workspaceId
+            && asset.editLease.leaseId === leaseId
+            && asset.editLease.expiresAt > Date.now()
+            && (!holderId || asset.editLease.holders.some(holder => holder.holderId === holderId && holder.expiresAt > Date.now())),
     )
 
 const isMatchingAssetRenditionUrl = (value: unknown, assetId: string): boolean => {
@@ -222,9 +227,11 @@ const isMatchingAssetRenditionUrl = (value: unknown, assetId: string): boolean =
     try {
         const url = new URL(value, 'http://asset.local')
         const match = /^\/api\/assets\/([^/]+)\/renditions\/[^/]+$/.exec(url.pathname)
-        return Boolean(match
-            && decodeURIComponent(match[1]!) === assetId
-            && !url.searchParams.has('token'))
+        return Boolean(
+            match
+                && decodeURIComponent(match[1]!) === assetId
+                && !url.searchParams.has('token'),
+        )
     } catch {
         return false
     }
@@ -239,8 +246,8 @@ export const assertAssetBackedMediaNodes = (node: unknown): void => {
         const urlFields = record.type === 'image'
             ? ['src']
             : record.type === 'aiGeneratedImage'
-                ? ['imageData']
-                : ['videoUrl', 'posterUrl']
+            ? ['imageData']
+            : ['videoUrl', 'posterUrl']
         for (const field of urlFields) {
             const value = record.attrs?.[field]
             if (value !== undefined && value !== '' && !isMatchingAssetRenditionUrl(value, assetId)) {
@@ -285,12 +292,14 @@ const validateEmbeddedAssetReferences = async ({
         const surfacePrefix = role === 'content'
             ? `document#${hostAsset.assetId}#content`
             : role === 'capabilityArtifact'
-                ? `capabilityArtifact#${hostAsset.assetId}`
-                : `conversation#${hostAsset.assetId}#media#`
-        const referenced = references.some((reference) => reference.type === 'workspace'
+            ? `capabilityArtifact#${hostAsset.assetId}`
+            : `conversation#${hostAsset.assetId}#media#`
+        const referenced = references.some((reference) =>
+            reference.type === 'workspace'
             && (role === 'content' || role === 'capabilityArtifact'
                 ? reference.surfaceIds?.includes(surfacePrefix)
-                : reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix))))
+                : reference.surfaceIds?.some((surfaceId) => surfaceId.startsWith(surfacePrefix)))
+        )
         if (!referenced) throw new Error(`EMBEDDED_ASSET_REFERENCE_MISSING:${embeddedAssetId}`)
     }
 }
@@ -313,11 +322,15 @@ const settleOnce = async ({
     if (!verifyLease(asset, workspaceId, leaseId, holderId)) throw new Error('LEASE_INVALID')
     const snapshot = await loadSnapshot(asset, role)
     const transport = AssetProseMirrorStepTransport.fromSingleton()
-    const events = await transport.replay({
-        organizationId: asset.organizationId,
-        assetId: asset.assetId,
-        role,
-    }, 1, 10000)
+    const events = await transport.replay(
+        {
+            organizationId: asset.organizationId,
+            assetId: asset.assetId,
+            role,
+        },
+        1,
+        10000,
+    )
     const incorporatedStreamSequence = events.reduce(
         (latest, event) => Math.max(latest, event.streamSequence),
         0,
@@ -341,8 +354,8 @@ const settleOnce = async ({
         else definition.assertInitialDocument(json)
     }
     const embeddedReferenceRole: AssetReferenceDocumentRole | undefined = role === 'content'
-        || role === 'conversation'
-        || role === 'capabilityArtifact'
+            || role === 'conversation'
+            || role === 'capabilityArtifact'
         ? role
         : undefined
     const tracksEmbeddedAssets = Boolean(embeddedReferenceRole)
@@ -470,11 +483,13 @@ const settleOnce = async ({
             void transport.purgeThrough(
                 { organizationId: asset.organizationId, assetId: asset.assetId, role },
                 incorporatedStreamSequence,
-            ).catch((error) => console.error('Settled Asset step purge failed:', {
-                assetId: asset.assetId,
-                role,
-                error,
-            }))
+            ).catch((error) =>
+                console.error('Settled Asset step purge failed:', {
+                    assetId: asset.assetId,
+                    role,
+                    error,
+                })
+            )
         }, SETTLED_STEP_REPLAY_GRACE_MS)
         if (typeof timer === 'object' && 'unref' in timer) timer.unref()
     }
@@ -493,8 +508,7 @@ const settleOnce = async ({
         }
         const references = await AssetModel.listReferences(embeddedAssetId)
         for (const reference of references) {
-            for (const surfaceId of reference.surfaceIds?.filter((value) =>
-                value.startsWith(`conversation#${asset.assetId}#media#`)) ?? []) {
+            for (const surfaceId of reference.surfaceIds?.filter((value) => value.startsWith(`conversation#${asset.assetId}#media#`)) ?? []) {
                 await enqueueAssetSurfaceCleanup({
                     assetId: embeddedAssetId,
                     organizationId: asset.organizationId,
@@ -531,26 +545,27 @@ const settleImmediately = async ({
     try {
         const pointer = await assetDocumentSettlementCoordinator.run(
             key,
-            async () => await runOperationWithRetry({
-                operation: async () => {
-                    attempts += 1
-                    const asset = await getAssetRecord(
-                        assetId,
-                        'AssetDocumentService.settle:getCurrent',
-                    )
-                    if (!asset || asset.organizationId !== organizationId) throw new Error('ASSET_NOT_FOUND')
-                    return await settleOnce({
-                        asset,
-                        role,
-                        workspaceId,
-                        leaseId,
-                        holderId,
-                        requester,
-                    })
-                },
-                shouldRetry: isTransactionConditionalCheckFailure,
-                maxAttempts: ASSET_DOCUMENT_SETTLEMENT_MAX_ATTEMPTS,
-            }),
+            async () =>
+                await runOperationWithRetry({
+                    operation: async () => {
+                        attempts += 1
+                        const asset = await getAssetRecord(
+                            assetId,
+                            'AssetDocumentService.settle:getCurrent',
+                        )
+                        if (!asset || asset.organizationId !== organizationId) throw new Error('ASSET_NOT_FOUND')
+                        return await settleOnce({
+                            asset,
+                            role,
+                            workspaceId,
+                            leaseId,
+                            holderId,
+                            requester,
+                        })
+                    },
+                    shouldRetry: isTransactionConditionalCheckFailure,
+                    maxAttempts: ASSET_DOCUMENT_SETTLEMENT_MAX_ATTEMPTS,
+                }),
         )
         console.info('[AssetDocumentSettlement] completed', {
             key,
@@ -735,10 +750,12 @@ const AssetDocumentService = {
         if (!Array.isArray(payload.steps) || payload.steps.length < 1 || payload.steps.length > 50) {
             return { error: 'INVALID_STEP_BATCH' }
         }
-        if (!Number.isSafeInteger(payload.baseVersion)
+        if (
+            !Number.isSafeInteger(payload.baseVersion)
             || payload.baseVersion < 0
             || !Number.isSafeInteger(payload.expectedVersion)
-            || payload.expectedVersion < 0) return { error: 'INVALID_DOCUMENT_VERSION' }
+            || payload.expectedVersion < 0
+        ) return { error: 'INVALID_DOCUMENT_VERSION' }
         const authorized = await AssetModel.get({
             assetId: payload.assetId,
             requester,
@@ -787,8 +804,10 @@ const AssetDocumentService = {
         workspaceId?: string
     }) => {
         if (!ASSET_DOCUMENT_ROLES.includes(coordinate.role)) return { error: 'INVALID_DOCUMENT_ROLE' }
-        if (!Number.isSafeInteger(localVersion) || localVersion < 0
-            || !Number.isSafeInteger(localStreamSeq) || localStreamSeq < 0) {
+        if (
+            !Number.isSafeInteger(localVersion) || localVersion < 0
+            || !Number.isSafeInteger(localStreamSeq) || localStreamSeq < 0
+        ) {
             return { error: 'INVALID_DOCUMENT_CURSOR' }
         }
         const authorized = await AssetModel.get({

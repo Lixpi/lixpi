@@ -1,7 +1,14 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
-import type { AiInteractionMediaGenerationRequest, CapabilityPromptReference } from '@lixpi/constants'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
+import type {
+    AiInteractionMediaGenerationRequest,
+    CapabilityPromptReference,
+} from '@lixpi/constants'
 
 import {
     CHARACTER_CREATOR_TOOL_ID,

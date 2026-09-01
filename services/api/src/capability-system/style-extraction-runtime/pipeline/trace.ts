@@ -2,13 +2,14 @@
 
 import { createHash } from 'node:crypto'
 import { info } from '@lixpi/debug-tools'
-import type { StageLogger, StageTraceEvent } from './types.ts'
+import type {
+    StageLogger,
+    StageTraceEvent,
+} from './types.ts'
 
-export const hashPrompt = (text: string): string =>
-    createHash('sha256').update(text).digest('hex').slice(0, 16)
+export const hashPrompt = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16)
 
-export const previewPrompt = (text: string, maxChars = 800): string =>
-    text.length > maxChars ? `${text.slice(0, maxChars)}…` : text
+export const previewPrompt = (text: string, maxChars = 800): string => text.length > maxChars ? `${text.slice(0, maxChars)}…` : text
 
 export const createStageLogger = (args: {
     styleExtractionRunId: string

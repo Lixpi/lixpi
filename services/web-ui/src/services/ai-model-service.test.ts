@@ -1,7 +1,17 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    LoadingStatus,
+    NATS_SUBJECTS,
+} from '@lixpi/constants'
 import AiModelService from '$src/services/ai-model-service.ts'
 
 const { AI_MODELS_SUBJECTS } = NATS_SUBJECTS

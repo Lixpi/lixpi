@@ -1,10 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+// @vitest-environment happy-dom
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 
-import { uiKitSettings } from '../../runtime-settings.ts'
-import { createHelpTooltip, createHelpTooltipProvider } from './index.ts'
+import {
+    createHelpTooltip,
+    createHelpTooltipProvider,
+} from './index.ts'
 
 function createTooltip(
-    override: Parameters<typeof createHelpTooltip>[0] = {},
+    override: Partial<Parameters<typeof createHelpTooltip>[0]> = {},
 ) {
     const tooltip = createHelpTooltip({
         label: 'Model settings',
@@ -23,6 +33,34 @@ function getTooltipContent(tooltip: { dom: HTMLElement }): HTMLElement {
 }
 
 describe('helpTooltip', () => {
+    it('uses independent provider delays and releases only its own portal content', () => {
+        vi.useFakeTimers()
+        const firstRoot = document.createElement('div')
+        const secondRoot = document.createElement('div')
+        const firstPortal = document.createElement('div')
+        const secondPortal = document.createElement('div')
+        const firstTrigger = document.createElement('button')
+        const secondTrigger = document.createElement('button')
+        firstTrigger.dataset.helpTooltip = 'First'
+        secondTrigger.dataset.helpTooltip = 'Second'
+        firstRoot.append(firstTrigger)
+        secondRoot.append(secondTrigger)
+        document.body.append(firstRoot, secondRoot, firstPortal, secondPortal)
+        const first = createHelpTooltipProvider({ root: firstRoot, portalRoot: firstPortal, showDelayMs: 0 })
+        const second = createHelpTooltipProvider({ root: secondRoot, portalRoot: secondPortal, showDelayMs: 250 })
+        firstTrigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+        secondTrigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+        expect(firstPortal.querySelector('.help-tooltip-content')).not.toBeNull()
+        expect(secondPortal.querySelector('.help-tooltip-content')).toBeNull()
+        first.destroy()
+        vi.advanceTimersByTime(250)
+        expect(firstPortal.children).toHaveLength(0)
+        expect(secondPortal.querySelector('.help-tooltip-content')?.textContent).toBe('Second')
+        second.destroy()
+        expect(secondPortal.children).toHaveLength(0)
+        vi.useRealTimers()
+    })
+
     let bodyHtml: string
 
     beforeEach(() => {
@@ -59,29 +97,31 @@ describe('helpTooltip', () => {
         const { tooltip, trigger } = createTooltip()
         document.body.appendChild(tooltip.dom)
 
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 0,
-            bottom: 24,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 0,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 0,
+                bottom: 24,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+            }) as DOMRect
 
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 180,
-            top: 24,
-            bottom: 44,
-            width: 180,
-            height: 20,
-            x: 0,
-            y: 24,
-            toJSON: () => ({}),
-        }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 180,
+                top: 24,
+                bottom: 44,
+                width: 180,
+                height: 20,
+                x: 0,
+                y: 24,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
 
@@ -109,28 +149,30 @@ describe('helpTooltip', () => {
         const { tooltip, trigger } = createTooltip()
         document.body.appendChild(tooltip.dom)
 
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 0,
-            bottom: 24,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 0,
-            toJSON: () => ({}),
-        }) as DOMRect
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 180,
-            top: 24,
-            bottom: 64,
-            width: 180,
-            height: 40,
-            x: 0,
-            y: 24,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 0,
+                bottom: 24,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+            }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 180,
+                top: 24,
+                bottom: 64,
+                width: 180,
+                height: 40,
+                x: 0,
+                y: 24,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
@@ -214,28 +256,30 @@ describe('helpTooltip', () => {
         const { tooltip, trigger } = createTooltip({ preferredPlacement: 'top' })
         document.body.appendChild(tooltip.dom)
 
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 100,
-            bottom: 124,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 100,
-            toJSON: () => ({}),
-        }) as DOMRect
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 180,
-            top: 60,
-            bottom: 40,
-            width: 180,
-            height: 20,
-            x: 0,
-            y: 60,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 100,
+                bottom: 124,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 100,
+                toJSON: () => ({}),
+            }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 180,
+                top: 60,
+                bottom: 40,
+                width: 180,
+                height: 20,
+                x: 0,
+                y: 60,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
@@ -247,28 +291,30 @@ describe('helpTooltip', () => {
         const { tooltip, trigger } = createTooltip({ preferredPlacement: 'top' })
         document.body.appendChild(tooltip.dom)
 
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 100,
-            bottom: 124,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 100,
-            toJSON: () => ({}),
-        }) as DOMRect
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 180,
-            top: 60,
-            bottom: 40,
-            width: 180,
-            height: 20,
-            x: 0,
-            y: 60,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 100,
+                bottom: 124,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 100,
+                toJSON: () => ({}),
+            }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 180,
+                top: 60,
+                bottom: 40,
+                width: 180,
+                height: 20,
+                x: 0,
+                y: 60,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
@@ -281,28 +327,30 @@ describe('helpTooltip', () => {
         const { tooltip, trigger } = createTooltip()
         document.body.appendChild(tooltip.dom)
 
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 0,
-            bottom: 24,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 0,
-            toJSON: () => ({}),
-        }) as DOMRect
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 180,
-            top: 24,
-            bottom: 64,
-            width: 180,
-            height: 40,
-            x: 0,
-            y: 24,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 0,
+                bottom: 24,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+            }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 180,
+                top: 24,
+                bottom: 64,
+                width: 180,
+                height: 40,
+                x: 0,
+                y: 24,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
@@ -359,30 +407,32 @@ describe('helpTooltip', () => {
             const content = getTooltipContent(tooltip)
             document.body.appendChild(tooltip.dom)
 
-            trigger.getBoundingClientRect = () => ({
-                left: 0,
-                right: 24,
-                top: 50,
-                bottom: 74,
-                width: 24,
-                height: 24,
-                x: 0,
-                y: 50,
-                toJSON: () => ({}),
-            }) as DOMRect
+            trigger.getBoundingClientRect = () =>
+                ({
+                    left: 0,
+                    right: 24,
+                    top: 50,
+                    bottom: 74,
+                    width: 24,
+                    height: 24,
+                    x: 0,
+                    y: 50,
+                    toJSON: () => ({}),
+                }) as DOMRect
 
             let contentHeight = 20
-            content.getBoundingClientRect = () => ({
-                left: 0,
-                right: 180,
-                top: 0,
-                bottom: contentHeight,
-                width: 180,
-                height: contentHeight,
-                x: 0,
-                y: 0,
-                toJSON: () => ({}),
-            }) as DOMRect
+            content.getBoundingClientRect = () =>
+                ({
+                    left: 0,
+                    right: 180,
+                    top: 0,
+                    bottom: contentHeight,
+                    width: 180,
+                    height: contentHeight,
+                    x: 0,
+                    y: 0,
+                    toJSON: () => ({}),
+                }) as DOMRect
 
             trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
             const visibleContent = document.body.querySelector('.help-tooltip-content') as HTMLElement
@@ -396,7 +446,6 @@ describe('helpTooltip', () => {
             global.ResizeObserver = originalResizeObserver
         }
     })
-
 
     it('supports array and element content for the tooltip body', () => {
         const first = document.createElement('span')
@@ -462,29 +511,31 @@ describe('helpTooltip', () => {
         const { tooltip, trigger } = createTooltip()
         document.body.appendChild(tooltip.dom)
 
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 0,
-            bottom: 24,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 0,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 0,
+                bottom: 24,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+            }) as DOMRect
 
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 240,
-            top: 24,
-            bottom: 64,
-            width: 240,
-            height: 40,
-            x: 0,
-            y: 24,
-            toJSON: () => ({}),
-        }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 240,
+                top: 24,
+                bottom: 64,
+                width: 240,
+                height: 40,
+                x: 0,
+                y: 24,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
@@ -516,28 +567,30 @@ describe('helpTooltip', () => {
             contentCssVariableNames: ['--help-tooltip-custom-extra'],
         })
         document.body.appendChild(tooltip.dom)
-        trigger.getBoundingClientRect = () => ({
-            left: 0,
-            right: 24,
-            top: 0,
-            bottom: 24,
-            width: 24,
-            height: 24,
-            x: 0,
-            y: 0,
-            toJSON: () => ({}),
-        }) as DOMRect
-        getTooltipContent(tooltip).getBoundingClientRect = () => ({
-            left: 0,
-            right: 240,
-            top: 24,
-            bottom: 64,
-            width: 240,
-            height: 40,
-            x: 0,
-            y: 24,
-            toJSON: () => ({}),
-        }) as DOMRect
+        trigger.getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 24,
+                top: 0,
+                bottom: 24,
+                width: 24,
+                height: 24,
+                x: 0,
+                y: 0,
+                toJSON: () => ({}),
+            }) as DOMRect
+        getTooltipContent(tooltip).getBoundingClientRect = () =>
+            ({
+                left: 0,
+                right: 240,
+                top: 24,
+                bottom: 64,
+                width: 240,
+                height: 40,
+                x: 0,
+                y: 24,
+                toJSON: () => ({}),
+            }) as DOMRect
 
         trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
         const content = document.body.querySelector('.help-tooltip-content') as HTMLElement
@@ -557,28 +610,30 @@ describe('helpTooltip', () => {
             })
             const content = getTooltipContent(tooltip)
 
-            trigger.getBoundingClientRect = () => ({
-                left: 0,
-                right: 24,
-                top: 0,
-                bottom: 24,
-                width: 24,
-                height: 24,
-                x: 0,
-                y: 0,
-                toJSON: () => ({}),
-            }) as DOMRect
-            content.getBoundingClientRect = () => ({
-                left: 0,
-                right: 200,
-                top: 24,
-                bottom: 64,
-                width: 200,
-                height: 40,
-                x: 0,
-                y: 24,
-                toJSON: () => ({}),
-            }) as DOMRect
+            trigger.getBoundingClientRect = () =>
+                ({
+                    left: 0,
+                    right: 24,
+                    top: 0,
+                    bottom: 24,
+                    width: 24,
+                    height: 24,
+                    x: 0,
+                    y: 0,
+                    toJSON: () => ({}),
+                }) as DOMRect
+            content.getBoundingClientRect = () =>
+                ({
+                    left: 0,
+                    right: 200,
+                    top: 24,
+                    bottom: 64,
+                    width: 200,
+                    height: 40,
+                    x: 0,
+                    y: 24,
+                    toJSON: () => ({}),
+                }) as DOMRect
 
             trigger.dispatchEvent(new PointerEvent('pointerenter'))
             expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
@@ -589,7 +644,7 @@ describe('helpTooltip', () => {
             expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
 
             content.dispatchEvent(new PointerEvent('pointerleave'))
-            vi.advanceTimersByTime(uiKitSettings.helpTooltip.interactiveHideDelayMs - 1)
+            vi.advanceTimersByTime(80 - 1)
             expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
             vi.advanceTimersByTime(2)
             expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
@@ -608,28 +663,30 @@ describe('helpTooltip', () => {
             const { tooltip, trigger } = createTooltip()
             document.body.appendChild(tooltip.dom)
 
-            trigger.getBoundingClientRect = () => ({
-                left: 0,
-                right: 24,
-                top: 0,
-                bottom: 24,
-                width: 24,
-                height: 24,
-                x: 0,
-                y: 0,
-                toJSON: () => ({}),
-            }) as DOMRect
-            getTooltipContent(tooltip).getBoundingClientRect = () => ({
-                left: 0,
-                right: 180,
-                top: 24,
-                bottom: 64,
-                width: 180,
-                height: 40,
-                x: 0,
-                y: 24,
-                toJSON: () => ({}),
-            }) as DOMRect
+            trigger.getBoundingClientRect = () =>
+                ({
+                    left: 0,
+                    right: 24,
+                    top: 0,
+                    bottom: 24,
+                    width: 24,
+                    height: 24,
+                    x: 0,
+                    y: 0,
+                    toJSON: () => ({}),
+                }) as DOMRect
+            getTooltipContent(tooltip).getBoundingClientRect = () =>
+                ({
+                    left: 0,
+                    right: 180,
+                    top: 24,
+                    bottom: 64,
+                    width: 180,
+                    height: 40,
+                    x: 0,
+                    y: 24,
+                    toJSON: () => ({}),
+                }) as DOMRect
 
             trigger.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }))
             expect(windowAddSpy).toHaveBeenCalledWith('resize', expect.any(Function))
@@ -661,7 +718,7 @@ describe('helpTooltip', () => {
             trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
             expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
 
-            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs - 1)
+            vi.advanceTimersByTime(1000 - 1)
             expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
 
             vi.advanceTimersByTime(1)
@@ -688,19 +745,19 @@ describe('helpTooltip', () => {
             const provider = createHelpTooltipProvider({ root })
 
             trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs)
+            vi.advanceTimersByTime(1000)
             expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
 
             trigger.click()
             expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
 
             trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs)
+            vi.advanceTimersByTime(1000)
             expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
 
             trigger.dispatchEvent(new PointerEvent('pointerleave'))
             trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-            vi.advanceTimersByTime(uiKitSettings.helpTooltip.providerShowDelayMs)
+            vi.advanceTimersByTime(1000)
             expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
 
             provider.destroy()
@@ -710,35 +767,29 @@ describe('helpTooltip', () => {
     })
 
     it('respects provider visibility guards before and after an expanded control opens', async () => {
-        const originalShowDelay = uiKitSettings.helpTooltip.providerShowDelayMs
-        uiKitSettings.helpTooltip.providerShowDelayMs = 0
+        const root = document.createElement('div')
+        const trigger = document.createElement('button')
+        trigger.setAttribute('aria-label', 'Generation settings')
+        trigger.setAttribute('aria-expanded', 'false')
+        trigger.dataset.helpTooltip = 'aria-label'
+        root.appendChild(trigger)
+        document.body.appendChild(root)
+        const provider = createHelpTooltipProvider({
+            showDelayMs: 0,
+            root,
+            shouldShow: element => element.getAttribute('aria-expanded') !== 'true',
+        })
 
-        try {
-            const root = document.createElement('div')
-            const trigger = document.createElement('button')
-            trigger.setAttribute('aria-label', 'Generation settings')
-            trigger.setAttribute('aria-expanded', 'false')
-            trigger.dataset.helpTooltip = 'aria-label'
-            root.appendChild(trigger)
-            document.body.appendChild(root)
-            const provider = createHelpTooltipProvider({
-                root,
-                shouldShow: element => element.getAttribute('aria-expanded') !== 'true',
-            })
+        trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+        expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
 
-            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-            expect(document.body.querySelector('.help-tooltip-content')).not.toBeNull()
+        trigger.setAttribute('aria-expanded', 'true')
+        await Promise.resolve()
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
 
-            trigger.setAttribute('aria-expanded', 'true')
-            await Promise.resolve()
-            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
+        trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+        expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
 
-            trigger.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-            expect(document.body.querySelector('.help-tooltip-content')).toBeNull()
-
-            provider.destroy()
-        } finally {
-            uiKitSettings.helpTooltip.providerShowDelayMs = originalShowDelay
-        }
+        provider.destroy()
     })
 })

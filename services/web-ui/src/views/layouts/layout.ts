@@ -4,11 +4,17 @@
 // between the workspace canvas and the intro splash based on the active route.
 // Renderer: TypeScript `html` DOM, no framework runtime.
 
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 import { createNavigationSidePanel } from '$src/components/navigationSidePanel/index.ts'
 import '$src/components/navigationSidePanel/navigation-side-panel.scss'
-import { createIntroPage, type IntroPageInstance } from '$src/components/introPage.ts'
-import { createWorkspaceCanvasView, type WorkspaceCanvasViewInstance } from '$src/components/workspaceCanvasView.ts'
+import {
+    createIntroPage,
+    type IntroPageInstance,
+} from '$src/components/introPage/introPage.ts'
+import {
+    createWorkspaceCanvasView,
+    type WorkspaceCanvasViewInstance,
+} from '$src/components/workspaceCanvasView/workspaceCanvasView.ts'
 
 import { routerStore } from '$src/stores/routerStore.ts'
 import { settings } from '$src/settings.ts'

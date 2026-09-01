@@ -1,6 +1,10 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 describe('block-card-tiles-list.scss', () => {
     const scss = readFileSync(resolve(__dirname, 'block-card-tiles-list.scss'), 'utf-8')

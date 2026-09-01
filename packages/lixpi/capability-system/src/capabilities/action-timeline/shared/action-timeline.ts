@@ -1,7 +1,10 @@
 'use strict'
 
 import type { CapabilityJsonValue } from '@lixpi/constants'
-import { Schema, type NodeSpec } from 'prosemirror-model'
+import {
+    Schema,
+    type NodeSpec,
+} from 'prosemirror-model'
 
 import {
     CapabilityArtifactSharedRegistry,
@@ -146,13 +149,13 @@ function timeTextToMilliseconds(raw: string, rawUnit: string, minimumMs: number)
     const unitCount = (Number(whole) * fractionScale) + Number(fraction || '0')
     const normalizedUnit = rawUnit.toLocaleLowerCase('en-US')
     const unitMilliseconds = normalizedUnit === 'ms'
-        || normalizedUnit.startsWith('msec')
-        || normalizedUnit.startsWith('millisecond')
+            || normalizedUnit.startsWith('msec')
+            || normalizedUnit.startsWith('millisecond')
         ? 1
         : normalizedUnit === 'm'
-            || normalizedUnit.startsWith('min')
-            ? 60000
-            : 1000
+                || normalizedUnit.startsWith('min')
+        ? 60000
+        : 1000
     const scaledMilliseconds = unitCount * unitMilliseconds
     if (!Number.isSafeInteger(scaledMilliseconds) || scaledMilliseconds % fractionScale !== 0) return undefined
     const milliseconds = scaledMilliseconds / fractionScale
@@ -174,10 +177,12 @@ export function assertGeneratedSegments(
     if (segments.length !== grid.length) throw new Error('ACTION_TIMELINE_SEGMENT_COUNT_INVALID')
     const seenSlots = new Set<number>()
     for (const segment of segments) {
-        if (!Number.isSafeInteger(segment.slotIndex)
+        if (
+            !Number.isSafeInteger(segment.slotIndex)
             || segment.slotIndex < 0
             || segment.slotIndex >= grid.length
-            || seenSlots.has(segment.slotIndex)) {
+            || seenSlots.has(segment.slotIndex)
+        ) {
             throw new Error(`ACTION_TIMELINE_SLOT_INVALID:${segment.slotIndex}`)
         }
         seenSlots.add(segment.slotIndex)
@@ -210,21 +215,23 @@ export function buildActionTimelineDocument(
         content: grid.map(slot => {
             const segment = segmentsBySlot.get(slot.slotIndex)
             if (!segment) throw new Error(`ACTION_TIMELINE_SLOT_MISSING:${slot.slotIndex}`)
-            const inlineContent = segment.runs.flatMap(run => 'text' in run
-                ? run.text ? [{ type: 'text', text: run.text }] : []
-                : [{
-                    type: 'prompt_reference',
-                    attrs: {
-                        referenceType: 'media',
-                        assetId: run.assetId,
-                        nodeId: '',
-                        mediaKind: referenceMetadata.get(run.assetId)?.mediaKind ?? 'image',
-                        moduleId: '',
-                        capabilityId: '',
-                        artifactTypeId: '',
-                        displayName: referenceMetadata.get(run.assetId)?.displayName ?? run.assetId,
-                    },
-                }])
+            const inlineContent = segment.runs.flatMap(run =>
+                'text' in run
+                    ? run.text ? [{ type: 'text', text: run.text }] : []
+                    : [{
+                        type: 'prompt_reference',
+                        attrs: {
+                            referenceType: 'media',
+                            assetId: run.assetId,
+                            nodeId: '',
+                            mediaKind: referenceMetadata.get(run.assetId)?.mediaKind ?? 'image',
+                            moduleId: '',
+                            capabilityId: '',
+                            artifactTypeId: '',
+                            displayName: referenceMetadata.get(run.assetId)?.displayName ?? run.assetId,
+                        },
+                    }]
+            )
             return {
                 type: 'actionTimelineSegment',
                 attrs: { startMs: slot.startMs, endMs: slot.endMs },
@@ -379,9 +386,11 @@ export function assertActionTimelineEditableMutation(previousInput: object, prop
     }
     for (const [index, previousSegment] of previousSegments.entries()) {
         const proposedSegment = proposedSegments[index]
-        if (!proposedSegment
+        if (
+            !proposedSegment
             || previousSegment.attrs?.startMs !== proposedSegment.attrs?.startMs
-            || previousSegment.attrs?.endMs !== proposedSegment.attrs?.endMs) {
+            || previousSegment.attrs?.endMs !== proposedSegment.attrs?.endMs
+        ) {
             throw new Error(`ACTION_TIMELINE_BOUNDARY_MUTATION_FORBIDDEN:${index}`)
         }
     }

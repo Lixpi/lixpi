@@ -1,6 +1,9 @@
 'use strict'
 
-import { Auth0Client, createAuth0Client } from '@auth0/auth0-spa-js'
+import {
+    Auth0Client,
+    createAuth0Client,
+} from '@auth0/auth0-spa-js'
 import { authStore } from '$src/stores/authStore.ts'
 
 const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN
@@ -84,7 +87,7 @@ class Auth0Service {
     public async getTokenSilently(forceRefresh = false): Promise<string | false> {
         try {
             return await this.auth0.getTokenSilently(
-                forceRefresh ? { cacheMode: 'off' } : undefined
+                forceRefresh ? { cacheMode: 'off' } : undefined,
             ) ?? false
         } catch (error) {
             await this.login()

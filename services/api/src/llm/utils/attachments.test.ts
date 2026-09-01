@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { convertAttachmentsForProvider } from './attachments.ts'
 
@@ -34,5 +38,4 @@ describe('convertAttachmentsForProvider', () => {
             detail: 'high',
         }])
     })
-
 })

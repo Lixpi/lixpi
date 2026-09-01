@@ -7,7 +7,7 @@ import 'd3-transition'
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
 import { checkMarkIcon } from '../../svg/svgIcons.ts'
-import { extractSvgPathIcon } from '../../svg/svgIconPaths.ts'
+import { extractSvgPathIcon } from '@lixpi/ui-primitives/svg'
 
 type ToggleSwitchConfig = {
     id: string
@@ -38,29 +38,29 @@ type ToggleSwitchInstance = {
 // Toggle switch dimensions. `height`/`width` are pixels; `size` remains as
 // the legacy pixel-height alias for existing callers.
 const TOGGLE_WIDTH_RATIO = 1.8
-const KNOB_SIZE_RATIO = 0.7      // Knob size relative to toggle height
-const KNOB_PADDING = 0.15        // Padding around knob (as ratio of toggle height)
+const KNOB_SIZE_RATIO = 0.7 // Knob size relative to toggle height
+const KNOB_PADDING = 0.15 // Padding around knob (as ratio of toggle height)
 
 // Color constants
 const COLORS = {
     active: {
         fill: '#5f8fcf',
-        stroke: '#5f8fcf'
+        stroke: '#5f8fcf',
     },
     inactive: {
         fill: '#d6d7d8',
-        stroke: '#9ea3a8'
+        stroke: '#9ea3a8',
     },
     knob: {
         fill: '#ffffff',
-        stroke: '#ffffff'
-    }
+        stroke: '#ffffff',
+    },
 }
 
 // Render a toggle switch as SVG group
 export function createToggleSwitch(
     parent: any,
-    config: ToggleSwitchConfig
+    config: ToggleSwitchConfig,
 ): ToggleSwitchInstance {
     const {
         id,
@@ -72,12 +72,12 @@ export function createToggleSwitch(
         checked = false,
         disabled = false,
         className = '',
-        onChange
+        onChange,
     } = config
 
     let state: ToggleSwitchState = {
         checked,
-        disabled
+        disabled,
     }
 
     // Calculate toggle dimensions
@@ -90,8 +90,8 @@ export function createToggleSwitch(
 
     // Knob positions (center Y, X for unchecked and checked states)
     const knobCenterY = toggleHeight / 2
-    const knobUncheckedX = trackRadius  // Aligned to left
-    const knobCheckedX = toggleWidth - trackRadius  // Aligned to right
+    const knobUncheckedX = trackRadius // Aligned to left
+    const knobCheckedX = toggleWidth - trackRadius // Aligned to right
 
     // Create toggle group visible at its final position. The prompt model menu
     // mounts inside ProseMirror DOM where transition setup can be skipped during
@@ -128,7 +128,7 @@ export function createToggleSwitch(
 
     // Checkmark icon inside knob (only visible when checked)
     const checkmarkIcon = extractSvgPathIcon(checkMarkIcon)
-    const checkmarkIconSize = knobSize * 0.6  // Icon is 60% of knob size
+    const checkmarkIconSize = knobSize * 0.6 // Icon is 60% of knob size
     const checkmarkScale = checkmarkIconSize / Math.max(checkmarkIcon.width, checkmarkIcon.height)
     const checkmarkWidth = checkmarkIcon.width * checkmarkScale
     const checkmarkHeight = checkmarkIcon.height * checkmarkScale
@@ -164,7 +164,7 @@ export function createToggleSwitch(
 
     // Render function to update visual state with smooth transitions
     function render() {
-        const duration = 200  // Smooth toggle animation
+        const duration = 200 // Smooth toggle animation
 
         // Animate track color
         track
@@ -173,7 +173,7 @@ export function createToggleSwitch(
             .ease(easeCubicOut)
             .attr('fill', state.checked ? COLORS.active.fill : COLORS.inactive.fill)
             .attr('stroke', state.checked ? COLORS.active.stroke : COLORS.inactive.stroke)
-            .attr('opacity', state.disabled ? 0.4 : 1)        // Animate knob position
+            .attr('opacity', state.disabled ? 0.4 : 1) // Animate knob position
         const targetX = state.checked ? knobCheckedX : knobUncheckedX
         knob
             .transition()
@@ -237,6 +237,6 @@ export function createToggleSwitch(
         setChecked,
         setDisabled,
         getChecked,
-        destroy
+        destroy,
     }
 }

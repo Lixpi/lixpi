@@ -2,7 +2,7 @@
 
 import {
     Stack,
-    LocalWorkspace
+    LocalWorkspace,
 } from '@pulumi/pulumi/automation/index.js'
 
 import { createInfrastructure } from './pulumiProgram.ts'

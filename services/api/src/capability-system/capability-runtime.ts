@@ -23,25 +23,27 @@ export function getCapabilityDispatcher(): CapabilityDispatcher {
         registry: capabilityActionRegistry,
         createPersistence: createCapabilityModelRunPersistence,
         createEventStreamName: run => getCapabilityRunEventStreamName(run.workspaceId),
-        search: async (request, requester) => await listAuthorizedCapabilities({
-            requester: {
-                userId: requester.userId,
-                organizationIds: requester.organizationId ? [requester.organizationId] : [],
-            },
-            query: request.query,
-            kinds: request.kinds,
-            limit: request.limit,
-            cursor: request.cursor,
-        }),
+        search: async (request, requester) =>
+            await listAuthorizedCapabilities({
+                requester: {
+                    userId: requester.userId,
+                    organizationIds: requester.organizationId ? [requester.organizationId] : [],
+                },
+                query: request.query,
+                kinds: request.kinds,
+                limit: request.limit,
+                cursor: request.cursor,
+            }),
         createEventHandler: request => {
             const conversationAssetId = request.conversationAssetId
             if (request.origin === 'panel' || !conversationAssetId) return undefined
-            return async event => await mirrorCapabilityRunEventToChat({
-                event,
-                workspaceId: request.requester.workspaceId,
-                organizationId: request.requester.organizationId,
-                conversationAssetId,
-            })
+            return async event =>
+                await mirrorCapabilityRunEventToChat({
+                    event,
+                    workspaceId: request.requester.workspaceId,
+                    organizationId: request.requester.organizationId,
+                    conversationAssetId,
+                })
         },
     })
     return defaultDispatcher

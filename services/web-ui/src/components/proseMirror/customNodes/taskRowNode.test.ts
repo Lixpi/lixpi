@@ -1,11 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     taskRowDefaultAttrs as packageTaskRowDefaultAttrs,
     taskRowNodeSpec as packageTaskRowNodeSpec,
     taskRowNodeType as packageTaskRowNodeType,
 } from '@lixpi/prosemirror'
-import { createProseMirrorSchema, DOCUMENT_TYPE } from '@lixpi/prosemirror'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from '@lixpi/prosemirror'
 import {
     defaultAttrs,
     taskRowNodeSpec,

@@ -1,6 +1,13 @@
-import { createHelpTooltip, type HelpTooltipInstance } from '@lixpi/ui-kit/components/help-tooltip'
-import { html } from '$src/utils/domTemplates.ts'
-import { settings, type AiPromptInputModelMenuSettings } from '$src/settings.ts'
+import {
+    createHelpTooltip,
+    type HelpTooltipInstance,
+} from '@lixpi/ui-kit/components/help-tooltip'
+import { questionMarkCircleIcon } from '@lixpi/ui-kit/svg'
+import { html } from '@lixpi/ui-primitives/dom'
+import {
+    settings,
+    type AiPromptInputModelMenuSettings,
+} from '$src/settings.ts'
 
 export type AiModelMenuControlItem = {
     label: string | HTMLElement
@@ -81,6 +88,8 @@ class AiModelMenuSection implements AiModelMenuSectionView {
     constructor(private readonly section: AiModelMenuSectionConfig) {
         this.controlViews = section.controls.map(this.createControl)
         this.helpTooltip = createHelpTooltip({
+            icon: questionMarkCircleIcon,
+            hideDelayMs: settings.helpTooltip.interactiveHideDelayMs,
             label: `${section.title} help`,
             text: section.helpText,
             className: 'ai-prompt-model-menu-section-help',

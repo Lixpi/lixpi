@@ -8,11 +8,21 @@ import {
     type MediaGenerationRunMeta,
     type ProviderName,
 } from '@lixpi/constants'
-import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
-import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../services/generated-asset-storage.ts'
+import type {
+    ChunkPayload,
+    ProseMirrorContentHandler,
+    ProseMirrorSnapshotProvider,
+} from './stream-publisher.ts'
+import {
+    attachGeneratedAssetNode,
+    settleGeneratedAssetOriginal,
+} from '../../services/generated-asset-storage.ts'
 import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
-import { TransientMediaStore, type TransientMediaMimeType } from '../../services/transient-media-store.ts'
+import {
+    TransientMediaStore,
+    type TransientMediaMimeType,
+} from '../../services/transient-media-store.ts'
 import { readImageIntrinsicSize } from './image-intrinsic-size.ts'
 
 export { readImageIntrinsicSize } from './image-intrinsic-size.ts'
@@ -23,16 +33,20 @@ export type CapturedImagePartialHandler = (
 ) => Promise<void>
 
 function readImageMimeType(buffer: Buffer): TransientMediaMimeType | null {
-    if (buffer.length >= 8
-        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    if (
+        buffer.length >= 8
+        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    ) {
         return 'image/png'
     }
     if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
         return 'image/jpeg'
     }
-    if (buffer.length >= 12
+    if (
+        buffer.length >= 12
         && buffer.toString('ascii', 0, 4) === 'RIFF'
-        && buffer.toString('ascii', 8, 12) === 'WEBP') {
+        && buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
         return 'image/webp'
     }
     if (buffer.length >= 6 && (buffer.toString('ascii', 0, 6) === 'GIF87a' || buffer.toString('ascii', 0, 6) === 'GIF89a')) {

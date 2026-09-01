@@ -7,7 +7,7 @@ import type {
 } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 import { resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
 
 // Image and video generation traces share an identical reference/excluded/
@@ -111,11 +111,16 @@ function getReferenceIdentity(reference: ImageGenerationTraceReference): string 
 
 function getReferenceRolePriority(reference: ImageGenerationTraceReference): number {
     switch (reference.role) {
-        case 'target': return 5
-        case 'comparison-target': return 4
-        case 'message-reference': return 3
-        case 'capability-reference': return 2
-        default: return 1
+        case 'target':
+            return 5
+        case 'comparison-target':
+            return 4
+        case 'message-reference':
+            return 3
+        case 'capability-reference':
+            return 2
+        default:
+            return 1
     }
 }
 
@@ -345,8 +350,7 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         const referenceImages = deduplicateImageGenerationTraceReferences(trace.referenceImages)
 
         if (referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...referenceImages.map((reference) =>
-                options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
+            referenceGrid.replaceChildren(...referenceImages.map((reference) => options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
         } else {
             referenceGrid.replaceChildren(html`
                 <div className="ai-image-generation-empty-references">No reference images were sent.</div>
@@ -405,14 +409,16 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                 html`<dt>${label}</dt>`,
                 html`<dd>${value}</dd>`,
             ]))
-            capabilitySteps.replaceChildren(...capabilityTrace.steps.map(step => html`
+            capabilitySteps.replaceChildren(...capabilityTrace.steps.map(step =>
+                html`
                 <li className="ai-capability-generation-step" data=${{ status: step.status }}>
                     <span className="ai-capability-generation-step-title">${step.title}</span>
                     <span className="ai-capability-generation-step-status">${formatImageGenerationTraceRole(step.status)}</span>
                     ${step.outputSummary ? html`<span className="ai-capability-generation-step-summary">${step.outputSummary}</span>` : null}
                     ${step.errorMessage ? html`<span className="ai-capability-generation-step-error">${step.errorMessage}</span>` : null}
                 </li>
-            `))
+            `
+            ))
         } else {
             capabilityMetadata.replaceChildren()
             capabilitySteps.replaceChildren()
@@ -421,17 +427,21 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         capabilityReviewSection.hidden = !capabilityReview
         if (capabilityReview) {
             capabilityReviewSummary.textContent = `${capabilityReview.summary} Automatic retries: ${capabilityReview.automaticRetries}.`
-            capabilityReviewSteps.replaceChildren(...capabilityReview.steps.map(step => html`
+            capabilityReviewSteps.replaceChildren(...capabilityReview.steps.map(step =>
+                html`
                 <li className="ai-capability-media-review-step" data=${{ status: step.status }}>
                     <span className="ai-capability-media-review-step-title">${step.title}</span>
                     <span className="ai-capability-media-review-step-status">
                         ${formatImageGenerationTraceRole(step.status)}${step.score === undefined ? '' : ` · ${Math.round(step.score * 100)}%`}
                     </span>
-                    ${step.issues.length > 0
+                    ${
+                    step.issues.length > 0
                         ? html`<span className="ai-capability-media-review-step-issues">${step.issues.join(', ')}</span>`
-                        : null}
+                        : null
+                }
                 </li>
-            `))
+            `
+            ))
             capabilityReviewRecommendation.textContent = capabilityReview.recommendation ?? ''
         } else {
             capabilityReviewSummary.textContent = ''

@@ -34,8 +34,8 @@ export async function resolveStyleExtractionInput(
         const rendition = asset.media.renditions.canonical?.status === 'ready'
             ? asset.media.renditions.canonical
             : asset.media.modelSafe && asset.media.renditions.original?.status === 'ready'
-                ? asset.media.renditions.original
-                : undefined
+            ? asset.media.renditions.original
+            : undefined
         if (!rendition?.blobHash) {
             throw new CapabilityError('CAPABILITY_ACTION_FAILED', `Image Asset ${assetId} is not ready`)
         }

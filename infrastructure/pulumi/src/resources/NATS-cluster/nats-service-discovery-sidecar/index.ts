@@ -4,18 +4,18 @@ import { Context } from 'aws-lambda'
 import {
     Route53Client,
     ChangeResourceRecordSetsCommand,
-    ListResourceRecordSetsCommand
+    ListResourceRecordSetsCommand,
 } from '@aws-sdk/client-route-53'
 import {
     ECSClient,
     DescribeContainerInstancesCommand,
     DescribeTasksCommand,
-    ListTasksCommand
+    ListTasksCommand,
 } from '@aws-sdk/client-ecs'
 import {
     EC2Client,
     DescribeInstancesCommand,
-    DescribeNetworkInterfacesCommand
+    DescribeNetworkInterfacesCommand,
 } from '@aws-sdk/client-ec2'
 
 type ECSTaskStateChangeEvent = {
@@ -67,15 +67,15 @@ type ECSTaskStateChangeEvent = {
 type CloudWatchEvent = ECSTaskStateChangeEvent
 
 const route53Client = new Route53Client({
-    region: process.env.AWS_REGION
+    region: process.env.AWS_REGION,
 })
 
 const ecsClient = new ECSClient({
-    region: process.env.AWS_REGION
+    region: process.env.AWS_REGION,
 })
 
 const ec2Client = new EC2Client({
-    region: process.env.AWS_REGION
+    region: process.env.AWS_REGION,
 })
 
 const log = (message: string, data?: any) => {
@@ -84,9 +84,7 @@ const log = (message: string, data?: any) => {
 
 const isTaskReadyForRegistration = (task: any): boolean => {
     // Check container status for NATS container
-    const natsContainer = task.containers?.find((container: any) =>
-        container.name === 'nats' || container.name.includes('nats')
-    )
+    const natsContainer = task.containers?.find((container: any) => container.name === 'nats' || container.name.includes('nats'))
 
     if (natsContainer) {
         // Container must be running
@@ -114,11 +112,13 @@ const isTaskReadyForRegistration = (task: any): boolean => {
 
 const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<string | null> => {
     try {
-        const response = await ecsClient.send(new DescribeTasksCommand({
-            cluster: clusterArn,
-            tasks: [taskArn],
-            include: ['TAGS']
-        }))
+        const response = await ecsClient.send(
+            new DescribeTasksCommand({
+                cluster: clusterArn,
+                tasks: [taskArn],
+                include: ['TAGS'],
+            }),
+        )
 
         const task = response.tasks?.[0]
         if (!task) {
@@ -141,10 +141,12 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
         }
 
         if (!networkInterfaceId && task.containerInstanceArn) {
-            const containerInstances = await ecsClient.send(new DescribeContainerInstancesCommand({
-                cluster: clusterArn,
-                containerInstances: [task.containerInstanceArn],
-            }))
+            const containerInstances = await ecsClient.send(
+                new DescribeContainerInstancesCommand({
+                    cluster: clusterArn,
+                    containerInstances: [task.containerInstanceArn],
+                }),
+            )
             const ec2InstanceId = containerInstances.containerInstances?.[0]?.ec2InstanceId
             if (ec2InstanceId) {
                 const instances = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [ec2InstanceId] }))
@@ -159,9 +161,11 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
         }
 
         // Describe the network interface to get the public IP
-        const eniResponse = await ec2Client.send(new DescribeNetworkInterfacesCommand({
-            NetworkInterfaceIds: [networkInterfaceId]
-        }))
+        const eniResponse = await ec2Client.send(
+            new DescribeNetworkInterfacesCommand({
+                NetworkInterfaceIds: [networkInterfaceId],
+            }),
+        )
 
         const networkInterface = eniResponse.NetworkInterfaces?.[0]
         const publicIP = networkInterface?.Association?.PublicIp
@@ -170,7 +174,7 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
             log('Found public IP via network interface', {
                 taskArn,
                 networkInterfaceId,
-                publicIP
+                publicIP,
             })
             return publicIP
         }
@@ -178,7 +182,7 @@ const getTaskPublicIP = async (taskArn: string, clusterArn: string): Promise<str
         log('No public IP found for task', {
             taskArn,
             networkInterfaceId,
-            hasAssociation: !!networkInterface?.Association
+            hasAssociation: !!networkInterface?.Association,
         })
         return null
     } catch (error) {
@@ -192,7 +196,7 @@ const updateRoute53Records = async (
     hostedZoneId: string,
     recordName: string,
     publicIPs: string[],
-    ttl: number = 60
+    ttl: number = 60,
 ): Promise<boolean> => {
     try {
         const changeRequest = {
@@ -204,10 +208,10 @@ const updateRoute53Records = async (
                         Name: recordName,
                         Type: 'A' as const,
                         TTL: ttl,
-                        ResourceRecords: publicIPs.map(ip => ({ Value: ip }))
-                    }
-                }]
-            }
+                        ResourceRecords: publicIPs.map(ip => ({ Value: ip })),
+                    },
+                }],
+            },
         }
 
         const response = await route53Client.send(new ChangeResourceRecordSetsCommand(changeRequest))
@@ -215,7 +219,7 @@ const updateRoute53Records = async (
             hostedZoneId,
             recordName,
             ips: publicIPs,
-            changeId: response.ChangeInfo?.Id
+            changeId: response.ChangeInfo?.Id,
         })
         return true
     } catch (error) {
@@ -224,7 +228,7 @@ const updateRoute53Records = async (
             hostedZoneId,
             recordName,
             ips: publicIPs,
-            error: err.message
+            error: err.message,
         })
         return false
     }
@@ -236,10 +240,12 @@ const getAllHealthyNatsTaskIPs = async (clusterArn: string): Promise<string[]> =
 
     try {
         // List all NATS tasks in cluster
-        const listResponse = await ecsClient.send(new ListTasksCommand({
-            cluster: clusterArn,
-            desiredStatus: 'RUNNING'
-        }))
+        const listResponse = await ecsClient.send(
+            new ListTasksCommand({
+                cluster: clusterArn,
+                desiredStatus: 'RUNNING',
+            }),
+        )
 
         if (!listResponse.taskArns || listResponse.taskArns.length === 0) {
             log('No running tasks found in cluster')
@@ -247,11 +253,13 @@ const getAllHealthyNatsTaskIPs = async (clusterArn: string): Promise<string[]> =
         }
 
         // Describe all tasks to get their health status
-        const describeResponse = await ecsClient.send(new DescribeTasksCommand({
-            cluster: clusterArn,
-            tasks: listResponse.taskArns,
-            include: ['TAGS']
-        }))
+        const describeResponse = await ecsClient.send(
+            new DescribeTasksCommand({
+                cluster: clusterArn,
+                tasks: listResponse.taskArns,
+                include: ['TAGS'],
+            }),
+        )
 
         // Get public IPs for healthy NATS tasks
         for (const task of describeResponse.tasks || []) {
@@ -291,7 +299,7 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
         ROUTE53_HOSTED_ZONE_ID,
         NATS_RECORD_NAME,
         ECS_CLUSTER_ARN,
-        NATS_CLIENT_PORT = '4222'
+        NATS_CLIENT_PORT = '4222',
     } = process.env
 
     if (!ROUTE53_HOSTED_ZONE_ID) {
@@ -314,7 +322,7 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
         lastStatus: event.detail.lastStatus,
         desiredStatus: event.detail.desiredStatus,
         healthStatus: event.detail.healthStatus,
-        connectivity: event.detail.connectivity
+        connectivity: event.detail.connectivity,
     })
 
     const { detail } = event
@@ -329,7 +337,7 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
     log('NATS task state changed, rebuilding Route53 record set', {
         taskArn,
         lastStatus,
-        desiredStatus
+        desiredStatus,
     })
 
     try {
@@ -342,17 +350,17 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
             await updateRoute53Records(
                 ROUTE53_HOSTED_ZONE_ID,
                 NATS_RECORD_NAME,
-                healthyIPs
+                healthyIPs,
             )
             log('Successfully updated Route53 with healthy NATS IPs', {
                 recordName: NATS_RECORD_NAME,
                 ipCount: healthyIPs.length,
-                ips: healthyIPs
+                ips: healthyIPs,
             })
         } else {
             log('Warning: No healthy NATS tasks found, keeping existing Route53 record', {
                 taskArn,
-                recordName: NATS_RECORD_NAME
+                recordName: NATS_RECORD_NAME,
             })
             // Note: We don't delete the record when no healthy tasks exist
             // This prevents DNS resolution failures during rolling deployments
@@ -362,7 +370,7 @@ export const handler = async (event: CloudWatchEvent, context: Context) => {
         log('Error processing NATS task state change', {
             taskArn,
             error: err.message,
-            stack: err.stack
+            stack: err.stack,
         })
         // Don't throw error to avoid Lambda retries for unrecoverable errors
     }

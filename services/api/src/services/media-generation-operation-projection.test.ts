@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     mediaGenerationLayoutSettings,
@@ -197,7 +203,7 @@ describe('media generation operation-node projection', () => {
         const secondOutput = canvasState.nodes.find(node => node.nodeId === 'output-node-1')!
         expect(Math.abs(secondOutput.position.y - firstOutput.position.y)).toBeCloseTo(
             mediaGenerationLayoutSettings.generatedMediaSize
-                * mediaGenerationLayoutSettings.preFrameCircleScale
+                    * mediaGenerationLayoutSettings.preFrameCircleScale
                 + mediaGenerationLayoutSettings.branchRowGap,
             6,
         )
@@ -270,17 +276,20 @@ describe('media generation operation-node projection', () => {
 
         expect(canvasState.nodes.some(node => node.nodeId === 'operation-request-1-0')).toBe(false)
         expect(canvasState.nodes.some(node => node.nodeId === 'pending-media-provisional')).toBe(false)
-        expect(canvasState.nodes).toEqual(expect.arrayContaining([expect.objectContaining({
-            nodeId: 'pending-media-request-1-0',
-            type: 'operationStatus',
-            requestRevision: 3,
-            position: { x: 860, y: 300 },
-        }), expect.objectContaining({
-            nodeId: 'pending-media-authoritative',
-            type: 'video',
-            assetId: 'authoritative-asset',
-            position: provisionalOutput.position,
-        })]))
+        expect(canvasState.nodes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                nodeId: 'pending-media-request-1-0',
+                type: 'operationStatus',
+                requestRevision: 3,
+                position: { x: 860, y: 300 },
+            }),
+            expect.objectContaining({
+                nodeId: 'pending-media-authoritative',
+                type: 'video',
+                assetId: 'authoritative-asset',
+                position: provisionalOutput.position,
+            }),
+        ]))
         expect(canvasState.edges).toEqual(expect.arrayContaining([expect.objectContaining({
             sourceNodeId: 'branch-fork-1',
             targetNodeId: 'pending-media-authoritative',

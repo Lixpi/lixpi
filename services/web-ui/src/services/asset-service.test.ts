@@ -1,14 +1,19 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     getAssetEventSubject,
     NATS_SUBJECTS,
     type Asset,
-    type CanvasState,
 } from '@lixpi/constants'
 
-import AssetService, { getWorkspaceCanvasAssetIds } from './asset-service.ts'
+import AssetService from './asset-service.ts'
 
 const mocks = vi.hoisted(() => ({
     getTokenSilently: vi.fn(),
@@ -159,18 +164,21 @@ describe('AssetService.loadWorkspaceAssets', () => {
         vi.clearAllMocks()
         mocks.getTokenSilently.mockResolvedValue('token')
         mocks.getAsset.mockReturnValue(undefined)
-        mocks.getWorkspace.mockReturnValue({
-            canvasState: {
-                nodes: [{
-                    nodeId: 'timeline-node',
-                    type: 'capabilityArtifact',
-                    assetId: 'timeline-asset',
-                    artifactTypeId: 'action-timeline',
-                    position: { x: 0, y: 0 },
-                    dimensions: { width: 400, height: 300 },
-                }],
-            },
-        })
+        mocks.getWorkspace.mockImplementation((key?: string) =>
+            key === 'workspaceId' ? 'workspace-1' : ({
+                workspaceId: 'workspace-1',
+                canvasState: {
+                    nodes: [{
+                        nodeId: 'timeline-node',
+                        type: 'capabilityArtifact',
+                        assetId: 'timeline-asset',
+                        artifactTypeId: 'action-timeline',
+                        position: { x: 0, y: 0 },
+                        dimensions: { width: 400, height: 300 },
+                    }],
+                },
+            })
+        )
     })
 
     it('loads lineage source Assets required by persisted Artifact references', async () => {
@@ -230,61 +238,6 @@ describe('AssetService.loadWorkspaceAssets', () => {
             expect.anything(),
             expect.anything(),
         )
-    })
-})
-
-describe('getWorkspaceCanvasAssetIds', () => {
-    it('returns only Assets reachable from the canvas and conversation panel', () => {
-        const canvasState: CanvasState = {
-            viewport: { x: 0, y: 0, zoom: 1 },
-            edges: [],
-            nodes: [
-                {
-                    nodeId: 'generated-image-node',
-                    type: 'image',
-                    assetId: 'generated-image-asset',
-                    position: { x: 0, y: 0 },
-                    dimensions: { width: 400, height: 300 },
-                    generatedBy: {
-                        conversationAssetId: 'generated-image-conversation',
-                        responseId: 'response-1',
-                        aiModel: 'Stability:sd3.5-large',
-                        revisedPrompt: 'portrait',
-                    },
-                },
-                {
-                    nodeId: 'branch-node',
-                    type: 'branchLine',
-                    branchId: 'branch-1',
-                    generationRequestId: 'generation-request-1',
-                    conversationAssetId: 'branch-conversation',
-                    position: { x: 500, y: 0 },
-                    dimensions: { width: 400, height: 100 },
-                    temporary: true,
-                },
-            ],
-            lastActiveConversationAssetId: 'active-conversation',
-            aiChatPanel: {
-                isOpen: true,
-                isSessionHistoryOpen: false,
-                topLevelMode: 'aiThreads',
-                tabs: [{
-                    tabId: 'tab-1',
-                    type: 'thread',
-                    refId: 'tab-conversation',
-                    title: 'Conversation',
-                }],
-                contextChips: [],
-            },
-        }
-
-        expect(getWorkspaceCanvasAssetIds(canvasState)).toEqual([
-            'generated-image-asset',
-            'generated-image-conversation',
-            'branch-conversation',
-            'tab-conversation',
-            'active-conversation',
-        ])
     })
 })
 

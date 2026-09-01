@@ -22,7 +22,11 @@
 import process from 'process'
 
 import NatsService from '@lixpi/nats-service'
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import {
     NATS_SUBJECTS,
     type GenerateRenditionsRequest,
@@ -88,9 +92,15 @@ info(`nex-entry file-conversion up; listening on ${BLOB_PROCESSING_SUBJECTS.GENE
 
 const shutdown = async (signal: string): Promise<void> => {
     warn(`nex-entry received ${signal}; shutting down file-conversion`)
-    try { await service.close?.() } catch { /* best-effort */ }
+    try {
+        await service.close?.()
+    } catch { /* best-effort */ }
     process.exit(0)
 }
 
-process.on('SIGTERM', () => { void shutdown('SIGTERM') })
-process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('SIGTERM', () => {
+    void shutdown('SIGTERM')
+})
+process.on('SIGINT', () => {
+    void shutdown('SIGINT')
+})

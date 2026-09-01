@@ -4,7 +4,7 @@ import type {
     CapabilityInputSchema,
     CapabilityInputSchemaProperty,
 } from '$src/services/capability-catalog-client.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type CapabilityRunFormInstance = {
     readonly element: HTMLFormElement

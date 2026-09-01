@@ -1,27 +1,33 @@
 'use strict'
 
-import type { Merge, Except } from 'type-fest'
-import type { AssetSubjectIdentity, DepictionMedium } from './asset-types.ts'
+import type {
+    Merge,
+    Except,
+} from 'type-fest'
+import type {
+    AssetSubjectIdentity,
+    DepictionMedium,
+} from './asset-types.ts'
 
 export const PROVIDER_NAMES = ['OpenAI', 'Anthropic', 'Google', 'Stability', 'BytePlus'] as const
 export type ProviderName = typeof PROVIDER_NAMES[number]
 
 // NOTE: User type restored exactly as originally defined per instruction (commas retained intentionally)
 export type User = {
-    userId: string,
-    stripeCustomerId?: string,
-    email: string,
-    name: string,
-    givenName: string,
-    familyName: string,
-    avatar: string,
-    hasActiveSubscription: boolean,
-    balance: string,
-    currency: string,
-    recentTags: string[],
-    organizations: string[],
-    createdAt: number,
-    updatedAt: number,
+    userId: string
+    stripeCustomerId?: string
+    email: string
+    name: string
+    givenName: string
+    familyName: string
+    avatar: string
+    hasActiveSubscription: boolean
+    balance: string
+    currency: string
+    recentTags: string[]
+    organizations: string[]
+    createdAt: number
+    updatedAt: number
 }
 
 export const ACCESS_LEVEL = {
@@ -62,8 +68,8 @@ export type MediaKind = 'image' | 'video' | 'audio' | 'document'
 // One row of the ingest policy. Absence from MEDIA_POLICY == not allowed.
 export type MediaPolicyEntry = {
     kind: MediaKind
-    modelSafe: boolean          // true => no transcode needed
-    canonicalMime: string       // target mime when modelSafe is false
+    modelSafe: boolean // true => no transcode needed
+    canonicalMime: string // target mime when modelSafe is false
 }
 
 // Allow-list: sniffed-mime -> policy. The single source of truth for what may
@@ -71,29 +77,29 @@ export type MediaPolicyEntry = {
 // MIME strings (authoritative); `canonicalMime` records the transcode target so
 // the decision lives in data, not branching code.
 export const MEDIA_POLICY: Readonly<Record<string, MediaPolicyEntry>> = {
-    'image/png':       { kind: 'image', modelSafe: true,  canonicalMime: 'image/png' },
-    'image/jpeg':      { kind: 'image', modelSafe: true,  canonicalMime: 'image/jpeg' },
-    'image/webp':      { kind: 'image', modelSafe: true,  canonicalMime: 'image/webp' },
-    'image/gif':       { kind: 'image', modelSafe: true,  canonicalMime: 'image/gif' },
-    'image/svg+xml':   { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
-    'image/avif':      { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
-    'image/heic':      { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
-    'image/heif':      { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
-    'image/tiff':      { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
-    'video/mp4':       { kind: 'video', modelSafe: true,  canonicalMime: 'video/mp4' },
+    'image/png': { kind: 'image', modelSafe: true, canonicalMime: 'image/png' },
+    'image/jpeg': { kind: 'image', modelSafe: true, canonicalMime: 'image/jpeg' },
+    'image/webp': { kind: 'image', modelSafe: true, canonicalMime: 'image/webp' },
+    'image/gif': { kind: 'image', modelSafe: true, canonicalMime: 'image/gif' },
+    'image/svg+xml': { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
+    'image/avif': { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
+    'image/heic': { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
+    'image/heif': { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
+    'image/tiff': { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
+    'video/mp4': { kind: 'video', modelSafe: true, canonicalMime: 'video/mp4' },
     'video/quicktime': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
-    'video/webm':      { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
-    'video/x-matroska':{ kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
-    'audio/mpeg':      { kind: 'audio', modelSafe: true,  canonicalMime: 'audio/mpeg' },
-    'audio/wav':       { kind: 'audio', modelSafe: true,  canonicalMime: 'audio/wav' },
-    'audio/mp4':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/x-m4a':     { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/aac':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/ogg':       { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/flac':      { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'application/pdf': { kind: 'document', modelSafe: true,  canonicalMime: 'application/pdf' },
-    'text/plain':      { kind: 'document', modelSafe: true,  canonicalMime: 'text/plain' },
-    'text/markdown':   { kind: 'document', modelSafe: true,  canonicalMime: 'text/markdown' },
+    'video/webm': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
+    'video/x-matroska': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
+    'audio/mpeg': { kind: 'audio', modelSafe: true, canonicalMime: 'audio/mpeg' },
+    'audio/wav': { kind: 'audio', modelSafe: true, canonicalMime: 'audio/wav' },
+    'audio/mp4': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/x-m4a': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/aac': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/ogg': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'audio/flac': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
+    'application/pdf': { kind: 'document', modelSafe: true, canonicalMime: 'application/pdf' },
+    'text/plain': { kind: 'document', modelSafe: true, canonicalMime: 'text/plain' },
+    'text/markdown': { kind: 'document', modelSafe: true, canonicalMime: 'text/markdown' },
     'application/msword': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
     'application/vnd.openxmlformats-officedocument.presentationml.presentation': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
@@ -105,11 +111,22 @@ export const MEDIA_POLICY: Readonly<Record<string, MediaPolicyEntry>> = {
 // "executables/scripts/archives are not permitted" error rather than a generic
 // "unsupported type". Belt-and-suspenders on top of deny-by-default.
 export const UPLOAD_DENYLIST_MIME: readonly string[] = [
-    'application/x-msdownload', 'application/x-executable', 'application/x-mach-binary',
-    'application/x-elf', 'application/vnd.microsoft.portable-executable',
-    'application/x-sh', 'application/x-shellscript', 'text/x-shellscript',
-    'application/zip', 'application/x-tar', 'application/gzip', 'application/x-rar-compressed', 'application/x-7z-compressed',
-    'application/x-msi', 'application/x-apple-diskimage', 'application/java-archive',
+    'application/x-msdownload',
+    'application/x-executable',
+    'application/x-mach-binary',
+    'application/x-elf',
+    'application/vnd.microsoft.portable-executable',
+    'application/x-sh',
+    'application/x-shellscript',
+    'text/x-shellscript',
+    'application/zip',
+    'application/x-tar',
+    'application/gzip',
+    'application/x-rar-compressed',
+    'application/x-7z-compressed',
+    'application/x-msi',
+    'application/x-apple-diskimage',
+    'application/java-archive',
     'application/vnd.ms-word.document.macroEnabled.12',
     'application/vnd.ms-excel.sheet.macroEnabled.12',
     'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
@@ -1328,7 +1345,7 @@ export type VideoGeneratedByMetadata = GeneratedMediaVariantMetadata & {
     durationSeconds?: number
     hasAudio?: boolean
     veoOperationName?: string
-    sourceVideoNodeId?: string    // set for extend/edit continuations (Phase 6)
+    sourceVideoNodeId?: string // set for extend/edit continuations (Phase 6)
     // Image-named schema alias for parentMediaNodeId.
     parentImageNodeId?: string
     sourceContextNodeIds?: string[]
@@ -1513,9 +1530,9 @@ export type WorkspaceEdge = {
     targetNodeId: string
     sourceHandle?: string
     targetHandle?: string
-    sourceT?: number  // Position along source side (0=start, 1=end, 0.5=center). Default: 0.5
-    targetT?: number  // Position along target side (0=start, 1=end, 0.5=center). Default: 0.5
-    sourceMessageId?: string  // Links generated-media lineage to the originating aiResponseMessage in its conversation Asset
+    sourceT?: number // Position along source side (0=start, 1=end, 0.5=center). Default: 0.5
+    targetT?: number // Position along target side (0=start, 1=end, 0.5=center). Default: 0.5
+    sourceMessageId?: string // Links generated-media lineage to the originating aiResponseMessage in its conversation Asset
     pathType?: WorkspaceEdgePathType
 }
 
@@ -2265,7 +2282,6 @@ export type TokensUsageEvent = {
         soldToClientFor: string
     }
 }
-
 
 export type FinancialTransaction = {
     userId: string

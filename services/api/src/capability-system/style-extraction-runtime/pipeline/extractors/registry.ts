@@ -17,8 +17,6 @@ export const registerExtractor = (extractor: StyleExtractor): void => {
 
 export const getExtractors = (): StyleExtractor[] => EXTRACTORS.slice()
 
-export const getExtractor = (axis: string): StyleExtractor | undefined =>
-    EXTRACTORS.find((e) => e.axis === axis)
+export const getExtractor = (axis: string): StyleExtractor | undefined => EXTRACTORS.find((e) => e.axis === axis)
 
-export const getRegisteredAxes = (): string[] =>
-    EXTRACTORS.map((e) => e.axis)
+export const getRegisteredAxes = (): string[] => EXTRACTORS.map((e) => e.axis)

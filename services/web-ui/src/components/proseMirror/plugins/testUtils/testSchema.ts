@@ -1,5 +1,8 @@
 import { Schema } from 'prosemirror-model'
-import { nodes, marks } from '$src/components/proseMirror/components/schema.ts'
+import {
+    nodes,
+    marks,
+} from '$src/components/proseMirror/components/schema.ts'
 import { aiGeneratedImageNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 import { aiGeneratedVideoNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
 import { aiChatThreadNodeSpec } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
@@ -20,7 +23,7 @@ export const testSchema = new Schema({
     nodes: {
         doc: {
             // Allow both regular blocks and AI chat threads at top level
-            content: '(block | aiChatThread)+'
+            content: '(block | aiChatThread)+',
         },
         paragraph: nodes.paragraph,
         heading: nodes.heading,
@@ -49,7 +52,7 @@ export const testSchema = new Schema({
         // AI prompt input node (standalone floating prompt)
         aiPromptInput: aiPromptInputNodeSpec,
     },
-    marks: marks
+    marks: marks,
 })
 
 export type TestSchema = typeof testSchema

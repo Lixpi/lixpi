@@ -1,9 +1,20 @@
 'use strict'
 
 import { writeFile } from 'node:fs/promises'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 
-import { transcodeAudioVideo, extractPosterFrame, extractRepresentativeFrame, probeMedia } from './audiovideo.ts'
+import {
+    transcodeAudioVideo,
+    extractPosterFrame,
+    extractRepresentativeFrame,
+    probeMedia,
+} from './audiovideo.ts'
 
 const runProcessMock = vi.fn()
 
@@ -122,13 +133,16 @@ describe('probeMedia', () => {
     it('extracts duration, aspect ratio, and audio presence from ffprobe output', async () => {
         runProcessMock.mockImplementation(async (_command, args) => {
             const outPath = parseShOutputPath(args[1])
-            await writeFile(outPath, JSON.stringify({
-                format: { duration: '12.34' },
-                streams: [
-                    { codec_type: 'video', width: 1280, height: 720, duration: '10' },
-                    { codec_type: 'audio', duration: '12.34' },
-                ],
-            }))
+            await writeFile(
+                outPath,
+                JSON.stringify({
+                    format: { duration: '12.34' },
+                    streams: [
+                        { codec_type: 'video', width: 1280, height: 720, duration: '10' },
+                        { codec_type: 'audio', duration: '12.34' },
+                    ],
+                }),
+            )
         })
         const probe = await probeMedia(Buffer.from('video'))
         expect(probe.durationSeconds).toBe(12.34)

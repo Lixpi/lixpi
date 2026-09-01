@@ -1,9 +1,15 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => {
-    const handlers: Array<{ path: string, middleware: Array<(req: any, res: any, next: any) => unknown> }> = []
+    const handlers: Array<{ path: string; middleware: Array<(req: any, res: any, next: any) => unknown> }> = []
     const readResource = vi.fn(async () => ({
         mediaType: 'image/png',
         blobHash: 'hash-1',

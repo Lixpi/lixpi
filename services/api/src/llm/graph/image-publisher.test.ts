@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, it, expect, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    it,
+    expect,
+    vi,
+} from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
 
 const generatedAssetStorageMocks = vi.hoisted(() => ({
@@ -22,9 +28,12 @@ vi.mock('../../services/generated-asset-storage.ts', () => generatedAssetStorage
 vi.mock('../../services/asset-provenance-materializer.ts', () => assetProvenanceMaterializerMocks)
 vi.mock('../../services/asset-maintenance-queue.ts', () => assetMaintenanceQueueMocks)
 
-import { ImagePublisher, readImageIntrinsicSize } from './image-publisher.ts'
+import {
+    ImagePublisher,
+    readImageIntrinsicSize,
+} from './image-publisher.ts'
 
-type Published = { subject: string, payload: any }
+type Published = { subject: string; payload: any }
 
 function makeNats(published: Published[]): any {
     return {
@@ -271,7 +280,18 @@ describe('ImagePublisher', () => {
     it('captures valid provider bytes without publishing or persisting candidate media', async () => {
         const { publisher, published } = makeCaptureOnlyPublisher()
         const pngBase64 = Buffer.from([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00,
+            0x89,
+            0x50,
+            0x4e,
+            0x47,
+            0x0d,
+            0x0a,
+            0x1a,
+            0x0a,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
         ]).toString('base64')
 
         await publisher.partial('', 0)
@@ -483,8 +503,10 @@ describe('readImageIntrinsicSize', () => {
         // SOI, APP0 (16-byte segment), SOF0 with height 800 / width 1200.
         const jpeg = Buffer.concat([
             Buffer.from([0xff, 0xd8]),
-            Buffer.from([0xff, 0xe0, 0x00, 0x10]), Buffer.alloc(14),
-            Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, 0x03, 0x20, 0x04, 0xb0]), Buffer.alloc(10),
+            Buffer.from([0xff, 0xe0, 0x00, 0x10]),
+            Buffer.alloc(14),
+            Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, 0x03, 0x20, 0x04, 0xb0]),
+            Buffer.alloc(10),
         ])
         expect(readImageIntrinsicSize(jpeg)).toEqual({ width: 1200, height: 800 })
     })

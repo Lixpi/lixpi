@@ -5,8 +5,14 @@
 
 import { type WorkspaceMeta } from '@lixpi/constants'
 
-import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { createSidePanel, type SidePanelInstance } from '@lixpi/ui-kit/components/side-panel'
+import {
+    html,
+    applyStyle,
+} from '@lixpi/ui-primitives/dom'
+import {
+    createSidePanel,
+    type SidePanelInstance,
+} from '@lixpi/ui-kit/components/side-panel'
 import { createPureDropdown } from '@lixpi/ui-kit/components/dropdown'
 import { settings } from '$src/settings.ts'
 import {
@@ -23,7 +29,10 @@ import { workspacesStore } from '$src/stores/workspacesStore.ts'
 import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { routerStore } from '$src/stores/routerStore.ts'
 import { servicesStore } from '$src/stores/servicesStore.ts'
-import { navigationSidePanelStore, userInfoPanelStore } from '$src/stores/navigationSidePanelStore.ts'
+import {
+    navigationSidePanelStore,
+    userInfoPanelStore,
+} from '$src/stores/navigationSidePanelStore.ts'
 import { authStore } from '$src/stores/authStore.ts'
 
 const NAVIGATION_SIDE_PANEL_SETTINGS = settings.navigationSidePanel
@@ -76,12 +85,13 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         this.headerEl.appendChild(this.createNewWorkspaceButton())
         this.footerEl.append(
             html`<div className="navigation-side-panel-footer-separator"></div>` as HTMLDivElement,
-            this.avatarEl
+            this.avatarEl,
         )
         this.panelEl.append(this.headerEl, this.listEl, this.footerEl, this.importFileInput)
         this.paneEl.appendChild(this.panelEl)
 
         this.sidePanel = createSidePanel({
+            root: this.paneEl,
             side: 'left',
             offset: NAVIGATION_SIDE_PANEL_SETTINGS.resizeHandle.offset,
             grabWidth: NAVIGATION_SIDE_PANEL_SETTINGS.resizeHandle.grabWidth,
@@ -152,7 +162,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         this.avatarEl.replaceChildren()
         if (user?.picture) {
             this.avatarEl.appendChild(
-                html`<img src=${user.picture} alt=${user.given_name || 'User'} referrerpolicy="no-referrer" />` as HTMLImageElement
+                html`<img src=${user.picture} alt=${user.given_name || 'User'} referrerpolicy="no-referrer" />` as HTMLImageElement,
             )
         } else {
             const initial = (user?.given_name || user?.name || 'User').charAt(0).toUpperCase()
@@ -164,7 +174,7 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         const paneWidth = this.paneEl.getBoundingClientRect().width || window.innerWidth
         return Math.max(
             NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.minWidth,
-            paneWidth - NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.maxPaneMargin
+            paneWidth - NAVIGATION_SIDE_PANEL_SETTINGS.dimensions.maxPaneMargin,
         )
     }
 

@@ -1,6 +1,9 @@
 'use strict'
 
-import { LoadingStatus, NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    LoadingStatus,
+    NATS_SUBJECTS,
+} from '@lixpi/constants'
 
 import { subscriptionStore } from '$src/stores/subscriptionStore.ts'
 import { userStore } from '$src/stores/userStore.ts'

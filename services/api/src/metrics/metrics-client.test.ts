@@ -1,9 +1,21 @@
 'use strict'
 
-import { describe, it, expect, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    vi,
+} from 'vitest'
 
-import { MetricsClient, type MetricsNats, type MetricsClientOptions } from './metrics-client.ts'
-import type { CheckRequest, ConfirmRequest } from '@lixpi/constants'
+import {
+    MetricsClient,
+    type MetricsNats,
+    type MetricsClientOptions,
+} from './metrics-client.ts'
+import type {
+    CheckRequest,
+    ConfirmRequest,
+} from '@lixpi/constants'
 
 function stubNats(request: MetricsNats['request'] = vi.fn()): MetricsNats {
     return { request }

@@ -56,10 +56,12 @@ export function collectGeneratedAssetSourceIds(
     for (const contextNode of workspaceContextSnapshot?.nodes ?? []) {
         if (contextNode.assetId) assetIdByNodeId.set(contextNode.nodeId, contextNode.assetId)
     }
-    return [...new Set([
-        ...assignment.referenceAssetIds,
-        ...assignment.sourceContextNodeIds.flatMap((nodeId) => assetIdByNodeId.get(nodeId) ?? []),
-    ])]
+    return [
+        ...new Set([
+            ...assignment.referenceAssetIds,
+            ...assignment.sourceContextNodeIds.flatMap((nodeId) => assetIdByNodeId.get(nodeId) ?? []),
+        ]),
+    ]
 }
 
 // A generation that continues an existing Asset, or that references one, reuses
@@ -149,13 +151,15 @@ export const ensurePendingGeneratedAssets = async ({
             promptFingerprint: assignment.promptFingerprint,
         }
         const assertMatchingPendingAsset = (existing: Awaited<ReturnType<typeof getAssetRecord>>): void => {
-            if (!existing
+            if (
+                !existing
                 || existing.organizationId !== organizationId
                 || existing.originWorkspaceId !== workspaceId
                 || existing.ownerUserId !== ownerUserId
                 || existing.lineage?.generationRequestId !== lineage.generationRequestId
                 || existing.lineage?.reasoningRunId !== lineage.reasoningRunId
-                || existing.lineage?.mediaRunId !== lineage.mediaRunId) {
+                || existing.lineage?.mediaRunId !== lineage.mediaRunId
+            ) {
                 throw new Error(`MEDIA_RUN_ASSET_ID_CONFLICT:${assignment.assetId}`)
             }
         }
@@ -318,19 +322,21 @@ export const settleGeneratedAssetOriginal = async ({
                     },
                     now,
                 }),
-                ...supplementalBlobs.flatMap(input => buildBlobReferenceOperations({
-                    blob: input.blob,
-                    reference: {
-                        blobKey: input.blob.blobKey,
-                        blobHash: input.blob.blobHash,
-                        organizationId: input.blob.organizationId,
-                        referenceKey: `asset#${assetId}#rendition#${input.name}`,
-                        ownerType: 'asset',
-                        ownerId: assetId,
-                        createdAt: now,
-                    },
-                    now,
-                })),
+                ...supplementalBlobs.flatMap(input =>
+                    buildBlobReferenceOperations({
+                        blob: input.blob,
+                        reference: {
+                            blobKey: input.blob.blobKey,
+                            blobHash: input.blob.blobHash,
+                            organizationId: input.blob.organizationId,
+                            referenceKey: `asset#${assetId}#rendition#${input.name}`,
+                            ownerType: 'asset',
+                            ownerId: assetId,
+                            createdAt: now,
+                        },
+                        now,
+                    })
+                ),
                 {
                     type: 'update',
                     tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
@@ -406,11 +412,13 @@ export const settleGeneratedAssetComposition = async ({
     }
     const componentIds = new Set<string>()
     for (const component of inputComposition.components) {
-        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
+        if (
+            !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(component.componentId)
             || componentIds.has(component.componentId)
             || !component.role.trim()
             || !component.title.trim()
-            || component.mimeType !== 'image/png') {
+            || component.mimeType !== 'image/png'
+        ) {
             throw new Error('GENERATED_MEDIA_COMPOSITION_COMPONENT_INVALID')
         }
         componentIds.add(component.componentId)
@@ -619,10 +627,12 @@ export const attachPlannedGeneratedAssetNodes = async ({
     let canvasGeometry: CanvasGeometryUpdate | null = null
 
     for (const assignment of lineagePlan.runAssignments) {
-        if (!assignment.assetId
+        if (
+            !assignment.assetId
             || !assignment.mediaType
             || !assignment.reasoningRunId
-            || !assignment.reasoningModelId) continue
+            || !assignment.reasoningModelId
+        ) continue
         const generationRun: MediaGenerationRunMeta = {
             requestKind: 'media-generation-matrix',
             generationRequestId: assignment.generationRequestId,
@@ -632,10 +642,12 @@ export const attachPlannedGeneratedAssetNodes = async ({
             ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
             ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
             mediaType: assignment.mediaType,
-            ...(typeof assignment.mediaIndex === 'number' ? {
-                mediaIndex: assignment.mediaIndex,
-                variantIndex: assignment.mediaIndex,
-            } : {}),
+            ...(typeof assignment.mediaIndex === 'number'
+                ? {
+                    mediaIndex: assignment.mediaIndex,
+                    variantIndex: assignment.mediaIndex,
+                }
+                : {}),
             lineageAssignment: assignment,
         }
         const asset = await getAssetRecord(assignment.assetId)

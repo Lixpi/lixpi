@@ -1,3 +1,4 @@
+'use strict'
 // =============================================================================
 // CORE BUBBLE MENU TYPES
 //
@@ -24,6 +25,7 @@ export type BubbleMenuPositionRequest = {
 }
 
 export type BubbleMenuOptions = {
+    label?: string
     parentEl: HTMLElement
     items: BubbleMenuItem[]
     panels?: HTMLElement[]

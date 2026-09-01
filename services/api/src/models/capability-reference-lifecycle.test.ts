@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import type {
     BlobRecord,
@@ -257,8 +264,7 @@ describe('Capability Blob reference lifecycle', () => {
             if (tableName.includes('Capabilities')) return { items: [currentRecord] }
             return { items: [] }
         })
-        mocks.getContentAddressedBlob.mockImplementation(({ blobHash }: { blobHash: string }) =>
-            new TextEncoder().encode(JSON.stringify(blobHash === newManifestHash ? nextManifest : oldManifest)))
+        mocks.getContentAddressedBlob.mockImplementation(({ blobHash }: { blobHash: string }) => new TextEncoder().encode(JSON.stringify(blobHash === newManifestHash ? nextManifest : oldManifest)))
 
         const now = CAPABILITY_BLOB_RETIREMENT_GRACE_MS + 10
         const protectedResult = await retireSupersededCapabilityBlobReferences({ now, limit: 10 })
@@ -283,15 +289,17 @@ describe('Capability Blob reference lifecycle', () => {
 
     it('fails closed without retiring anything when any bounded safety scan is truncated', async () => {
         ;(globalThis as any).dynamoDBService.scanItems.mockImplementation(({ tableName }: { tableName: string }) => ({
-            items: tableName.includes('Blob-References') ? [{
-                blobKey: `org-1#${oldManifestHash}`,
-                blobHash: oldManifestHash,
-                organizationId: 'org-1',
-                referenceKey: 'capability#skill-lifecycle#manifest',
-                ownerType: 'capability',
-                ownerId: 'skill-lifecycle',
-                createdAt: 1,
-            }] : [],
+            items: tableName.includes('Blob-References')
+                ? [{
+                    blobKey: `org-1#${oldManifestHash}`,
+                    blobHash: oldManifestHash,
+                    organizationId: 'org-1',
+                    referenceKey: 'capability#skill-lifecycle#manifest',
+                    ownerType: 'capability',
+                    ownerId: 'skill-lifecycle',
+                    createdAt: 1,
+                }]
+                : [],
             ...(tableName.includes('Capability-Runs') ? { lastEvaluatedKey: { runId: 'next' } } : {}),
         }))
 

@@ -2,20 +2,23 @@ import type { EditorView } from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { html } from '$src/utils/domTemplates.ts'
-import { BubbleMenu, type BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
+import { html } from '@lixpi/ui-primitives/dom'
+import {
+    BubbleMenu,
+    type BubbleMenuItem,
+} from '@lixpi/ui-kit/components/bubble-menu'
 import {
     createSlidingSwitch,
     type SlidingSwitchOptionRenderInstance,
     type SlidingSwitchOptionRenderState,
 } from '@lixpi/ui-kit/components/sliding-switch'
 import {
-    appendSvgPathIcon,
     clockIcon,
     imageIcon,
     plusIcon,
     videoIcon,
 } from '@lixpi/ui-kit/svg'
+import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
@@ -193,23 +196,29 @@ function createModelMenuTriggerSummaryAspectRatioIcon(value: string): HTMLElemen
 }
 
 function createModelMenuTriggerSummaryItem(item: ModelMenuTriggerSummaryItem): HTMLElement {
-    const trailingIconNodes = item.trailingIcons?.map(icon => html`
+    const trailingIconNodes = item.trailingIcons?.map(icon =>
+        html`
         <span
             className="ai-prompt-model-menu-trigger-summary-icon"
             innerHTML=${icon}
             aria-hidden="true"
         ></span>
-    ` as HTMLSpanElement) ?? []
+    ` as HTMLSpanElement
+    ) ?? []
 
     return html`
         <span className="ai-prompt-model-menu-trigger-summary-item">
-            ${item.icon ? html`
+            ${
+        item.icon
+            ? html`
                 <span
                     className=${`ai-prompt-model-menu-trigger-summary-icon${item.iconVariant === 'clock' ? ' ai-prompt-model-menu-trigger-summary-clock-icon' : ''}`}
                     innerHTML=${item.icon}
                     aria-hidden="true"
                 ></span>
-            ` : null}
+            `
+            : null
+    }
             ${item.aspectRatio ? createModelMenuTriggerSummaryAspectRatioIcon(item.aspectRatio) : null}
             <span className="ai-prompt-model-menu-trigger-summary-label">${item.label}</span>
             ${trailingIconNodes}
@@ -259,8 +268,10 @@ function uniqueNonEmptyValues(values: string[]): string[] {
 
 export function hasAiPromptInputContent(node: ProseMirrorNode): boolean {
     if (node.isText && node.text?.trim()) return true
-    if (node.type.name === PROMPT_REFERENCE_NODE_TYPE
-        || node.type.name === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) return true
+    if (
+        node.type.name === PROMPT_REFERENCE_NODE_TYPE
+        || node.type.name === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
+    ) return true
     let found = false
     node.forEach((child) => {
         if (!found && hasAiPromptInputContent(child)) found = true
@@ -404,7 +415,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
 
         const setSelectedModelIds = (
             selectionAttrName: 'aiReasoningModels' | 'aiImageModels' | 'aiVideoModels',
-            modelIds: string[]
+            modelIds: string[],
         ): void => {
             const normalizedModelIds = uniqueNonEmptyValues(modelIds)
             const multipleModeAttrName = {
@@ -431,8 +442,9 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         const getUnavailableModelIds = (
             selectionAttrName: 'aiReasoningModels' | 'aiImageModels' | 'aiVideoModels',
             modelIndex: number,
-        ): string[] => getSelectedModelIds(selectionAttrName)
-            .filter((_, index) => index !== modelIndex)
+        ): string[] =>
+            getSelectedModelIds(selectionAttrName)
+                .filter((_, index) => index !== modelIndex)
 
         const setImageConfigSelectionGroups = (groups: MediaGenerationConfigSelectionGroup[]): void => {
             const firstImageModel = getSelectedModelIds('aiImageModels')[0]
@@ -475,11 +487,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setSelectedModelIds: modelIds => setSelectedModelIds('aiReasoningModels', modelIds),
             getConfigGroups: () => getConfigSelectionGroups('reasoningGenerationConfigGroups'),
             setConfigGroups: setReasoningConfigSelectionGroups,
-            createModelDropdown: modelIndex => options.createModelDropdown({
-                getCurrentAiModel: () => getSelectedModelIds('aiReasoningModels')[modelIndex] ?? '',
-                setAiModel: modelId => replaceSelectedModelAt('aiReasoningModels', modelIndex, modelId),
-                getUnavailableAiModels: () => getUnavailableModelIds('aiReasoningModels', modelIndex),
-            }, `ai-reasoning-model-${modelIndex}`),
+            createModelDropdown: modelIndex =>
+                options.createModelDropdown({
+                    getCurrentAiModel: () => getSelectedModelIds('aiReasoningModels')[modelIndex] ?? '',
+                    setAiModel: modelId => replaceSelectedModelAt('aiReasoningModels', modelIndex, modelId),
+                    getUnavailableAiModels: () => getUnavailableModelIds('aiReasoningModels', modelIndex),
+                }, `ai-reasoning-model-${modelIndex}`),
         })
         const imageConfigMatrix = createMediaGenerationConfigMatrixView({
             mediaType: 'image',
@@ -487,11 +500,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setSelectedModelIds: (modelIds) => setSelectedModelIds('aiImageModels', modelIds),
             getConfigGroups: () => getConfigSelectionGroups('imageGenerationConfigGroups'),
             setConfigGroups: setImageConfigSelectionGroups,
-            createModelDropdown: modelIndex => options.createImageModelDropdown({
-                getCurrentImageModel: () => getSelectedModelIds('aiImageModels')[modelIndex] ?? '',
-                setImageModel: modelId => replaceSelectedModelAt('aiImageModels', modelIndex, modelId),
-                getUnavailableImageModels: () => getUnavailableModelIds('aiImageModels', modelIndex),
-            }, `ai-image-model-${modelIndex}`),
+            createModelDropdown: modelIndex =>
+                options.createImageModelDropdown({
+                    getCurrentImageModel: () => getSelectedModelIds('aiImageModels')[modelIndex] ?? '',
+                    setImageModel: modelId => replaceSelectedModelAt('aiImageModels', modelIndex, modelId),
+                    getUnavailableImageModels: () => getUnavailableModelIds('aiImageModels', modelIndex),
+                }, `ai-image-model-${modelIndex}`),
         })
         const videoConfigMatrix = createMediaGenerationConfigMatrixView({
             mediaType: 'video',
@@ -499,11 +513,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             setSelectedModelIds: (modelIds) => setSelectedModelIds('aiVideoModels', modelIds),
             getConfigGroups: () => getConfigSelectionGroups('videoGenerationConfigGroups'),
             setConfigGroups: setVideoConfigSelectionGroups,
-            createModelDropdown: modelIndex => options.createVideoModelDropdown({
-                getCurrentVideoModel: () => getSelectedModelIds('aiVideoModels')[modelIndex] ?? '',
-                setVideoModel: modelId => replaceSelectedModelAt('aiVideoModels', modelIndex, modelId),
-                getUnavailableVideoModels: () => getUnavailableModelIds('aiVideoModels', modelIndex),
-            }, `ai-video-model-${modelIndex}`),
+            createModelDropdown: modelIndex =>
+                options.createVideoModelDropdown({
+                    getCurrentVideoModel: () => getSelectedModelIds('aiVideoModels')[modelIndex] ?? '',
+                    setVideoModel: modelId => replaceSelectedModelAt('aiVideoModels', modelIndex, modelId),
+                    getUnavailableVideoModels: () => getUnavailableModelIds('aiVideoModels', modelIndex),
+                }, `ai-video-model-${modelIndex}`),
         })
         const reasoningAddModel = new AddModelButton({
             capability: 'reasoning',
@@ -541,12 +556,6 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                 bottom: 0,
                 left: 0,
             },
-            trackBackgroundColor: settings.slidingSwitch.styles.trackBackgroundColor,
-            indicatorBackgroundColor: settings.slidingSwitch.styles.indicatorBackgroundColor,
-            unselectedOptionColor: settings.slidingSwitch.styles.unselectedOptionColor,
-            hoveredOptionColor: settings.slidingSwitch.styles.hoveredOptionColor,
-            selectedOptionColor: settings.slidingSwitch.styles.selectedOptionColor,
-            indicatorBoxShadow: settings.slidingSwitch.styles.indicatorBoxShadow,
             reshuffleItemsOnValueChange: {
                 enable: true,
                 selectedElementPosition: 'right',
@@ -566,10 +575,12 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             const moduleIds: string[] = []
             const seen = new Set<string>()
             node.descendants(child => {
-                if (child.type.name !== PROMPT_REFERENCE_NODE_TYPE
+                if (
+                    child.type.name !== PROMPT_REFERENCE_NODE_TYPE
                     || child.attrs.referenceType !== 'capability-module'
                     || typeof child.attrs.moduleId !== 'string'
-                    || seen.has(child.attrs.moduleId)) return
+                    || seen.has(child.attrs.moduleId)
+                ) return
                 seen.add(child.attrs.moduleId)
                 moduleIds.push(child.attrs.moduleId)
             })
@@ -580,9 +591,10 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             getModuleIds,
             getPromptText: () => node.textContent,
             getCapabilityInputs: () => parseCapabilityInputsAttr(getNodeAttr(view, getPos, 'capabilityInputs')),
-            setCapabilityInputs: inputs => setNodeAttrs(view, getPos, {
-                capabilityInputs: serializeCapabilityInputsAttr(inputs),
-            }),
+            setCapabilityInputs: inputs =>
+                setNodeAttrs(view, getPos, {
+                    capabilityInputs: serializeCapabilityInputsAttr(inputs),
+                }),
             setValidity: (toolId, valid, message) => {
                 capabilityValidity.set(toolId, { valid, ...(message ? { message } : {}) })
                 syncSubmitValidity()
@@ -597,8 +609,9 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
         let modelMenu: BubbleMenu | null = null
         let modelMenuTrigger: HTMLButtonElement | null = null
         let modelMenuContent: AiModelMenuContentView
-        const getModelOption = (modelId: string) => transformModelsToOptions(aiModelsStore.getData())
-            .find(option => option.aiModel === modelId)
+        const getModelOption = (modelId: string) =>
+            transformModelsToOptions(aiModelsStore.getData())
+                .find(option => option.aiModel === modelId)
         const getModelTitle = (modelId: string): string => {
             const model = getModelOption(modelId)
             return model?.title ?? modelId.split(':').at(-1) ?? modelId
@@ -616,7 +629,9 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             const usesMultipleModels = selectedModelIds.length > 1
             const modelSummary = usesMultipleModels
                 ? 'Using multiple models'
-                : selectedModelIds[0] ? getModelTitle(selectedModelIds[0]) : 'Select model'
+                : selectedModelIds[0]
+                ? getModelTitle(selectedModelIds[0])
+                : 'Select model'
             const selectedModelIcons = usesMultipleModels
                 ? selectedModelIds.flatMap(modelId => getModelOption(modelId)?.icon ?? [])
                 : undefined
@@ -646,7 +661,7 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
                     icon: control.key === 'duration' ? clockIcon : undefined,
                     iconVariant: control.key === 'duration' ? 'clock' : undefined,
                     aspectRatio: (control.key === 'aspectRatio' || control.key === 'imageSize')
-                        && /^\d+:\d+$/.test(value)
+                            && /^\d+:\d+$/.test(value)
                         ? value
                         : undefined,
                 }]
@@ -845,13 +860,15 @@ export function createAiPromptInputNodeView(options: AiPromptInputNodeViewOption
             if (controlsEl.contains(target)) return
             if (modelMenuTrigger?.contains(target)) return
             if (modelMenu?.element.contains(target)) return
-            if (target instanceof Element
+            if (
+                target instanceof Element
                 && target.closest(
                     '.ai-prompt-model-selector-popover, '
-                    + '.sliding-dropdown-scroll-portal, '
-                    + '[data-sliding-dropdown-open="true"], '
-                    + '.sliding-dropdown-group',
-                )) return
+                        + '.sliding-dropdown-scroll-portal, '
+                        + '[data-sliding-dropdown-open="true"], '
+                        + '.sliding-dropdown-group',
+                )
+            ) return
             modelMenu?.hide()
         }
         document.addEventListener('mousedown', handleDocumentMouseDown, true)

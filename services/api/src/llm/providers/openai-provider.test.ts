@@ -1,7 +1,17 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AiModelInferenceCapabilities, ImageReferenceCapabilities } from '@lixpi/constants'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import type {
+    AiModelInferenceCapabilities,
+    ImageReferenceCapabilities,
+} from '@lixpi/constants'
 
 import {
     appendOpenAIImageGenerationReferences,
@@ -105,18 +115,23 @@ const processWithCharacterReferences = async (
             request,
             formData: await request.clone().formData(),
         })
-        return new Response([
-            'event: image_edit.completed',
-            `data: ${JSON.stringify({
-                type: 'image_edit.completed',
-                b64_json: TINY_PNG_BASE64,
-            })}`,
-            '',
-            '',
-        ].join('\n'), {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-        })
+        return new Response(
+            [
+                'event: image_edit.completed',
+                `data: ${
+                    JSON.stringify({
+                        type: 'image_edit.completed',
+                        b64_json: TINY_PNG_BASE64,
+                    })
+                }`,
+                '',
+                '',
+            ].join('\n'),
+            {
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+            },
+        )
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -282,7 +297,7 @@ describe('OpenAIProvider panel-reference ingestion', () => {
     it('forwards synchronized reasoning controls to the Responses API', async () => {
         const provider = new OpenAIProvider('workspace-1:thread-1:reasoning-1', makeDeps())
         const create = vi.fn(async () => ({
-            [Symbol.asyncIterator]: async function* () {
+            [Symbol.asyncIterator]: async function*() {
                 yield {
                     type: 'response.completed',
                     response: { id: 'response-1', output: [] },
@@ -323,12 +338,15 @@ describe('OpenAIProvider panel-reference ingestion', () => {
             aiChatThreadId: 'thread-1',
         })
 
-        expect(create).toHaveBeenCalledWith(expect.objectContaining({
-            model: 'gpt-5.6-sol',
-            reasoning: { effort: 'max', mode: 'pro' },
-            text: { verbosity: 'high' },
-            max_output_tokens: 4096,
-        }), expect.any(Object))
+        expect(create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                model: 'gpt-5.6-sol',
+                reasoning: { effort: 'max', mode: 'pro' },
+                text: { verbosity: 'high' },
+                max_output_tokens: 4096,
+            }),
+            expect.any(Object),
+        )
         expect(create.mock.calls[0]?.[0]).not.toHaveProperty('temperature')
     })
 })

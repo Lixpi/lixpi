@@ -1,6 +1,12 @@
 'use strict'
 
-import { describe, expect, it, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { EditorState } from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { testSchema as schema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
@@ -8,8 +14,6 @@ import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedImageNodeView,
-    getAiGeneratedImageCallbacks,
-    setAiGeneratedImageCallbacks,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedImageNode.ts'
 import AuthService from '$src/services/auth-service.ts'
 
@@ -133,35 +137,6 @@ function createFakeNodeElement(imageData: string, variantIndex: string): HTMLEle
 // =============================================================================
 // callback registry
 // =============================================================================
-
-describe('aiGeneratedImageNode callback registry', () => {
-    it('stores callbacks in a shared module registry', () => {
-        const callbacks = { onImageErrorToCanvas: vi.fn() }
-
-        setAiGeneratedImageCallbacks(callbacks)
-
-        expect(getAiGeneratedImageCallbacks()).toBe(callbacks)
-    })
-
-    it('replaces the entire callback registry when set again', () => {
-        const firstCallbacks = {
-            onImageErrorToCanvas: vi.fn(),
-            onImagePartialToCanvas: vi.fn(),
-        } as any
-        const secondCallbacks = {
-            onImageCompleteToCanvas: vi.fn(),
-        } as any
-
-        setAiGeneratedImageCallbacks(firstCallbacks)
-        setAiGeneratedImageCallbacks(secondCallbacks)
-        const registeredCallbacks = getAiGeneratedImageCallbacks()
-
-        expect(registeredCallbacks).toBe(secondCallbacks)
-        expect(registeredCallbacks).not.toHaveProperty('onImageErrorToCanvas')
-        expect(registeredCallbacks).toHaveProperty('onImageCompleteToCanvas')
-        expect(registeredCallbacks).not.toHaveProperty('onImagePartialToCanvas')
-    })
-})
 
 // =============================================================================
 // aiGeneratedImageNodeView

@@ -1,4 +1,4 @@
-import { html } from '../../dom/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type MediaModelBadgeConfig = {
     providerTitle?: string | null
@@ -43,11 +43,7 @@ export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElemen
             data-help-tooltip="aria-label"
         >
             ${icon ? html`<span className="media-model-badge-icon" innerHTML=${icon}></span>` : null}
-            ${visibleLabel ? html`<span className="media-model-badge-name">${
-                providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null
-            }${separator}${
-                modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null
-            }</span>` : null}
+            ${visibleLabel ? html`<span className="media-model-badge-name">${providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null}${separator}${modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null}</span>` : null}
         </div>
     ` as HTMLElement
 }
@@ -63,7 +59,7 @@ export function applyMediaModelBadgeStyleProperties(
     host: HTMLElement,
     properties: MediaModelBadgeStyleProperties,
 ): void {
-    host.style.setProperty('--workspace-generated-media-chrome-icon-size', properties.iconSize)
+    host.style.setProperty('--canvas-node-footer-icon-size', properties.iconSize)
     host.style.setProperty('--workspace-generated-media-chrome-top-gap', properties.topGap)
     host.style.setProperty('--workspace-media-model-badge-icon-gap', properties.iconGap)
     host.style.setProperty('--workspace-media-model-badge-provider-color', properties.providerColor)

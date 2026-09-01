@@ -1,8 +1,16 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import { MEDIA_POLICY, type MediaKind } from '@lixpi/constants'
+import {
+    MEDIA_POLICY,
+    type MediaKind,
+} from '@lixpi/constants'
 
 const policyByMime: Record<string, { kind: MediaKind; modelSafe: boolean; canonicalMime: string }> = {
     'application/pdf': {

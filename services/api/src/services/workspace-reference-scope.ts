@@ -29,7 +29,8 @@ export const scopeAssetRequesterToWorkspace = (
 export const requesterHasWorkspaceScope = (
     requester: AssetRequesterContext,
     workspace: WorkspaceScope,
-): boolean => requester.workspaceIds.includes(workspace.workspaceId)
+): boolean =>
+    requester.workspaceIds.includes(workspace.workspaceId)
     && requester.organizationIds.includes(workspace.organizationId)
 
 export const createAssetRequesterForWorkspaceUser = (
@@ -54,6 +55,7 @@ export const createAssetRequesterForWorkspaceUser = (
 export const isAssetAvailableInWorkspaceScope = (
     asset: WorkspaceScopedAssetIdentity,
     workspace: WorkspaceScope,
-): boolean => asset.organizationId === workspace.organizationId
+): boolean =>
+    asset.organizationId === workspace.organizationId
     && (asset.scope !== 'workspace' || asset.scopeOwnerId === workspace.workspaceId)
     && (asset.scope !== 'organization' || asset.scopeOwnerId === workspace.organizationId)

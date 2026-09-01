@@ -1,33 +1,37 @@
 // @ts-nocheck
 'use strict'
 
-import { EditorState } from "prosemirror-state"
-import { EditorView } from "prosemirror-view"
-import { DOMParser } from "prosemirror-model"
+import { EditorState } from 'prosemirror-state'
+import { EditorView } from 'prosemirror-view'
+import { DOMParser } from 'prosemirror-model'
 import {
     DOCUMENT_TYPE,
     aiChatThreadNodeType,
     aiPromptInputNodeType,
-    createProseMirrorSchema
+    createProseMirrorSchema,
 } from '@lixpi/prosemirror'
-import { keymap } from "prosemirror-keymap"
-import { history } from "prosemirror-history"
-import { baseKeymap } from "prosemirror-commands"
-import { dropCursor } from "prosemirror-dropcursor"
-import { gapCursor } from "prosemirror-gapcursor"
+import { keymap } from 'prosemirror-keymap'
+import { history } from 'prosemirror-history'
+import { baseKeymap } from 'prosemirror-commands'
+import { dropCursor } from 'prosemirror-dropcursor'
+import { gapCursor } from 'prosemirror-gapcursor'
 
 // Plugins
 import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import focusPlugin from '$src/components/proseMirror/plugins/focusPlugin.js'
 import lockCursorPositionPlugin from '$src/components/proseMirror/plugins/lockCursorPositionPlugin.js'
 import {
-    createAiChatThreadPlugin
+    createAiChatThreadPlugin,
+    type AiChatStreamObserver,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin'
 import {
-    createAiPromptInputPlugin
+    createAiPromptInputPlugin,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin'
-import { createCodeBlockPlugin, codeBlockInputRule } from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
-import { activeNodePlugin } from "$src/components/proseMirror/plugins/activeNodePlugin"
+import {
+    createCodeBlockPlugin,
+    codeBlockInputRule,
+} from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
+import { activeNodePlugin } from '$src/components/proseMirror/plugins/activeNodePlugin'
 
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
@@ -36,11 +40,11 @@ import {
     createAtPromptReferencePickerPlugin,
     createPromptReferenceNodeViewPlugin,
     createSlashCapabilityModulePickerPlugin,
-    type PromptReferencePreviewRenderer,
 } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
-import {buildKeymap} from "$src/components/proseMirror/components/keyMap.js"
-import {buildInputRules} from "$src/components/proseMirror/components/inputRules.js"
+import { buildKeymap } from '$src/components/proseMirror/components/keyMap.js'
+import { buildInputRules } from '$src/components/proseMirror/components/inputRules.js'
 import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
 
 type ProseMirrorEditorConfig = {
@@ -52,6 +56,7 @@ type ProseMirrorEditorConfig = {
     threadId?: string | null
     onEditorChange?: (value: any) => void
     onStreamingUpdate?: (value: any) => void
+    onStreamEvent?: AiChatStreamObserver
     onAiChatSubmit?: (value: any) => void
     onAiChatStop?: (value: any) => void
     onPromptSubmit?: (value: any) => void
@@ -69,6 +74,7 @@ type ProseMirrorEditorConfig = {
 
 export class ProseMirrorEditor {
     editorView!: EditorView
+    private readonly onStreamEvent?: AiChatStreamObserver
     editorSchema: any = null
     proseMirrorAuthority: ProseMirrorAuthorityService | null = null
 
@@ -81,6 +87,7 @@ export class ProseMirrorEditor {
         threadId,
         onEditorChange,
         onStreamingUpdate,
+        onStreamEvent,
         onAiChatSubmit,
         onAiChatStop,
         onPromptSubmit,
@@ -93,10 +100,11 @@ export class ProseMirrorEditor {
         aiChatThreadRenderContext,
         schema,
         plugins = [],
-        enablePromptReferences = false
+        enablePromptReferences = false,
     }: ProseMirrorEditorConfig) {
         this.onEditorChange = onEditorChange
         this.onStreamingUpdate = onStreamingUpdate
+        this.onStreamEvent = onStreamEvent
         this.onAiChatSubmit = onAiChatSubmit
         this.onAiChatStop = onAiChatStop
         this.onPromptSubmit = onPromptSubmit
@@ -127,10 +135,10 @@ export class ProseMirrorEditor {
 
         this.editorView = new EditorView(editorMountElement, {
             state: EditorState.create({
-                doc: initialDocContent,    // initialVal is the initial content of the editor
-                plugins: this.createPlugins(initialVal, isDisabled)
+                doc: initialDocContent, // initialVal is the initial content of the editor
+                plugins: this.createPlugins(initialVal, isDisabled),
             }),
-            editable: () => this.isEditorEditable()
+            editable: () => this.isEditorEditable(),
         })
 
         if (this.proseMirrorAuthorityOptions) {
@@ -196,7 +204,7 @@ export class ProseMirrorEditor {
                     initialValue,
                     this.dispatchStateChange.bind(this),
                     this.dispatchStreamingUpdate.bind(this),
-                    this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null
+                    this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null,
                 ),
                 focusPlugin(this.updateEditorFocusState.bind(this)),
                 createPromptReferenceNodeViewPlugin(this.promptReferencePreviewRenderer),
@@ -216,7 +224,7 @@ export class ProseMirrorEditor {
                 initialValue,
                 this.dispatchStateChange.bind(this),
                 this.dispatchStreamingUpdate.bind(this),
-                this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null
+                this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null,
             ),
             focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
@@ -248,8 +256,9 @@ export class ProseMirrorEditor {
                     },
                     stopAiRequestHandler: val => this.onAiChatStop(val),
                     onReceivingStateChange: this.onReceivingStateChange,
-                    renderContext: this.aiChatThreadRenderContext
-                })
+                    onStreamEvent: this.onStreamEvent,
+                    renderContext: this.aiChatThreadRenderContext,
+                }),
             )
         }
 
@@ -279,8 +288,8 @@ export class ProseMirrorEditor {
                     createVideoDurationDropdown: this.promptControlFactories?.createVideoDurationDropdown,
                     createSubmitButton: this.promptControlFactories?.createSubmitButton,
                     createCapabilityControls: this.promptControlFactories?.createCapabilityControls,
-                    placeholderText: 'Talk to me...'
-                })
+                    placeholderText: 'Talk to me...',
+                }),
             )
         }
 
@@ -303,7 +312,7 @@ export class ProseMirrorEditor {
     }
 
     updateEditorFocusState(focusedState) {
-        if (!this.editorView) { return }
+        if (!this.editorView) return
         this.editorView.setProps({ editable: () => this.isEditorEditable() })
     }
 

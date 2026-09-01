@@ -1,8 +1,8 @@
-import { html } from '../../dom/domTemplates.ts'
-import { infoLetterIcon } from '../../svg/svgIcons.ts'
+import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     createProgressRippleIcon,
     type ProgressRippleIconInstance,
+    type ProgressRippleArtwork,
 } from '../progressTimeline/progressRippleIcon.ts'
 
 export type CanvasNodeFooterSection = {
@@ -16,6 +16,8 @@ export type CanvasNodeFooterState = {
 }
 
 export type CanvasNodeFooterConfig = CanvasNodeFooterState & {
+    document?: Document
+    icons: { info: string; progress: ProgressRippleArtwork }
     infoLabel: string
     infoTitle?: string
     progressLabel?: string
@@ -33,6 +35,7 @@ export type CanvasNodeFooterInstance = {
 }
 
 class CanvasNodeFooter implements CanvasNodeFooterInstance {
+    private readonly html: ReturnType<typeof createDocumentHtml>
     readonly element: HTMLDivElement
 
     private readonly infoButton: HTMLButtonElement
@@ -40,8 +43,11 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
     private readonly progressRipple: ProgressRippleIconInstance
     private progressActive = false
 
-    constructor(config: CanvasNodeFooterConfig) {
+    constructor(private readonly config: CanvasNodeFooterConfig) {
+        const html = this.html = createDocumentHtml(config.document ?? document)
         this.progressRipple = createProgressRippleIcon({
+            document: config.document,
+            artwork: config.icons.progress,
             className: 'canvas-node-footer-progress-ripple',
         })
         this.infoButton = html`
@@ -51,7 +57,7 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
                 aria-label=${config.infoLabel}
                 data-help-tooltip=${config.infoTitle ?? 'aria-label'}
             >
-                <span className="canvas-node-footer-info-icon" innerHTML=${infoLetterIcon}></span>
+                <span className="canvas-node-footer-info-icon" innerHTML=${config.icons.info}></span>
             </button>
         ` as HTMLButtonElement
         this.progressButton = html`
@@ -69,13 +75,8 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
             </div>
         ` as HTMLDivElement
 
-        const openDetails = (event: MouseEvent): void => {
-            event.preventDefault()
-            event.stopPropagation()
-            config.onOpenDetails()
-        }
-        this.infoButton.addEventListener('click', openDetails)
-        this.progressButton.addEventListener('click', openDetails)
+        this.infoButton.addEventListener('click', this.openDetails)
+        this.progressButton.addEventListener('click', this.openDetails)
         this.appendSections(config.sections ?? [])
         this.update(config)
     }
@@ -93,11 +94,14 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
     }
 
     destroy(): void {
+        this.infoButton.removeEventListener('click', this.openDetails)
+        this.progressButton.removeEventListener('click', this.openDetails)
         this.progressRipple.destroy()
         this.element.remove()
     }
 
     private appendSections(sections: readonly CanvasNodeFooterSection[]): void {
+        const html = this.html
         for (const section of sections) {
             const elements = section.elements.filter((element): element is HTMLElement => Boolean(element))
             if (elements.length === 0) continue
@@ -108,6 +112,12 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
             }
             this.element.append(...elements)
         }
+    }
+
+    private openDetails = (event: MouseEvent): void => {
+        event.preventDefault()
+        event.stopPropagation()
+        this.config.onOpenDetails()
     }
 }
 

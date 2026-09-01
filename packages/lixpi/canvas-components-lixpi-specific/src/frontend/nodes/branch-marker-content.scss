@@ -1,0 +1,555 @@
+@import '@lixpi/ui-primitives/styles/transitions';
+
+@import './branch-reference-resolution.scss';
+
+.workspace-branch-marker-review-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--canvas-node-footer-icon-size, 34px);
+    height: var(--canvas-node-footer-icon-size, 34px);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--canvas-node-footer-color, #4d5963);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: hoverTransition(color, $defaultHoverTransitionDuration);
+
+    &:hover:not(:disabled) {
+        color: var(--canvas-node-footer-hover-color, #181e23);
+        background: transparent;
+    }
+
+    &:disabled {
+        cursor: wait;
+        opacity: 0.5;
+    }
+
+    &:focus-visible {
+        outline: 1px solid currentColor;
+        outline-offset: 2px;
+    }
+}
+
+.workspace-branch-marker-review-action-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 85.7143%;
+    height: 85.7143%;
+    pointer-events: none;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+}
+
+.workspace-branch-marker-review-action.is-accept .workspace-branch-marker-review-action-icon {
+    width: 88%;
+    height: 88%;
+}
+
+.workspace-branch-marker-content {
+    position: relative;
+    z-index: 16;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 7px 18px;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-content.has-stop-control {
+    padding-right: 52px;
+}
+
+.workspace-branch-marker-content.has-progress {
+    --workspace-branch-marker-progress-corner-radius: 40px;
+    --workspace-branch-marker-section-gap: 9px;
+
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    align-items: flex-start;
+    width: calc(100% + 2px);
+    height: auto;
+    min-height: 0;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border: 1px solid var(--workspace-branch-origin-border-color);
+    border-radius: var(--workspace-branch-marker-progress-corner-radius);
+    background: var(--workspace-branch-origin-background-color);
+    box-shadow: var(--workspace-branch-origin-box-shadow);
+}
+
+.workspace-branch-marker-content.has-progress.has-stop-control {
+    padding-right: 18px;
+}
+
+.workspace-branch-marker-content.has-progress.has-stop-control > .workspace-branch-marker-main > .workspace-branch-marker-message {
+    padding-right: 34px;
+}
+
+.workspace-branch-marker-content.has-progress .workspace-branch-marker-separator {
+    margin: var(--workspace-branch-marker-section-gap) auto;
+}
+
+.workspace-branch-origin-node:has(> .workspace-branch-marker-content.has-progress),
+.workspace-branch-fork-node:has(> .workspace-branch-marker-content.has-progress),
+.workspace-branch-line-node:has(> .workspace-branch-marker-content.has-progress) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+.workspace-branch-marker-content.has-progress .workspace-branch-marker-main {
+    width: 100%;
+}
+
+.workspace-branch-marker-content.has-progress .workspace-branch-marker-media-models {
+    top: var(--workspace-branch-marker-header-center, 50%);
+}
+
+
+.workspace-branch-marker-spinner {
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: rgba(255, 255, 255, 0.86);
+    border-radius: 50%;
+    animation: workspace-branch-marker-spin 0.8s linear infinite;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-stop-control {
+    position: absolute;
+    // The marker's transparent drag/details overlay owns all other node clicks.
+    // Keep only this control above it so its hit target survives canvas handoff.
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    right: 14px;
+    top: 50%;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    appearance: none;
+    background: none;
+    box-shadow: none;
+    color: inherit;
+    cursor: pointer;
+    pointer-events: auto;
+    transform: translateY(-50%);
+}
+
+.workspace-branch-marker-stop-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    transition: hoverTransition(transform, $defaultHoverTransitionDuration);
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+
+    svg * {
+        fill: currentColor;
+    }
+}
+
+.workspace-branch-marker-stop-control:hover {
+    background: none;
+    box-shadow: none;
+    color: inherit;
+
+    .workspace-branch-marker-stop-icon {
+        transform: scale(1.08);
+    }
+}
+
+.workspace-branch-marker-stop-control:focus-visible {
+    outline: 1px solid currentColor;
+    outline-offset: 2px;
+}
+
+.workspace-branch-marker-review-controls {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 8px);
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: auto;
+    transform: scale(var(--workspace-branch-marker-review-zoom-scale, 1));
+    transform-origin: top right;
+}
+
+.workspace-branch-marker-review-action {
+    width: 30px;
+    height: 30px;
+}
+
+.workspace-branch-marker-regeneration-dropdown {
+    width: 30px;
+    height: 30px;
+    color: var(--canvas-node-footer-color, #4d5963);
+    transition: hoverTransition(color, $defaultHoverTransitionDuration);
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu,
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button {
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+    background: transparent;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .selected-option-icon,
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .title {
+    display: none;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button .state-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 85.7143%;
+    height: 85.7143%;
+    margin-left: 0;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-regeneration-dropdown.dropdown-menu-tag-pill-wrapper .dots-dropdown-menu > button .state-indicator svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.workspace-branch-marker-regeneration-dropdown:hover:not(:has(button:disabled)) {
+    color: var(--canvas-node-footer-hover-color, #181e23);
+}
+
+.workspace-branch-marker-regeneration-dropdown:has(button:disabled) {
+    cursor: wait;
+    opacity: 0.5;
+}
+
+@keyframes workspace-branch-marker-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.workspace-branch-marker-media-models {
+    position: absolute;
+    left: calc(100% + var(--workspace-branch-marker-media-model-main-gap, 10px));
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--workspace-branch-marker-media-model-stack-gap, 6px);
+    box-sizing: border-box;
+    pointer-events: auto;
+}
+
+.workspace-branch-marker-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    gap: 0;
+    overflow: visible;
+}
+
+.workspace-branch-marker-separator {
+    width: 92%;
+    height: 1px;
+    margin: 3px auto;
+    background: var(
+        --canvas-node-footer-separator-gradient,
+        linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.18) 10%, rgba(255, 255, 255, 0.34) 26%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0.34) 74%, rgba(255, 255, 255, 0.18) 90%, rgba(255, 255, 255, 0) 100%)
+    );
+    border-radius: 999px;
+}
+
+.workspace-branch-marker-response {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0 2px;
+    color: currentColor;
+    font-size: var(--workspace-branch-marker-response-font-size, 16px);
+    font-weight: 500;
+    line-height: var(--workspace-branch-marker-response-line-height, 1.15);
+    min-height: 1.12em;
+    opacity: 0.72;
+    overflow: visible;
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-response.is-enhancing {
+    opacity: 0.92;
+}
+
+.workspace-branch-marker-response-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 13px;
+    width: 13px;
+    height: 13px;
+    color: currentColor;
+    overflow: hidden;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+
+    svg * {
+        fill: currentColor;
+    }
+}
+
+.workspace-branch-marker-response-spinner {
+    flex: 0 0 13px;
+    width: 13px;
+    height: 13px;
+}
+
+.workspace-branch-marker-response-text {
+    display: block;
+    flex: 1 1 auto;
+    line-height: inherit;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding-block: 1px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-message {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    max-width: 100%;
+    min-width: 0;
+    color: currentColor;
+    font-size: var(--workspace-branch-marker-message-font-size, 16px);
+    font-weight: 700;
+    gap: 7px;
+    line-height: var(--workspace-branch-marker-message-line-height, 1.14);
+    min-height: 1.16em;
+    opacity: 0.94;
+    overflow: visible;
+    padding: 0 2px;
+    text-align: left;
+}
+
+.workspace-branch-marker-message.is-pending {
+    opacity: 0.96;
+}
+
+.workspace-branch-marker-message-text .prompt-reference-chip {
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.workspace-branch-marker-message-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    color: currentColor;
+    overflow: hidden;
+
+    svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+
+    svg * {
+        fill: currentColor;
+    }
+}
+
+.workspace-branch-marker-reasoning-icon {
+    pointer-events: none;
+}
+
+.workspace-branch-marker-media-model-icon {
+    margin-top: 0;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-media-model-circle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--workspace-branch-marker-media-model-circle-size, 36px);
+    height: var(--workspace-branch-marker-media-model-circle-size, 36px);
+    box-sizing: border-box;
+    color: var(--workspace-branch-marker-media-model-icon-color, #42494f);
+    border-radius: 50%;
+    background-color: var(--workspace-branch-marker-media-model-circle-background-color, transparent);
+    background-image: none;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    border: none;
+    box-shadow: var(
+        --workspace-branch-marker-media-model-circle-box-shadow,
+        inset 0 1px 1px rgba(255, 255, 255, 0.1),
+        inset 0 -4px 8px rgba(3, 7, 11, 0.07),
+        0 7px 18px rgba(18, 24, 31, 0.16)
+    );
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-media-model-texture {
+    position: absolute;
+    inset: var(--workspace-branch-marker-media-model-texture-inset, 5px);
+    z-index: 0;
+    border-radius: 50%;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: var(--workspace-branch-marker-media-model-texture-background-size, 142% 142%);
+    opacity: var(--workspace-branch-marker-media-model-texture-opacity, 0.82);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.workspace-branch-marker-media-model-circle .workspace-branch-marker-message-icon {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 var(--workspace-branch-marker-media-model-icon-size, 16px);
+    width: var(--workspace-branch-marker-media-model-icon-size, 16px);
+    height: var(--workspace-branch-marker-media-model-icon-size, 16px);
+}
+
+.workspace-branch-marker-media-models .workspace-branch-marker-reasoning-tooltip,
+.workspace-branch-marker-media-models .workspace-branch-marker-reasoning-tooltip-trigger {
+    margin-top: 0;
+}
+
+.workspace-branch-marker-reasoning-tooltip {
+    --help-tooltip-width: max-content;
+    --help-tooltip-max-width: min(220px, calc(100vw - 48px));
+    --help-tooltip-padding: 4px 8px;
+    --help-tooltip-background: rgba(46, 51, 56, 0.96);
+    --help-tooltip-border: 1px solid rgba(255, 255, 255, 0.14);
+    --help-tooltip-border-radius: 5px;
+    --help-tooltip-box-shadow: 0 8px 24px rgba(17, 24, 31, 0.22);
+    --help-tooltip-color: #f7f9fb;
+    --help-tooltip-font-size: 11px;
+    --help-tooltip-font-weight: 600;
+    --help-tooltip-line-height: 1.2;
+    --help-tooltip-offset: 7px;
+    --help-tooltip-trigger-focus-outline: 1px solid rgba(255, 255, 255, 0.72);
+    --help-tooltip-trigger-focus-outline-offset: 2px;
+    --help-tooltip-content-z-index: 10150;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    pointer-events: auto;
+
+    .workspace-branch-marker-message-icon {
+        margin-top: 0;
+    }
+}
+
+.workspace-branch-marker-reasoning-tooltip-trigger {
+    width: 14px;
+    height: 14px;
+    color: currentColor;
+    pointer-events: auto;
+}
+
+.workspace-branch-marker-reasoning-tooltip-content {
+    white-space: nowrap;
+}
+
+.workspace-branch-marker-media-model-tooltip {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+}
+
+.workspace-branch-marker-media-model-tooltip-trigger {
+    width: 36px;
+    height: 36px;
+}
+
+.workspace-branch-marker-message-text {
+    display: -webkit-box;
+    flex: 1 1 auto;
+    line-height: inherit;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding-block: 1px;
+    text-overflow: ellipsis;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}

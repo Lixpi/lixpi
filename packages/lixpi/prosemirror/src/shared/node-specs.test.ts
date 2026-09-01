@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import { createProseMirrorSchema, DOCUMENT_TYPE } from './schema-builder.ts'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from './schema-builder.ts'
 import {
     aiGeneratedImageNodeSpec,
     aiGeneratedVideoNodeSpec,
@@ -60,17 +67,17 @@ describe('aiPromptInputNodeSpec', () => {
     it('normalizes parseDOM booleans independently of config groups', () => {
         const parseRule = aiPromptInputNodeSpec.parseDOM![0]
         const node = parseRule.getAttrs!(fakeDom({
-            'data-ai-reasoning-models': '[\"r1\", \"r1\", \"\"]',
+            'data-ai-reasoning-models': '["r1", "r1", ""]',
             'data-use-multiple-reasoning-models': 'true',
             'data-use-multiple-image-models': 'false',
             'data-use-multiple-video-models': 'true',
-            'data-ai-image-models': '[\"img\", \"\", \"img\"]',
-            'data-ai-video-models': '[\"video\"]',
+            'data-ai-image-models': '["img", "", "img"]',
+            'data-ai-video-models': '["video"]',
             'data-reasoning-generation-config-groups': '[{"groupId":"effort","modelIds":["r1"]}]',
             'data-video-resolution': '720p',
             'data-image-generation-size': 'auto',
-            'data-image-generation-config-groups': '[{\"groupId\":\"size\",\"modelIds\":[\"x\",\"y\"]}]',
-            'data-video-generation-config-groups': '[{\"groupId\":\"fps\",\"modelIds\":[\"v1\"]}]',
+            'data-image-generation-config-groups': '[{"groupId":"size","modelIds":["x","y"]}]',
+            'data-video-generation-config-groups': '[{"groupId":"fps","modelIds":["v1"]}]',
         }))
 
         expect(node).toMatchObject({
@@ -112,7 +119,7 @@ describe('aiUserMessageNodeSpec', () => {
         const parsed = parseRule.getAttrs!(fakeDom({
             'data-id': 'msg-1',
             'data-created-at': '42',
-            'data-reference-node-ids': '[\"a\",\"a\",\"\",\"b\",\" \"]',
+            'data-reference-node-ids': '["a","a","","b"," "]',
         })) as Record<string, any>
 
         expect(parsed).toEqual({

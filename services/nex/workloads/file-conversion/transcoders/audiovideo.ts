@@ -1,11 +1,17 @@
 'use strict'
 
-import { writeFile, readFile } from 'node:fs/promises'
+import {
+    writeFile,
+    readFile,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { warn } from '@lixpi/debug-tools'
 
-import { runProcess, withTempDir } from './run-process.ts'
+import {
+    runProcess,
+    withTempDir,
+} from './run-process.ts'
 
 // Transcode exotic audio/video to a model-safe canonical container. Audio →
 // MP3; video → faststart H.264/AAC MP4. The target is the policy table's
@@ -29,10 +35,19 @@ export const transcodeAudioVideo = async (buffer: Buffer, canonicalMime: string)
             case 'video/mp4':
                 outPath = join(dir, 'out.mp4')
                 args = [
-                    '-y', '-i', inPath,
-                    '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
-                    '-c:a', 'aac',
-                    '-movflags', '+faststart',
+                    '-y',
+                    '-i',
+                    inPath,
+                    '-c:v',
+                    'libx264',
+                    '-preset',
+                    'fast',
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:a',
+                    'aac',
+                    '-movflags',
+                    '+faststart',
                     outPath,
                 ]
                 break
@@ -60,8 +75,17 @@ const extractFrameFromVideo = async (videoBuffer: Buffer, atSeconds?: number): P
                 : []
 
             await runProcess('ffmpeg', [
-                '-y', ...seekArgs, '-i', inPath,
-                '-frames:v', '1', '-f', 'image2', '-c:v', 'png', outPath,
+                '-y',
+                ...seekArgs,
+                '-i',
+                inPath,
+                '-frames:v',
+                '1',
+                '-f',
+                'image2',
+                '-c:v',
+                'png',
+                outPath,
             ])
             return readFile(outPath)
         })
@@ -72,13 +96,11 @@ const extractFrameFromVideo = async (videoBuffer: Buffer, atSeconds?: number): P
 }
 
 // Frame 0 of a video, used as the PIXI low-LoD poster.
-export const extractPosterFrame = async (videoBuffer: Buffer): Promise<Buffer | null> =>
-    extractFrameFromVideo(videoBuffer)
+export const extractPosterFrame = async (videoBuffer: Buffer): Promise<Buffer | null> => extractFrameFromVideo(videoBuffer)
 
 // A frame near the temporal middle of the clip — the still the branch resolver
 // grounds the video against and that VEO uses as the image-to-video anchor.
-export const extractRepresentativeFrame = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> =>
-    extractFrameFromVideo(videoBuffer, atSeconds)
+export const extractRepresentativeFrame = async (videoBuffer: Buffer, atSeconds?: number): Promise<Buffer | null> => extractFrameFromVideo(videoBuffer, atSeconds)
 
 // Probe a media buffer for duration / dimensions via ffprobe. Best-effort —
 // returns nulls when ffprobe is unavailable or the stream can't be read.
@@ -129,11 +151,25 @@ export const createVideoPreview = async (buffer: Buffer): Promise<Buffer> =>
         const outPath = join(dir, 'preview.mp4')
         await writeFile(inPath, buffer)
         await runProcess('ffmpeg', [
-            '-y', '-i', inPath,
-            '-vf', 'scale=w=min(1280\\,iw):h=-2',
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '26', '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac', '-b:a', '128k',
-            '-movflags', '+faststart',
+            '-y',
+            '-i',
+            inPath,
+            '-vf',
+            'scale=w=min(1280\\,iw):h=-2',
+            '-c:v',
+            'libx264',
+            '-preset',
+            'fast',
+            '-crf',
+            '26',
+            '-pix_fmt',
+            'yuv420p',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '128k',
+            '-movflags',
+            '+faststart',
             outPath,
         ], { timeoutMs: 300000 })
         return readFile(outPath)

@@ -21,7 +21,10 @@ import {
     CapabilityActionRegistry,
 } from './capability-action-registry.ts'
 import { validateCapabilityManifest } from '../shared/capability-validation.ts'
-import { CapabilityError, isCapabilityError } from '../shared/capability-errors.ts'
+import {
+    CapabilityError,
+    isCapabilityError,
+} from '../shared/capability-errors.ts'
 import { validateJsonSchemaValue } from '../shared/capability-json-schema.ts'
 import { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
 import { CapabilityDagRunner } from './capability-dag-runner.ts'
@@ -223,14 +226,16 @@ export class CapabilityWorkflowRunner {
 
                 if (executable.length === 0) continue
                 await persistRun({ currentStepIds: executable.map(step => step.stepId) })
-                const executions = executable.map(step => this.executeStep({
-                    step,
-                    run,
-                    request,
-                    bindingContext,
-                    emit,
-                    getRunEvents: () => Object.freeze(runEvents.map(event => Object.freeze(structuredClone(event)))),
-                }))
+                const executions = executable.map(step =>
+                    this.executeStep({
+                        step,
+                        run,
+                        request,
+                        bindingContext,
+                        emit,
+                        getRunEvents: () => Object.freeze(runEvents.map(event => Object.freeze(structuredClone(event)))),
+                    })
+                )
                 const results = await Promise.all(executions)
                 let firstFailure: StepExecutionResult | undefined
 

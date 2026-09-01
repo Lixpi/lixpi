@@ -1,7 +1,15 @@
-import { access, readdir, readFile } from 'node:fs/promises'
+import {
+    access,
+    readdir,
+    readFile,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 async function listTypeScriptFiles(directory: string): Promise<string[]> {
     const entries = await readdir(directory, { withFileTypes: true })

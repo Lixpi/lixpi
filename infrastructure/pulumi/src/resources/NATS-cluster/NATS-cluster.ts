@@ -6,11 +6,11 @@ import * as pulumi from '@pulumi/pulumi'
 
 import {
     buildDockerImage,
-    type DockerImageBuildResult
+    type DockerImageBuildResult,
 } from '../../helpers/docker/build-helpers.ts'
 import { createServiceDiscoverySidecar } from './nats-service-discovery-sidecar.ts'
 import {
-    type CertificateHelper
+    type CertificateHelper,
 } from '../certificate-manager/certificate-helper.ts'
 import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
@@ -28,10 +28,10 @@ export type NatsClusterServiceArgs = {
     cloudMapNamespaceName: string
 
     // Route53 configuration for public client access
-    parentHostedZoneId: pulumi.Input<string>  // The main domain hosted zone ID for Route53 records
-    natsRecordName: string  // e.g., "nats.shelby-dev.lixpi.dev"
+    parentHostedZoneId: pulumi.Input<string> // The main domain hosted zone ID for Route53 records
+    natsRecordName: string // e.g., "nats.shelby-dev.lixpi.dev"
 
-    ecsCluster: {  // Add back ECS cluster - Fargate tasks can run on any cluster
+    ecsCluster: { // Add back ECS cluster - Fargate tasks can run on any cluster
         id: pulumi.Output<string>
         arn: pulumi.Output<string>
         name: pulumi.Output<string>
@@ -91,9 +91,9 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         publicSubnets,
         privateSubnets,
         serviceName = 'nats',
-        clientPort = 4222,           // Client connections
-        httpManagementPort = 8222,   // HTTP management/info
-        clusterRoutingPort = 6222,   // Cluster routing
+        clientPort = 4222, // Client connections
+        httpManagementPort = 8222, // HTTP management/info
+        clusterRoutingPort = 6222, // Cluster routing
         cpu = 256,
         memory = 512,
         minCount = 1,
@@ -103,7 +103,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         certificateHelper,
         dockerBuildContext,
         dockerfilePath,
-        dependencies = [],  // Extract dependencies with empty default
+        dependencies = [], // Extract dependencies with empty default
     } = args
 
     // Pure CloudMap approach - no load balancers ever!
@@ -117,24 +117,24 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         push: true,
         buildOnPreview: true,
         noCache: true,
-    }) as DockerImageBuildResult;
+    }) as DockerImageBuildResult
 
     // Create PRIVATE CloudMap service for internal cluster communication
     const privateDiscoveryService = new aws.servicediscovery.Service(`${serviceName}-private-discovery`, {
-        name: "nats",
+        name: 'nats',
         namespaceId: cloudMapNamespace.id,
         dnsConfig: {
             namespaceId: cloudMapNamespace.id,
             dnsRecords: [{
                 ttl: 10,
-                type: "A",
+                type: 'A',
             }],
-            routingPolicy: "MULTIVALUE",
+            routingPolicy: 'MULTIVALUE',
         },
         healthCheckCustomConfig: {
             failureThreshold: 1,
         },
-    });
+    })
 
     // Create Lambda service discovery sidecar to manage Route53 public DNS records
     // This MUST be created before the ECS service to handle task state changes
@@ -149,7 +149,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         memorySize: 512,
         dockerBuildContext: '/usr/src/service/infrastructure/pulumi/src/resources/NATS-cluster/nats-service-discovery-sidecar',
         dockerfilePath: '/usr/src/service/infrastructure/pulumi/src/resources/NATS-cluster/nats-service-discovery-sidecar/Dockerfile',
-    });
+    })
 
     // ECS Task Execution Role - used by ECS agent
     const executionRole = new aws.iam.Role(`${serviceName}-exec-role`, {
@@ -175,7 +175,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
     new aws.iam.RolePolicyAttachment(`${serviceName}-ecr-policy`, {
         role: executionRole.name,
         policyArn: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly',
-    });
+    })
 
     // ECS Task Role - used by the containers
     const taskRole = new aws.iam.Role(`${serviceName}-task-role`, {
@@ -220,14 +220,16 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         }],
     })
     const backupPolicy = new aws.iam.Policy(`${serviceName}-backup-policy`, {
-        policy: backupBucket.arn.apply((bucketArn) => JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [{
-                Effect: 'Allow',
-                Action: ['s3:GetObject', 's3:ListBucket', 's3:PutObject'],
-                Resource: [bucketArn, `${bucketArn}/*`],
-            }],
-        })),
+        policy: backupBucket.arn.apply((bucketArn) =>
+            JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Effect: 'Allow',
+                    Action: ['s3:GetObject', 's3:ListBucket', 's3:PutObject'],
+                    Resource: [bucketArn, `${bucketArn}/*`],
+                }],
+            })
+        ),
     })
     new aws.iam.RolePolicyAttachment(`${serviceName}-backup-policy-attachment`, {
         role: taskRole.name,
@@ -283,14 +285,16 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         { name: 'websocket', fromPort: 443, toPort: 443, cidrBlocks: ['0.0.0.0/0'] },
         { name: 'management', fromPort: httpManagementPort, toPort: httpManagementPort, cidrBlocks: [vpc.cidrBlock] },
         { name: 'routing', fromPort: clusterRoutingPort, toPort: clusterRoutingPort, cidrBlocks: [vpc.cidrBlock] },
-    ].map((rule) => new aws.ec2.SecurityGroupRule(`${serviceName}-${rule.name}-ingress`, {
-        type: 'ingress',
-        securityGroupId: ec2SecurityGroup.id,
-        protocol: 'tcp',
-        fromPort: rule.fromPort,
-        toPort: rule.toPort,
-        cidrBlocks: rule.cidrBlocks,
-    }))
+    ].map((rule) =>
+        new aws.ec2.SecurityGroupRule(`${serviceName}-${rule.name}-ingress`, {
+            type: 'ingress',
+            securityGroupId: ec2SecurityGroup.id,
+            protocol: 'tcp',
+            fromPort: rule.fromPort,
+            toPort: rule.toPort,
+            cidrBlocks: rule.cidrBlocks,
+        })
+    )
 
     // Create CloudWatch Log Group for Container
     const logGroup = new aws.cloudwatch.LogGroup(`${serviceName}-logs`, {
@@ -385,7 +389,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
                     },
                     {
                         name: 'NATS_WEBSOCKET_NO_TLS',
-                        value: 'false' // For AWS deployment: TLS enabled (no_tls: false)
+                        value: 'false', // For AWS deployment: TLS enabled (no_tls: false)
                     },
                     {
                         name: 'DOMAIN_NAME',
@@ -401,7 +405,8 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
                 // Use CloudMap as seed server - nodes will attempt to connect to the CloudMap DNS
                 // NATS is smart enough to handle self-connections and will discover other nodes through gossip
                 command: [
-                    "--routes", `nats://sys:${environment.NATS_SYS_USER_PASSWORD}@nats.${cloudMapNamespaceName}:6222`
+                    '--routes',
+                    `nats://sys:${environment.NATS_SYS_USER_PASSWORD}@nats.${cloudMapNamespaceName}:6222`,
                 ],
                 logConfiguration: {
                     logDriver: 'awslogs',
@@ -409,7 +414,7 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
                         'awslogs-group': logGroupName,
                         'awslogs-region': aws.config.region,
                         'awslogs-stream-prefix': 'ecs',
-                        'awslogs-create-group': 'true'
+                        'awslogs-create-group': 'true',
                     },
                 },
                 healthCheck: {
@@ -437,29 +442,31 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
             imageReference,
             bucketName,
             logGroupName,
-        ]) => JSON.stringify([{
-            name: 'nats-backup',
-            image: imageReference,
-            essential: true,
-            cpu: 128,
-            memory: 256,
-            entryPoint: ['/opt/nats/backup-streams.sh'],
-            environment: [
-                { name: 'NATS_BACKUP_BUCKET', value: bucketName },
-                { name: 'NATS_BACKUP_PREFIX', value: 'jetstream' },
-                { name: 'NATS_URL', value: `tls://nats.${cloudMapNamespaceName}:${clientPort}` },
-                { name: 'NATS_SYS_USER', value: 'regular_user' },
-                { name: 'NATS_SYS_PASSWORD', value: environment.NATS_REGULAR_USER_PASSWORD },
-            ],
-            logConfiguration: {
-                logDriver: 'awslogs',
-                options: {
-                    'awslogs-group': logGroupName,
-                    'awslogs-region': aws.config.region,
-                    'awslogs-stream-prefix': 'backup',
+        ]) =>
+            JSON.stringify([{
+                name: 'nats-backup',
+                image: imageReference,
+                essential: true,
+                cpu: 128,
+                memory: 256,
+                entryPoint: ['/opt/nats/backup-streams.sh'],
+                environment: [
+                    { name: 'NATS_BACKUP_BUCKET', value: bucketName },
+                    { name: 'NATS_BACKUP_PREFIX', value: 'jetstream' },
+                    { name: 'NATS_URL', value: `tls://nats.${cloudMapNamespaceName}:${clientPort}` },
+                    { name: 'NATS_SYS_USER', value: 'regular_user' },
+                    { name: 'NATS_SYS_PASSWORD', value: environment.NATS_REGULAR_USER_PASSWORD },
+                ],
+                logConfiguration: {
+                    logDriver: 'awslogs',
+                    options: {
+                        'awslogs-group': logGroupName,
+                        'awslogs-region': aws.config.region,
+                        'awslogs-stream-prefix': 'backup',
+                    },
                 },
-            },
-        }])),
+            }])
+        ),
     })
 
     const backupScheduleRole = new aws.iam.Role(`${serviceName}-backup-schedule-role`, {
@@ -477,13 +484,15 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
             taskDefinitionArn,
             executionRoleArn,
             taskRoleArn,
-        ]) => JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [
-                { Effect: 'Allow', Action: 'ecs:RunTask', Resource: taskDefinitionArn },
-                { Effect: 'Allow', Action: 'iam:PassRole', Resource: [executionRoleArn, taskRoleArn] },
-            ],
-        })),
+        ]) =>
+            JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [
+                    { Effect: 'Allow', Action: 'ecs:RunTask', Resource: taskDefinitionArn },
+                    { Effect: 'Allow', Action: 'iam:PassRole', Resource: [executionRoleArn, taskRoleArn] },
+                ],
+            })
+        ),
     })
     new aws.iam.RolePolicyAttachment(`${serviceName}-backup-schedule-attachment`, {
         role: backupScheduleRole.name,
@@ -515,16 +524,16 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
         deploymentMaximumPercent: 100,
         deploymentCircuitBreaker: {
             enable: true,
-            rollback: true
+            rollback: true,
         },
         serviceRegistries: {
-            registryArn: privateDiscoveryService.arn,  // Auto-register private IP with private CloudMap
+            registryArn: privateDiscoveryService.arn, // Auto-register private IP with private CloudMap
             containerName: serviceName,
             containerPort: clientPort,
         },
         forceNewDeployment: true,
         enableExecuteCommand: true, // Enable for debugging
-        waitForSteadyState: false,  // Don't wait - let it deploy async
+        waitForSteadyState: false, // Don't wait - let it deploy async
     }, {
         customTimeouts: {
             create: '10m',
@@ -532,12 +541,12 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
             delete: '10m',
         },
         replaceOnChanges: [
-            "taskDefinition"
+            'taskDefinition',
         ],
         dependsOn: [
             serviceDiscoverySidecar.lambdaFunction, // Ensure Lambda is ready to handle events
             ...ingressRules,
-            ...dependencies,  // CRITICAL: Wait for certificate generation before starting NATS
+            ...dependencies, // CRITICAL: Wait for certificate generation before starting NATS
         ],
     })
 
@@ -551,41 +560,41 @@ export const createNatsClusterService = async (args: NatsClusterServiceArgs) => 
             minCapacity: minCount,
             maxCapacity: maxCount,
             resourceId: pulumi.interpolate`service/${ecsCluster.name}/${ecsService.name}`, // Fixed: use actual cluster name
-            scalableDimension: "ecs:service:DesiredCount",
-            serviceNamespace: "ecs",
-        });
+            scalableDimension: 'ecs:service:DesiredCount',
+            serviceNamespace: 'ecs',
+        })
 
         // CPU-based scaling policy
         const cpuScalingPolicy = new aws.appautoscaling.Policy(`${serviceName}-cpu-scaling`, {
-            policyType: "TargetTrackingScaling",
+            policyType: 'TargetTrackingScaling',
             resourceId: scalableTarget.resourceId,
             scalableDimension: scalableTarget.scalableDimension,
             serviceNamespace: scalableTarget.serviceNamespace,
             targetTrackingScalingPolicyConfiguration: {
                 predefinedMetricSpecification: {
-                    predefinedMetricType: "ECSServiceAverageCPUUtilization",
+                    predefinedMetricType: 'ECSServiceAverageCPUUtilization',
                 },
                 targetValue: 70.0, // Target 70% CPU utilization
                 scaleInCooldown: 300, // 5 minutes
                 scaleOutCooldown: 60, // 1 minute
             },
-        });
+        })
 
         // Memory-based scaling policy
         const memoryScalingPolicy = new aws.appautoscaling.Policy(`${serviceName}-memory-scaling`, {
-            policyType: "TargetTrackingScaling",
+            policyType: 'TargetTrackingScaling',
             resourceId: scalableTarget.resourceId,
             scalableDimension: scalableTarget.scalableDimension,
             serviceNamespace: scalableTarget.serviceNamespace,
             targetTrackingScalingPolicyConfiguration: {
                 predefinedMetricSpecification: {
-                    predefinedMetricType: "ECSServiceAverageMemoryUtilization",
+                    predefinedMetricType: 'ECSServiceAverageMemoryUtilization',
                 },
                 targetValue: 80.0, // Target 80% memory utilization
                 scaleInCooldown: 300, // 5 minutes
                 scaleOutCooldown: 60, // 1 minute
             },
-        });
+        })
     }
 
     return {

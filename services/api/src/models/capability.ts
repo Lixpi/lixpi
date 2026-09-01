@@ -18,7 +18,10 @@ import {
     type CapabilityStatus,
 } from '@lixpi/constants'
 import { validateCapabilityManifest } from '@lixpi/capability-system/shared'
-import { isTransactionConditionalCheckFailure, type TransactOperation } from '@lixpi/dynamodb-service'
+import {
+    isTransactionConditionalCheckFailure,
+    type TransactOperation,
+} from '@lixpi/dynamodb-service'
 
 import BlobModel, { buildBlobReferenceBatchOperations } from './blob.ts'
 import { getContentAddressedBlob } from '../services/blob-storage.ts'
@@ -119,31 +122,41 @@ function decodeCursor(
     if (!cursor) return { partitions: {}, query, kinds }
     try {
         const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as CapabilityCatalogCursor
-        if (!parsed || typeof parsed !== 'object' || !parsed.partitions
+        if (
+            !parsed || typeof parsed !== 'object' || !parsed.partitions
             || typeof parsed.partitions !== 'object' || Array.isArray(parsed.partitions)
-            || parsed.query !== query || JSON.stringify(parsed.kinds) !== JSON.stringify(kinds)) {
+            || parsed.query !== query || JSON.stringify(parsed.kinds) !== JSON.stringify(kinds)
+        ) {
             throw new Error('INVALID_CURSOR')
         }
         for (const [cursorKey, lastKey] of Object.entries(parsed.partitions)) {
             const expected = allowedCursorKeys.get(cursorKey)
-            if (!expected || !lastKey || typeof lastKey !== 'object' || Array.isArray(lastKey)
+            if (
+                !expected || !lastKey || typeof lastKey !== 'object' || Array.isArray(lastKey)
                 || lastKey.scopeAndOwner !== expected.scopeAndOwner
                 || typeof lastKey.searchKey !== 'string'
-                || !lastKey.searchKey.startsWith(expected.searchPrefix)) throw new Error('INVALID_CURSOR')
+                || !lastKey.searchKey.startsWith(expected.searchPrefix)
+            ) throw new Error('INVALID_CURSOR')
         }
-        if (parsed.completed && (!Array.isArray(parsed.completed)
-            || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))) {
+        if (
+            parsed.completed && (!Array.isArray(parsed.completed)
+                || parsed.completed.some((cursorKey) => typeof cursorKey !== 'string' || !allowedCursorKeys.has(cursorKey)))
+        ) {
             throw new Error('INVALID_CURSOR')
         }
-        if (parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 1000
-            || parsed.buffered.some((key) => {
-                if (!key || typeof key !== 'object' || Array.isArray(key)
-                    || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string') return true
-                return ![...allowedCursorKeys.values()].some((expected) => (
-                    key.scopeAndOwner === expected.scopeAndOwner
-                    && key.searchKey.startsWith(expected.searchPrefix)
-                ))
-            }))) throw new Error('INVALID_CURSOR')
+        if (
+            parsed.buffered && (!Array.isArray(parsed.buffered) || parsed.buffered.length > 1000
+                || parsed.buffered.some((key) => {
+                    if (
+                        !key || typeof key !== 'object' || Array.isArray(key)
+                        || typeof key.scopeAndOwner !== 'string' || typeof key.searchKey !== 'string'
+                    ) return true
+                    return ![...allowedCursorKeys.values()].some((expected) => (
+                        key.scopeAndOwner === expected.scopeAndOwner
+                        && key.searchKey.startsWith(expected.searchPrefix)
+                    ))
+                }))
+        ) throw new Error('INVALID_CURSOR')
         return parsed
     } catch {
         throw new Error('INVALID_CURSOR')
@@ -379,10 +392,14 @@ export async function listAuthorizedCapabilities({
         'global#system',
         `principal#${requester.userId}`,
     ]
-    const allowedCursorKeys = new Map(partitions.flatMap((partition) => uniqueKinds.map((kind) => [
-        `${partition}|${kind}`,
-        { scopeAndOwner: partition, searchPrefix: `${kind}#${normalizedQuery}` },
-    ] as const)))
+    const allowedCursorKeys = new Map(partitions.flatMap((partition) =>
+        uniqueKinds.map((kind) =>
+            [
+                `${partition}|${kind}`,
+                { scopeAndOwner: partition, searchPrefix: `${kind}#${normalizedQuery}` },
+            ] as const
+        )
+    ))
     const decoded = decodeCursor(cursor, normalizedQuery, uniqueKinds, allowedCursorKeys)
     const bufferedRows = await Promise.all((decoded.buffered ?? []).map(async (key) =>
         await dynamoDBService.getItem({
@@ -390,32 +407,35 @@ export async function listAuthorizedCapabilities({
             key,
             consistentRead: true,
             origin: 'Capability.listAuthorizedCapabilities.buffered',
-        }) as CapabilityMeta | undefined))
-    const requests = partitions.flatMap((partition) => uniqueKinds.map(async (kind) => {
-        const cursorKey = `${partition}|${kind}`
-        if (decoded.completed?.includes(cursorKey)) {
-            return { cursorKey, items: [] as CapabilityMeta[], lastKey: undefined, completed: true }
-        }
-        const result = await dynamoDBService.queryItems({
-            tableName: capabilitiesMetaTableName(),
-            keyConditions: { scopeAndOwner: partition },
-            sortKeyCondition: {
-                key: 'searchKey',
-                operator: 'begins_with',
-                value: `${kind}#${normalizedQuery}`,
-            },
-            exclusiveStartKey: decoded.partitions[cursorKey],
-            limit,
-            scanIndexForward: true,
-            origin: 'Capability.listAuthorizedCapabilities',
+        }) as CapabilityMeta | undefined
+    ))
+    const requests = partitions.flatMap((partition) =>
+        uniqueKinds.map(async (kind) => {
+            const cursorKey = `${partition}|${kind}`
+            if (decoded.completed?.includes(cursorKey)) {
+                return { cursorKey, items: [] as CapabilityMeta[], lastKey: undefined, completed: true }
+            }
+            const result = await dynamoDBService.queryItems({
+                tableName: capabilitiesMetaTableName(),
+                keyConditions: { scopeAndOwner: partition },
+                sortKeyCondition: {
+                    key: 'searchKey',
+                    operator: 'begins_with',
+                    value: `${kind}#${normalizedQuery}`,
+                },
+                exclusiveStartKey: decoded.partitions[cursorKey],
+                limit,
+                scanIndexForward: true,
+                origin: 'Capability.listAuthorizedCapabilities',
+            })
+            return {
+                cursorKey,
+                items: (result?.items ?? []) as CapabilityMeta[],
+                lastKey: result?.lastEvaluatedKey,
+                completed: !result?.lastEvaluatedKey,
+            }
         })
-        return {
-            cursorKey,
-            items: (result?.items ?? []) as CapabilityMeta[],
-            lastKey: result?.lastEvaluatedKey,
-            completed: !result?.lastEvaluatedKey,
-        }
-    }))
+    )
     const pages = await Promise.all(requests)
     const nextPartitions: Record<string, Record<string, unknown>> = {}
     const completed = new Set(decoded.completed ?? [])
@@ -441,23 +461,29 @@ export async function listAuthorizedCapabilities({
         }
     }
     const sortedItems = [...merged.values()]
-        .sort((left, right) => left.normalizedName.localeCompare(right.normalizedName)
+        .sort((left, right) =>
+            left.normalizedName.localeCompare(right.normalizedName)
             || left.kind.localeCompare(right.kind)
-            || left.capabilityId.localeCompare(right.capabilityId))
+            || left.capabilityId.localeCompare(right.capabilityId)
+        )
     const items = sortedItems.slice(0, limit)
     const buffered = sortedItems.slice(limit)
     return {
         items,
         ...(Object.keys(nextPartitions).length > 0 || buffered.length > 0
-            ? { cursor: encodeCursor({
-                partitions: nextPartitions,
-                query: normalizedQuery,
-                kinds: uniqueKinds,
-                completed: [...completed],
-                ...(buffered.length > 0 ? {
-                    buffered: buffered.map(({ scopeAndOwner, searchKey }) => ({ scopeAndOwner, searchKey })),
-                } : {}),
-            }) }
+            ? {
+                cursor: encodeCursor({
+                    partitions: nextPartitions,
+                    query: normalizedQuery,
+                    kinds: uniqueKinds,
+                    completed: [...completed],
+                    ...(buffered.length > 0
+                        ? {
+                            buffered: buffered.map(({ scopeAndOwner, searchKey }) => ({ scopeAndOwner, searchKey })),
+                        }
+                        : {}),
+                }),
+            }
             : {}),
     }
 }
@@ -590,8 +616,8 @@ export async function retireSupersededCapabilityBlobReferences({
     ])
     const scanTruncated = Boolean(
         referenceResult?.lastEvaluatedKey
-        || capabilityResult?.lastEvaluatedKey
-        || runResult?.lastEvaluatedKey,
+            || capabilityResult?.lastEvaluatedKey
+            || runResult?.lastEvaluatedKey,
     )
     const references = ((referenceResult?.items ?? []) as BlobReference[])
         .filter(reference => reference.ownerType === 'capability')
@@ -621,30 +647,32 @@ export async function retireSupersededCapabilityBlobReferences({
         }
     }
 
-    await Promise.all([...protectedManifestHashes].flatMap(([capabilityId, hashes]) => [...hashes].map(async manifestBlobHash => {
-        const record = recordsById.get(capabilityId)
-        if (!record) {
-            unsafeCapabilityIds.add(capabilityId)
-            return
-        }
-        try {
-            const manifest = await readCapabilityManifestBlob(record.storageOwnerId, manifestBlobHash, capabilityId)
-            protectedReferenceIds.add(buildProtectedReferenceId(
-                capabilityId,
-                manifestBlobHash,
-                `capability#${capabilityId}#manifest`,
-            ))
-            for (const resource of manifest.resources) {
+    await Promise.all([...protectedManifestHashes].flatMap(([capabilityId, hashes]) =>
+        [...hashes].map(async manifestBlobHash => {
+            const record = recordsById.get(capabilityId)
+            if (!record) {
+                unsafeCapabilityIds.add(capabilityId)
+                return
+            }
+            try {
+                const manifest = await readCapabilityManifestBlob(record.storageOwnerId, manifestBlobHash, capabilityId)
                 protectedReferenceIds.add(buildProtectedReferenceId(
                     capabilityId,
-                    resource.blobHash,
-                    `capability#${capabilityId}#resource#${resource.resourceId}`,
+                    manifestBlobHash,
+                    `capability#${capabilityId}#manifest`,
                 ))
+                for (const resource of manifest.resources) {
+                    protectedReferenceIds.add(buildProtectedReferenceId(
+                        capabilityId,
+                        resource.blobHash,
+                        `capability#${capabilityId}#resource#${resource.resourceId}`,
+                    ))
+                }
+            } catch {
+                unsafeCapabilityIds.add(capabilityId)
             }
-        } catch {
-            unsafeCapabilityIds.add(capabilityId)
-        }
-    })))
+        })
+    ))
 
     const cutoff = now - CAPABILITY_BLOB_RETIREMENT_GRACE_MS
     const eligible = references.filter(reference => reference.createdAt <= cutoff)
@@ -740,12 +768,14 @@ export async function saveCapability(input: SaveCapabilityInput): Promise<Capabi
             access: 'edit',
         })
         if ('error' in authorized) throw new Error(authorized.error)
-        if (existing.kind !== input.manifest.kind
+        if (
+            existing.kind !== input.manifest.kind
             || existing.scope !== input.scope
             || existing.scopeOwnerId !== input.scopeOwnerId
             || existing.storageOwnerId !== input.storageOwnerId
             || (hasStructuralExposure && existing.catalogExposure !== input.catalogExposure)
-            || (hasStructuralExposure && existing.parentModuleId !== input.parentModuleId)) {
+            || (hasStructuralExposure && existing.parentModuleId !== input.parentModuleId)
+        ) {
             throw new Error('IMMUTABLE_CAPABILITY_AUTHORITY_CHANGED')
         }
         if (!input.expectedManifestBlobHash) throw new Error('EXPECTED_MANIFEST_BLOB_HASH_REQUIRED')

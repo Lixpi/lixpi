@@ -6,6 +6,8 @@ This document is the canonical, deep-dive reference for the ProseMirror-based ed
 ## High-level overview
 
 - Workspace canvas hosts own editor lifecycle and join Asset metadata with role snapshots before instantiating the editor driver.
+- Asset context-preview tiles come from `@lixpi/canvas-components-lixpi-specific/frontend/context`. The canvas adapter supplies authenticated rendition URLs, document text and installed Artifact icons; UI-kit owns the generic popover and tooltip. Preview disposal releases native media and ignores late URL responses.
+- The Lixpi package owns the workspace composer shell, gradient, draft storage and context trays. `canvas-adapters/prompt-composer-editor.ts` mounts the application editor through the package's typed port. `promptControlFactories.ts` supplies the application's existing model and installed-Capability controls without changing their defaults or submission contract.
 - `components/editor.ts` imports the shared ProseMirror schema factory from `@lixpi/prosemirror` and wires all editor plugins.
 - A rich plugin stack handles state propagation, AI triggers, authority-backed step application, placeholders/menus, CodeMirror code blocks, and UX behaviors.
 - Transaction meta flags (e.g., `use:aiChat`, `insert:<nodeType>`) are the core intra-plugin signaling mechanism.
@@ -427,7 +429,7 @@ flowchart LR
 - React to Mod+Enter differently:
   - Update `buildKeymap` or the `aiChatThreadPlugin` meta handling.
 - Add a new AI streaming style:
-  - Extend `packages/lixpi/prosemirror/src/stream-assembly.ts` so browser and server assembly stay identical.
+  - Extend `packages/lixpi/prosemirror/src/shared/stream-assembly.ts` so browser and server assembly stay identical.
 
 
 ## Edge cases and invariants
@@ -449,9 +451,9 @@ flowchart LR
 
 ## File map
 
-- Workspace host: `components/workspaceCanvasView.ts` and `infographics/workspace/WorkspaceCanvas.ts`
+- Workspace host: `components/workspaceCanvasView/workspaceCanvasView.ts` mounts the package surface through `canvas-adapters/workspace-canvas-host.ts`. Lixpi composition lives in `@lixpi/canvas-components-lixpi-specific/frontend/workspace`
 - Editor driver: `components/editor.ts`
-- Prompt composer wrapper: `aiPromptComposer.ts`
+- Prompt composer wrapper: `@lixpi/canvas-components-lixpi-specific/frontend/composer`; application editor mounting: `canvas-adapters/prompt-composer-editor.ts`
 - Shared schema package: `packages/lixpi/prosemirror`
 - Schema compatibility export: `components/schema.ts`
 - Bubble menu: `plugins/bubbleMenuPlugin/*`
@@ -492,7 +494,7 @@ The active conversation Asset structure uses a single AI chat thread container:
 User input is handled by a separate `aiPromptInputPlugin` which renders in the bottom-center canvas composer:
 - Remains a submit surface while earlier user-message runs are active
 - Has its own `ProseMirrorEditor` with `documentType: 'aiPromptInput'`
-- `aiPromptComposer.ts` wraps that editor for hosts that mount a reusable prompt surface
+- The Lixpi canvas package wraps that editor through the prompt-composer port for workspace prompt surfaces
 - Controls (model selector, image toggle, submit button) are generic reusable factories in `$src/components/aiModelControls/`
 - Each submit creates a standalone hidden AI chat thread and a pending branch-lineage projection
 - Each active branch-lineage marker shows its thread stop control at the right-center until every planned media branch has finished; the composer has no aggregate receiving/stop state

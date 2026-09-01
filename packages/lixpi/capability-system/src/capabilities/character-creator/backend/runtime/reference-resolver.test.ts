@@ -1,7 +1,13 @@
 'use strict'
 
 import sharp from 'sharp'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
@@ -31,22 +37,25 @@ const defaultPanels = buildCharacterSheetRenderPlan({
     userPrompt: 'Create a character sheet.',
 }).panels
 
-const resolve = async () => await resolveCharacterReferences({
-    assetIds: ['asset-1'],
-    organizationId: 'org-1',
-    workspaceId: 'workspace-1',
-    userId: 'user-1',
-    assets,
-    panels: defaultPanels,
-})
+const resolve = async () =>
+    await resolveCharacterReferences({
+        assetIds: ['asset-1'],
+        organizationId: 'org-1',
+        workspaceId: 'workspace-1',
+        userId: 'user-1',
+        assets,
+        panels: defaultPanels,
+    })
 
 describe('resolveCharacterReferences', () => {
     beforeEach(async () => {
         vi.clearAllMocks()
         vi.mocked(assets.getAuthorizedAsset).mockResolvedValue(readyAsset())
-        vi.mocked(assets.readBlob).mockResolvedValue(await sharp({
-            create: { width: 640, height: 480, channels: 3, background: '#446688' },
-        }).png().toBuffer())
+        vi.mocked(assets.readBlob).mockResolvedValue(
+            await sharp({
+                create: { width: 640, height: 480, channels: 3, background: '#446688' },
+            }).png().toBuffer(),
+        )
     })
 
     it('reauthorizes the Asset and resolves the canonical rendition at original dimensions', async () => {
@@ -103,43 +112,45 @@ describe('resolveCharacterReferences', () => {
     })
 
     it('expands a stored character sheet into its original sources and isolated component shots', async () => {
-        vi.mocked(assets.getAuthorizedAsset).mockImplementation(async ({ assetId }) => assetId === 'sheet-1'
-            ? readyAsset({
-                assetId: 'sheet-1',
-                composition: {
-                    schemaVersion: 'asset-media-composition-v1',
-                    kind: 'character-sheet',
-                    capabilityId: 'global.character-creator',
-                    sourceAssetIds: ['source-1'],
-                    components: [
-                        {
-                            componentId: 'head-front-neutral',
-                            role: 'character-sheet-panel',
-                            title: 'Neutral front identity portrait',
-                            blobHash: 'head-hash',
-                            mimeType: 'image/png',
-                            byteSize: 100,
-                        },
-                        {
-                            componentId: 'body-front',
-                            role: 'character-sheet-panel',
-                            title: 'Front body',
-                            blobHash: 'front-hash',
-                            mimeType: 'image/png',
-                            byteSize: 100,
-                        },
-                        {
-                            componentId: 'body-back',
-                            role: 'character-sheet-panel-review-only',
-                            title: 'Back body',
-                            blobHash: 'back-review-hash',
-                            mimeType: 'image/png',
-                            byteSize: 100,
-                        },
-                    ],
-                },
-            })
-            : readyAsset({ assetId: 'source-1' }))
+        vi.mocked(assets.getAuthorizedAsset).mockImplementation(async ({ assetId }) =>
+            assetId === 'sheet-1'
+                ? readyAsset({
+                    assetId: 'sheet-1',
+                    composition: {
+                        schemaVersion: 'asset-media-composition-v1',
+                        kind: 'character-sheet',
+                        capabilityId: 'global.character-creator',
+                        sourceAssetIds: ['source-1'],
+                        components: [
+                            {
+                                componentId: 'head-front-neutral',
+                                role: 'character-sheet-panel',
+                                title: 'Neutral front identity portrait',
+                                blobHash: 'head-hash',
+                                mimeType: 'image/png',
+                                byteSize: 100,
+                            },
+                            {
+                                componentId: 'body-front',
+                                role: 'character-sheet-panel',
+                                title: 'Front body',
+                                blobHash: 'front-hash',
+                                mimeType: 'image/png',
+                                byteSize: 100,
+                            },
+                            {
+                                componentId: 'body-back',
+                                role: 'character-sheet-panel-review-only',
+                                title: 'Back body',
+                                blobHash: 'back-review-hash',
+                                mimeType: 'image/png',
+                                byteSize: 100,
+                            },
+                        ],
+                    },
+                })
+                : readyAsset({ assetId: 'source-1' })
+        )
 
         const result = await resolveCharacterReferences({
             assetIds: ['sheet-1', 'source-1'],
@@ -232,9 +243,11 @@ describe('resolveCharacterReferences', () => {
     })
 
     it('does not split an arbitrary blank 3:2 source', async () => {
-        vi.mocked(assets.readBlob).mockResolvedValue(await sharp({
-            create: { width: 1200, height: 800, channels: 3, background: '#ffffff' },
-        }).png().toBuffer())
+        vi.mocked(assets.readBlob).mockResolvedValue(
+            await sharp({
+                create: { width: 1200, height: 800, channels: 3, background: '#ffffff' },
+            }).png().toBuffer(),
+        )
         const panels = buildCharacterSheetRenderPlan({
             capabilityRunId: 'run-1',
             sourceAssetIds: ['asset-1'],

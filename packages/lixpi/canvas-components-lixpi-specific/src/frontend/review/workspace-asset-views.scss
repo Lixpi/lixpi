@@ -1,0 +1,159 @@
+.workspace-generated-output-details-content {
+    .canvas-asset-metadata-editor {
+        pointer-events: auto;
+
+        .ProseMirror {
+            min-height: 0;
+            color: #252b33;
+            background: transparent;
+            border: 0;
+            box-shadow: none;
+            outline: none;
+        }
+
+        h1.document-title {
+            color: #252b33;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        p {
+            color: rgba(37, 43, 51, 0.68);
+            line-height: 1.45;
+        }
+
+        &.is-details {
+            margin: 1rem 1rem 0;
+            cursor: text;
+
+            .ProseMirror {
+                padding: 0;
+                cursor: text;
+            }
+
+            h1.document-title {
+                margin: 0 0 0.45rem;
+                font-size: 1.55rem;
+                line-height: 1.12;
+                cursor: text;
+            }
+
+            p {
+                margin: 0;
+                font-size: 0.82rem;
+                cursor: text;
+            }
+        }
+    }
+
+    .canvas-asset-details {
+        position: relative;
+        margin: 1rem;
+        padding-top: 1rem;
+
+        &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.08) 22%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 78%, rgba(0, 0, 0, 0) 100%);
+        }
+    }
+
+    .canvas-asset-details-heading,
+    .canvas-asset-details-label,
+    .canvas-asset-diagnostics-label {
+        display: block;
+        color: rgba(0, 0, 0, 0.5);
+        font-size: 0.68rem;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        line-height: 1.35;
+        text-transform: uppercase;
+    }
+
+    .canvas-asset-details-heading {
+        margin: 0;
+    }
+
+    .canvas-asset-details-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .canvas-asset-scope-control {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .canvas-asset-scope-dropdown {
+        min-width: 8rem;
+    }
+
+    .canvas-asset-storage-lineage {
+        margin-top: 0.8rem;
+        border-top: 1px solid rgba(34, 40, 49, 0.08);
+    }
+
+    .canvas-asset-detail-row {
+        display: grid;
+        grid-template-columns: minmax(5.5rem, 0.18fr) minmax(0, 1fr);
+        gap: 0.75rem;
+        padding: 0.52rem 0;
+        border-bottom: 1px solid rgba(34, 40, 49, 0.06);
+    }
+
+    .canvas-asset-subject-identity-row {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .canvas-asset-subject-identity-control {
+        min-height: 28px;
+        width: 100%;
+    }
+
+    .canvas-asset-seed-label {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .canvas-asset-details-status,
+    .canvas-asset-renditions,
+    .canvas-asset-lineage,
+    .canvas-asset-seed {
+        color: #59656f;
+        font-size: 0.72rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+
+    .canvas-asset-seed {
+        font-variant-numeric: tabular-nums;
+    }
+
+    .canvas-asset-details-status.is-error {
+        color: #a43d45;
+    }
+
+    @media (max-width: 720px) {
+        .canvas-asset-details-toolbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .canvas-asset-detail-row {
+            grid-template-columns: 1fr;
+            gap: 0.2rem;
+        }
+    }
+}

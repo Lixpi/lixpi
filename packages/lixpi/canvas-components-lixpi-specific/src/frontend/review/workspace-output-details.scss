@@ -1,0 +1,288 @@
+.canvas-generated-media-reasoning-model {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+    min-width: 0;
+    // margin: 0 0 0.2rem;
+    // padding: 1rem 1rem 0;
+    margin-top: .5rem;
+    white-space: nowrap;
+
+    .media-model-badge {
+        flex: 0 1 auto;
+        min-width: 0;
+    }
+}
+
+.canvas-generated-media-reasoning-model-caption {
+    flex: 0 0 auto;
+    color: rgba(0, 0, 0, 0.5);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.workspace-generated-output-details-content {
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    pointer-events: auto;
+    color: #252b33;
+    box-sizing: border-box;
+
+    // Compact media descriptor (summary + tags), shown for every media object —
+    // generated and uploaded alike. It carries the same inset as the editable
+    // metadata and Asset-diagnostics sections in the unified sidebar flow.
+    .canvas-media-descriptor {
+        margin: 1rem;
+
+        &.is-analyzing .canvas-media-descriptor-summary {
+            color: rgba(0, 0, 0, 0.46);
+            font-style: italic;
+        }
+
+        &.is-failed .canvas-media-descriptor-summary {
+            color: rgba(0, 0, 0, 0.46);
+        }
+    }
+
+    .canvas-media-descriptor-loading {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0 0 0.3rem;
+    }
+
+    .canvas-media-descriptor-spinner {
+        border-color: rgba(90, 100, 112, 0.18);
+        border-top-color: rgba(90, 100, 112, 0.88);
+    }
+
+    .canvas-media-descriptor-label {
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgba(0, 0, 0, 0.5);
+        margin: 0 0 0.3rem;
+    }
+
+    .canvas-media-descriptor-loading .canvas-media-descriptor-label {
+        margin: 0;
+    }
+
+    .canvas-media-descriptor-summary {
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.78rem;
+        line-height: 1.45;
+    }
+
+    .canvas-media-descriptor-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin: 0.4rem 0 0;
+    }
+
+    .canvas-media-descriptor-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.1rem 0.45rem;
+        font-size: 0.68rem;
+        line-height: 1.4;
+        color: #4d5963;
+        background: rgba(34, 40, 49, 0.06);
+        border-radius: 10px;
+    }
+
+
+    .canvas-branch-origin-provenance-section {
+        margin: 0.65rem 0 0;
+    }
+
+    .canvas-branch-origin-provenance-label {
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgba(0, 0, 0, 0.5);
+        margin: 0 0 0.3rem;
+    }
+
+    .canvas-branch-origin-reference-preview-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .canvas-branch-origin-rationale {
+        margin: 0;
+        font-size: 0.76rem;
+        line-height: 1.4;
+        color: #36414a;
+        overflow-wrap: anywhere;
+    }
+
+    .canvas-branch-origin-reference-preview-list .context-preview-main {
+        flex: 0 0 58px;
+        width: 58px;
+        height: 42px;
+    }
+
+    .canvas-branch-origin-rationale {
+        margin-top: 0.4rem;
+        color: rgba(0, 0, 0, 0.58);
+    }
+}
+
+.canvas-generated-media-projection {
+    width: 100%;
+}
+
+.canvas-generated-media-history-section {
+    position: relative;
+    margin: 1rem;
+    padding-top: 1rem;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.08) 22%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 78%, rgba(0, 0, 0, 0) 100%);
+    }
+}
+
+.canvas-generated-media-projection-editor {
+    min-height: 0;
+    overflow: visible;
+    border-radius: 0;
+    cursor: default;
+}
+
+.canvas-generated-media-projection-editor .ProseMirror {
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+}
+
+.canvas-generated-media-projection-editor .document-title {
+    display: none;
+}
+
+.canvas-generated-media-projection-editor .ai-chat-thread-wrapper {
+    min-height: 0;
+    margin-top: 0;
+    padding-bottom: 0;
+}
+
+.canvas-generated-media-projection-editor .ai-chat-thread-content {
+    padding-bottom: 0;
+}
+
+.workspace-generated-output-details-content .canvas-generated-media-projection-editor .ai-chat-thread-wrapper {
+    min-height: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.workspace-generated-output-details-content .canvas-generated-media-projection-editor .ai-chat-thread-content {
+    padding-bottom: 0;
+}
+
+.workspace-generated-output-details-content .canvas-generated-media-projection-editor .ai-generated-image-wrapper,
+.workspace-generated-output-details-content .canvas-generated-media-projection-editor .ai-generated-video-wrapper {
+    margin-bottom: 0;
+}
+
+.canvas-generated-media-projection-editor .ai-user-message-wrapper {
+    margin: 0 0 0.55rem;
+}
+
+.canvas-generated-media-projection-editor .ai-user-message {
+    max-width: 88%;
+    margin-right: 0;
+    padding: 0.55rem 0.75rem;
+    border-radius: 14px 14px 9px 14px;
+    line-height: 1.45;
+}
+
+.canvas-generated-media-projection-editor .ai-response-message-wrapper {
+    padding: 0;
+}
+
+.canvas-generated-media-projection-editor .ai-response-message {
+    width: 100%;
+}
+
+.canvas-generated-media-projection-editor .ai-media-generation-progress {
+    margin: 0.85rem 0;
+}
+
+// ProseMirror gives every ordered list a 30px content indent. The pipeline is
+// already a self-indenting tree, so its root and child rails use only the
+// component-owned grid indentation.
+.canvas-generated-media-projection-editor .ai-media-generation-progress > .progress-timeline,
+.canvas-generated-media-projection-editor .ai-media-generation-progress .progress-timeline-children {
+    padding-left: 0;
+}
+
+.canvas-generated-media-projection-editor .ai-response-message-content > *:first-child,
+.canvas-generated-media-projection-editor .ai-user-message-content > *:first-child {
+    margin-top: 0;
+}
+
+.canvas-generated-media-projection-editor .ai-response-message-content > *:last-child,
+.canvas-generated-media-projection-editor .ai-user-message-content > *:last-child {
+    margin-bottom: 0;
+}
+
+.canvas-generated-media-projection-editor .canvas-generated-media-trace-details {
+    margin: 0.95rem 0 0;
+}
+
+// Fading gradient separator above the final generated image, matching the section
+// dividers in the trace block and the branch lineage node marker separator.
+.canvas-generated-media-projection-editor .ai-generated-media-section-title {
+    position: relative;
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.04) 10%, rgba(0, 0, 0, 0.08) 26%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.08) 74%, rgba(0, 0, 0, 0.04) 90%, rgba(0, 0, 0, 0) 100%);
+    }
+}
+
+// Canvas reference tiles use the context-preview component (thumbnail + hover card),
+// which carries its own sizing — so the grid lays them out compactly side by side
+// instead of stretching each thumbnail across a full 1fr column.
+.canvas-generated-media-trace-details .ai-image-generation-reference-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.canvas-generated-media-projection-editor .ai-image-generation-tool-prompt-fallback,
+.canvas-generated-media-projection-editor .ai-image-generation-final-prompt {
+    max-height: none;
+    overflow: visible;
+}

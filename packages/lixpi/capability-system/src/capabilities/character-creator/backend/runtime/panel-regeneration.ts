@@ -21,9 +21,12 @@ export function selectCharacterPanelsForRegeneration(args: {
     const availablePanelIds = new Set(panelIds.filter(panelId => args.availableComponentIds.has(panelId)))
     if (availablePanelIds.size === 0) return fullSheet(panelIds, 'no-stored-components')
     if (args.regenerationScope !== 'selected-panels') {
-        return fullSheet(panelIds, args.regenerationScope === 'full-sheet'
-            ? 'evidence-full-sheet-scope'
-            : 'unresolved-edit-scope')
+        return fullSheet(
+            panelIds,
+            args.regenerationScope === 'full-sheet'
+                ? 'evidence-full-sheet-scope'
+                : 'unresolved-edit-scope',
+        )
     }
 
     const affectedPanelIds = new Set(args.affectedPanelIds ?? [])

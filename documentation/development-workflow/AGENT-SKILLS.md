@@ -31,6 +31,8 @@ Agents must not run project setup, package scripts, build scripts, docs builds, 
 
 If the Dockerized command is not documented or the required container is unavailable, agents stop and ask instead of falling back to a host command.
 
+TypeScript formatting and linting use the Docker-only commands in [`TYPESCRIPT-QUALITY.md`](../testing/TypeScript/TYPESCRIPT-QUALITY.md). Agents select the affected service or shared package instead of scanning unrelated workspaces. They must not invoke dprint, Oxlint, TypeScript source, Node, or a package manager on the host.
+
 ## Required AI Model Registry Skill
 
 Lixpi exposes `ai-model-registry` through matching aliases in `.github/skills/`, `.claude/skills/`, `.cursor/skills/`, and `.agents/skills/`. Its description covers changes to provider models, parameters, request payloads, configuration controls, defaults, options, compatibility, pricing, SDK surfaces, and registry documentation, so each harness loads the rule when either production code or registry data can drift.

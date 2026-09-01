@@ -5,7 +5,9 @@ export type CanvasEnginePoint = {
     y: number
 }
 
-export type CanvasEngineRect = CanvasEnginePoint & {
+export type CanvasEngineSize = {
     width: number
     height: number
 }
+
+export type CanvasEngineRect = CanvasEnginePoint & CanvasEngineSize
