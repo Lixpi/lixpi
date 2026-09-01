@@ -55,41 +55,41 @@ function expectExcerptNotToContain(excerpt: string, snippet: string, label = 'so
 
 function loadScss(): string {
     return readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.scss').replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/canvas-chrome';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/canvas-chrome";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas-chrome.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/document-node';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/document-node";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/document-node.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/operation-status';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/operation-status";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/operation-status-node.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/branch-marker';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/branch-marker";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-reference-resolution.scss')
             + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/branch-marker-content.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/nodes';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/nodes";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/nodes/workspace-node-shells.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/progress';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/progress";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/progress/media-generation-progress.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/output-details';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/output-details";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/video-chrome';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/video-chrome";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-video-chrome.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/asset-views';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/asset-views";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/workspace-asset-views.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/output-chrome';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/output-chrome";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/generated-output-node-chrome.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/right-panel';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/right-panel";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-right-panel.scss'),
     ).replace(
-        "@import '@lixpi/canvas-components-lixpi-specific/styles/output-details-content';",
+        '@import "@lixpi/canvas-components-lixpi-specific/styles/output-details-content";',
         readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/workspace-output-details.scss'),
     )
 }

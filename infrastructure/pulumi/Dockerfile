@@ -2,7 +2,7 @@
 FROM pulumi/pulumi:latest
 
 # Set Node.js version
-ARG NODE_VERSION=23.11.0
+ARG NODE_VERSION=24.20.0
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \

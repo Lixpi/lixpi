@@ -1,7 +1,5 @@
-@use "sass:color";
-@import '@lixpi/ui-primitives/styles/transitions';
-@import '$src/sass/_variables.scss';
-@import '$src/sass/themes/_minimalist-chic.scss';
+@import "@lixpi/ui-primitives/styles/transitions";
+@import "$src/sass/_variables.scss";
 
 // Selection highlight color (same as bubble menu active state)
 $imageSelectionColor: rgba(95, 143, 207, 1);
@@ -156,7 +154,12 @@ $imageSelectionColor: rgba(95, 143, 207, 1);
 
     // Clear float after non-wrapped block elements
     > p:not(:first-child),
-    > h1, > h2, > h3, > h4, > h5, > h6,
+    > h1,
+    > h2,
+    > h3,
+    > h4,
+    > h5,
+    > h6,
     > blockquote,
     > pre,
     > .pm-image-wrap-none {
@@ -173,7 +176,9 @@ $imageSelectionColor: rgba(95, 143, 207, 1);
     width: 24px;
     height: 24px;
     opacity: 0;
-    transition: opacity 0.2s ease, transform 0.15s ease;
+    transition:
+        hoverTransition(opacity, 0.2s),
+        hoverTransition(transform, 0.15s);
     z-index: 10;
     display: flex;
     align-items: center;
@@ -185,7 +190,7 @@ $imageSelectionColor: rgba(95, 143, 207, 1);
         width: 20px;
         height: 20px;
         fill: $steelBlue !important;
-        transition: transform 0.15s ease;
+        transition: hoverTransition(transform, 0.15s);
     }
 
     &:hover,

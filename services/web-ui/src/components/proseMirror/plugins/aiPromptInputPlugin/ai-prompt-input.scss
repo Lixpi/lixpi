@@ -6,8 +6,8 @@
 // Input field is vertically centered with controls at the bottom.
 // =============================================================================
 
-@import '$src/sass/_variables.scss';
-@import '@lixpi/ui-primitives/styles/transitions';
+@import "$src/sass/_variables.scss";
+@import "@lixpi/ui-primitives/styles/transitions";
 
 .ai-prompt-input-floating {
     position: absolute;
@@ -179,7 +179,7 @@
     justify-content: flex-end;
     gap: 0.35rem;
     margin-top: 0.4rem;
-    padding-right: .5rem;
+    padding-right: 0.5rem;
 
     .dropdown-menu-tag-pill-wrapper {
         position: relative;
@@ -205,7 +205,7 @@
         flex: 0 0 32px;
         border-radius: 50%;
         opacity: 0.6;
-        transition: all 400ms ease;
+        transition: hoverTransition(all, 400ms);
         cursor: pointer;
         box-sizing: border-box;
 
@@ -216,7 +216,7 @@
             justify-content: center;
             width: 100%;
             height: 100%;
-            transition: all 250ms ease;
+            transition: hoverTransition(all, 250ms);
         }
 
         .button-default {
@@ -227,12 +227,11 @@
 
         .button-hover {
             position: absolute;
+            z-index: 2;
             inset: 0;
             opacity: 0;
             pointer-events: none;
         }
-
-        .button-hover { z-index: 2; }
 
         .send-icon {
             display: inline-flex;
@@ -245,15 +244,21 @@
                 width: 20px;
                 height: 20px;
                 fill: rgba(0, 0, 0, 0.5);
-                transition: fill 150ms ease;
+                transition: hoverTransition(fill, 150ms);
             }
         }
 
         &:hover {
             opacity: 1;
 
-            .button-default { opacity: 0; pointer-events: none; }
-            .button-hover { opacity: 1; pointer-events: auto; }
+            .button-default {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .button-hover {
+                opacity: 1;
+                pointer-events: auto;
+            }
 
             .send-icon svg {
                 fill: rgba(0, 0, 0, 0.8);
@@ -275,7 +280,9 @@
     background: rgba(105, 115, 133, 0.06);
     color: var(--ai-prompt-model-menu-trigger-color, #{$steelBlue});
     cursor: pointer;
-    transition: hoverTransition(background-color), hoverTransition(color);
+    transition:
+        hoverTransition(background-color),
+        hoverTransition(color);
 }
 
 .ai-prompt-model-menu-trigger:hover,
@@ -431,13 +438,13 @@
 }
 
 .ai-prompt-model-menu-section + .ai-prompt-model-menu-section::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 50%;
     width: var(--ai-prompt-model-menu-section-divider-width, 92%);
     height: var(--ai-prompt-model-menu-section-divider-height, 2px);
-    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, rgba(247, 247, 253, 0) 100%));
+    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #f7f7fd 10%, #f3e4f2 26%, #c5c0ee 50%, #e6e9f6 74%, #f7f7fd 90%, rgba(247, 247, 253, 0) 100%));
     border-radius: var(--ai-prompt-model-menu-section-divider-border-radius, 999px);
     transform: translateX(-50%);
 }
@@ -538,9 +545,6 @@
 
 .ai-prompt-selected-model-tag-svg {
     display: block;
-}
-
-.ai-prompt-selected-model-tag-svg {
     overflow: visible;
 }
 
@@ -585,13 +589,13 @@
 }
 
 .ai-media-config-group + .ai-media-config-group::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 50%;
     width: var(--ai-prompt-model-menu-section-divider-width, 92%);
     height: var(--ai-prompt-model-menu-section-divider-height, 2px);
-    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #F7F7FD 10%, #F3E4F2 26%, #C5C0EE 50%, #E6E9F6 74%, #F7F7FD 90%, rgba(247, 247, 253, 0) 100%));
+    background: var(--ai-prompt-model-menu-section-divider-gradient, linear-gradient(90deg, rgba(247, 247, 253, 0) 0%, #f7f7fd 10%, #f3e4f2 26%, #c5c0ee 50%, #e6e9f6 74%, #f7f7fd 90%, rgba(247, 247, 253, 0) 100%));
     border-radius: var(--ai-prompt-model-menu-section-divider-border-radius, 999px);
     transform: translateX(-50%);
 }
@@ -785,7 +789,9 @@
     background: transparent;
     color: var(--ai-prompt-model-menu-control-label-color, #7a828a);
     cursor: pointer;
-    transition: hoverTransition(color), hoverTransition(background-color);
+    transition:
+        hoverTransition(color),
+        hoverTransition(background-color);
 }
 
 .ai-model-config-add {

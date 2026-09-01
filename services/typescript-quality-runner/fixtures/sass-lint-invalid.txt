@@ -1,0 +1,12 @@
+.sample-panel__content {
+    --sampleProperty: #fff;
+    transition: color 150ms ease;
+
+    .sample-panel-child {
+        section {
+            span {
+                color: #ggg;
+            }
+        }
+    }
+}

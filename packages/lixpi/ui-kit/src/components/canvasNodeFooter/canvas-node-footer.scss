@@ -1,4 +1,4 @@
-@use '@lixpi/ui-primitives/styles/transitions' as *;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
 
 .canvas-node-footer {
     display: flex;
@@ -108,7 +108,7 @@
         transparent 100%
     );
 
-    content: '';
+    content: "";
     position: absolute;
     top: 50%;
     left: 50%;

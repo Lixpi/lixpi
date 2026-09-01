@@ -17,7 +17,7 @@
     min-width: 0;
 }
 
-.progress-timeline-item[data-leading='source'] {
+.progress-timeline-item[data-leading="source"] {
     // Source rows lead with 9px caps text next to an 11px icon; the flex row's
     // height is whichever is taller.
     --progress-timeline-first-line-height: max(calc(var(--progress-timeline-source-size, 9px) * 1.2), 11px);
@@ -31,7 +31,7 @@
 }
 
 .progress-timeline-rail::after {
-    content: '';
+    content: "";
     position: absolute;
     // Marker offset + 8px marker + 2px gap.
     top: calc((var(--progress-timeline-first-line-height) - 8px) / 2 + 10px);
@@ -66,24 +66,23 @@
     background: var(--progress-timeline-surface, #5d656d);
 }
 
-
-.progress-timeline-item[data-status='completed'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+.progress-timeline-item[data-status="completed"] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-color: var(--progress-timeline-completed, #72d4a9);
     background: var(--progress-timeline-completed, #72d4a9);
 }
 
-.progress-timeline-item[data-status='attention'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+.progress-timeline-item[data-status="attention"] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-color: var(--progress-timeline-attention, #e1b45f);
     background: var(--progress-timeline-attention, #e1b45f);
 }
 
-.progress-timeline-item[data-status='failed'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core,
-.progress-timeline-item[data-status='cancelled'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+.progress-timeline-item[data-status="failed"] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core,
+.progress-timeline-item[data-status="cancelled"] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-color: var(--progress-timeline-failed, #ff8b8b);
     background: var(--progress-timeline-failed, #ff8b8b);
 }
 
-.progress-timeline-item[data-status='skipped'] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
+.progress-timeline-item[data-status="skipped"] > .progress-timeline-rail > .progress-timeline-marker > .progress-timeline-marker-core {
     border-style: dashed;
     opacity: 0.58;
 }
@@ -147,15 +146,15 @@
     white-space: nowrap;
 }
 
-.progress-timeline-source[data-source-kind='capability'] {
+.progress-timeline-source[data-source-kind="capability"] {
     color: var(--progress-timeline-capability, #eca983);
 }
 
-.progress-timeline-source[data-source-kind='tool'] {
+.progress-timeline-source[data-source-kind="tool"] {
     color: var(--progress-timeline-tool, #d7e6ff);
 }
 
-.progress-timeline-source[data-source-kind='skill'] {
+.progress-timeline-source[data-source-kind="skill"] {
     color: var(--progress-timeline-skill, #b7dfd8);
 }
 

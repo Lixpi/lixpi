@@ -14,9 +14,7 @@
 // 1) Placement - Container positioning and sizing
 // ------------------------------------------------
 @mixin loadingPlaceholderPlacement($config: ()) {
-    $defaults: (
-        zIndex: 99
-    );
+    $defaults: (zIndex: 99);
 
     $s: map-merge($defaults, $config);
 
@@ -82,7 +80,7 @@
         animation: loading-placeholder-rotation map-get($s, animationDurationOuter) linear infinite;
 
         &::after {
-            content: '';
+            content: "";
             box-sizing: border-box;
             position: absolute;
             left: 0;

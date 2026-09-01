@@ -6,7 +6,7 @@
 # docker-compose.yml) as its own isolated pnpm workspace root under
 # /usr/src/service/<domain>, so this image ships no dependencies of its own —
 # run-tests.sh installs each domain's deps on demand before running vitest.
-ARG NODE_VERSION=23
+ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-alpine
 

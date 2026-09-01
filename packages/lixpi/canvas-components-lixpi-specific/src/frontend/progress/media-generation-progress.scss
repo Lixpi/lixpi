@@ -1,4 +1,4 @@
-@import '@lixpi/ui-primitives/styles/transitions';
+@import "@lixpi/ui-primitives/styles/transitions";
 
 .workspace-media-generation-progress {
     --progress-timeline-surface: transparent;
@@ -215,8 +215,8 @@
     opacity: 0.72;
 }
 
-.workspace-media-generation-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-title,
-.workspace-media-generation-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-meta {
+.workspace-media-generation-progress .progress-timeline-item[data-status="running"] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-item[data-status="running"] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-meta {
     opacity: 1;
 }
 

@@ -1,6 +1,6 @@
 @use "sass:color";
-@use '../../styles/tokens' as *;
-@use '@lixpi/ui-primitives/styles/transitions' as *;
+@use "../../styles/tokens" as *;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
 
 // Use same colors as dropdown and infoBubble primitives
 $bubbleMenuBg: $steelBlue;
@@ -18,7 +18,10 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     --bubble-menu-visual-scale: 1;
     transform: translateY(4px) scale(var(--bubble-menu-visual-scale));
     transform-origin: top left;
-    transition: pupOutTransition(opacity, 100ms), pupOutTransition(transform, 100ms), pupOutTransition(visibility, 100ms);
+    transition:
+        pupOutTransition(opacity, 100ms),
+        pupOutTransition(transform, 100ms),
+        pupOutTransition(visibility, 100ms);
 
     &.is-visible {
         visibility: visible;
@@ -181,7 +184,10 @@ $bubbleMenuShadow: $dropdownDarkThemeSubmenuBoxShadow;
     visibility: hidden;
     opacity: 0;
     transform: translateY(-4px);
-    transition: pupOutTransition(opacity, 150ms), pupOutTransition(transform, 150ms), pupOutTransition(visibility, 150ms);
+    transition:
+        pupOutTransition(opacity, 150ms),
+        pupOutTransition(transform, 150ms),
+        pupOutTransition(visibility, 150ms);
     z-index: 110;
 
     &.is-open {

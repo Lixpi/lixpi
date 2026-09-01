@@ -1,3 +1,5 @@
+@use "@lixpi/ui-primitives/styles/transitions" as *;
+
 .execution-trace {
     display: grid;
     gap: 10px;
@@ -176,7 +178,7 @@
 }
 
 .execution-trace-value-item::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0.66em;
     left: 1px;
@@ -199,7 +201,7 @@
 }
 
 .execution-trace-value-label::after {
-    content: ':';
+    content: ":";
 }
 
 .execution-trace-value-text {
@@ -273,11 +275,11 @@
 }
 
 .execution-trace-text-summary::before {
-    content: '\203A';
+    content: "\203A";
     display: inline-block;
     width: 10px;
     transform-origin: 45% 50%;
-    transition: transform 140ms ease;
+    transition: standardTransition(transform, 140ms);
 }
 
 .execution-trace-text[open] .execution-trace-text-summary::before {

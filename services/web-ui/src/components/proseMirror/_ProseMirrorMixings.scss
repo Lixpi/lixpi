@@ -1,8 +1,7 @@
-
 @mixin boundaryPointerTriangle($config: ()) {
     $defaults: (
-        direction: 'right',
-        anchor: 'bottom',
+        direction: "right",
+        anchor: "bottom",
         horizontalOffset: 4px,
         verticalOffset: 16px,
         size: 4px,
@@ -25,17 +24,17 @@
         position: absolute;
         border: $size solid transparent;
 
-        @if $anchor == 'top' {
+        @if $anchor == "top" {
             top: $verticalOffset;
         } @else {
             bottom: $verticalOffset;
         }
 
-        @if $direction == 'right' {
+        @if $direction == "right" {
             left: 100%;
             margin-left: $horizontalOffset;
             border-left-color: $color;
-        } @else if $direction == 'left' {
+        } @else if $direction == "left" {
             right: 100%;
             margin-right: $horizontalOffset;
             border-right-color: $color;
@@ -49,17 +48,17 @@
             border: ($size + 2px) solid transparent;
             z-index: -1;
 
-            @if $anchor == 'top' {
+            @if $anchor == "top" {
                 top: $verticalOffset - 2px;
             } @else {
                 bottom: $verticalOffset - 2px;
             }
 
-            @if $direction == 'right' {
+            @if $direction == "right" {
                 left: 100%;
                 margin-left: $horizontalOffset;
                 border-left-color: $accentColor;
-            } @else if $direction == 'left' {
+            } @else if $direction == "left" {
                 right: 100%;
                 margin-right: $horizontalOffset;
                 border-right-color: $accentColor;
@@ -72,8 +71,8 @@
 // Uses SVG mask technique so it works on any background (including gradients)
 @mixin speechBubbleTail($config: ()) {
     $defaults: (
-        position: 'right',          // 'left' or 'right' - which side the tail appears
-        bubbleColor: #e5e5ea,       // background color of the bubble
+        position: "right", // 'left' or 'right' - which side the tail appears
+        bubbleColor: #e5e5ea // background color of the bubble
     );
 
     $settings: map-merge($defaults, $config);
@@ -94,15 +93,15 @@
         height: 11px;
         background-color: $bubbleColor;
 
-        @if $position == 'right' {
+        @if $position == "right" {
             right: -7px;
             // Curved tail shape using clip-path polygon with smooth curve simulation
             // The shape: starts wide at top (connects to bubble), curves to a point at bottom-right
-            clip-path: path('M 0 0 L 0 6.5 C 0 9.5 5 11 12 11 C 8.5 10 7.5 8.5 6.5 6.5 C 5.5 4.5 3 2 0 0 Z');
+            clip-path: path("M 0 0 L 0 6.5 C 0 9.5 5 11 12 11 C 8.5 10 7.5 8.5 6.5 6.5 C 5.5 4.5 3 2 0 0 Z");
         } @else {
             left: -7px;
             // Mirrored for left side
-            clip-path: path('M 12 0 L 12 6.5 C 12 9.5 7 11 0 11 C 3.5 10 4.5 8.5 5.5 6.5 C 6.5 4.5 9 2 12 0 Z');
+            clip-path: path("M 12 0 L 12 6.5 C 12 9.5 7 11 0 11 C 3.5 10 4.5 8.5 5.5 6.5 C 6.5 4.5 9 2 12 0 Z");
         }
     }
 }

@@ -8,7 +8,6 @@
     z-index: 3;
 }
 
-
 .workspace-video-chrome {
     position: absolute;
     pointer-events: none;
@@ -46,7 +45,6 @@
     overflow: visible;
     pointer-events: none;
 }
-
 
 @media (prefers-reduced-transparency: reduce) {
     .workspace-video-controls-host {

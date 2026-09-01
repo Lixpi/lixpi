@@ -1,4 +1,4 @@
-@import '@lixpi/ui-primitives/styles/transitions';
+@import "@lixpi/ui-primitives/styles/transitions";
 
 .workspace-upload-placeholder-node {
     display: flex;
@@ -36,14 +36,14 @@
     position: absolute;
     top: 18px;
     right: 18px;
-    z-index: 20;    // above the transparent drag overlay (z-index: 15)
+    z-index: 20; // above the transparent drag overlay (z-index: 15)
 }
 
 .workspace-upload-placeholder-dismiss {
     position: absolute;
     top: 14px;
     right: 14px;
-    z-index: 20;    // above the transparent drag overlay (z-index: 15)
+    z-index: 20; // above the transparent drag overlay (z-index: 15)
     display: inline-flex;
     align-items: center;
     justify-content: center;

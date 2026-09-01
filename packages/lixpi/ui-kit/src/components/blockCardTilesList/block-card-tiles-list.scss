@@ -1,5 +1,5 @@
-@use '../../styles/tokens' as *;
-@use '@lixpi/ui-primitives/styles/transitions' as *;
+@use "../../styles/tokens" as *;
+@use "@lixpi/ui-primitives/styles/transitions" as *;
 
 .block-card-tiles-list {
     flex: 0 0 auto;
@@ -125,7 +125,7 @@
 }
 
 .block-card-tile-action::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 50%;
     top: 50%;

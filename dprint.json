@@ -1,6 +1,6 @@
 {
     "$schema": "https://dprint.dev/schemas/v0.json",
-    "includes": ["**/*.ts"],
+    "includes": ["**/*.css", "**/*.scss", "**/*.ts"],
     "excludes": [
         "**/node_modules",
         "**/dist",
@@ -24,7 +24,9 @@
         "importDeclaration.sortTypeOnlyImports": "last",
         "exportDeclaration.sortNamedExports": "maintain"
     },
+    "malva": {},
     "plugins": [
-        "/usr/src/quality-runner/node_modules/@dprint/typescript/plugin.wasm"
+        "/usr/src/quality-runner/node_modules/@dprint/typescript/plugin.wasm",
+        "/usr/src/quality-runner/node_modules/dprint-plugin-malva/plugin.wasm"
     ]
 }

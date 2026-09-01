@@ -6,7 +6,11 @@
     "devDependencies": {
         "@dprint/typescript": "0.96.1",
         "dprint": "0.57.0",
-        "oxlint": "1.80.0"
+        "dprint-plugin-malva": "0.16.0",
+        "oxlint": "1.80.0",
+        "postcss-scss": "4.0.9",
+        "stylelint": "17.14.1",
+        "stylelint-scss": "7.2.0"
     },
     "packageManager": "pnpm@11.6.0"
 }

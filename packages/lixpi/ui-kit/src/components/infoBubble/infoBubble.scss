@@ -1,5 +1,5 @@
-@use '../../styles/tokens' as *;
-@use './infoBubble-mixins' as *;
+@use "../../styles/tokens" as *;
+@use "./infoBubble-mixins" as *;
 
 /* InfoBubble component styles */
 .info-bubble-wrapper {
@@ -18,26 +18,30 @@
     }
 
     &.theme-light {
-        @include infoBubbleTheme((
-            surfaceBg: $offWhite,
-            surfaceFg: $nightBlue,
-            bubbleRadius: 4px,
-            bubbleShadow: (0 1px 3px 1px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
-            borderLightnessAdjustment: -10%
-        ));
+        @include infoBubbleTheme(
+            (
+                surfaceBg: $offWhite,
+                surfaceFg: $nightBlue,
+                bubbleRadius: 4px,
+                bubbleShadow: (0 1px 3px 1px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
+                borderLightnessAdjustment: -10%
+            )
+        );
     }
 
     &.theme-dark {
-        @include infoBubbleTheme((
-            // In our app, `theme-dark` is used for controls on light surfaces.
-            // Keep the popover surface light (like M3 menus) and rely on violet
-            // state layers for interaction.
-            surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
-            surfaceFg: $dropdownDarkThemeSubmenuTextColor,
-            bubbleRadius: 8px,
-            bubbleShadow: (0 2px 6px 2px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
-            borderLightnessAdjustment: -10%
-        ));
+        @include infoBubbleTheme(
+            (
+                // In our app, `theme-dark` is used for controls on light surfaces.
+                // Keep the popover surface light (like M3 menus) and rely on violet
+                // state layers for interaction.
+                surfaceBg: $dropdownDarkThemeSubmenuBackgroundColor,
+                surfaceFg: $dropdownDarkThemeSubmenuTextColor,
+                bubbleRadius: 8px,
+                bubbleShadow: (0 2px 6px 2px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%)),
+                borderLightnessAdjustment: -10%
+            )
+        );
     }
 
     // Dropdown-specific: hide arrow, use M3 menu container style

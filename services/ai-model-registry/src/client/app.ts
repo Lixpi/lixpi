@@ -739,9 +739,15 @@ class ParamPicker {
     }
 }
 
-const picker = new ParamPicker(document.getElementById('providers') as HTMLElement)
-try {
-    await picker.init()
-} catch (error) {
-    document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
+async function startParamPicker(): Promise<void> {
+    const picker = new ParamPicker(document.getElementById('providers') as HTMLElement)
+
+    try {
+        await picker.init()
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(message)}</p>`
+    }
 }
+
+void startParamPicker()

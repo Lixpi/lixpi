@@ -1,4 +1,3 @@
-
 // IMPORTANT!!!
 // This file is deprecated and used only in some old code and will be removed later
 // All new changes must rely on `colorPalette` variable in services/web-ui/src/settings.ts
@@ -14,9 +13,9 @@ $offWhiteMuted: #bfbfbf;
 
 // Third party brand colours. Used only to accurately represent colors of third party providers, like LLM providers etc.
 //INFO: can not be used for anything else
-$claudeAi: #D97757;
+$claudeAi: #d97757;
 $gptBrandColor: #5bbf97;
-$googleGemini: #4285F4;
+$googleGemini: #4285f4;
 
 // Are they used anywere at all???
 // $red: #cd4444;
@@ -30,7 +29,6 @@ $almost-black: #23292d;
 $perfect-light-green: #d5e2cb;
 $yet-another-light-green: #cedbb8;
 $perfect-light-blue: linear-gradient(to right, #cfe8f473, #e6f0f8, #e5f1f9);
-
 
 //TODO deprecated
 // Color coded rows

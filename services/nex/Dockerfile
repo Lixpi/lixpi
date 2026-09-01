@@ -1,6 +1,6 @@
 # NATS NEX execution-engine node image.
 #
-# Mirrors services/api: a node:23-alpine base so the workload can run TypeScript
+# Mirrors services/api: a node:24-alpine base so the workload can run TypeScript
 # via `node --experimental-transform-types` (exactly how the API container runs
 # TS), plus the pinned `nex` binary that turns this container into a NEX node
 # running the bundled native nexlet. The workload's @lixpi/* + provider-SDK deps
@@ -9,7 +9,7 @@
 # `nex` is a static Go binary published per-arch on GitHub releases. libc6-compat
 # is installed as a safety net in case a release links against glibc on musl.
 
-ARG NODE_VERSION=23
+ARG NODE_VERSION=24
 ARG NEX_VERSION=0.4.1
 
 FROM node:${NODE_VERSION}-alpine

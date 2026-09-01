@@ -1,4 +1,5 @@
-@use 'sass:math';
+@use "sass:math";
+@use "@lixpi/ui-primitives/styles/transitions" as *;
 
 // Radii are compile-time values. The colour tokens below stay CSS custom
 // properties because the client writes measured header heights into the same
@@ -32,12 +33,16 @@ $radius-card: 8px;
     --group-h: 52px;
 }
 
-* { box-sizing: border-box; }
+* {
+    box-sizing: border-box;
+}
 
 /* Filtering toggles the `hidden` attribute. The UA stylesheet backs that with
    `display: none`, but any author `display` rule on the element outranks it, so
    without this the filters silently do nothing on anything styled as a flexbox. */
-[hidden] { display: none !important; }
+[hidden] {
+    display: none !important;
+}
 
 body {
     margin: 0;
@@ -46,17 +51,29 @@ body {
     font: 18px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; color: var(--hidden); }
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 16px;
+    color: var(--hidden);
+}
 
 .save-state {
     font-weight: 600;
     font-size: 13px;
     white-space: nowrap;
 
-    &[data-state='idle'] { color: var(--muted); }
-    &[data-state='saving'] { color: var(--hidden); }
-    &[data-state='saved'] { color: var(--exposed); }
-    &[data-state='error'] { color: var(--warn); }
+    &[data-state="idle"] {
+        color: var(--muted);
+    }
+    &[data-state="saving"] {
+        color: var(--hidden);
+    }
+    &[data-state="saved"] {
+        color: var(--exposed);
+    }
+    &[data-state="error"] {
+        color: var(--warn);
+    }
 }
 
 /* Search, filter, counts and save state all share one line. Nothing here grows:
@@ -84,19 +101,45 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     font: inherit;
     font-size: 14px;
 }
-#search { flex: 0 1 240px; min-width: 130px; }
-#state-filter, #model-filter { cursor: pointer; }
-#model-filter { max-width: 230px; }
-#search:focus, #state-filter:focus, #model-filter:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#search {
+    flex: 0 1 240px;
+    min-width: 130px;
+}
+#state-filter, #model-filter {
+    cursor: pointer;
+}
+#model-filter {
+    max-width: 230px;
+}
+#search:focus, #state-filter:focus, #model-filter:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
 
-.tally { display: flex; gap: 12px; margin-left: auto; font-size: 13px; color: var(--muted); }
-.tally-item b { color: var(--text); }
-.tally-item[data-kind="expose"] b { color: var(--exposed); }
-.tally-item[data-kind="unreviewed"] b { color: var(--hidden); }
+.tally {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--muted);
+}
+.tally-item b {
+    color: var(--text);
+}
+.tally-item[data-kind="expose"] b {
+    color: var(--exposed);
+}
+.tally-item[data-kind="unreviewed"] b {
+    color: var(--hidden);
+}
 
-.providers { padding: 20px 28px 80px; }
+.providers {
+    padding: 20px 28px 80px;
+}
 
-.section { margin-bottom: 40px; }
+.section {
+    margin-bottom: 40px;
+}
 
 /* Both header levels stick: the section under the toolbar, the provider under
    the section. The section shrinks once stuck so it costs less of the viewport
@@ -116,7 +159,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     letter-spacing: 0.06em;
     color: var(--muted);
 }
-.provider-name { color: var(--accent); }
+.provider-name {
+    color: var(--accent);
+}
 
 /* All three header levels toggle their own body: media type, provider, and the
    categories inside a provider. The chevron points down when open and rotates a
@@ -127,24 +172,41 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     cursor: pointer;
     user-select: none;
 
-    &:hover { color: var(--text); }
+    &:hover {
+        color: var(--text);
+    }
 }
 
-.chevron { flex-shrink: 0; transition: transform 0.15s ease; }
-
-.section[data-collapsed='true'] {
-    > .section-head .chevron { transform: rotate(-90deg); }
-    > .section-body { display: none; }
+.chevron {
+    flex-shrink: 0;
+    transition: standardTransition(transform, 0.15s);
 }
 
-.group[data-collapsed='true'] {
-    > .group-head .chevron { transform: rotate(-90deg); }
-    > .group-body { display: none; }
+.section[data-collapsed="true"] {
+    > .section-head .chevron {
+        transform: rotate(-90deg);
+    }
+    > .section-body {
+        display: none;
+    }
 }
 
-.category[data-collapsed='true'] {
-    > .category-head .chevron { transform: rotate(-90deg); }
-    > .rows { display: none; }
+.group[data-collapsed="true"] {
+    > .group-head .chevron {
+        transform: rotate(-90deg);
+    }
+    > .group-body {
+        display: none;
+    }
+}
+
+.category[data-collapsed="true"] {
+    > .category-head .chevron {
+        transform: rotate(-90deg);
+    }
+    > .rows {
+        display: none;
+    }
 }
 
 .group {
@@ -167,13 +229,28 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     background: var(--surface-raised);
 }
 
-.group-head h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.models { margin: 2px 0 0; color: var(--muted); font-size: 15px; }
-.group-count { color: var(--muted); font-size: 15px; white-space: nowrap; margin-left: auto; }
+.group-head h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+.models {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+}
+.group-count {
+    color: var(--muted);
+    font-size: 15px;
+    white-space: nowrap;
+    margin-left: auto;
+}
 
 /* Each provider's parameters are grouped by what they do. The heading sticks
    under the provider header so the concern stays named while scrolling. */
-.category:not(:first-child) { border-top: 1px solid var(--border); }
+.category:not(:first-child) {
+    border-top: 1px solid var(--border);
+}
 .category-head {
     position: sticky;
     top: calc(var(--toolbar-h, 52px) + var(--section-h) + var(--group-h));
@@ -196,7 +273,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     text-transform: none;
     opacity: 0.7;
 }
-.category .rows { padding-top: 10px; }
+.category .rows {
+    padding-top: 10px;
+}
 
 /* Two parameters per row. minmax(0, 1fr) rather than a bare 1fr, so a long
    value chip or apiField cannot blow the column out past its share. */
@@ -222,34 +301,85 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 /* Use unticked means the parameter is not part of any request, so the card fill
    lifts to a lighter blue-grey. It keeps --bg's exact hue on purpose: anything
    pulled toward neutral reads brown next to a blue-tinted page. */
-.row[data-decision="skip"] { background: var(--bg); }
-.row[data-decision="skip"][data-status="none"] { background: var(--surface-muted); }
+.row[data-decision="skip"] {
+    background: var(--bg);
+}
+.row[data-decision="skip"][data-status="none"] {
+    background: var(--surface-muted);
+}
 
 /* Hide sits at the far right of the title line and folds the card down to that
    line alone. It only applies to a parameter that is not being used, so the
    checkbox only exists while Use is off. */
-.check.row-flag { margin-left: auto; display: none; }
-.row[data-decision="skip"] .check.row-flag { display: flex; }
+.check.row-flag {
+    margin-left: auto;
+    display: none;
+}
+.row[data-decision="skip"] .check.row-flag {
+    display: flex;
+}
 /* A hidden row is out of scope, so its title reads back and Use is not offered
    until Hide comes off again. */
-.row[data-irrelevant="true"] { align-self: start; }
-.row[data-irrelevant="true"] .param-name { color: var(--muted); }
-.row[data-irrelevant="true"] .badge { opacity: 0.5; }
-.row[data-irrelevant="true"] > *:not(.row-title):not(.note) { display: none; }
-.row[data-irrelevant="true"] .note { margin-top: 10px; }
-.row[data-irrelevant="true"] .row-title { margin-bottom: 0; }
+.row[data-irrelevant="true"] {
+    align-self: start;
+}
+.row[data-irrelevant="true"] .param-name {
+    color: var(--muted);
+}
+.row[data-irrelevant="true"] .badge {
+    opacity: 0.5;
+}
+.row[data-irrelevant="true"] > *:not(.row-title):not(.note) {
+    display: none;
+}
+.row[data-irrelevant="true"] .note {
+    margin-top: 10px;
+}
+.row[data-irrelevant="true"] .row-title {
+    margin-bottom: 0;
+}
 
 /* The two checkboxes sit on the title line directly after the last badge. */
-.row-choices { display: flex; gap: 18px; }
-.check { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 16px; white-space: nowrap; }
-.check input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.row-choices {
+    display: flex;
+    gap: 18px;
+}
+.check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    cursor: pointer;
+    font-size: 16px;
+    white-space: nowrap;
+}
+.check input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
 /* Show in UI is disabled until Use is on, so it reads back rather than looking
    like an option that simply is not ticked. */
-.check input:disabled { cursor: not-allowed; opacity: 0.45; }
-.check input:disabled + span { color: var(--muted); }
+.check input:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+.check input:disabled + span {
+    color: var(--muted);
+}
 
-.row-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 8px; }
-.param-name { font-size: 17px; font-weight: 600; color: var(--text); }
+.row-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.param-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+}
 
 .badge {
     font-size: 14px;
@@ -259,19 +389,43 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     color: var(--muted);
     white-space: nowrap;
 
-    &[data-state='exposed'] { color: var(--exposed); border-color: currentColor; }
-    &[data-state='hidden'] { color: var(--hidden); border-color: currentColor; }
-    &[data-state='absent'] { color: var(--absent); }
-    &[data-availability='unsupported'] { color: var(--warn); border-color: currentColor; }
-    &[data-availability='unverified'] { color: var(--warn); border-color: currentColor; font-weight: 600; }
-    &[data-availability='supported'] { display: none; }
+    &[data-state="exposed"] {
+        color: var(--exposed);
+        border-color: currentColor;
+    }
+    &[data-state="hidden"] {
+        color: var(--hidden);
+        border-color: currentColor;
+    }
+    &[data-state="absent"] {
+        color: var(--absent);
+    }
+    &[data-availability="unsupported"] {
+        color: var(--warn);
+        border-color: currentColor;
+    }
+    &[data-availability="unverified"] {
+        color: var(--warn);
+        border-color: currentColor;
+        font-weight: 600;
+    }
+    &[data-availability="supported"] {
+        display: none;
+    }
 }
 
-.summary { margin: 0 0 8px; }
+.summary {
+    margin: 0 0 8px;
+}
 
-.values { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.values {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
 /* Every chip carries a transparent border so marking one does not shift the row. */
-.values { align-items: center; }
 .values code {
     background: var(--code-bg);
     border: 1px solid transparent;
@@ -281,26 +435,45 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 /* Chips are the picker for any parameter with a value list, so they are only
    clickable while the parameter is actually used. */
 .row[data-decision="internal"] .values.is-pickable code,
-.row[data-decision="expose"] .values.is-pickable code { cursor: pointer; }
+.row[data-decision="expose"] .values.is-pickable code {
+    cursor: pointer;
+}
 .row[data-decision="internal"] .values.is-pickable code:hover,
-.row[data-decision="expose"] .values.is-pickable code:hover { border-color: var(--muted); }
+.row[data-decision="expose"] .values.is-pickable code:hover {
+    border-color: var(--muted);
+}
 
 /* Grey dashed marks the provider's own default; solid green marks what was
    picked, and wins when a chip is both. */
-.values code.is-provider-default { border-color: var(--cream); border-style: dashed; position: relative; }
-.values code.is-selected { border-color: var(--exposed); border-style: solid; color: var(--exposed); }
+.values code.is-provider-default {
+    border-color: var(--cream);
+    border-style: dashed;
+    position: relative;
+}
+.values code.is-selected {
+    border-color: var(--exposed);
+    border-style: solid;
+    color: var(--exposed);
+}
 
 /* Picking the provider's own default turns its bubble green too, so the chip and
    its label agree instead of the chip reading chosen and the bubble reading not. */
 /* Near-black ink rather than the page background: on this green it lifts the
    contrast from about 5:1 to 6:1, and white goes the wrong way at only 3:1. */
-.values code.is-provider-default.is-selected::after { background: var(--exposed); color: #131a10; }
-.values code.is-provider-default.is-selected::before { border-top-color: var(--exposed); }
+.values code.is-provider-default.is-selected::after {
+    background: var(--exposed);
+    color: #131a10;
+}
+.values code.is-provider-default.is-selected::before {
+    border-top-color: var(--exposed);
+}
 
 /* The provider default gets a speech bubble sitting above its chip, its pointer
    on the bubble's underside aimed down at the option. The chip row reserves the
    height above itself so the bubble never overlaps the text before it. */
-.values.is-pickable { margin-top: 30px; }
+.values.is-pickable {
+    margin-top: 30px;
+}
 .values code.is-provider-default::before,
 .values code.is-provider-default::after {
     position: absolute;
@@ -309,14 +482,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     pointer-events: none;
 }
 .values code.is-provider-default::before {
-    content: '';
+    content: "";
     bottom: calc(100% + 7px);
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     border-top: 5px solid var(--cream);
 }
 .values code.is-provider-default::after {
-    content: 'default';
+    content: "default";
     bottom: calc(100% + 12px);
     padding: 1px 8px;
     border-radius: 5px;
@@ -334,18 +507,42 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     margin: 0 0 10px;
     font-size: 15px;
 }
-.facts dt { color: var(--muted); }
-.facts dd { margin: 0; }
+.facts dt {
+    color: var(--muted);
+}
+.facts dd {
+    margin: 0;
+}
 
-.combines { margin: 0 0 8px; padding-left: 20px; font-size: 15px; color: var(--muted); }
-.combines li { margin-bottom: 2px; }
+.combines {
+    margin: 0 0 8px;
+    padding-left: 20px;
+    font-size: 15px;
+    color: var(--muted);
+}
+.combines li {
+    margin-bottom: 2px;
+}
 
 /* Each value control belongs to exactly one decision, so both live in the DOM
    and the row's decision reveals the one that applies. */
-.value-control { display: none; align-items: center; gap: 10px; margin-bottom: 10px; }
-.row[data-decision="internal"] .value-control[data-for="fixed"] { display: flex; }
-.row[data-decision="expose"] .value-control[data-for="default"] { display: flex; }
-.value-label { color: var(--muted); font-size: 15px; white-space: nowrap; }
+.value-control {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.row[data-decision="internal"] .value-control[data-for="fixed"] {
+    display: flex;
+}
+.row[data-decision="expose"] .value-control[data-for="default"] {
+    display: flex;
+}
+.value-label {
+    color: var(--muted);
+    font-size: 15px;
+    white-space: nowrap;
+}
 .value-control select, .value-control input {
     flex: 1 1 auto;
     min-width: 0;
@@ -357,7 +554,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     font: inherit;
     font-size: 15px;
 }
-.value-control select:focus, .value-control input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.value-control select:focus, .value-control input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
 
 .note {
     width: 100%;
@@ -369,16 +569,26 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     background: var(--bg);
     color: var(--text);
 }
-.note:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.note:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
 
-.fatal { color: var(--warn); font-weight: 600; }
+.fatal {
+    color: var(--warn);
+    font-weight: 600;
+}
 
 @media (max-width: 1100px) {
-    .rows { grid-template-columns: minmax(0, 1fr); }
+    .rows {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 @media (max-width: 720px) {
-    .row-choices { width: 100%; }
+    .row-choices {
+        width: 100%;
+    }
 }
 
 /* Where an already-used parameter is set in the repo, and what it does there. */
@@ -396,8 +606,13 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     color: var(--muted);
     margin-bottom: 6px;
 }
-.usage-what { margin: 0 0 8px; font-size: 15px; }
-.usage .facts { margin-bottom: 8px; }
+.usage-what {
+    margin: 0 0 8px;
+    font-size: 15px;
+}
+.usage .facts {
+    margin-bottom: 8px;
+}
 .usage-code {
     margin: 0;
     padding: 8px 10px;
@@ -405,7 +620,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     background: var(--code-bg);
     overflow-x: auto;
 }
-.usage-code code { color: var(--text); white-space: pre; }
+.usage-code code {
+    color: var(--text);
+    white-space: pre;
+}
 
 /* Sign-off is a judgement on the finished decision, so it sits at the bottom
    right of the card, after everything it is a judgement about. */
@@ -419,20 +637,50 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 }
 
 /* The approved border reuses the palette's green rather than a new one. */
-.row[data-status="approved"] { border-color: var(--exposed); }
-.row[data-status="needs-param-clarification"] { border-color: var(--hidden); }
-.row[data-status="needs-implementation-investigation"] { border-color: var(--pink); }
-.tally-item[data-kind="approved"] b { color: var(--exposed); }
-.tally-item[data-kind="needs-param-clarification"] b { color: var(--hidden); }
-.tally-item[data-kind="needs-implementation-investigation"] b { color: var(--pink); }
+.row[data-status="approved"] {
+    border-color: var(--exposed);
+}
+.row[data-status="needs-param-clarification"] {
+    border-color: var(--hidden);
+}
+.row[data-status="needs-implementation-investigation"] {
+    border-color: var(--pink);
+}
+.tally-item[data-kind="approved"] b {
+    color: var(--exposed);
+}
+.tally-item[data-kind="needs-param-clarification"] b {
+    color: var(--hidden);
+}
+.tally-item[data-kind="needs-implementation-investigation"] b {
+    color: var(--pink);
+}
 
 /* Which models and API surfaces accept this parameter. Green is documented
    support, red is documented rejection; a parameter the docs do not restrict
    lists its whole group, because unmentioned means supported. */
-.compat { margin: 0 0 10px; display: flex; flex-direction: column; gap: 4px; }
-.compat-row { display: flex; align-items: baseline; gap: 10px; }
-.compat-label { color: var(--muted); font-size: 15px; min-width: 58px; flex-shrink: 0; }
-.pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.compat {
+    margin: 0 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.compat-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+.compat-label {
+    color: var(--muted);
+    font-size: 15px;
+    min-width: 58px;
+    flex-shrink: 0;
+}
+.pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
 .pill {
     font-size: 13px;
     padding: 1px 9px;
@@ -440,8 +688,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
     border: 1px solid currentColor;
     white-space: nowrap;
 
-    &[data-kind='yes'] { color: var(--exposed); }
-    &[data-kind='no'] { color: var(--warn); }
+    &[data-kind="yes"] {
+        color: var(--exposed);
+    }
+    &[data-kind="no"] {
+        color: var(--warn);
+    }
 }
 
 /* The page each fact was read from, so a claim can be checked at its source.
@@ -454,10 +706,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
         color: var(--accent);
         text-decoration: none;
 
-        &:hover { text-decoration: underline; }
+        &:hover {
+            text-decoration: underline;
+        }
     }
 }
-
-
-
-

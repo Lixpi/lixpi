@@ -4,20 +4,45 @@ import {
     stat,
     writeFile,
 } from 'node:fs/promises'
-import {
-    resolve,
-} from 'node:path'
+import { resolve } from 'node:path'
 
 const ignoredDirectoryNames = new Set(['coverage', 'dist', 'node_modules', 'packages-vendor'])
 const multilineImportPattern = /^(import(?:\s+[\w$]+,)?\s*)\{\r?\n([\s\S]*?)(^\}\s+from\s+['"][^'"]+['"][^\n]*$)/gm
 const inlineImportPattern = /^(import(?:\s+[\w$]+,)?\s*)\{\s*([^{}\n]+?)\s*\}(\s+from\s+['"][^'"]+['"][^\n]*$)/gm
 const specifierPattern = /^\s*(type\s+)?(?:[\w$]+|['"][^'"]+['"])(?:\s+as\s+[\w$]+)?\s*,?\s*(?:\/\/.*)?$/
 
-async function collectTypeScriptFiles(inputPaths) {
-    const files = []
-    const prohibitedFiles = []
+type CollectedTypeScriptFiles = {
+    files: string[]
+    prohibitedFiles: string[]
+}
 
-    async function visit(path) {
+type ImportEntry = {
+    isType: boolean
+    lines: string[]
+    text: string
+}
+
+type ParsedImportEntries = {
+    entries: ImportEntry[]
+    trailingLines: string[]
+}
+
+type Replacement = {
+    end: number
+    start: number
+    value: string
+}
+
+type CanonicalizationResult = {
+    output: string
+    violations: number[]
+}
+
+async function collectTypeScriptFiles(inputPaths: string[]): Promise<CollectedTypeScriptFiles> {
+    const files: string[] = []
+    const prohibitedFiles: string[] = []
+
+    async function visit(path: string): Promise<void> {
         const entry = await stat(path)
         if (entry.isFile()) {
             if (path.endsWith('.tsx') || path.endsWith('.jsx')) prohibitedFiles.push(path)
@@ -40,10 +65,10 @@ async function collectTypeScriptFiles(inputPaths) {
     }
 }
 
-function parseMultilineSpecifierEntries(body) {
+function parseMultilineSpecifierEntries(body: string): ParsedImportEntries {
     const lines = body.split('\n')
-    const entries = []
-    let pendingLines = []
+    const entries: ImportEntry[] = []
+    let pendingLines: string[] = []
 
     for (const line of lines) {
         const specifier = line.match(specifierPattern)
@@ -63,7 +88,7 @@ function parseMultilineSpecifierEntries(body) {
     return { entries, trailingLines: pendingLines }
 }
 
-function applyReplacements(source, replacements) {
+function applyReplacements(source: string, replacements: Replacement[]): string {
     if (replacements.length === 0) return source
 
     let output = ''
@@ -76,9 +101,9 @@ function applyReplacements(source, replacements) {
     return output + source.slice(cursor)
 }
 
-function canonicalizeMultilineImports(source, fix) {
-    const violations = []
-    const replacements = []
+function canonicalizeMultilineImports(source: string, fix: boolean): CanonicalizationResult {
+    const violations: number[] = []
+    const replacements: Replacement[] = []
 
     for (const match of source.matchAll(multilineImportPattern)) {
         const [fullMatch, header, body, closing] = match
@@ -122,9 +147,9 @@ function canonicalizeMultilineImports(source, fix) {
     }
 }
 
-function canonicalizeInlineImports(source, fix) {
-    const violations = []
-    const replacements = []
+function canonicalizeInlineImports(source: string, fix: boolean): CanonicalizationResult {
+    const violations: number[] = []
+    const replacements: Replacement[] = []
 
     for (const match of source.matchAll(inlineImportPattern)) {
         const [fullMatch, header, body, suffix] = match
@@ -155,7 +180,7 @@ function canonicalizeInlineImports(source, fix) {
     }
 }
 
-function processSource(source, fix) {
+function processSource(source: string, fix: boolean): CanonicalizationResult {
     const multilineResult = canonicalizeMultilineImports(source, fix)
     const inlineResult = canonicalizeInlineImports(multilineResult.output, fix)
     return {
@@ -166,7 +191,7 @@ function processSource(source, fix) {
 
 const [mode, ...inputPaths] = process.argv.slice(2)
 if ((mode !== 'check' && mode !== 'fix') || inputPaths.length === 0) {
-    console.error('Usage: import-specifier-order.mjs {check|fix} <path...>')
+    console.error('Usage: import-specifier-order.ts {check|fix} <path...>')
     process.exit(1)
 }
 

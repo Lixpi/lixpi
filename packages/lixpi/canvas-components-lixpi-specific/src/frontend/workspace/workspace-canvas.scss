@@ -1,12 +1,12 @@
-@import '@lixpi/ui-primitives/styles/transitions';
-@import '@lixpi/canvas-components/styles/loading-overlay';
-@import '@lixpi/canvas-components-lixpi-specific/styles/workspace-layer';
-@import '@lixpi/canvas-components-lixpi-specific/styles/video-chrome';
-@import '@lixpi/canvas-components-lixpi-specific/styles/asset-views';
-@import '@lixpi/canvas-components-lixpi-specific/styles/output-chrome';
-@import '@lixpi/canvas-components-lixpi-specific/styles/context-preview';
+@import "@lixpi/ui-primitives/styles/transitions";
+@import "@lixpi/canvas-components/styles/loading-overlay";
+@import "@lixpi/canvas-components-lixpi-specific/styles/workspace-layer";
+@import "@lixpi/canvas-components-lixpi-specific/styles/video-chrome";
+@import "@lixpi/canvas-components-lixpi-specific/styles/asset-views";
+@import "@lixpi/canvas-components-lixpi-specific/styles/output-chrome";
+@import "@lixpi/canvas-components-lixpi-specific/styles/context-preview";
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/canvas-chrome';
+@import "@lixpi/canvas-components-lixpi-specific/styles/canvas-chrome";
 
 .workspace-pane {
     --side-panel-backdrop-bottom-outset: var(--workspace-canvas-padding-bottom, 0px);
@@ -37,13 +37,17 @@
 }
 
 @keyframes workspace-media-analyzing-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.45; }
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
 }
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/output-details-content';
+@import "@lixpi/canvas-components-lixpi-specific/styles/output-details-content";
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/nodes';
+@import "@lixpi/canvas-components-lixpi-specific/styles/nodes";
 
 // Animated gradient background is rendered via @lixpi/canvas-components/effects.
 .workspace-ai-chat-thread-node {
@@ -114,15 +118,15 @@
     padding: 0 0 1rem;
 }
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/right-panel';
+@import "@lixpi/canvas-components-lixpi-specific/styles/right-panel";
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/workspace-composer';
+@import "@lixpi/canvas-components-lixpi-specific/styles/workspace-composer";
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/operation-status';
+@import "@lixpi/canvas-components-lixpi-specific/styles/operation-status";
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/branch-marker';
-@import '@lixpi/canvas-components-lixpi-specific/styles/progress';
-@import '@lixpi/canvas-components-lixpi-specific/styles/output-details';
+@import "@lixpi/canvas-components-lixpi-specific/styles/branch-marker";
+@import "@lixpi/canvas-components-lixpi-specific/styles/progress";
+@import "@lixpi/canvas-components-lixpi-specific/styles/output-details";
 
 .image-error {
     display: flex;
@@ -137,7 +141,7 @@
     border-radius: 4px;
 }
 
-@import '@lixpi/canvas-components-lixpi-specific/styles/document-node';
+@import "@lixpi/canvas-components-lixpi-specific/styles/document-node";
 
 .editor-error,
 .editor-placeholder {

@@ -1,5 +1,5 @@
 # Set Node.js version
-ARG NODE_VERSION=23
+ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-alpine
 
@@ -16,6 +16,7 @@ RUN apk add --no-cache curl jq
 COPY ./services/ai-model-registry/package.json ./package.json
 RUN npm install --no-audit --no-fund
 
+COPY ./packages/lixpi/ui-primitives/src/styles /usr/packages/lixpi/ui-primitives/src/styles
 COPY ./services/ai-model-registry/vite.config.ts ./vite.config.ts
 COPY ./services/ai-model-registry/src ./src
 

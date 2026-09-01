@@ -106,7 +106,7 @@ When you select **local** environment:
 
 ## Technical Details
 
-- **Runtime**: Node.js 23 with native TypeScript (`--experimental-transform-types`)
+- **Runtime**: Node.js 24 with stable native TypeScript type stripping
 - **Prompts**: `@clack/prompts` for beautiful interactive CLI
 - **Key Generation**: `@nats-io/nkeys` for cryptographic key pairs
 - **No host dependencies**: Everything runs inside Docker

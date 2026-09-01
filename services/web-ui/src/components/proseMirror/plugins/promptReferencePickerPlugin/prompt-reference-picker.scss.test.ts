@@ -96,7 +96,7 @@ describe('prompt-reference-picker.scss', () => {
     // Chip color has exactly one owner. Every surface reads these custom
     // properties; no stylesheet may restate a chip color literal of its own.
     it('reads its palette from the shared partial and emits the light defaults once', () => {
-        expectSourceToContain(scss, "@import '$src/sass/_prompt-reference-chip.scss';")
+        expectSourceToContain(scss, '@import "$src/sass/_prompt-reference-chip.scss";')
         expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
 
         const partial = readFileSync(
