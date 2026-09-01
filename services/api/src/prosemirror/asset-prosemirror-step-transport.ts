@@ -110,9 +110,11 @@ export class AssetProseMirrorStepTransport {
         }
     }
 
-    async publishAiStep(payload: Omit<AssetStepEnvelope, 'kind' | 'origin' | 'schemaVersion'> & {
-        expectedLastStreamSequence: number
-    }): Promise<number> {
+    async publishAiStep(
+        payload: Omit<AssetStepEnvelope, 'kind' | 'origin' | 'schemaVersion'> & {
+            expectedLastStreamSequence: number
+        },
+    ): Promise<number> {
         const streamName = await this.ensureOrganizationStream(payload.organizationId)
         const envelope: AssetStepEnvelope = {
             organizationId: payload.organizationId,
@@ -138,9 +140,11 @@ export class AssetProseMirrorStepTransport {
         return sequence
     }
 
-    async publishAiStreamStep(payload: Omit<AssetStepEnvelope, 'kind' | 'origin' | 'schemaVersion'> & {
-        expectedLastStreamSequence: number
-    }): Promise<{ envelope: AssetStepEnvelope; streamSequence: number }> {
+    async publishAiStreamStep(
+        payload: Omit<AssetStepEnvelope, 'kind' | 'origin' | 'schemaVersion'> & {
+            expectedLastStreamSequence: number
+        },
+    ): Promise<{ envelope: AssetStepEnvelope; streamSequence: number }> {
         const streamSequence = await this.publishAiStep(payload)
         return {
             envelope: {
@@ -162,9 +166,11 @@ export class AssetProseMirrorStepTransport {
         }
     }
 
-    async publishControlEvent(payload: Omit<AssetStepControlEnvelope, 'origin'> & {
-        expectedLastStreamSequence: number
-    }): Promise<{ envelope: AssetStepControlEnvelope; streamSequence: number }> {
+    async publishControlEvent(
+        payload: Omit<AssetStepControlEnvelope, 'origin'> & {
+            expectedLastStreamSequence: number
+        },
+    ): Promise<{ envelope: AssetStepControlEnvelope; streamSequence: number }> {
         const streamName = await this.ensureOrganizationStream(payload.organizationId)
         const envelope: AssetStepControlEnvelope = {
             organizationId: payload.organizationId,

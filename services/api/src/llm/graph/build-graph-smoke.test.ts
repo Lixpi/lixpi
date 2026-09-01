@@ -1,9 +1,20 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
-import { StateGraph, END, START } from '@langchain/langgraph'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
+import {
+    StateGraph,
+    END,
+    START,
+} from '@langchain/langgraph'
 
-import { channels, type ProviderState } from './state.ts'
+import {
+    channels,
+    type ProviderState,
+} from './state.ts'
 
 // Phase 0 spike: prove three non-negotiable behaviors of @langchain/langgraph TS:
 //   1. Channel reducer with `keep` semantics preserves unset fields on partial returns.

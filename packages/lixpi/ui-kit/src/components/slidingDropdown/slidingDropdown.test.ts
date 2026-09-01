@@ -1,6 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { select, selection } from 'd3-selection'
-import { easePupOut } from '../../animation/easings.ts'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    select,
+    selection,
+} from 'd3-selection'
+import { easePupOut } from '@lixpi/ui-primitives/animation'
 import { uiKitSettings } from '../../runtime-settings.ts'
 import {
     createSlidingDropdown,
@@ -62,7 +72,6 @@ const makeImmediateTransition = (target: any): any => {
     }
     return chain
 }
-
 ;(selection.prototype as any).transition = function(): any {
     return makeImmediateTransition(this)
 }
@@ -183,18 +192,22 @@ function renderedSvgTop(svg: SVGSVGElement): number {
 }
 
 function dispatchPointerClick(target: Element): void {
-    target.dispatchEvent(new PointerEvent('pointerdown', {
-        bubbles: true,
-        button: 0,
-        clientY: 400,
-        pointerId: 7,
-    }))
-    target.dispatchEvent(new PointerEvent('pointerup', {
-        bubbles: true,
-        button: 0,
-        clientY: 400,
-        pointerId: 7,
-    }))
+    target.dispatchEvent(
+        new PointerEvent('pointerdown', {
+            bubbles: true,
+            button: 0,
+            clientY: 400,
+            pointerId: 7,
+        }),
+    )
+    target.dispatchEvent(
+        new PointerEvent('pointerup', {
+            bubbles: true,
+            button: 0,
+            clientY: 400,
+            pointerId: 7,
+        }),
+    )
     target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
 }
 
@@ -295,6 +308,33 @@ describe('createSlidingDropdown — intrinsic width and chevron', () => {
     afterEach(() => {
         vi.useRealTimers()
         vi.restoreAllMocks()
+    })
+
+    it('remeasures an unchanged selected value after hidden content becomes measurable', () => {
+        const { svg, slidingDropdown } = mountWithOptions([
+            { label: '1K', value: '1K' },
+            { label: '2K', value: '2K' },
+        ], '1K')
+        const initialSurfaceWidth = surfaceWidth(svg)
+        const selectedContent = svg.querySelector(
+            '.sliding-dropdown-option-group[data-value="1K"] .sliding-dropdown-option-content',
+        ) as SVGGElement
+        const getBBox = vi.fn(() => ({
+            x: 2,
+            y: 0,
+            width: 80,
+            height: HEIGHT,
+        } as DOMRect))
+        Object.defineProperty(selectedContent, 'getBBox', {
+            configurable: true,
+            value: getBBox,
+        })
+
+        slidingDropdown.setValue('1K')
+
+        expect(getBBox).toHaveBeenCalled()
+        expect(surfaceWidth(svg)).toBeGreaterThan(initialSurfaceWidth)
+        expect(slidingDropdown.isOpen()).toBe(false)
     })
 
     it('keeps a short selected value anchored while the wider option tape opens and closes', () => {
@@ -455,9 +495,11 @@ describe('createSlidingDropdown — portaled viewport geometry', () => {
             expect(renderedSvgTop(svg)).toBeGreaterThanOrEqual(0)
             expect(renderedSvgTop(svg) + Number.parseFloat(svg.style.height)).toBeLessThanOrEqual(1200)
             expect(svg.querySelector('clipPath rect')?.getAttribute('height')).toBe(String(OPTIONS.length * HEIGHT))
-            expect(Array.from(svg.querySelectorAll('.sliding-dropdown-option-group')).map(option => (
-                option.getAttribute('data-value')
-            ))).toEqual(OPTIONS.map(option => option.value))
+            expect(
+                Array.from(svg.querySelectorAll('.sliding-dropdown-option-group')).map(option => (
+                    option.getAttribute('data-value')
+                )),
+            ).toEqual(OPTIONS.map(option => option.value))
         })
     }
 
@@ -665,7 +707,9 @@ describe('createSlidingDropdown — motion and snap timing', () => {
         Object.defineProperty(scrollPortal, 'scrollTop', {
             configurable: true,
             get: () => scrollTop,
-            set: value => { scrollTop = value },
+            set: value => {
+                scrollTop = value
+            },
         })
         expect(scrollPortal.scrollTop).toBe(HEIGHT * 0.6 * 2)
         scrollPortal.dispatchEvent(new Event('scroll'))
@@ -680,9 +724,11 @@ describe('createSlidingDropdown — motion and snap timing', () => {
         expect(renderedSvgTop(svg)).toBeCloseTo(418)
         expect(svg.getAttribute('viewBox')).toBe(`0 0 ${expandedSurfaceWidth} ${OPTIONS.length * HEIGHT}`)
         expect(svg.querySelector('clipPath rect')?.getAttribute('height')).toBe(String(OPTIONS.length * HEIGHT))
-        expect(Array.from(svg.querySelectorAll('.sliding-dropdown-option-group')).map(option => (
-            option.getAttribute('data-value')
-        ))).toEqual(OPTIONS.map(option => option.value))
+        expect(
+            Array.from(svg.querySelectorAll('.sliding-dropdown-option-group')).map(option => (
+                option.getAttribute('data-value')
+            )),
+        ).toEqual(OPTIONS.map(option => option.value))
         expect(slidingDropdown.getValue()).toBe('square')
 
         document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))

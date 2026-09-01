@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -34,8 +40,7 @@ vi.mock('../../services/media-generation-request-service.ts', () => ({
 
 import { workspaceSubjects } from './workspace-subjects.ts'
 
-const getHandler = (subject: string) =>
-    workspaceSubjects.find((subscription) => subscription.subject === subject)!.handler
+const getHandler = (subject: string) => workspaceSubjects.find((subscription) => subscription.subject === subject)!.handler
 
 describe('Workspace deletion cleans up workspace Asset references', () => {
     beforeEach(() => {

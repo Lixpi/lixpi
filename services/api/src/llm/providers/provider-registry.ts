@@ -1,12 +1,25 @@
 'use strict'
 
 import type NatsService from '@lixpi/nats-service'
-import { info, warn } from '@lixpi/debug-tools'
-import { PROVIDER_NAMES, type CapabilityJsonValue, type ProviderName } from '@lixpi/constants'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
+import {
+    PROVIDER_NAMES,
+    type CapabilityJsonValue,
+    type ProviderName,
+} from '@lixpi/constants'
 
-import type { BaseProvider, BaseProviderDeps } from './base-provider.ts'
+import type {
+    BaseProvider,
+    BaseProviderDeps,
+} from './base-provider.ts'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
+import type {
+    ProseMirrorContentHandler,
+    ProseMirrorSnapshotProvider,
+} from '../graph/stream-publisher.ts'
 import { UsageReporter } from '../usage/usage-reporter.ts'
 import type { MetricsClient } from '../../metrics/metrics-client.ts'
 import {
@@ -19,7 +32,7 @@ export type MetricsDeps = {
     metrics?: MetricsClient
 }
 
-export type ProviderConstructor = new (
+export type ProviderConstructor = new(
     instanceKey: string,
     deps: BaseProviderDeps,
 ) => BaseProvider

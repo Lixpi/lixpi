@@ -7,7 +7,7 @@ type Meta = {
     isAuthenticated: boolean
 }
 
-type User = {    // TODO use User from @lixpi/constants, but make sure that it's compatible with auth0 user object (if it uses auth0 user object, I don't remember)
+type User = { // TODO use User from @lixpi/constants, but make sure that it's compatible with auth0 user object (if it uses auth0 user object, I don't remember)
     userId: string
     name: string
     email: string
@@ -27,7 +27,7 @@ const auth: AuthStore = {
     },
     data: {
         user: null,
-    }
+    },
 }
 
 const store = writable(auth)
@@ -57,21 +57,23 @@ export const authStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): void => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): void =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    setDataValues: (values: Partial<Auth> = {}): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            ...values
-        }
-    })),
+    setDataValues: (values: Partial<Auth> = {}): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                ...values,
+            },
+        })),
 
     resetStore: (): void => store.set(auth),
 }

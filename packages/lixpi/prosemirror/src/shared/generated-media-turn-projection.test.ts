@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     buildBranchMarkerTurnProjectionFromThreadContent,
@@ -156,9 +160,11 @@ describe('buildBranchMarkerTurnProjectionFromThreadContent', () => {
         const projectedUserMessage = projectedThread?.content?.find((node) => node.type === 'aiUserMessage')
 
         expect(projectedUserMessage).toEqual(submittedUserMessage)
-        expect(projectedUserMessage?.content?.[0]?.content?.map((node) => (
-            node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
-        ))).toEqual(['Create ', 'Action Timeline', ' 15s duration with 2s gaps.'])
+        expect(
+            projectedUserMessage?.content?.[0]?.content?.map((node) => (
+                node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
+            )),
+        ).toEqual(['Create ', 'Action Timeline', ' 15s duration with 2s gaps.'])
         expect(collectProseMirrorText(projection?.content)).toContain('Building the Action Timeline.')
     })
 

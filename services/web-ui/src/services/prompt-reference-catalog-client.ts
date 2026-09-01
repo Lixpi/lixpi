@@ -44,15 +44,16 @@ export function createPromptReferenceCatalogClient(
         return response
     }
     return {
-        list: async (query) => await request<PromptReferenceCatalogPage>(
-            NATS_SUBJECTS.PROMPT_REFERENCE_SUBJECTS.LIST,
-            {
-                category: query.category,
-                query: query.query?.normalize('NFKC').trim().toLocaleLowerCase('en-US') ?? '',
-                ...(query.cursor ? { cursor: query.cursor } : {}),
-                limit: query.limit ?? 20,
-            },
-        ),
+        list: async (query) =>
+            await request<PromptReferenceCatalogPage>(
+                NATS_SUBJECTS.PROMPT_REFERENCE_SUBJECTS.LIST,
+                {
+                    category: query.category,
+                    query: query.query?.normalize('NFKC').trim().toLocaleLowerCase('en-US') ?? '',
+                    ...(query.cursor ? { cursor: query.cursor } : {}),
+                    limit: query.limit ?? 20,
+                },
+            ),
         listModules: async (query = '') => {
             const response = await request<{ items: CapabilityModuleMeta[] }>(
                 NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.LIST,
@@ -60,9 +61,10 @@ export function createPromptReferenceCatalogClient(
             )
             return response.items
         },
-        getModule: async (moduleId) => await request<{
-            meta: CapabilityModuleMeta
-            entry: CapabilityPromptReference
-        }>(NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.GET, { moduleId }),
+        getModule: async (moduleId) =>
+            await request<{
+                meta: CapabilityModuleMeta
+                entry: CapabilityPromptReference
+            }>(NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.GET, { moduleId }),
     }
 }

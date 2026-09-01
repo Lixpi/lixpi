@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     type CapabilityCatalogRecord,
@@ -86,16 +91,20 @@ function makeFixture(manifestValues: CapabilityManifest[], resourceValues: Map<s
         })
     }
     const store: CapabilityResolverStore = {
-        batchGetAuthorizedCatalogRecords: vi.fn(async ({ capabilityIds }) => new Map(
-            capabilityIds.flatMap(capabilityId => {
-                const record = records.get(capabilityId)
-                return record ? [[capabilityId, record] as const] : []
-            }),
-        )),
+        batchGetAuthorizedCatalogRecords: vi.fn(async ({ capabilityIds }) =>
+            new Map(
+                capabilityIds.flatMap(capabilityId => {
+                    const record = records.get(capabilityId)
+                    return record ? [[capabilityId, record] as const] : []
+                }),
+            )
+        ),
         readManifest: vi.fn(async ({ record }) => manifests.get(record.capabilityId)!),
-        readResource: vi.fn(async ({ record, resource }) => resourceValues.get(
-            resourceKey(record.capabilityId, resource.resourceId),
-        )!),
+        readResource: vi.fn(async ({ record, resource }) =>
+            resourceValues.get(
+                resourceKey(record.capabilityId, resource.resourceId),
+            )!
+        ),
     }
     return { store, records, manifests, resources: resourceValues }
 }
@@ -144,13 +153,15 @@ describe('resolveCapabilities', () => {
             makeSkill('root', [{ capabilityId: 'secret', kind: 'skill' }]),
             makeSkill('secret'),
         ])
-        fixture.store.batchGetAuthorizedCatalogRecords = vi.fn(async ({ capabilityIds }) => new Map(
-            capabilityIds.flatMap(capabilityId => {
-                if (capabilityId === 'secret') return []
-                const record = fixture.records.get(capabilityId)
-                return record ? [[capabilityId, record] as const] : []
-            }),
-        ))
+        fixture.store.batchGetAuthorizedCatalogRecords = vi.fn(async ({ capabilityIds }) =>
+            new Map(
+                capabilityIds.flatMap(capabilityId => {
+                    if (capabilityId === 'secret') return []
+                    const record = fixture.records.get(capabilityId)
+                    return record ? [[capabilityId, record] as const] : []
+                }),
+            )
+        )
 
         await expect(resolveCapabilities([{ capabilityId: 'root', kind: 'skill' }], {
             store: fixture.store,

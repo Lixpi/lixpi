@@ -1,6 +1,12 @@
 'use strict'
 
-import { describe, expect, it, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'

@@ -1,13 +1,25 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import type { CapabilityCatalogRecord, CapabilityMeta } from '@lixpi/constants'
+import type {
+    CapabilityCatalogRecord,
+    CapabilityMeta,
+} from '@lixpi/constants'
 
 vi.mock('./blob.ts', () => ({ default: {}, buildBlobReferenceBatchOperations: vi.fn() }))
 vi.mock('../services/blob-storage.ts', () => ({ getContentAddressedBlob: vi.fn() }))
 
-import { authorizeCapability, listAuthorizedCapabilities } from './capability.ts'
+import {
+    authorizeCapability,
+    listAuthorizedCapabilities,
+} from './capability.ts'
 
 const record: CapabilityCatalogRecord = {
     capabilityId: 'tool-disabled',
@@ -69,19 +81,21 @@ describe('disabled Capability catalog visibility', () => {
                     ? sortKeyCondition.value.startsWith('tool#')
                         ? [meta]
                         : sortKeyCondition.value.startsWith('skill#')
-                            ? [internalMeta]
-                            : []
+                        ? [internalMeta]
+                        : []
                     : [],
             })),
             getItem: vi.fn().mockImplementation(async ({ key }: { key: Record<string, unknown> }) => {
                 if ('principalId' in key) {
-                    return accessLevel ? {
-                        capabilityId: record.capabilityId,
-                        principalId: key.principalId,
-                        accessLevel,
-                        createdAt: 1,
-                        updatedAt: 1,
-                    } : undefined
+                    return accessLevel
+                        ? {
+                            capabilityId: record.capabilityId,
+                            principalId: key.principalId,
+                            accessLevel,
+                            createdAt: 1,
+                            updatedAt: 1,
+                        }
+                        : undefined
                 }
                 return record
             }),
@@ -130,15 +144,17 @@ describe('disabled Capability catalog visibility', () => {
             keyConditions,
         }: {
             keyConditions: { scopeAndOwner: string }
-        }) => keyConditions.scopeAndOwner === 'organization#org-1'
-            ? {
-                items: [meta],
-                lastEvaluatedKey: {
-                    scopeAndOwner: meta.scopeAndOwner,
-                    searchKey: meta.searchKey,
-                },
-            }
-            : { items: [] })
+        }) =>
+            keyConditions.scopeAndOwner === 'organization#org-1'
+                ? {
+                    items: [meta],
+                    lastEvaluatedKey: {
+                        scopeAndOwner: meta.scopeAndOwner,
+                        searchKey: meta.searchKey,
+                    },
+                }
+                : { items: [] }
+        )
 
         const first = await listAuthorizedCapabilities({
             requester: { userId: 'owner-1', organizationIds: ['org-1'] },

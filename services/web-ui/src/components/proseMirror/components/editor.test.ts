@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 vi.mock('$src/components/proseMirror/plugins/aiChatThreadPlugin', () => ({
     createAiChatThreadPlugin: vi.fn(),

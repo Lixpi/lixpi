@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { UsageReporter } from './usage-reporter.ts'
 import type { AiModelMetaInfo } from '../graph/state.ts'

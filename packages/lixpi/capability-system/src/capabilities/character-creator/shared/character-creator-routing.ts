@@ -61,11 +61,13 @@ export function restrictMediaRequestToCharacterImages(
         outputMediaTypes: ['image'],
         useMultipleVideoModels: false,
         videoModelIds: [],
-        ...(request.regeneration?.mode === 'existing-prompt' ? {
-            regeneration: {
-                ...request.regeneration,
-                replayPrompts: request.regeneration.replayPrompts.filter(prompt => prompt.mediaType === 'image'),
-            },
-        } : {}),
+        ...(request.regeneration?.mode === 'existing-prompt'
+            ? {
+                regeneration: {
+                    ...request.regeneration,
+                    replayPrompts: request.regeneration.replayPrompts.filter(prompt => prompt.mediaType === 'image'),
+                },
+            }
+            : {}),
     }
 }

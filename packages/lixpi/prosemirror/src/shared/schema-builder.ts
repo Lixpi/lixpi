@@ -1,4 +1,7 @@
-import { Schema, type NodeSpec } from 'prosemirror-model'
+import {
+    Schema,
+    type NodeSpec,
+} from 'prosemirror-model'
 import { schema } from './base-schema.ts'
 import {
     aiChatNodeSpecs,

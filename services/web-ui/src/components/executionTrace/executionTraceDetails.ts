@@ -12,19 +12,22 @@ import {
 } from '@lixpi/ui-kit/components/tag-pill'
 import { createMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
 import { select } from 'd3-selection'
+import { createCapabilityPromptReferencePreview } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 import {
-    createCapabilityPromptReferencePreview,
     createMediaPromptReferencePreview,
     createPromptReferenceChipElement,
     type PromptReferencePreviewRenderer,
-} from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import {
     applyMediaModelBadgeStyleProperties,
     resolveMediaModelBadgeConfig,
-} from '$src/components/mediaModelBadge.ts'
-import { colorPalette, settings } from '$src/settings.ts'
-import { html } from '$src/utils/domTemplates.ts'
+} from '$src/components/mediaModelBadge/mediaModelBadge.ts'
+import {
+    colorPalette,
+    settings,
+} from '$src/settings.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type ExecutionTraceDetailInstance = {
     element: HTMLElement
@@ -239,12 +242,14 @@ export function getExecutionTraceDisplayFacts(
         })
     }
 
-    return [...groupedFacts.values()].map(({ count, ...fact }) => count > 1
-        ? {
-            ...fact,
-            label: `${fact.label}${fact.label.endsWith('s') ? '' : 's'} (${count})`,
-        }
-        : fact)
+    return [...groupedFacts.values()].map(({ count, ...fact }) =>
+        count > 1
+            ? {
+                ...fact,
+                label: `${fact.label}${fact.label.endsWith('s') ? '' : 's'} (${count})`,
+            }
+            : fact
+    )
 }
 
 export function formatExecutionTraceDuration(startedAt?: number, completedAt?: number): string {
@@ -283,12 +288,12 @@ export function isRenderableExecutionTrace(trace: unknown): trace is ExecutionTr
     if (candidate.traceVersion !== 'execution-trace-v1') return false
     return Boolean(
         candidate.reasoning
-        || candidate.handles?.length
-        || candidate.modelCalls?.length
-        || candidate.facts?.length
-        || candidate.inputSummary
-        || candidate.outputSummary
-        || candidate.errorMessage,
+            || candidate.handles?.length
+            || candidate.modelCalls?.length
+            || candidate.facts?.length
+            || candidate.inputSummary
+            || candidate.outputSummary
+            || candidate.errorMessage,
     )
 }
 
@@ -308,14 +313,16 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
                 ${trace.modelCalls?.length ? this.renderModelCalls(trace.modelCalls) : null}
                 ${trace.facts?.length ? this.renderFacts(trace.facts) : null}
                 ${trace.outputSummary ? this.renderProse('Output', trace.outputSummary) : null}
-                ${trace.errorMessage
-                    ? html`
+                ${
+            trace.errorMessage
+                ? html`
                         <section className="execution-trace-section execution-trace-section-error">
                             <h4 className="execution-trace-section-title">Error</h4>
                             <p className="execution-trace-prose">${trace.errorMessage}</p>
                         </section>
                     `
-                    : null}
+                : null
+        }
             </div>
         ` as HTMLElement
     }
@@ -347,17 +354,25 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     private renderHandleList(handles: readonly ExecutionTraceHandle[]): HTMLElement {
         return html`
             <ul className="execution-trace-handles">
-                ${handles.map(handle => html`
+                ${
+            handles.map(handle =>
+                html`
                     <li className="execution-trace-handle" data-handle-kind=${handle.kind}>
                         ${this.renderHandle(handle)}
-                        ${handle.role
-                            ? html`<span className="execution-trace-handle-role">${formatExecutionTraceHandleRole(handle.role)}</span>`
-                            : null}
-                        ${handle.note
-                            ? html`<span className="execution-trace-handle-note">${handle.note}</span>`
-                            : null}
+                        ${
+                    handle.role
+                        ? html`<span className="execution-trace-handle-role">${formatExecutionTraceHandleRole(handle.role)}</span>`
+                        : null
+                }
+                        ${
+                    handle.note
+                        ? html`<span className="execution-trace-handle-note">${handle.note}</span>`
+                        : null
+                }
                     </li>
-                `)}
+                `
+            )
+        }
             </ul>
         ` as HTMLElement
     }
@@ -402,7 +417,7 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
             referenceType: handle.kind === 'capability-artifact' ? 'capability-module' : handle.kind,
             displayName: handle.displayName,
             ...(handle.mediaKind ? { mediaKind: handle.mediaKind } : {}),
-        })
+        }, previewRenderer?.environment.document ?? document)
     }
 
     private renderModelCalls(modelCalls: readonly ExecutionTraceModelCall[]): HTMLElement {
@@ -436,52 +451,66 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
         return html`
             <li className="execution-trace-model-call" data-model-call-role=${modelCall.role}>
                 ${modelHeader}
-                ${modelCall.purpose
-                    ? html`
+                ${
+            modelCall.purpose
+                ? html`
                         <div className="execution-trace-field">
                             <span className="execution-trace-field-label">Purpose</span>
                             <p className="execution-trace-prose">${modelCall.purpose}</p>
                         </div>
                     `
-                    : null}
-                ${visibleParams.length
-                    ? html`
+                : null
+        }
+                ${
+            visibleParams.length
+                ? html`
                         <div className="execution-trace-field">
                             <span className="execution-trace-field-label">Parameters</span>
                             ${this.renderParams(visibleParams)}
                         </div>
                     `
-                    : null}
-                ${modelCall.inputHandles?.length
-                    ? html`
+                : null
+        }
+                ${
+            modelCall.inputHandles?.length
+                ? html`
                         <div className="execution-trace-model-call-handles">
                             <span className="execution-trace-field-label">Inputs</span>
                             ${this.renderHandleList(modelCall.inputHandles)}
                         </div>
                     `
-                    : null}
+                : null
+        }
                 ${modelCall.systemPrompt ? this.renderCollapsibleText('System prompt', modelCall.systemPrompt) : null}
                 ${modelCall.prompt ? this.renderCollapsibleText('Prompt', modelCall.prompt) : null}
                 ${modelCall.responseExcerpt ? this.renderCollapsibleText('Response', modelCall.responseExcerpt) : null}
-                ${modelCall.outputHandles?.length
-                    ? html`
+                ${
+            modelCall.outputHandles?.length
+                ? html`
                         <div className="execution-trace-model-call-handles">
                             <span className="execution-trace-field-label">Outputs</span>
                             ${this.renderHandleList(modelCall.outputHandles)}
                         </div>
                     `
-                    : null}
-                ${modelCall.errorMessage
-                    ? html`<p className="execution-trace-prose execution-trace-model-call-error">${modelCall.errorMessage}</p>`
-                    : null}
-                ${duration || tokenUsage
-                    ? html`
-                        ${this.renderValueList([
-                            ...(duration ? [{ label: 'Duration', value: duration }] : []),
-                            ...(tokenUsage ? [{ label: 'Tokens', value: tokenUsage }] : []),
-                        ], 'execution-trace-model-call-footer')}
+                : null
+        }
+                ${
+            modelCall.errorMessage
+                ? html`<p className="execution-trace-prose execution-trace-model-call-error">${modelCall.errorMessage}</p>`
+                : null
+        }
+                ${
+            duration || tokenUsage
+                ? html`
+                        ${
+                    this.renderValueList([
+                        ...(duration ? [{ label: 'Duration', value: duration }] : []),
+                        ...(tokenUsage ? [{ label: 'Tokens', value: tokenUsage }] : []),
+                    ], 'execution-trace-model-call-footer')
+                }
                     `
-                    : null}
+                : null
+        }
             </li>
         ` as HTMLElement
     }
@@ -515,18 +544,20 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     ): HTMLElement {
         return html`
             <ul className="execution-trace-value-list ${className}">
-                ${items.map((item) => {
-                    const tagValues = item.allowTags === false ? [] : getExecutionTraceTagValues(item.value)
-                    const itemClassName = tagValues.length
-                        ? 'execution-trace-value-item execution-trace-value-item-tags'
-                        : 'execution-trace-value-item'
-                    return html`
+                ${
+            items.map((item) => {
+                const tagValues = item.allowTags === false ? [] : getExecutionTraceTagValues(item.value)
+                const itemClassName = tagValues.length
+                    ? 'execution-trace-value-item execution-trace-value-item-tags'
+                    : 'execution-trace-value-item'
+                return html`
                         <li className=${itemClassName}>
                             <span className="execution-trace-value-label">${item.label}</span>
                             ${this.renderValue(item.value, tagValues, item.valueClassName)}
                         </li>
                     `
-                })}
+            })
+        }
             </ul>
         ` as HTMLElement
     }
@@ -537,11 +568,15 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
         }
         return html`
             <span className="execution-trace-value-tags ${valueClassName}">
-                ${tagValues.map((tagValue, index) => this.renderValueTag(
+                ${
+            tagValues.map((tagValue, index) =>
+                this.renderValueTag(
                     tagValue,
                     getExecutionTraceTagPillColors(tagValue, index),
                     index,
-                ))}
+                )
+            )
+        }
             </span>
         ` as HTMLElement
     }

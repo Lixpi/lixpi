@@ -3,10 +3,20 @@
 import * as process from 'process'
 
 import OpenAI, { toFile } from 'openai'
-import { info, warn, err } from '@lixpi/debug-tools'
-import type { ImageReferenceCapabilities, ProviderName } from '@lixpi/constants'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
+import type {
+    ImageReferenceCapabilities,
+    ProviderName,
+} from '@lixpi/constants'
 
-import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import {
+    BaseProvider,
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
@@ -43,26 +53,30 @@ import {
 } from '../utils/transport-retry.ts'
 import { prependImageReferencePromptLegend } from './image-reference-adapters.ts'
 
-type ImageRefFile = Pick<ResolvedImageGenerationReference,
-    'role' |
-    'byteLength' |
-    'mediaType' |
-    'sha256'
-> & {
-    file: File | Awaited<ReturnType<typeof toFile>>
-    name: string
-}
+type ImageRefFile =
+    & Pick<
+        ResolvedImageGenerationReference,
+        | 'role'
+        | 'byteLength'
+        | 'mediaType'
+        | 'sha256'
+    >
+    & {
+        file: File | Awaited<ReturnType<typeof toFile>>
+        name: string
+    }
 
 export const buildOpenAIImageReferenceFiles = async (
     references: readonly ResolvedImageGenerationReference[],
-): Promise<ImageRefFile[]> => Promise.all(references.map(async reference => ({
-    file: await toFile(reference.bytes, reference.fileName, { type: reference.mediaType }),
-    name: reference.fileName,
-    role: reference.role,
-    byteLength: reference.byteLength,
-    mediaType: reference.mediaType,
-    sha256: reference.sha256,
-})))
+): Promise<ImageRefFile[]> =>
+    Promise.all(references.map(async reference => ({
+        file: await toFile(reference.bytes, reference.fileName, { type: reference.mediaType }),
+        name: reference.fileName,
+        role: reference.role,
+        byteLength: reference.byteLength,
+        mediaType: reference.mediaType,
+        sha256: reference.sha256,
+    })))
 
 export const appendOpenAIImageGenerationReferences = (
     inputMessages: Array<{ role: string; content: any }>,
@@ -220,9 +234,11 @@ export class OpenAIProvider extends BaseProvider {
                 capabilityToolExecutor,
             })
 
-            if (!enableImageGeneration
+            if (
+                !enableImageGeneration
                 && !enableVideoGeneration
-                && !state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
+                && !state.pendingCapabilityOutputFinalizations?.length
+            ) this.publisher.end()
             return update
         } catch (e: any) {
             err(`OpenAI streaming failed: ${e?.message ?? e}`)
@@ -305,11 +321,13 @@ export class OpenAIProvider extends BaseProvider {
         const pendingRequiredToolName = args.capabilityToolExecutor?.pendingRequiredToolName()
         if (pendingRequiredToolName) {
             requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(pendingRequiredToolName)
-        } else if (!args.capabilityToolExecutor
+        } else if (
+            !args.capabilityToolExecutor
             && !args.state.capabilityMediaExecutionPlan
             && !args.enableImageGeneration
             && !args.enableVideoGeneration
-            && args.hasImageModel !== args.hasVideoModel) {
+            && args.hasImageModel !== args.hasVideoModel
+        ) {
             requestKwargs.tool_choice = buildOpenAIRequiredCapabilityToolChoice(
                 args.hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME,
             )
@@ -317,30 +335,38 @@ export class OpenAIProvider extends BaseProvider {
         assessProviderInputBudget({ state: args.state, request: requestKwargs })
 
         if (args.enableImageGeneration) {
-            info(`[OpenAI:${this.instanceKey}] Responses-API image-gen call ${JSON.stringify({
-                model: args.modelVersion,
-                imageSize: args.state.imageSize,
-                quality: args.state.imageGenerationConfig?.quality ?? 'auto',
-                background: args.state.imageGenerationConfig?.background ?? 'auto',
-                inputFidelity: args.state.aiModelMetaInfo.imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
-                moderation: 'low',
-                partialImages: 3,
-                inputMessageCount: args.inputMessages.length,
-                inputImageCount: args.inputMessages.reduce((count, m) => count + (Array.isArray(m.content)
-                    ? m.content.filter((b: any) => b?.type === 'input_image' || b?.type === 'image_url').length
-                    : 0), 0),
-                promptLen: (args.inputMessages[args.inputMessages.length - 1]?.content as any)?.length ?? 0,
-            }, null, 0)}`)
+            info(`[OpenAI:${this.instanceKey}] Responses-API image-gen call ${
+                JSON.stringify(
+                    {
+                        model: args.modelVersion,
+                        imageSize: args.state.imageSize,
+                        quality: args.state.imageGenerationConfig?.quality ?? 'auto',
+                        background: args.state.imageGenerationConfig?.background ?? 'auto',
+                        inputFidelity: args.state.aiModelMetaInfo.imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
+                        moderation: 'low',
+                        partialImages: 3,
+                        inputMessageCount: args.inputMessages.length,
+                        inputImageCount: args.inputMessages.reduce((count, m) =>
+                            count + (Array.isArray(m.content)
+                                ? m.content.filter((b: any) => b?.type === 'input_image' || b?.type === 'image_url').length
+                                : 0), 0),
+                        promptLen: (args.inputMessages[args.inputMessages.length - 1]?.content as any)?.length ?? 0,
+                    },
+                    null,
+                    0,
+                )
+            }`)
         }
 
         // Submit only. Once the stream starts emitting, tokens are published as
         // they arrive, so a restart would replay text the user already saw.
         const stream = await this.retryTransport(
-                'responses',
-            async () => await this.client.responses.create(requestKwargs as any, {
-                signal: this.signal,
-                maxRetries: 0,
-            }),
+            'responses',
+            async () =>
+                await this.client.responses.create(requestKwargs as any, {
+                    signal: this.signal,
+                    maxRetries: 0,
+                }),
         )
 
         let imagesGenerated = 0
@@ -389,8 +415,10 @@ export class OpenAIProvider extends BaseProvider {
                     }
 
                     const capabilityCalls = (response.output ?? []).flatMap((item: any) => {
-                        if (item?.type !== 'function_call'
-                            || !args.capabilityToolExecutor?.recognizes(item.name)) return []
+                        if (
+                            item?.type !== 'function_call'
+                            || !args.capabilityToolExecutor?.recognizes(item.name)
+                        ) return []
                         return [{
                             callId: item.call_id ?? item.id ?? '',
                             name: item.name,
@@ -430,24 +458,36 @@ export class OpenAIProvider extends BaseProvider {
                         if (videoCall) {
                             update.generatedVideoPrompt = videoCall.prompt
                             update.generatedVideoNegativePrompt = videoCall.negativePrompt
-                            info(`[OpenAI:${this.instanceKey}] generate_video tool call ${JSON.stringify({
-                                chatModel: args.modelVersion,
-                                targetVideoProvider: args.state.videoProviderName,
-                                targetVideoModel: args.state.videoModelVersion,
-                                promptLen: videoCall.prompt.length,
-                                negativePromptLen: videoCall.negativePrompt?.length ?? 0,
-                            }, null, 0)}`)
+                            info(`[OpenAI:${this.instanceKey}] generate_video tool call ${
+                                JSON.stringify(
+                                    {
+                                        chatModel: args.modelVersion,
+                                        targetVideoProvider: args.state.videoProviderName,
+                                        targetVideoModel: args.state.videoModelVersion,
+                                        promptLen: videoCall.prompt.length,
+                                        negativePromptLen: videoCall.negativePrompt?.length ?? 0,
+                                    },
+                                    null,
+                                    0,
+                                )
+                            }`)
                         } else if (imageCall) {
                             const refs = extractReferenceImages(args.state.messages)
                             update.generatedImagePrompt = imageCall.prompt
                             update.referenceImages = refs
-                            info(`[OpenAI:${this.instanceKey}] generate_image tool call ${JSON.stringify({
-                                chatModel: args.modelVersion,
-                                targetImageProvider: args.state.imageProviderName,
-                                targetImageModel: args.state.imageModelVersion,
-                                promptLen: imageCall.prompt.length,
-                                referenceImagesExtracted: refs.length,
-                            }, null, 0)}`)
+                            info(`[OpenAI:${this.instanceKey}] generate_image tool call ${
+                                JSON.stringify(
+                                    {
+                                        chatModel: args.modelVersion,
+                                        targetImageProvider: args.state.imageProviderName,
+                                        targetImageModel: args.state.imageModelVersion,
+                                        promptLen: imageCall.prompt.length,
+                                        referenceImagesExtracted: refs.length,
+                                    },
+                                    null,
+                                    0,
+                                )
+                            }`)
                         } else if (args.hasImageModel && args.state.capabilityMediaExecutionPlan) {
                             info(`[OpenAI:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${args.modelVersion})`)
                         } else if (args.hasImageModel && args.hasVideoModel) {
@@ -468,8 +508,8 @@ export class OpenAIProvider extends BaseProvider {
                                 if (result) {
                                     imagesGenerated += 1
                                     info(
-                                        `Image generation completed, revised prompt: ` +
-                                        `${(revisedPrompt as string).slice(0, 100)}`,
+                                        `Image generation completed, revised prompt: `
+                                            + `${(revisedPrompt as string).slice(0, 100)}`,
                                     )
                                     await this.imagePub.complete({
                                         imageBase64: result,
@@ -578,28 +618,34 @@ export class OpenAIProvider extends BaseProvider {
             signal: this.signal,
             maxRetries: 0,
         }
-        info(`[OpenAI:${this.instanceKey}] image SDK call ${JSON.stringify({
-            api: hasReferences ? 'images.edit' : 'images.generate',
-            model: args.modelVersion,
-            size: args.imageSize,
-            quality,
-            background,
-            inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
-            automaticRetries: imageRequestOptions.maxRetries,
-            transportRetryBudgetMs: TRANSPORT_RETRY_BUDGET_MS,
-            partialImages: 3,
-            referenceFiles: referenceFiles.length,
-            referenceFileNames: referenceFiles.map(r => r.name),
-            referenceFileMetadata: referenceFiles.map(reference => ({
-                name: reference.name,
-                role: reference.role,
-                byteLength: reference.byteLength,
-                mediaType: reference.mediaType,
-                sha256: reference.sha256,
-            })),
-            promptLen: prompt.length,
-            promptPreview: prompt.slice(0, 200),
-        }, null, 0)}`)
+        info(`[OpenAI:${this.instanceKey}] image SDK call ${
+            JSON.stringify(
+                {
+                    api: hasReferences ? 'images.edit' : 'images.generate',
+                    model: args.modelVersion,
+                    size: args.imageSize,
+                    quality,
+                    background,
+                    inputFidelity: imageReferenceCapabilities?.inputFidelity ?? 'provider-default',
+                    automaticRetries: imageRequestOptions.maxRetries,
+                    transportRetryBudgetMs: TRANSPORT_RETRY_BUDGET_MS,
+                    partialImages: 3,
+                    referenceFiles: referenceFiles.length,
+                    referenceFileNames: referenceFiles.map(r => r.name),
+                    referenceFileMetadata: referenceFiles.map(reference => ({
+                        name: reference.name,
+                        role: reference.role,
+                        byteLength: reference.byteLength,
+                        mediaType: reference.mediaType,
+                        sha256: reference.sha256,
+                    })),
+                    promptLen: prompt.length,
+                    promptPreview: prompt.slice(0, 200),
+                },
+                null,
+                0,
+            )
+        }`)
 
         // Send placeholder for animated border.
         await this.imagePub.partial('', 0)
@@ -610,7 +656,7 @@ export class OpenAIProvider extends BaseProvider {
         // that drops mid-stream leaves no usable image, so resuming is not
         // possible and only a fresh request can still produce this shot.
         const finalImage = await this.retryTransport(
-                'image',
+            'image',
             async () => {
                 const stream = hasReferences
                     ? await this.client.images.edit({
@@ -709,7 +755,6 @@ export class OpenAIProvider extends BaseProvider {
         }
         return parts.join('\n').trim()
     }
-
 }
 
 function mergeProviderUpdates(
@@ -721,16 +766,18 @@ function mergeProviderUpdates(
     return {
         ...first,
         ...second,
-        ...(firstUsage || secondUsage ? {
-            usage: {
-                promptTokens: (firstUsage?.promptTokens ?? 0) + (secondUsage?.promptTokens ?? 0),
-                promptAudioTokens: (firstUsage?.promptAudioTokens ?? 0) + (secondUsage?.promptAudioTokens ?? 0),
-                promptCachedTokens: (firstUsage?.promptCachedTokens ?? 0) + (secondUsage?.promptCachedTokens ?? 0),
-                completionTokens: (firstUsage?.completionTokens ?? 0) + (secondUsage?.completionTokens ?? 0),
-                completionAudioTokens: (firstUsage?.completionAudioTokens ?? 0) + (secondUsage?.completionAudioTokens ?? 0),
-                completionReasoningTokens: (firstUsage?.completionReasoningTokens ?? 0) + (secondUsage?.completionReasoningTokens ?? 0),
-                totalTokens: (firstUsage?.totalTokens ?? 0) + (secondUsage?.totalTokens ?? 0),
-            },
-        } : {}),
+        ...(firstUsage || secondUsage
+            ? {
+                usage: {
+                    promptTokens: (firstUsage?.promptTokens ?? 0) + (secondUsage?.promptTokens ?? 0),
+                    promptAudioTokens: (firstUsage?.promptAudioTokens ?? 0) + (secondUsage?.promptAudioTokens ?? 0),
+                    promptCachedTokens: (firstUsage?.promptCachedTokens ?? 0) + (secondUsage?.promptCachedTokens ?? 0),
+                    completionTokens: (firstUsage?.completionTokens ?? 0) + (secondUsage?.completionTokens ?? 0),
+                    completionAudioTokens: (firstUsage?.completionAudioTokens ?? 0) + (secondUsage?.completionAudioTokens ?? 0),
+                    completionReasoningTokens: (firstUsage?.completionReasoningTokens ?? 0) + (secondUsage?.completionReasoningTokens ?? 0),
+                    totalTokens: (firstUsage?.totalTokens ?? 0) + (secondUsage?.totalTokens ?? 0),
+                },
+            }
+            : {}),
     }
 }

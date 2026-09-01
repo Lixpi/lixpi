@@ -68,8 +68,10 @@ export function extractLatestUserPromptReferences(
     const references: PromptReference[] = []
     const seen = new Set<string>()
     const visit = (node: ProseMirrorJsonNode): void => {
-        if (node.type === PROMPT_REFERENCE_NODE_TYPE
-            || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
+        if (
+            node.type === PROMPT_REFERENCE_NODE_TYPE
+            || node.type === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE
+        ) {
             const attrs = (node.type === PROMPT_REFERENCE_NODE_TYPE
                 ? normalizePromptReferenceAttrs(node.attrs)
                 : normalizeLegacyCapabilityReferenceAttrs(node.attrs)) as PromptReferenceAtomAttrs | null
@@ -115,10 +117,12 @@ export async function authorizePromptReferences({
             const entry = moduleCatalog.resolveEntry(reference.moduleId)
             if (!entry) throw new Error(`PROMPT_REFERENCE_MODULE_NOT_FOUND:${reference.moduleId}`)
             const record = await CapabilityModel.authorize({ capabilityId: entry.capabilityId, requester: capabilityRequester })
-            if ('error' in record || record.status !== 'active'
+            if (
+                'error' in record || record.status !== 'active'
                 || record.kind !== entry.kind
                 || record.parentModuleId !== reference.moduleId
-                || record.catalogExposure !== 'module-internal') {
+                || record.catalogExposure !== 'module-internal'
+            ) {
                 throw new Error(`PROMPT_REFERENCE_MODULE_UNAVAILABLE:${reference.moduleId}`)
             }
             capabilityReferences.push(entry)
@@ -126,10 +130,12 @@ export async function authorizePromptReferences({
         }
         if (reference.referenceType === 'tool' || reference.referenceType === 'skill') {
             const record = await CapabilityModel.authorize({ capabilityId: reference.capabilityId, requester: capabilityRequester })
-            if ('error' in record || record.status !== 'active'
+            if (
+                'error' in record || record.status !== 'active'
                 || record.kind !== reference.referenceType
                 || record.catalogExposure !== 'standalone'
-                || record.parentModuleId !== undefined) {
+                || record.parentModuleId !== undefined
+            ) {
                 throw new Error(`PROMPT_REFERENCE_CAPABILITY_UNAVAILABLE:${reference.capabilityId}`)
             }
             capabilityReferences.push({ capabilityId: record.capabilityId, kind: record.kind })
@@ -137,21 +143,27 @@ export async function authorizePromptReferences({
         }
 
         const asset = await AssetModel.get({ assetId: reference.assetId, requester: scopedRequester })
-        if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, workspace)
-            || asset.states.lifecycle !== 'active' || asset.documents.conversation) {
+        if (
+            'error' in asset || !isAssetAvailableInWorkspaceScope(asset, workspace)
+            || asset.states.lifecycle !== 'active' || asset.documents.conversation
+        ) {
             throw new Error(`PROMPT_REFERENCE_ASSET_UNAVAILABLE:${reference.assetId}`)
         }
         if (reference.referenceType === 'capability-artifact') {
-            if (asset.artifact?.artifactTypeId !== reference.artifactTypeId
-                || !asset.documents.capabilityArtifact) {
+            if (
+                asset.artifact?.artifactTypeId !== reference.artifactTypeId
+                || !asset.documents.capabilityArtifact
+            ) {
                 throw new Error(`PROMPT_REFERENCE_ARTIFACT_TYPE_MISMATCH:${reference.assetId}`)
             }
             capabilityArtifactBackendRegistry.require(reference.artifactTypeId)
             const node = reference.nodeId
                 ? workspace.canvasState.nodes.find(candidate => candidate.nodeId === reference.nodeId)
                 : undefined
-            if (reference.nodeId && (!node || node.type !== 'capabilityArtifact'
-                || node.assetId !== asset.assetId || node.artifactTypeId !== reference.artifactTypeId)) {
+            if (
+                reference.nodeId && (!node || node.type !== 'capabilityArtifact'
+                    || node.assetId !== asset.assetId || node.artifactTypeId !== reference.artifactTypeId)
+            ) {
                 throw new Error(`PROMPT_REFERENCE_NODE_ASSET_MISMATCH:${reference.nodeId}`)
             }
             const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, 'capabilityArtifact')
@@ -161,8 +173,10 @@ export async function authorizePromptReferences({
             const citedAssetIds = definition.collectReferencedAssetIds(snapshot.doc)
             const citedAssets = await Promise.all(citedAssetIds.map(async assetId => {
                 const cited = await AssetModel.get({ assetId, requester: scopedRequester })
-                if ('error' in cited || !isAssetAvailableInWorkspaceScope(cited, workspace)
-                    || cited.states.lifecycle !== 'active') {
+                if (
+                    'error' in cited || !isAssetAvailableInWorkspaceScope(cited, workspace)
+                    || cited.states.lifecycle !== 'active'
+                ) {
                     throw new Error(`PROMPT_REFERENCE_ARTIFACT_CITED_ASSET_UNAVAILABLE:${assetId}`)
                 }
                 return cited
@@ -223,18 +237,19 @@ export async function authorizePromptReferences({
             roleHints: ['base-context'],
             ancestorNodeIds: reference.nodeId ? [reference.nodeId] : [],
             sourceContextNodeIds: reference.nodeId ? [reference.nodeId] : [],
-            ...(asset.descriptor?.summary ? {
-                visualEntitySummary: asset.descriptor.summary,
-                visualStyleSummary: asset.descriptor.summary,
-            } : {}),
+            ...(asset.descriptor?.summary
+                ? {
+                    visualEntitySummary: asset.descriptor.summary,
+                    visualStyleSummary: asset.descriptor.summary,
+                }
+                : {}),
             entityTags: asset.descriptor?.entityTags ?? [],
             styleTags: asset.descriptor?.styleTags ?? [],
             createdAt: asset.createdAt,
         })
     }
 
-    const modelInputs = await Promise.all([...modelInputAssets.values()].map(async asset =>
-        await resolveAuthorizedAssetModelInput(asset, scopedRequester)))
+    const modelInputs = await Promise.all([...modelInputAssets.values()].map(async asset => await resolveAuthorizedAssetModelInput(asset, scopedRequester)))
     const deduplicatedMediaCandidates = [...new Map(
         mediaCandidates.map(candidate => [candidate.assetId, candidate]),
     ).values()]
@@ -283,12 +298,13 @@ export function addPromptReferenceMediaToLatestUserMessage(
     })
 }
 
-export function addPromptReferenceAudioToLatestUserMessage<T extends {
-    role: string
-    content: string | Array<Record<string, unknown>>
-}>(messages: T[], inputs: readonly CapabilityResolvedModelInput[]): T[] {
-    const audioInputs = inputs.filter((input): input is Extract<CapabilityResolvedModelInput, { kind: 'audio' }> =>
-        input.kind === 'audio')
+export function addPromptReferenceAudioToLatestUserMessage<
+    T extends {
+        role: string
+        content: string | Array<Record<string, unknown>>
+    },
+>(messages: T[], inputs: readonly CapabilityResolvedModelInput[]): T[] {
+    const audioInputs = inputs.filter((input): input is Extract<CapabilityResolvedModelInput, { kind: 'audio' }> => input.kind === 'audio')
     if (audioInputs.length === 0) return messages
     let latestUserIndex = -1
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -362,10 +378,12 @@ async function toMediaCandidate(asset: Asset): Promise<MediaBranchCandidateImage
         roleHints: ['base-context'],
         ancestorNodeIds: [],
         sourceContextNodeIds: [],
-        ...(asset.descriptor?.summary ? {
-            visualEntitySummary: asset.descriptor.summary,
-            visualStyleSummary: asset.descriptor.summary,
-        } : {}),
+        ...(asset.descriptor?.summary
+            ? {
+                visualEntitySummary: asset.descriptor.summary,
+                visualStyleSummary: asset.descriptor.summary,
+            }
+            : {}),
         entityTags: asset.descriptor?.entityTags ?? [],
         styleTags: asset.descriptor?.styleTags ?? [],
         createdAt: asset.createdAt,

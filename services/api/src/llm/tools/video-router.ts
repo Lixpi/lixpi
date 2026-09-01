@@ -2,11 +2,18 @@
 
 import * as process from 'node:process'
 
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import type { ProviderRegistry } from '../providers/provider-registry.ts'
 import type { ProviderState } from '../graph/state.ts'
-import type { ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
+import type {
+    ProseMirrorContentHandler,
+    ProseMirrorSnapshotProvider,
+} from '../graph/stream-publisher.ts'
 import {
     createProviderCancellationError,
     isProviderCancellationError,
@@ -89,8 +96,8 @@ export class VideoRouter {
 
         if (!videoProvider || !videoModel || !prompt) {
             err(
-                `[VideoRouter] Missing provider, model, or prompt — provider=${videoProvider} ` +
-                `model=${videoModel} promptLen=${prompt.length}`,
+                `[VideoRouter] Missing provider, model, or prompt — provider=${videoProvider} `
+                    + `model=${videoModel} promptLen=${prompt.length}`,
             )
             return {}
         }
@@ -106,15 +113,19 @@ export class VideoRouter {
                 modelId: generationRun.mediaModelId,
                 stage: 'submit',
             })
-            if (problem) warn(`[MediaGenerationProblem] ${JSON.stringify({
-                supportCode: problem.supportCode,
-                category: problem.category,
-                stage: problem.stage,
-                provider: problem.provider,
-                modelId: problem.modelId,
-                providerCode: problem.providerCode,
-                providerReason: problem.providerReason,
-            })}`)
+            if (problem) {
+                warn(`[MediaGenerationProblem] ${
+                    JSON.stringify({
+                        supportCode: problem.supportCode,
+                        category: problem.category,
+                        stage: problem.stage,
+                        provider: problem.provider,
+                        modelId: problem.modelId,
+                        providerCode: problem.providerCode,
+                        providerReason: problem.providerReason,
+                    })
+                }`)
+            }
             await requestService.recordRunStatus({
                 generationRequestId: state.durableGenerationRequestId,
                 workspaceId,
@@ -131,25 +142,31 @@ export class VideoRouter {
             errorCode: string | undefined,
             errorType: string | undefined,
             problem: MediaGenerationProblem | undefined,
-        ): Partial<ProviderState> => state.durableGenerationRequestId && problem ? {
-            error: problem.detail,
-            errorCode: problem.providerCode ?? problem.category,
-            errorType: problem.category,
-        } : {
-            error,
-            ...(errorCode ? { errorCode } : {}),
-            ...(errorType ? { errorType } : {}),
-        }
+        ): Partial<ProviderState> =>
+            state.durableGenerationRequestId && problem
+                ? {
+                    error: problem.detail,
+                    errorCode: problem.providerCode ?? problem.category,
+                    errorType: problem.category,
+                }
+                : {
+                    error,
+                    ...(errorCode ? { errorCode } : {}),
+                    ...(errorType ? { errorType } : {}),
+                }
         if (videoProvider === 'BytePlus' && state.durableGenerationRequestId && generationRun?.mediaModelId) {
             const accountScope = process.env.BYTEPLUS_ACCOUNT_SCOPE
             const now = Date.now()
             const requiredAssetIds = (state.providerSafeMediaIntent?.bindings ?? [])
                 .filter(binding => ['self', 'authorized-real-person'].includes(binding.subjectIdentity.classification))
-                .filter(binding => !binding.subjectIdentity.providerVerifications.some(verification =>
-                    verification.provider === 'BytePlus'
-                    && verification.providerAccountScope === accountScope
-                    && verification.status === 'valid'
-                    && (!verification.expiresAt || verification.expiresAt > now)))
+                .filter(binding =>
+                    !binding.subjectIdentity.providerVerifications.some(verification =>
+                        verification.provider === 'BytePlus'
+                        && verification.providerAccountScope === accountScope
+                        && verification.status === 'valid'
+                        && (!verification.expiresAt || verification.expiresAt > now)
+                    )
+                )
                 .map(binding => binding.assetId)
             if (requiredAssetIds.length > 0) {
                 await requestService.requireProviderVerification({
@@ -181,29 +198,35 @@ export class VideoRouter {
                 : {}),
         }
 
-        info(`[VideoRouter] invocation chain ${JSON.stringify({
-            workspaceId,
-            aiChatThreadId,
-            chatProvider: state.provider,
-            chatModel: state.modelVersion,
-            videoProvider,
-            videoModel,
-            aspectRatio: state.videoAspectRatio,
-            resolution: state.videoResolution,
-            durationSeconds: state.videoDurationSeconds,
-            originalPromptLen: prompt.length,
-            routedPromptLen: videoModelPrompt.length,
-            hasFirstFrame: !!state.videoFirstFrameImage,
-            firstFrameFingerprint: state.videoFirstFrameImage
-                ? fingerprintRef(state.videoFirstFrameImage)
-                : null,
-            referenceCount,
-            referenceImageFingerprints: (videoReferenceImages ?? []).map(fingerprintRef),
-            capabilityReferenceImagesCount: capabilityReferenceImages.length,
-            capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
-            hasSourceVideo: !!state.videoSourceForExtension,
-            instanceKey,
-        }, null, 0)}`)
+        info(`[VideoRouter] invocation chain ${
+            JSON.stringify(
+                {
+                    workspaceId,
+                    aiChatThreadId,
+                    chatProvider: state.provider,
+                    chatModel: state.modelVersion,
+                    videoProvider,
+                    videoModel,
+                    aspectRatio: state.videoAspectRatio,
+                    resolution: state.videoResolution,
+                    durationSeconds: state.videoDurationSeconds,
+                    originalPromptLen: prompt.length,
+                    routedPromptLen: videoModelPrompt.length,
+                    hasFirstFrame: !!state.videoFirstFrameImage,
+                    firstFrameFingerprint: state.videoFirstFrameImage
+                        ? fingerprintRef(state.videoFirstFrameImage)
+                        : null,
+                    referenceCount,
+                    referenceImageFingerprints: (videoReferenceImages ?? []).map(fingerprintRef),
+                    capabilityReferenceImagesCount: capabilityReferenceImages.length,
+                    capabilityBriefLen: capabilityUsagePrompt?.length ?? 0,
+                    hasSourceVideo: !!state.videoSourceForExtension,
+                    instanceKey,
+                },
+                null,
+                0,
+            )
+        }`)
 
         if (capabilityReferenceImages.length > 0 && (state.videoSourceForExtension || state.videoFirstFrameImage)) {
             warn(`[VideoRouter] Capability reference images are represented in the prompt only for ${instanceKey}; VEO extension/first-frame inputs are mutually exclusive with referenceImages.`)

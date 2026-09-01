@@ -2,7 +2,7 @@
 
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
 import type { MarkdownStreamToken } from '@lixpi/constants'
-import { html } from './domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 // Unified, framework-agnostic renderer that turns a markdown token stream into plain DOM
 // using the app's @lixpi/markdown-stream-parser.
@@ -20,10 +20,26 @@ import { html } from './domTemplates.ts'
 // is in development — once it ships, import the token type from the package instead.
 
 function wrapInline(child: Node, style: string): Node {
-    if (style === 'bold') { const el = html`<strong></strong>` as HTMLElement; el.appendChild(child); return el }
-    if (style === 'italic') { const el = html`<em></em>` as HTMLElement; el.appendChild(child); return el }
-    if (style === 'strikethrough') { const el = html`<del></del>` as HTMLElement; el.appendChild(child); return el }
-    if (style === 'code') { const el = html`<code className="lixpi-md-code-inline"></code>` as HTMLElement; el.appendChild(child); return el }
+    if (style === 'bold') {
+        const el = html`<strong></strong>` as HTMLElement
+        el.appendChild(child)
+        return el
+    }
+    if (style === 'italic') {
+        const el = html`<em></em>` as HTMLElement
+        el.appendChild(child)
+        return el
+    }
+    if (style === 'strikethrough') {
+        const el = html`<del></del>` as HTMLElement
+        el.appendChild(child)
+        return el
+    }
+    if (style === 'code') {
+        const el = html`<code className="lixpi-md-code-inline"></code>` as HTMLElement
+        el.appendChild(child)
+        return el
+    }
     return child
 }
 
@@ -72,18 +88,25 @@ export class MarkdownStreamRenderer {
     // stopParsing triggers cleanup() so the final block renders whether the parser emits
     // synchronously or asynchronously.
     finalize(): void {
-        try { this.parser.stopParsing() } catch {}
+        try {
+            this.parser.stopParsing()
+        } catch {}
     }
 
     private cleanup(): void {
         this.unsubscribe?.()
         this.unsubscribe = null
-        try { MarkdownStreamParser.removeInstance(this.instanceId) } catch {}
+        try {
+            MarkdownStreamParser.removeInstance(this.instanceId)
+        } catch {}
     }
 
     private handleSegment(parsed: MarkdownStreamToken): void {
         if (!parsed) return
-        if (parsed.status === 'END_STREAM') { this.cleanup(); return }
+        if (parsed.status === 'END_STREAM') {
+            this.cleanup()
+            return
+        }
         const seg = parsed.segment
         if (!seg) return
         const type = seg.type ?? 'paragraph'

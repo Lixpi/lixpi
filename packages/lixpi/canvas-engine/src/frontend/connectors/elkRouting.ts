@@ -3,7 +3,10 @@
 
 // Use the bundled browser version (no web-worker dependency)
 import ELK from 'elkjs/lib/elk.bundled.js'
-import type { EdgeConfig, NodeConfig } from './types.ts'
+import type {
+    EdgeConfig,
+    NodeConfig,
+} from './types.ts'
 
 type ElkNode = {
     id: string
@@ -12,7 +15,7 @@ type ElkNode = {
     width: number
     height: number
     ports?: ElkPort[]
-    properties?: Record<string, unknown>
+    properties?: Record<string, string>
 }
 
 type ElkPort = {
@@ -21,7 +24,7 @@ type ElkPort = {
     y: number
     width?: number
     height?: number
-    properties?: Record<string, unknown>
+    properties?: Record<string, string>
 }
 
 type ElkEdge = {
@@ -44,7 +47,7 @@ type ElkEdgeResult = {
 
 type ElkGraph = {
     id: string
-    layoutOptions: Record<string, string | number | boolean>
+    layoutOptions: Record<string, string>
     children: ElkNode[]
     edges: ElkEdge[]
 }
@@ -69,7 +72,7 @@ function getElk(): InstanceType<typeof ELK> {
 function computePortPosition(
     node: NodeConfig,
     side: 'left' | 'right',
-    t: number = 0.5
+    t: number = 0.5,
 ): { x: number; y: number } {
     const y = node.height * t
     const x = side === 'left' ? 0 : node.width
@@ -79,7 +82,7 @@ function computePortPosition(
 // Build elk ports for a node based on connected edges
 function buildNodePorts(
     node: NodeConfig,
-    edges: EdgeConfig[]
+    edges: EdgeConfig[],
 ): ElkPort[] {
     const ports: ElkPort[] = []
 
@@ -97,8 +100,8 @@ function buildNodePorts(
                     width: 1,
                     height: 1,
                     properties: {
-                        'org.eclipse.elk.port.side': side === 'left' ? 'WEST' : 'EAST'
-                    }
+                        'org.eclipse.elk.port.side': side === 'left' ? 'WEST' : 'EAST',
+                    },
                 })
             }
         }
@@ -116,8 +119,8 @@ function buildNodePorts(
                     width: 1,
                     height: 1,
                     properties: {
-                        'org.eclipse.elk.port.side': side === 'left' ? 'WEST' : 'EAST'
-                    }
+                        'org.eclipse.elk.port.side': side === 'left' ? 'WEST' : 'EAST',
+                    },
                 })
             }
         }
@@ -130,7 +133,7 @@ function buildNodePorts(
 // Returns a map of edge id -> bend points
 export async function computeEdgeRoutes(
     nodes: NodeConfig[],
-    edges: EdgeConfig[]
+    edges: EdgeConfig[],
 ): Promise<Map<string, Array<{ x: number; y: number }>>> {
     const elk = getElk()
 
@@ -161,14 +164,14 @@ export async function computeEdgeRoutes(
             height: node.height,
             ports: buildNodePorts(node, edges),
             properties: {
-                'org.eclipse.elk.noLayout': true  // Don't move nodes
-            }
+                'org.eclipse.elk.noLayout': 'true', // Don't move nodes
+            },
         })),
         edges: edges.map(edge => ({
             id: edge.id,
             sources: [`${edge.source.nodeId}_src_${edge.id}`],
-            targets: [`${edge.target.nodeId}_tgt_${edge.id}`]
-        }))
+            targets: [`${edge.target.nodeId}_tgt_${edge.id}`],
+        })),
     }
 
     const result = await elk.layout(elkGraph) as ElkResult
@@ -207,7 +210,7 @@ type DebouncedCompute = {
 
 export function createDebouncedEdgeRouting(
     onComplete: (routes: Map<string, Array<{ x: number; y: number }>>) => void,
-    delay: number = 50
+    delay: number = 50,
 ): DebouncedCompute {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     let pendingNodes: NodeConfig[] = []
@@ -249,6 +252,6 @@ export function createDebouncedEdgeRouting(
             }
             pendingNodes = []
             pendingEdges = []
-        }
+        },
     }
 }

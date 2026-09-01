@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { createDefaultCapabilityModuleCatalog } from './installed-capabilities.ts'
 

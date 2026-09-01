@@ -1,15 +1,30 @@
-import { brokenImageIcon } from '@lixpi/ui-kit/svg'
-import { html, applyStyle } from '$src/utils/domTemplates.ts'
-import { buildAssetRenditionPath, resolveAuthenticatedMediaUrl } from '$src/utils/mediaUrls.ts'
+import {
+    brokenImageIcon,
+    videoControlIcons,
+} from '@lixpi/ui-kit/svg'
+import {
+    html,
+    applyStyle,
+} from '@lixpi/ui-primitives/dom'
+import {
+    buildAssetRenditionPath,
+    resolveAuthenticatedMediaUrl,
+} from '$src/utils/mediaUrls.ts'
 import AuthService from '$src/services/auth-service.ts'
 import { settings } from '$src/settings.ts'
 import { NodeSelection } from 'prosemirror-state'
-import type { CanvasGeometryUpdate, MediaBranchVlmResolution, MediaGenerationRunMeta } from '@lixpi/constants'
 // @ts-ignore - runtime import
 import { select } from 'd3-selection'
-import { applyVideoControlsHostStyleProperties, createVideoControls, type VideoControlsInstance } from '@lixpi/ui-kit/components/video-controls'
+import {
+    applyVideoControlsHostStyleProperties,
+    createVideoControls,
+    type VideoControlsInstance,
+} from '@lixpi/ui-kit/components/video-controls'
 import { renderMediaModelBadge } from '@lixpi/ui-kit/components/media-model-badge'
-import { applyMediaModelBadgeStyleProperties, resolveMediaModelBadgeConfig } from '$src/components/mediaModelBadge.ts'
+import {
+    applyMediaModelBadgeStyleProperties,
+    resolveMediaModelBadgeConfig,
+} from '$src/components/mediaModelBadge/mediaModelBadge.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     aiGeneratedVideoNodeSpec,
@@ -25,72 +40,6 @@ import {
 export {
     aiGeneratedVideoNodeSpec,
     aiGeneratedVideoNodeType,
-}
-
-export type AiGeneratedVideoCallbacks = {
-    onAddToCanvas?: (data: {
-        videoUrl: string
-        assetId: string
-        durationSeconds: number
-        aspectRatio: number
-        hasAudio: boolean
-        responseId: string
-        revisedPrompt: string
-        videoModel: string
-    }) => void
-    onVideoPendingToCanvas?: (data: {
-        threadId: string
-        aiProvider: string
-        canvasGeometry?: CanvasGeometryUpdate
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onVideoGeneratingToCanvas?: (data: {
-        threadId: string
-        aiProvider: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onVideoCompleteToCanvas?: (data: {
-        threadId: string
-        videoUrl: string
-        assetId: string
-        durationSeconds: number
-        aspectRatio: number
-        hasAudio: boolean
-        responseId: string
-        revisedPrompt: string
-        videoModel: string
-        videoModelProvider: string
-        responseMessageId: string
-        canvasGeometry?: CanvasGeometryUpdate
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onVideoGenerationTraceToCanvas?: (data: {
-        threadId: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    onVideoErrorToCanvas?: (data: {
-        threadId: string
-        error: string
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-    // The structured VLM resolver is shared with images; video uses the same
-    // resolution payload, so the resolved/error callbacks are reused from the
-    // image callback surface rather than duplicated here.
-    onVideoBranchResolvedToCanvas?: (data: {
-        threadId: string
-        resolution: MediaBranchVlmResolution
-        generationRun?: MediaGenerationRunMeta
-    }) => void
-}
-
-let globalCallbacks: AiGeneratedVideoCallbacks = {}
-
-export function setAiGeneratedVideoCallbacks(callbacks: AiGeneratedVideoCallbacks) {
-    globalCallbacks = callbacks
-}
-
-export function getAiGeneratedVideoCallbacks(): AiGeneratedVideoCallbacks {
-    return globalCallbacks
 }
 
 const buildAuthenticatedUrl = async (url: string): Promise<string> => {
@@ -143,7 +92,7 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     const videoElement = wrapper.querySelector('.ai-generated-video-content') as HTMLVideoElement
     const controlsHost = wrapper.querySelector('.ai-generated-video-controls-host') as HTMLDivElement
     const modelChromeElement = wrapper.querySelector('.ai-generated-media-model-chrome') as HTMLElement
-    applyVideoControlsHostStyleProperties(controlsHost)
+    applyVideoControlsHostStyleProperties(controlsHost, settings.videoControls.styles)
     applyMediaModelBadgeStyleProperties(wrapper, { scale: settings.mediaNode.generatedMediaChrome.chatScale })
     let videoControls: VideoControlsInstance | null = null
     let controlsSvg: any = null
@@ -178,9 +127,12 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
     wrapper.addEventListener('click', handleClick)
 
     const updateModelChrome = (): void => {
-        renderMediaModelBadge(modelChromeElement, resolveMediaModelBadgeConfig({
-            modelId: node.attrs.mediaModelId || node.attrs.videoModel,
-        }))
+        renderMediaModelBadge(
+            modelChromeElement,
+            resolveMediaModelBadgeConfig({
+                modelId: node.attrs.mediaModelId || node.attrs.videoModel,
+            }),
+        )
     }
 
     const clearErrorPlaceholder = (): void => {
@@ -233,6 +185,8 @@ export const aiGeneratedVideoNodeView = (node: any, view: any, getPos: () => num
             .style('transform', `scale(${controlsScale})`)
 
         videoControls = createVideoControls(controlsSvg, {
+            icons: videoControlIcons,
+            settings: settings.videoControls,
             id: String(node.attrs.responseId || node.attrs.assetId || 'chat-video'),
             x: 0,
             y: 0,

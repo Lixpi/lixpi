@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     getAsset: vi.fn(),
@@ -39,9 +45,11 @@ const workspace = {
     },
 }
 const moduleCatalog = {
-    resolveEntry: vi.fn((moduleId: string) => moduleId === 'character-creator'
-        ? { capabilityId: 'global.character-creator', kind: 'tool' as const }
-        : undefined),
+    resolveEntry: vi.fn((moduleId: string) =>
+        moduleId === 'character-creator'
+            ? { capabilityId: 'global.character-creator', kind: 'tool' as const }
+            : undefined
+    ),
 }
 const imageAsset = {
     assetId: 'asset-1',
@@ -76,12 +84,14 @@ beforeEach(() => {
     mocks.getBlob.mockResolvedValue({ bucketName: 'org-assets', objectKey: 'portrait.png' })
     mocks.getObject.mockResolvedValue(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]))
     mocks.authorizeCapability.mockImplementation(async ({ capabilityId }: { capabilityId: string }) => {
-        if (capabilityId === 'global.character-creator') return {
-            capabilityId,
-            kind: 'tool',
-            parentModuleId: 'character-creator',
-            catalogExposure: 'module-internal',
-            status: 'active',
+        if (capabilityId === 'global.character-creator') {
+            return {
+                capabilityId,
+                kind: 'tool',
+                parentModuleId: 'character-creator',
+                catalogExposure: 'module-internal',
+                status: 'active',
+            }
         }
         return {
             capabilityId,
@@ -249,10 +259,13 @@ describe('authorizePromptReferences', () => {
                 content: [{
                     type: 'actionTimelineSegment',
                     attrs: { startMs: 0, endMs: 1000 },
-                    content: [{ type: 'paragraph', content: [
-                        { type: 'text', text: longText },
-                        { type: 'prompt_reference', attrs: { referenceType: 'media', assetId: 'asset-1' } },
-                    ] }],
+                    content: [{
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: longText },
+                            { type: 'prompt_reference', attrs: { referenceType: 'media', assetId: 'asset-1' } },
+                        ],
+                    }],
                 }],
             },
         })

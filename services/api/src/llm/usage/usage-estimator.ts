@@ -1,8 +1,14 @@
 'use strict'
 
-import type { MeasuringUnit, Modality } from '@lixpi/constants'
+import type {
+    MeasuringUnit,
+    Modality,
+} from '@lixpi/constants'
 
-import type { AiModelMetaInfo, ProviderState } from '../graph/state.ts'
+import type {
+    AiModelMetaInfo,
+    ProviderState,
+} from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import { estimateInputTokens } from '../providers/provider-input-budget.ts'
 import { estimateVideoTokens } from './video-token-accounting.ts'
@@ -116,7 +122,9 @@ function estimateReasoningMetering(state: ProviderState): CheckMetering {
             completionCeiling,
             completionCeilingFrom: maxCompletionTokens !== undefined
                 ? 'maxCompletionSize'
-                : contextWindow !== undefined ? 'contextWindowRemainder' : 'unknown',
+                : contextWindow !== undefined
+                ? 'contextWindowRemainder'
+                : 'unknown',
         },
     }
 }

@@ -1,6 +1,12 @@
 'use strict'
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
@@ -8,7 +14,12 @@ import * as AiModelModelModule from '../../models/ai-model.ts'
 import * as capabilityStateResolver from '../../capability-system/capability-state-resolver.ts'
 import * as mediaBranchResolver from '../graph/media-branch-resolver.ts'
 import * as workspaceContextResolver from '../graph/workspace-context-resolver.ts'
-import { buildMediaGenerationRequestGroupKey, buildMediaGenerationThreadGroupPrefix, MediaGenerationMatrixOrchestrator, type MatrixRequestData } from './media-generation-matrix.ts'
+import {
+    buildMediaGenerationRequestGroupKey,
+    buildMediaGenerationThreadGroupPrefix,
+    MediaGenerationMatrixOrchestrator,
+    type MatrixRequestData,
+} from './media-generation-matrix.ts'
 
 const generatedAssetStorageMocks = vi.hoisted(() => ({
     ensurePendingGeneratedAssets: vi.fn(),
@@ -49,7 +60,7 @@ vi.mock('../../services/media-generation-request-service.ts', () => ({
 const natsService = { publish: vi.fn() } as any
 
 const createRegistry = () => {
-    const process = vi.fn(async () => ({ }))
+    const process = vi.fn(async () => ({}))
     const preflightAdmission = vi.fn(async () => ({ metricsAdmissionApproved: true }))
     const getOrCreate = vi.fn(() => ({ preflightAdmission }))
     const remove = vi.fn()

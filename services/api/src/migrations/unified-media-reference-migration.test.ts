@@ -1,8 +1,17 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import type { Asset, CanvasState } from '@lixpi/constants'
+import type {
+    Asset,
+    CanvasState,
+} from '@lixpi/constants'
 
 import {
     migrateAssetMediaIdentity,

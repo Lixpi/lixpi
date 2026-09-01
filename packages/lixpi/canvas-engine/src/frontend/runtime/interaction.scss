@@ -1,0 +1,53 @@
+.canvas-engine-pane {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+
+    > canvas {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+}
+
+.canvas-node-shell {
+    pointer-events: auto;
+}
+
+.canvas-node-handles {
+    position: absolute;
+    pointer-events: none;
+}
+
+.canvas-node-resize-handle {
+    position: absolute;
+    pointer-events: auto;
+}
+
+.canvas-port,
+.canvas-resize-handle {
+    position: absolute;
+    pointer-events: auto;
+    box-sizing: border-box;
+    border: 1px solid currentColor;
+}
+
+.canvas-port {
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+}
+
+.canvas-selection-marquee {
+    position: absolute;
+    z-index: 10001;
+    pointer-events: none;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+}
+
+.canvas-selection-group {
+    position: absolute;
+    z-index: 10000;
+    pointer-events: auto;
+    box-sizing: border-box;
+}

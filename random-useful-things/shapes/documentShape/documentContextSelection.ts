@@ -40,7 +40,7 @@ export function startContextSelectionAnimation(
     container: HTMLElement,
     nodeId: string = 'context',
     duration: number = 1500,
-    gradientId: string = 'ctx-grad'
+    gradientId: string = 'ctx-grad',
 ): { stop: () => void } {
     let running = true
     let gradient: any = null
@@ -71,7 +71,7 @@ export function startContextSelectionAnimation(
                     stop: () => {
                         running = false
                         gradient?.interrupt()
-                    }
+                    },
                 }
             }
         }
@@ -97,6 +97,6 @@ export function startContextSelectionAnimation(
         stop: () => {
             running = false
             gradient?.interrupt()
-        }
+        },
     }
 }

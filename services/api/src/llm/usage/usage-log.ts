@@ -1,7 +1,14 @@
 'use strict'
 
-import type { CheckResponse, ConfirmRequest, ConfirmResponse } from '@lixpi/constants'
-import { info, warn } from '@lixpi/debug-tools'
+import type {
+    CheckResponse,
+    ConfirmRequest,
+    ConfirmResponse,
+} from '@lixpi/constants'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
 
 import type { CheckMeteringBasis } from './usage-estimator.ts'
 
@@ -28,19 +35,25 @@ export function logUsageCheck(entry: {
     modality: string
 }): void {
     const { basis, response } = entry
-    const line = `[Metrics] usage check ${JSON.stringify({
-        model: entry.model,
-        modality: entry.modality,
-        estimatedUnits: entry.estimatedUnits,
-        unit: basis.measuringUnit,
-        ...basisDetail(basis),
-        approved: response.approved,
-        ...(response.reason ? { reason: response.reason } : {}),
-        estimatedCostUsd: usd(response.estimatedCost),
-        balanceUsd: usd(response.balance),
-        workflowId: entry.workflowId,
-        ...(response.operationId ? { operationId: response.operationId } : {}),
-    }, null, 0)}`
+    const line = `[Metrics] usage check ${
+        JSON.stringify(
+            {
+                model: entry.model,
+                modality: entry.modality,
+                estimatedUnits: entry.estimatedUnits,
+                unit: basis.measuringUnit,
+                ...basisDetail(basis),
+                approved: response.approved,
+                ...(response.reason ? { reason: response.reason } : {}),
+                estimatedCostUsd: usd(response.estimatedCost),
+                balanceUsd: usd(response.balance),
+                workflowId: entry.workflowId,
+                ...(response.operationId ? { operationId: response.operationId } : {}),
+            },
+            null,
+            0,
+        )
+    }`
 
     // A denied run and a placeholder-derived charge estimate both need to stand
     // out. A provisional frame size means the number is arithmetic over guessed
@@ -59,20 +72,26 @@ export function logUsageConfirm(entry: {
     soldToClientFor?: string | undefined
 }): void {
     const { request, response } = entry
-    info(`[Metrics] usage confirm ${JSON.stringify({
-        model: request.model,
-        modality: request.modality,
-        unit: request.measuringUnit,
-        ...request.usage,
-        ...(entry.purchasedFor ? { purchasedForUsd: entry.purchasedFor } : {}),
-        ...(entry.soldToClientFor ? { soldToClientForUsd: entry.soldToClientFor } : {}),
-        chargedUsd: usd(response?.resaleCost),
-        balanceUsd: usd(response?.balance),
-        workflowId: request.workflowId,
-        workflowSeq: request.workflowSeq,
-        providerRequestId: request.providerRequestId,
-        ...(request.operationId ? { operationId: request.operationId } : {}),
-    }, null, 0)}`)
+    info(`[Metrics] usage confirm ${
+        JSON.stringify(
+            {
+                model: request.model,
+                modality: request.modality,
+                unit: request.measuringUnit,
+                ...request.usage,
+                ...(entry.purchasedFor ? { purchasedForUsd: entry.purchasedFor } : {}),
+                ...(entry.soldToClientFor ? { soldToClientForUsd: entry.soldToClientFor } : {}),
+                chargedUsd: usd(response?.resaleCost),
+                balanceUsd: usd(response?.balance),
+                workflowId: request.workflowId,
+                workflowSeq: request.workflowSeq,
+                providerRequestId: request.providerRequestId,
+                ...(request.operationId ? { operationId: request.operationId } : {}),
+            },
+            null,
+            0,
+        )
+    }`)
 }
 
 // Spreads only the fields the modality actually set, so a tokens line carries no

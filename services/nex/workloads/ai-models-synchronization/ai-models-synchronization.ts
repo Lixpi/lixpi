@@ -4,12 +4,24 @@ import process from 'process'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI } from '@google/genai'
-import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock'
+import {
+    BedrockClient,
+    ListFoundationModelsCommand,
+} from '@aws-sdk/client-bedrock'
 import { fromSSO } from '@aws-sdk/credential-providers'
-import DynamoDBService, { marshall, unmarshall } from '@lixpi/dynamodb-service'
+import DynamoDBService, {
+    marshall,
+    unmarshall,
+} from '@lixpi/dynamodb-service'
 
-//INFO: do not remove unused imports!
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+// INFO: do not remove unused imports!
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import {
     GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
@@ -35,7 +47,7 @@ const MODALITY_METADATA = {
     audio: { title: 'Audio', shortTitle: 'AUDIO' },
     voice: { title: 'Voice', shortTitle: 'VOICE' },
     video: { title: 'Video', shortTitle: 'VID' },
-    video_generation: { title: 'Video Generation', shortTitle: 'VID GEN' }
+    video_generation: { title: 'Video Generation', shortTitle: 'VID GEN' },
 } as const
 
 // Helper function to generate modalities with metadata from modalities array
@@ -45,7 +57,7 @@ function generateModalitiesWithMetadata(modalities: string[]): Array<{ modality:
         return {
             modality,
             title: metadata?.title || modality.charAt(0).toUpperCase() + modality.slice(1),
-            shortTitle: metadata?.shortTitle || modality.toUpperCase()
+            shortTitle: metadata?.shortTitle || modality.toUpperCase(),
         }
     })
 }
@@ -81,21 +93,22 @@ const greatestCommonDivisor = (left: number, right: number): number => {
 // controls are separate metadata and never pass through this mapper.
 export const mapResolutionOptionsToAspectRatioLabels = (
     options: ImageSizeOption[],
-): ImageSizeOption[] => options.map((option) => {
-    const dimensions = option.value.match(/^(\d+)\s*[x×]\s*(\d+)$/i)
-    if (!dimensions) return { ...option }
+): ImageSizeOption[] =>
+    options.map((option) => {
+        const dimensions = option.value.match(/^(\d+)\s*[x×]\s*(\d+)$/i)
+        if (!dimensions) return { ...option }
 
-    const width = Number(dimensions[1])
-    const height = Number(dimensions[2])
-    if (width === 0 || height === 0) return { ...option }
+        const width = Number(dimensions[1])
+        const height = Number(dimensions[2])
+        if (width === 0 || height === 0) return { ...option }
 
-    const divisor = greatestCommonDivisor(width, height)
+        const divisor = greatestCommonDivisor(width, height)
 
-    return {
-        ...option,
-        label: `${width / divisor}:${height / divisor}`,
-    }
-})
+        return {
+            ...option,
+            label: `${width / divisor}:${height / divisor}`,
+        }
+    })
 
 const OPENAI_IMAGE_SIZES = mapResolutionOptionsToAspectRatioLabels([
     { value: '1024x1024', label: '1024x1024' },
@@ -153,13 +166,15 @@ const buildOpenAIReasoningControls = (
         defaultEffort,
         'Controls how many reasoning tokens the model may spend. Higher levels can improve complex work but increase latency and output-token cost.',
     ),
-    ...(includeReasoningMode ? [segmentedControl(
-        'reasoningMode',
-        'Reasoning mode',
-        OPENAI_REASONING_MODE_OPTIONS,
-        'standard',
-        'Pro mode performs additional internal model work before returning a single answer. It is independent of reasoning effort and is available only on GPT-5.6.',
-    )] : []),
+    ...(includeReasoningMode
+        ? [segmentedControl(
+            'reasoningMode',
+            'Reasoning mode',
+            OPENAI_REASONING_MODE_OPTIONS,
+            'standard',
+            'Pro mode performs additional internal model work before returning a single answer. It is independent of reasoning effort and is available only on GPT-5.6.',
+        )]
+        : []),
     segmentedControl(
         'reasoningVerbosity',
         'Response detail',
@@ -469,20 +484,22 @@ const buildSeedanceControls = (
         'true',
         MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT.generateAudio,
     ),
-    ...(includeOutputFormat ? [{
-        key: 'outputFormat' as const,
-        label: 'Output format',
-        kind: 'segmented' as const,
-        options: [
-            { value: 'mp4', label: 'MP4' },
-            {
-                value: 'mov',
-                label: 'MOV',
-                description: 'MOV preserves higher color precision for post-production but has narrower playback support.',
-            },
-        ],
-        defaultValue: 'mov',
-    }] : []),
+    ...(includeOutputFormat
+        ? [{
+            key: 'outputFormat' as const,
+            label: 'Output format',
+            kind: 'segmented' as const,
+            options: [
+                { value: 'mp4', label: 'MP4' },
+                {
+                    value: 'mov',
+                    label: 'MOV',
+                    description: 'MOV preserves higher color precision for post-production but has narrower playback support.',
+                },
+            ],
+            defaultValue: 'mov',
+        }]
+        : []),
     toggleControl(
         'watermark',
         'Watermark',
@@ -668,24 +685,30 @@ const AI_MODEL_INPUT_KINDS = new Set<AiModelInputKind>([
 export function assertValidInferenceCapabilities(model: AiModel): AiModel {
     const profile = model.inferenceCapabilities
     if (!profile) throw new Error(`INFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
-    if (typeof profile.requiresAutoToolChoiceWithThinking !== 'boolean'
+    if (
+        typeof profile.requiresAutoToolChoiceWithThinking !== 'boolean'
         || typeof profile.supportsTemperature !== 'boolean'
         || typeof profile.supportsSystemPrompt !== 'boolean'
-        || typeof profile.requiresClosedJsonSchema !== 'boolean') {
+        || typeof profile.requiresClosedJsonSchema !== 'boolean'
+    ) {
         throw new Error(`INFERENCE_CAPABILITIES_FLAGS_INVALID:${model.provider}:${model.model}`)
     }
-    if (profile.supportedInputKinds.length === 0
+    if (
+        profile.supportedInputKinds.length === 0
         || new Set(profile.supportedInputKinds).size !== profile.supportedInputKinds.length
-        || profile.supportedInputKinds.some(kind => !AI_MODEL_INPUT_KINDS.has(kind))) {
+        || profile.supportedInputKinds.some(kind => !AI_MODEL_INPUT_KINDS.has(kind))
+    ) {
         throw new Error(`INFERENCE_CAPABILITIES_INPUTS_INVALID:${model.provider}:${model.model}`)
     }
     const anthropicThinking = profile.thinkingMode === 'anthropic-manual'
         || profile.thinkingMode === 'anthropic-adaptive'
     const googleThinking = profile.thinkingMode === 'google-budget'
         || profile.thinkingMode === 'google-level'
-    if ((anthropicThinking && model.provider !== 'Anthropic')
+    if (
+        (anthropicThinking && model.provider !== 'Anthropic')
         || (googleThinking && model.provider !== 'Google')
-        || profile.requiresAutoToolChoiceWithThinking !== anthropicThinking) {
+        || profile.requiresAutoToolChoiceWithThinking !== anthropicThinking
+    ) {
         throw new Error(`INFERENCE_CAPABILITIES_THINKING_INVALID:${model.provider}:${model.model}`)
     }
     return model
@@ -699,27 +722,35 @@ export function assertValidImageReferenceCapabilities(model: AiModel): AiModel {
         return model
     }
     if (!profile) throw new Error(`IMAGE_REFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
-    if (!Number.isInteger(profile.maxReferenceImages) || profile.maxReferenceImages < 0
+    if (
+        !Number.isInteger(profile.maxReferenceImages) || profile.maxReferenceImages < 0
         || !Number.isInteger(profile.maxIdentityReferenceImages) || profile.maxIdentityReferenceImages < 0
-        || profile.maxIdentityReferenceImages > profile.maxReferenceImages) {
+        || profile.maxIdentityReferenceImages > profile.maxReferenceImages
+    ) {
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_LIMITS_INVALID:${model.provider}:${model.model}`)
     }
-    if (profile.conditioningModes.length === 0
+    if (
+        profile.conditioningModes.length === 0
         || new Set(profile.conditioningModes).size !== profile.conditioningModes.length
-        || profile.conditioningModes.some(mode => !IMAGE_REFERENCE_CONDITIONING_MODES.has(mode))) {
+        || profile.conditioningModes.some(mode => !IMAGE_REFERENCE_CONDITIONING_MODES.has(mode))
+    ) {
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_MODES_INVALID:${model.provider}:${model.model}`)
     }
-    if (!['provider-managed', 'standard', 'high'].includes(profile.inputFidelity)
+    if (
+        !['provider-managed', 'standard', 'high'].includes(profile.inputFidelity)
         || !Number.isInteger(profile.maxOutputPixels) || profile.maxOutputPixels <= 0
         || profile.supportedAspectRatios.length === 0
-        || profile.supportedAspectRatios.some(ratio => !/^\d+:\d+$/u.test(ratio))) {
+        || profile.supportedAspectRatios.some(ratio => !/^\d+:\d+$/u.test(ratio))
+    ) {
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_PROFILE_INVALID:${model.provider}:${model.model}`)
     }
     if (profile.maxIdentityReferenceImages > 0 && !profile.conditioningModes.includes('identity')) {
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_IDENTITY_INVALID:${model.provider}:${model.model}`)
     }
-    if (profile.supportsStructureControl !== profile.conditioningModes.includes('structure')
-        || profile.supportsPoseControl !== profile.conditioningModes.includes('pose')) {
+    if (
+        profile.supportsStructureControl !== profile.conditioningModes.includes('structure')
+        || profile.supportsPoseControl !== profile.conditioningModes.includes('pose')
+    ) {
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_CONTROLS_INVALID:${model.provider}:${model.model}`)
     }
     return model
@@ -738,14 +769,16 @@ export function assertValidVideoGenerationControls(model: AiModel): AiModel {
     }
     for (const control of controls) {
         const optionValues = control.options.map(option => option.value)
-        if (!control.label
+        if (
+            !control.label
             || new Set(optionValues).size !== optionValues.length
             || (control.kind !== 'number' && control.kind !== 'text' && optionValues.length === 0)
             || (control.defaultValue !== undefined
                 && control.kind !== 'number'
                 && control.kind !== 'text'
                 && !optionValues.includes(control.defaultValue))
-            || (control.kind === 'fixed' && control.readOnly !== true)) {
+            || (control.kind === 'fixed' && control.readOnly !== true)
+        ) {
             throw new Error(`VIDEO_GENERATION_CONTROL_INVALID:${model.provider}:${model.model}:${control.key}`)
         }
     }
@@ -770,27 +803,29 @@ type GoogleModel = {
 }
 
 // Default model capability/settings per provider.
-type ModelDefaults = Pick<
-    AiModel,
-    'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'inferenceCapabilities' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName' | 'imageReferenceCapabilities'
-> & {
-    imagePromptMaxChars?: number
-    imageSizeMode?: ImageSizeMode
-    imageSizes?: ImageSizeOption[]
-    reasoningGenerationControls?: MediaGenerationConfigControl[]
-    imageGenerationControls?: MediaGenerationConfigControl[]
-    videoAspectRatios?: ImageSizeOption[]
-    videoResolutions?: ImageSizeOption[]
-    videoDurations?: ImageSizeOption[]
-    videoGenerationControls?: MediaGenerationConfigControl[]
-    videoMaxReferenceImages?: number
-    // Not part of AiModel, used only for provider-grouped sorting
-    starSortingPosition: number
-    // Transform functions for model properties
-    transforms?: {
-        [key: string]: (...args: any[]) => any
+type ModelDefaults =
+    & Pick<
+        AiModel,
+        'contextWindow' | 'maxCompletionSize' | 'defaultTemperature' | 'inferenceCapabilities' | 'modalities' | 'pricing' | 'color' | 'iconName' | 'colorIconName' | 'imageReferenceCapabilities'
+    >
+    & {
+        imagePromptMaxChars?: number
+        imageSizeMode?: ImageSizeMode
+        imageSizes?: ImageSizeOption[]
+        reasoningGenerationControls?: MediaGenerationConfigControl[]
+        imageGenerationControls?: MediaGenerationConfigControl[]
+        videoAspectRatios?: ImageSizeOption[]
+        videoResolutions?: ImageSizeOption[]
+        videoDurations?: ImageSizeOption[]
+        videoGenerationControls?: MediaGenerationConfigControl[]
+        videoMaxReferenceImages?: number
+        // Not part of AiModel, used only for provider-grouped sorting
+        starSortingPosition: number
+        // Transform functions for model properties
+        transforms?: {
+            [key: string]: (...args: any[]) => any
+        }
     }
-}
 
 type ProviderModelDefaults = {
     exact: Record<string, PartialDeep<ModelDefaults>>
@@ -862,7 +897,7 @@ export class AiModelsSync {
         this.dynamoDBService = options.dynamoDBService || new DynamoDBService({
             region: env.AWS_REGION,
             ssoProfile: env.AWS_PROFILE,
-            ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }),    // For local development only
+            ...(env.DYNAMODB_ENDPOINT && { endpoint: env.DYNAMODB_ENDPOINT }), // For local development only
         })
 
         this.openai = new OpenAI({
@@ -978,12 +1013,12 @@ export class AiModelsSync {
                 modalities: ['text'],
                 pricing: {
                     currency: 'USD',
-                    resaleMargin: '1',    // for example set to 1.2 to add 20% margin
+                    resaleMargin: '1', // for example set to 1.2 to add 20% margin
                     text: {
                         measuringUnit: 'tokens',
                         pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
-                    }
+                        tiers: { default: { prompt: '0.00', completion: '0.00' } },
+                    },
                 },
                 // Provider UI defaults
                 color: '#56967c',
@@ -1018,9 +1053,9 @@ export class AiModelsSync {
                             .join(' ')
                         // Remove "Latest" suffix if present
                         return title.replace(/\s+Latest$/i, '')
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         // Anthropic model defaults sourced from the official Models overview.
         // Claude 5 uses its full 1M context window and 128k synchronous output limit.
@@ -1049,8 +1084,8 @@ export class AiModelsSync {
                     text: {
                         measuringUnit: 'tokens',
                         pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
-                    }
+                        tiers: { default: { prompt: '0.00', completion: '0.00' } },
+                    },
                 },
                 color: '#D97757',
                 iconName: 'claudeIcon',
@@ -1069,9 +1104,9 @@ export class AiModelsSync {
                             .join(' ')
                         // Remove "Claude " prefix if present
                         return fullTitle.replace(/^Claude\s+/i, '')
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         Google: {
             exact: {
@@ -1107,8 +1142,8 @@ export class AiModelsSync {
                     text: {
                         measuringUnit: 'tokens',
                         pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } }
-                    }
+                        tiers: { default: { prompt: '0.00', completion: '0.00' } },
+                    },
                 },
                 color: '#4285F4',
                 iconName: 'geminiIcon',
@@ -1170,21 +1205,21 @@ export class AiModelsSync {
                             })
                             .join(' ')
                             .replace(/\s+Preview$/i, '')
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         Stability: {
             exact: {
                 'stability-ultra': {
                     modalities: ['image_generation'],
                     imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } }
+                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } },
                 },
                 'sd3.5-large': {
                     modalities: ['image_generation'],
                     imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } }
+                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } },
                 },
             },
             prefix: [],
@@ -1204,8 +1239,8 @@ export class AiModelsSync {
                         measuringUnit: 'credits',
                         pricePer: '1',
                         prompt: '0.00',
-                        completion: '0.00'
-                    }
+                        completion: '0.00',
+                    },
                 },
                 color: '#A855F7',
                 iconName: 'stabilityIcon',
@@ -1227,9 +1262,9 @@ export class AiModelsSync {
                             'sd3.5-large': 'SD 3.5 Large',
                         }
                         return names[modelId] || modelId
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         // BytePlus ModelArk — Seedance video generation. Static entries (no
         // model-list API in the repo); token-metered. Each exact profile owns
@@ -1331,7 +1366,7 @@ export class AiModelsSync {
                 pricing: {
                     currency: 'USD',
                     resaleMargin: '1',
-                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '7.7' }
+                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '7.7' },
                 },
                 // Seedance is a ByteDance model — brand color plus the ByteDance brand icon.
                 color: '#1664FF',
@@ -1355,10 +1390,10 @@ export class AiModelsSync {
                             'dreamina-seedance-2-5-260628': 'Seedance 2.5',
                         }
                         return names[modelId] || modelId
-                    }
-                }
-            }
-        }
+                    },
+                },
+            },
+        },
     }
 
     // Helper to merge pricing from partial values with provider fallback
@@ -1453,7 +1488,6 @@ export class AiModelsSync {
             const models = modelsList.data
 
             return models.filter((model: OpenAIModel) => AiModelsSync.OPENAI_ALLOWED_MODELS.has(model.id))
-
         } catch (error) {
             err('Failed to fetch OpenAI models:', error)
             throw error
@@ -1553,7 +1587,6 @@ export class AiModelsSync {
             }
 
             throw new Error('Anthropic models list endpoint returned no models')
-
         } catch (error) {
             warn('Failed to fetch Anthropic models:', error)
             throw error
@@ -1592,7 +1625,6 @@ export class AiModelsSync {
                 }
                 return AiModelsSync.GOOGLE_ALLOWED_MODELS.has(modelId)
             })
-
         } catch (error) {
             err('Failed to fetch Google models:', error)
             throw error
@@ -1629,14 +1661,14 @@ export class AiModelsSync {
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
         }
 
         // Apply transforms to model properties
         if (modelDefaults.transforms) {
             for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
                 if (transformFn) {
-                    (model as any)[key] = transformFn(openAIModel.id)
+                    ;(model as any)[key] = transformFn(openAIModel.id)
                 }
             }
         }
@@ -1674,14 +1706,14 @@ export class AiModelsSync {
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
         }
 
         // Apply transforms to model properties
         if (modelDefaults.transforms) {
             for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
                 if (transformFn) {
-                    (model as any)[key] = transformFn(anthropicModel.id, anthropicModel.display_name)
+                    ;(model as any)[key] = transformFn(anthropicModel.id, anthropicModel.display_name)
                 }
             }
         }
@@ -1728,14 +1760,14 @@ export class AiModelsSync {
             videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
             pricing: modelDefaults.pricing,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
         }
 
         // Apply transforms to model properties
         if (modelDefaults.transforms) {
             for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
                 if (transformFn) {
-                    (model as any)[key] = transformFn(googleModel.name)
+                    ;(model as any)[key] = transformFn(googleModel.name)
                 }
             }
         }
@@ -1754,7 +1786,7 @@ export class AiModelsSync {
                 await this.dynamoDBService.putItem({
                     tableName,
                     item: model,
-                    origin
+                    origin,
                 })
                 info(`Updated model: ${model.model}`)
             } catch (error) {
@@ -1786,9 +1818,7 @@ export class AiModelsSync {
             })
 
             // Map OpenAI models to our format
-            const mappedModels: AiModel[] = openAIModels.map((model, index) =>
-                this.applyDefaultModelFlags(this.mapOpenAIModelToAiModel(model, index + 1))
-            )
+            const mappedModels: AiModel[] = openAIModels.map((model, index) => this.applyDefaultModelFlags(this.mapOpenAIModelToAiModel(model, index + 1)))
 
             info(`🔧 Mapped ${mappedModels.length} models to our format:`)
             mappedModels.forEach((model, index) => {
@@ -1800,7 +1830,7 @@ export class AiModelsSync {
                 tableName: this.aiModelsListTableName,
                 keyConditions: { provider: 'OpenAI' },
                 fetchAllItems: true,
-                origin: `Service::${this.serviceName}`
+                origin: `Service::${this.serviceName}`,
             })
 
             const existingModels = existingModelsResult.items
@@ -1810,9 +1840,7 @@ export class AiModelsSync {
             info(`Found ${existingModels.length} existing OpenAI models in database`)
 
             // Identify models to delete (exist in DB but not in fetched list)
-            const modelsToDelete = existingModels.filter((existingModel: any) =>
-                fetchedModelIds.indexOf(existingModel.model) === -1
-            )
+            const modelsToDelete = existingModels.filter((existingModel: any) => fetchedModelIds.indexOf(existingModel.model) === -1)
 
             // Separate remaining models into new and existing
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
@@ -1829,7 +1857,7 @@ export class AiModelsSync {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
                             key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
-                            origin: `Service::${this.serviceName}`
+                            origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete OpenAI model: ${(modelToDelete as any).model}`)
                     } catch (error) {
@@ -1845,7 +1873,7 @@ export class AiModelsSync {
                 await this.dynamoDBService.batchWriteItems({
                     tableName: this.aiModelsListTableName,
                     items: newModels,
-                    origin: `Service::${this.serviceName}`
+                    origin: `Service::${this.serviceName}`,
                 })
                 info(`Inserted ${newModels.length} new OpenAI models`)
             }
@@ -1861,9 +1889,8 @@ export class AiModelsSync {
                 processed: mappedModels.length,
                 newModels: newModels.length,
                 updatedModels: modelsToUpdate.length,
-                deletedModels: modelsToDelete.length
+                deletedModels: modelsToDelete.length,
             }
-
         } catch (error) {
             err('❌ OpenAI models synchronization failed:', error)
             throw error
@@ -1892,9 +1919,7 @@ export class AiModelsSync {
             })
 
             // Map Anthropic models to our format
-            const mappedModels: AiModel[] = anthropicModels.map((model, index) =>
-                this.applyDefaultModelFlags(this.mapAnthropicModelToAiModel(model, index + 1))
-            )
+            const mappedModels: AiModel[] = anthropicModels.map((model, index) => this.applyDefaultModelFlags(this.mapAnthropicModelToAiModel(model, index + 1)))
 
             info(`🔧 Mapped ${mappedModels.length} Anthropic models to our format:`)
             mappedModels.forEach((model, index) => {
@@ -1906,7 +1931,7 @@ export class AiModelsSync {
                 tableName: this.aiModelsListTableName,
                 keyConditions: { provider: 'Anthropic' },
                 fetchAllItems: true,
-                origin: `Service::${this.serviceName}`
+                origin: `Service::${this.serviceName}`,
             })
 
             const existingModels = existingModelsResult.items
@@ -1916,9 +1941,7 @@ export class AiModelsSync {
             info(`Found ${existingModels.length} existing Anthropic models in database`)
 
             // Identify models to delete (exist in DB but not in fetched list)
-            const modelsToDelete = existingModels.filter((existingModel: any) =>
-                fetchedModelIds.indexOf(existingModel.model) === -1
-            )
+            const modelsToDelete = existingModels.filter((existingModel: any) => fetchedModelIds.indexOf(existingModel.model) === -1)
 
             // Separate remaining models into new and existing
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
@@ -1935,7 +1958,7 @@ export class AiModelsSync {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
                             key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
-                            origin: `Service::${this.serviceName}`
+                            origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete Anthropic model: ${(modelToDelete as any).model}`)
                     } catch (error) {
@@ -1951,7 +1974,7 @@ export class AiModelsSync {
                 await this.dynamoDBService.batchWriteItems({
                     tableName: this.aiModelsListTableName,
                     items: newModels,
-                    origin: `Service::${this.serviceName}`
+                    origin: `Service::${this.serviceName}`,
                 })
                 info(`Inserted ${newModels.length} new Anthropic models`)
             }
@@ -1967,9 +1990,8 @@ export class AiModelsSync {
                 processed: mappedModels.length,
                 newModels: newModels.length,
                 updatedModels: modelsToUpdate.length,
-                deletedModels: modelsToDelete.length
+                deletedModels: modelsToDelete.length,
             }
-
         } catch (error) {
             err('❌ Anthropic models synchronization failed:', error)
             throw error
@@ -1993,9 +2015,7 @@ export class AiModelsSync {
                 info(`  ${index + 1}. ${model.name} (display: ${model.displayName || 'N/A'}, input: ${model.inputTokenLimit}, output: ${model.outputTokenLimit})`)
             })
 
-            const mappedModels: AiModel[] = googleModels.map((model, index) =>
-                this.applyDefaultModelFlags(this.mapGoogleModelToAiModel(model, index + 1))
-            )
+            const mappedModels: AiModel[] = googleModels.map((model, index) => this.applyDefaultModelFlags(this.mapGoogleModelToAiModel(model, index + 1)))
 
             info(`🔧 Mapped ${mappedModels.length} Google models to our format:`)
             mappedModels.forEach((model, index) => {
@@ -2006,7 +2026,7 @@ export class AiModelsSync {
                 tableName: this.aiModelsListTableName,
                 keyConditions: { provider: 'Google' },
                 fetchAllItems: true,
-                origin: `Service::${this.serviceName}`
+                origin: `Service::${this.serviceName}`,
             })
 
             const existingModels = existingModelsResult.items
@@ -2015,9 +2035,7 @@ export class AiModelsSync {
 
             info(`Found ${existingModels.length} existing Google models in database`)
 
-            const modelsToDelete = existingModels.filter((existingModel: any) =>
-                fetchedModelIds.indexOf(existingModel.model) === -1
-            )
+            const modelsToDelete = existingModels.filter((existingModel: any) => fetchedModelIds.indexOf(existingModel.model) === -1)
 
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
@@ -2032,7 +2050,7 @@ export class AiModelsSync {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
                             key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
-                            origin: `Service::${this.serviceName}`
+                            origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete Google model: ${(modelToDelete as any).model}`)
                     } catch (error) {
@@ -2047,7 +2065,7 @@ export class AiModelsSync {
                 await this.dynamoDBService.batchWriteItems({
                     tableName: this.aiModelsListTableName,
                     items: newModels,
-                    origin: `Service::${this.serviceName}`
+                    origin: `Service::${this.serviceName}`,
                 })
                 info(`Inserted ${newModels.length} new Google models`)
             }
@@ -2062,9 +2080,8 @@ export class AiModelsSync {
                 processed: mappedModels.length,
                 newModels: newModels.length,
                 updatedModels: modelsToUpdate.length,
-                deletedModels: modelsToDelete.length
+                deletedModels: modelsToDelete.length,
             }
-
         } catch (error) {
             err('❌ Google models synchronization failed:', error)
             throw error
@@ -2108,14 +2125,14 @@ export class AiModelsSync {
             imageReferenceCapabilities: modelDefaults.imageReferenceCapabilities,
             pricing: modelDefaults.pricing,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
         }
 
         // Apply transforms to model properties
         if (modelDefaults.transforms) {
             for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
                 if (transformFn) {
-                    (aiModel as any)[key] = transformFn(model.id)
+                    ;(aiModel as any)[key] = transformFn(model.id)
                 }
             }
         }
@@ -2135,9 +2152,7 @@ export class AiModelsSync {
             const stabilityModels = this.getStabilityModels()
             info(`📡 Using ${stabilityModels.length} hardcoded Stability AI models`)
 
-            const mappedModels: AiModel[] = stabilityModels.map((model, index) =>
-                this.applyDefaultModelFlags(this.mapStabilityModelToAiModel(model, index + 1))
-            )
+            const mappedModels: AiModel[] = stabilityModels.map((model, index) => this.applyDefaultModelFlags(this.mapStabilityModelToAiModel(model, index + 1)))
 
             info(`🔧 Mapped ${mappedModels.length} Stability AI models to our format:`)
             mappedModels.forEach((model, index) => {
@@ -2148,7 +2163,7 @@ export class AiModelsSync {
                 tableName: this.aiModelsListTableName,
                 keyConditions: { provider: 'Stability' },
                 fetchAllItems: true,
-                origin: `Service::${this.serviceName}`
+                origin: `Service::${this.serviceName}`,
             })
 
             const existingModels = existingModelsResult.items
@@ -2157,9 +2172,7 @@ export class AiModelsSync {
 
             info(`Found ${existingModels.length} existing Stability AI models in database`)
 
-            const modelsToDelete = existingModels.filter((existingModel: any) =>
-                fetchedModelIds.indexOf(existingModel.model) === -1
-            )
+            const modelsToDelete = existingModels.filter((existingModel: any) => fetchedModelIds.indexOf(existingModel.model) === -1)
 
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
@@ -2174,7 +2187,7 @@ export class AiModelsSync {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
                             key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
-                            origin: `Service::${this.serviceName}`
+                            origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete Stability AI model: ${(modelToDelete as any).model}`)
                     } catch (error) {
@@ -2189,7 +2202,7 @@ export class AiModelsSync {
                 await this.dynamoDBService.batchWriteItems({
                     tableName: this.aiModelsListTableName,
                     items: newModels,
-                    origin: `Service::${this.serviceName}`
+                    origin: `Service::${this.serviceName}`,
                 })
                 info(`Inserted ${newModels.length} new Stability AI models`)
             }
@@ -2204,9 +2217,8 @@ export class AiModelsSync {
                 processed: mappedModels.length,
                 newModels: newModels.length,
                 updatedModels: modelsToUpdate.length,
-                deletedModels: modelsToDelete.length
+                deletedModels: modelsToDelete.length,
             }
-
         } catch (error) {
             err('❌ Stability AI models synchronization failed:', error)
             throw error
@@ -2258,14 +2270,14 @@ export class AiModelsSync {
             videoMaxReferenceImages: modelDefaults.videoMaxReferenceImages,
             pricing: modelDefaults.pricing,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
         }
 
         // Apply transforms to model properties
         if (modelDefaults.transforms) {
             for (const [key, transformFn] of Object.entries(modelDefaults.transforms)) {
                 if (transformFn) {
-                    (aiModel as any)[key] = transformFn(model.id)
+                    ;(aiModel as any)[key] = transformFn(model.id)
                 }
             }
         }
@@ -2286,9 +2298,7 @@ export class AiModelsSync {
             const bytePlusModels = this.getBytePlusModels()
             info(`📡 Using ${bytePlusModels.length} hardcoded BytePlus models`)
 
-            const mappedModels: AiModel[] = bytePlusModels.map((model, index) =>
-                this.applyDefaultModelFlags(this.mapBytePlusModelToAiModel(model, index + 1))
-            )
+            const mappedModels: AiModel[] = bytePlusModels.map((model, index) => this.applyDefaultModelFlags(this.mapBytePlusModelToAiModel(model, index + 1)))
 
             info(`🔧 Mapped ${mappedModels.length} BytePlus models to our format:`)
             mappedModels.forEach((model, index) => {
@@ -2299,7 +2309,7 @@ export class AiModelsSync {
                 tableName: this.aiModelsListTableName,
                 keyConditions: { provider: 'BytePlus' },
                 fetchAllItems: true,
-                origin: `Service::${this.serviceName}`
+                origin: `Service::${this.serviceName}`,
             })
 
             const existingModels = existingModelsResult.items
@@ -2308,9 +2318,7 @@ export class AiModelsSync {
 
             info(`Found ${existingModels.length} existing BytePlus models in database`)
 
-            const modelsToDelete = existingModels.filter((existingModel: any) =>
-                fetchedModelIds.indexOf(existingModel.model) === -1
-            )
+            const modelsToDelete = existingModels.filter((existingModel: any) => fetchedModelIds.indexOf(existingModel.model) === -1)
 
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
@@ -2325,7 +2333,7 @@ export class AiModelsSync {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
                             key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
-                            origin: `Service::${this.serviceName}`
+                            origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete BytePlus model: ${(modelToDelete as any).model}`)
                     } catch (error) {
@@ -2340,7 +2348,7 @@ export class AiModelsSync {
                 await this.dynamoDBService.batchWriteItems({
                     tableName: this.aiModelsListTableName,
                     items: newModels,
-                    origin: `Service::${this.serviceName}`
+                    origin: `Service::${this.serviceName}`,
                 })
                 info(`Inserted ${newModels.length} new BytePlus models`)
             }
@@ -2355,9 +2363,8 @@ export class AiModelsSync {
                 processed: mappedModels.length,
                 newModels: newModels.length,
                 updatedModels: modelsToUpdate.length,
-                deletedModels: modelsToDelete.length
+                deletedModels: modelsToDelete.length,
             }
-
         } catch (error) {
             err('❌ BytePlus models synchronization failed:', error)
             throw error
@@ -2400,7 +2407,7 @@ export class AiModelsSync {
             totalProcessed: openAIResult.processed + anthropicResult.processed + googleResult.processed + stabilityResult.processed + bytePlusResult.processed,
             totalNew: openAIResult.newModels + anthropicResult.newModels + googleResult.newModels + stabilityResult.newModels + bytePlusResult.newModels,
             totalUpdated: openAIResult.updatedModels + anthropicResult.updatedModels + googleResult.updatedModels + stabilityResult.updatedModels + bytePlusResult.updatedModels,
-            totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels + bytePlusResult.deletedModels
+            totalDeleted: openAIResult.deletedModels + anthropicResult.deletedModels + googleResult.deletedModels + stabilityResult.deletedModels + bytePlusResult.deletedModels,
         }
 
         info('✅ AI models synchronization completed')

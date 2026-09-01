@@ -1,5 +1,5 @@
-import path from "path"
-import { pathToFileURL } from "url"
+import path from 'path'
+import { pathToFileURL } from 'url'
 import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
@@ -9,7 +9,7 @@ export default defineConfig({
         globals: true,
         include: ['src/**/*.test.ts'],
         alias: {
-            $src: path.resolve("./src"),
+            $src: path.resolve('./src'),
         },
     },
     server: {
@@ -43,21 +43,24 @@ export default defineConfig({
         exclude: [
             '@lixpi/capability-system',
             '@lixpi/canvas-engine',
+            '@lixpi/canvas-components',
+            '@lixpi/canvas-components-lixpi-specific',
             '@lixpi/constants',
             '@lixpi/nats-service',
             '@lixpi/prosemirror',
             '@lixpi/ui-kit',
+            '@lixpi/ui-primitives',
         ],
     },
     // mode:'development',
     resolve: {
         alias: {
-            $src: path.resolve("./src"),
+            $src: path.resolve('./src'),
         },
 
         // This is a browser-only SPA, so prefer the `browser` export condition when
         // packages ship separate browser and server entry points.
-        conditions: ['browser']
+        conditions: ['browser'],
     },
 
     // SASS $src alias - same as TypeScript/JavaScript aliases
@@ -72,7 +75,7 @@ export default defineConfig({
                             return pathToFileURL(resolved)
                         }
                         return null
-                    }
+                    },
                 }],
             },
         },

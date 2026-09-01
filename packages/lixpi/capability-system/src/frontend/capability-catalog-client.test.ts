@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     getCapabilityUserEventSubject,
     NATS_SUBJECTS,
@@ -95,10 +100,17 @@ describe('CapabilityCatalogClient', () => {
     it('resolves the Tool input schema and dependency names from authorized details', async () => {
         const request = vi.fn().mockResolvedValue({
             record: {
-                capabilityId: 'tool-1', kind: 'tool', scope: 'global', scopeOwnerId: 'system',
-                storageOwnerId: 'system', manifestBlobHash: 'hash-1', status: 'active', ownerUserId: 'system',
+                capabilityId: 'tool-1',
+                kind: 'tool',
+                scope: 'global',
+                scopeOwnerId: 'system',
+                storageOwnerId: 'system',
+                manifestBlobHash: 'hash-1',
+                status: 'active',
+                ownerUserId: 'system',
                 catalogExposure: 'standalone',
-                createdAt: 1, updatedAt: 2,
+                createdAt: 1,
+                updatedAt: 2,
             },
             manifest: {
                 schemaVersion: 1,
@@ -144,10 +156,17 @@ describe('CapabilityCatalogClient', () => {
 
     it('sends optimistic catalog management payloads through the dedicated subjects', async () => {
         const record: CapabilityCatalogRecord = {
-            capabilityId: 'skill-1', kind: 'skill', scope: 'user', scopeOwnerId: 'user-1',
-            storageOwnerId: 'org-1', manifestBlobHash: 'hash-1', status: 'active', ownerUserId: 'user-1',
+            capabilityId: 'skill-1',
+            kind: 'skill',
+            scope: 'user',
+            scopeOwnerId: 'user-1',
+            storageOwnerId: 'org-1',
+            manifestBlobHash: 'hash-1',
+            status: 'active',
+            ownerUserId: 'user-1',
             catalogExposure: 'standalone',
-            createdAt: 1, updatedAt: 2,
+            createdAt: 1,
+            updatedAt: 2,
         }
         const manifest: CapabilityManifest = {
             schemaVersion: 1,
@@ -192,9 +211,17 @@ describe('CapabilityCatalogClient', () => {
     it('combines RUN.GET with envelope-based replay and advances its cursor', async () => {
         const request = vi.fn()
             .mockResolvedValueOnce({
-                runId: 'run-1', rootCapabilityId: 'tool-1', resolvedManifests: [], workspaceId: 'workspace-1',
-                origin: 'panel', status: 'running', currentStepIds: [], outputAssetIds: [], eventStreamName: 'events',
-                createdAt: 1, updatedAt: 2,
+                runId: 'run-1',
+                rootCapabilityId: 'tool-1',
+                resolvedManifests: [],
+                workspaceId: 'workspace-1',
+                origin: 'panel',
+                status: 'running',
+                currentStepIds: [],
+                outputAssetIds: [],
+                eventStreamName: 'events',
+                createdAt: 1,
+                updatedAt: 2,
             })
             .mockResolvedValueOnce({
                 events: [{
@@ -214,10 +241,14 @@ describe('CapabilityCatalogClient', () => {
 
         expect(replay.events).toHaveLength(1)
         expect(replay.cursor).toBe('9')
-        expect(request).toHaveBeenNthCalledWith(2, CAPABILITY_CATALOG_SUBJECTS.replay, expect.objectContaining({
-            runId: 'run-1',
-            startStreamSequence: 1,
-        }))
+        expect(request).toHaveBeenNthCalledWith(
+            2,
+            CAPABILITY_CATALOG_SUBJECTS.replay,
+            expect.objectContaining({
+                runId: 'run-1',
+                startStreamSequence: 1,
+            }),
+        )
     })
 
     it('subscribes to the tokenized user run-event subject and filters by workspace and run', () => {

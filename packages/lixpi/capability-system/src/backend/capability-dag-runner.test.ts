@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { CapabilityDagRunner } from './capability-dag-runner.ts'
 
@@ -17,12 +21,14 @@ describe('CapabilityDagRunner', () => {
         expect(runner.getReadyNodes().map(node => node.nodeId)).toEqual(['profile', 'action'])
     })
 
-    it.each([
-        [[{ nodeId: 'bad id', dependsOn: [] }], 'CAPABILITY_DAG_NODE_ID_INVALID'],
-        [[{ nodeId: 'same', dependsOn: [] }, { nodeId: 'same', dependsOn: [] }], 'CAPABILITY_DAG_NODE_ID_DUPLICATE'],
-        [[{ nodeId: 'first', dependsOn: ['missing'] }], 'CAPABILITY_DAG_DEPENDENCY_UNKNOWN'],
-        [[{ nodeId: 'first', dependsOn: ['second'] }, { nodeId: 'second', dependsOn: ['first'] }], 'CAPABILITY_DAG_CYCLE'],
-    ] as const)('rejects invalid dependency graphs', (nodes, errorCode) => {
+    it.each(
+        [
+            [[{ nodeId: 'bad id', dependsOn: [] }], 'CAPABILITY_DAG_NODE_ID_INVALID'],
+            [[{ nodeId: 'same', dependsOn: [] }, { nodeId: 'same', dependsOn: [] }], 'CAPABILITY_DAG_NODE_ID_DUPLICATE'],
+            [[{ nodeId: 'first', dependsOn: ['missing'] }], 'CAPABILITY_DAG_DEPENDENCY_UNKNOWN'],
+            [[{ nodeId: 'first', dependsOn: ['second'] }, { nodeId: 'second', dependsOn: ['first'] }], 'CAPABILITY_DAG_CYCLE'],
+        ] as const,
+    )('rejects invalid dependency graphs', (nodes, errorCode) => {
         expect(() => new CapabilityDagRunner(nodes)).toThrow(errorCode)
     })
 

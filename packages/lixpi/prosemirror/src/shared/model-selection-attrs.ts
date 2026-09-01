@@ -10,10 +10,13 @@ export function parseCapabilityInputsAttr(value: unknown): SerializedCapabilityI
     try {
         const parsed = JSON.parse(value) as unknown
         if (!isJsonObject(parsed)) return {}
-        return Object.fromEntries(Object.entries(parsed).flatMap(([toolId, input]) =>
-            toolId.trim() && isJsonObject(input)
-                ? [[toolId, input as Record<string, CapabilityJsonValue>]]
-                : []))
+        return Object.fromEntries(
+            Object.entries(parsed).flatMap(([toolId, input]) =>
+                toolId.trim() && isJsonObject(input)
+                    ? [[toolId, input as Record<string, CapabilityJsonValue>]]
+                    : []
+            ),
+        )
     } catch {
         return {}
     }
@@ -98,7 +101,7 @@ export function parseMediaGenerationConfigSelectionAttr(value: unknown): MediaGe
                 : {}
             const values = Object.fromEntries(
                 Object.entries(rawValues)
-                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0),
             )
 
             return [{
@@ -119,7 +122,7 @@ export function serializeMediaGenerationConfigSelectionAttr(groups: readonly Med
             modelIds: Array.from(new Set(group.modelIds.filter(modelId => modelId.trim().length > 0))),
             values: Object.fromEntries(
                 Object.entries(group.values)
-                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+                    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0),
             ),
         }))
         .filter(group => group.groupId && group.modelIds.length > 0)

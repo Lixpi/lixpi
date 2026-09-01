@@ -54,7 +54,7 @@ graph TB
 
 | Surface | Renderer | Source |
 |---------|----------|--------|
-| Editable AI chat ProseMirror content | API-side `AiChatProseMirrorStreamAssembler` plus shared `@lixpi/prosemirror` assembly helpers | [`ai-chat-stream-assembler.ts`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts), [`stream-assembly.ts`](../../packages/lixpi/prosemirror/src/stream-assembly.ts) |
+| Editable AI chat ProseMirror content | API-side `AiChatProseMirrorStreamAssembler` plus shared `@lixpi/prosemirror` assembly helpers | [`ai-chat-stream-assembler.ts`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts), [`stream-assembly.ts`](../../packages/lixpi/prosemirror/src/shared/stream-assembly.ts) |
 | **Non-editable** content (everything else) | The unified `MarkdownStreamRenderer` | [`markdownStreamRenderer.ts`](../../services/web-ui/src/utils/markdownStreamRenderer.ts) |
 
 Both consume the same parser and segment shape. If a new surface needs markdown, reuse one of these paths and extend it where needed.
@@ -103,7 +103,7 @@ The browser does not run a separate markdown-to-ProseMirror parser for AI chat t
 
 ## Non-Editable Rendering: `MarkdownStreamRenderer`
 
-[`src/utils/markdownStreamRenderer.ts`](../../services/web-ui/src/utils/markdownStreamRenderer.ts) is the **only** approved way to render markdown outside ProseMirror. It owns its `contentEl`, drives the parser, and applies styles to each segment as plain DOM (built with the `html` helper from `domTemplates.ts`).
+[`src/utils/markdownStreamRenderer.ts`](../../services/web-ui/src/utils/markdownStreamRenderer.ts) is the **only** approved way to render markdown outside ProseMirror. It owns its `contentEl`, drives the parser, and applies styles to each segment as plain DOM (built with the `html` helper from `@lixpi/ui-primitives/dom`).
 
 **Streaming** (tokens arrive over time — e.g. live model output). Because the renderer owns `contentEl`, it survives container re-renders; re-attach `contentEl` after a rebuild instead of recreating it:
 

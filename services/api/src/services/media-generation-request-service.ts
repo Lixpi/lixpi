@@ -22,7 +22,7 @@ import {
 import {
     getMediaGenerationOperationNodeId,
     getPendingGeneratedMediaNodeId,
-} from '@lixpi/canvas-engine'
+} from '@lixpi/canvas-components-lixpi-specific/shared'
 import { warn } from '@lixpi/debug-tools'
 import { isTransactionConditionalCheckFailure } from '@lixpi/dynamodb-service'
 
@@ -46,16 +46,16 @@ import {
 } from './media-generation-operation-projection.ts'
 
 export const MEDIA_GENERATION_CHECKPOINT_SCHEMA_VERSION = 'media-generation-checkpoint-v1'
-const checkpointReferenceKey = (generationRequestId: string): string =>
-    `mediaGenerationRequest#${generationRequestId}#checkpoint`
+const checkpointReferenceKey = (generationRequestId: string): string => `mediaGenerationRequest#${generationRequestId}#checkpoint`
 
-const getLineageMarkerNodeIds = (lineagePlan: MediaBranchLineagePlan | undefined): string[] => lineagePlan
-    ? [
-        lineagePlan.branchOrigin?.nodeId,
-        ...lineagePlan.branchForks.map(marker => marker.nodeId),
-        ...lineagePlan.branchLines.map(marker => marker.nodeId),
-    ].filter((nodeId): nodeId is string => Boolean(nodeId))
-    : []
+const getLineageMarkerNodeIds = (lineagePlan: MediaBranchLineagePlan | undefined): string[] =>
+    lineagePlan
+        ? [
+            lineagePlan.branchOrigin?.nodeId,
+            ...lineagePlan.branchForks.map(marker => marker.nodeId),
+            ...lineagePlan.branchLines.map(marker => marker.nodeId),
+        ].filter((nodeId): nodeId is string => Boolean(nodeId))
+        : []
 
 const mergeCanvasGeometryUpdates = (
     generationRequestId: string,
@@ -63,24 +63,32 @@ const mergeCanvasGeometryUpdates = (
 ): CanvasGeometryUpdate => {
     const available = updates.filter((update): update is CanvasGeometryUpdate => Boolean(update))
     const byNodeId = new Map(available.flatMap(update => update.nodes).map(node => [node.nodeId, node]))
-    const snapshotsByNodeId = new Map(available
-        .flatMap(update => update.nodeSnapshots ?? [])
-        .map(node => [node.nodeId, node]))
-    const edgesById = new Map(available
-        .flatMap(update => update.edgeSnapshots ?? [])
-        .map(edge => [edge.edgeId, edge]))
+    const snapshotsByNodeId = new Map(
+        available
+            .flatMap(update => update.nodeSnapshots ?? [])
+            .map(node => [node.nodeId, node]),
+    )
+    const edgesById = new Map(
+        available
+            .flatMap(update => update.edgeSnapshots ?? [])
+            .map(edge => [edge.edgeId, edge]),
+    )
     return {
         generationRequestId,
         layoutRevision: Math.max(...available.map(update => update.layoutRevision)),
         nodes: [...byNodeId.values()],
         ...(snapshotsByNodeId.size ? { nodeSnapshots: [...snapshotsByNodeId.values()] } : {}),
         ...(edgesById.size ? { edgeSnapshots: [...edgesById.values()] } : {}),
-        ...(available.some(update => update.removedNodeIds?.length) ? {
-            removedNodeIds: [...new Set(available.flatMap(update => update.removedNodeIds ?? []))],
-        } : {}),
-        ...(available.some(update => update.removedEdgeIds?.length) ? {
-            removedEdgeIds: [...new Set(available.flatMap(update => update.removedEdgeIds ?? []))],
-        } : {}),
+        ...(available.some(update => update.removedNodeIds?.length)
+            ? {
+                removedNodeIds: [...new Set(available.flatMap(update => update.removedNodeIds ?? []))],
+            }
+            : {}),
+        ...(available.some(update => update.removedEdgeIds?.length)
+            ? {
+                removedEdgeIds: [...new Set(available.flatMap(update => update.removedEdgeIds ?? []))],
+            }
+            : {}),
     }
 }
 
@@ -170,8 +178,12 @@ function deriveRequestStatus(runs: readonly MediaGenerationRun[]): MediaGenerati
     return allTerminal
         ? failedCount === 0
             ? 'completed'
-            : completedCount > 0 ? 'completed-with-errors' : 'failed'
-        : hasActionRequired ? 'action-required' : 'running'
+            : completedCount > 0
+            ? 'completed-with-errors'
+            : 'failed'
+        : hasActionRequired
+        ? 'action-required'
+        : 'running'
 }
 
 const createDurableRunsFromLineagePlan = (lineagePlan: MediaBranchLineagePlan): MediaGenerationRun[] => {
@@ -180,9 +192,11 @@ const createDurableRunsFromLineagePlan = (lineagePlan: MediaBranchLineagePlan): 
     }
 
     return lineagePlan.runAssignments.map((assignment, generationRun) => {
-        if (!assignment.reasoningModelId
+        if (
+            !assignment.reasoningModelId
             || assignment.reasoningIndex === undefined
-            || !assignment.mediaModelId) {
+            || !assignment.mediaModelId
+        ) {
             throw new Error(`MEDIA_REQUEST_LINEAGE_ASSIGNMENT_INCOMPLETE:${generationRun}`)
         }
         const [provider] = assignment.mediaModelId.split(':')
@@ -294,10 +308,12 @@ export class MediaGenerationRequestService {
             unresolvedBindings,
             resolvedReferences: [],
             runs,
-            plannedCanvasNodeIds: runs.flatMap(run => [
-                run.operationNodeId,
-                run.outputNodeId,
-            ].filter((nodeId): nodeId is string => Boolean(nodeId))).concat(
+            plannedCanvasNodeIds: runs.flatMap(run =>
+                [
+                    run.operationNodeId,
+                    run.outputNodeId,
+                ].filter((nodeId): nodeId is string => Boolean(nodeId))
+            ).concat(
                 getLineageMarkerNodeIds(initialLineagePlan),
             ),
             revision: 1,
@@ -440,10 +456,12 @@ export class MediaGenerationRequestService {
             const next = alreadyBound ? request : {
                 ...request,
                 runs: bindings.map(binding => binding.run),
-                plannedCanvasNodeIds: bindings.flatMap(binding => [
-                    binding.operationNodeId,
-                    binding.run.outputNodeId,
-                ].filter((nodeId): nodeId is string => Boolean(nodeId))).concat(
+                plannedCanvasNodeIds: bindings.flatMap(binding =>
+                    [
+                        binding.operationNodeId,
+                        binding.run.outputNodeId,
+                    ].filter((nodeId): nodeId is string => Boolean(nodeId))
+                ).concat(
                     getLineageMarkerNodeIds(lineagePlan),
                 ),
                 revision: request.revision + 1,
@@ -492,11 +510,12 @@ export class MediaGenerationRequestService {
             if ('error' in current) throw new Error('MEDIA_REFERENCE_CANDIDATE_NOT_AUTHORIZED')
             return current
         }))
-        const refreshedByAssetId = new Map(createMediaReferenceBindings({
-            assets: currentAssets,
-            selectedNodeIds: Object.fromEntries(authorized.bindings.flatMap(binding =>
-                binding.nodeId ? [[binding.assetId, binding.nodeId]] : [])),
-        }).map(binding => [binding.assetId, binding]))
+        const refreshedByAssetId = new Map(
+            createMediaReferenceBindings({
+                assets: currentAssets,
+                selectedNodeIds: Object.fromEntries(authorized.bindings.flatMap(binding => binding.nodeId ? [[binding.assetId, binding.nodeId]] : [])),
+            }).map(binding => [binding.assetId, binding]),
+        )
         const remaining = authorized.unresolvedBindings.filter(candidate => candidate.bindingId !== bindingId)
         const now = Date.now()
         const next: MediaGenerationRequest = {
@@ -507,10 +526,12 @@ export class MediaGenerationRequestService {
                     ...refreshed,
                     alias: binding.alias,
                     displayNameSnapshot: binding.displayNameSnapshot,
-                    forbiddenNameVariants: [...new Set([
-                        ...binding.forbiddenNameVariants,
-                        ...refreshed.forbiddenNameVariants,
-                    ])],
+                    forbiddenNameVariants: [
+                        ...new Set([
+                            ...binding.forbiddenNameVariants,
+                            ...refreshed.forbiddenNameVariants,
+                        ]),
+                    ],
                 }
             }),
             unresolvedBindings: remaining,
@@ -540,10 +561,12 @@ export class MediaGenerationRequestService {
                 message: pendingAction
                     ? 'Choose which attached Asset the prompt refers to.'
                     : 'Resuming the media request.',
-                ...(pendingAction ? {
-                    candidateAssetIds: pendingAction.candidateAssetIds,
-                    unresolvedBindingId: pendingAction.bindingId,
-                } : {}),
+                ...(pendingAction
+                    ? {
+                        candidateAssetIds: pendingAction.candidateAssetIds,
+                        unresolvedBindingId: pendingAction.bindingId,
+                    }
+                    : {}),
                 requestRevision: next.revision,
                 clearAction: !pendingAction,
             })
@@ -575,28 +598,32 @@ export class MediaGenerationRequestService {
         const cancelledRuns = authorized.runs.filter(run => (
             !['completed', 'failed', 'cancelled'].includes(run.status)
         ))
-        const streamedProgressByRun = new Map(await Promise.all(cancelledRuns.map(async run => {
-            const streamed = await this.getStreamedRunProgress(authorized, run.generationRun)
-            return [run.generationRun, streamed.progress] as const
-        })))
+        const streamedProgressByRun = new Map(
+            await Promise.all(cancelledRuns.map(async run => {
+                const streamed = await this.getStreamedRunProgress(authorized, run.generationRun)
+                return [run.generationRun, streamed.progress] as const
+            })),
+        )
         const now = Date.now()
         const next: MediaGenerationRequest = {
             ...authorized,
             status: 'cancelled',
-            runs: authorized.runs.map(run => ['completed', 'failed', 'cancelled'].includes(run.status)
-                ? run
-                : {
-                    ...run,
-                    status: 'cancelled',
-                    completedAt: now,
-                    progress: settleMediaGenerationRunProgress(
-                        streamedProgressByRun.get(run.generationRun) ?? run.progress,
-                        'cancelled',
-                        streamedProgressByRun.get(run.generationRun)?.message
-                            ?? run.progress?.message
-                            ?? 'Media generation cancelled.',
-                    ),
-                }),
+            runs: authorized.runs.map(run =>
+                ['completed', 'failed', 'cancelled'].includes(run.status)
+                    ? run
+                    : {
+                        ...run,
+                        status: 'cancelled',
+                        completedAt: now,
+                        progress: settleMediaGenerationRunProgress(
+                            streamedProgressByRun.get(run.generationRun) ?? run.progress,
+                            'cancelled',
+                            streamedProgressByRun.get(run.generationRun)?.message
+                                ?? run.progress?.message
+                                ?? 'Media generation cancelled.',
+                        ),
+                    }
+            ),
             revision: authorized.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
@@ -638,8 +665,10 @@ export class MediaGenerationRequestService {
     }): Promise<MediaGenerationRequest> {
         const authorized = await MediaGenerationRequestModel.getAuthorized({ generationRequestId, workspaceId, userId })
         if ('error' in authorized) throw new Error(authorized.error)
-        if (!['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)
-            && authorized.revision !== requestRevision) {
+        if (
+            !['completed', 'completed-with-errors', 'failed', 'cancelled'].includes(authorized.status)
+            && authorized.revision !== requestRevision
+        ) {
             throw new Error('STALE_MEDIA_REQUEST_REVISION')
         }
         return await this.cancelAuthorizedRequest(authorized)
@@ -728,8 +757,7 @@ export class MediaGenerationRequestService {
     }): Promise<MediaGenerationRequest> {
         const request = await MediaGenerationRequestModel.get({ generationRequestId, workspaceId })
         if (!request) throw new Error('MEDIA_REQUEST_NOT_FOUND')
-        const run = request.runs.find(candidate =>
-            candidate.modelId === mediaModelId && candidate.reasoningIndex === reasoningIndex)
+        const run = request.runs.find(candidate => candidate.modelId === mediaModelId && candidate.reasoningIndex === reasoningIndex)
         if (!run) throw new Error('MEDIA_REQUEST_RUN_NOT_FOUND')
         const now = Date.now()
         const problem: MediaGenerationProblem = {
@@ -749,12 +777,16 @@ export class MediaGenerationRequestService {
         const next: MediaGenerationRequest = {
             ...request,
             status: 'action-required',
-            runs: request.runs.map(candidate => candidate.generationRun === run.generationRun ? {
-                ...candidate,
-                status: 'awaiting-provider-verification',
-                requiredVerificationAssetIds: [...new Set(assetIds)],
-                problem,
-            } : candidate),
+            runs: request.runs.map(candidate =>
+                candidate.generationRun === run.generationRun
+                    ? {
+                        ...candidate,
+                        status: 'awaiting-provider-verification',
+                        requiredVerificationAssetIds: [...new Set(assetIds)],
+                        problem,
+                    }
+                    : candidate
+            ),
             revision: request.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
@@ -851,13 +883,17 @@ export class MediaGenerationRequestService {
                 const accumulatedProgress = streamed.progress
                     ? mergeMediaGenerationRunProgress(targetRun.progress, streamed.progress)
                     : targetRun.progress
-                const runs = request.runs.map(run => run.generationRun === generationRun ? {
-                    ...run,
-                    status: 'failed' as const,
-                    problem,
-                    completedAt: now,
-                    progress: settleMediaGenerationRunProgress(accumulatedProgress, 'failed', problemDetail),
-                } : run)
+                const runs = request.runs.map(run =>
+                    run.generationRun === generationRun
+                        ? {
+                            ...run,
+                            status: 'failed' as const,
+                            problem,
+                            completedAt: now,
+                            progress: settleMediaGenerationRunProgress(accumulatedProgress, 'failed', problemDetail),
+                        }
+                        : run
+                )
                 const status = deriveRequestStatus(runs)
                 const next: MediaGenerationRequest = {
                     ...request,
@@ -919,8 +955,10 @@ export class MediaGenerationRequestService {
             const repairsSyntheticUnsettledFailure = status === 'completed'
                 && run.status === 'failed'
                 && run.problem?.type === 'urn:lixpi:media-problem:media-run-unsettled'
-            if (['completed', 'failed', 'cancelled'].includes(run.status)
-                && !repairsSyntheticUnsettledFailure) return request
+            if (
+                ['completed', 'failed', 'cancelled'].includes(run.status)
+                && !repairsSyntheticUnsettledFailure
+            ) return request
             const streamed = status === 'running'
                 ? { progress: undefined, streamSequence: 0 }
                 : await this.getStreamedRunProgress(request, run.generationRun)
@@ -1004,9 +1042,11 @@ export class MediaGenerationRequestService {
                 : run.progress
             const nextProgress = mergeMediaGenerationRunProgress(currentProgress, progress)
             const now = Date.now()
-            const runs = request.runs.map(candidate => candidate.generationRun === run.generationRun
-                ? { ...candidate, progress: nextProgress }
-                : candidate)
+            const runs = request.runs.map(candidate =>
+                candidate.generationRun === run.generationRun
+                    ? { ...candidate, progress: nextProgress }
+                    : candidate
+            )
             const next: MediaGenerationRequest = {
                 ...request,
                 status: request.status === 'submitted' ? 'running' : request.status,
@@ -1059,28 +1099,28 @@ export class MediaGenerationRequestService {
                 progress: run.progress,
             })
             : run.status === 'failed' && run.outputNodeId && run.outputAssetId
-                ? settleFailedGeneratedMediaRunOnCanvas({
-                    workspaceId: request.workspaceId,
-                    generationRun: {
-                        requestKind: 'media-generation-matrix',
-                        generationRequestId: request.generationRequestId,
-                        reasoningRunId: run.reasoningRunId
-                            ?? `${request.generationRequestId}:reasoning:${run.reasoningIndex}`,
-                        ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
-                        reasoningModelId: run.reasoningModelId,
-                        mediaModelId: run.modelId,
-                        ...(run.mediaType ? { mediaType: run.mediaType } : {}),
-                        reasoningIndex: run.reasoningIndex,
-                        ...(run.mediaIndex === undefined ? {} : { mediaIndex: run.mediaIndex }),
-                        variantIndex: run.generationRun,
-                    },
-                    outputNodeId: run.outputNodeId,
-                    assetId: run.outputAssetId,
-                    errorMessage: message,
-                    ...(problem ? { problem } : {}),
-                    ...(run.progress ? { progress: run.progress } : {}),
-                    requestRevision: request.revision,
-                })
+            ? settleFailedGeneratedMediaRunOnCanvas({
+                workspaceId: request.workspaceId,
+                generationRun: {
+                    requestKind: 'media-generation-matrix',
+                    generationRequestId: request.generationRequestId,
+                    reasoningRunId: run.reasoningRunId
+                        ?? `${request.generationRequestId}:reasoning:${run.reasoningIndex}`,
+                    ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                    reasoningModelId: run.reasoningModelId,
+                    mediaModelId: run.modelId,
+                    ...(run.mediaType ? { mediaType: run.mediaType } : {}),
+                    reasoningIndex: run.reasoningIndex,
+                    ...(run.mediaIndex === undefined ? {} : { mediaIndex: run.mediaIndex }),
+                    variantIndex: run.generationRun,
+                },
+                outputNodeId: run.outputNodeId,
+                assetId: run.outputAssetId,
+                errorMessage: message,
+                ...(problem ? { problem } : {}),
+                ...(run.progress ? { progress: run.progress } : {}),
+                requestRevision: request.revision,
+            })
             : updateMediaGenerationOperationNode({
                 workspaceId: request.workspaceId,
                 operationNodeId: run.operationNodeId,
@@ -1101,10 +1141,12 @@ export class MediaGenerationRequestService {
                 generationRun: run.generationRun,
                 ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
                 ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
-                ...(run.progress ? {
-                    progress: run.progress,
-                    message: run.progress.message,
-                } : {}),
+                ...(run.progress
+                    ? {
+                        progress: run.progress,
+                        message: run.progress.message,
+                    }
+                    : {}),
                 ...(problem ? { problem } : {}),
             }),
         })
@@ -1127,10 +1169,12 @@ export class MediaGenerationRequestService {
 
     async cleanupWorkspace(workspaceId: string): Promise<number> {
         const metas = await MediaGenerationRequestModel.listWorkspace(workspaceId)
-        const requests = (await Promise.all(metas.map(meta => MediaGenerationRequestModel.get({
-            generationRequestId: meta.generationRequestId,
-            workspaceId,
-        })))).filter((request): request is MediaGenerationRequest => Boolean(request))
+        const requests = (await Promise.all(metas.map(meta =>
+            MediaGenerationRequestModel.get({
+                generationRequestId: meta.generationRequestId,
+                workspaceId,
+            })
+        ))).filter((request): request is MediaGenerationRequest => Boolean(request))
         for (const request of requests) {
             await BlobModel.removeReference({
                 organizationId: request.organizationId,

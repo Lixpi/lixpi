@@ -7,7 +7,7 @@ import type { NKeyVerificationResult } from './types.ts'
 
 export const verifyNKeySignedJWT = async ({
     token,
-    publicKey
+    publicKey,
 }: {
     token: string
     publicKey: string

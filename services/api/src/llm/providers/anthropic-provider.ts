@@ -4,13 +4,23 @@ import * as process from 'process'
 
 import Anthropic from '@anthropic-ai/sdk'
 import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
-import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import {
+    BaseProvider,
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { bedrockInference } from './bedrock-inference.ts'
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderState } from '../graph/state.ts'
-import { getSystemPrompt, formatUserMessageWithHack } from '../prompts/load-prompts.ts'
+import {
+    getSystemPrompt,
+    formatUserMessageWithHack,
+} from '../prompts/load-prompts.ts'
 import {
     assertMessageInputKindsSupported,
     convertAttachmentsForProvider,
@@ -160,10 +170,12 @@ export class AnthropicProvider extends BaseProvider {
                 const pendingRequiredToolName = capabilityToolExecutor?.pendingRequiredToolName()
                 if (pendingRequiredToolName && !capabilities.requiresAutoToolChoiceWithThinking) {
                     streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(pendingRequiredToolName)
-                } else if (!capabilityToolExecutor
+                } else if (
+                    !capabilityToolExecutor
                     && !state.capabilityMediaExecutionPlan
                     && !capabilities.requiresAutoToolChoiceWithThinking
-                    && hasImageModel !== hasVideoModel) {
+                    && hasImageModel !== hasVideoModel
+                ) {
                     streamArgs.tool_choice = buildAnthropicRequiredCapabilityToolChoice(
                         hasVideoModel ? VIDEO_TOOL_NAME : TOOL_NAME,
                     )
@@ -230,24 +242,36 @@ export class AnthropicProvider extends BaseProvider {
                 if (videoCall) {
                     update.generatedVideoPrompt = videoCall.prompt
                     update.generatedVideoNegativePrompt = videoCall.negativePrompt
-                    info(`[Anthropic:${this.instanceKey}] generate_video tool call ${JSON.stringify({
-                        chatModel: modelVersion,
-                        targetVideoProvider: state.videoProviderName,
-                        targetVideoModel: state.videoModelVersion,
-                        promptLen: videoCall.prompt.length,
-                        negativePromptLen: videoCall.negativePrompt?.length ?? 0,
-                    }, null, 0)}`)
+                    info(`[Anthropic:${this.instanceKey}] generate_video tool call ${
+                        JSON.stringify(
+                            {
+                                chatModel: modelVersion,
+                                targetVideoProvider: state.videoProviderName,
+                                targetVideoModel: state.videoModelVersion,
+                                promptLen: videoCall.prompt.length,
+                                negativePromptLen: videoCall.negativePrompt?.length ?? 0,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                 } else if (imageCall) {
                     const refs = extractReferenceImages(messages)
                     update.generatedImagePrompt = imageCall.prompt
                     update.referenceImages = refs
-                    info(`[Anthropic:${this.instanceKey}] generate_image tool call ${JSON.stringify({
-                        chatModel: modelVersion,
-                        targetImageProvider: state.imageProviderName,
-                        targetImageModel: state.imageModelVersion,
-                        promptLen: imageCall.prompt.length,
-                        referenceImagesExtracted: refs.length,
-                    }, null, 0)}`)
+                    info(`[Anthropic:${this.instanceKey}] generate_image tool call ${
+                        JSON.stringify(
+                            {
+                                chatModel: modelVersion,
+                                targetImageProvider: state.imageProviderName,
+                                targetImageModel: state.imageModelVersion,
+                                promptLen: imageCall.prompt.length,
+                                referenceImagesExtracted: refs.length,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                 } else if (hasImageModel && state.capabilityMediaExecutionPlan) {
                     info(`[Anthropic:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${modelVersion})`)
                 } else if (hasImageModel && hasVideoModel) {
@@ -287,5 +311,4 @@ export class AnthropicProvider extends BaseProvider {
 
         return update
     }
-
 }

@@ -1,8 +1,18 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import { NATS_SUBJECTS, type CapabilityCatalogRecord, type CapabilityManifest } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    type CapabilityCatalogRecord,
+    type CapabilityManifest,
+} from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
     model: {
@@ -111,14 +121,20 @@ describe('Capability catalog management transport', () => {
         await handler(CATALOG.CREATE)(common)
         await handler(CATALOG.UPDATE)({ ...common, expectedManifestBlobHash: record.manifestBlobHash })
 
-        expect(mocks.model.save).toHaveBeenNthCalledWith(1, expect.objectContaining({
-            manifest,
-            expectedManifestBlobHash: undefined,
-        }))
-        expect(mocks.model.save).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            manifest,
-            expectedManifestBlobHash: record.manifestBlobHash,
-        }))
+        expect(mocks.model.save).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({
+                manifest,
+                expectedManifestBlobHash: undefined,
+            }),
+        )
+        expect(mocks.model.save).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+                manifest,
+                expectedManifestBlobHash: record.manifestBlobHash,
+            }),
+        )
     })
 
     it('uses UPDATE as a status-only active/disabled mutation with optimistic concurrency', async () => {

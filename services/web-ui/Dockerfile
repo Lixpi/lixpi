@@ -17,11 +17,14 @@ WORKDIR /usr/src/service
 COPY ./services/web-ui/ .
 COPY ./packages/lixpi/capability-system ./packages/lixpi/capability-system
 COPY ./packages/lixpi/canvas-engine ./packages/lixpi/canvas-engine
+COPY ./packages/lixpi/canvas-components ./packages/lixpi/canvas-components
+COPY ./packages/lixpi/canvas-components-lixpi-specific ./packages/lixpi/canvas-components-lixpi-specific
 COPY ./packages/lixpi/constants ./packages/lixpi/constants
 COPY ./packages/lixpi/nats-service ./packages/lixpi/nats-service
 COPY ./packages/lixpi/debug-tools ./packages/lixpi/debug-tools
 COPY ./packages/lixpi/prosemirror ./packages/lixpi/prosemirror
 COPY ./packages/lixpi/ui-kit ./packages/lixpi/ui-kit
+COPY ./packages/lixpi/ui-primitives ./packages/lixpi/ui-primitives
 COPY ./services/web-ui/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Install dependencies, redundant when running locally because starting service each time will install deps, but needed for deployment

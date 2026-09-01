@@ -1,8 +1,18 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import type { CapabilityCatalogRecord, CapabilityManifest, CapabilityMeta } from '@lixpi/constants'
+import type {
+    CapabilityCatalogRecord,
+    CapabilityManifest,
+    CapabilityMeta,
+} from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
     getContentAddressedBlob: vi.fn(),
@@ -17,7 +27,11 @@ vi.mock('../services/blob-storage.ts', () => ({
     getContentAddressedBlob: mocks.getContentAddressedBlob,
 }))
 
-import { grantCapabilityAccess, revokeCapabilityAccess, setCapabilityStatus } from './capability.ts'
+import {
+    grantCapabilityAccess,
+    revokeCapabilityAccess,
+    setCapabilityStatus,
+} from './capability.ts'
 
 const manifest: CapabilityManifest = {
     schemaVersion: 1,

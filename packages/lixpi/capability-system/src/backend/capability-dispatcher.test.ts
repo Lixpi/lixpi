@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import type {
     CapabilityManifest,
@@ -14,10 +19,16 @@ import { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
 
 function makePlan(): SealedResolvedCapabilityPlan {
     const inputRef: CapabilityResourceRef = {
-        resourceId: 'input', blobHash: 'input', mediaType: 'application/schema+json', role: 'schema',
+        resourceId: 'input',
+        blobHash: 'input',
+        mediaType: 'application/schema+json',
+        role: 'schema',
     }
     const outputRef: CapabilityResourceRef = {
-        resourceId: 'output', blobHash: 'output', mediaType: 'application/schema+json', role: 'schema',
+        resourceId: 'output',
+        blobHash: 'output',
+        mediaType: 'application/schema+json',
+        role: 'schema',
     }
     const manifest: CapabilityManifest = {
         schemaVersion: 1,
@@ -85,22 +96,27 @@ describe('CapabilityDispatcher detached runs', () => {
             validateInput: () => ({ valid: true }),
             validateOutput: () => ({ valid: true }),
             authorize: () => true,
-            execute: async (_input, context) => await new Promise((_resolve, reject) => {
-                context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true })
-            }),
+            execute: async (_input, context) =>
+                await new Promise((_resolve, reject) => {
+                    context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true })
+                }),
             classifyRetry: () => 'terminal',
         })
         const runs: CapabilityRun[] = []
         const events: CapabilityRunEvent[] = []
         let cancelled: (() => void) | undefined
-        const cancellation = new Promise<void>(resolve => { cancelled = resolve })
+        const cancellation = new Promise<void>(resolve => {
+            cancelled = resolve
+        })
         const dispatcher = new CapabilityDispatcher({
             store: {} as never,
             registry,
             search: async () => ({ items: [] }),
             createEventStreamName: run => `capability-run-${run.workspaceId}-${run.runId}`,
             createPersistence: () => ({
-                createRun: async run => { runs.push(structuredClone(run)) },
+                createRun: async run => {
+                    runs.push(structuredClone(run))
+                },
                 updateRun: async run => {
                     runs.push(structuredClone(run))
                 },

@@ -16,20 +16,21 @@ import {
     type MediaGenerationConfigGroup,
     type MediaGenerationConfigMatrix,
 } from '@lixpi/constants'
-import type { Omit, Pick } from 'type-fest'
+import type {
+    Omit,
+    Pick,
+} from 'type-fest'
 
 import { settings } from '../settings.ts'
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
-const modelHasGenerationModality = (model: Omit<AiModel, 'pricing'>, modality: 'image_generation' | 'video_generation'): boolean =>
-    model.modalities?.some(entry => entry.modality === modality) ?? false
+const modelHasGenerationModality = (model: Omit<AiModel, 'pricing'>, modality: 'image_generation' | 'video_generation'): boolean => model.modalities?.some(entry => entry.modality === modality) ?? false
 
-const modelIdFor = (model: Pick<AiModel, 'provider' | 'model'>): AiModelId =>
-    `${model.provider}:${model.model}` as AiModelId
+const modelIdFor = (model: Pick<AiModel, 'provider' | 'model'>): AiModelId => `${model.provider}:${model.model}` as AiModelId
 
 const findConfiguredCatalogModel = (
     models: Array<Omit<AiModel, 'pricing'>>,
@@ -196,8 +197,7 @@ const appendMatrixGroup = (
 // defaults win when available, followed by synchronization flags and then
 // the first model matching the requested capability.
 const resolveDefaultModels = (models: Array<Omit<AiModel, 'pricing'>>): DefaultAiModelSelection => {
-    const isReasoningModel = (model: Omit<AiModel, 'pricing'>): boolean =>
-        !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation')
+    const isReasoningModel = (model: Omit<AiModel, 'pricing'>): boolean => !modelHasGenerationModality(model, 'image_generation') && !modelHasGenerationModality(model, 'video_generation')
 
     const resolve = (
         capability: DefaultAiModelCapability,
@@ -278,7 +278,7 @@ export default {
     getAiModel: async ({
         provider,
         model,
-        omitPricing = true
+        omitPricing = true,
     }: Pick<AiModel, 'provider' | 'model'> & { omitPricing?: boolean }): Promise<AiModel | Omit<AiModel, 'pricing'> | undefined> => {
         const aiModel = await dynamoDBService.getItem({
             tableName: getDynamoDbTableStageName('AI_MODELS_LIST', ORG_NAME, STAGE),
@@ -295,5 +295,5 @@ export default {
         }
 
         return aiModel
-    }
+    },
 }

@@ -112,12 +112,18 @@ export function selectCharacterEvidenceFacts(args: {
     return [...byFeature.values()].flatMap(candidates => {
         const observed = candidates.filter(fact => fact.visibility === 'observed')
         const pool = observed.length > 0 ? observed : candidates
-        return [pool.sort((left, right) => requestAuthorityPriority(right.requestAuthority)
-            - requestAuthorityPriority(left.requestAuthority)
-            || targetSpecificity(right, args.targetAngle) - targetSpecificity(left, args.targetAngle)
-            || right.confidence - left.confidence)[0]!]
-    }).sort((left, right) => Number(changed.has(normalize(right.feature)))
-        - Number(changed.has(normalize(left.feature))))
+        return [
+            pool.sort((left, right) =>
+                requestAuthorityPriority(right.requestAuthority)
+                    - requestAuthorityPriority(left.requestAuthority)
+                || targetSpecificity(right, args.targetAngle) - targetSpecificity(left, args.targetAngle)
+                || right.confidence - left.confidence
+            )[0]!,
+        ]
+    }).sort((left, right) =>
+        Number(changed.has(normalize(right.feature)))
+        - Number(changed.has(normalize(left.feature)))
+    )
 }
 
 const buildDefaultCoverage = (sources: readonly ResolvedCharacterReference[]): CharacterEvidenceProfile['sourceCoverage'] =>
@@ -134,9 +140,11 @@ const resolveUnambiguousObservedSources = (
     const sourceAssetIds = [...new Set(sources.map(source => source.assetId))]
     const soleSourceAssetId = sourceAssetIds.length === 1 ? sourceAssetIds[0] : undefined
     if (!soleSourceAssetId) return facts
-    return facts.map(fact => fact.visibility === 'observed' && !fact.sourceAssetId
-        ? { ...fact, sourceAssetId: soleSourceAssetId }
-        : fact)
+    return facts.map(fact =>
+        fact.visibility === 'observed' && !fact.sourceAssetId
+            ? { ...fact, sourceAssetId: soleSourceAssetId }
+            : fact
+    )
 }
 
 const findConflicts = (facts: CharacterEvidenceProfile['facts']): CharacterEvidenceProfile['conflicts'] => {
@@ -173,9 +181,11 @@ const validateEvidenceCoordinates = (
         if (!source) throw new Error('CHARACTER_EVIDENCE_SOURCE_UNKNOWN')
         if (!fact.sourceRegion) continue
         const region = fact.sourceRegion
-        if (![region.x, region.y, region.width, region.height].every(Number.isFinite)
+        if (
+            ![region.x, region.y, region.width, region.height].every(Number.isFinite)
             || region.x < 0 || region.y < 0 || region.width <= 0 || region.height <= 0
-            || region.x + region.width > source.width || region.y + region.height > source.height) {
+            || region.x + region.width > source.width || region.y + region.height > source.height
+        ) {
             throw new Error('CHARACTER_EVIDENCE_REGION_INVALID')
         }
     }
@@ -184,8 +194,7 @@ const validateEvidenceCoordinates = (
     }
 }
 
-const targetSpecificity = (fact: CharacterEvidenceProfile['facts'][number], targetAngle: string): number =>
-    fact.targetAngles.some(angle => targetAngle.includes(angle)) ? 1 : 0
+const targetSpecificity = (fact: CharacterEvidenceProfile['facts'][number], targetAngle: string): number => fact.targetAngles.some(angle => targetAngle.includes(angle)) ? 1 : 0
 
 const requestAuthorityPriority = (
     authority: CharacterEvidenceProfile['facts'][number]['requestAuthority'],
@@ -215,9 +224,11 @@ const resolveEditTargetPolicy = ({
     const approved = new Set(approvedRegions)
     const rejected = new Set(rejectedRegions)
     if (EDIT_TARGET_REGIONS.every(region => rejected.has(region))) return 'discard'
-    if (approved.size > 0
+    if (
+        approved.size > 0
         && [...approved].every(region => region === 'face')
-        && [...rejected].some(region => region !== 'face')) {
+        && [...rejected].some(region => region !== 'face')
+    ) {
         return 'identity-only'
     }
     if (reportedPolicy === 'identity-only' || reportedPolicy === 'discard') return reportedPolicy
@@ -229,9 +240,11 @@ const resolveRegenerationScope = (
     affectedPanelIds: readonly string[],
     panelIds: ReadonlySet<string>,
 ): CharacterRegenerationScope => {
-    if (reportedScope === 'selected-panels'
+    if (
+        reportedScope === 'selected-panels'
         && affectedPanelIds.length > 0
-        && (panelIds.size === 0 || affectedPanelIds.length < panelIds.size)) {
+        && (panelIds.size === 0 || affectedPanelIds.length < panelIds.size)
+    ) {
         return 'selected-panels'
     }
     return 'full-sheet'

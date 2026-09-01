@@ -1,8 +1,11 @@
 import {
+    WorkspaceAssetProjection,
+    WorkspaceAssetSynchronization,
+} from '@lixpi/canvas-components-lixpi-specific/shared'
+import {
     getAssetEventSubject,
     NATS_SUBJECTS,
     type Asset,
-    type CanvasState,
     type AssetDocumentRole,
     type AssetMeta,
     type AssetPrimaryCategory,
@@ -28,10 +31,7 @@ import { workspaceStore } from '$src/stores/workspaceStore.ts'
 import { userStore } from '$src/stores/userStore.ts'
 
 const { ASSET_SUBJECTS } = NATS_SUBJECTS
-const WORKSPACE_RECONCILIATION_INTERVAL_MS = 5 * 60000
 const ASSET_LOAD_CONCURRENCY = 8
-const ASSET_DOCUMENT_RESUME_CONCURRENCY = 4
-const ASSET_DOCUMENT_STORE_BATCH_SIZE = 16
 const ASSET_DOCUMENT_RESUME_TIMEOUT_MS = 15000
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
@@ -71,38 +71,18 @@ async function mapWithConcurrency<T, R>(
     return results
 }
 
-export function getWorkspaceCanvasAssetIds(canvasState: CanvasState | undefined): string[] {
-    if (!canvasState) return []
-
-    const assetIds = new Set<string>()
-    for (const node of canvasState.nodes) {
-        if ('assetId' in node && typeof node.assetId === 'string' && node.assetId) {
-            assetIds.add(node.assetId)
-        }
-        if ('conversationAssetId' in node
-            && typeof node.conversationAssetId === 'string'
-            && node.conversationAssetId) {
-            assetIds.add(node.conversationAssetId)
-        }
-        if ('generatedBy' in node
-            && node.generatedBy
-            && typeof node.generatedBy.conversationAssetId === 'string'
-            && node.generatedBy.conversationAssetId) {
-            assetIds.add(node.generatedBy.conversationAssetId)
-        }
-    }
-    for (const tab of canvasState.aiChatPanel?.tabs ?? []) {
-        if (tab.type === 'thread' && typeof tab.refId === 'string' && tab.refId) {
-            assetIds.add(tab.refId)
-        }
-    }
-    if (canvasState.lastActiveConversationAssetId) {
-        assetIds.add(canvasState.lastActiveConversationAssetId)
-    }
-    return [...assetIds]
-}
-
 export class AssetService {
+    private readonly workspaceAssets = new WorkspaceAssetProjection({
+        get: (assetId, workspaceId) => this.get(assetId, workspaceId),
+        hasDocument: (assetId, role) => Boolean(assetDocumentsStore.get(assetId, role)),
+        resumeDocument: coordinate => this.resumeDocumentSnapshot(coordinate),
+        publishAssets: (workspaceId, assets) => assetsStore.setAssets(workspaceId, assets),
+        publishDocuments: snapshots => assetDocumentsStore.setMany(snapshots),
+        setLoading: workspaceId => assetsStore.setLoading(workspaceId),
+        setError: error => assetsStore.setError(error),
+        reportError: (message, error) => console.warn('[AssetService]', message, error),
+    })
+
     private async loadAssetsById(assetIds: readonly string[], workspaceId?: string): Promise<Asset[]> {
         const results = await mapWithConcurrency([...assetIds], ASSET_LOAD_CONCURRENCY, async (assetId) => {
             try {
@@ -121,9 +101,11 @@ export class AssetService {
         })
         if (!response.ok) throw new Error(`Asset document snapshot fetch failed: ${response.status}`)
         const snapshot = await response.json() as AssetDocSnapshot
-        if (snapshot.assetId !== reference.assetId
+        if (
+            snapshot.assetId !== reference.assetId
             || snapshot.organizationId !== reference.organizationId
-            || snapshot.role !== reference.role) {
+            || snapshot.role !== reference.role
+        ) {
             throw new Error('ASSET_DOCUMENT_SNAPSHOT_COORDINATE_MISMATCH')
         }
         return snapshot
@@ -160,44 +142,54 @@ export class AssetService {
     }
 
     startWorkspaceSynchronization(workspaceId: string): () => void {
-        let stopped = false
-        let running = false
-        const synchronize = async (): Promise<void> => {
-            if (stopped || running) return
-            running = true
-            try {
-                await this.loadWorkspaceAssets(workspaceId)
-            } catch (error) {
-                console.error('[AssetService] Asset synchronization failed', error)
-            } finally {
-                running = false
-            }
-        }
-        const nats = servicesStore.getData('nats')
-        const userId = userStore.getData('userId') as string
-        const eventSubscriptions = nats && userId
-            ? Object.entries(ASSET_SUBJECTS.EVENTS).map(([eventName, canonicalSubject]) => nats.subscribe(
-                getAssetEventSubject(userId, canonicalSubject),
-                (data: any) => {
-                    const assetId = typeof data?.assetId === 'string' ? data.assetId : ''
-                    if (eventName === 'DELETED') {
-                        if (assetId) assetsStore.remove(assetId)
-                        return
+        const owner = new WorkspaceAssetSynchronization(workspaceId, {
+            subscribe: listener => {
+                const nats = servicesStore.getData('nats')
+                const userId = userStore.getData('userId') as string
+                const subscriptions: { unsubscribe: () => void }[] = []
+                const release = (): void => {
+                    const errors: unknown[] = []
+                    for (const subscription of subscriptions.splice(0)) {
+                        try {
+                            subscription.unsubscribe()
+                        } catch (error) {
+                            errors.push(error)
+                        }
                     }
-                    if (assetId && assetsStore.get(assetId)) {
-                        void this.refresh(assetId, workspaceId).then((result) => {
-                            if ('error' in result) assetsStore.remove(assetId)
-                        })
+                    if (errors.length) throw new AggregateError(errors, 'Asset event subscription cleanup failed')
+                }
+                try {
+                    if (nats && userId) {
+                        for (const [eventName, canonicalSubject] of Object.entries(ASSET_SUBJECTS.EVENTS)) {
+                            subscriptions.push(nats.subscribe(getAssetEventSubject(userId, canonicalSubject), (data: unknown) => {
+                                const assetId = data && typeof data === 'object' && 'assetId' in data && typeof data.assetId === 'string' ? data.assetId : ''
+                                listener({ assetId, deleted: eventName === 'DELETED' })
+                            }))
+                        }
                     }
-                },
-            ))
-            : []
-        const timer = setInterval(() => { void synchronize() }, WORKSPACE_RECONCILIATION_INTERVAL_MS)
-        return () => {
-            stopped = true
-            clearInterval(timer)
-            for (const subscription of eventSubscriptions) subscription.unsubscribe()
-        }
+                    return release
+                } catch (error) {
+                    try {
+                        release()
+                    } catch (cleanupError) {
+                        throw new AggregateError([error, cleanupError], 'Asset event subscription failed')
+                    }
+                    throw error
+                }
+            },
+            setInterval: (callback, delay) => {
+                const timer = setInterval(callback, delay)
+                return () => clearInterval(timer)
+            },
+            load: current => this.loadWorkspaceAssets(workspaceId, current),
+            read: assetId => assetsStore.get(assetId),
+            fetch: (assetId, sourceWorkspaceId) => this.get(assetId, sourceWorkspaceId),
+            publish: asset => assetsStore.upsert(asset),
+            hydrate: (assets, current) => this.workspaceAssets.hydrate(assets, current),
+            remove: assetId => assetsStore.remove(assetId),
+            reportError: error => console.error('[AssetService] Asset synchronization failed', error),
+        })
+        return owner.destroy
     }
 
     async list({
@@ -220,60 +212,10 @@ export class AssetService {
         return result
     }
 
-    async loadWorkspaceAssets(workspaceId: string): Promise<Asset[]> {
-        assetsStore.setLoading(workspaceId)
-        try {
-            const workspace = workspaceStore.getData()
-            const prioritizedAssetIds = getWorkspaceCanvasAssetIds(workspace?.canvasState)
-                .sort((left, right) => {
-                    const activeConversationAssetId = workspace?.canvasState?.lastActiveConversationAssetId
-                    if (left === activeConversationAssetId) return -1
-                    if (right === activeConversationAssetId) return 1
-                    return 0
-                })
-            const directAssets = await this.loadAssetsById(prioritizedAssetIds, workspaceId)
-            const directAssetIds = new Set(directAssets.map(asset => asset.assetId))
-            const lineageSourceAssetIds = [...new Set(directAssets.flatMap(asset => asset.lineage?.sourceAssetIds ?? []))]
-                .filter(assetId => !directAssetIds.has(assetId))
-            const lineageSourceAssets = await this.loadAssetsById(lineageSourceAssetIds, workspaceId)
-            const assets = [...directAssets, ...lineageSourceAssets]
-            assetsStore.setAssets(workspaceId, Array.isArray(assets) ? assets : [])
-            const documentCoordinates = assets
-                .flatMap((asset) => (Object.keys(asset.documents) as AssetDocumentRole[]).map((role) => ({
-                    organizationId: asset.organizationId,
-                    assetId: asset.assetId,
-                    role,
-                })))
-                .filter(({ assetId, role }) => !assetDocumentsStore.get(assetId, role))
-                .sort((left, right) => {
-                    if (left.role === 'conversation' && right.role !== 'conversation') return -1
-                    if (right.role === 'conversation' && left.role !== 'conversation') return 1
-                    return 0
-                })
-            const pendingSnapshots: AssetDocumentSnapshot[] = []
-            const flushPendingSnapshots = (): void => {
-                if (pendingSnapshots.length === 0) return
-                assetDocumentsStore.setMany(pendingSnapshots.splice(0, pendingSnapshots.length))
-            }
-            await mapWithConcurrency(documentCoordinates, ASSET_DOCUMENT_RESUME_CONCURRENCY, async (coordinate) => {
-                try {
-                    const snapshot = await this.resumeDocumentSnapshot(coordinate)
-                    if (snapshot) pendingSnapshots.push(snapshot)
-                    if (pendingSnapshots.length >= ASSET_DOCUMENT_STORE_BATCH_SIZE) flushPendingSnapshots()
-                } catch (error) {
-                    console.warn('[AssetService] Asset document resume failed; synchronization will retry it', {
-                        assetId: coordinate.assetId,
-                        role: coordinate.role,
-                        error,
-                    })
-                }
-            })
-            flushPendingSnapshots()
-            return assets
-        } catch (error) {
-            assetsStore.setError(error)
-            throw error
-        }
+    async loadWorkspaceAssets(workspaceId: string, current: () => boolean = () => true): Promise<Asset[]> {
+        const workspace = workspaceStore.getData()
+        if (workspace?.workspaceId !== workspaceId) return []
+        return this.workspaceAssets.load(workspaceId, workspace.canvasState, () => current() && workspaceStore.getData('workspaceId') === workspaceId)
     }
 
     async resumeDocument({

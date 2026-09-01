@@ -1,10 +1,19 @@
 'use strict'
 
 import { writeFile } from 'node:fs/promises'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 import sharp from 'sharp'
 
-import { transcodeImage, getImageAspectRatio } from './image.ts'
+import {
+    transcodeImage,
+    getImageAspectRatio,
+} from './image.ts'
 
 const runProcessMock = vi.fn()
 

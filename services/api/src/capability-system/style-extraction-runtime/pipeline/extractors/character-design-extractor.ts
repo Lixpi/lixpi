@@ -60,8 +60,7 @@ const extractor: StyleExtractor = {
     applicableTo: (scene) => {
         return scene.references.some((r) => r.subjects.length > 0)
     },
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

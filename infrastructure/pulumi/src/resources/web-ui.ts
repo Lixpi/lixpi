@@ -4,7 +4,12 @@ import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 import { Command } from '@pulumi/command/local/index.js'
 
-import { log, info, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import {
     formatStageResourceName,
@@ -12,7 +17,7 @@ import {
 
 import {
     buildDockerImage,
-    type DockerImageLocalResult
+    type DockerImageLocalResult,
 } from '../helpers/docker/build-helpers.ts'
 
 export type WebUIArgs = {
@@ -81,19 +86,20 @@ export const createWebUI = async (args: WebUIArgs) => {
     // Grant CloudFront permission to access the bucket
     const bucketPolicy = new aws.s3.BucketPolicy(`${formattedServiceName}-bucket-policy`, {
         bucket: siteBucket.id,
-        policy: pulumi.all([siteBucket.arn, originAccessIdentity.iamArn]).apply(([bucketArn, oaiArn]) => JSON.stringify({
-            Version: "2012-10-17",
-            Statement: [{
-                Effect: "Allow",
-                Principal: {
-                    AWS: oaiArn,
-                },
-                Action: "s3:GetObject",
-                Resource: `${bucketArn}/*`,
-            }],
-        })),
+        policy: pulumi.all([siteBucket.arn, originAccessIdentity.iamArn]).apply(([bucketArn, oaiArn]) =>
+            JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Effect: 'Allow',
+                    Principal: {
+                        AWS: oaiArn,
+                    },
+                    Action: 's3:GetObject',
+                    Resource: `${bucketArn}/*`,
+                }],
+            })
+        ),
     })
-
 
     // Build web UI Docker image locally (no ECR push needed)
     const { image: webUIBuildImage, imageTag: webUIImageTag } = buildDockerImage({
@@ -103,9 +109,9 @@ export const createWebUI = async (args: WebUIArgs) => {
         platforms: ['linux/amd64'],
         buildArgs: Object.entries(environment).reduce((acc, [key, value]) => ({
             ...acc,
-            [key]: value
+            [key]: value,
         }), {
-            VITE_NATS_SERVER: environment.VITE_NATS_SERVER
+            VITE_NATS_SERVER: environment.VITE_NATS_SERVER,
         }),
         push: false,
         noCache: true,
@@ -114,17 +120,15 @@ export const createWebUI = async (args: WebUIArgs) => {
             {
                 docker: {
                     names: [`${formattedServiceName}-build:latest`.toLowerCase()],
-                }
+                },
             },
-        ]
+        ],
     }) as DockerImageLocalResult
 
     // Prepare environment variables for docker run only
     const envVars = pulumi.all(
-        Object.entries(environment).map(([key, value]) =>
-          pulumi.output(value).apply(v => `-e ${key}=${v}`)
-        )
-    ).apply(flags => flags.join(" "));
+        Object.entries(environment).map(([key, value]) => pulumi.output(value).apply(v => `-e ${key}=${v}`)),
+    ).apply(flags => flags.join(' '))
 
     // Run a container to build the site, and extract the build artifacts
     const buildCommand = pulumi.interpolate`
@@ -144,8 +148,8 @@ export const createWebUI = async (args: WebUIArgs) => {
         update: buildCommand,
         environment: {
             // Add a timestamp to force the command to run on every update
-            TIMESTAMP: new Date().toISOString()
-        }
+            TIMESTAMP: new Date().toISOString(),
+        },
     }, {
         replaceOnChanges: ['*'],
         dependsOn: [webUIBuildImage],
@@ -160,19 +164,19 @@ export const createWebUI = async (args: WebUIArgs) => {
         update: s3SyncCommand,
         environment: {
             // Add a timestamp to force the command to run on every update
-            TIMESTAMP: new Date().toISOString()
-        }
+            TIMESTAMP: new Date().toISOString(),
+        },
     }, {
         dependsOn: [buildExec, siteBucket, webUIBuildImage],
-        replaceOnChanges: ['*']
+        replaceOnChanges: ['*'],
     })
 
     // Create CloudFront distribution
     const distribution = new aws.cloudfront.Distribution(`${formattedServiceName}-distribution`, {
         enabled: true,
         isIpv6Enabled: true,
-        httpVersion: "http3",
-        priceClass: "PriceClass_All", // Use global edge locations for worldwide distribution
+        httpVersion: 'http3',
+        priceClass: 'PriceClass_All', // Use global edge locations for worldwide distribution
 
         // Origins configuration
         origins: [{
@@ -185,17 +189,17 @@ export const createWebUI = async (args: WebUIArgs) => {
 
         // Default behavior
         defaultCacheBehavior: {
-            allowedMethods: ["GET", "HEAD", "OPTIONS"], // ALLOW_GET_HEAD_OPTIONS
-            cachedMethods: ["GET", "HEAD", "OPTIONS"],
+            allowedMethods: ['GET', 'HEAD', 'OPTIONS'], // ALLOW_GET_HEAD_OPTIONS
+            cachedMethods: ['GET', 'HEAD', 'OPTIONS'],
             targetOriginId: siteBucket.id.apply(id => `S3-${id}`),
             forwardedValues: {
                 queryString: false,
                 cookies: {
-                    forward: "none",
+                    forward: 'none',
                 },
-                headers: ["Origin"],
+                headers: ['Origin'],
             },
-            viewerProtocolPolicy: "redirect-to-https", // HTTPS_ONLY
+            viewerProtocolPolicy: 'redirect-to-https', // HTTPS_ONLY
             minTtl: 0,
             defaultTtl: 3600,
             maxTtl: 86400,
@@ -205,7 +209,7 @@ export const createWebUI = async (args: WebUIArgs) => {
         // Restrictions
         restrictions: {
             geoRestriction: {
-                restrictionType: "none",
+                restrictionType: 'none',
                 locations: [],
             },
         },
@@ -213,8 +217,8 @@ export const createWebUI = async (args: WebUIArgs) => {
         // SSL certificate
         viewerCertificate: {
             acmCertificateArn: certificateArn,
-            sslSupportMethod: "sni-only",
-            minimumProtocolVersion: "TLSv1.2_2021",
+            sslSupportMethod: 'sni-only',
+            minimumProtocolVersion: 'TLSv1.2_2021',
         },
 
         // Custom error responses - redirect to index.html for SPA
@@ -222,12 +226,12 @@ export const createWebUI = async (args: WebUIArgs) => {
             {
                 errorCode: 403,
                 responseCode: 200,
-                responsePagePath: "/index.html",
+                responsePagePath: '/index.html',
             },
             {
                 errorCode: 404,
                 responseCode: 200,
-                responsePagePath: "/index.html",
+                responsePagePath: '/index.html',
             },
         ],
 
@@ -249,11 +253,11 @@ export const createWebUI = async (args: WebUIArgs) => {
         update: invalidationCommand,
         environment: {
             // Add a timestamp to force the command to run on every update
-            TIMESTAMP: new Date().toISOString()
-        }
+            TIMESTAMP: new Date().toISOString(),
+        },
     }, {
         dependsOn: [uploadExec, distribution],
-        replaceOnChanges: ['*']
+        replaceOnChanges: ['*'],
     })
 
     return {
@@ -266,6 +270,6 @@ export const createWebUI = async (args: WebUIArgs) => {
             distributionId: distribution.id,
             distributionDomainName: distribution.domainName,
             distributionHostedZoneId: distribution.hostedZoneId, // Add hosted zone ID for alias record
-        }
+        },
     }
 }

@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     assertValidCharacterSheetRenderPlan,
@@ -68,10 +72,12 @@ describe('CharacterSheetRenderPlan', () => {
             ],
         })
         expect(expandedPlan.panels.map(panel => panel.panelId)).toContain('body-profile')
-        expect(expandedPlan.panels.slice(3).every(panel => (
-            panel.outputBindings.map(binding => binding.bindingKey).join(',')
-                === `${CHARACTER_IDENTITY_ANCHOR_BINDING_KEY},${CHARACTER_OUTFIT_ANCHOR_BINDING_KEY},${CHARACTER_BACK_ANCHOR_BINDING_KEY}`
-        ))).toBe(true)
+        expect(
+            expandedPlan.panels.slice(3).every(panel => (
+                panel.outputBindings.map(binding => binding.bindingKey).join(',')
+                    === `${CHARACTER_IDENTITY_ANCHOR_BINDING_KEY},${CHARACTER_OUTFIT_ANCHOR_BINDING_KEY},${CHARACTER_BACK_ANCHOR_BINDING_KEY}`
+            )),
+        ).toBe(true)
         expect(plan.panels.length * (plan.semanticRetryLimit + 1)).toBe(CHARACTER_SHEET_DEFAULT_OPERATION_COUNT)
         expect(expandedPlan.panels).toHaveLength(CHARACTER_SHEET_MAX_OPERATION_COUNT)
         expect(expandedPlan.panels.length * (expandedPlan.semanticRetryLimit + 1))
@@ -123,34 +129,42 @@ describe('CharacterSheetRenderPlan', () => {
             .toThrow('CHARACTER_SHEET_PLAN_PANEL_ID_INVALID')
         expect(() => assertValidCharacterSheetRenderPlan({ ...plan, panels: plan.panels.map((panel, index) => index === 0 ? { ...panel, dependsOn: ['missing'] } : panel) }))
             .toThrow('CHARACTER_SHEET_PLAN_DEPENDENCY_UNKNOWN')
-        expect(() => assertValidCharacterSheetRenderPlan({
-            ...plan,
-            panels: plan.panels.map(panel => {
-                if (panel.panelId !== 'body-back') return panel
-                return {
-                    ...panel,
-                    outputBindings: panel.outputBindings.map((binding, index) => index === 1
-                        ? { ...binding, fileName: 'GENERATED_WRONG_ANCHOR.png' }
-                        : binding),
-                }
-            }),
-        }))
+        expect(() =>
+            assertValidCharacterSheetRenderPlan({
+                ...plan,
+                panels: plan.panels.map(panel => {
+                    if (panel.panelId !== 'body-back') return panel
+                    return {
+                        ...panel,
+                        outputBindings: panel.outputBindings.map((binding, index) =>
+                            index === 1
+                                ? { ...binding, fileName: 'GENERATED_WRONG_ANCHOR.png' }
+                                : binding
+                        ),
+                    }
+                }),
+            })
+        )
             .toThrow('CHARACTER_SHEET_PLAN_GENERATED_REFERENCE_SET_INVALID:body-back')
-        expect(() => assertValidCharacterSheetRenderPlan({
-            ...plan,
-            panels: plan.panels.map(panel => {
-                if (panel.panelId !== 'body-back') return panel
-                return { ...panel, panelId: 'body-profile' }
-            }),
-        }))
+        expect(() =>
+            assertValidCharacterSheetRenderPlan({
+                ...plan,
+                panels: plan.panels.map(panel => {
+                    if (panel.panelId !== 'body-back') return panel
+                    return { ...panel, panelId: 'body-profile' }
+                }),
+            })
+        )
             .toThrow('CHARACTER_SHEET_PLAN_DEFAULT_SEQUENCE_INVALID:body-back')
-        expect(() => assertValidCharacterSheetRenderPlan({
-            ...plan,
-            panels: plan.panels.map(panel => {
-                if (panel.panelId !== CHARACTER_OUTFIT_ANCHOR_PANEL_ID) return panel
-                return { ...panel, required: false }
-            }),
-        }))
+        expect(() =>
+            assertValidCharacterSheetRenderPlan({
+                ...plan,
+                panels: plan.panels.map(panel => {
+                    if (panel.panelId !== CHARACTER_OUTFIT_ANCHOR_PANEL_ID) return panel
+                    return { ...panel, required: false }
+                }),
+            })
+        )
             .toThrow('CHARACTER_SHEET_PLAN_DEFAULT_SEQUENCE_INVALID:body-front')
     })
 })

@@ -36,12 +36,14 @@ const getReference = async (blobKey: string, referenceKey: string): Promise<Blob
     }) as BlobReference | undefined
 
 const assertMatchingReference = (existing: BlobReference, expected: BlobReference): void => {
-    if (existing.blobKey !== expected.blobKey
+    if (
+        existing.blobKey !== expected.blobKey
         || existing.blobHash !== expected.blobHash
         || existing.organizationId !== expected.organizationId
         || existing.referenceKey !== expected.referenceKey
         || existing.ownerType !== expected.ownerType
-        || existing.ownerId !== expected.ownerId) {
+        || existing.ownerId !== expected.ownerId
+    ) {
         throw new Error('BLOB_REFERENCE_METADATA_CONFLICT')
     }
 }
@@ -260,12 +262,13 @@ const BlobModel = {
     }: {
         organizationId: string
         blobHash: string
-    }): Promise<BlobRecord | undefined> => await dynamoDBService.getItem({
-        tableName: blobsTableName(),
-        key: { blobKey: getBlobKey(organizationId, blobHash) },
-        consistentRead: true,
-        origin: 'Blob.get',
-    }) as BlobRecord | undefined,
+    }): Promise<BlobRecord | undefined> =>
+        await dynamoDBService.getItem({
+            tableName: blobsTableName(),
+            key: { blobKey: getBlobKey(organizationId, blobHash) },
+            consistentRead: true,
+            origin: 'Blob.get',
+        }) as BlobRecord | undefined,
 
     registerStoredBlob: async ({
         organizationId,
@@ -626,10 +629,12 @@ const BlobModel = {
             origin: 'Blob.collectOrphanedStagingBlobs',
         })
         const candidates = ((result?.items ?? []) as BlobRecord[])
-            .filter((blob) => blob.referenceCount === 0 && (
-                blob.status === 'deleting'
-                || (blob.status === 'staging' && blob.updatedAt <= olderThan)
-            ))
+            .filter((blob) =>
+                blob.referenceCount === 0 && (
+                    blob.status === 'deleting'
+                    || (blob.status === 'staging' && blob.updatedAt <= olderThan)
+                )
+            )
             .slice(0, limit)
         let deleted = 0
         for (const blob of candidates) {
@@ -656,10 +661,12 @@ const BlobModel = {
                         origin: 'Blob.collectOrphanedStagingBlobs.mark',
                     })
                 }
-                if (await BlobModel.deleteZeroReferenceBlob({
-                    organizationId: blob.organizationId,
-                    blobHash: blob.blobHash,
-                })) {
+                if (
+                    await BlobModel.deleteZeroReferenceBlob({
+                        organizationId: blob.organizationId,
+                        blobHash: blob.blobHash,
+                    })
+                ) {
                     deleted += 1
                 }
             } catch (error) {

@@ -1,9 +1,21 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { selection } from 'd3-selection'
-import { EditorState, Transaction } from 'prosemirror-state'
-import { EditorView, DecorationSet } from 'prosemirror-view'
+import {
+    EditorState,
+    Transaction,
+} from 'prosemirror-state'
+import {
+    EditorView,
+    DecorationSet,
+} from 'prosemirror-view'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import {
     doc,
@@ -25,7 +37,11 @@ import {
 import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputPlugin.ts'
 import { settings } from '$src/settings.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import { bytedanceIcon, geminiIcon, plusIcon } from '@lixpi/ui-kit/svg'
+import {
+    bytedanceIcon,
+    geminiIcon,
+    plusIcon,
+} from '@lixpi/ui-kit/svg'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -308,7 +324,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -366,11 +382,13 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         expect(track.getAttribute('width')).toBe('76')
         expect(track.getAttribute('height')).toBe('40')
         expect(track.getAttribute('rx')).toBe('20')
-        expect(track.getAttribute('fill')).toBe(settings.slidingSwitch.styles.trackBackgroundColor)
+        expect(track.getAttribute('fill')).toBe('rgba(105, 115, 133, 0.09)')
         expect(indicator.getAttribute('width')).toBe('36')
         expect(indicator.getAttribute('height')).toBe('36')
         expect(indicator.getAttribute('rx')).toBe('18')
-        expect(indicator.getAttribute('fill')).toBe(settings.slidingSwitch.styles.indicatorBackgroundColor)
+        expect(indicator.getAttribute('fill')).toBe('rgba(255, 255, 255, 0.72)')
+        expect(indicator.style.filter).toBe('')
+        expect(svg.querySelector('.sliding-switch-indicator-inset-shadow')?.getAttribute('fill')).toBe('transparent')
         expect(optionGroups.map(group => group.getAttribute('data-value'))).toEqual(['video', 'image'])
         expect(hits.map(hit => [hit.getAttribute('x'), hit.getAttribute('width'), hit.getAttribute('height')])).toEqual([
             ['2', '36', '36'],
@@ -384,18 +402,18 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         const videoOption = svg.querySelector('.sliding-switch-option-group[data-value="video"]')!
         const imageIconPath = imageOption.querySelector('path')
         const videoIconPath = videoOption.querySelector('path')
-        expect(imageIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.selectedOptionColor)
-        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.unselectedOptionColor)
+        expect(imageIconPath?.getAttribute('fill')).toBe('#1a2744')
+        expect(videoIconPath?.getAttribute('fill')).toBe('rgba(49, 59, 78, 0.68)')
 
         videoOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }))
-        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.hoveredOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe('#1a2744')
 
         videoOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 
         expect(mockView.state.doc.firstChild!.attrs.mediaGenerationMode).toBe('video')
         expect(imageOption.getAttribute('aria-checked')).toBe('false')
         expect(videoOption.getAttribute('aria-checked')).toBe('true')
-        expect(videoIconPath?.getAttribute('fill')).toBe(settings.slidingSwitch.styles.selectedOptionColor)
+        expect(videoIconPath?.getAttribute('fill')).toBe('#1a2744')
     })
 
     it('mounts the icon switch outside the input wrapper when requested and removes it on destroy', () => {
@@ -621,8 +639,10 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             })
 
             const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
-            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
-                .map(label => label.textContent)).toEqual(['Imagen 4', 'Square'])
+            expect(
+                Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                    .map(label => label.textContent),
+            ).toEqual(['Imagen 4', 'Square'])
             expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-icon svg')).not.toBeNull()
             expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-separator')).not.toBeNull()
             expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon'))
@@ -700,8 +720,10 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
             })
 
             const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
-            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
-                .map(label => label.textContent)).toEqual(['Sora 2', 'Widescreen', '1080p', 'Smart length'])
+            expect(
+                Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                    .map(label => label.textContent),
+            ).toEqual(['Sora 2', 'Widescreen', '1080p', 'Smart length'])
             expect(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-separator')).toHaveLength(1)
             expect(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-dot-separator')).toHaveLength(2)
             expect(summary?.querySelector('.ai-prompt-model-menu-trigger-summary-aspect-ratio-icon')).not.toBeNull()
@@ -787,19 +809,25 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
 
             const summary = modelMenuControlMountEl.querySelector('.ai-prompt-model-menu-trigger-summary')
             const summaryItem = summary?.querySelector('.ai-prompt-model-menu-trigger-summary-item')
-            const providerIcons = Array.from(summary?.querySelectorAll(
-                '.ai-prompt-model-menu-trigger-summary-icon',
-            ) ?? []) as HTMLSpanElement[]
+            const providerIcons = Array.from(
+                summary?.querySelectorAll(
+                    '.ai-prompt-model-menu-trigger-summary-icon',
+                ) ?? [],
+            ) as HTMLSpanElement[]
             const expectedGeminiIcon = document.createElement('span')
             const expectedByteDanceIcon = document.createElement('span')
             expectedGeminiIcon.innerHTML = geminiIcon
             expectedByteDanceIcon.innerHTML = bytedanceIcon
 
-            expect(Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
-                .map(label => label.textContent)).toEqual(['Using multiple models'])
-            expect(summaryItem?.children[0]?.classList.contains(
-                'ai-prompt-model-menu-trigger-summary-label',
-            )).toBe(true)
+            expect(
+                Array.from(summary?.querySelectorAll('.ai-prompt-model-menu-trigger-summary-label') ?? [])
+                    .map(label => label.textContent),
+            ).toEqual(['Using multiple models'])
+            expect(
+                summaryItem?.children[0]?.classList.contains(
+                    'ai-prompt-model-menu-trigger-summary-label',
+                ),
+            ).toBe(true)
             expect(Array.from(summaryItem?.children ?? []).slice(1)).toEqual(providerIcons)
             expect(providerIcons.map(icon => icon.innerHTML)).toEqual([
                 expectedGeminiIcon.innerHTML,
@@ -827,9 +855,10 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
                 mountModelMenuControl: controlElement => modelMenuControlMountEl.appendChild(controlElement),
             }).nv
 
-            const getModelLabel = () => modelMenuControlMountEl.querySelector(
-                '.ai-prompt-model-menu-trigger-summary-label',
-            )?.textContent
+            const getModelLabel = () =>
+                modelMenuControlMountEl.querySelector(
+                    '.ai-prompt-model-menu-trigger-summary-label',
+                )?.textContent
             expect(getModelLabel()).toBe('gpt-image-2')
 
             aiModelsStore.setAiModelsCatalog({
@@ -1217,7 +1246,7 @@ describe('createAiPromptInputNodeView — empty state tracking', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -1930,7 +1959,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -1971,10 +2000,13 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const state = createEditorStateWithPlugins(testDoc, [plugin])
         const mockView = { state, dispatch: vi.fn() } as unknown as EditorView
 
-        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
-            key: 'Enter',
-            metaKey: true,
-        }))
+        plugin.props.handleDOMEvents!.keydown!(
+            mockView,
+            new KeyboardEvent('keydown', {
+                key: 'Enter',
+                metaKey: true,
+            }),
+        )
 
         expect(options.onSubmit).toHaveBeenCalledWith(expect.objectContaining({
             aiReasoningModels: ['Anthropic:sonnet-4-6', 'OpenAI:gpt-5-4'],
@@ -2010,14 +2042,17 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
-        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
-            key: 'Enter',
-            metaKey: true,
-        }))
+        plugin.props.handleDOMEvents!.keydown!(
+            mockView,
+            new KeyboardEvent('keydown', {
+                key: 'Enter',
+                metaKey: true,
+            }),
+        )
 
         expect(options.onSubmit.mock.calls[0][0].contentJSON).toEqual([{
             type: 'paragraph',
@@ -2096,7 +2131,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -2115,14 +2150,17 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
-        plugin.props.handleDOMEvents!.keydown!(mockView, new KeyboardEvent('keydown', {
-            key: 'Enter',
-            metaKey: true,
-        }))
+        plugin.props.handleDOMEvents!.keydown!(
+            mockView,
+            new KeyboardEvent('keydown', {
+                key: 'Enter',
+                metaKey: true,
+            }),
+        )
 
         expect(options.onSubmit).not.toHaveBeenCalled()
         expect(mockView.dispatch).not.toHaveBeenCalled()
@@ -2151,7 +2189,7 @@ describe('createAiPromptInputPlugin — keyboard shortcuts', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -2189,7 +2227,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -2215,7 +2253,7 @@ describe('createAiPromptInputPlugin — image options handling', () => {
         const mockView = {
             state,
             dispatch: vi.fn((tr: Transaction) => {
-                (mockView as any).state = (mockView as any).state.apply(tr)
+                ;(mockView as any).state = (mockView as any).state.apply(tr)
             }),
         } as unknown as EditorView
 
@@ -2447,7 +2485,7 @@ describe('Visual — receiving state CSS expectations', () => {
         // $nightBlue is #42494f — used to indicate active state when text is present
         const scss = readFileSync(
             resolve(__dirname, 'ai-prompt-input.scss'),
-            'utf-8'
+            'utf-8',
         )
         expectSourceToContain(scss, 'data-empty="false"')
         // Send button

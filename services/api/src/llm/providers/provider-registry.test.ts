@@ -1,9 +1,19 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
-import { PROVIDER_NAMES, type ProviderName } from '@lixpi/constants'
+import {
+    PROVIDER_NAMES,
+    type ProviderName,
+} from '@lixpi/constants'
 
 import { ProviderRegistry } from './provider-registry.ts'
 import {
@@ -41,9 +51,11 @@ const makeDeps = () => ({
 const createFakeProvider = (resolveToken?: { release: () => void }) => {
     const providerName = 'Anthropic' as const
     const process = vi.fn(async () => {
-        if (resolveToken) await new Promise<void>((resolve) => {
-            resolveToken.release = resolve
-        })
+        if (resolveToken) {
+            await new Promise<void>((resolve) => {
+                resolveToken.release = resolve
+            })
+        }
         return {}
     })
     const stop = vi.fn()
@@ -64,13 +76,19 @@ const createDefinition = (provider: ProviderName, constructor: any): MediaProvid
         compile: compileProviderSafeIntent,
     },
     moderation: {
-        policy: provider === 'OpenAI' ? 'low'
-            : provider === 'Google' ? 'input-mode-least-restrictive' : 'fixed-provider-policy',
-        settings: (_modelId, inputMode) => provider === 'OpenAI'
-            ? { moderation: 'low' }
-            : provider === 'Google' ? {
-                personGeneration: inputMode === 'image-conditioned' ? 'allow_adult' : 'allow_all',
-            } : {},
+        policy: provider === 'OpenAI'
+            ? 'low'
+            : provider === 'Google'
+            ? 'input-mode-least-restrictive'
+            : 'fixed-provider-policy',
+        settings: (_modelId, inputMode) =>
+            provider === 'OpenAI'
+                ? { moderation: 'low' }
+                : provider === 'Google'
+                ? {
+                    personGeneration: inputMode === 'image-conditioned' ? 'allow_adult' : 'allow_all',
+                }
+                : {},
         automaticRetry: 'never',
         costOnFilter: 'not-documented',
     },

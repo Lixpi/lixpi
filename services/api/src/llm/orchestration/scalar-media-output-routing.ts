@@ -6,12 +6,14 @@ export const hasExplicitVideoOutputRequest = (_prompt: string): boolean => false
 
 // Kept as a compatibility export for older callers. Media selection is now
 // authoritative request state from the UI and prompt text does not alter it.
-export const restrictMediaRequestToExplicitVideoOutput = <T extends {
-    imageModelIds?: string[]
-    useMultipleImageModels?: boolean
-    videoModelIds?: string[]
-    outputMediaTypes?: Array<'image' | 'video'>
-}>({
+export const restrictMediaRequestToExplicitVideoOutput = <
+    T extends {
+        imageModelIds?: string[]
+        useMultipleImageModels?: boolean
+        videoModelIds?: string[]
+        outputMediaTypes?: Array<'image' | 'video'>
+    },
+>({
     request,
     prompt,
     hasVideoSource,

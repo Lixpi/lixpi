@@ -42,8 +42,7 @@ const extractor: StyleExtractor = {
     description: 'Extracts the mood / emotional register: primary mood, secondary moods, atmosphere, pace, season, time-of-day, and concrete drivers.',
     minDominance: 0.3,
     applicableTo: (scene) => (scene.axisDominance['mood'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

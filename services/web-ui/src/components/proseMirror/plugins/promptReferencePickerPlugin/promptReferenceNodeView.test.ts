@@ -2,8 +2,16 @@ import {
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
     PROMPT_REFERENCE_NODE_TYPE,
 } from '@lixpi/prosemirror'
-import { NodeSelection, TextSelection } from 'prosemirror-state'
-import { describe, expect, it, vi } from 'vitest'
+import {
+    NodeSelection,
+    TextSelection,
+} from 'prosemirror-state'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     atomIcon,
@@ -14,7 +22,7 @@ import {
     videoPlayGlyphIcon,
     videoVolumeHighGlyphIcon,
 } from '@lixpi/ui-kit/svg'
-import { CapabilityModulePromiseCache } from './capabilityPromptReferencePreview.ts'
+import { CapabilityModulePromiseCache } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import { getCapabilityArtifactIcon } from '$src/installed-capabilities.ts'
 import {
     createStateWithNodeSelection,
@@ -27,9 +35,9 @@ import {
 import { createMockEditorView } from '$src/components/proseMirror/plugins/testUtils/testHelpers.ts'
 import {
     createPromptReferenceNodeViewPlugin,
-    getPromptReferenceIcon,
     PromptReferenceNodeView,
 } from './promptReferenceNodeView.ts'
+import { getPromptReferenceIcon } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 const capabilityMeta = {
     moduleId: 'global.character-creator',
@@ -53,15 +61,17 @@ const capabilityMeta = {
 }
 
 describe('PromptReferenceNodeView', () => {
-    it.each([
-        ['media', 'image', imageIcon],
-        ['media', 'video', videoPlayGlyphIcon],
-        ['media', 'audio', videoVolumeHighGlyphIcon],
-        ['media', 'document', documentIcon],
-        ['capability-module', '', atomIcon],
-        ['tool', '', promptIcon],
-        ['skill', '', fileIcon],
-    ] as const)('uses an existing SVG for %s %s references', (referenceType, mediaKind, icon) => {
+    it.each(
+        [
+            ['media', 'image', imageIcon],
+            ['media', 'video', videoPlayGlyphIcon],
+            ['media', 'audio', videoVolumeHighGlyphIcon],
+            ['media', 'document', documentIcon],
+            ['capability-module', '', atomIcon],
+            ['tool', '', promptIcon],
+            ['skill', '', fileIcon],
+        ] as const,
+    )('uses an existing SVG for %s %s references', (referenceType, mediaKind, icon) => {
         expect(getPromptReferenceIcon(referenceType, mediaKind)).toBe(icon)
     })
 
@@ -109,16 +119,21 @@ describe('PromptReferenceNodeView', () => {
             environment: {
                 getDocuments: () => [],
                 getThreads: () => [],
-                getApiBaseUrl: () => '',
-                getAuthToken: async () => '',
+                document,
+                tooltipHideDelayMs: 0,
+                getArtifactIcon: () => '',
+                extractDocumentText: () => '',
+                initialRenditionUrl: () => '',
+                resolveRenditionUrl: async () => '',
+                onError: vi.fn(),
             },
         })
         document.body.append(nodeView.dom)
-        expect(nodeView.dom.classList.contains('workspace-ai-chat-panel-context-preview-tooltip-inline-label')).toBe(true)
+        expect(nodeView.dom.classList.contains('context-preview-tooltip-inline-label')).toBe(true)
         const trigger = nodeView.dom.querySelector<HTMLElement>('.help-tooltip-trigger')!
         trigger.focus()
         const popover = document.body.querySelector<HTMLElement>('.help-tooltip-content')!
-        expect(popover.classList.contains('workspace-ai-chat-panel-context-preview-popover')).toBe(true)
+        expect(popover.classList.contains('context-preview-popover')).toBe(true)
         expect(popover.querySelector('[role="status"]')?.textContent).toContain('Loading')
         await new Promise(resolve => setTimeout(resolve, 0))
         expect(popover.querySelector('.capability-description-card h2')?.textContent).toBe('Character Creator')
@@ -151,8 +166,13 @@ describe('PromptReferenceNodeView', () => {
             environment: {
                 getDocuments: () => [],
                 getThreads: () => [],
-                getApiBaseUrl: () => '',
-                getAuthToken: async () => '',
+                document,
+                tooltipHideDelayMs: 0,
+                getArtifactIcon: () => '',
+                extractDocumentText: () => '',
+                initialRenditionUrl: () => '',
+                resolveRenditionUrl: async () => '',
+                onError: vi.fn(),
             },
         })
         viewport.append(nodeView.dom)
@@ -241,15 +261,20 @@ describe('PromptReferenceNodeView', () => {
                 getDocuments: () => [],
                 getThreads: () => [],
                 getAsset: () => undefined,
-                getApiBaseUrl: () => '',
-                getAuthToken: async () => '',
+                document,
+                tooltipHideDelayMs: 0,
+                getArtifactIcon: () => '',
+                extractDocumentText: () => '',
+                initialRenditionUrl: () => '',
+                resolveRenditionUrl: async () => '',
+                onError: vi.fn(),
             },
         })
         document.body.appendChild(nodeView.dom)
 
-        expect(nodeView.dom.classList.contains('workspace-ai-chat-panel-context-preview-tooltip-inline-label')).toBe(true)
-        expect(nodeView.dom.querySelector('.workspace-ai-chat-panel-context-preview-trigger-inline-label')).not.toBeNull()
-        expect(nodeView.dom.querySelector('.workspace-ai-chat-panel-context-preview-image-mini')).toBeNull()
+        expect(nodeView.dom.classList.contains('context-preview-tooltip-inline-label')).toBe(true)
+        expect(nodeView.dom.querySelector('.context-preview-trigger-inline-label')).not.toBeNull()
+        expect(nodeView.dom.querySelector('.context-preview-image-mini')).toBeNull()
         expect(nodeView.dom.querySelector('.prompt-reference-chip-content')?.textContent).toBe('Character Sheet')
 
         const trigger = nodeView.dom.querySelector('.help-tooltip-trigger') as HTMLElement
@@ -257,8 +282,8 @@ describe('PromptReferenceNodeView', () => {
         await Promise.resolve()
 
         const preview = document.body.querySelector('.help-tooltip-content') as HTMLElement
-        expect(preview.querySelector('.workspace-ai-chat-panel-context-preview-image-large')).not.toBeNull()
-        expect(preview.querySelector('.workspace-ai-chat-panel-context-preview-popover-title')?.textContent)
+        expect(preview.querySelector('.context-preview-image-large')).not.toBeNull()
+        expect(preview.querySelector('.context-preview-popover-title')?.textContent)
             .toBe('Character Sheet')
 
         nodeView.destroy()
@@ -284,8 +309,13 @@ describe('PromptReferenceNodeView', () => {
                 getDocuments: () => [],
                 getThreads: () => [],
                 getAsset: () => ({ title: 'Shelby' }) as never,
-                getApiBaseUrl: () => '',
-                getAuthToken: async () => '',
+                document,
+                tooltipHideDelayMs: 0,
+                getArtifactIcon: () => '',
+                extractDocumentText: () => '',
+                initialRenditionUrl: () => '',
+                resolveRenditionUrl: async () => '',
+                onError: vi.fn(),
             },
         })
 
@@ -314,8 +344,13 @@ describe('PromptReferenceNodeView', () => {
                 getDocuments: () => [],
                 getThreads: () => [],
                 getAsset: () => undefined,
-                getApiBaseUrl: () => '',
-                getAuthToken: async () => '',
+                document,
+                tooltipHideDelayMs: 0,
+                getArtifactIcon: () => '',
+                extractDocumentText: () => '',
+                initialRenditionUrl: () => '',
+                resolveRenditionUrl: async () => '',
+                onError: vi.fn(),
             },
         })
 
@@ -334,30 +369,37 @@ describe('PromptReferenceNodeView', () => {
             displayName: 'asset-video',
         })
         const nodeView = new PromptReferenceNodeView(node, {
-            getNode: reference => reference.mediaKind === 'video'
-                ? {
-                    type: 'video',
-                    nodeId: 'video-node-1',
-                    assetId: 'asset-video',
-                    position: { x: 0, y: 0 },
-                    dimensions: { width: 640, height: 360 },
-                }
-                : undefined,
+            getNode: reference =>
+                reference.mediaKind === 'video'
+                    ? {
+                        type: 'video',
+                        nodeId: 'video-node-1',
+                        assetId: 'asset-video',
+                        position: { x: 0, y: 0 },
+                        dimensions: { width: 640, height: 360 },
+                    }
+                    : undefined,
             environment: {
                 getDocuments: () => [],
                 getThreads: () => [],
-                getAsset: () => ({
-                    title: 'Slop Train',
-                    media: { kind: 'video' },
-                }) as never,
-                getApiBaseUrl: () => '',
-                getAuthToken: async () => '',
+                getAsset: () =>
+                    ({
+                        title: 'Slop Train',
+                        media: { kind: 'video' },
+                    }) as never,
+                document,
+                tooltipHideDelayMs: 0,
+                getArtifactIcon: () => '',
+                extractDocumentText: () => '',
+                initialRenditionUrl: () => '',
+                resolveRenditionUrl: async () => '',
+                onError: vi.fn(),
             },
         })
 
         expect(nodeView.dom.querySelector('.prompt-reference-chip-name')?.textContent).toBe('Slop Train')
         expect(nodeView.dom.querySelector('.prompt-reference-chip-icon')?.innerHTML).toContain('M8 5v14l11-7z')
-        expect(nodeView.dom.classList.contains('workspace-ai-chat-panel-context-preview-tooltip-inline-label')).toBe(true)
+        expect(nodeView.dom.classList.contains('context-preview-tooltip-inline-label')).toBe(true)
         nodeView.destroy()
     })
 
@@ -368,10 +410,12 @@ describe('PromptReferenceNodeView', () => {
         expect(nodeViews).toHaveProperty(LEGACY_CAPABILITY_REFERENCE_NODE_TYPE)
     })
 
-    it.each([
-        ['ArrowRight', 'before', 1, 2],
-        ['ArrowLeft', 'after', 2, 1],
-    ] as const)('moves %s directly from %s the atom to its opposite side', (key, _side, start, expected) => {
+    it.each(
+        [
+            ['ArrowRight', 'before', 1, 2],
+            ['ArrowLeft', 'after', 2, 1],
+        ] as const,
+    )('moves %s directly from %s the atom to its opposite side', (key, _side, start, expected) => {
         const documentNode = doc(p(promptReference({ displayName: 'Character Sheet' })))
         const state = createStateWithTextSelection(documentNode, start, start)
         const view = createMockEditorView({ state })
@@ -385,10 +429,12 @@ describe('PromptReferenceNodeView', () => {
         expect(view.state.selection.to).toBe(expected)
     })
 
-    it.each([
-        ['ArrowLeft', 1],
-        ['ArrowRight', 2],
-    ] as const)('converts a prompt-reference NodeSelection into a visible text caret for %s', (key, expected) => {
+    it.each(
+        [
+            ['ArrowLeft', 1],
+            ['ArrowRight', 2],
+        ] as const,
+    )('converts a prompt-reference NodeSelection into a visible text caret for %s', (key, expected) => {
         const documentNode = doc(p(promptReference({ displayName: 'Character Sheet' })))
         const nodePosition = findNodePosition(documentNode, PROMPT_REFERENCE_NODE_TYPE)
         if (nodePosition === null) throw new Error('Missing prompt reference in test document')

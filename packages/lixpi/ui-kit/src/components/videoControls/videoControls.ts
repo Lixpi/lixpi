@@ -1,18 +1,17 @@
-// SVG video control bar, built as a framework-agnostic d3 primitive like
-// slidingSwitch and toggleSwitch. The component renders controls only; the host
-// owns video pixels and supplies the HTMLVideoElement as the single source of truth.
-
 import {
-    videoFullscreenEnterGlyphIcon,
-    videoFullscreenExitGlyphIcon,
-    videoPauseGlyphIcon,
-    videoPlayGlyphIcon,
-    videoVolumeHighGlyphIcon,
-    videoVolumeMutedGlyphIcon,
-} from '../../svg/svgIcons.ts'
-import { uiKitSettings } from '../../runtime-settings.ts'
+    appendSvgPathIcon,
+    sanitizeSvgId,
+} from '@lixpi/ui-primitives/svg'
+import {
+    createDefaultVideoControlsSettings,
+    type VideoControlsSettings,
+} from './settings.ts'
+
+export type VideoControlIcons = { play: string; pause: string; volumeHigh: string; volumeMuted: string; fullscreenEnter: string; fullscreenExit: string }
 
 export type VideoControlsConfig = {
+    icons: VideoControlIcons
+    settings?: VideoControlsSettings
     id: string
     x: number
     y: number
@@ -29,8 +28,7 @@ export type VideoControlsInstance = {
     destroy: () => void
 }
 
-export function applyVideoControlsHostStyleProperties(host: HTMLElement): void {
-    const styles = uiKitSettings.videoControls.styles
+export function applyVideoControlsHostStyleProperties(host: HTMLElement, styles: VideoControlsSettings['styles'] = createDefaultVideoControlsSettings().styles): void {
     host.style.setProperty('--video-controls-host-border-radius', styles.hostBorderRadius)
     host.style.setProperty('--video-controls-host-drop-shadow', styles.hostDropShadow)
     host.style.setProperty('--video-controls-host-backdrop-filter', styles.hostBackdropFilter)
@@ -78,7 +76,7 @@ function formatTime(seconds: number): string {
     return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
-function formatRate(rate: number, precision = uiKitSettings.videoControls.speed.displayPrecision): string {
+function formatRate(rate: number, precision: number): string {
     const formatted = rate.toFixed(precision).replace(/\.?0+$/, '')
     return `${formatted}x`
 }
@@ -89,16 +87,12 @@ function roundToStep(value: number, step: number): number {
     return Number((Math.round(value / step) * step).toFixed(precision))
 }
 
-function sanitizeSvgId(value: string): string {
-    return value.replace(/[^a-zA-Z0-9_-]/g, '-') || 'video-controls'
-}
-
 function interpolateControlWidth(
     responsiveWidth: number,
     minResponsiveWidth: number,
     maxResponsiveWidth: number,
     minControlWidth: number,
-    maxControlWidth: number
+    maxControlWidth: number,
 ): number {
     if (maxControlWidth <= minControlWidth) return maxControlWidth
     if (maxResponsiveWidth <= minResponsiveWidth) return maxControlWidth
@@ -106,50 +100,8 @@ function interpolateControlWidth(
     return minControlWidth + (maxControlWidth - minControlWidth) * ratio
 }
 
-function extractPathData(svgMarkup: string): string[] {
-    const parser = new DOMParser()
-    const svgDoc = parser.parseFromString(svgMarkup, 'image/svg+xml')
-    return Array.from(svgDoc.querySelectorAll('path'))
-        .map((path) => path.getAttribute('d') || '')
-        .filter(Boolean)
-}
-
-function getSvgViewBoxTransform(svgMarkup: string): string | null {
-    const parser = new DOMParser()
-    const svgDoc = parser.parseFromString(svgMarkup, 'image/svg+xml')
-    const svgEl = svgDoc.querySelector('svg')
-    const viewBox = svgEl?.getAttribute('viewBox')
-    if (!viewBox) return null
-
-    const values = viewBox
-        .trim()
-        .split(/[\s,]+/)
-        .map(Number)
-    if (values.length !== 4) return null
-
-    const minX = values[0] ?? Number.NaN
-    const minY = values[1] ?? Number.NaN
-    const width = values[2] ?? Number.NaN
-    const height = values[3] ?? Number.NaN
-    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(width) || !Number.isFinite(height)) return null
-    if (width <= 0 || height <= 0) return null
-
-    const scale = Math.min(24 / width, 24 / height)
-    const x = (24 - width * scale) / 2 - minX * scale
-    const y = (24 - height * scale) / 2 - minY * scale
-    return `translate(${x} ${y}) scale(${scale})`
-}
-
-function setIconPaths(iconGroup: any, svgMarkup: string, fill: string = uiKitSettings.videoControls.styles.icon): void {
-    iconGroup.selectAll('*').remove()
-    const iconPathGroup = iconGroup.append('g')
-    const transform = getSvgViewBoxTransform(svgMarkup)
-    if (transform) iconPathGroup.attr('transform', transform)
-    for (const pathData of extractPathData(svgMarkup)) {
-        iconPathGroup.append('path')
-            .attr('d', pathData)
-            .attr('fill', fill)
-    }
+function setIconPaths(iconGroup: any, svgMarkup: string, fill: string): void {
+    appendSvgPathIcon(iconGroup, svgMarkup, { x: 0, y: 0, size: 24, fill })
 }
 
 function setButtonPosition(button: ButtonControl, x: number, y: number): void {
@@ -170,7 +122,7 @@ function stopControlPointerPropagation(event: Event): void {
     event.stopPropagation()
 }
 
-function bindButtonAction(button: ButtonControl, action: (event: Event) => void): void {
+function bindButtonAction(button: ButtonControl, hoverColor: string, action: (event: Event) => void): void {
     const run = (event: Event) => {
         event.preventDefault()
         event.stopPropagation()
@@ -182,7 +134,7 @@ function bindButtonAction(button: ButtonControl, action: (event: Event) => void)
         .on('mousedown', stopControlPointerPropagation)
         .on('click', run)
         .on('dblclick', stopControlPointerPropagation)
-        .on('mouseenter', () => button.hit.attr('fill', uiKitSettings.videoControls.styles.buttonHover))
+        .on('mouseenter', () => button.hit.attr('fill', hoverColor))
         .on('mouseleave', () => button.hit.attr('fill', 'transparent'))
 
     button.group
@@ -203,14 +155,17 @@ function bufferedEnd(videoEl: HTMLVideoElement): number {
 }
 
 function supportsFullscreen(videoEl: HTMLVideoElement): boolean {
-    return typeof videoEl.requestFullscreen === 'function' && typeof document.exitFullscreen === 'function'
+    return typeof videoEl.requestFullscreen === 'function' && typeof videoEl.ownerDocument.exitFullscreen === 'function'
 }
 
 function isFullscreen(videoEl: HTMLVideoElement): boolean {
-    return document.fullscreenElement === videoEl
+    return videoEl.ownerDocument.fullscreenElement === videoEl
 }
 
 class VideoControls implements VideoControlsInstance {
+    private readonly settings: VideoControlsSettings
+    private readonly icons: VideoControlIcons
+    private readonly view: Window
     private readonly id: string
     private readonly height: number
     private readonly videoEl: HTMLVideoElement
@@ -223,12 +178,12 @@ class VideoControls implements VideoControlsInstance {
     private y: number
     private width: number
     private responsiveWidth: number
-    private seekX = uiKitSettings.videoControls.layout.padding
+    private seekX: number
     private seekWidth: number
-    private volumeWidth = uiKitSettings.videoControls.layout.volumeSliderWidth
+    private volumeWidth: number
     private speedX = 0
     private speedSliderX = 0
-    private speedSliderWidth = uiKitSettings.videoControls.layout.speedSliderWidth
+    private speedSliderWidth: number
     private destroyed = false
     private activePointerCleanup: (() => void) | null = null
     private scrubPreviewTime: number | null = null
@@ -270,12 +225,18 @@ class VideoControls implements VideoControlsInstance {
     private readonly volumeHit: any
 
     constructor(parent: any, config: VideoControlsConfig) {
+        this.settings = structuredClone(config.settings ?? createDefaultVideoControlsSettings())
+        this.icons = { ...config.icons }
+        this.view = config.videoEl.ownerDocument.defaultView ?? window
+        this.seekX = this.settings.layout.padding
+        this.volumeWidth = this.settings.layout.volumeSliderWidth
+        this.speedSliderWidth = this.settings.layout.speedSliderWidth
         const {
             id,
             videoEl,
             className = '',
         } = config
-        const { layout, styles, speed, typography } = uiKitSettings.videoControls
+        const { layout, styles, speed, typography } = this.settings
 
         this.id = id
         this.videoEl = videoEl
@@ -283,12 +244,13 @@ class VideoControls implements VideoControlsInstance {
         this.y = config.y
         this.width = config.width
         this.responsiveWidth = config.responsiveWidth ?? config.width
-        this.height = config.height ?? uiKitSettings.videoControls.height
+        this.height = config.height ?? this.settings.height
         this.buttonY = (this.height - layout.buttonSize) / 2
         this.scrubberY = this.height / 2 - layout.railHeight / 2
         this.seekWidth = Math.max(1, this.width - layout.padding * 2)
-        this.glassFilterId = `video-controls-liquid-glass-${sanitizeSvgId(this.id)}`
-        this.glassClipId = `video-controls-pill-clip-${sanitizeSvgId(this.id)}`
+        const resourceId = sanitizeSvgId(`${this.id}-${crypto.randomUUID()}`)
+        this.glassFilterId = `video-controls-liquid-glass-${resourceId}`
+        this.glassClipId = `video-controls-pill-clip-${resourceId}`
 
         this.group = parent.append('g')
             .attr('class', `video-controls-group ${className}`)
@@ -340,9 +302,9 @@ class VideoControls implements VideoControlsInstance {
             .attr('clip-path', `url(#${this.glassClipId})`)
             .attr('pointer-events', 'none')
 
-        this.playButton = this.createButton('video-controls-play', videoPlayGlyphIcon, 'Play video')
-        this.volumeButton = this.createButton('video-controls-volume-button', videoVolumeHighGlyphIcon, 'Mute video')
-        this.fullscreenButton = this.createButton('video-controls-fullscreen', videoFullscreenEnterGlyphIcon, 'Enter fullscreen')
+        this.playButton = this.createButton('video-controls-play', this.icons.play, 'Play video')
+        this.volumeButton = this.createButton('video-controls-volume-button', this.icons.volumeHigh, 'Mute video')
+        this.fullscreenButton = this.createButton('video-controls-fullscreen', this.icons.fullscreenEnter, 'Enter fullscreen')
 
         this.currentTimeText = this.group.append('text')
             .attr('class', 'video-controls-current-time')
@@ -515,7 +477,7 @@ class VideoControls implements VideoControlsInstance {
         const progressRatio = duration > 0 ? currentTime / duration : 0
         const bufferedRatio = duration > 0 ? bufferedEnd(this.videoEl) / duration : 0
         const volume = this.videoEl.muted ? 0 : clamp(this.videoEl.volume, 0, 1)
-        const speed = clamp(this.videoEl.playbackRate || 1, uiKitSettings.videoControls.speed.minRate, uiKitSettings.videoControls.speed.maxRate)
+        const speed = clamp(this.videoEl.playbackRate || 1, this.settings.speed.minRate, this.settings.speed.maxRate)
         const speedRatio = this.speedRatio(speed)
 
         this.currentTimeText.text(formatTime(currentTime))
@@ -527,26 +489,26 @@ class VideoControls implements VideoControlsInstance {
             .attr('opacity', duration > 0 ? 1 : 0.45)
         this.seekGroup.attr('opacity', duration > 0 ? 1 : 0.45)
 
-        const playIcon = this.videoEl.paused ? videoPlayGlyphIcon : videoPauseGlyphIcon
-        setIconPaths(this.playButton.icon, playIcon)
+        const playIcon = this.videoEl.paused ? this.icons.play : this.icons.pause
+        setIconPaths(this.playButton.icon, playIcon, this.settings.styles.icon)
         this.playButton.group.attr('aria-label', this.videoEl.paused ? 'Play video' : 'Pause video')
 
         const isMuted = this.videoEl.muted || this.videoEl.volume === 0
-        const volumeIcon = isMuted ? videoVolumeMutedGlyphIcon : videoVolumeHighGlyphIcon
-        setIconPaths(this.volumeButton.icon, volumeIcon, isMuted ? uiKitSettings.videoControls.styles.iconMuted : uiKitSettings.videoControls.styles.icon)
+        const volumeIcon = isMuted ? this.icons.volumeMuted : this.icons.volumeHigh
+        setIconPaths(this.volumeButton.icon, volumeIcon, isMuted ? this.settings.styles.iconMuted : this.settings.styles.icon)
         this.volumeButton.group.attr('aria-label', isMuted ? 'Unmute video' : 'Mute video')
         this.volumeProgress.attr('width', this.volumeWidth * volume)
         this.volumeHandle.attr('cx', this.volumeWidth * volume)
 
-        this.speedText.text(formatRate(speed))
+        this.speedText.text(formatRate(speed, this.settings.speed.displayPrecision))
         this.speedGroup
             .attr('aria-valuenow', speed)
-            .attr('aria-valuetext', formatRate(speed))
+            .attr('aria-valuetext', formatRate(speed, this.settings.speed.displayPrecision))
         this.speedProgress.attr('width', this.speedSliderWidth * speedRatio)
         this.speedHandle.attr('cx', this.speedSliderX + this.speedSliderWidth * speedRatio)
 
-        const fullscreenIcon = isFullscreen(this.videoEl) ? videoFullscreenExitGlyphIcon : videoFullscreenEnterGlyphIcon
-        setIconPaths(this.fullscreenButton.icon, fullscreenIcon)
+        const fullscreenIcon = isFullscreen(this.videoEl) ? this.icons.fullscreenExit : this.icons.fullscreenEnter
+        setIconPaths(this.fullscreenButton.icon, fullscreenIcon, this.settings.styles.icon)
         this.fullscreenButton.group.attr('aria-label', isFullscreen(this.videoEl) ? 'Exit fullscreen' : 'Enter fullscreen')
     }
 
@@ -568,12 +530,12 @@ class VideoControls implements VideoControlsInstance {
         for (const eventName of MEDIA_EVENTS) {
             this.videoEl.removeEventListener(eventName, this.onMediaEvent)
         }
-        document.removeEventListener('fullscreenchange', this.onMediaEvent)
+        this.videoEl.ownerDocument.removeEventListener('fullscreenchange', this.onMediaEvent)
         this.group.remove()
     }
 
     private createLiquidGlassFilter(): void {
-        const { liquidGlassFilter } = uiKitSettings.videoControls.styles
+        const { liquidGlassFilter } = this.settings.styles
         if (liquidGlassFilter.displacementScale <= 0) return
 
         const filter = this.defs.append('filter')
@@ -600,7 +562,7 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private createButton(className: string, iconMarkup: string, label: string): ButtonControl {
-        const { layout } = uiKitSettings.videoControls
+        const { layout } = this.settings
         const buttonGroup = this.group.append('g')
             .attr('class', className)
             .attr('role', 'button')
@@ -623,12 +585,12 @@ class VideoControls implements VideoControlsInstance {
             .attr('class', `${className}-icon`)
             .attr('transform', `translate(${(layout.buttonSize - layout.iconSize) / 2}, ${(layout.buttonSize - layout.iconSize) / 2}) scale(${layout.iconSize / 24})`)
 
-        setIconPaths(icon, iconMarkup)
+        setIconPaths(icon, iconMarkup, this.settings.styles.icon)
         return { group: buttonGroup, hit, icon }
     }
 
     private layout(): void {
-        const { layout, responsive } = uiKitSettings.videoControls
+        const { layout, responsive } = this.settings
         const speedSliderWidth = this.responsiveWidth >= responsive.speedSliderFullResponsiveWidth
             ? layout.speedSliderWidth
             : interpolateControlWidth(
@@ -734,7 +696,7 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private speedRatio(rate: number): number {
-        const { minRate, maxRate } = uiKitSettings.videoControls.speed
+        const { minRate, maxRate } = this.settings.speed
         const guideRate = this.speedGuideRate()
         const safeRate = clamp(rate, minRate, maxRate)
         if (maxRate <= minRate) return 0
@@ -743,8 +705,8 @@ class VideoControls implements VideoControlsInstance {
         return clamp(0.5 + (safeRate - guideRate) / (maxRate - guideRate) * 0.5, 0.5, 1)
     }
 
-    private speedFromRatio(ratio: number, step = uiKitSettings.videoControls.speed.pointerStep): number {
-        const { minRate, maxRate } = uiKitSettings.videoControls.speed
+    private speedFromRatio(ratio: number, step = this.settings.speed.pointerStep): number {
+        const { minRate, maxRate } = this.settings.speed
         const guideRate = this.speedGuideRate()
         const safeRatio = clamp(ratio, 0, 1)
         let rawRate = minRate + safeRatio * (maxRate - minRate)
@@ -757,7 +719,7 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private speedGuideRate(): number {
-        const { guideRate, minRate, maxRate } = uiKitSettings.videoControls.speed
+        const { guideRate, minRate, maxRate } = this.settings.speed
         return clamp(guideRate, minRate, maxRate)
     }
 
@@ -788,7 +750,7 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private resetSpeedToDefault(): void {
-        const { defaultRate, guideRate, minRate, maxRate } = uiKitSettings.videoControls.speed
+        const { defaultRate, guideRate, minRate, maxRate } = this.settings.speed
         const targetRate = Number.isFinite(defaultRate) ? defaultRate : guideRate
         this.videoEl.playbackRate = clamp(targetRate, minRate, maxRate)
         this.render()
@@ -803,13 +765,13 @@ class VideoControls implements VideoControlsInstance {
 
                 const move = (moveEvent: PointerEvent) => applyValue(moveEvent)
                 const up = () => {
-                    window.removeEventListener('pointermove', move)
-                    window.removeEventListener('pointerup', up)
+                    this.view.removeEventListener('pointermove', move)
+                    this.view.removeEventListener('pointerup', up)
                     this.activePointerCleanup = null
                 }
 
-                window.addEventListener('pointermove', move)
-                window.addEventListener('pointerup', up)
+                this.view.addEventListener('pointermove', move)
+                this.view.addEventListener('pointerup', up)
                 this.activePointerCleanup = up
             })
             .on('mousedown', stopControlPointerStart)
@@ -833,9 +795,9 @@ class VideoControls implements VideoControlsInstance {
                     this.setVideoTimeFromEvent(moveEvent)
                 }
                 const removeListeners = () => {
-                    window.removeEventListener('pointermove', move)
-                    window.removeEventListener('pointerup', up)
-                    window.removeEventListener('pointercancel', cancel)
+                    this.view.removeEventListener('pointermove', move)
+                    this.view.removeEventListener('pointerup', up)
+                    this.view.removeEventListener('pointercancel', cancel)
                     this.activePointerCleanup = null
                 }
                 const finish = () => {
@@ -849,9 +811,9 @@ class VideoControls implements VideoControlsInstance {
                 const up = () => finish()
                 const cancel = () => finish()
 
-                window.addEventListener('pointermove', move)
-                window.addEventListener('pointerup', up)
-                window.addEventListener('pointercancel', cancel)
+                this.view.addEventListener('pointermove', move)
+                this.view.addEventListener('pointerup', up)
+                this.view.addEventListener('pointercancel', cancel)
                 this.activePointerCleanup = finish
             })
             .on('mousedown', stopControlPointerStart)
@@ -880,11 +842,11 @@ class VideoControls implements VideoControlsInstance {
             this.videoEl.removeEventListener('seeked', finishSeek)
             this.videoEl.removeEventListener('loadeddata', finishSeek)
             if (nextSeekTimerId !== null) {
-                window.clearTimeout(nextSeekTimerId)
+                this.view.clearTimeout(nextSeekTimerId)
                 nextSeekTimerId = null
             }
             if (failSafeTimerId !== null) {
-                window.clearTimeout(failSafeTimerId)
+                this.view.clearTimeout(failSafeTimerId)
                 failSafeTimerId = null
             }
             if (this.scrubSeekCleanup === cleanup) this.scrubSeekCleanup = null
@@ -894,7 +856,7 @@ class VideoControls implements VideoControlsInstance {
             if (settled) return
             settled = true
             cleanup()
-            nextSeekTimerId = window.setTimeout(() => {
+            nextSeekTimerId = this.view.setTimeout(() => {
                 nextSeekTimerId = null
                 this.scrubSeekInFlight = false
                 if (this.destroyed || this.scrubSeekTarget === null) return
@@ -907,7 +869,7 @@ class VideoControls implements VideoControlsInstance {
 
         this.videoEl.addEventListener('seeked', finishSeek)
         this.videoEl.addEventListener('loadeddata', finishSeek)
-        failSafeTimerId = window.setTimeout(finishSeek, 500)
+        failSafeTimerId = this.view.setTimeout(finishSeek, 500)
         this.scrubSeekCleanup = cleanup
 
         try {
@@ -954,7 +916,7 @@ class VideoControls implements VideoControlsInstance {
     private async toggleFullscreen(): Promise<void> {
         if (!supportsFullscreen(this.videoEl)) return
         try {
-            if (isFullscreen(this.videoEl)) await document.exitFullscreen()
+            if (isFullscreen(this.videoEl)) await this.videoEl.ownerDocument.exitFullscreen()
             else await this.videoEl.requestFullscreen()
         } catch (error) {
             console.warn('[videoControls] fullscreen failed', error)
@@ -963,13 +925,17 @@ class VideoControls implements VideoControlsInstance {
     }
 
     private bindButtonActions(): void {
-        bindButtonAction(this.playButton, () => { void this.togglePlay() })
-        bindButtonAction(this.volumeButton, () => {
+        bindButtonAction(this.playButton, this.settings.styles.buttonHover, () => {
+            void this.togglePlay()
+        })
+        bindButtonAction(this.volumeButton, this.settings.styles.buttonHover, () => {
             this.videoEl.muted = !this.videoEl.muted
             if (!this.videoEl.muted && this.videoEl.volume === 0) this.videoEl.volume = 0.5
             this.render()
         })
-        bindButtonAction(this.fullscreenButton, () => { void this.toggleFullscreen() })
+        bindButtonAction(this.fullscreenButton, this.settings.styles.buttonHover, () => {
+            void this.toggleFullscreen()
+        })
     }
 
     private bindSpeedSlider(): void {
@@ -980,7 +946,7 @@ class VideoControls implements VideoControlsInstance {
                 this.resetSpeedToDefault()
             })
             .on('keydown', (event: KeyboardEvent) => {
-                const { keyboardStep, minRate, maxRate } = uiKitSettings.videoControls.speed
+                const { keyboardStep, minRate, maxRate } = this.settings.speed
                 const currentRate = clamp(this.videoEl.playbackRate || 1, minRate, maxRate)
                 let nextRate: number | null = null
                 if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') nextRate = currentRate - keyboardStep
@@ -1000,7 +966,7 @@ class VideoControls implements VideoControlsInstance {
         for (const eventName of MEDIA_EVENTS) {
             this.videoEl.addEventListener(eventName, this.onMediaEvent)
         }
-        document.addEventListener('fullscreenchange', this.onMediaEvent)
+        this.videoEl.ownerDocument.addEventListener('fullscreenchange', this.onMediaEvent)
     }
 
     private readonly onMediaEvent = (): void => {

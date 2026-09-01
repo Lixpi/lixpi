@@ -1,12 +1,25 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 
 import { resolveMediaBranch } from './media-branch-resolver.ts'
-import type { ChatMessage, ProviderState } from './state.ts'
-import type { VlmCallArgs, VlmCallResult } from '../structured-vlm/structured-vlm-client.ts'
+import type {
+    ChatMessage,
+    ProviderState,
+} from './state.ts'
+import type {
+    VlmCallArgs,
+    VlmCallResult,
+} from '../structured-vlm/structured-vlm-client.ts'
 
 const portraitUrl = 'nats-obj://workspace-workspace-1-files/portrait-file'
 const landscapeUrl = 'nats-obj://workspace-workspace-1-files/landscape-file'
@@ -130,10 +143,12 @@ function createState(overrides: {
         { type: 'input_image', image_url: landscapeUrl, detail: 'auto' },
         { type: 'input_text', text: JSON.stringify({ type: 'generated_image_variant', nodeId: 'person-generated' }) },
         { type: 'input_image', image_url: personUrl, detail: 'auto' },
-        ...(hasGoatCandidate ? [
-            { type: 'input_text', text: JSON.stringify({ type: 'generated_image_variant', nodeId: 'goat-generated' }) },
-            { type: 'input_image', image_url: goatUrl, detail: 'auto' },
-        ] : []),
+        ...(hasGoatCandidate
+            ? [
+                { type: 'input_text', text: JSON.stringify({ type: 'generated_image_variant', nodeId: 'goat-generated' }) },
+                { type: 'input_image', image_url: goatUrl, detail: 'auto' },
+            ]
+            : []),
     ]
     return {
         messages: [
@@ -348,11 +363,14 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'make that guy that used landscape as a source orange monochromatic',
-            activeTargetCandidateId: 'goat-generated',
-            candidates: [...baseCandidates, goatCandidate],
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'make that guy that used landscape as a source orange monochromatic',
+                activeTargetCandidateId: 'goat-generated',
+                candidates: [...baseCandidates, goatCandidate],
+            }),
+            deps,
+        )
         const resolution = update.mediaBranchResolution
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
@@ -386,9 +404,12 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'draw a new ceramic horse in the style of this painted portrait',
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'draw a new ceramic horse in the style of this painted portrait',
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
@@ -415,10 +436,13 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'make it very artistic',
-            activeTargetCandidateId: 'person-generated',
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'make it very artistic',
+                activeTargetCandidateId: 'person-generated',
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
@@ -448,11 +472,14 @@ describe('resolveMediaBranch', () => {
             }],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'fix the coat sleeves on this accepted character sheet',
-            activeTargetCandidateId: acceptedCandidate.candidateId,
-            candidates: [acceptedCandidate],
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'fix the coat sleeves on this accepted character sheet',
+                activeTargetCandidateId: acceptedCandidate.candidateId,
+                candidates: [acceptedCandidate],
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
@@ -482,11 +509,14 @@ describe('resolveMediaBranch', () => {
             decisions: [],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'correct the clothing on this character sheet using the original reference',
-            activeTargetCandidateId: acceptedCandidate.candidateId,
-            candidates: [baseCandidates[0]!, acceptedCandidate],
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'correct the clothing on this character sheet using the original reference',
+                activeTargetCandidateId: acceptedCandidate.candidateId,
+                candidates: [baseCandidates[0]!, acceptedCandidate],
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
@@ -518,11 +548,14 @@ describe('resolveMediaBranch', () => {
             decisions: [],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'fix this accepted character sheet',
-            activeTargetCandidateId: acceptedCandidate.candidateId,
-            candidates: [acceptedCandidate],
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'fix this accepted character sheet',
+                activeTargetCandidateId: acceptedCandidate.candidateId,
+                candidates: [acceptedCandidate],
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'edit-active-branch',
@@ -554,11 +587,14 @@ describe('resolveMediaBranch', () => {
             decisions: [],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'draw a goat in the style of this image',
-            activeTargetCandidateId: acceptedCandidate.candidateId,
-            candidates: [acceptedCandidate],
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'draw a goat in the style of this image',
+                activeTargetCandidateId: acceptedCandidate.candidateId,
+                candidates: [acceptedCandidate],
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
@@ -588,10 +624,13 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        const update = await resolveMediaBranch(createState({
-            promptText: 'draw a goat in the style of that landscape painting',
-            activeTargetCandidateId: 'person-generated',
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                promptText: 'draw a goat in the style of that landscape painting',
+                activeTargetCandidateId: 'person-generated',
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
@@ -689,9 +728,12 @@ describe('resolveMediaBranch', () => {
             rationale: 'The referent is unclear.',
         }))
 
-        const update = await resolveMediaBranch(createState({
-            candidates: [baseCandidates[0]!, duplicatePortraitCandidate],
-        }), deps)
+        const update = await resolveMediaBranch(
+            createState({
+                candidates: [baseCandidates[0]!, duplicatePortraitCandidate],
+            }),
+            deps,
+        )
 
         expect(update.mediaBranchResolution).toMatchObject({
             mode: 'fresh-branch',
@@ -717,10 +759,13 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        const update = await resolveMediaBranch(createVideoState({
-            promptText: 'animate that portrait, slow zoom in with ambient sound',
-            activeTargetCandidateId: 'person-generated',
-        }), deps)
+        const update = await resolveMediaBranch(
+            createVideoState({
+                promptText: 'animate that portrait, slow zoom in with ambient sound',
+                activeTargetCandidateId: 'person-generated',
+            }),
+            deps,
+        )
 
         // The resolver must run off videoModelVersion alone (no image model selected)
         // and feed the chosen target identity into VEO as the first frame.
@@ -743,9 +788,12 @@ describe('resolveMediaBranch', () => {
             ],
         }))
 
-        const update = await resolveMediaBranch(createVideoState({
-            promptText: 'a fox trotting through falling snow in this painting style',
-        }), deps)
+        const update = await resolveMediaBranch(
+            createVideoState({
+                promptText: 'a fox trotting through falling snow in this painting style',
+            }),
+            deps,
+        )
 
         expect(publisher.mediaBranchResolved).toHaveBeenCalledOnce()
         expect(update.mediaBranchResolution?.targetCandidateId).toBeNull()

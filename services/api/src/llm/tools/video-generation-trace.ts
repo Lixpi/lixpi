@@ -232,11 +232,13 @@ const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReferenc
     const capabilityReferenceImageTraceUrls = state.capabilityReferenceImageTraceUrls ?? []
     return [
         ...buildBranchReferenceTrace(state),
-        ...capabilityReferenceImages.map((imageUrl, index) => buildCapabilityReference(
-            imageUrl,
-            capabilityReferenceImageTraceUrls[index],
-            index,
-        )),
+        ...capabilityReferenceImages.map((imageUrl, index) =>
+            buildCapabilityReference(
+                imageUrl,
+                capabilityReferenceImageTraceUrls[index],
+                index,
+            )
+        ),
     ]
 }
 
@@ -287,18 +289,20 @@ export const buildVideoGenerationTrace = (state: ProviderState): VideoGeneration
         promptWasChanged: toolPrompt.trim() !== finalPrompt.trim(),
         referenceImages: buildReferenceTrace(state),
         excludedReferences: buildExcludedTrace(state),
-        resolver: resolution ? {
-            resolverKind: resolution.resolverKind,
-            resolverVersion: resolution.resolverVersion,
-            resolverModelProvider: resolution.resolverModelProvider,
-            resolverModelId: resolution.resolverModelId,
-            mode: resolution.mode,
-            operationKind: resolution.operationKind,
-            confidence: resolution.confidence,
-            rationale: resolution.rationale,
-            targetCandidateId: resolution.targetCandidateId,
-            parentCandidateId: resolution.parentCandidateId,
-            branchId: resolution.branchId,
-        } : undefined,
+        resolver: resolution
+            ? {
+                resolverKind: resolution.resolverKind,
+                resolverVersion: resolution.resolverVersion,
+                resolverModelProvider: resolution.resolverModelProvider,
+                resolverModelId: resolution.resolverModelId,
+                mode: resolution.mode,
+                operationKind: resolution.operationKind,
+                confidence: resolution.confidence,
+                rationale: resolution.rationale,
+                targetCandidateId: resolution.targetCandidateId,
+                parentCandidateId: resolution.parentCandidateId,
+                branchId: resolution.branchId,
+            }
+            : undefined,
     }
 }

@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import AiModelModel from './ai-model.ts'
 
@@ -541,5 +547,4 @@ describe('AiModel.getAiModel', () => {
 
         expect(model).toHaveProperty('pricing', { input: 0.1, output: 0.2 })
     })
-
 })

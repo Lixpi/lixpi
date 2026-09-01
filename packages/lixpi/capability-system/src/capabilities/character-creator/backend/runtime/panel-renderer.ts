@@ -45,23 +45,27 @@ export async function renderCharacterPanel(args: {
     const poseReference = await loadCharacterPoseReference(args.panel)
     if (poseReference) {
         const poseBytes = decodeReferenceImage(poseReference.url)
-        info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] dispatch ${JSON.stringify({
-            mediaRunId: args.context.mediaRunId,
-            panelId: args.panel.panelId,
-            target: args.panel.target,
-            fileName: poseReference.fileName,
-            preAdaptationReferenceIndex: 0,
-            byteLength: poseBytes.length,
-            sha256: createHash('sha256').update(poseBytes).digest('hex'),
-            identityReferenceRoles: args.references.map(reference => reference.role),
-        })}`)
+        info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] dispatch ${
+            JSON.stringify({
+                mediaRunId: args.context.mediaRunId,
+                panelId: args.panel.panelId,
+                target: args.panel.target,
+                fileName: poseReference.fileName,
+                preAdaptationReferenceIndex: 0,
+                byteLength: poseBytes.length,
+                sha256: createHash('sha256').update(poseBytes).digest('hex'),
+                identityReferenceRoles: args.references.map(reference => reference.role),
+            })
+        }`)
     } else {
-        info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] no-pose-control ${JSON.stringify({
-            mediaRunId: args.context.mediaRunId,
-            panelId: args.panel.panelId,
-            target: args.panel.target,
-            identityReferenceRoles: args.references.map(reference => reference.role),
-        })}`)
+        info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] no-pose-control ${
+            JSON.stringify({
+                mediaRunId: args.context.mediaRunId,
+                panelId: args.panel.panelId,
+                target: args.panel.target,
+                identityReferenceRoles: args.references.map(reference => reference.role),
+            })
+        }`)
     }
     const result = await args.imageGeneration.generate({
         context: args.context,
@@ -76,19 +80,23 @@ export async function renderCharacterPanel(args: {
     if (poseReference && !result.includedReferenceRoles.includes('pose-reference')) {
         throw new Error(`CHARACTER_PANEL_POSE_REFERENCE_OMITTED:${args.panel.panelId}`)
     }
-    const requiredGeneratedReferenceRoles = new Set(args.panel.outputBindings
-        .filter(binding => binding.required)
-        .map(binding => binding.referenceRole))
+    const requiredGeneratedReferenceRoles = new Set(
+        args.panel.outputBindings
+            .filter(binding => binding.required)
+            .map(binding => binding.referenceRole),
+    )
     for (const role of requiredGeneratedReferenceRoles) {
         if (!result.includedReferenceRoles.includes(role)) {
             throw new Error(`CHARACTER_PANEL_GENERATED_REFERENCE_OMITTED:${args.panel.panelId}:${role}`)
         }
     }
-    info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] provider-result ${JSON.stringify({
-        includedReferenceRoles: result.includedReferenceRoles,
-        omittedReferenceRoles: result.omittedReferenceRoles,
-        providerOperationId: result.providerOperationId ?? '',
-    })}`)
+    info(`[CharacterCreatorShot:${args.context.generationRequestId}:${args.panel.panelId}:${args.attempt}] provider-result ${
+        JSON.stringify({
+            includedReferenceRoles: result.includedReferenceRoles,
+            omittedReferenceRoles: result.omittedReferenceRoles,
+            providerOperationId: result.providerOperationId ?? '',
+        })
+    }`)
     const providerBytes = decodeGeneratedImage(result.image)
     const bytes = await normalizeGeneratedPanel(providerBytes)
     return {
@@ -158,20 +166,20 @@ export function buildCharacterPanelPrompt(args: {
                 ? 'No synthetic facial or portrait control image is provided. Use the generated identity and outfit anchors for complementary request-compliant continuity, use the original subject references for unchanged evidence absent from both anchors, and use the request for the required design, camera angle, and body context.'
                 : 'No synthetic facial or portrait control image is provided. Use only the prompt and original subject references for facial anatomy, sex presentation, identity, hair, headwear, expression, camera angle, and body context; create the requested neutral head view directly.'
             : usesGeneratedReferences
-                ? 'No synthetic spatial control image is provided for this detail shot. Use the generated identity and outfit anchors for request-compliant continuity, the original subject references for unchanged evidence absent from both anchors, and the prompt for requested design changes, camera angle, and framing.'
-                : 'No synthetic spatial control image is provided for this detail shot. Use only the prompt and original subject references for identity, outfit construction, materials, accessories, camera angle, and framing.'
+            ? 'No synthetic spatial control image is provided for this detail shot. Use the generated identity and outfit anchors for request-compliant continuity, the original subject references for unchanged evidence absent from both anchors, and the prompt for requested design changes, camera angle, and framing.'
+            : 'No synthetic spatial control image is provided for this detail shot. Use only the prompt and original subject references for identity, outfit construction, materials, accessories, camera angle, and framing.'
         : args.panel.kind === 'head'
-            ? `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for centered straight-on camera direction, upright head position, symmetric head-and-shoulder alignment, upper-body crop, and subject scale. Its featureless gray mannequin is spatial pose control only, never identity or design evidence.`
+        ? `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for centered straight-on camera direction, upright head position, symmetric head-and-shoulder alignment, upper-body crop, and subject scale. Its featureless gray mannequin is spatial pose control only, never identity or design evidence.`
         : args.panel.kind === 'prop'
-            ? `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for object placement, hand placement, and framing.`
-            : `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for framing, camera direction, upright head angle, posture, limb placement, weight distribution, and silhouette.`
+        ? `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for object placement, hand placement, and framing.`
+        : `Use the file POSE_REFERENCE_${args.panel.panelId}.png only for framing, camera direction, upright head angle, posture, limb placement, weight distribution, and silhouette.`
     const framingInstruction = args.panel.kind === 'head'
         ? 'Use close head-and-shoulders identity-portrait framing. Preserve the complete top of the hair or headwear with 10-12 percent clean margin, plus the complete face and neck. Crop immediately below the collarbones. Do not show armpits, arms, chest, or torso. The head from crown to chin must occupy 55-60 percent of image height so facial details are clear.'
         : args.panel.crop === 'full-body' || args.panel.crop === 'action'
-            ? 'The complete character must occupy 82-90 percent of image height. Keep even white margins above the hair or headwear and below the footwear. Do not make the figure small.'
-            : args.panel.crop === 'upper-body'
-                ? 'Frame from the complete top of the hair or headwear through mid-torso. Keep both shoulders and upper arms visible. The subject must occupy 82-90 percent of image height without touching an edge.'
-                : 'Fill the frame with the requested object arrangement while keeping every object and hand fully visible.'
+        ? 'The complete character must occupy 82-90 percent of image height. Keep even white margins above the hair or headwear and below the footwear. Do not make the figure small.'
+        : args.panel.crop === 'upper-body'
+        ? 'Frame from the complete top of the hair or headwear through mid-torso. Keep both shoulders and upper arms visible. The subject must occupy 82-90 percent of image height without touching an edge.'
+        : 'Fill the frame with the requested object arrangement while keeping every object and hand fully visible.'
     return [
         `Create one isolated ${args.panel.crop} reference image: ${args.panel.target}.`,
         panelLocalInstruction,
@@ -203,10 +211,10 @@ export function buildCharacterPanelPrompt(args: {
         usesGeneratedIdentityAnchor
             ? 'The file GENERATED_IDENTITY_ANCHOR.png is the facial identity, hair, headwear, and close-detail continuity anchor only when it complies with the authoritative request and shared Capability instructions. If it omitted or weakened an explicit requested change, correct that failure instead of copying it.'
             : usesIdentityOnlyEditTarget
-                ? 'The approved edit-target identity crop defines only the request-approved facial and mechanical identity construction. Apply every requested visible correction without importing rejected body, outfit, prop, pose, or layout traits.'
-                : args.originalSourceReferenceCount > 0
-                    ? 'The original source image or images define the baseline person or character. Preserve recognizable identity and every observed trait that the authoritative request and shared Capability instructions do not change.'
-                    : 'Use the authoritative request to establish the character while preserving only the request-compliant traits present in the supplied references.',
+            ? 'The approved edit-target identity crop defines only the request-approved facial and mechanical identity construction. Apply every requested visible correction without importing rejected body, outfit, prop, pose, or layout traits.'
+            : args.originalSourceReferenceCount > 0
+            ? 'The original source image or images define the baseline person or character. Preserve recognizable identity and every observed trait that the authoritative request and shared Capability instructions do not change.'
+            : 'Use the authoritative request to establish the character while preserving only the request-compliant traits present in the supplied references.',
         usesGeneratedOutfitAnchor
             ? 'The file GENERATED_OUTFIT_ANCHOR.png is the full-body proportions, outfit construction, layer, accessory, color, material, and footwear continuity anchor only when it complies with the authoritative request and shared Capability instructions. Preserve its complete request-compliant outfit across this view.'
             : '',

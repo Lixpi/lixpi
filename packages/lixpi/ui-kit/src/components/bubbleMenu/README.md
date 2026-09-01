@@ -26,7 +26,7 @@ The `BubbleMenuView` class adapts the core `BubbleMenu` for ProseMirror:
 - Manages ProseMirror-specific interactions (link input panel, mark toggling, image attribute changes)
 - Drives show/hide on every ProseMirror transaction
 
-### Workspace Canvas (`infographics/workspace/`)
+### Workspace Canvas
 
 The `WorkspaceCanvas` creates a `BubbleMenu` for canvas image nodes:
 - Uses `'canvasImage'` context

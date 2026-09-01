@@ -1,4 +1,4 @@
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type AiUserMessageShell = {
     wrapper: HTMLElement

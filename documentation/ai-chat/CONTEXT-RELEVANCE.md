@@ -80,7 +80,7 @@ Full media bytes and document contents are resolved after authorization. The bro
 
 ## Relevant Code
 
-- [`ai-image-branching.ts`](../../services/web-ui/src/services/ai-image-branching.ts)
+- [`ai-image-branching.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-context.ts)
 - [`prompt-reference-resolver.ts`](../../services/api/src/services/prompt-reference-resolver.ts)
 - [`ai-interaction-subjects.ts`](../../services/api/src/NATS/subscriptions/ai-interaction-subjects.ts)
 - [`workspace-context-resolver.ts`](../../services/api/src/llm/graph/workspace-context-resolver.ts)

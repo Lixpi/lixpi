@@ -13,10 +13,18 @@ import type {
     ProviderName,
 } from '@lixpi/constants'
 
-import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from '../structured-vlm/structured-vlm-client.ts'
+import {
+    callStructuredVlm,
+    type VlmCallArgs,
+    type VlmCallResult,
+    type VlmJsonSchema,
+} from '../structured-vlm/structured-vlm-client.ts'
 import { resolveImageUrls } from '../utils/attachments.ts'
 import { restrictSnapshotToExplicitRefs } from './media-branch-snapshot.ts'
-import type { ChatMessage, ProviderState } from './state.ts'
+import type {
+    ChatMessage,
+    ProviderState,
+} from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 import { requiredCapabilityProducedCapabilityOnlyOutput } from '../../capability-system/capability-state-resolver.ts'
 
@@ -188,7 +196,7 @@ const RESOLUTION_SCHEMA: VlmJsonSchema = {
 }
 
 const SYSTEM_PROMPT = [
-    'You are Lixpi\'s image branch resolver. Your job is to inspect the user prompt plus labeled candidate images and assign visual roles before image or video generation. Image generation and video generation are both fully supported capabilities; which one runs is decided elsewhere and is never your concern — you only ground visual references.',
+    "You are Lixpi's image branch resolver. Your job is to inspect the user prompt plus labeled candidate images and assign visual roles before image or video generation. Image generation and video generation are both fully supported capabilities; which one runs is decided elsewhere and is never your concern — you only ground visual references.",
     'Resolve visual references only — never judge feasibility. Do not refuse, lower confidence, or return mode="ambiguous" because the request is for a video, because it asks for motion, animation, camera movement, or audio, or because of any perceived capability limit. Motion and clip requests are ordinary video generation and must be grounded exactly like image requests. For video, the target identity you pick becomes the first frame (image-to-video) and your selected style references become the video reference images.',
     'Always ground decisions in the actual candidate pixels. Do not route from regexes, recency, prompt text alone, or guessed entity tags.',
     'If the candidate metadata includes roleHints containing "active-target" or the prompt context names an Active target candidateId, treat that as a weak UI selection hint only. It is not visual truth and must never override the user prompt or candidate pixels.',
@@ -303,12 +311,11 @@ const assertKnownCandidateIds = (label: string, candidateIds: string[], candidat
     }
 }
 
-const appendRationale = (rationale: string, guardMessage: string): string =>
-    [rationale, guardMessage].filter(Boolean).join(' ')
+const appendRationale = (rationale: string, guardMessage: string): string => [rationale, guardMessage].filter(Boolean).join(' ')
 
 const sanitizeDecisions = (
     decisions: unknown,
-    candidateById: Map<string, MediaBranchCandidateImage>
+    candidateById: Map<string, MediaBranchCandidateImage>,
 ): MediaBranchVlmReferenceDecision[] => {
     if (!Array.isArray(decisions)) return []
     const out: MediaBranchVlmReferenceDecision[] = []
@@ -356,8 +363,7 @@ const sanitizeResolution = (args: {
     let parentCandidateId = normalizeOptionalCandidateId(args.parsed.parentCandidateId) ?? targetCandidateId ?? undefined
     let includeGeneratedCandidateIds = normalizeStringArray(args.parsed.includeGeneratedCandidateIds)
     const referenceCandidateIds = snapshot.candidates.map((candidate) => candidate.candidateId)
-    const sourceContextNodeIds = [...new Set(snapshot.candidates.flatMap((candidate) =>
-        candidate.nodeId ? [candidate.nodeId] : []))]
+    const sourceContextNodeIds = [...new Set(snapshot.candidates.flatMap((candidate) => candidate.nodeId ? [candidate.nodeId] : []))]
     let styleReferenceCandidateIds = normalizeStringArray(args.parsed.styleReferenceCandidateIds)
     const decisions = sanitizeDecisions(args.parsed.decisions, candidateById).map((decision) =>
         decision.role === 'excluded'
@@ -366,7 +372,8 @@ const sanitizeResolution = (args: {
                 role: 'base-context' as const,
                 reason: appendRationale(decision.reason, 'The reference remains attached because the user selected it explicitly.'),
             }
-            : decision)
+            : decision
+    )
 
     let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
     let confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
@@ -382,11 +389,13 @@ const sanitizeResolution = (args: {
         const promptLooksLikeEdit = /\b(?:fix|edit|correct|adjust|change|update|revise|redo|regenerate|remove|replace|add)\b/iu
             .test(snapshot.promptText)
             || /\bmake\s+(?:this|that|it)\b/iu.test(snapshot.promptText)
-        const generatedTargetWasSelected = Boolean(onlyCandidate
-            && (targetCandidateId === onlyCandidate.candidateId
-                || parentCandidateId === onlyCandidate.candidateId
-                || (onlyCandidate.roleHints.includes('active-target')
-                    && promptLooksLikeEdit)))
+        const generatedTargetWasSelected = Boolean(
+            onlyCandidate
+                && (targetCandidateId === onlyCandidate.candidateId
+                    || parentCandidateId === onlyCandidate.candidateId
+                    || (onlyCandidate.roleHints.includes('active-target')
+                        && promptLooksLikeEdit)),
+        )
         const generatedTarget = onlyCandidate?.roleHints.includes('generated-variant') && generatedTargetWasSelected
             ? onlyCandidate
             : undefined
@@ -395,10 +404,12 @@ const sanitizeResolution = (args: {
             operationKind = 'edit_existing'
             targetCandidateId = generatedTarget.candidateId
             parentCandidateId = generatedTarget.candidateId
-            includeGeneratedCandidateIds = [...new Set([
-                ...includeGeneratedCandidateIds,
-                generatedTarget.candidateId,
-            ])]
+            includeGeneratedCandidateIds = [
+                ...new Set([
+                    ...includeGeneratedCandidateIds,
+                    generatedTarget.candidateId,
+                ]),
+            ]
             rationale = appendRationale(
                 rationale,
                 'Resolver guard retained the only explicit generated Asset as the edit target and continuation parent.',
@@ -427,10 +438,12 @@ const sanitizeResolution = (args: {
         mode = 'edit-active-branch'
         targetCandidateId = activeTarget.candidateId
         parentCandidateId = activeTarget.candidateId
-        includeGeneratedCandidateIds = [...new Set([
-            ...includeGeneratedCandidateIds,
-            activeTarget.candidateId,
-        ])]
+        includeGeneratedCandidateIds = [
+            ...new Set([
+                ...includeGeneratedCandidateIds,
+                activeTarget.candidateId,
+            ]),
+        ]
         rationale = appendRationale(
             rationale,
             'Resolver guard restored the active target omitted from an edit_existing resolution.',
@@ -462,8 +475,8 @@ const sanitizeResolution = (args: {
     const rawBranchId = normalizeOptionalCandidateId(args.parsed.branchId)
     const generatedTargetWithoutActiveBranch = Boolean(
         targetCandidate
-        && !targetCandidate.branchId
-        && targetCandidate.roleHints.includes('generated-variant'),
+            && !targetCandidate.branchId
+            && targetCandidate.roleHints.includes('generated-variant'),
     )
     const branchId = targetCandidate?.branchId
         ?? (mode === 'fresh-branch' || generatedTargetWithoutActiveBranch ? undefined : rawBranchId)
@@ -549,7 +562,7 @@ const stripCandidateImageBlocks = (messages: ChatMessage[], candidateImageUrls: 
 
 const buildResolvedBranchMessage = (
     resolution: MediaBranchVlmResolution,
-    candidates: MediaBranchCandidateImage[]
+    candidates: MediaBranchCandidateImage[],
 ): ChatMessage => {
     const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]))
     const blocks: Array<Record<string, any>> = [{
@@ -618,8 +631,8 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
     if (requiredCapabilityProducedCapabilityOnlyOutput(state)) return {}
     const hasCapabilityMediaOutput = (
         state.capabilityOutputMediaAssetIds
-        ?? state.capabilityOutputAssetIds
-        ?? []
+            ?? state.capabilityOutputAssetIds
+            ?? []
     ).length > 0
     if (!hasCapabilityMediaOutput && !state.imageModelVersion && !state.videoModelVersion) return {}
     const snapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
@@ -633,12 +646,18 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
     if (snapshot.candidates.length === 0) {
         const resolution = buildFreshBranchResolution(state)
         deps.publisher.mediaBranchResolved(resolution)
-        info(`[MediaBranchResolver] resolved fresh branch ${JSON.stringify({
-            workspaceId: state.workspaceId,
-            aiChatThreadId: state.aiChatThreadId,
-            branchId: resolution.branchId,
-            rationale: resolution.rationale,
-        }, null, 0)}`)
+        info(`[MediaBranchResolver] resolved fresh branch ${
+            JSON.stringify(
+                {
+                    workspaceId: state.workspaceId,
+                    aiChatThreadId: state.aiChatThreadId,
+                    branchId: resolution.branchId,
+                    rationale: resolution.rationale,
+                },
+                null,
+                0,
+            )
+        }`)
         return { mediaBranchResolution: resolution }
     }
 
@@ -718,20 +737,26 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
         const messages = [resolvedBranchMessage, ...cleanedMessages]
 
         deps.publisher.mediaBranchResolved(resolution)
-        info(`[MediaBranchResolver] resolved ${JSON.stringify({
-            workspaceId: state.workspaceId,
-            aiChatThreadId: state.aiChatThreadId,
-            provider,
-            model: result.modelName || modelVersion,
-            activeTargetCandidateId: snapshot.activeTargetCandidateId,
-            mode: resolution.mode,
-            operationKind: resolution.operationKind,
-            targetCandidateId: resolution.targetCandidateId,
-            referenceCandidateIds: resolution.referenceCandidateIds,
-            excludedCandidateIds: resolution.excludedCandidateIds,
-            confidence: resolution.confidence,
-            rationale: resolution.rationale,
-        }, null, 0)}`)
+        info(`[MediaBranchResolver] resolved ${
+            JSON.stringify(
+                {
+                    workspaceId: state.workspaceId,
+                    aiChatThreadId: state.aiChatThreadId,
+                    provider,
+                    model: result.modelName || modelVersion,
+                    activeTargetCandidateId: snapshot.activeTargetCandidateId,
+                    mode: resolution.mode,
+                    operationKind: resolution.operationKind,
+                    targetCandidateId: resolution.targetCandidateId,
+                    referenceCandidateIds: resolution.referenceCandidateIds,
+                    excludedCandidateIds: resolution.excludedCandidateIds,
+                    confidence: resolution.confidence,
+                    rationale: resolution.rationale,
+                },
+                null,
+                0,
+            )
+        }`)
 
         // For video generation, map the explicit references and VLM-assigned roles onto the video
         // provider's inputs as FRAME CONDITIONING ONLY (never asset/style refs):

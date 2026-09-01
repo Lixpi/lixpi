@@ -1,6 +1,11 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import {
     NATS_SUBJECTS,
     type CharacterFidelityAssessmentRequest,
@@ -257,9 +262,12 @@ describe('Character Creator API platform adapter', () => {
 
     it('uses the internal fidelity subject and stops waiting when cancelled', async () => {
         const response = {
-            jobId: 'job-1', panelId: 'head-front', attemptId: 'attempt-1',
+            jobId: 'job-1',
+            panelId: 'head-front',
+            attemptId: 'attempt-1',
             metric: { available: false, unavailableReason: 'source-face-not-found' as const },
-            sourceDetections: [], candidateDetections: [],
+            sourceDetections: [],
+            candidateDetections: [],
             detector: { artifactId: 'yunet', sha256: 'a' },
             recognizer: { artifactId: 'sface', sha256: 'b' },
         }

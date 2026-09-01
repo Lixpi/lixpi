@@ -19,6 +19,7 @@ These docs are authored as Markdoc-friendly Markdown and render to a static HTML
 | [System Architecture](platform/SYSTEM-ARCHITECTURE.md) | Services, the NATS backbone, Capability ownership boundaries, subject naming, key design decisions, horizontal scaling |
 | [Development](platform/DEVELOPMENT.md) | Local dev quick start: env wizard, infrastructure init, running services |
 | [AI Model Registry](development-workflow/AI-MODEL-REGISTRY.md) | Required synchronization between provider documentation, registry data, model sync, provider requests, configuration controls, tests, and developer docs |
+| [TypeScript Linting and Formatting](testing/TypeScript/TYPESCRIPT-QUALITY.md) | Docker-only per-service and per-package dprint and Oxlint commands |
 | [Nano Stores](platform/NANOSTORES.md) | Frontend store conventions for `nanostores` and `@nanostores/persistent` |
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | How to discover, move, link, render, and verify docs as the architecture changes |
 
@@ -54,17 +55,17 @@ The cross-cutting spine. Every feature references these instead of re-explaining
 
 ## Canvas
 
-The infinite workspace surface: data model, interaction, and the DOM/PIXI renderer.
+Product behavior and persistence stay in the central workspace guides. Rendering, reusable components and Lixpi canvas composition are documented with their packages.
 
 | Page | What it covers |
 |------|----------------|
 | [Workspace Model](canvas/WORKSPACE-MODEL.md) | Core concepts, the `CanvasState`/`CanvasNode`/`WorkspaceEdge` data model, stores, NATS subjects, HTTP endpoints, persistence, media lifecycle, storage durability, lazy loading |
 | [User Flows](canvas/USER-FLOWS.md) | Opening a workspace, creating documents, uploading/converting/saving/deleting/moving/editing media |
-| [Edges & Connections](canvas/EDGES-AND-CONNECTIONS.md) | `WorkspaceConnectionManager`, proximity connect, routing, handles, selection/deletion/persistence |
-| [Rendering Engine](canvas/RENDERING-ENGINE.md) | DOM/PIXI ownership split, layer stack, viewport bridge, sync pipeline, config ownership, file map |
-| [Image Rendering Performance](canvas/IMAGE-RENDERING-PERFORMANCE.md) | LoD tiers, texture cache, decode pool, mipmaps, edge renderer, optimizations, known issues, tuning constants |
-| [Collision Resolution](canvas/COLLISION-RESOLUTION.md) | The geometry-agnostic resolver, when it runs, parent/child rules, invariants |
-| [Visual Effects](canvas/VISUAL-EFFECTS.md) | Gradient rendering families, shared easing, the shifting background, the color-analysis tool |
+| [Canvas Engine](../packages/lixpi/canvas-engine/README.md) | Rendering, scene contracts, node registration, input, connectors, collisions and resource ownership |
+| [Canvas Components](../packages/lixpi/canvas-components/README.md) | Reusable media surfaces, glass, outlines, loading effects and examples |
+| [Lixpi Canvas Components](../packages/lixpi/canvas-components-lixpi-specific/README.md) | Workspace composition, product nodes, media events, host ports and persistence |
+| [UI Primitives](../packages/lixpi/ui-primitives/README.md) | Shared DOM templates, SVG utilities, colors, gradients and easing |
+| [UI Kit](../packages/lixpi/ui-kit/README.md) | Panels, menus, tooltips, controls, previews and icon artwork |
 
 ## AI Chat & Context
 
@@ -82,7 +83,7 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 | [Video Generation](media-generation/VIDEO-GENERATION.md) | VEO submit/poll, the `generate_video` tool, the VEO provider, storage/durability, video events, the video node, model sync, usage, extension |
 | [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md) | The structured VLM resolver, candidate snapshot, persisted metadata, placement rules, branch-root provenance, balanced branch-tree layout, references-vs-lineage |
 | [Media Reference Identity and Provider Moderation](media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md) | Provider-safe aliases, local ambiguity resolution, durable requests, Asset identity attestations, native verification, provider policy profiles, and recoverable operation nodes |
-| [Video Player Controls](media-generation/VIDEO-PLAYER-CONTROLS.md) | The shared SVG control bar, two mount points, scrubbing, accessibility |
+| [Video Player Controls](../packages/lixpi/ui-kit/docs/VIDEO-PLAYER-CONTROLS.md) | The shared SVG control bar, two mount points, scrubbing, accessibility |
 
 ## Library
 
@@ -100,10 +101,13 @@ The infinite workspace surface: data model, interaction, and the DOM/PIXI render
 
 ## Conventions & deep dives
 
+Shared browser building blocks are documented in [UI Primitives](../packages/lixpi/ui-primitives/README.md): DOM templates, SVG utilities, gradients, animation timing and transition helpers. The [UI Kit](../packages/lixpi/ui-kit/README.md) owns shared controls and icon artwork.
+
 | Page | What it covers |
 |------|----------------|
 | [Maintaining Documentation](MAINTAINING-DOCUMENTATION.md) | Documentation discovery, page moves, Markdoc compatibility, link hygiene, and verification |
 | [AI Model Registry](development-workflow/AI-MODEL-REGISTRY.md) | Container-only registry maintenance and the required code/data synchronization contract |
+| [TypeScript Linting and Formatting](testing/TypeScript/TYPESCRIPT-QUALITY.md) | Docker-only dprint and Oxlint checks, fixes, cache behavior, and import formatting |
 | [Documentation Style Guide Selection](documentation-style-guides/USING-DOCUMENTATION-STYLE-GUIDES.md) | Which documentation style sources apply to a given docs change |
 | [Coding Style Guide Selection](coding-style-guides/USING-CODING-STYLE-GUIDES.md) | Which coding style guides apply to the files being changed — TypeScript rules bind repo-wide |
 | [TypeScript Coding Style](coding-style-guides/TYPESCRIPT.md) | TypeScript imports, type definitions, class-first ownership, DOM templating, and modern JavaScript rules — mandatory for all TypeScript in the repo |

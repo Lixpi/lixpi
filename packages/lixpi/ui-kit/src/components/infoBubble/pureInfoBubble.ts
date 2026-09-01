@@ -1,10 +1,13 @@
-import { applyStyle, html } from '../../dom/domTemplates.ts'
+import {
+    applyStyle,
+    html,
+} from '@lixpi/ui-primitives/dom'
 import { infoBubbleStateManager } from './infoBubbleStateManager.ts'
 
 type InfoBubbleTheme = 'dark' | 'light'
 type InfoBubbleArrowSide = 'top' | 'bottom' | 'left' | 'right'
-type InfoBubbleOffset = { x?: number, y?: number }
-type InfoBubblePosition = { x: number, y: number }
+type InfoBubbleOffset = { x?: number; y?: number }
+type InfoBubblePosition = { x: number; y: number }
 
 export type InfoBubbleConfig = {
     id: string
@@ -130,7 +133,7 @@ class InfoBubble implements InfoBubbleInstance {
         }
     }
 
-    private measureArrowDimensions(): { crossOffset: number, outerSize: number } {
+    private measureArrowDimensions(): { crossOffset: number; outerSize: number } {
         const beforeStyle = window.getComputedStyle(this.bubbleContainer, '::before')
         const borders = beforeStyle.borderWidth
             .split(' ')

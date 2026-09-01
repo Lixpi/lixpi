@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     callStructuredVlm: vi.fn(),
@@ -14,8 +20,15 @@ vi.mock('../../../../llm/structured-vlm/structured-vlm-client.ts', () => ({
     callStructuredVlm: mocks.callStructuredVlm,
 }))
 
-import { buildExtractorMessages, runAxisVlm, wrapAxisSchema } from './_helpers.ts'
-import type { SceneAssessment, StyleExtractionState } from '../types.ts'
+import {
+    buildExtractorMessages,
+    runAxisVlm,
+    wrapAxisSchema,
+} from './_helpers.ts'
+import type {
+    SceneAssessment,
+    StyleExtractionState,
+} from '../types.ts'
 
 function makeScene(overrides: Partial<SceneAssessment> = {}): SceneAssessment {
     return {

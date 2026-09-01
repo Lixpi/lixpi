@@ -58,7 +58,7 @@ export const buildImageModelPrompt = (state: ProviderState): string => {
 
     return [
         'MANDATORY VISUAL CAPABILITY TRANSFER: the attached capability reference image(s) and capability brief are not optional inspiration. They define the medium the generated image must be made of.',
-        'The new subject MUST be CONSTRUCTED FROM this medium itself \u2014 brush strokes, washes, paper tooth, grain, deckle behavior, palette, edge softness, and mark-making must appear on the subject\'s own surface (its body, fur, skin, form), not only as a frame or background. A clean, smooth, digitally-rendered subject placed on top of a textured paper backdrop is a REJECTED result.',
+        "The new subject MUST be CONSTRUCTED FROM this medium itself \u2014 brush strokes, washes, paper tooth, grain, deckle behavior, palette, edge softness, and mark-making must appear on the subject's own surface (its body, fur, skin, form), not only as a frame or background. A clean, smooth, digitally-rendered subject placed on top of a textured paper backdrop is a REJECTED result.",
         'Do not copy the reference subject, composition, pose, or layout. Carry only the medium and its mark-making behavior.',
         capabilityUsagePrompt ? `VISUAL CAPABILITY BRIEF:\n${capabilityUsagePrompt}` : undefined,
         'USER IMAGE REQUEST:',
@@ -172,13 +172,15 @@ const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceRe
     )
     const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
-    return resolution.referenceCandidateIds.map((candidateId, index) => buildBranchReference({
-        imageUrl: '',
-        index,
-        candidateId,
-        candidate: candidatesById.get(candidateId),
-        decision: decisionsById.get(candidateId),
-    }))
+    return resolution.referenceCandidateIds.map((candidateId, index) =>
+        buildBranchReference({
+            imageUrl: '',
+            index,
+            candidateId,
+            candidate: candidatesById.get(candidateId),
+            decision: decisionsById.get(candidateId),
+        })
+    )
 }
 
 const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
@@ -236,13 +238,15 @@ const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedR
 const readCapabilityReviewTrace = (value: unknown): CapabilityMediaReviewTrace | undefined => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
     const candidate = value as Partial<CapabilityMediaReviewTrace>
-    if (candidate.traceVersion !== 'capability-media-review-v1'
+    if (
+        candidate.traceVersion !== 'capability-media-review-v1'
         || typeof candidate.capabilityId !== 'string'
         || typeof candidate.summary !== 'string'
         || candidate.automaticRetries !== 0
         || (candidate.recommendation !== undefined && typeof candidate.recommendation !== 'string')
         || !Array.isArray(candidate.steps)
-        || candidate.steps.some(step => !step
+        || candidate.steps.some(step =>
+            !step
             || typeof step.stepId !== 'string'
             || typeof step.title !== 'string'
             || !['completed', 'needs-review', 'unavailable'].includes(step.status)
@@ -251,7 +255,9 @@ const readCapabilityReviewTrace = (value: unknown): CapabilityMediaReviewTrace |
                 || step.score < 0
                 || step.score > 1))
             || !Array.isArray(step.issues)
-            || step.issues.some(issue => typeof issue !== 'string'))) return undefined
+            || step.issues.some(issue => typeof issue !== 'string')
+        )
+    ) return undefined
     return candidate as CapabilityMediaReviewTrace
 }
 
@@ -279,18 +285,20 @@ export const buildImageGenerationTrace = (state: ProviderState): ImageGeneration
         referenceImages: buildReferenceTrace(state),
         excludedReferences: buildExcludedTrace(state),
         capabilityReview: readCapabilityReviewTrace(state.capabilityMediaTrace),
-        resolver: resolution ? {
-            resolverKind: resolution.resolverKind,
-            resolverVersion: resolution.resolverVersion,
-            resolverModelProvider: resolution.resolverModelProvider,
-            resolverModelId: resolution.resolverModelId,
-            mode: resolution.mode,
-            operationKind: resolution.operationKind,
-            confidence: resolution.confidence,
-            rationale: resolution.rationale,
-            targetCandidateId: resolution.targetCandidateId,
-            parentCandidateId: resolution.parentCandidateId,
-            branchId: resolution.branchId,
-        } : undefined,
+        resolver: resolution
+            ? {
+                resolverKind: resolution.resolverKind,
+                resolverVersion: resolution.resolverVersion,
+                resolverModelProvider: resolution.resolverModelProvider,
+                resolverModelId: resolution.resolverModelId,
+                mode: resolution.mode,
+                operationKind: resolution.operationKind,
+                confidence: resolution.confidence,
+                rationale: resolution.rationale,
+                targetCandidateId: resolution.targetCandidateId,
+                parentCandidateId: resolution.parentCandidateId,
+                branchId: resolution.branchId,
+            }
+            : undefined,
     }
 }

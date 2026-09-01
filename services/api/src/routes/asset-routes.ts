@@ -16,7 +16,10 @@ import BlobModel from '../models/blob.ts'
 import Workspace from '../models/workspace.ts'
 import { getAssetRequesterContext } from '../services/asset-requester-context.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'
-import { AssetFileRejectedError, ingestAssetFile } from '../services/asset-ingest.ts'
+import {
+    AssetFileRejectedError,
+    ingestAssetFile,
+} from '../services/asset-ingest.ts'
 import { fetchPublicRemoteFile } from '../services/public-remote-file.ts'
 
 const router = Router()
@@ -51,14 +54,16 @@ router.post('/workspaces/:workspaceId', authenticateRequest, upload.single('file
     const organizationId = workspace.organizationId
     if (!req.file) return res.status(400).json({ error: 'No file provided' })
     try {
-        return res.json(await ingestAssetFile({
-            organizationId,
-            workspaceId,
-            ownerUserId: userId,
-            buffer: req.file.buffer,
-            originalName: normalizeUploadedFilename(req.file.originalname),
-            ...(req.body?.expectedKind === 'image' ? { expectedKind: 'image' as const } : {}),
-        }))
+        return res.json(
+            await ingestAssetFile({
+                organizationId,
+                workspaceId,
+                ownerUserId: userId,
+                buffer: req.file.buffer,
+                originalName: normalizeUploadedFilename(req.file.originalname),
+                ...(req.body?.expectedKind === 'image' ? { expectedKind: 'image' as const } : {}),
+            }),
+        )
     } catch (error) {
         if (error instanceof AssetFileRejectedError) return res.status(422).json({ error: error.reason })
         console.error('Asset upload failed:', error)
@@ -80,13 +85,15 @@ router.post('/workspaces/:workspaceId/import-url', authenticateRequest, async (r
     const organizationId = workspace.organizationId
     try {
         const remote = await fetchPublicRemoteFile(url)
-        return res.json(await ingestAssetFile({
-            organizationId,
-            workspaceId,
-            ownerUserId: userId,
-            ...remote,
-            ...(req.body?.expectedKind === 'image' ? { expectedKind: 'image' as const } : {}),
-        }))
+        return res.json(
+            await ingestAssetFile({
+                organizationId,
+                workspaceId,
+                ownerUserId: userId,
+                ...remote,
+                ...(req.body?.expectedKind === 'image' ? { expectedKind: 'image' as const } : {}),
+            }),
+        )
     } catch (error) {
         if (error instanceof AssetFileRejectedError) return res.status(422).json({ error: error.reason })
         const message = error instanceof Error ? error.message : String(error)

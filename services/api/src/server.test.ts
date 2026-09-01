@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    it,
+    expect,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => {
     const appUseCalls: Array<{ args: unknown[] }> = []

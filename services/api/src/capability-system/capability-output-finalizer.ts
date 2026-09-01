@@ -31,17 +31,18 @@ type CapabilityOutputFinalizer = {
 const capabilityOutputFinalizers = new Map<string, CapabilityOutputFinalizer>([[
     ACTION_TIMELINE_TOOL_ID,
     {
-        finalize: async (state, output) => await finalizeActionTimelineArtifact({
-            assetId: output.assetId,
-            capabilityRunId: output.capabilityRunId,
-            input: output.input,
-            variant: output.variant,
-            generationRun: output.generationRun,
-            workspaceId: state.workspaceId,
-            userId: requireEventMetaString(state.eventMeta.userId, 'USER_ID_REQUIRED'),
-            organizationId: requireEventMetaString(state.eventMeta.organizationId, 'ORGANIZATION_ID_REQUIRED'),
-            conversationAssetId: state.aiChatThreadId,
-        }),
+        finalize: async (state, output) =>
+            await finalizeActionTimelineArtifact({
+                assetId: output.assetId,
+                capabilityRunId: output.capabilityRunId,
+                input: output.input,
+                variant: output.variant,
+                generationRun: output.generationRun,
+                workspaceId: state.workspaceId,
+                userId: requireEventMetaString(state.eventMeta.userId, 'USER_ID_REQUIRED'),
+                organizationId: requireEventMetaString(state.eventMeta.organizationId, 'ORGANIZATION_ID_REQUIRED'),
+                conversationAssetId: state.aiChatThreadId,
+            }),
         discard: async (state, output) => {
             await discardStagedActionTimelineArtifact({
                 assetId: output.assetId,

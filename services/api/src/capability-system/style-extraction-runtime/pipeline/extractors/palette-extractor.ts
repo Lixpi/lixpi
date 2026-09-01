@@ -61,8 +61,7 @@ const extractor: StyleExtractor = {
         if (intent && /palette|colou?r/i.test(intent)) return true
         return (scene.axisDominance['palette'] ?? 0) >= 0.3
     },
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

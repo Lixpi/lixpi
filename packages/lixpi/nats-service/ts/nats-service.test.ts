@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import NatsService, { generateSelfIssuedJWT } from './nats-service.ts'
 
@@ -51,7 +58,7 @@ vi.mock('@nats-io/jetstream', () => ({
 }))
 
 vi.mock('@nats-io/obj', () => ({
-    Objm: function (this: any) {
+    Objm: function(this: any) {
         return objmConstructorMock(...arguments)
     },
 }))
@@ -69,7 +76,7 @@ type MockSubscription = {
 }
 
 const createAsyncIterable = <T>(items: T[]): MockSubscription => ({
-    [Symbol.asyncIterator]: async function* () {
+    [Symbol.asyncIterator]: async function*() {
         for (const item of items) {
             yield item
         }
@@ -77,9 +84,11 @@ const createAsyncIterable = <T>(items: T[]): MockSubscription => ({
 })
 
 const createMockConnection = (overrides: Record<string, any> = {}) => {
-    const protocolSubs = new Map(overrides.protocolSubs ?? [
-        ['noop', { subject: 'noop' }],
-    ])
+    const protocolSubs = new Map(
+        overrides.protocolSubs ?? [
+            ['noop', { subject: 'noop' }],
+        ],
+    )
     return {
         getServer: vi.fn().mockReturnValue('nats://localhost:4222'),
         isClosed: vi.fn().mockReturnValue(overrides.isClosed ?? false),
@@ -107,7 +116,7 @@ const decodeJwtLikePayload = (token: string) => {
 }
 
 describe('NatsService', () => {
-    let seedKeyPair: { getPublicKey: ReturnType<typeof vi.fn>, sign: ReturnType<typeof vi.fn> }
+    let seedKeyPair: { getPublicKey: ReturnType<typeof vi.fn>; sign: ReturnType<typeof vi.fn> }
     let objmMock: any
     let jetstreamClientMock: any
     let jetstreamManagerMockInstance: any
@@ -372,9 +381,14 @@ describe('NatsService', () => {
             const service = new (NatsService as any)({})
             service['nc'] = connectionMock
 
-            service.reply('inbox', async () => {
-                throw new Error('BUFFER_REPLY_FAILED')
-            }, {}, 'buffer')
+            service.reply(
+                'inbox',
+                async () => {
+                    throw new Error('BUFFER_REPLY_FAILED')
+                },
+                {},
+                'buffer',
+            )
             await flushPending()
 
             const response = msg.respond.mock.calls[0]?.[0]
@@ -394,7 +408,7 @@ describe('NatsService', () => {
             expect(connectionMock.request).toHaveBeenCalledWith(
                 'topic',
                 JSON.stringify({ request: true }),
-                { timeout: 1000 }
+                { timeout: 1000 },
             )
         })
     })
@@ -583,7 +597,7 @@ describe('NatsService', () => {
                     name: 'stream-x',
                     subjects: ['a', 'b', 'c'],
                     num_replicas: 1,
-                })
+                }),
             )
             expect(streamInfo.config.subjects).toEqual(['a', 'b', 'c'])
         })
@@ -675,7 +689,7 @@ describe('NatsService', () => {
             expect(jetstreamClientMock.publish).toHaveBeenCalledWith(
                 'subject',
                 new TextEncoder().encode(JSON.stringify({ done: true })),
-                { msgID: 'm1' }
+                { msgID: 'm1' },
             )
             expect(jetstreamClientMock.publish).toHaveBeenCalledWith('subject', new Uint8Array([1, 2]), { msgID: 'm2' })
             expect(jsonResult).toEqual({ seq: 4 })

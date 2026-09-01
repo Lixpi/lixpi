@@ -1,6 +1,13 @@
 'use strict'
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import {
     createGenericAiModelMultiSelect,

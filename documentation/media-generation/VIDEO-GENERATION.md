@@ -12,7 +12,7 @@ Structurally, video adds a sibling to every image primitive: a `generate_video` 
 This page covers what is specific to video generation. The shared LangGraph workflow, dual-model architecture, post-stream 3-way router, tool injection/extraction mechanism, routers, stream lifecycle, and shared `ProviderState` are covered in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md).
 
 {% callout type="note" %}
-The shared workflow, dual-model routing, the `generate_video` tool schema, the 3-way `routeAfterStream` router, and the routers live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection (including which prior generated video continues a branch) live in [Branch Lineage](./BRANCH-LINEAGE.md). A source/uploaded first-frame image is only a reference and placement anchor; it does not become a generated-output connector parent unless it is itself an existing generated-media branch member selected by the API lineage planner. The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The playback control bar lives in [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md).
+The shared workflow, dual-model routing, the `generate_video` tool schema, the 3-way `routeAfterStream` router, and the routers live in [AI Generation Pipeline](../platform/AI-GENERATION-PIPELINE.md). Canvas placement, branch lineage, branch-root provenance, balanced branch-tree layout, and VLM reference selection (including which prior generated video continues a branch) live in [Branch Lineage](./BRANCH-LINEAGE.md). A source/uploaded first-frame image is only a reference and placement anchor; it does not become a generated-output connector parent unless it is itself an existing generated-media branch member selected by the API lineage planner. The full stream-event catalog lives in [Streaming and Events](../platform/STREAMING-AND-EVENTS.md). The playback control bar lives in [Video Player Controls](../../packages/lixpi/ui-kit/docs/VIDEO-PLAYER-CONTROLS.md).
 {% /callout %}
 
 ## Explicit Media Mode
@@ -314,7 +314,7 @@ A completed `VideoCanvasNode` can be continued. The browser sends its `assetId` 
 | Mode/model selection | Explicit Image mode with its synchronized default | Explicit Video mode with its synchronized default |
 
 {% callout type="note" %}
-Branch lineage, branch-root provenance, balanced branch-tree layout, canvas positioning/collision, the generation-trace meta-info renderer, playback controls, and descriptors are **shared**, not differences. Video reuses workspace relevance, the same candidate-snapshot path, branch-tree layout, the collision cleanup pass, the `createImageGenerationTraceDetails` renderer, `components/videoControls`, and the `MediaDescriptor`/`ContentDescriptor` shape used by images. A video candidate simply contributes its mid-frame still instead of a full image. See [Branch Lineage](./BRANCH-LINEAGE.md), [Collision Resolution](../canvas/COLLISION-RESOLUTION.md), [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md), and [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md).
+Branch lineage, branch-root provenance, balanced branch-tree layout, canvas positioning/collision, the generation-trace meta-info renderer, playback controls, and descriptors are **shared**, not differences. Video reuses workspace relevance, the same candidate-snapshot path, branch-tree layout, the collision cleanup pass, the `createImageGenerationTraceDetails` renderer, `components/videoControls`, and the `MediaDescriptor`/`ContentDescriptor` shape used by images. A video candidate simply contributes its mid-frame still instead of a full image. See [Branch Lineage](./BRANCH-LINEAGE.md), [Collision Resolution](../../packages/lixpi/canvas-engine/docs/COLLISION-RESOLUTION.md), [Video Player Controls](../../packages/lixpi/ui-kit/docs/VIDEO-PLAYER-CONTROLS.md), and [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md).
 {% /callout %}
 
 ## File Structure
@@ -355,13 +355,20 @@ services/api/src/
     └── media-descriptor-subjects.ts  # authorize Asset and resolve representative rendition
 
 services/web-ui/src/
-├── infographics/workspace/
-│   ├── WorkspaceCanvas.ts            # VideoCanvasNode placement, lifecycle callbacks, extend-in-new-thread
-│   ├── rendering/videoNodeHandler.ts # PIXI poster + authenticated DOM video element
-│   ├── pixiMediaLayer.ts             # dispatch non-image nodes to the registry
-│   └── canvasBubbleMenuItems.ts      # CANVAS_VIDEO_CONTEXT (extend / connect / delete)
-├── components/videoControls/         # shared SVG playback controls
-└── services/ai-interaction-service.ts # VIDEO_* handlers → chat segments
+├── canvas-adapters/workspace-media.ts # authenticated source, upload and download ports
+└── services/ai-interaction-service.ts # VIDEO_* handlers to conversation segments
+
+packages/lixpi/canvas-components-lixpi-specific/src/frontend/
+├── workspace/workspace-canvas.ts     # product composition and lifecycle
+├── media/workspace-media-layer.ts    # video state and poster projection
+├── media/workspace-video-chrome.ts   # UI-kit controls on native playback
+└── menus/canvas-bubble-menu-items.ts  # video actions
+
+packages/lixpi/canvas-components/src/frontend/media/
+└── playback-node.ts                  # reusable poster and native playback surface
+
+packages/lixpi/ui-kit/src/components/videoControls/
+                                      # shared SVG playback controls
 
 packages/lixpi/constants/
 ├── ts/types.ts                       # VideoCanvasNode, VideoGeneratedByMetadata, Asset, Blob, AiModel video fields
@@ -394,7 +401,7 @@ packages/lixpi/constants/
 - [Image Generation](./IMAGE-GENERATION.md) — the sibling image branch this pipeline extends.
 - [Branch Lineage](./BRANCH-LINEAGE.md) — canvas placement, branch identity, branch-root provenance, balanced branch-tree layout, and the structured VLM resolver (including how a prior video continues a branch via its mid-frame still).
 - [Streaming and Events](../platform/STREAMING-AND-EVENTS.md) — the complete stream-event catalog and the browser render path.
-- [Video Player Controls](./VIDEO-PLAYER-CONTROLS.md) — the shared SVG playback control bar and its two mount points.
+- [Video Player Controls](../../packages/lixpi/ui-kit/docs/VIDEO-PLAYER-CONTROLS.md) — the shared SVG playback control bar and its two mount points.
 - [Media Library](../library/MEDIA-LIBRARY.md) — saving and materializing reusable video copies.
-- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the PIXI media layer and DOM chrome overlay that render video nodes.
+- [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — the PIXI media layer and DOM chrome overlay that render video nodes.
 - [Media & Content Descriptors](../ai-chat/MEDIA-DESCRIPTORS.md) — the VLM analysis descriptor generated videos request from their representative still/poster.

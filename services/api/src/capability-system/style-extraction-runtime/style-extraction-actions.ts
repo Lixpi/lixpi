@@ -7,7 +7,10 @@ import type {
 
 import { extractStyleReferenceImagesFromMessages } from './pipeline/style-extraction-state.ts'
 import { runRouter } from './pipeline/stage1-router.ts'
-import { runExtractorAxis, selectApplicableExtractors } from './pipeline/stage2-extractors.ts'
+import {
+    runExtractorAxis,
+    selectApplicableExtractors,
+} from './pipeline/stage2-extractors.ts'
 import { materializeSourceCrops } from './pipeline/stage3-crops.ts'
 import { synthesizeStyle } from './pipeline/stage4-synthesis.ts'
 import { generateSamples } from './pipeline/stage5-samples.ts'

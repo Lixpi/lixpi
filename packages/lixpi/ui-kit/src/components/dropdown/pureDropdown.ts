@@ -1,7 +1,10 @@
-import { html } from '../../dom/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 import { chevronDownIcon } from '../../svg/svgIcons.ts'
 import { uiKitSettings } from '../../runtime-settings.ts'
-import { createInfoBubble, type InfoBubbleInstance } from '../infoBubble/index.ts'
+import {
+    createInfoBubble,
+    type InfoBubbleInstance,
+} from '../infoBubble/index.ts'
 
 // Inject fill color utility (same as original dropdown)
 function injectFillColor(svg: string, color?: string): string {
@@ -79,7 +82,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         popoverClassName = '',
         disableTriggerHover = false,
         errorState,
-        onSelect
+        onSelect,
     } = config
 
     let availableTags = config.availableTags || []
@@ -92,7 +95,7 @@ export function createPureDropdown<Option extends DropdownOption>(
 
     const modalityFilterEnabled = Boolean(
         enableTagFilter
-        && uiKitSettings.modelSelectorDropdown.useModalityFilter
+            && uiKitSettings.modelSelectorDropdown.useModalityFilter,
     )
 
     // Prevent ProseMirror from handling mousedown on dropdown
@@ -176,8 +179,7 @@ export function createPureDropdown<Option extends DropdownOption>(
 
         submenuList.innerHTML = ''
         filteredOptions.forEach(option => {
-            const isSelected =
-                option === currentSelectedValue
+            const isSelected = option === currentSelectedValue
                 || option.title === currentSelectedValue?.title
 
             const li = html`
@@ -212,11 +214,14 @@ export function createPureDropdown<Option extends DropdownOption>(
     }
 
     // Build header content (if tag filter enabled)
-    const headerContent = modalityFilterEnabled && availableTags.length > 0 ? html`
+    const headerContent = modalityFilterEnabled && availableTags.length > 0
+        ? html`
         <div class="tag-filter" onmousedown=${preventProseMirrorEdit}>
             <div class="tag-filter-title">Filter by modality:</div>
             <div class="tag-filter-list">
-                ${availableTags.map(tag => html`
+                ${
+            availableTags.map(tag =>
+                html`
                     <span
                         class="tag-filter-item"
                         role="button"
@@ -224,10 +229,13 @@ export function createPureDropdown<Option extends DropdownOption>(
                         data-tag="${tag}"
                         onclick=${(e: Event) => handleTagFilterClick(e, tag)}
                     >${tag}</span>
-                `)}
+                `
+            )
+        }
             </div>
         </div>
-    ` : null
+    `
+        : null
 
     // Only absorb wheel events when the dropdown can actually scroll in that direction.
     // At scroll boundaries or when content doesn't overflow, let the event propagate
@@ -295,7 +303,7 @@ export function createPureDropdown<Option extends DropdownOption>(
         onClose: () => {
             dom.classList.remove('dropdown-open')
             dotsMenu?.classList.remove('is-active')
-        }
+        },
     })
     infoBubble.dom.setAttribute('data-side-panel-no-drag', 'true')
 
@@ -319,7 +327,9 @@ export function createPureDropdown<Option extends DropdownOption>(
             : null
         const nextTitle = activeErrorState
             ? activeErrorState.title || uiKitSettings.dropdown.errorState.fallbackTitle
-            : renderTitleForSelectedValue ? (currentSelectedValue?.title || '') : ''
+            : renderTitleForSelectedValue
+            ? (currentSelectedValue?.title || '')
+            : ''
         const nextTitleColor = activeErrorState
             ? activeErrorState.textColor || uiKitSettings.dropdown.errorState.textColor
             : ''
@@ -393,6 +403,6 @@ export function createPureDropdown<Option extends DropdownOption>(
         setErrorState: (newErrorState?: DropdownErrorState) => {
             currentErrorState = newErrorState
             updateSelectedDisplay()
-        }
+        },
     }
 }

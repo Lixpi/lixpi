@@ -4,8 +4,17 @@ import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-import { log, info, warn, err } from '@lixpi/debug-tools'
-import { plInfo, plWarn, plError } from './pulumiLogger.ts'
+import {
+    log,
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
+import {
+    plInfo,
+    plWarn,
+    plError,
+} from './pulumiLogger.ts'
 
 import { createSsmParameters } from './resources/SSM-parameters.ts'
 import { createDynamoDbTables } from './resources/db/DynamoDB-tables.ts'
@@ -16,16 +25,24 @@ import { createNatsClusterService } from './resources/NATS-cluster/NATS-cluster.
 import { createMainApiService } from './resources/main-api-service.ts'
 import { createNexNodeService } from './resources/nex-node/nex-node.ts'
 import { createCertificate } from './resources//certificate.ts'
-import { createDnsRecords, createHostedZone, createDelegationRecord, getOrCreateHostedZone } from './resources/dns-records.ts'
+import {
+    createDnsRecords,
+    createHostedZone,
+    createDelegationRecord,
+    getOrCreateHostedZone,
+} from './resources/dns-records.ts'
 import { createWebUI } from './resources/web-ui.ts'
 import { formatStageResourceName } from '@lixpi/constants'
-import { createLambdaCertificateManager, createLambdaCertificateHelper } from './resources/certificate-manager/index.ts'
+import {
+    createLambdaCertificateManager,
+    createLambdaCertificateHelper,
+} from './resources/certificate-manager/index.ts'
 
 const {
     DOMAIN_NAME,
     HOSTED_ZONE_NAME,
-    AWS_ROUTE53_HOSTED_ZONE_ID,              // Child or root hosted zone (if exists)
-    AWS_ROUTE53_PARENT_HOSTED_ZONE_ID,       // Optional parent zone for delegation
+    AWS_ROUTE53_HOSTED_ZONE_ID, // Child or root hosted zone (if exists)
+    AWS_ROUTE53_PARENT_HOSTED_ZONE_ID, // Optional parent zone for delegation
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
     ANTHROPIC_USE_AWS_BEDROCK_INFERENCE,
@@ -76,11 +93,9 @@ const {
     VITE_AUTH0_REDIRECT_URI,
     VITE_STRIPE_PUBLIC_KEY,
     VITE_NATS_SERVER,
-
 } = process.env
 
 export const createInfrastructure = async () => {
-
     // Decide whether to deploy full AWS infra or use local-only resources
     const DEPLOY_TO_AWS = process.env.ENVIRONMENT !== 'local'
     const USE_LOCAL_DYNAMODB = !DEPLOY_TO_AWS
@@ -88,13 +103,13 @@ export const createInfrastructure = async () => {
     const dynamoDBtables = await createDynamoDbTables({
         ...(USE_LOCAL_DYNAMODB && {
             provider: new aws.Provider('local-dynamodb', {
-                region: ('us-east-1' as aws.Region),
+                region: 'us-east-1' as aws.Region,
                 accessKey: 'test',
                 secretKey: 'test',
                 skipCredentialsValidation: true,
                 skipRequestingAccountId: true,
                 endpoints: [{ dynamodb: DYNAMODB_ENDPOINT! }],
-            })
+            }),
         }),
     })
 
@@ -110,38 +125,38 @@ export const createInfrastructure = async () => {
     const networkInfrastructure = await createNetworkInfrastructure()
 
     // Configure provider to assume the role with Route53 permissions
-    const dnsProvider = new aws.Provider("dns-provider", {
+    const dnsProvider = new aws.Provider('dns-provider', {
         ...(HOSTED_ZONE_DNS_ROLE_ARN && {
             assumeRole: {
                 roleArn: HOSTED_ZONE_DNS_ROLE_ARN,
-                sessionName: "PulumiDeployment"
-            }
-        })
-    });
+                sessionName: 'PulumiDeployment',
+            },
+        }),
+    })
 
     // Hosted zone resolution strategy (idempotent & reuse-only):
     // 1. If explicit AWS_ROUTE53_HOSTED_ZONE_ID provided -> trust & reuse it (validate exists)
     // 2. Else try to find existing zone by name -> reuse
     // 3. Else create new one (and only then optionally delegate from parent)
-    let hostedZoneId: pulumi.Output<string>;
-    let createdHostedZone: aws.route53.Zone | undefined;
-    let delegationRecord: aws.route53.Record | undefined;
+    let hostedZoneId: pulumi.Output<string>
+    let createdHostedZone: aws.route53.Zone | undefined
+    let delegationRecord: aws.route53.Record | undefined
 
     if (AWS_ROUTE53_HOSTED_ZONE_ID) {
         const existing = await aws.route53.getZone({ name: DOMAIN_NAME! }).catch(e => {
             throw new Error(`Explicit AWS_ROUTE53_HOSTED_ZONE_ID provided but lookup by name failed for ${DOMAIN_NAME}: ${e}`)
-        });
-        hostedZoneId = pulumi.output(existing.zoneId);
+        })
+        hostedZoneId = pulumi.output(existing.zoneId)
     } else {
         const zoneResult = await getOrCreateHostedZone({
             orgName: ORG_NAME!,
             stage: STAGE!,
             domainName: DOMAIN_NAME!,
             serviceName: 'domain',
-        });
-        hostedZoneId = zoneResult.outputs.hostedZoneId;
+        })
+        hostedZoneId = zoneResult.outputs.hostedZoneId
         if (!zoneResult.reused) {
-            createdHostedZone = zoneResult.hostedZone;
+            createdHostedZone = zoneResult.hostedZone
             if (AWS_ROUTE53_PARENT_HOSTED_ZONE_ID) {
                 delegationRecord = createDelegationRecord({
                     parentHostedZoneId: AWS_ROUTE53_PARENT_HOSTED_ZONE_ID,
@@ -149,7 +164,7 @@ export const createInfrastructure = async () => {
                     nameServers: zoneResult.outputs.nameServers,
                     serviceName: 'domain',
                     dnsProvider,
-                });
+                })
             }
         }
     }
@@ -161,16 +176,16 @@ export const createInfrastructure = async () => {
         orgName: ORG_NAME!,
         stage: STAGE!,
         serviceName: 'shared-certificate',
-        dnsProvider
+        dnsProvider,
     })
 
     // Create CloudMap service discovery namespace (for DNS-based service discovery)
-    const cloudMapNamespaceName = `cloudmap.${DOMAIN_NAME}.internal`; // cloudmap.shelby-dev.lixpi.dev.internal
+    const cloudMapNamespaceName = `cloudmap.${DOMAIN_NAME}.internal` // cloudmap.shelby-dev.lixpi.dev.internal
     const cloudMapNamespace = new aws.servicediscovery.PrivateDnsNamespace(`${DOMAIN_NAME}-namespace`, {
         name: cloudMapNamespaceName,
         vpc: networkInfrastructure.vpc.id,
         description: `Private service discovery namespace for ${cloudMapNamespaceName}`,
-    });
+    })
 
     // Create ECS Cluster for Fargate tasks
     const ecsCluster = await createEcsCluster({
@@ -203,7 +218,7 @@ export const createInfrastructure = async () => {
 
     // Create NATS domain for certificate management - USE MANAGEABLE DOMAIN
     // The client connects to nats.cloudmap.shelby-dev.lixpi.dev, but we generate cert for controllable domain
-    const natsDomain = `nats.${DOMAIN_NAME}`  // nats.shelby-dev.lixpi.dev (manageable via Route53)
+    const natsDomain = `nats.${DOMAIN_NAME}` // nats.shelby-dev.lixpi.dev (manageable via Route53)
 
     // Create placeholder DNS record for NATS domain BEFORE certificate generation
     // This allows DNS-01 challenge to succeed since the domain will exist in DNS
@@ -212,11 +227,11 @@ export const createInfrastructure = async () => {
     const natsPlaceholderRecord = new aws.route53.Record(`nats-placeholder-record`, {
         name: natsDomain,
         zoneId: hostedZoneId,
-        type: "A",
+        type: 'A',
         allowOverwrite: true,
-        records: ["8.8.8.8"],
+        records: ['8.8.8.8'],
         ttl: 60,
-    });
+    })
 
     // Create Lambda-based Caddy certificate manager for NATS TLS certificates
     // Note: DNS record created above ensures domain exists for certificate validation
@@ -245,7 +260,7 @@ export const createInfrastructure = async () => {
         'secrets-manager',
         {
             secretsManagerPrefix: formatStageResourceName('nats-certs', ORG_NAME!, STAGE!),
-        }
+        },
     )
 
     // Create NATS cluster service - CRITICAL: Must wait for certificates to be generated first
@@ -265,24 +280,24 @@ export const createInfrastructure = async () => {
         publicSubnets: networkInfrastructure.publicSubnets,
         privateSubnets: networkInfrastructure.privateSubnets,
         serviceName: formatStageResourceName('nats-cluster', ORG_NAME!, STAGE!).toLowerCase(),
-        clientPort: 4222,           // 4222: client connections
-        httpManagementPort: 8222,   // 8222: HTTP management/info
-        clusterRoutingPort: 6222,   // 6222: cluster routing
+        clientPort: 4222, // 4222: client connections
+        httpManagementPort: 8222, // 8222: HTTP management/info
+        clusterRoutingPort: 6222, // 6222: cluster routing
         cpu: 256,
-        memory: 512,                // Changed from 256 to 512 - valid Fargate combination
+        memory: 512, // Changed from 256 to 512 - valid Fargate combination
         minCount: 3,
         maxCount: 3,
         desiredCount: 3,
         environment: {
-            NATS_CLUSTER_NAME: "Lixpi-NATS",
-            NATS_SERVER_NAME_BASE: "Lixpi-NATS",
+            NATS_CLUSTER_NAME: 'Lixpi-NATS',
+            NATS_SERVER_NAME_BASE: 'Lixpi-NATS',
             NATS_SYS_USER_PASSWORD: NATS_SYS_USER_PASSWORD!,
             NATS_REGULAR_USER_PASSWORD: NATS_REGULAR_USER_PASSWORD!,
             NATS_AUTH_NKEY_ISSUER_PUBLIC: NATS_AUTH_NKEY_ISSUER_PUBLIC!,
             NATS_AUTH_XKEY_ISSUER_PUBLIC: NATS_AUTH_XKEY_ISSUER_PUBLIC!,
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_SAME_ORIGIN: NATS_SAME_ORIGIN!,
-            NATS_ALLOWED_ORIGINS: NATS_ALLOWED_ORIGINS || "[]",
+            NATS_ALLOWED_ORIGINS: NATS_ALLOWED_ORIGINS || '[]',
             NATS_DEBUG_MODE: NATS_DEBUG_MODE!,
             NATS_TRACE_MODE: NATS_TRACE_MODE!,
         },
@@ -400,7 +415,7 @@ export const createInfrastructure = async () => {
             aiModelsListTable: dynamoDBtables.aiModelsListTable,
         },
         environment: {
-            NATS_SERVERS: natsClusterService.outputs.natsUrl,   // internal plain nats:// CloudMap URL
+            NATS_SERVERS: natsClusterService.outputs.natsUrl, // internal plain nats:// CloudMap URL
             NATS_NEX_NODE_NKEY_PUBLIC: NATS_NEX_NODE_NKEY_PUBLIC!,
             NATS_NEX_NODE_NKEY_SEED: NATS_NEX_NODE_NKEY_SEED!,
             NATS_JS_DOMAIN: 'lixpi',
@@ -448,7 +463,7 @@ export const createInfrastructure = async () => {
         },
         dockerBuildContext: '/usr/src/service',
         dockerfilePath: '/usr/src/service/services/web-ui/Dockerfile',
-    });
+    })
 
     // Create DNS records after the services are created
     const dnsRecords = pulumi.all([
@@ -475,27 +490,27 @@ export const createInfrastructure = async () => {
                 // Add the record for the apex domain
                 {
                     name: webDomainName,
-                    type: "A",
+                    type: 'A',
                     alias: {
                         name: webDistDns,
                         zoneId: webDistZoneId,
                         evaluateTargetHealth: false,
-                    }
+                    },
                 },
                 // Add the record for www subdomain
                 {
                     name: webWwwDomainName,
-                    type: "A",
+                    type: 'A',
                     alias: {
                         name: webDistDns,
                         zoneId: webDistZoneId,
                         evaluateTargetHealth: false,
-                    }
-                }
+                    },
+                },
             ],
-            serviceName: 'Lixpi-AI'
-        });
-    });
+            serviceName: 'Lixpi-AI',
+        })
+    })
 
     return {
         ssmParameters,

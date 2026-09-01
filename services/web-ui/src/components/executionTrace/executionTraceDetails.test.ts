@@ -1,8 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import type { ExecutionTrace } from '@lixpi/constants'
 
-import { colorPalette, settings } from '$src/settings.ts'
+import {
+    colorPalette,
+    settings,
+} from '$src/settings.ts'
 
 import {
     createExecutionTraceDetail,
@@ -411,8 +418,13 @@ describe('createExecutionTraceDetail — handles', () => {
                 environment: {
                     getDocuments: () => [],
                     getThreads: () => [],
-                    getApiBaseUrl: () => '',
-                    getAuthToken: async () => '',
+                    document,
+                    tooltipHideDelayMs: 0,
+                    getArtifactIcon: () => '',
+                    extractDocumentText: () => '',
+                    initialRenditionUrl: () => '',
+                    resolveRenditionUrl: async () => '',
+                    onError: vi.fn(),
                 },
             },
             trace: makeTrace({

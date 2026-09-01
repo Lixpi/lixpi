@@ -1,6 +1,10 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 function extractFlatRule(source: string, selector: string): string {
     const start = source.indexOf(`${selector} {`)
@@ -99,14 +103,16 @@ describe('prompt-reference-picker.scss', () => {
             resolve(__dirname, '../../../../sass/_prompt-reference-chip.scss'),
             'utf-8',
         )
-        for (const declaration of [
-            '--prompt-reference-color: #3d649c;',
-            '--prompt-reference-capability-module-color: #a55324;',
-            '--prompt-reference-tool-color: #39766f;',
-            '--prompt-reference-skill-color: #6d4fb2;',
-            '--prompt-reference-color: #d7e6ff;',
-            '--prompt-reference-capability-module-color: #eca983;',
-        ]) {
+        for (
+            const declaration of [
+                '--prompt-reference-color: #3d649c;',
+                '--prompt-reference-capability-module-color: #a55324;',
+                '--prompt-reference-tool-color: #39766f;',
+                '--prompt-reference-skill-color: #6d4fb2;',
+                '--prompt-reference-color: #d7e6ff;',
+                '--prompt-reference-capability-module-color: #eca983;',
+            ]
+        ) {
             expectSourceToContain(partial, declaration, 'prompt-reference chip palette')
         }
     })

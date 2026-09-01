@@ -1,6 +1,14 @@
 'use strict'
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeAll,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
@@ -149,14 +157,16 @@ describe('AiModelsSync — image generation option metadata', () => {
             ...googleModels,
             ...stabilityModels,
             ...bytePlusModels,
-        ].flatMap((model: any) => [
-            ...(model.reasoningGenerationControls ?? []),
-            ...(model.imageGenerationControls ?? []),
-            ...(model.videoGenerationControls ?? []),
-        ].map((control: any) => ({
-            modelId: `${model.provider}:${model.model}`,
-            control,
-        })))
+        ].flatMap((model: any) =>
+            [
+                ...(model.reasoningGenerationControls ?? []),
+                ...(model.imageGenerationControls ?? []),
+                ...(model.videoGenerationControls ?? []),
+            ].map((control: any) => ({
+                modelId: `${model.provider}:${model.model}`,
+                control,
+            }))
+        )
         const nonConfigurableControls = synchronizedControls.filter(({ control }: any) => (
             control.kind === 'fixed'
             || control.readOnly === true
@@ -493,7 +503,19 @@ describe('AiModelsSync — BytePlus Seedance video model mapping', () => {
 
         expect(model.videoResolutions?.map((option: any) => option.value)).toEqual(['480p', '720p'])
         expect(model.videoDurations?.map((option: any) => option.value)).toEqual([
-            '-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15',
+            '-1',
+            '4',
+            '5',
+            '6',
+            '7',
+            '8',
+            '9',
+            '10',
+            '11',
+            '12',
+            '13',
+            '14',
+            '15',
         ])
         expect(model.videoMaxReferenceImages).toBe(9)
         expect(model.pricing.video).toMatchObject({
@@ -661,7 +683,9 @@ describe('AiModelsSync — Anthropic model fetch failure modes', () => {
             googleApiKey: 'test-key',
         })
         sync.anthropic.models = {
-            list: async () => { throw new Error('upstream unavailable') },
+            list: async () => {
+                throw new Error('upstream unavailable')
+            },
         }
 
         await expect(sync.fetchAnthropicModels()).rejects.toThrow('upstream unavailable')

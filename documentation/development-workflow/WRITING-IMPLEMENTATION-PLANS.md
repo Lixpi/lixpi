@@ -232,7 +232,7 @@ Before designing anything new, find the existing pattern in the codebase:
 - New NATS subject → look at how an adjacent subject group is structured and handled.
 - New ProseMirror plugin → look at the existing plugin family (`services/web-ui/src/components/proseMirror/plugins/`) including their READMEs.
 - New LangGraph tool → look at how `services/api/src/llm/tools/image-generation.ts` is structured and registered across all three providers.
-- New canvas overlay → look at the existing AI chat floating panel rendering pattern in `services/web-ui/src/infographics/workspace/WorkspaceCanvas.ts`.
+- New canvas overlay → look at the existing AI chat floating panel rendering pattern in `packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts`.
 
 Mirror the existing pattern unless you have a concrete reason to diverge. State that reason in the plan when you do.
 

@@ -1,6 +1,4 @@
 import type {
-    CapabilityModuleMeta,
-    CanvasNode,
     MediaPromptReference,
     PromptReferenceType,
 } from '@lixpi/constants'
@@ -19,67 +17,21 @@ import {
 import type { NodeView } from 'prosemirror-view'
 
 import {
-    createContextPreviewTile,
-    type ContextPreviewEnvironment,
+    createMediaPromptReferencePreview,
+    createPromptReferenceChipElement,
+    createCapabilityPromptReferencePreview,
+    type PromptReferencePreviewRenderer,
+    type PromptReferenceChipDescriptor,
     type ContextPreviewTileInstance,
-} from '$src/components/contextPreview/index.ts'
-import { html } from '$src/utils/domTemplates.ts'
-import {
-    atomIcon,
-    documentIcon,
-    fileIcon,
-    imageIcon,
-    promptIcon,
-    videoPlayGlyphIcon,
-    videoVolumeHighGlyphIcon,
-} from '@lixpi/ui-kit/svg'
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import { html } from '@lixpi/ui-primitives/dom'
 import {
     capabilityArtifactFrontendRegistry,
     ensureCapabilityStyles,
     getCapabilityArtifactIcon,
 } from '$src/installed-capabilities.ts'
-import { CapabilityModulePromiseCache, createCapabilityPromptReferencePreview } from './capabilityPromptReferencePreview.ts'
 
-const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media' | 'capability-artifact'>, string> = {
-    'capability-module': atomIcon,
-    tool: promptIcon,
-    skill: fileIcon,
-}
-
-type MediaKind = MediaPromptReference['mediaKind']
 type PromptReferenceArrowKey = 'ArrowLeft' | 'ArrowRight'
-export type PromptReferenceChipDescriptor = {
-    referenceType: Exclude<PromptReferenceType, 'capability-artifact'>
-    displayName: string
-    mediaKind?: unknown
-}
-
-export type PromptReferencePreviewRenderer = {
-    getNode: (reference: MediaPromptReference) => CanvasNode | undefined
-    environment: ContextPreviewEnvironment
-    inlinePopover?: boolean
-    preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
-    getCapabilityModule?: (moduleId: string) => Promise<CapabilityModuleMeta>
-    capabilityModuleCache?: CapabilityModulePromiseCache
-}
-
-export type PromptReferencePreviewInstance = {
-    dom: HTMLElement
-    destroy: () => void
-}
-
-export type CreatePromptReferencePreviewOptions = {
-    inlinePopover?: boolean
-    preferredPlacement?: 'top' | 'bottom' | 'left' | 'right'
-    variant?: 'inline' | 'thumbnail'
-}
-
-const mediaPromptReferenceIcons: Record<MediaKind, string> = {
-    image: imageIcon,
-    video: videoPlayGlyphIcon,
-    audio: videoVolumeHighGlyphIcon,
-    document: documentIcon,
-}
 
 function getPromptReferenceType(node: ProseMirrorNode): PromptReferenceType {
     if (node.type.name === LEGACY_CAPABILITY_REFERENCE_NODE_TYPE) {
@@ -87,11 +39,13 @@ function getPromptReferenceType(node: ProseMirrorNode): PromptReferenceType {
     }
 
     const referenceType = node.attrs.referenceType
-    if (referenceType === 'media'
+    if (
+        referenceType === 'media'
         || referenceType === 'capability-artifact'
         || referenceType === 'capability-module'
         || referenceType === 'tool'
-        || referenceType === 'skill') return referenceType
+        || referenceType === 'skill'
+    ) return referenceType
     return 'skill'
 }
 
@@ -122,88 +76,6 @@ function getMediaPromptReference(
             : {}),
         mediaKind,
     }
-}
-
-export function getPromptReferenceIcon(
-    referenceType: PromptReferenceType,
-    mediaKind: unknown,
-): string {
-    if (referenceType === 'capability-artifact') return atomIcon
-    if (referenceType !== 'media') return promptReferenceIcons[referenceType]
-    if (mediaKind === 'video' || mediaKind === 'audio' || mediaKind === 'document') {
-        return mediaPromptReferenceIcons[mediaKind]
-    }
-    return mediaPromptReferenceIcons.image
-}
-
-function createPromptReferenceChipContent(descriptor: PromptReferenceChipDescriptor): HTMLSpanElement {
-    return html`
-        <span className="prompt-reference-chip-content">
-            <span
-                className="prompt-reference-chip-icon"
-                aria-hidden="true"
-                innerHTML=${getPromptReferenceIcon(descriptor.referenceType, descriptor.mediaKind)}
-            ></span>
-            <span className="prompt-reference-chip-name">${descriptor.displayName}</span>
-        </span>
-    ` as HTMLSpanElement
-}
-
-function resolveMediaPromptReferenceDisplayName(
-    reference: MediaPromptReference & { displayName: string },
-    previewRenderer: PromptReferencePreviewRenderer,
-): string {
-    return previewRenderer.environment.getAsset?.(reference.assetId)?.title?.trim()
-        || reference.displayName.trim()
-        || reference.assetId
-}
-
-export function createMediaPromptReferencePreview(
-    reference: MediaPromptReference & { displayName: string },
-    previewRenderer: PromptReferencePreviewRenderer,
-    options: CreatePromptReferencePreviewOptions = {},
-): PromptReferencePreviewInstance | null {
-    const previewNode = previewRenderer.getNode(reference)
-    if (!previewNode) return null
-
-    const displayName = resolveMediaPromptReferenceDisplayName(reference, previewRenderer)
-    const triggerContent = options.variant === 'thumbnail'
-        ? undefined
-        : createPromptReferenceChipContent({
-            referenceType: 'media',
-            displayName,
-            mediaKind: reference.mediaKind,
-        })
-    const previewTile = createContextPreviewTile({
-        node: previewNode,
-        getNode: () => previewRenderer.getNode(reference) ?? previewNode,
-        environment: previewRenderer.environment,
-        preferredPlacement: options.preferredPlacement ?? previewRenderer.preferredPlacement ?? 'top',
-        inlinePopover: options.inlinePopover ?? previewRenderer.inlinePopover,
-        triggerContent,
-        titleOverride: displayName,
-    })
-    if (options.variant !== 'thumbnail') {
-        previewTile.dom.classList.add(
-            'prompt-reference-chip',
-            'prompt-reference-chip-media',
-            'context-preview-inline-label',
-        )
-    } else {
-        previewTile.dom.classList.add('context-preview-thumbnail')
-    }
-    return previewTile
-}
-
-export function createPromptReferenceChipElement(
-    descriptor: PromptReferenceChipDescriptor,
-): HTMLSpanElement {
-    return html`
-        <span
-            className=${`prompt-reference-chip prompt-reference-chip-${descriptor.referenceType}`}
-            contenteditable="false"
-        >${createPromptReferenceChipContent(descriptor)}</span>
-    ` as HTMLSpanElement
 }
 
 export function getPromptReferenceArrowTarget(
@@ -265,13 +137,13 @@ export class PromptReferenceNodeView implements NodeView {
                 displayName: descriptor.displayName,
             }, previewRenderer)
             : referenceType === 'capability-module' && previewRenderer?.getCapabilityModule
-                ? createCapabilityPromptReferencePreview({
-                    moduleId: String(node.attrs.moduleId ?? ''),
-                    displayName: descriptor.displayName,
-                }, previewRenderer)
+            ? createCapabilityPromptReferencePreview({
+                moduleId: String(node.attrs.moduleId ?? ''),
+                displayName: descriptor.displayName,
+            }, previewRenderer)
             : null
         this.dom = this.previewTile?.dom
-            ?? createPromptReferenceChipElement(descriptor)
+            ?? createPromptReferenceChipElement(descriptor, previewRenderer?.environment.document ?? document)
         this.dom.classList.add('prompt-reference-chip', `prompt-reference-chip-${referenceType}`)
     }
 
@@ -305,9 +177,11 @@ export function createPromptReferenceNodeViewPlugin(
                 if (target === null) return false
 
                 event.preventDefault()
-                view.dispatch(view.state.tr
-                    .setSelection(TextSelection.create(view.state.doc, target))
-                    .scrollIntoView())
+                view.dispatch(
+                    view.state.tr
+                        .setSelection(TextSelection.create(view.state.doc, target))
+                        .scrollIntoView(),
+                )
                 return true
             },
         },

@@ -1,7 +1,14 @@
 'use strict'
 
-import { describe, it, expect } from 'vitest'
-import { layoutTree, type TreeLayoutNode } from './layout-tree.ts'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
+import {
+    layoutTree,
+    type TreeLayoutNode,
+} from './layout-tree.ts'
 
 // =============================================================================
 // PURE TIDY-TREE LAYOUT
@@ -10,7 +17,7 @@ import { layoutTree, type TreeLayoutNode } from './layout-tree.ts'
 // Geometry helpers used by the invariant assertions below.
 const rectOf = (
     positions: Map<string, { x: number; y: number }>,
-    node: TreeLayoutNode
+    node: TreeLayoutNode,
 ) => {
     const pos = positions.get(node.id)!
     return { x: pos.x, y: pos.y, width: node.width, height: node.height }
@@ -18,16 +25,16 @@ const rectOf = (
 
 const overlaps = (
     a: { x: number; y: number; width: number; height: number },
-    b: { x: number; y: number; width: number; height: number }
+    b: { x: number; y: number; width: number; height: number },
 ): boolean =>
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
+    a.x < b.x + b.width
+    && a.x + a.width > b.x
+    && a.y < b.y + b.height
+    && a.y + a.height > b.y
 
 const centerY = (
     positions: Map<string, { x: number; y: number }>,
-    node: TreeLayoutNode
+    node: TreeLayoutNode,
 ): number => positions.get(node.id)!.y + node.height / 2
 
 const OPTS = { depthGap: 100, siblingGap: 40 }
@@ -103,7 +110,7 @@ describe('layoutTree', () => {
 
         const rCenter = centerY(positions, nodes[0])
         expect(centerY(positions, nodes[2])).toBeCloseTo(rCenter, 6) // B aligned with R
-        expect(centerY(positions, nodes[1])).toBeLessThan(rCenter)   // A above
+        expect(centerY(positions, nodes[1])).toBeLessThan(rCenter) // A above
         expect(centerY(positions, nodes[3])).toBeGreaterThan(rCenter) // C below
     })
 

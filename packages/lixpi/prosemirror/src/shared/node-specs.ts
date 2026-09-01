@@ -263,8 +263,8 @@ export function normalizeReferenceNodeIds(value: unknown): string[] {
     const rawIds = Array.isArray(value)
         ? value
         : typeof value === 'string' && value.trim()
-            ? parseReferenceNodeIds(value)
-            : []
+        ? parseReferenceNodeIds(value)
+        : []
     const ids: string[] = []
     const seen = new Set<string>()
     for (const rawId of rawIds) {

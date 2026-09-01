@@ -1,6 +1,11 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     getTransientMediaBucketName,
@@ -119,10 +124,13 @@ describe('TransientMediaStore', () => {
             revision: 1,
         })
 
-        expect(nats.createObjectStore).toHaveBeenCalledWith('transient-media-org-1-files', expect.objectContaining({
-            description: 'Transient generation media for org-1',
-            ttl: 3600000000000,
-        }))
+        expect(nats.createObjectStore).toHaveBeenCalledWith(
+            'transient-media-org-1-files',
+            expect.objectContaining({
+                description: 'Transient generation media for org-1',
+                ttl: 3600000000000,
+            }),
+        )
         expect(nats.putObject).toHaveBeenCalledWith(
             'transient-media-org-1-files',
             expect.stringMatching(/^partial-[a-f0-9]{64}\.mp3$/),

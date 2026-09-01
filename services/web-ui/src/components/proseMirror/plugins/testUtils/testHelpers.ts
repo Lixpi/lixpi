@@ -89,7 +89,7 @@ export function createMockImageWrapper(options: MockDOMRectOptions = {}): HTMLEl
 // Create EditorView mock that returns a specific image element
 export function createMockViewWithImage(
     state: EditorState,
-    imageRect: MockDOMRectOptions = { top: 100, left: 50, width: 400, height: 300 }
+    imageRect: MockDOMRectOptions = { top: 100, left: 50, width: 400, height: 300 },
 ): EditorView {
     const imageWrapper = createMockImageWrapper(imageRect)
 

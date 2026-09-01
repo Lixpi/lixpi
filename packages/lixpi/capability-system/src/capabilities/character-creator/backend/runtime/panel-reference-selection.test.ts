@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
 import { emptyCharacterEvidenceProfile } from './character-evidence.ts'
@@ -86,11 +90,13 @@ describe('selectCharacterPanelReferenceEntries', () => {
             entry('prop-crop', 'REFERENCE_1_PROP_CROP.png', { sourceAssetId: 'source-1' }),
         ]
 
-        expect(selectCharacterPanelReferenceEntries(
-            entries,
-            panel,
-            emptyCharacterEvidenceProfile(),
-        ).map(reference => reference.role)).toEqual(['face-crop'])
+        expect(
+            selectCharacterPanelReferenceEntries(
+                entries,
+                panel,
+                emptyCharacterEvidenceProfile(),
+            ).map(reference => reference.role),
+        ).toEqual(['face-crop'])
     })
 
     it('isolates an approved edit-target identity from unrelated body sources', () => {

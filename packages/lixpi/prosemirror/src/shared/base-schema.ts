@@ -20,7 +20,9 @@ export const nodes = {
         content: 'inline*',
         group: 'block',
         parseDOM: [{ tag: 'p' }],
-        toDOM() { return pDOM },
+        toDOM() {
+            return pDOM
+        },
     } as NodeSpec,
 
     blockquote: {
@@ -28,13 +30,17 @@ export const nodes = {
         group: 'block',
         defining: true,
         parseDOM: [{ tag: 'blockquote' }],
-        toDOM() { return blockquoteDOM },
+        toDOM() {
+            return blockquoteDOM
+        },
     } as NodeSpec,
 
     horizontal_rule: {
         group: 'block',
         parseDOM: [{ tag: 'hr' }],
-        toDOM() { return hrDOM },
+        toDOM() {
+            return hrDOM
+        },
     } as NodeSpec,
 
     heading: {
@@ -50,7 +56,9 @@ export const nodes = {
             { tag: 'h5', attrs: { level: 5 } },
             { tag: 'h6', attrs: { level: 6 } },
         ],
-        toDOM(node) { return [`h${node.attrs.level}`, 0] },
+        toDOM(node) {
+            return [`h${node.attrs.level}`, 0]
+        },
     } as NodeSpec,
 
     code_block: {
@@ -60,7 +68,9 @@ export const nodes = {
         code: true,
         defining: true,
         parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }],
-        toDOM() { return preDOM },
+        toDOM() {
+            return preDOM
+        },
     } as NodeSpec,
 
     text: {
@@ -141,7 +151,9 @@ export const nodes = {
         group: 'inline',
         selectable: false,
         parseDOM: [{ tag: 'br' }],
-        toDOM() { return brDOM },
+        toDOM() {
+            return brDOM
+        },
     } as NodeSpec,
 
     prompt_reference: {
@@ -188,9 +200,7 @@ export const nodes = {
                 'data-artifact-type-id': node.attrs.artifactTypeId,
                 'data-prompt-reference-display-name': node.attrs.displayName,
                 class: `prompt-reference-chip prompt-reference-chip-${referenceType}`,
-            },
-                ['span', { class: 'prompt-reference-chip-name' }, node.attrs.displayName],
-            ]
+            }, ['span', { class: 'prompt-reference-chip-name' }, node.attrs.displayName]]
         },
     } as NodeSpec,
 
@@ -225,9 +235,7 @@ export const nodes = {
                 'data-capability-kind': kind,
                 'data-capability-display-name': node.attrs.displayName,
                 class: `prompt-reference-chip prompt-reference-chip-${kind}`,
-            },
-                ['span', { class: 'prompt-reference-chip-name' }, node.attrs.displayName],
-            ]
+            }, ['span', { class: 'prompt-reference-chip-name' }, node.attrs.displayName]]
         },
     } as NodeSpec,
 }
@@ -263,7 +271,9 @@ export const marks = {
             { style: 'font-style=italic' },
             { style: 'font-style=normal', clearMark: m => m.type.name === 'em' },
         ],
-        toDOM() { return emDOM },
+        toDOM() {
+            return emDOM
+        },
     } as MarkSpec,
 
     strikethrough: {
@@ -273,7 +283,9 @@ export const marks = {
             { style: 'font-style=strikethrough' },
             { style: 'font-style=normal', clearMark: m => m.type.name === 'strikethrough' },
         ],
-        toDOM() { return strikethroughDOM },
+        toDOM() {
+            return strikethroughDOM
+        },
     } as MarkSpec,
 
     strong: {
@@ -283,12 +295,16 @@ export const marks = {
             { style: 'font-weight=400', clearMark: m => m.type.name === 'strong' },
             { style: 'font-weight', getAttrs: (value: string) => /^(bold(er)?|[5-9]\d{2,})$/.test(value) && null },
         ],
-        toDOM() { return strongDOM },
+        toDOM() {
+            return strongDOM
+        },
     } as MarkSpec,
 
     code: {
         parseDOM: [{ tag: 'code' }],
-        toDOM() { return codeDOM },
+        toDOM() {
+            return codeDOM
+        },
     } as MarkSpec,
 }
 

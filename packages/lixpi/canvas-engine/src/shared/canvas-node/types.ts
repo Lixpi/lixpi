@@ -1,8 +1,7 @@
 'use strict'
 
-import type { CanvasNode } from '@lixpi/constants'
-
 import type { CanvasEngineRect } from '../geometry/index.ts'
+import type { CanvasPositionedNode } from '../scene/types.ts'
 
 export type RigidCanvasNodeGroup = {
     id: string
@@ -12,8 +11,8 @@ export type RigidCanvasNodeGroup = {
     overlapThreshold?: number
 }
 
-export type RigidCanvasNodeCollisionResult = {
-    nodes: CanvasNode[]
+export type RigidCanvasNodeCollisionResult<Node extends CanvasPositionedNode = CanvasPositionedNode> = {
+    nodes: Node[]
     changed: boolean
     movedGroupCount: number
     movedNodeCount: number

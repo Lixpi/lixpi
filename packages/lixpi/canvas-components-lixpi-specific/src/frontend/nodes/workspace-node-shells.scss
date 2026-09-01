@@ -1,0 +1,291 @@
+@import '@lixpi/ui-primitives/styles/transitions';
+
+.workspace-document-node {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    position: relative;
+
+    &.is-selected,
+    &:focus-within {
+        outline: none;
+    }
+
+    &.is-resizing {
+        user-select: none;
+
+        .document-node-editor {
+            pointer-events: none;
+        }
+    }
+}
+
+.workspace-image-node {
+    background: transparent;
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+    overflow: visible;
+    padding: 0;
+
+    &.is-resizing {
+        user-select: none;
+    }
+
+    &.is-dragging {
+        cursor: move;
+    }
+
+    // The PIXI media layer owns all image pixels and the generating-image border.
+    // The DOM node still owns interaction chrome: drag overlay and resize handles.
+    // The node shadow/frame may sit behind the PIXI sprite.
+
+    &.is-selected {
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
+    }
+
+    &.is-pending-generated-media-before-frame {
+        box-shadow: none;
+        pointer-events: none;
+
+        .image-drag-overlay {
+            top: var(--workspace-pending-media-hit-top);
+            left: var(--workspace-pending-media-hit-left);
+            right: auto;
+            bottom: auto;
+            width: var(--workspace-pending-media-hit-size);
+            height: var(--workspace-pending-media-hit-size);
+            border-radius: 50%;
+            pointer-events: auto;
+        }
+
+        .document-resize-handle {
+            visibility: hidden;
+            pointer-events: none;
+        }
+    }
+
+}
+
+.image-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: transparent;
+}
+
+.workspace-media-document-node,
+.workspace-audio-node {
+    background: transparent;
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+    overflow: visible;
+    padding: 0;
+
+    &.is-selected {
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
+    }
+}
+
+.media-document-drag-overlay,
+.audio-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: transparent;
+}
+
+.workspace-video-node {
+    background: transparent;
+    border-radius: var(--workspace-media-node-border-radius);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+    overflow: visible;
+    padding: 0;
+
+    &.is-resizing {
+        user-select: none;
+    }
+
+    &.is-dragging {
+        cursor: move;
+    }
+
+    &.is-selected {
+        box-shadow: var(--workspace-media-node-selected-box-shadow);
+    }
+
+    &.is-pending-generated-media-before-frame {
+        box-shadow: none;
+        pointer-events: none;
+
+        .video-drag-overlay {
+            top: var(--workspace-pending-media-hit-top);
+            left: var(--workspace-pending-media-hit-left);
+            right: auto;
+            bottom: auto;
+            width: var(--workspace-pending-media-hit-size);
+            height: var(--workspace-pending-media-hit-size);
+            border-radius: 50%;
+            pointer-events: auto;
+        }
+
+        .document-resize-handle {
+            visibility: hidden;
+            pointer-events: none;
+        }
+    }
+}
+
+.video-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: transparent;
+}
+
+.document-resize-handle {
+    position: absolute;
+    // Size follows the configured zoom scaling.
+    opacity: 0;
+    pointer-events: auto;
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+
+    svg {
+        width: 100%;
+        height: 100%;
+        fill: var(--workspace-resize-handle-color, #42494f) !important;
+        transition: hoverTransition(transform, $defaultHoverTransitionDuration);
+        display: block;
+    }
+
+    &:hover,
+    &.is-dragging {
+        opacity: 1;
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: scale(1.2);
+    }
+}
+
+.document-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    z-index: 15;
+    background: transparent;
+}
+
+.workspace-document-node.is-dragging .document-drag-overlay {
+    cursor: move;
+}
+
+.document-resize-top-left {
+    top: -6px;
+    left: -6px;
+    cursor: nwse-resize;
+
+    svg {
+        transform: rotate(180deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(180deg) scale(1.2);
+    }
+}
+
+.document-resize-top-right {
+    top: -6px;
+    right: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(-90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(-90deg) scale(1.2);
+    }
+}
+
+.document-resize-bottom-left {
+    bottom: -6px;
+    left: -6px;
+    cursor: nesw-resize;
+
+    svg {
+        transform: rotate(90deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(90deg) scale(1.2);
+    }
+}
+
+.document-resize-bottom-right {
+    bottom: -6px;
+    right: -6px;
+    cursor: nwse-resize;
+
+    svg {
+        transform: rotate(0deg);
+    }
+
+    &:hover svg,
+    &.is-dragging svg {
+        transform: rotate(0deg) scale(1.2);
+    }
+}
+
+.workspace-branch-origin-node,
+.workspace-branch-fork-node,
+.workspace-branch-line-node {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--workspace-branch-origin-background-color);
+    border: 1px solid var(--workspace-branch-origin-border-color);
+    border-radius: 9999px;
+    box-sizing: border-box;
+    box-shadow: var(--workspace-branch-origin-box-shadow);
+    color: var(--workspace-branch-origin-icon-color);
+    cursor: pointer;
+    overflow: visible;
+    padding: 0;
+}
+
+.branch-origin-drag-overlay,
+.branch-fork-drag-overlay,
+.branch-line-drag-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: transparent;
+    border-radius: inherit;
+    cursor: pointer;
+}

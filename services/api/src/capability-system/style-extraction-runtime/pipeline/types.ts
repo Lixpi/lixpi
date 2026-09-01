@@ -4,7 +4,11 @@ import type {
     ProviderName,
 } from '@lixpi/constants'
 
-import type { AiModelMetaInfo, ChatMessage, ProviderState } from '../../../llm/graph/state.ts'
+import type {
+    AiModelMetaInfo,
+    ChatMessage,
+    ProviderState,
+} from '../../../llm/graph/state.ts'
 
 export type ReferenceImage = {
     imageRef: string

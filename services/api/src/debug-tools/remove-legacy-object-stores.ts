@@ -35,11 +35,15 @@ try {
         .filter((bucketName) => LEGACY_BUCKET_PATTERNS.some((pattern) => pattern.test(bucketName)))
         .sort()
 
-    console.log(JSON.stringify({
-        mode: confirmed ? 'delete' : 'dry-run',
-        legacyBucketNames,
-        activeBlobBucketsExcluded: bucketNames.filter((bucketName) => bucketName.startsWith('blobs-')).sort(),
-    }, null, 2))
+    console.log(JSON.stringify(
+        {
+            mode: confirmed ? 'delete' : 'dry-run',
+            legacyBucketNames,
+            activeBlobBucketsExcluded: bucketNames.filter((bucketName) => bucketName.startsWith('blobs-')).sort(),
+        },
+        null,
+        2,
+    ))
 
     if (!confirmed) {
         console.log(`Dry run only. Re-run with ${CONFIRMATION_FLAG} after verifying the archive and target account.`)

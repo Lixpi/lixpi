@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { extractLatestUserPromptReferences } from './prompt-reference-resolver.ts'
 
@@ -16,10 +20,13 @@ describe('extractLatestUserPromptReferences', () => {
         const doc = threadDoc([
             {
                 type: 'aiUserMessage',
-                content: [{ type: 'paragraph', content: [{
-                    type: 'prompt_reference',
-                    attrs: { referenceType: 'skill', capabilityId: 'old-skill', displayName: 'Old' },
-                }] }],
+                content: [{
+                    type: 'paragraph',
+                    content: [{
+                        type: 'prompt_reference',
+                        attrs: { referenceType: 'skill', capabilityId: 'old-skill', displayName: 'Old' },
+                    }],
+                }],
             },
             { type: 'aiResponseMessage', content: [{ type: 'paragraph' }] },
             {
@@ -50,10 +57,13 @@ describe('extractLatestUserPromptReferences', () => {
     it('rejects malformed atoms instead of trusting cosmetic or forged fields', () => {
         const doc = threadDoc([{
             type: 'aiUserMessage',
-            content: [{ type: 'paragraph', content: [{
-                type: 'prompt_reference',
-                attrs: { referenceType: 'media', assetId: 'asset-1', mediaKind: 'executable', displayName: 'Forged' },
-            }] }],
+            content: [{
+                type: 'paragraph',
+                content: [{
+                    type: 'prompt_reference',
+                    attrs: { referenceType: 'media', assetId: 'asset-1', mediaKind: 'executable', displayName: 'Forged' },
+                }],
+            }],
         }])
 
         expect(() => extractLatestUserPromptReferences(doc, 'conversation-1'))

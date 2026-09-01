@@ -3,29 +3,35 @@
 import { createHash } from 'node:crypto'
 
 import sharp from 'sharp'
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import { buildCharacterPanelSpecs } from '../../shared/character-sheet-media-plan.ts'
 
 import { composeCharacterSheet } from './character-sheet-compositor.ts'
 import { emptyCharacterEvidenceProfile } from './character-evidence.ts'
 
-const panelBytes = async (index: number): Promise<Buffer> => await sharp({
-    create: {
-        width: 512,
-        height: 768,
-        channels: 3,
-        background: {
-            r: (index * 37) % 255,
-            g: (index * 71) % 255,
-            b: (index * 113) % 255,
+const panelBytes = async (index: number): Promise<Buffer> =>
+    await sharp({
+        create: {
+            width: 512,
+            height: 768,
+            channels: 3,
+            background: {
+                r: (index * 37) % 255,
+                g: (index * 71) % 255,
+                b: (index * 113) % 255,
+            },
         },
-    },
-}).png().toBuffer()
+    }).png().toBuffer()
 
-const completePanels = async (panelSpecs = buildCharacterPanelSpecs()) => await Promise.all(panelSpecs.map(async (panel, index) => ({
-    panelId: panel.panelId,
-    bytes: await panelBytes(index + 1),
-})))
+const completePanels = async (panelSpecs = buildCharacterPanelSpecs()) =>
+    await Promise.all(panelSpecs.map(async (panel, index) => ({
+        panelId: panel.panelId,
+        bytes: await panelBytes(index + 1),
+    })))
 
 describe('character sheet compositor', () => {
     it('assembles a deterministic 3840x2560 PNG and stable hash', async () => {

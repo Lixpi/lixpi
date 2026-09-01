@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import { createProseMirrorSchema, DOCUMENT_TYPE } from '../shared/schema-builder.ts'
+import {
+    createProseMirrorSchema,
+    DOCUMENT_TYPE,
+} from '../shared/schema-builder.ts'
 import { HeadlessProseMirrorEngine } from './headless-engine.ts'
 
 function createDocJson() {

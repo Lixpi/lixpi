@@ -1,12 +1,15 @@
 'use strict'
 
 import * as process from 'process'
-import { getDynamoDbTableStageName, type User } from '@lixpi/constants'
+import {
+    getDynamoDbTableStageName,
+    type User,
+} from '@lixpi/constants'
 import type { Partial } from 'type-fest'
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
 export default {
@@ -14,14 +17,14 @@ export default {
         return await dynamoDBService.getItem({
             tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
             key: { userId },
-            origin: `model::User->get( ${userId} )`
+            origin: `model::User->get( ${userId} )`,
         })
     },
 
     create: async (user: Partial<User>): Promise<User | undefined> => {
         const newUserData = {
-            userId: user.userId,    // Partition key
-            stripeCustomerId: user.stripeCustomerId,    // Sort key
+            userId: user.userId, // Partition key
+            stripeCustomerId: user.stripeCustomerId, // Sort key
             email: user.email,
             name: user.name,
             givenName: user.givenName,
@@ -34,7 +37,7 @@ export default {
             await dynamoDBService.putItem({
                 tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
                 item: newUserData,
-                origin: 'model::User->create()'
+                origin: 'model::User->create()',
             })
 
             return newUserData
@@ -51,7 +54,7 @@ export default {
         family_name,
         avatar,
         projects_accessList,
-        organizations
+        organizations,
     }: Partial<User> & {
         userId: string
     }): Promise<void> => {
@@ -69,9 +72,9 @@ export default {
                     ...(avatar && { avatar }),
                     ...(projects_accessList && { projects_accessList }),
                     ...(organizations && { organizations }),
-                    updatedAt: currentDate
+                    updatedAt: currentDate,
                 },
-                origin: 'model::User->update()'
+                origin: 'model::User->update()',
             })
         } catch (e) {
             console.error('Error updating user:', e)
@@ -80,26 +83,26 @@ export default {
 
     addRecentTag: async ({
         userId,
-        tagId
+        tagId,
     }: Pick<User, 'userId'> & { tagId: string }): Promise<any> => {
         try {
-            const currentDate = new Date().getTime();
+            const currentDate = new Date().getTime()
 
             // Fetch the current recentTags
             const user = await dynamoDBService.getItem({
                 tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
                 key: { userId },
-                origin: 'model::User->addRecentTag()'
-            });
+                origin: 'model::User->addRecentTag()',
+            })
 
             // Prepare the new recentTags list
-            let currentTags = user?.recentTags || [];
+            let currentTags = user?.recentTags || []
 
             // Remove the tag if it already exists, as we'll prepend it
-            currentTags = currentTags.filter((id: string) => id !== tagId);
+            currentTags = currentTags.filter((id: string) => id !== tagId)
 
             // Prepend the new tagId and trim the list to maximum 10 items
-            const updatedTags = [tagId, ...currentTags].slice(0, 10);
+            const updatedTags = [tagId, ...currentTags].slice(0, 10)
 
             const result = await dynamoDBService.updateItem({
                 tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
@@ -110,19 +113,19 @@ export default {
                 `,
                 expressionAttributeNames: {
                     '#recentTags': 'recentTags',
-                    '#updatedAt': 'updatedAt'
+                    '#updatedAt': 'updatedAt',
                 },
                 expressionAttributeValues: {
                     ':updatedTags': updatedTags,
-                    ':updatedAt': currentDate
+                    ':updatedAt': currentDate,
                 },
-                origin: 'model::User->addRecentTag()'
-            });
+                origin: 'model::User->addRecentTag()',
+            })
 
-            return result;
+            return result
         } catch (error) {
-            console.error('Error adding recent tag:', error);
-            throw error;
+            console.error('Error adding recent tag:', error)
+            throw error
         }
     },
 }

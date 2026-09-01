@@ -148,19 +148,21 @@ export const resolveMediaGenerationReference = async (payload: {
     requestRevision: number
     bindingId: string
     assetId: string
-}): Promise<unknown> => await requestMediaGenerationAction(
-    AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.RESOLVE_REFERENCE,
-    payload,
-)
+}): Promise<unknown> =>
+    await requestMediaGenerationAction(
+        AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.RESOLVE_REFERENCE,
+        payload,
+    )
 
 export const cancelMediaGenerationRequest = async (payload: {
     generationRequestId: string
     workspaceId: string
     requestRevision: number
-}): Promise<unknown> => await requestMediaGenerationAction(
-    AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.CANCEL,
-    payload,
-)
+}): Promise<unknown> =>
+    await requestMediaGenerationAction(
+        AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.CANCEL,
+        payload,
+    )
 
 export const startMediaGenerationVerification = async (payload: {
     generationRequestId: string
@@ -187,10 +189,11 @@ export const getMediaGenerationRequest = async (payload: {
         configuration: unknown
     }
     liveSubject: string
-}> => await requestMediaGenerationAction(
-    AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.GET,
-    payload,
-)
+}> =>
+    await requestMediaGenerationAction(
+        AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.GET,
+        payload,
+    )
 
 export const replayMediaGenerationRequest = async (payload: {
     generationRequestId: string
@@ -203,10 +206,11 @@ export const replayMediaGenerationRequest = async (payload: {
         events: Array<{ event: MediaGenerationRequestEvent; streamSequence: number }>
         hasMore: boolean
     }
-}> => await requestMediaGenerationAction(
-    AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.REPLAY,
-    payload,
-)
+}> =>
+    await requestMediaGenerationAction(
+        AI_INTERACTION_SUBJECTS.MEDIA_GENERATION_REQUEST.REPLAY,
+        payload,
+    )
 
 export default class AiInteractionService {
     workspaceId: string
@@ -218,6 +222,9 @@ export default class AiInteractionService {
     pipelineEventIds: Set<string>
     pipelineLocalStreamSeq: number
     onError: ((error: unknown) => void) | null
+    private responseSubscription: { unsubscribe: () => void } | null = null
+    private subscriptionRevision = 0
+    private disconnected = false
 
     constructor({
         workspaceId,
@@ -236,6 +243,10 @@ export default class AiInteractionService {
         this.onError = onError ?? null
 
         this.initNatsSubscriptions()
+    }
+
+    private emitSegment(segment: Record<string, unknown>): void {
+        this.segmentsReceiver.receiveSegment({ ...segment, workspaceId: this.workspaceId })
     }
 
     getRunKey(generationRun?: MediaGenerationRunMeta): string {
@@ -271,13 +282,14 @@ export default class AiInteractionService {
 
     async initNatsSubscriptions() {
         try {
-            if (!this.workspaceId || !this.conversationAssetId || !this.organizationId)
+            if (!this.workspaceId || !this.conversationAssetId || !this.organizationId) {
                 throw new Error('AiInteractionService requires workspaceId, conversationAssetId, and organizationId')
+            }
 
             const subject = this.getChatResponseSubject()
 
-            // Only unsubscribe previous subscriptions for THIS specific thread, not all threads
-            servicesStore.getData('nats')!.getSubscriptions([subject]).forEach((sub: { unsubscribe: () => void }) => sub.unsubscribe())
+            this.disconnect()
+            this.disconnected = false
 
             debugAiInteractionLog(`[AI_INTERACTION] Subscribing to NATS response channel: ${subject}`)
             this.subscribeToChatMessages()
@@ -287,14 +299,15 @@ export default class AiInteractionService {
         }
     }
 
-    async subscribeToChatMessages() {
+    subscribeToChatMessages(): void {
         const subject = this.getChatResponseSubject()
-        // Subscribe to responses for this specific workspace and thread
-        servicesStore.getData('nats')!.subscribe(
+        const revision = this.subscriptionRevision
+        this.responseSubscription = servicesStore.getData('nats')!.subscribe(
             subject,
             (data: any, _msg: unknown) => {
+                if (this.disconnected || revision !== this.subscriptionRevision) return
                 this.onChatMessageResponse(data)
-            }
+            },
         )
     }
 
@@ -315,18 +328,23 @@ export default class AiInteractionService {
     }
 
     async resumePipelineEventStream(): Promise<void> {
+        if (this.disconnected) return
+        const revision = this.subscriptionRevision
         try {
             let hasMore = false
             do {
+                const token = await AuthService.getTokenSilently()
+                if (this.disconnected || revision !== this.subscriptionRevision) return
                 const result = await servicesStore.getData('nats')!.request(
                     AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_RESUME,
                     {
-                        token: await AuthService.getTokenSilently(),
+                        token,
                         workspaceId: this.workspaceId,
                         conversationAssetId: this.conversationAssetId,
                         localStreamSeq: this.pipelineLocalStreamSeq,
                     },
                 ) as PipelineReplayResult
+                if (this.disconnected || revision !== this.subscriptionRevision) return
                 if (result?.error) {
                     console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', result.error)
                     return
@@ -341,13 +359,14 @@ export default class AiInteractionService {
                 hasMore = result.hasMore === true && events.length > 0
             } while (hasMore)
         } catch (error) {
+            if (this.disconnected || revision !== this.subscriptionRevision) return
             console.error('[AI_INTERACTION] CHAT_PIPELINE_RESUME failed:', error)
         }
     }
 
-
     onChatMessageResponse(data: any) {
         try {
+            if (this.disconnected || (data?.workspaceId && data.workspaceId !== this.workspaceId)) return
             if (!this.shouldProcessPipelinePayload(data)) return
 
             if (data?.error) {
@@ -363,7 +382,7 @@ export default class AiInteractionService {
                     requestRevision: data.requestRevision,
                 })
                 if (data.canvasGeometry) {
-                    this.segmentsReceiver.receiveSegment({
+                    this.emitSegment({
                         type: 'canvas_geometry_resolved',
                         canvasGeometry: data.canvasGeometry,
                         aiProvider: '',
@@ -392,7 +411,7 @@ export default class AiInteractionService {
             }
 
             if (content.status === STREAM_STATUS.CAPABILITY_RUN_EVENT) {
-                this.segmentsReceiver.receiveSegment(toCapabilityRunEventSegment(
+                this.emitSegment(toCapabilityRunEventSegment(
                     content as CapabilityRunEventStreamPayload,
                 ))
                 return
@@ -405,7 +424,7 @@ export default class AiInteractionService {
                     improvedDescriptorCount: Object.keys(workspaceContextResolution?.improvedDescriptors ?? {}).length,
                     narrowedMediaCount: workspaceContextResolution?.narrowedMediaNodeIds.length ?? 0,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'context_relevance_resolved',
                     workspaceContextResolution,
                     ...segmentBase,
@@ -415,7 +434,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.CONTEXT_RELEVANCE_ERROR) {
                 debugAiInteractionLog('[AI_INTERACTION] CONTEXT_RELEVANCE_ERROR received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'context_relevance_error',
                     error: content.error || 'Workspace context relevance failed',
                     ...segmentBase,
@@ -431,7 +450,7 @@ export default class AiInteractionService {
                     referenceCount: imageGenerationTrace?.referenceImages.length ?? 0,
                     excludedReferenceCount: imageGenerationTrace?.excludedReferences.length ?? 0,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'image_generation_trace',
                     imageGenerationTrace,
                     ...segmentBase,
@@ -446,7 +465,7 @@ export default class AiInteractionService {
                     capabilityRunId: capabilityGenerationTrace?.capabilityRunId,
                     stepCount: capabilityGenerationTrace?.steps.length ?? 0,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'capability_generation_trace',
                     capabilityGenerationTrace,
                     ...segmentBase,
@@ -456,7 +475,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.IMAGE_PARTIAL) {
                 debugAiInteractionLog('[AI_INTERACTION] IMAGE_PARTIAL received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'image_partial',
                     imageUrl: content.imageUrl,
                     assetId: content.assetId,
@@ -470,7 +489,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.MEDIA_BRANCH_RESOLVED) {
                 debugAiInteractionLog('[AI_INTERACTION] MEDIA_BRANCH_RESOLVED received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'image_branch_resolved',
                     mediaBranchResolution: content.resolution,
                     ...segmentBase,
@@ -485,7 +504,7 @@ export default class AiInteractionService {
                     branchForkCount: lineagePlan?.branchForks.length ?? 0,
                     runAssignmentCount: lineagePlan?.runAssignments.length ?? 0,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'media_lineage_planned',
                     mediaBranchLineagePlan: lineagePlan,
                     ...segmentBase,
@@ -497,7 +516,7 @@ export default class AiInteractionService {
                 debugAiInteractionLog('[AI_INTERACTION] MEDIA_GENERATION_SKIPPED received:', {
                     generationRequestId: content.generationRequestId,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'media_generation_skipped',
                     generationRequestId: content.generationRequestId || '',
                     ...segmentBase,
@@ -509,7 +528,7 @@ export default class AiInteractionService {
                 debugAiInteractionLog('[AI_INTERACTION] MEDIA_GENERATION_REQUEST_COMPLETE received:', {
                     generationRequestId: content.generationRequestId,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'media_generation_request_complete',
                     generationRequestId: content.generationRequestId || generationRun?.generationRequestId || '',
                     ...segmentBase,
@@ -519,7 +538,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.MEDIA_BRANCH_RESOLUTION_ERROR) {
                 debugAiInteractionLog('[AI_INTERACTION] MEDIA_BRANCH_RESOLUTION_ERROR received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'image_branch_resolution_error',
                     error: content.error || 'Image branch resolution failed',
                     ...segmentBase,
@@ -532,7 +551,7 @@ export default class AiInteractionService {
                     layoutRevision: content.canvasGeometry?.layoutRevision,
                     nodeCount: content.canvasGeometry?.nodes?.length ?? 0,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'canvas_geometry_resolved',
                     canvasGeometry: content.canvasGeometry,
                     ...segmentBase,
@@ -543,7 +562,7 @@ export default class AiInteractionService {
             if (content.status === STREAM_STATUS.IMAGE_COMPLETE) {
                 debugAiInteractionLog('[AI_INTERACTION] IMAGE_COMPLETE received:', content)
 
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'image_complete',
                     imageUrl: content.imageUrl,
                     assetId: content.assetId,
@@ -556,14 +575,14 @@ export default class AiInteractionService {
                     imageModelId: content.imageModelId || '',
                     ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...(generationRun ? { generationRun } : {}),
-                    conversationAssetId: this.conversationAssetId
+                    conversationAssetId: this.conversationAssetId,
                 })
                 return
             }
 
             if (content.status === STREAM_STATUS.IMAGE_ERROR) {
                 debugAiInteractionLog('[AI_INTERACTION] IMAGE_ERROR received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'image_error',
                     error: content.error || 'Image generation failed',
                     ...segmentBase,
@@ -582,7 +601,7 @@ export default class AiInteractionService {
                     referenceCount: videoGenerationTrace?.referenceImages.length ?? 0,
                     excludedReferenceCount: videoGenerationTrace?.excludedReferences.length ?? 0,
                 })
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'video_generation_trace',
                     videoGenerationTrace,
                     ...segmentBase,
@@ -592,7 +611,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.VIDEO_PENDING) {
                 debugAiInteractionLog('[AI_INTERACTION] VIDEO_PENDING received')
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'video_pending',
                     ...(content.canvasGeometry ? { canvasGeometry: content.canvasGeometry } : {}),
                     ...segmentBase,
@@ -601,7 +620,7 @@ export default class AiInteractionService {
             }
 
             if (content.status === STREAM_STATUS.VIDEO_GENERATING) {
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'video_generating',
                     ...segmentBase,
                 })
@@ -610,7 +629,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.VIDEO_COMPLETE) {
                 debugAiInteractionLog('[AI_INTERACTION] VIDEO_COMPLETE received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'video_complete',
                     videoUrl: content.videoUrl,
                     assetId: content.assetId,
@@ -631,7 +650,7 @@ export default class AiInteractionService {
 
             if (content.status === STREAM_STATUS.VIDEO_ERROR) {
                 debugAiInteractionLog('[AI_INTERACTION] VIDEO_ERROR received:', content)
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     type: 'video_error',
                     error: content.error || 'Video generation failed',
                     ...segmentBase,
@@ -640,7 +659,7 @@ export default class AiInteractionService {
             }
 
             if (content.status === STREAM_STATUS.ERROR) {
-                this.segmentsReceiver.receiveSegment({
+                this.emitSegment({
                     status: 'ERROR',
                     error: content.text || content.error || 'AI generation failed',
                     ...segmentBase,
@@ -682,8 +701,7 @@ export default class AiInteractionService {
         const reasoningModelsEnabled = useMultipleReasoningModels ?? inferModeFromModels(aiReasoningModels)
         const imageModelsEnabled = useMultipleImageModels ?? inferModeFromModels(aiImageModels)
         const videoModelsEnabled = useMultipleVideoModels ?? inferModeFromModels(aiVideoModels)
-        const collapseForMode = (modelIds: string[] | undefined, useMultiple: boolean): string[] =>
-            useMultiple ? (modelIds ?? []) : (modelIds ?? []).slice(0, 1)
+        const collapseForMode = (modelIds: string[] | undefined, useMultiple: boolean): string[] => useMultiple ? (modelIds ?? []) : (modelIds ?? []).slice(0, 1)
         const reasoningModelIds = collapseForMode(aiReasoningModels, reasoningModelsEnabled)
         const selectedImageModelIds = collapseForMode(aiImageModels, imageModelsEnabled)
         const selectedVideoModelIds = collapseForMode(aiVideoModels, videoModelsEnabled)
@@ -695,7 +713,7 @@ export default class AiInteractionService {
             workspaceId: this.workspaceId,
             conversationAssetId: this.conversationAssetId,
             aiReasoningModels: reasoningModelIds,
-            organizationId: this.organizationId
+            organizationId: this.organizationId,
         }
 
         if (generationRequestId) {
@@ -744,11 +762,11 @@ export default class AiInteractionService {
         const outputMediaTypes: Array<'image' | 'video'> = regenerationMediaTypes.length > 0
             ? regenerationMediaTypes
             : mediaGenerationMode
-                ? [mediaGenerationMode]
-                : [
-                    ...(hasImageOutput ? ['image' as const] : []),
-                    ...(hasVideoOutput ? ['video' as const] : []),
-                ]
+            ? [mediaGenerationMode]
+            : [
+                ...(hasImageOutput ? ['image' as const] : []),
+                ...(hasVideoOutput ? ['video' as const] : []),
+            ]
         const matrixImageModelIds = outputMediaTypes.includes('image') ? imageModelIds : []
         const matrixVideoModelIds = outputMediaTypes.includes('video') ? videoModelIds : []
         const selectedSectionCounts = [reasoningModelIds.length, matrixImageModelIds.length, matrixVideoModelIds.length]
@@ -766,20 +784,32 @@ export default class AiInteractionService {
                 reasoningModelIds,
                 imageModelIds: matrixImageModelIds,
                 videoModelIds: matrixVideoModelIds,
-                ...(reasoningConfigGroups?.length ? { reasoningOptions: {
-                    configGroups: reasoningConfigGroups,
-                } } : {}),
-                ...(matrixImageModelIds.length > 0 ? { imageOptions: {
-                    imageSize: imageSize || 'auto',
-                    ...(imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
-                } } : {}),
-                ...(matrixVideoModelIds.length > 0 ? { videoOptions: {
-                    ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
-                    ...(videoResolution ? { resolution: videoResolution } : {}),
-                    ...(videoDuration ? { duration: videoDuration } : {}),
-                    ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
-                    ...(videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
-                } } : {}),
+                ...(reasoningConfigGroups?.length
+                    ? {
+                        reasoningOptions: {
+                            configGroups: reasoningConfigGroups,
+                        },
+                    }
+                    : {}),
+                ...(matrixImageModelIds.length > 0
+                    ? {
+                        imageOptions: {
+                            imageSize: imageSize || 'auto',
+                            ...(imageConfigGroups?.length ? { configGroups: imageConfigGroups } : {}),
+                        },
+                    }
+                    : {}),
+                ...(matrixVideoModelIds.length > 0
+                    ? {
+                        videoOptions: {
+                            ...(videoAspectRatio ? { aspectRatio: videoAspectRatio } : {}),
+                            ...(videoResolution ? { resolution: videoResolution } : {}),
+                            ...(videoDuration ? { duration: videoDuration } : {}),
+                            ...(videoSourceForExtension ? { sourceForExtension: videoSourceForExtension } : {}),
+                            ...(videoConfigGroups?.length ? { configGroups: videoConfigGroups } : {}),
+                        },
+                    }
+                    : {}),
                 ...(regeneration ? { regeneration } : {}),
             }
         }
@@ -810,11 +840,14 @@ export default class AiInteractionService {
     }
 
     disconnect() {
-        const subject = this.getChatResponseSubject()
-        servicesStore.getData('nats')?.getSubscriptions([subject]).forEach((sub: { unsubscribe: () => void }) => sub.unsubscribe())
+        this.disconnected = true
+        this.subscriptionRevision += 1
+        const subscription = this.responseSubscription
+        this.responseSubscription = null
         this.currentAiProvider = null
         this.providersByRunKey.clear()
         this.pipelineEventIds.clear()
+        subscription?.unsubscribe()
     }
 
     destroy() {

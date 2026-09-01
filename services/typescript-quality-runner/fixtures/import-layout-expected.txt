@@ -1,0 +1,13 @@
+import {
+    applyNodeGeometry,
+    type CanvasEngineRect,
+} from '@lixpi/canvas-engine/shared'
+import { singleValue } from './single.ts'
+import DefaultValue, { namedValue } from './mixed.ts'
+
+void applyNodeGeometry
+type Rect = CanvasEngineRect
+void (null as Rect | null)
+void singleValue
+void DefaultValue
+void namedValue

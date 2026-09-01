@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import { ASSET_DOCUMENT_ROLES, isAssetDocumentRole } from './asset-types.ts'
+import {
+    ASSET_DOCUMENT_ROLES,
+    isAssetDocumentRole,
+} from './asset-types.ts'
 
 describe('Asset document roles', () => {
     it('keeps Capability Artifacts in the canonical runtime role list', () => {

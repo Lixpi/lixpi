@@ -1,6 +1,12 @@
-import { Plugin, PluginKey } from 'prosemirror-state'
+import {
+    Plugin,
+    PluginKey,
+} from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
-import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
+import {
+    createEl,
+    applyStyle,
+} from '@lixpi/ui-primitives/dom'
 
 export const linkTooltipPluginKey = new PluginKey('linkTooltip')
 

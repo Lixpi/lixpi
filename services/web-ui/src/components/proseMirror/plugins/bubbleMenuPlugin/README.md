@@ -105,7 +105,7 @@ The bubble menu is defined via a structured list in `bubbleMenuItems.ts`:
 - Text wrap buttons: None, Wrap Left, Wrap Right
 - Action buttons: Create Variant, Blockquote, Delete
 
-Each button is built with `createEl` from `$src/utils/domTemplates.ts`.
+Each button is built with `createEl` from `@lixpi/ui-primitives/dom`.
 
 Icon-only menu actions keep their labels in `aria-label` and opt into the application-level ui-kit help-tooltip provider. The link apply and remove controls are keyboard focusable and activate with Enter or Space. This adapter does not create native `title` tooltips or feature-local tooltip markup.
 

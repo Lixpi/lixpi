@@ -58,17 +58,21 @@ export async function resolveCharacterReferences(args: {
         try {
             const asset = await getAuthorizedAsset(assetId)
             const composition = asset.composition
-            if (composition?.kind === 'character-sheet'
-                && composition.capabilityId === 'global.character-creator') {
+            if (
+                composition?.kind === 'character-sheet'
+                && composition.capabilityId === 'global.character-creator'
+            ) {
                 for (const sourceAssetId of composition.sourceAssetIds) await resolveAsset(sourceAssetId)
                 for (const component of composition.components) {
                     if (component.role === 'character-sheet-panel-review-only') continue
                     const componentKey = `component:${assetId}:${component.componentId}`
                     if (resolvedKeys.has(componentKey)) continue
-                    const bytes = Buffer.from(await args.assets.readBlob({
-                        organizationId: args.organizationId,
-                        blobHash: component.blobHash,
-                    }))
+                    const bytes = Buffer.from(
+                        await args.assets.readBlob({
+                            organizationId: args.organizationId,
+                            blobHash: component.blobHash,
+                        }),
+                    )
                     const metadata = await sharp(bytes).metadata()
                     if (!metadata.width || !metadata.height) {
                         throw new Error(`CHARACTER_REFERENCE_DIMENSIONS_INVALID:${assetId}:${component.componentId}`)
@@ -99,10 +103,12 @@ export async function resolveCharacterReferences(args: {
             if (!selected?.blobHash || !selected.mimeType || !isSupportedImageMimeType(selected.mimeType)) {
                 throw new Error(`CHARACTER_REFERENCE_NOT_MODEL_READY:${assetId}`)
             }
-            const bytes = Buffer.from(await args.assets.readBlob({
-                organizationId: args.organizationId,
-                blobHash: selected.blobHash,
-            }))
+            const bytes = Buffer.from(
+                await args.assets.readBlob({
+                    organizationId: args.organizationId,
+                    blobHash: selected.blobHash,
+                }),
+            )
             const metadata = await sharp(bytes).metadata()
             if (!metadata.width || !metadata.height) {
                 throw new Error(`CHARACTER_REFERENCE_DIMENSIONS_INVALID:${assetId}`)
@@ -144,8 +150,7 @@ export async function resolveCharacterReferences(args: {
     return resolved
 }
 
-const isSupportedImageMimeType = (value: string): value is ResolvedCharacterReference['mimeType'] =>
-    value === 'image/jpeg' || value === 'image/png' || value === 'image/webp'
+const isSupportedImageMimeType = (value: string): value is ResolvedCharacterReference['mimeType'] => value === 'image/jpeg' || value === 'image/png' || value === 'image/webp'
 
 const LEGACY_SHEET_ASPECT_RATIO = 3 / 2
 const LEGACY_SHEET_ASPECT_RATIO_TOLERANCE = 0.02
@@ -228,12 +233,17 @@ const hasExpectedLegacySheetSeparators = async (
         const gapStart = previousRow.y + previousRow.height
         const gapEnd = rows[index]!
         if (gapEnd <= gapStart) continue
-        const separator = scaleLayoutRegion({
-            x: 0,
-            y: gapStart,
-            width: layout.width,
-            height: gapEnd - gapStart,
-        }, layout, width, height)
+        const separator = scaleLayoutRegion(
+            {
+                x: 0,
+                y: gapStart,
+                width: layout.width,
+                height: gapEnd - gapStart,
+            },
+            layout,
+            width,
+            height,
+        )
         const separatorBytes = await sharp(bytes).extract(separator).toBuffer()
         if (await getNearWhitePixelRatio(separatorBytes) < LEGACY_SHEET_MINIMUM_SEPARATOR_WHITE_RATIO) return false
     }
@@ -270,5 +280,4 @@ const getNearWhitePixelRatio = async (bytes: Buffer): Promise<number> => {
     return nearWhitePixels / (info.width * info.height)
 }
 
-const getNonWhitePixelRatio = async (bytes: Buffer): Promise<number> =>
-    1 - await getNearWhitePixelRatio(bytes)
+const getNonWhitePixelRatio = async (bytes: Buffer): Promise<number> => 1 - await getNearWhitePixelRatio(bytes)

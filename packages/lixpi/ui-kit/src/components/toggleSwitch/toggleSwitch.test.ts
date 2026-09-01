@@ -1,5 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { select, selection } from 'd3-selection'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
+import {
+    select,
+    selection,
+} from 'd3-selection'
 import { createToggleSwitch } from './toggleSwitch.ts'
 
 // `toggleSwitch` animates via `selection.transition()`. happy-dom does not implement
@@ -100,7 +109,7 @@ describe('createToggleSwitch', () => {
             width: 40,
             height: 16,
             checked: false,
-            className: 'custom-toggle'
+            className: 'custom-toggle',
         })
 
         const track = svg.querySelector('.toggle-track') as SVGRectElement

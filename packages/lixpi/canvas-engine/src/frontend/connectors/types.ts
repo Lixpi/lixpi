@@ -6,11 +6,11 @@ export type AnchorPosition = 'left' | 'right' | 'top' | 'bottom' | 'center'
 
 // Path rendering strategy
 export type PathType =
-    | 'bezier'              // XYFlow getBezierPath (curved, respects Position)
-    | 'straight'            // XYFlow getStraightPath (direct line)
-    | 'smoothstep'          // XYFlow getSmoothStepPath (orthogonal with rounded corners)
-    | 'horizontal-bezier'   // Custom symmetric S-curve for horizontal flows
-    | 'orthogonal'          // Circuit board style: horizontal → vertical → horizontal with rounded corners
+    | 'bezier' // XYFlow getBezierPath (curved, respects Position)
+    | 'straight' // XYFlow getStraightPath (direct line)
+    | 'smoothstep' // XYFlow getSmoothStepPath (orthogonal with rounded corners)
+    | 'horizontal-bezier' // Custom symmetric S-curve for horizontal flows
+    | 'orthogonal' // Circuit board style: horizontal → vertical → horizontal with rounded corners
 
 // Marker (arrowhead) style
 export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'arrowhead-selected' | 'none'
@@ -19,8 +19,8 @@ export type MarkerType = 'arrowhead' | 'arrowhead-muted' | 'arrowhead-selected' 
 export type EdgeAnchor = {
     nodeId: string
     position: AnchorPosition
-    t?: number                               // Position along the side (0=start, 1=end, 0.5=center). Default: 0.5
-    offset?: { x?: number; y?: number }      // Fine-tune anchor position in pixels
+    t?: number // Position along the side (0=start, 1=end, 0.5=center). Default: 0.5
+    offset?: { x?: number; y?: number } // Fine-tune anchor position in pixels
 }
 
 // Edge configuration with source/target and styling
@@ -30,13 +30,13 @@ export type EdgeConfig = {
     target: EdgeAnchor
     pathType?: PathType
     marker?: MarkerType
-    markerStart?: MarkerType    // Marker at the start of the edge (for bidirectional arrows)
-    curvature?: number           // For bezier/smoothstep paths (default: 0.25)
-    borderRadius?: number        // For orthogonal paths corner rounding (default: 8)
-    lineStyle?: 'solid' | 'dashed'  // Line style (default: 'solid')
-    bendPoints?: Array<{ x: number; y: number }>  // elkjs-computed waypoints for orthogonal routing
-    laneIndex?: number           // Index within edges sharing same target (for vertical lane ordering)
-    laneCount?: number           // Total edges sharing same target
+    markerStart?: MarkerType // Marker at the start of the edge (for bidirectional arrows)
+    curvature?: number // For bezier/smoothstep paths (default: 0.25)
+    borderRadius?: number // For orthogonal paths corner rounding (default: 8)
+    lineStyle?: 'solid' | 'dashed' // Line style (default: 'solid')
+    bendPoints?: Array<{ x: number; y: number }> // elkjs-computed waypoints for orthogonal routing
+    laneIndex?: number // Index within edges sharing same target (for vertical lane ordering)
+    laneCount?: number // Total edges sharing same target
 }
 
 export type NodeShape = 'rect' | 'circle' | 'foreignObject' | 'path'
@@ -58,19 +58,19 @@ export type NodeConfig = {
     y: number
     width: number
     height: number
-    radius?: number         // For rounded rect corners or circle radius
-    pathData?: string        // For path-based shapes
+    radius?: number // For rounded rect corners or circle radius
+    pathData?: string // For path-based shapes
     className?: string
     content?: NodeContent
-    disabled?: boolean      // Applies disabled styling
+    disabled?: boolean // Applies disabled styling
     anchorOverrides?: NodeAnchorOverride
 }
 
 // Path computation result
 export type ComputedPath = {
-    path: string            // SVG path string
-    labelX: number          // X coordinate for label
-    labelY: number          // Y coordinate for label
-    offsetX: number         // X offset from source
-    offsetY: number         // Y offset from source
+    path: string // SVG path string
+    labelX: number // X coordinate for label
+    labelY: number // Y coordinate for label
+    offsetX: number // X offset from source
+    offsetY: number // Y offset from source
 }

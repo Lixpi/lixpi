@@ -5,20 +5,19 @@ import * as pulumi from '@pulumi/pulumi'
 
 import {
     buildDockerImage,
-    type DockerImageBuildResult
+    type DockerImageBuildResult,
 } from '../../helpers/docker/build-helpers.ts'
 import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
 // Local helper function (avoiding import issues)
-const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string =>
-    `${resourceName}-${orgName}-${stageName}`
+const formatStageResourceName = (resourceName: string, orgName: string, stageName: string): string => `${resourceName}-${orgName}-${stageName}`
 
 const { ORG_NAME, STAGE } = process.env
 
 export type ServiceDiscoverySidecarArgs = {
     // Route53 configuration for public IP registration
     route53HostedZoneId: pulumi.Input<string>
-    natsRecordName: string  // e.g., "nats.shelby-dev.lixpi.dev"
+    natsRecordName: string // e.g., "nats.shelby-dev.lixpi.dev"
 
     // ECS cluster to monitor
     ecsCluster: {
@@ -61,7 +60,7 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
         dockerfilePath,
         platforms: ['linux/amd64'],
         push: true,
-    }) as DockerImageBuildResult;
+    }) as DockerImageBuildResult
 
     // Lambda execution role
     const lambdaRole = new aws.iam.Role(`${functionName}-role`, {
@@ -100,12 +99,12 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
                         Action: [
                             'route53:ChangeResourceRecordSets',
                             'route53:ListResourceRecordSets',
-                            'route53:GetChange'
+                            'route53:GetChange',
                         ],
                         Resource: [
                             `arn:aws:route53:::hostedzone/${hostedZoneId}`,
-                            'arn:aws:route53:::change/*'
-                        ]
+                            'arn:aws:route53:::change/*',
+                        ],
                     },
                     {
                         Effect: 'Allow',
@@ -137,7 +136,7 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
                     },
                 ],
             })
-        )
+        ),
     })
 
     new aws.iam.RolePolicyAttachment(`${functionName}-policy-attachment`, {
@@ -209,13 +208,15 @@ export const createServiceDiscoverySidecar = async (args: ServiceDiscoverySideca
     // CloudWatch Event Rule for ECS Task State Changes
     const ecsTaskStateRule = new aws.cloudwatch.EventRule(`${functionName}-rule`, {
         description: 'Capture ECS task state changes for NATS service discovery',
-        eventPattern: ecsCluster.arn.apply((clusterArn: string) => JSON.stringify({
-            source: ['aws.ecs'],
-            'detail-type': ['ECS Task State Change'],
-            detail: {
-                clusterArn: [clusterArn],
-            },
-        })),
+        eventPattern: ecsCluster.arn.apply((clusterArn: string) =>
+            JSON.stringify({
+                source: ['aws.ecs'],
+                'detail-type': ['ECS Task State Change'],
+                detail: {
+                    clusterArn: [clusterArn],
+                },
+            })
+        ),
     })
 
     // Permission for CloudWatch Events to invoke Lambda

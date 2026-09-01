@@ -2,12 +2,25 @@
 
 import * as process from 'process'
 
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import type { ProviderName } from '@lixpi/constants'
 
-import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
-import type { ProviderState, VideoUsage } from '../graph/state.ts'
-import { BYTEPLUS_ARK_BASE_URL, BYTEPLUS_VIDEO_POLL_INTERVAL_MS } from '../config.ts'
+import {
+    BaseProvider,
+    type BaseProviderDeps,
+} from './base-provider.ts'
+import type {
+    ProviderState,
+    VideoUsage,
+} from '../graph/state.ts'
+import {
+    BYTEPLUS_ARK_BASE_URL,
+    BYTEPLUS_VIDEO_POLL_INTERVAL_MS,
+} from '../config.ts'
 import {
     BytePlusModelArkError,
     buildSeedanceContent,
@@ -54,8 +67,8 @@ export class BytePlusProvider extends BaseProvider {
             // router only ever dispatches Seedance video here, so anything else
             // is a misconfiguration worth surfacing loudly.
             throw new Error(
-                `BytePlus provider supports Seedance video generation only ` +
-                `(model="${modelVersion}", enableVideoGeneration=${enableVideoGeneration}).`,
+                `BytePlus provider supports Seedance video generation only `
+                    + `(model="${modelVersion}", enableVideoGeneration=${enableVideoGeneration}).`,
             )
         }
 
@@ -83,8 +96,10 @@ export class BytePlusProvider extends BaseProvider {
         const accountScope = process.env.BYTEPLUS_ACCOUNT_SCOPE
         const now = Date.now()
         const verifiedAssetUris = (state.providerSafeMediaIntent?.bindings ?? []).flatMap(binding => {
-            if (binding.subjectIdentity.classification !== 'self'
-                && binding.subjectIdentity.classification !== 'authorized-real-person') return []
+            if (
+                binding.subjectIdentity.classification !== 'self'
+                && binding.subjectIdentity.classification !== 'authorized-real-person'
+            ) return []
             const verification = binding.subjectIdentity.providerVerifications.find(candidate => (
                 candidate.provider === 'BytePlus'
                 && candidate.providerAccountScope === accountScope
@@ -113,7 +128,7 @@ export class BytePlusProvider extends BaseProvider {
         const hasLastFrame = content.some(item => item.type === 'image_url' && item.role === 'last_frame')
         const isSeedance25 = modelVersion === 'dreamina-seedance-2-5-260628'
         const outputFormat = isSeedance25
-            && (generationConfig.outputFormat === 'mp4' || generationConfig.outputFormat === 'mov')
+                && (generationConfig.outputFormat === 'mp4' || generationConfig.outputFormat === 'mov')
             ? generationConfig.outputFormat
             : undefined
         const ratio = isSeedance25 && (hasFirstFrame || hasLastFrame)
@@ -132,17 +147,23 @@ export class BytePlusProvider extends BaseProvider {
             ...(outputFormat ? { output_format: outputFormat } : {}),
         }
 
-        info(`[BytePlus:${this.instanceKey}] Seedance submit ${JSON.stringify({
-            model: modelVersion,
-            ratio: payload.ratio,
-            resolution: payload.resolution,
-            duration: payload.duration,
-            generateAudio: payload.generate_audio,
-            outputFormat: payload.output_format,
-            promptLen: providerPrompt.length,
-            hasFirstFrame,
-            hasLastFrame,
-        }, null, 0)}`)
+        info(`[BytePlus:${this.instanceKey}] Seedance submit ${
+            JSON.stringify(
+                {
+                    model: modelVersion,
+                    ratio: payload.ratio,
+                    resolution: payload.resolution,
+                    duration: payload.duration,
+                    generateAudio: payload.generate_audio,
+                    outputFormat: payload.output_format,
+                    promptLen: providerPrompt.length,
+                    hasFirstFrame,
+                    hasLastFrame,
+                },
+                null,
+                0,
+            )
+        }`)
 
         try {
             const created = await this.retryTransport(
@@ -161,10 +182,11 @@ export class BytePlusProvider extends BaseProvider {
                 onKeepalive: () => this.videoPub.generating(),
                 // A blip while polling must not discard a video ModelArk is
                 // already rendering — each retrieve is idempotent.
-                retrieve: async (config, id, signal) => await this.retryTransport(
-                'video-poll',
-                    async () => await retrieveVideoGenerationTask(config, id, signal),
-                ),
+                retrieve: async (config, id, signal) =>
+                    await this.retryTransport(
+                        'video-poll',
+                        async () => await retrieveVideoGenerationTask(config, id, signal),
+                    ),
             })
 
             if (task.status !== 'succeeded') {
@@ -226,12 +248,18 @@ export class BytePlusProvider extends BaseProvider {
                 containerFormat,
             })
 
-            info(`[BytePlus:${this.instanceKey}] Seedance complete ${JSON.stringify({
-                taskId,
-                durationSeconds,
-                generationSeed,
-                totalTokens: task.usage?.total_tokens,
-            }, null, 0)}`)
+            info(`[BytePlus:${this.instanceKey}] Seedance complete ${
+                JSON.stringify(
+                    {
+                        taskId,
+                        durationSeconds,
+                        generationSeed,
+                        totalTokens: task.usage?.total_tokens,
+                    },
+                    null,
+                    0,
+                )
+            }`)
 
             return {
                 durationSeconds,
@@ -244,7 +272,9 @@ export class BytePlusProvider extends BaseProvider {
         } catch (e: any) {
             const message = e?.message ?? String(e)
             err(`[BytePlus:${this.instanceKey}] Seedance failed: ${message}`)
-            try { this.videoPub.error(message) } catch { /* publisher may not be initialized */ }
+            try {
+                this.videoPub.error(message)
+            } catch { /* publisher may not be initialized */ }
             throw e
         }
     }

@@ -141,9 +141,9 @@ class RouterService {
         const targetHash = route.hash
 
         return (
-            currentUrl.pathname !== targetPath ||
-            currentUrl.search !== targetQuery ||
-            currentUrl.hash.slice(1) !== targetHash
+            currentUrl.pathname !== targetPath
+            || currentUrl.search !== targetQuery
+            || currentUrl.hash.slice(1) !== targetHash
         )
     }
 

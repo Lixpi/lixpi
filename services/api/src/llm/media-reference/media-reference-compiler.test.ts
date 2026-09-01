@@ -1,8 +1,15 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import type { Asset, MediaReferenceBinding } from '@lixpi/constants'
+import type {
+    Asset,
+    MediaReferenceBinding,
+} from '@lixpi/constants'
 import type { ProseMirrorJsonNode } from '@lixpi/prosemirror'
 
 import {
@@ -322,10 +329,12 @@ describe('media reference matching and compilation', () => {
             assets: [makeAsset({ assetId: 'asset-1', title: 'Shelby' })],
         })
 
-        expect(() => assertNoForbiddenMediaReferenceLeak({
-            payload: { candidate: { visualSummary: 'A shot of Shelby on a train' } },
-            forbiddenNameVariants: bindings[0]!.forbiddenNameVariants,
-        })).toThrow('MEDIA_REFERENCE_DISPLAY_NAME_LEAK:$.candidate.visualSummary')
+        expect(() =>
+            assertNoForbiddenMediaReferenceLeak({
+                payload: { candidate: { visualSummary: 'A shot of Shelby on a train' } },
+                forbiddenNameVariants: bindings[0]!.forbiddenNameVariants,
+            })
+        ).toThrow('MEDIA_REFERENCE_DISPLAY_NAME_LEAK:$.candidate.visualSummary')
         expect(sanitizeMediaReferenceText('Shelby boards the train', bindings)).toBe('REFERENCE_1 boards the train')
     })
 
@@ -347,17 +356,19 @@ describe('media reference matching and compilation', () => {
 
         expect(placeholderBinding.forbiddenNameVariants).toEqual([])
         expect(titledBinding.forbiddenNameVariants).toEqual(['cute tabby kitten'])
-        expect(() => assertNoForbiddenMediaReferenceLeak({
-            payload: {
-                mediaBranchCandidateSnapshot: {
-                    candidates: [{ roleHints: ['base-context', 'generated-variant'] }],
+        expect(() =>
+            assertNoForbiddenMediaReferenceLeak({
+                payload: {
+                    mediaBranchCandidateSnapshot: {
+                        candidates: [{ roleHints: ['base-context', 'generated-variant'] }],
+                    },
                 },
-            },
-            forbiddenNameVariants: [
-                ...placeholderBinding.forbiddenNameVariants,
-                ...titledBinding.forbiddenNameVariants,
-            ],
-        })).not.toThrow()
+                forbiddenNameVariants: [
+                    ...placeholderBinding.forbiddenNameVariants,
+                    ...titledBinding.forbiddenNameVariants,
+                ],
+            })
+        ).not.toThrow()
     })
 
     it('fails closed when the maximum request-scoped binding count is exceeded', () => {
@@ -370,10 +381,12 @@ describe('media reference matching and compilation', () => {
             alias: `REFERENCE_${index + 1}`,
         })) as MediaReferenceBinding[]
 
-        expect(() => matchMediaReferencePhrase({
-            phrase: 'Template',
-            bindings: tooMany,
-            promptRange: { from: 0, to: 8 },
-        })).toThrow('MEDIA_REFERENCE_BINDING_LIMIT_EXCEEDED')
+        expect(() =>
+            matchMediaReferencePhrase({
+                phrase: 'Template',
+                bindings: tooMany,
+                promptRange: { from: 0, to: 8 },
+            })
+        ).toThrow('MEDIA_REFERENCE_BINDING_LIMIT_EXCEEDED')
     })
 })

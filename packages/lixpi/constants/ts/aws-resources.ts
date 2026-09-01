@@ -1,6 +1,5 @@
 'use strict'
 
-
 export const DYNAMODB_TABLES: Record<string, string> = {
     USERS: 'Users',
     ORGANIZATIONS: 'Organizations',

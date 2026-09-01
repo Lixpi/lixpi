@@ -1,6 +1,6 @@
 'use strict'
 
-import type { CanvasNode } from '@lixpi/constants'
+import type { CanvasPositionedNode } from '../scene/types.ts'
 
 import {
     resolveCollisions,
@@ -14,11 +14,11 @@ import type {
     RigidCanvasNodeGroup,
 } from './types.ts'
 
-export function resolveRigidCanvasNodeGroupCollisions(
-    nodes: CanvasNode[],
+export function resolveRigidCanvasNodeGroupCollisions<Node extends CanvasPositionedNode>(
+    nodes: Node[],
     groups: RigidCanvasNodeGroup[],
     options: CollisionOptions = {},
-): RigidCanvasNodeCollisionResult {
+): RigidCanvasNodeCollisionResult<Node> {
     if (groups.length <= 1) {
         return {
             nodes,
@@ -85,7 +85,7 @@ export function resolveRigidCanvasNodeGroupCollisions(
                     x: node.position.x + delta.x,
                     y: node.position.y + delta.y,
                 },
-            } as CanvasNode
+            }
         }),
         changed: true,
         movedGroupCount,

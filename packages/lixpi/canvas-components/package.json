@@ -1,0 +1,32 @@
+{
+    "name": "@lixpi/canvas-components",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "license": "MIT",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./effects/glass": "./src/frontend/effects/glass/index.ts",
+        "./effects/outline": "./src/frontend/effects/outline/index.ts",
+        "./loading": "./src/frontend/loading/index.ts",
+        "./media": "./src/frontend/media/index.ts",
+        "./styles/loading-overlay": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/frontend/loading/loading-overlay.scss",
+            "style": "./src/frontend/loading/loading-overlay.scss",
+            "default": "./src/frontend/loading/loading-overlay.scss"
+        }
+    },
+    "scripts": {
+        "test:run": "vitest run"
+    },
+    "dependencies": {
+        "@lixpi/canvas-engine": "workspace:*",
+        "@lixpi/ui-primitives": "workspace:*"
+    },
+    "devDependencies": {
+        "vitest": "*",
+        "happy-dom": "*"
+    }
+}

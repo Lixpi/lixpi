@@ -1,7 +1,14 @@
 'use strict'
 
 import util from 'node:util'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mockedChalk = vi.hoisted(() => ({
     green: vi.fn((value: string) => `green:${value}`),
@@ -14,18 +21,25 @@ vi.mock('chalk', () => ({
     default: mockedChalk,
 }))
 
-import { err, info, infoStr, log, warn } from './debug-tools.ts'
+import {
+    err,
+    info,
+    infoStr,
+    log,
+    warn,
+} from './debug-tools.ts'
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn> | undefined
 let consoleInfoSpy: ReturnType<typeof vi.spyOn> | undefined
 let consoleWarnSpy: ReturnType<typeof vi.spyOn> | undefined
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined
 
-const safeInspect = (value: unknown) => util.inspect(value, {
-    showHidden: false,
-    depth: null,
-    colors: true,
-})
+const safeInspect = (value: unknown) =>
+    util.inspect(value, {
+        showHidden: false,
+        depth: null,
+        colors: true,
+    })
 
 const setupConsoleSpies = () => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)

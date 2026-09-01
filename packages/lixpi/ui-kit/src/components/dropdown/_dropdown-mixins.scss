@@ -2,7 +2,7 @@
 @use "sass:map";
 @use "sass:math";
 @use '../../styles/tokens' as *;
-@use '../../styles/transitions' as *;
+@use '@lixpi/ui-primitives/styles/transitions' as *;
 @use '../infoBubble/infoBubble-mixins' as *;
 
 // =============================

@@ -72,7 +72,7 @@ Each embedded surface keeps the cited Asset alive after its canvas and Media cat
 - Package module: [`packages/lixpi/capability-system/src/capabilities/action-timeline/`](../../packages/lixpi/capability-system/src/capabilities/action-timeline/)
 - API adapters: [`services/api/src/capability-system/`](../../services/api/src/capability-system/)
 - Browser composition: [`services/web-ui/src/installed-capabilities.ts`](../../services/web-ui/src/installed-capabilities.ts)
-- Generic Artifact library: [`services/web-ui/src/infographics/workspace/artifactLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/artifactLibraryPanel.ts)
+- Generic Artifact library: [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/artifact-library-panel.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/artifact-library-panel.ts)
 
 ## Related documentation
 

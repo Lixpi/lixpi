@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
 

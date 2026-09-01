@@ -5,7 +5,7 @@ import {
 } from '@lixpi/prosemirror'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export {
     aiMediaGenerationProgressNodeSpec,

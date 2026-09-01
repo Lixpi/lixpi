@@ -1,0 +1,243 @@
+@import '@lixpi/ui-primitives/styles/transitions';
+@import '@lixpi/canvas-components/styles/loading-overlay';
+@import '@lixpi/canvas-components-lixpi-specific/styles/workspace-layer';
+@import '@lixpi/canvas-components-lixpi-specific/styles/video-chrome';
+@import '@lixpi/canvas-components-lixpi-specific/styles/asset-views';
+@import '@lixpi/canvas-components-lixpi-specific/styles/output-chrome';
+@import '@lixpi/canvas-components-lixpi-specific/styles/context-preview';
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/canvas-chrome';
+
+.workspace-pane {
+    --side-panel-backdrop-bottom-outset: var(--workspace-canvas-padding-bottom, 0px);
+    --side-panel-backdrop-inline-outset: var(--workspace-canvas-padding-inline, 0px);
+
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    cursor: default;
+
+    &.is-hovering-edge {
+        cursor: pointer;
+    }
+}
+
+.workspace-pixi-media-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    contain: layout paint;
+}
+
+.canvas-node-footer-info-button.is-analyzing {
+    color: var(--workspace-analysis-color, #5d656d);
+    animation: workspace-media-analyzing-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes workspace-media-analyzing-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/output-details-content';
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/nodes';
+
+// Animated gradient background is rendered via @lixpi/canvas-components/effects.
+.workspace-ai-chat-thread-node {
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: var(--ai-chat-thread-node-box-shadow, none);
+    border: var(--ai-chat-thread-node-border, none);
+
+    // Empty thread nodes are hidden until the first message arrives.
+    // Uses visibility:hidden so the element remains measurable (offsetWidth/Height)
+    // while being invisible. The data attribute is set at DOM-creation time so
+    // the browser never paints the node visibly — no flash on page load.
+    &[data-thread-empty="true"] {
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    // Optional pattern overlay (renderer reads these CSS vars)
+    --gradient-pattern-alpha: 0.22;
+    --gradient-pattern-tint: rgba(18, 62, 112, 0.85);
+    --gradient-pattern-scale: 1;
+    // Set this to enable a pattern overlay, e.g. url('/patterns/your-pattern.png')
+    // --gradient-pattern-url: url('/patterns/your-pattern.png');
+
+    .shifting-gradient-canvas {
+        border-radius: inherit;
+    }
+
+    // Position resize handles inside the node boundary (overflow: hidden clips anything outside)
+    .document-resize-top-left {
+        top: 0;
+        left: 0;
+    }
+
+    .document-resize-top-right {
+        top: 0;
+        right: 0;
+    }
+}
+
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor {
+    position: relative;
+    z-index: 1;
+    background: transparent !important;
+}
+
+// Override the white background from ProseMirror.scss - make fully transparent
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .editor,
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
+    background: transparent !important;
+}
+
+// Remove bottom padding that was reserved for the in-thread sticky composer.
+// In the workspace canvas the input is a floating element below the node.
+.workspace-ai-chat-thread-node .ai-chat-thread-wrapper {
+    padding-bottom: 0;
+    margin-top: 0;
+}
+
+.workspace-ai-chat-thread-node .ai-chat-thread-wrapper .ai-chat-thread-content {
+    padding-bottom: 0;
+}
+
+// Override global ProseMirror padding/min-height for the canvas thread
+.workspace-ai-chat-thread-node .ai-chat-thread-node-editor .ProseMirror {
+    min-height: 0;
+    padding: 0 0 1rem;
+}
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/right-panel';
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/workspace-composer';
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/operation-status';
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/branch-marker';
+@import '@lixpi/canvas-components-lixpi-specific/styles/progress';
+@import '@lixpi/canvas-components-lixpi-specific/styles/output-details';
+
+.image-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-height: 80px;
+    color: #d63031;
+    background: #fff5f5;
+    font-size: 13px;
+    border-radius: 4px;
+}
+
+@import '@lixpi/canvas-components-lixpi-specific/styles/document-node';
+
+.editor-error,
+.editor-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 80px;
+    color: #888;
+    font-size: 13px;
+}
+
+.editor-error {
+    color: #d63031;
+    background: #fff5f5;
+}
+
+// AI chat thread editor container - extends document-node-editor
+.ai-chat-thread-node-editor {
+    flex: 1;
+    overflow: hidden;
+    min-height: 100px;
+    border-radius: 0 0 8px 8px;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: text;
+}
+
+// Bottom resize handles on the per-thread floating AI input
+.ai-prompt-input-thread-persistent {
+    &.is-selected {
+        outline: 1px solid var(--selection-outline-color);
+        outline-offset: 2px;
+    }
+
+    // Resize handles stay hidden until their own corner is hovered.
+}
+
+// Connection handles on nodes
+.workspace-handle {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--workspace-handle-color, #42494f);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 18;
+    transition:
+        hoverTransition(opacity, $defaultHoverTransitionDuration),
+        hoverTransition(transform, $defaultHoverTransitionDuration);
+
+    &:hover {
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+}
+
+.workspace-handle.left {
+    left: 0;
+}
+
+.workspace-handle.right {
+    left: 100%;
+}
+
+.image-error-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    min-height: 60px;
+    color: #888;
+    font-size: 12px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+
+    svg {
+        width: 48px;
+        height: 48px;
+    }
+}
+
+// Show handles on hover for all node types
+.workspace-document-node:hover .workspace-handle,
+.workspace-image-node:hover .workspace-handle,
+.workspace-video-node:hover .workspace-handle,
+.workspace-media-document-node:hover .workspace-handle,
+.workspace-audio-node:hover .workspace-handle,
+.workspace-ai-chat-thread-node:hover .workspace-handle,
+.workspace-document-node.is-selected .workspace-handle,
+.workspace-image-node.is-selected .workspace-handle,
+.workspace-video-node.is-selected .workspace-handle,
+.workspace-media-document-node.is-selected .workspace-handle,
+.workspace-audio-node.is-selected .workspace-handle,
+.workspace-ai-chat-thread-node.is-selected .workspace-handle {
+    opacity: 1;
+    pointer-events: auto;
+}

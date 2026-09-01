@@ -2,9 +2,9 @@ import { ProseMirrorEditor } from '$src/components/proseMirror/components/editor
 import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
 import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import type { AiUserMessageContextPreviewRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiUserMessageNode.ts'
-import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import type { AiMediaGenerationProgressRenderer } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiMediaGenerationProgressNode.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type ReadOnlyAiChatThreadRenderOptions = {
     mount: HTMLElement

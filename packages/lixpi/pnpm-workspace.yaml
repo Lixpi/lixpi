@@ -2,6 +2,8 @@ packages:
   - "auth-service"
   - "capability-system"
   - "canvas-engine"
+  - "canvas-components"
+  - "canvas-components-lixpi-specific"
   - "constants/ts"
   - "debug-tools/ts"
   - "dynamodb-service"
@@ -9,3 +11,4 @@ packages:
   - "nats-service/ts"
   - "prosemirror"
   - "ui-kit"
+  - "ui-primitives"

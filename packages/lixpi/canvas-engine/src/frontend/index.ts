@@ -1,6 +1,10 @@
 'use strict'
 
 export * from '../shared/index.ts'
-export * as animation from './animation/index.ts'
+export * from './media/index.ts'
+export * from './viewport/index.ts'
+export * from './runtime/node-registry.ts'
+export * from './runtime/canvas-scene.ts'
+export * from './runtime/canvas-controller.ts'
 export * as connectors from './connectors/index.ts'
 export * as rendering from './rendering/index.ts'

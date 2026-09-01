@@ -1,0 +1,243 @@
+@import '@lixpi/ui-primitives/styles/transitions';
+
+.workspace-media-generation-progress {
+    --progress-timeline-surface: transparent;
+    --progress-timeline-primary: currentColor;
+    --progress-timeline-secondary: currentColor;
+    --progress-timeline-line: rgb(77 89 99 / 34%);
+    --progress-timeline-pending-border: rgb(77 89 99 / 58%);
+    --progress-timeline-source-size: 9px;
+    --progress-timeline-title-size: var(--workspace-branch-marker-response-font-size, 11.5px);
+    --progress-timeline-title-weight: 500;
+    --progress-timeline-summary-size: var(--workspace-branch-marker-response-font-size, 11.5px);
+    position: static;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin-top: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #4d5963;
+    font-size: var(--workspace-branch-marker-response-font-size, 11.5px);
+    font-weight: 500;
+    line-height: var(--workspace-branch-marker-response-line-height, 1.15);
+    pointer-events: none;
+}
+
+.workspace-media-generation-sidebar-progress {
+    --progress-timeline-line: rgb(77 89 99 / 24%);
+    --progress-timeline-pending-border: rgb(77 89 99 / 42%);
+    --progress-timeline-source-size: 9px;
+    --progress-timeline-title-size: var(--workspace-right-sidebar-content-font-size);
+    --progress-timeline-summary-size: var(--workspace-right-sidebar-content-font-size);
+    --execution-trace-tag-pill-font-size: var(--workspace-right-sidebar-tag-pill-font-size);
+    --execution-trace-tag-pill-font-weight: var(--workspace-right-sidebar-tag-pill-font-weight);
+    color: #4d5963;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: var(--workspace-right-sidebar-content-font-size);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    pointer-events: auto;
+}
+
+.workspace-media-generation-sidebar-progress .progress-timeline,
+.workspace-media-generation-sidebar-progress .progress-timeline-item,
+.workspace-media-generation-sidebar-progress .progress-timeline-content,
+.workspace-media-generation-sidebar-progress .progress-timeline-details,
+.workspace-media-generation-sidebar-progress .progress-timeline-detail,
+.workspace-media-generation-sidebar-progress .progress-timeline-children {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.workspace-media-generation-sidebar-progress .progress-timeline-title,
+.workspace-media-generation-sidebar-progress .progress-timeline-summary,
+.workspace-media-generation-sidebar-progress .progress-timeline-source-name,
+.workspace-media-generation-sidebar-progress .progress-timeline-meta {
+    overflow: visible;
+    max-width: 100%;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.workspace-branch-marker-progress {
+    --progress-timeline-surface: var(--workspace-branch-origin-background-color, #5d656d);
+    --progress-timeline-line: rgb(255 255 255 / 38%);
+    --progress-timeline-pending-border: rgb(255 255 255 / 68%);
+    padding: 0 2px 1px;
+    color: currentColor;
+}
+
+.workspace-branch-marker-progress .workspace-media-generation-pipeline-disclosure:hover,
+.workspace-branch-marker-progress .workspace-media-generation-pipeline-disclosure:focus-visible,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle:hover .progress-timeline-chevron,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-source,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-title,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-meta,
+.workspace-branch-marker-progress .progress-timeline-toggle:focus-visible .progress-timeline-chevron {
+    color: var(--workspace-branch-origin-icon-color);
+}
+
+.workspace-media-generation-pipeline-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0 0 10px;
+    color: currentColor;
+}
+
+.workspace-media-generation-pipeline-heading {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.workspace-media-generation-pipeline-status {
+    overflow: hidden;
+    min-width: 0;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    opacity: 0.72;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-media-generation-pipeline-disclosure {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: currentColor;
+    font: inherit;
+    opacity: 0.72;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+}
+
+.workspace-media-generation-pipeline-disclosure:hover,
+.workspace-media-generation-pipeline-disclosure:focus-visible {
+    opacity: 1;
+}
+
+.workspace-media-generation-pipeline-disclosure-label {
+    overflow: hidden;
+    min-width: 0;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-media-generation-pipeline-disclosure-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 15px;
+    width: 15px;
+    height: 15px;
+    // A 1.5px offset aligns this 15px glyph with the 12px section chevrons.
+    margin-right: -1.5px;
+    line-height: 0;
+}
+
+.workspace-media-generation-pipeline-disclosure-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.workspace-media-generation-pipeline-disclosure-icon svg * {
+    fill: currentColor;
+}
+
+.workspace-media-generation-progress .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-summary,
+.workspace-media-generation-progress .progress-timeline-meta {
+    color: currentColor;
+    line-height: inherit;
+    opacity: 0.72;
+}
+
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-source,
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-meta,
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-chevron {
+    transition: hoverTransition(opacity, $defaultHoverTransitionDuration);
+}
+
+.workspace-media-generation-progress .progress-timeline-toggle .progress-timeline-source {
+    opacity: 0.72;
+}
+
+.workspace-media-generation-progress .progress-timeline-source-kind {
+    font-weight: 400;
+}
+
+.workspace-media-generation-progress .progress-timeline-source-name {
+    font-weight: 700;
+}
+
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-source,
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-meta,
+.workspace-media-generation-progress .progress-timeline-toggle:hover .progress-timeline-chevron,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-source,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-meta,
+.workspace-media-generation-progress .progress-timeline-toggle:focus-visible .progress-timeline-chevron {
+    opacity: 1;
+}
+
+.workspace-media-generation-progress .progress-timeline-chevron {
+    opacity: 0.72;
+}
+
+.workspace-media-generation-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-title,
+.workspace-media-generation-progress .progress-timeline-item[data-status='running'] > .progress-timeline-content > .progress-timeline-title-row > .progress-timeline-heading > .progress-timeline-meta {
+    opacity: 1;
+}
+
+.workspace-media-generation-progress .progress-timeline-content {
+    padding-bottom: 8px;
+}
+
+.workspace-media-generation-progress .progress-timeline-item:last-child > .progress-timeline-content {
+    padding-bottom: 0;
+}
+
+.workspace-media-generation-progress .progress-timeline-item:last-child > .progress-timeline-rail {
+    min-height: 14px;
+}
+
+.workspace-media-generation-progress .progress-timeline-children {
+    margin-top: 6px;
+}
+
+.canvas-generated-media-history-panel > .workspace-media-generation-progress,
+.canvas-generated-media-history-panel .ai-media-generation-progress {
+    width: auto;
+    margin: 18px 0 0;
+}

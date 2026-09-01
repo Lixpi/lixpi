@@ -1,9 +1,6 @@
 'use strict'
 
-export * from '../animation/index.ts'
-export * from './glass/pixiGlassBorderRenderer.ts'
-export * from './glass/pixiGlassMaterial.ts'
-export * from './gradients/freeformGradient.ts'
-export * from './gradients/shiftingGradientRenderer.ts'
-export * from './gradients/svgGradient.ts'
-export * from './progress/pixiTravelingOutlineRenderer.ts'
+export * from './resources.ts'
+export * from './canvas-renderer.ts'
+export * from './drawing-scope.ts'
+export * from './rectangle-overlay.ts'

@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { CapabilityMediaStrategyRegistry } from '../../../backend/capability-media-strategy-registry.ts'
 import { CapabilityModuleCatalog } from '../../../backend/capability-module.ts'
@@ -44,9 +48,11 @@ describe('createCharacterCreatorModule', () => {
         catalog.registerMediaStrategies(registry)
 
         expect(module.mediaStrategies?.map(strategy => strategy.kind)).toEqual(['character-sheet'])
-        expect(registry.get({
-            kind: 'character-sheet',
-            capabilityRunId: 'run-1',
-        } satisfies CapabilityMediaExecutionPlan)).toBe(module.mediaStrategies?.[0])
+        expect(registry.get(
+            {
+                kind: 'character-sheet',
+                capabilityRunId: 'run-1',
+            } satisfies CapabilityMediaExecutionPlan,
+        )).toBe(module.mediaStrategies?.[0])
     })
 })

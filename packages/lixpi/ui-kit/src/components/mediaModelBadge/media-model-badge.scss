@@ -1,6 +1,6 @@
 .media-model-badge {
     min-width: 0;
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    height: var(--canvas-node-footer-icon-size, 34px);
     flex: 1 1 auto;
     display: flex;
     align-items: center;
@@ -12,9 +12,9 @@
 
 .media-model-badge-icon,
 .media-model-badge svg {
-    width: var(--workspace-generated-media-chrome-icon-size, 34px);
-    height: var(--workspace-generated-media-chrome-icon-size, 34px);
-    flex: 0 0 var(--workspace-generated-media-chrome-icon-size, 34px);
+    width: var(--canvas-node-footer-icon-size, 34px);
+    height: var(--canvas-node-footer-icon-size, 34px);
+    flex: 0 0 var(--canvas-node-footer-icon-size, 34px);
     fill: currentColor;
 }
 

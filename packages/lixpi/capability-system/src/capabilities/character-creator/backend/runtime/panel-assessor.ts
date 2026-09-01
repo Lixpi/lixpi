@@ -1,7 +1,10 @@
 'use strict'
 
 import sharp from 'sharp'
-import { info, warn } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
 
 import type {
     CharacterFidelityAssessmentRequest,
@@ -123,9 +126,11 @@ export async function assessCharacterPanel(args: {
     if (fidelity.metric.available && (fidelity.metric.cosineSimilarity ?? 0) < 0.45) {
         failedDimensions.push('facial-identity')
     }
-    if (!fidelity.metric.available
+    if (
+        !fidelity.metric.available
         && fidelity.metric.unavailableReason !== 'face-not-required'
-        && fidelity.metric.unavailableReason !== 'non-photographic') {
+        && fidelity.metric.unavailableReason !== 'non-photographic'
+    ) {
         failedDimensions.push('face-similarity-unavailable')
     }
     if (dimensions.length === 0) failedDimensions.push('per-dimension-evaluation-unavailable')
@@ -167,12 +172,14 @@ const assessPanelDimensions = async (
     } catch (error) {
         if (args.signal?.aborted) throw error
         const diagnostic = error instanceof Error ? error.message : String(error)
-        warn(`[CharacterCreatorFidelity] dimension-assessor-unavailable ${JSON.stringify({
-            attemptId: args.attemptId,
-            panelId: args.panel.panelId,
-            errorName: error instanceof Error ? error.name : 'Error',
-            diagnostic: diagnostic.slice(0, 320),
-        })}`)
+        warn(`[CharacterCreatorFidelity] dimension-assessor-unavailable ${
+            JSON.stringify({
+                attemptId: args.attemptId,
+                panelId: args.panel.panelId,
+                errorName: error instanceof Error ? error.name : 'Error',
+                diagnostic: diagnostic.slice(0, 320),
+            })
+        }`)
         return {
             dimensions: [],
             assessor: 'unavailable',
@@ -187,22 +194,26 @@ const assessPanelDimensions = async (
 
 const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[0]): Promise<CharacterFidelityAssessmentResponse> => {
     const requiresFaceFidelity = args.panel.acceptanceDimensions.includes('facial-identity')
-    if (!args.fidelity || args.evidence.medium !== 'photograph'
-        || !requiresFaceFidelity) {
+    if (
+        !args.fidelity || args.evidence.medium !== 'photograph'
+        || !requiresFaceFidelity
+    ) {
         const reason: CharacterFidelityUnavailableReason = args.evidence.medium !== 'photograph'
             ? 'non-photographic'
             : !requiresFaceFidelity
-                ? 'face-not-required'
-                : 'assessor-unavailable'
-        info(`[CharacterFidelity] local-skip ${JSON.stringify({
-            attemptId: args.attemptId,
-            panelId: args.panel.panelId,
-            panelKind: args.panel.kind,
-            sourceMedium: args.evidence.medium,
-            requiresFaceFidelity,
-            fidelityPortAvailable: Boolean(args.fidelity),
-            reason,
-        })}`)
+            ? 'face-not-required'
+            : 'assessor-unavailable'
+        info(`[CharacterFidelity] local-skip ${
+            JSON.stringify({
+                attemptId: args.attemptId,
+                panelId: args.panel.panelId,
+                panelKind: args.panel.kind,
+                sourceMedium: args.evidence.medium,
+                requiresFaceFidelity,
+                fidelityPortAvailable: Boolean(args.fidelity),
+                reason,
+            })
+        }`)
         return unavailableMetric(args, reason)
     }
     const request: CharacterFidelityAssessmentRequest = {
@@ -222,11 +233,13 @@ const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[
         return await args.fidelity.assess(request, args.signal)
     } catch (error) {
         if (args.signal?.aborted) throw error
-        warn(`[CharacterFidelity] assessor-unavailable ${JSON.stringify({
-            attemptId: args.attemptId,
-            panelId: args.panel.panelId,
-            error: error instanceof Error ? error.message : String(error),
-        })}`)
+        warn(`[CharacterFidelity] assessor-unavailable ${
+            JSON.stringify({
+                attemptId: args.attemptId,
+                panelId: args.panel.panelId,
+                error: error instanceof Error ? error.message : String(error),
+            })
+        }`)
         return unavailableMetric(args, 'assessor-unavailable')
     }
 }

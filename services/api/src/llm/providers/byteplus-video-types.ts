@@ -174,18 +174,14 @@ const downloadModelArkOutput = async (
     return Buffer.from(arrayBuffer)
 }
 
-export const downloadVideo = async (videoUrl: string, signal?: AbortSignal): Promise<Buffer> =>
-    downloadModelArkOutput(videoUrl, 'video', signal)
+export const downloadVideo = async (videoUrl: string, signal?: AbortSignal): Promise<Buffer> => downloadModelArkOutput(videoUrl, 'video', signal)
 
-export const downloadLastFrame = async (frameUrl: string, signal?: AbortSignal): Promise<Buffer> =>
-    downloadModelArkOutput(frameUrl, 'last frame', signal)
+export const downloadLastFrame = async (frameUrl: string, signal?: AbortSignal): Promise<Buffer> => downloadModelArkOutput(frameUrl, 'last frame', signal)
 
-export const SEEDANCE_TERMINAL_STATUSES: ReadonlySet<SeedanceTaskStatus> =
-    new Set(['succeeded', 'failed', 'cancelled', 'expired'])
+export const SEEDANCE_TERMINAL_STATUSES: ReadonlySet<SeedanceTaskStatus> = new Set(['succeeded', 'failed', 'cancelled', 'expired'])
 
-export const SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE =
-    'Seedance video extension requires provider-fetchable video URLs. ' +
-    'Use VEO for extension until external asset handoff is implemented.'
+export const SEEDANCE_EXTENSION_UNSUPPORTED_MESSAGE = 'Seedance video extension requires provider-fetchable video URLs. '
+    + 'Use VEO for extension until external asset handoff is implemented.'
 
 export type SeedanceContentInputs = {
     videoSourceForExtension?: string
@@ -200,8 +196,8 @@ const toModelArkImageUrl = (url: string, label: string): string => {
     if (!url) throw new Error(`Seedance: empty ${label} URL`)
     if (url.startsWith('nats-obj://')) {
         throw new Error(
-            `Seedance: refusing to send a private object-store URI as a ${label}. ` +
-            `The resolver must supply a base64 data URL.`,
+            `Seedance: refusing to send a private object-store URI as a ${label}. `
+                + `The resolver must supply a base64 data URL.`,
         )
     }
     return url

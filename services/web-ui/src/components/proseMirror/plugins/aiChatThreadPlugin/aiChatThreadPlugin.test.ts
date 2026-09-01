@@ -1,10 +1,22 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
-import { afterEach, beforeEach } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+} from 'vitest'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { EditorState } from 'prosemirror-state'
-import { AI_CHAT_THREAD_PLUGIN_KEY, STOP_AI_CHAT_META, USE_AI_CHAT_META } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
+import {
+    AI_CHAT_THREAD_PLUGIN_KEY,
+    STOP_AI_CHAT_META,
+    USE_AI_CHAT_META,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import {
@@ -148,8 +160,8 @@ describe('aiChatThreadPlugin — local media response templates', () => {
                         aiImageModels: JSON.stringify([imageModel]),
                         imageGenerationSize: 'auto',
                     },
-                    [makeUserMessage('Swap the characters')]
-                )
+                    [makeUserMessage('Swap the characters')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -214,8 +226,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         // least one selected image model for handleChatRequest to submit.
                         aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
                     },
-                    [userMessage, responseMessageWithFeature]
-                )
+                    [userMessage, responseMessageWithFeature],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -284,8 +296,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         aiImageModels: JSON.stringify(['Google:gemini-3.1-flash-image']),
                         imageGenerationConfigGroups,
                     },
-                    [makeUserMessage('Image config group test')]
-                )
+                    [makeUserMessage('Image config group test')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -349,8 +361,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         videoAspectRatio: '16:9',
                         videoResolution: '1080p',
                     },
-                    [makeUserMessage('Video config group test')]
-                )
+                    [makeUserMessage('Video config group test')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -392,8 +404,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                     [
                         makeUserMessage('First line'),
                         makeUserMessage('Second line'),
-                    ]
-                )
+                    ],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -426,11 +438,11 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                 aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']),
                 aiImageModels: JSON.stringify(['Google:gemini-2.5-flash-image']),
             },
-            [makeUserMessage('Thread one prompt')]
+            [makeUserMessage('Thread one prompt')],
         )
         const threadTwo = makeThread(
             { threadId: 'thread-b', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
-            [makeUserMessage('Thread two prompt')]
+            [makeUserMessage('Thread two prompt')],
         )
 
         const state = EditorState.create({
@@ -671,8 +683,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                             'OpenAI:o4-mini',
                         ]),
                     },
-                    [makeUserMessage('String flag parsing')]
-                )
+                    [makeUserMessage('String flag parsing')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -716,8 +728,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                             'OpenAI:o4-mini',
                         ]),
                     },
-                    [makeUserMessage('String flag parsing')]
-                )
+                    [makeUserMessage('String flag parsing')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -814,9 +826,13 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         expect(handlePaste).toBeDefined()
 
         const insidePaste = handlePaste!({ state: stateInsideThread } as any, {} as ClipboardEvent, null as any)
-        const outsidePaste = handlePaste!({
-            state: createStateWithTextSelection(state.doc, state.doc.content.size, state.doc.content.size),
-        } as any, {} as ClipboardEvent, null as any)
+        const outsidePaste = handlePaste!(
+            {
+                state: createStateWithTextSelection(state.doc, state.doc.content.size, state.doc.content.size),
+            } as any,
+            {} as ClipboardEvent,
+            null as any,
+        )
 
         expect(insidePaste).toBe(true)
         expect(outsidePaste).toBe(false)
@@ -842,8 +858,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         ]),
                         imageGenerationSize: '1024x1024',
                     },
-                    [makeUserMessage('Legacy multi-model payload')]
-                )
+                    [makeUserMessage('Legacy multi-model payload')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -893,8 +909,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         videoDuration: '8',
                         sourceVideoNodeId: 'video-source-node',
                     },
-                    [makeUserMessage('Legacy multi-model payload')]
-                )
+                    [makeUserMessage('Legacy multi-model payload')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -936,8 +952,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         useMultipleImageModels: true,
                         aiImageModels: 'not-json',
                     },
-                    [makeUserMessage('Image model payload validation')]
-                )
+                    [makeUserMessage('Image model payload validation')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -950,7 +966,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         state.applyTransaction(trigger)
 
         expect(consoleErrorSpy).toHaveBeenCalledWith(
-            '[AI_CHAT_THREAD] Image generation requires at least one image model.'
+            '[AI_CHAT_THREAD] Image generation requires at least one image model.',
         )
         expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
@@ -970,8 +986,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                             'OpenAI:gpt-image-1',
                         ]),
                     },
-                    [makeUserMessage('Single-image-model collapse')]
-                )
+                    [makeUserMessage('Single-image-model collapse')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -1005,8 +1021,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
                         useMultipleVideoModels: true,
                         aiVideoModels: 'not-json',
                     },
-                    [makeUserMessage('Video model payload validation')]
-                )
+                    [makeUserMessage('Video model payload validation')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -1019,7 +1035,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
         state.applyTransaction(trigger)
 
         expect(consoleErrorSpy).toHaveBeenCalledWith(
-            '[AI_CHAT_THREAD] Video generation requires at least one video model.'
+            '[AI_CHAT_THREAD] Video generation requires at least one video model.',
         )
         expect(sendAiRequestHandler).not.toHaveBeenCalled()
     })
@@ -1032,8 +1048,8 @@ describe('aiChatThreadPlugin — request payload construction', () => {
             doc: doc(
                 makeThread(
                     { threadId: 'thread-stop', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
-                    [makeUserMessage('Stopping request')]
-                )
+                    [makeUserMessage('Stopping request')],
+                ),
             ),
             schema,
             plugins: [plugin],
@@ -1053,7 +1069,7 @@ describe('aiChatThreadPlugin — request payload construction', () => {
 
         const thread = makeThread(
             { threadId: 'thread-delete', aiReasoningModels: JSON.stringify(['Anthropic:claude-sonnet-4-6']) },
-            [makeUserMessage('Only message')]
+            [makeUserMessage('Only message')],
         )
         const state = EditorState.create({
             doc: doc(thread),

@@ -45,14 +45,16 @@ export function createCharacterCreatorRuntimePorts(args: {
                     assetId: asset.assetId,
                     organizationId: asset.organizationId,
                     ...(asset.composition ? { composition: structuredClone(asset.composition) } : {}),
-                    ...(asset.media ? {
-                        media: {
-                            renditions: {
-                                canonical: projectRendition(asset.media.renditions.canonical),
-                                original: projectRendition(asset.media.renditions.original),
+                    ...(asset.media
+                        ? {
+                            media: {
+                                renditions: {
+                                    canonical: projectRendition(asset.media.renditions.canonical),
+                                    original: projectRendition(asset.media.renditions.original),
+                                },
                             },
-                        },
-                    } : {}),
+                        }
+                        : {}),
                 }
             },
             readBlob: async request => await getContentAddressedBlob(request),
@@ -81,40 +83,50 @@ export function createCharacterCreatorRuntimePorts(args: {
             },
         },
         imageGeneration: {
-            generate: async request => await generateCapabilityImage({
-                ...request,
-                registry: args.registry,
-            }),
+            generate: async request =>
+                await generateCapabilityImage({
+                    ...request,
+                    registry: args.registry,
+                }),
         },
         structuredVlm: {
-            call: async request => await callStructuredVlm({
-                ...request,
-                natsService: args.natsService,
-            }),
+            call: async request =>
+                await callStructuredVlm({
+                    ...request,
+                    natsService: args.natsService,
+                }),
         },
         fidelity: {
-            assess: async (request, signal) => await assessCharacterFidelity(
-                args.natsService,
-                request,
-                signal,
-            ),
+            assess: async (request, signal) =>
+                await assessCharacterFidelity(
+                    args.natsService,
+                    request,
+                    signal,
+                ),
         },
     }
 }
 
-const projectRendition = (rendition: {
-    status?: string
-    blobHash?: string
-    mimeType?: string
-} | undefined): CharacterReferenceRendition | undefined => rendition ? {
-    status: rendition.status,
-    blobHash: rendition.blobHash,
-    mimeType: rendition.mimeType,
-} : undefined
+const projectRendition = (
+    rendition: {
+        status?: string
+        blobHash?: string
+        mimeType?: string
+    } | undefined,
+): CharacterReferenceRendition | undefined =>
+    rendition
+        ? {
+            status: rendition.status,
+            blobHash: rendition.blobHash,
+            mimeType: rendition.mimeType,
+        }
+        : undefined
 
-const generateCapabilityImage = async (args: {
-    registry: ProviderRegistry
-} & Parameters<CharacterCreatorRuntimePorts['imageGeneration']['generate']>[0]): Promise<CharacterImageGenerationResult> => {
+const generateCapabilityImage = async (
+    args: {
+        registry: ProviderRegistry
+    } & Parameters<CharacterCreatorRuntimePorts['imageGeneration']['generate']>[0],
+): Promise<CharacterImageGenerationResult> => {
     const providerName = args.context.imageModel.provider
     const modelVersion = args.context.imageModel.modelVersion
     const modelMeta = args.context.imageModel.meta
@@ -124,7 +136,9 @@ const generateCapabilityImage = async (args: {
         args.operationKey,
     ].join(':')
     const provider = args.registry.createTransient(instanceKey, providerName)
-    const stopForAbort = (): void => { void args.registry.stop(instanceKey) }
+    const stopForAbort = (): void => {
+        void args.registry.stop(instanceKey)
+    }
     args.signal?.addEventListener('abort', stopForAbort, { once: true })
     const resolvedImageSize = resolvePanelImageSize(args.context.imageModel.requestedSize, modelMeta)
     const references: ImageGenerationReference[] = args.references.map(reference => ({

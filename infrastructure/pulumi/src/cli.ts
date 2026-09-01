@@ -5,14 +5,19 @@ import process from 'process'
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 
-import { log, info, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import { endOutputSession } from './outputFormatter.ts'
 
 import { StackManager } from './stackManager.ts'
 
 const {
     AWS_REGION,
-    STAGE
+    STAGE,
 } = process.env
 
 const cli = yargs(hideBin(process.argv))
@@ -64,7 +69,7 @@ const execCommand = async () => {
                 break
             case 'refresh':
                 await manager.refresh({
-                    clearPendingCreates: true
+                    clearPendingCreates: true,
                 })
                 break
             case 'outputs':

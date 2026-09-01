@@ -1,9 +1,19 @@
 import 'd3-transition'
 
-import { select, type Selection } from 'd3-selection'
-import { html } from '../../dom/domTemplates.ts'
+import {
+    select,
+    type Selection,
+} from 'd3-selection'
+import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+
+export type ProgressRippleArtwork = {
+    viewBox: { x: number; y: number; width: number; height: number }
+    paths: readonly [string, string, string]
+}
 
 export type ProgressRippleIconConfig = {
+    artwork: ProgressRippleArtwork
+    document?: Document
     color?: string
     className?: string
 }
@@ -14,12 +24,6 @@ export type ProgressRippleIconInstance = {
     reset: () => void
     destroy: () => void
 }
-
-const PROGRESS_LINE_STEP_CIRCLE_PATHS = [
-    'm432 240c0 106.039062-85.960938 192-192 192s-192-85.960938-192-192 85.960938-192 192-192 192 85.960938 192 192zm0 0',
-    'm240 480c-132.546875 0-240-107.453125-240-240s107.453125-240 240-240 240 107.453125 240 240c-.148438 132.484375-107.515625 239.851562-240 240zm0-464c-123.710938 0-224 100.289062-224 224s100.289062 224 224 224 224-100.289062 224-224c-.140625-123.652344-100.347656-223.859375-224-224zm0 0',
-    'm352 240c0 61.855469-50.144531 112-112 112s-112-50.144531-112-112 50.144531-112 112-112 112 50.144531 112 112zm0 0',
-] as const
 
 const DEFAULT_COLOR = '#cbbfff'
 const CYCLE_MS = 1400
@@ -39,8 +43,11 @@ function tintHex(color: string, whiteMix = 0.68): string {
     return `#${tinted.map(channel => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
-function centeredLayerScale(scale: number): string {
-    return `translate(240 240) scale(${scale}) translate(-240 -240)`
+function centeredLayerScale(scale: number, artwork: ProgressRippleArtwork): string {
+    const { x, y, width, height } = artwork.viewBox
+    const cx = x + width / 2
+    const cy = y + height / 2
+    return `translate(${cx} ${cy}) scale(${scale}) translate(${-cx} ${-cy})`
 }
 
 function rippleEase(t: number): number {
@@ -57,7 +64,8 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
     private cycleTimeoutId: number | undefined
     private destroyed = false
 
-    constructor(config: ProgressRippleIconConfig) {
+    constructor(private readonly config: ProgressRippleIconConfig) {
+        const html = createDocumentHtml(config.document ?? document)
         const color = config.color ?? DEFAULT_COLOR
         this.element = html`
             <span
@@ -68,22 +76,22 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
         this.svg = select<HTMLElement, unknown>(this.element)
             .append<SVGSVGElement>('svg')
             .attr('class', 'progress-ripple-icon-svg')
-            .attr('viewBox', '0 0 480 480')
+            .attr('viewBox', [config.artwork.viewBox.x, config.artwork.viewBox.y, config.artwork.viewBox.width, config.artwork.viewBox.height].join(' '))
             .attr('focusable', 'false')
 
         const layers = [
             {
-                path: PROGRESS_LINE_STEP_CIRCLE_PATHS[0],
+                path: config.artwork.paths[0],
                 className: 'marker-middle marker-animated-layer',
                 fill: tintHex(color),
             },
             {
-                path: PROGRESS_LINE_STEP_CIRCLE_PATHS[1],
+                path: config.artwork.paths[1],
                 className: 'marker-outer marker-animated-layer',
                 fill: color,
             },
             {
-                path: PROGRESS_LINE_STEP_CIRCLE_PATHS[2],
+                path: config.artwork.paths[2],
                 className: 'marker-center',
                 fill: color,
             },
@@ -120,30 +128,32 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
     }
 
     private resetLayers(selector: string): void {
+        const artwork = this.config.artwork
         this.svg.selectAll<SVGGElement, unknown>(selector)
             .interrupt('progress-marker-middle')
             .interrupt('progress-marker-outer')
             .attr('opacity', 1)
-            .attr('transform', centeredLayerScale(1))
+            .attr('transform', centeredLayerScale(1, artwork))
     }
 
     private runCycle(): void {
+        const artwork = this.config.artwork
         const middleLayers = this.svg.selectAll<SVGGElement, unknown>('g.marker-middle')
         if (!middleLayers.size()) return
 
         middleLayers
             .interrupt('progress-marker-middle')
             .attr('opacity', 1)
-            .attr('transform', centeredLayerScale(1))
+            .attr('transform', centeredLayerScale(1, artwork))
             .transition('progress-marker-middle')
             .duration(MIDDLE_DURATION_MS)
             .ease(rippleEase)
             .attr('opacity', 0)
-            .attr('transform', centeredLayerScale(1.72))
+            .attr('transform', centeredLayerScale(1.72, artwork))
             .on('end', function(this: SVGGElement) {
                 select(this)
                     .attr('opacity', 0)
-                    .attr('transform', centeredLayerScale(1.72))
+                    .attr('transform', centeredLayerScale(1.72, artwork))
             })
 
         const outerTimeoutId = window.setTimeout(() => {
@@ -151,16 +161,16 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
             this.svg.selectAll<SVGGElement, unknown>('g.marker-outer')
                 .interrupt('progress-marker-outer')
                 .attr('opacity', 1)
-                .attr('transform', centeredLayerScale(1))
+                .attr('transform', centeredLayerScale(1, artwork))
                 .transition('progress-marker-outer')
                 .duration(OUTER_DURATION_MS)
                 .ease(rippleEase)
                 .attr('opacity', 0)
-                .attr('transform', centeredLayerScale(2.05))
+                .attr('transform', centeredLayerScale(2.05, artwork))
                 .on('end', function(this: SVGGElement) {
                     select(this)
                         .attr('opacity', 0)
-                        .attr('transform', centeredLayerScale(2.05))
+                        .attr('transform', centeredLayerScale(2.05, artwork))
                 })
         }, OUTER_DELAY_MS)
 
@@ -189,7 +199,7 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
 }
 
 export function createProgressRippleIcon(
-    config: ProgressRippleIconConfig = {},
+    config: ProgressRippleIconConfig,
 ): ProgressRippleIconInstance {
     return new ProgressRippleIcon(config)
 }

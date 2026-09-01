@@ -6,9 +6,13 @@
     "description": "Standalone Markdoc -> HTML renderer for Lixpi documentation. No UI framework; the only runtime dependency is @markdoc/markdoc.",
     "scripts": {
         "build": "node build.mjs",
-        "serve": "node build.mjs && node serve.mjs"
+        "serve": "node build.mjs && node serve.mjs",
+        "test:run": "vitest run"
     },
     "dependencies": {
         "@markdoc/markdoc": "^0.4.0"
+    },
+    "devDependencies": {
+        "vitest": "*"
     }
 }

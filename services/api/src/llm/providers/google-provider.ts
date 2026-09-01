@@ -3,11 +3,21 @@
 import * as process from 'process'
 
 import { GoogleGenAI } from '@google/genai'
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
-import { BaseProvider, type BaseProviderDeps } from './base-provider.ts'
+import {
+    BaseProvider,
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import type { ProviderName } from '@lixpi/constants'
-import type { ProviderState, ChatMessage } from '../graph/state.ts'
+import type {
+    ProviderState,
+    ChatMessage,
+} from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
     assertMessageInputKindsSupported,
@@ -36,7 +46,11 @@ import { asGoogleTool } from '@lixpi/capability-system/backend'
 import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 import { buildImageReferencePromptLabel } from './image-reference-adapters.ts'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import {
+    mkdtemp,
+    readFile,
+    rm,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -355,30 +369,38 @@ export class GoogleProvider extends BaseProvider {
                 }
             } else if (effectiveImageGen) {
                 // Native image-generation path (called via ImageRouter).
-                const inputImageCount = contents.reduce((acc, c) => acc + (Array.isArray((c as any).parts)
-                    ? (c as any).parts.filter((p: any) => p?.inlineData || p?.inline_data).length
-                    : 0), 0)
-                const inputTextLen = contents.reduce((acc, c) => acc + (Array.isArray((c as any).parts)
-                    ? (c as any).parts.reduce((s: number, p: any) => s + (typeof p?.text === 'string' ? p.text.length : 0), 0)
-                    : 0), 0)
-                info(`[Google:${this.instanceKey}] image-gen call ${JSON.stringify({
-                    model: modelVersion,
-                    responseModalities: config.responseModalities,
-                    aspectRatio: (config as any).imageConfig?.aspectRatio ?? 'auto',
-                    imageSize: (config as any).imageConfig?.imageSize ?? 'provider-default',
-                    temperature,
-                    maxOutputTokens: maxTokens,
-                    contentsCount: contents.length,
-                    inputImageCount,
-                    inputTextLen,
-                    referenceMetadata: resolvedImageGenerationReferences.map(reference => ({
-                        role: reference.role,
-                        fileName: reference.fileName,
-                        byteLength: reference.byteLength,
-                        mediaType: reference.mediaType,
-                        sha256: reference.sha256,
-                    })),
-                }, null, 0)}`)
+                const inputImageCount = contents.reduce((acc, c) =>
+                    acc + (Array.isArray((c as any).parts)
+                        ? (c as any).parts.filter((p: any) => p?.inlineData || p?.inline_data).length
+                        : 0), 0)
+                const inputTextLen = contents.reduce((acc, c) =>
+                    acc + (Array.isArray((c as any).parts)
+                        ? (c as any).parts.reduce((s: number, p: any) => s + (typeof p?.text === 'string' ? p.text.length : 0), 0)
+                        : 0), 0)
+                info(`[Google:${this.instanceKey}] image-gen call ${
+                    JSON.stringify(
+                        {
+                            model: modelVersion,
+                            responseModalities: config.responseModalities,
+                            aspectRatio: (config as any).imageConfig?.aspectRatio ?? 'auto',
+                            imageSize: (config as any).imageConfig?.imageSize ?? 'provider-default',
+                            temperature,
+                            maxOutputTokens: maxTokens,
+                            contentsCount: contents.length,
+                            inputImageCount,
+                            inputTextLen,
+                            referenceMetadata: resolvedImageGenerationReferences.map(reference => ({
+                                role: reference.role,
+                                fileName: reference.fileName,
+                                byteLength: reference.byteLength,
+                                mediaType: reference.mediaType,
+                                sha256: reference.sha256,
+                            })),
+                        },
+                        null,
+                        0,
+                    )
+                }`)
                 await this.imagePub.partial('', 0)
                 assessProviderInputBudget({
                     state,
@@ -387,12 +409,13 @@ export class GoogleProvider extends BaseProvider {
                 // Non-streaming image call: nothing is published until it
                 // returns, so the whole request is safe to reattempt.
                 const response = await this.retryTransport(
-                'image',
-                    async () => await this.client.models.generateContent({
-                        model: modelVersion,
-                        contents: contents as any,
-                        config: config as any,
-                    }),
+                    'image',
+                    async () =>
+                        await this.client.models.generateContent({
+                            model: modelVersion,
+                            contents: contents as any,
+                            config: config as any,
+                        }),
                 )
                 usageMetadata = response.usageMetadata
 
@@ -409,7 +432,7 @@ export class GoogleProvider extends BaseProvider {
                         const inline = (part as any).inlineData ?? (part as any).inline_data
                         const text = (part as any).text
                         if (inline?.data) {
-                            imageParts.push(inline.data)  // already base64 in JS SDK
+                            imageParts.push(inline.data) // already base64 in JS SDK
                         } else if (text) {
                             textChunks.push(text)
                         }
@@ -470,12 +493,13 @@ export class GoogleProvider extends BaseProvider {
                     })
                     // Submit only — the drain below publishes as it goes.
                     const stream = await this.retryTransport(
-                'stream',
-                        async () => await this.client.models.generateContentStream({
-                            model: modelVersion,
-                            contents: contents as any,
-                            config: effectiveStreamConfig as any,
-                        }),
+                        'stream',
+                        async () =>
+                            await this.client.models.generateContentStream({
+                                model: modelVersion,
+                                contents: contents as any,
+                                config: effectiveStreamConfig as any,
+                            }),
                     )
                     let detectedImage: string | undefined
                     let detectedVideo: VideoToolCall | undefined
@@ -574,19 +598,27 @@ export class GoogleProvider extends BaseProvider {
                     ? !detectedVideo
                     : !detectedImage && !detectedVideo
 
-                if (shouldForceMediaTool
+                if (
+                    shouldForceMediaTool
                     && state.capabilityUsageMode !== 'character-creator'
                     && !this.shouldStop
-                    && forcedFunctionNames.length > 0) {
-                    warn(`[Google:${this.instanceKey}] AUTO tool selection did not satisfy the media request; retrying with forced function call ${JSON.stringify({
-                        explicitVideoToolRequired,
-                        forcedFunctionNames,
-                        detectedImage: !!detectedImage,
-                        detectedVideo: !!detectedVideo,
-                        textCharacterCount: toolStreamResult.textCharacterCount,
-                        finishReasons: toolStreamResult.finishReasons,
-                        functionCallNames: toolStreamResult.functionCallNames,
-                    }, null, 0)}`)
+                    && forcedFunctionNames.length > 0
+                ) {
+                    warn(`[Google:${this.instanceKey}] AUTO tool selection did not satisfy the media request; retrying with forced function call ${
+                        JSON.stringify(
+                            {
+                                explicitVideoToolRequired,
+                                forcedFunctionNames,
+                                detectedImage: !!detectedImage,
+                                detectedVideo: !!detectedVideo,
+                                textCharacterCount: toolStreamResult.textCharacterCount,
+                                finishReasons: toolStreamResult.finishReasons,
+                                functionCallNames: toolStreamResult.functionCallNames,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                     toolStreamResult = await runToolStream({
                         ...config,
                         toolConfig: {
@@ -602,36 +634,54 @@ export class GoogleProvider extends BaseProvider {
                 }
 
                 if (explicitVideoToolRequired && !this.shouldStop && !detectedVideo) {
-                    throw new Error(`Google reasoning model failed to emit required generate_video tool call ${JSON.stringify({
-                        model: modelVersion,
-                        detectedImage: !!detectedImage,
-                        textCharacterCount: toolStreamResult.textCharacterCount,
-                        finishReasons: toolStreamResult.finishReasons,
-                        functionCallNames: toolStreamResult.functionCallNames,
-                    }, null, 0)}`)
+                    throw new Error(`Google reasoning model failed to emit required generate_video tool call ${
+                        JSON.stringify(
+                            {
+                                model: modelVersion,
+                                detectedImage: !!detectedImage,
+                                textCharacterCount: toolStreamResult.textCharacterCount,
+                                finishReasons: toolStreamResult.finishReasons,
+                                functionCallNames: toolStreamResult.functionCallNames,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                 }
 
                 if (detectedVideo) {
                     update.generatedVideoPrompt = detectedVideo.prompt
                     update.generatedVideoNegativePrompt = detectedVideo.negativePrompt
-                    info(`[Google:${this.instanceKey}] generate_video tool call ${JSON.stringify({
-                        chatModel: modelVersion,
-                        targetVideoProvider: state.videoProviderName,
-                        targetVideoModel: state.videoModelVersion,
-                        promptLen: detectedVideo.prompt.length,
-                        negativePromptLen: detectedVideo.negativePrompt?.length ?? 0,
-                    }, null, 0)}`)
+                    info(`[Google:${this.instanceKey}] generate_video tool call ${
+                        JSON.stringify(
+                            {
+                                chatModel: modelVersion,
+                                targetVideoProvider: state.videoProviderName,
+                                targetVideoModel: state.videoModelVersion,
+                                promptLen: detectedVideo.prompt.length,
+                                negativePromptLen: detectedVideo.negativePrompt?.length ?? 0,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                 } else if (detectedImage) {
                     const refs = extractReferenceImages(resolvedMessages)
                     update.generatedImagePrompt = detectedImage
                     update.referenceImages = refs
-                    info(`[Google:${this.instanceKey}] generate_image tool call ${JSON.stringify({
-                        chatModel: modelVersion,
-                        targetImageProvider: state.imageProviderName,
-                        targetImageModel: state.imageModelVersion,
-                        promptLen: detectedImage.length,
-                        referenceImagesExtracted: refs.length,
-                    }, null, 0)}`)
+                    info(`[Google:${this.instanceKey}] generate_image tool call ${
+                        JSON.stringify(
+                            {
+                                chatModel: modelVersion,
+                                targetImageProvider: state.imageProviderName,
+                                targetImageModel: state.imageModelVersion,
+                                promptLen: detectedImage.length,
+                                referenceImagesExtracted: refs.length,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                 } else if (injectTool && state.capabilityMediaExecutionPlan) {
                     info(`[Google:${this.instanceKey}] using required Capability media plan without a generate_image tool call (model=${modelVersion})`)
                 } else if (injectTool && injectVideoTool) {
@@ -649,12 +699,13 @@ export class GoogleProvider extends BaseProvider {
                 })
                 // Submit only — the drain below publishes as it goes.
                 const stream = await this.retryTransport(
-                'text',
-                    async () => await this.client.models.generateContentStream({
-                        model: modelVersion,
-                        contents: contents as any,
-                        config: config as any,
-                    }),
+                    'text',
+                    async () =>
+                        await this.client.models.generateContentStream({
+                            model: modelVersion,
+                            contents: contents as any,
+                            config: config as any,
+                        }),
                 )
                 for await (const chunk of stream) {
                     if (this.shouldStop) break
@@ -699,9 +750,11 @@ export class GoogleProvider extends BaseProvider {
                 }
             }
 
-            if (!effectiveImageGen
+            if (
+                !effectiveImageGen
                 && !effectiveVideoGen
-                && !state.pendingCapabilityOutputFinalizations?.length) this.publisher.end()
+                && !state.pendingCapabilityOutputFinalizations?.length
+            ) this.publisher.end()
         } catch (e: any) {
             err(`Google streaming failed: ${e?.message ?? e}`)
             update.error = e?.message ?? String(e)
@@ -823,22 +876,28 @@ export class GoogleProvider extends BaseProvider {
             ),
         )
 
-        info(`[Google:${this.instanceKey}] VEO submit ${JSON.stringify({
-            model: modelVersion,
-            aspectRatio: veoConfig.aspectRatio,
-            resolution: veoConfig.resolution,
-            durationSeconds: veoConfig.durationSeconds,
-            personGeneration: veoConfig.personGeneration,
-            promptLen: prompt.length,
-            hasFirstFrame: !!firstFrameImage,
-            hasLastFrame: !!lastFrameImage,
-            firstFrameMimeType: firstFrameImage?.mimeType,
-            firstFrameBase64Length: firstFrameImage?.imageBytes.length ?? 0,
-            lastFrameMimeType: lastFrameImage?.mimeType,
-            lastFrameBase64Length: lastFrameImage?.imageBytes.length ?? 0,
-            duplicateFrameInputCount,
-            hasExtensionSource: !!extensionVideo,
-        }, null, 0)}`)
+        info(`[Google:${this.instanceKey}] VEO submit ${
+            JSON.stringify(
+                {
+                    model: modelVersion,
+                    aspectRatio: veoConfig.aspectRatio,
+                    resolution: veoConfig.resolution,
+                    durationSeconds: veoConfig.durationSeconds,
+                    personGeneration: veoConfig.personGeneration,
+                    promptLen: prompt.length,
+                    hasFirstFrame: !!firstFrameImage,
+                    hasLastFrame: !!lastFrameImage,
+                    firstFrameMimeType: firstFrameImage?.mimeType,
+                    firstFrameBase64Length: firstFrameImage?.imageBytes.length ?? 0,
+                    lastFrameMimeType: lastFrameImage?.mimeType,
+                    lastFrameBase64Length: lastFrameImage?.imageBytes.length ?? 0,
+                    duplicateFrameInputCount,
+                    hasExtensionSource: !!extensionVideo,
+                },
+                null,
+                0,
+            )
+        }`)
 
         try {
             await this.videoPub.pending()
@@ -863,14 +922,20 @@ export class GoogleProvider extends BaseProvider {
                 'video',
                 async () => await this.client.models.generateVideos(veoParams as any),
             )
-            info(`[Google:${this.instanceKey}] VEO operation accepted ${JSON.stringify({
-                operationName: typeof operation?.name === 'string' ? operation.name : null,
-                done: operation?.done === true,
-                operationKeys: getObjectKeys(operation),
-                metadataKeys: getObjectKeys(operation?.metadata),
-                hasResponse: !!operation?.response,
-                hasError: !!operation?.error,
-            }, null, 0)}`)
+            info(`[Google:${this.instanceKey}] VEO operation accepted ${
+                JSON.stringify(
+                    {
+                        operationName: typeof operation?.name === 'string' ? operation.name : null,
+                        done: operation?.done === true,
+                        operationKeys: getObjectKeys(operation),
+                        metadataKeys: getObjectKeys(operation?.metadata),
+                        hasResponse: !!operation?.response,
+                        hasError: !!operation?.error,
+                    },
+                    null,
+                    0,
+                )
+            }`)
 
             while (!operation.done) {
                 if (this.shouldStop) throw new Error('Video generation aborted')
@@ -881,21 +946,28 @@ export class GoogleProvider extends BaseProvider {
                 // A blip while polling must not discard a video the provider is
                 // already rendering — each poll is idempotent, so retry it.
                 operation = await this.retryTransport(
-                'video-poll',
-                    async () => await this.client.operations.getVideosOperation({
-                        operation,
-                        config: { abortSignal: this.signal } as any,
-                    } as any),
+                    'video-poll',
+                    async () =>
+                        await this.client.operations.getVideosOperation({
+                            operation,
+                            config: { abortSignal: this.signal } as any,
+                        } as any),
                 )
                 if (operation.done || pollCount === 1 || pollCount % 6 === 0) {
-                    info(`[Google:${this.instanceKey}] VEO poll ${JSON.stringify({
-                        operationName: typeof operation?.name === 'string' ? operation.name : null,
-                        pollCount,
-                        elapsedMs: Date.now() - startedAt,
-                        done: operation?.done === true,
-                        hasResponse: !!operation?.response,
-                        hasError: !!operation?.error,
-                    }, null, 0)}`)
+                    info(`[Google:${this.instanceKey}] VEO poll ${
+                        JSON.stringify(
+                            {
+                                operationName: typeof operation?.name === 'string' ? operation.name : null,
+                                pollCount,
+                                elapsedMs: Date.now() - startedAt,
+                                done: operation?.done === true,
+                                hasResponse: !!operation?.response,
+                                hasError: !!operation?.error,
+                            },
+                            null,
+                            0,
+                        )
+                    }`)
                 }
             }
 
@@ -939,7 +1011,9 @@ export class GoogleProvider extends BaseProvider {
             const message = e?.message ?? String(e)
             err(`[Google:${this.instanceKey}] VEO failed: ${message}`)
             // publisher may not be initialized
-            try { this.videoPub.error(message) } catch {}
+            try {
+                this.videoPub.error(message)
+            } catch {}
             throw e
         }
     }
@@ -1001,10 +1075,11 @@ export class GoogleProvider extends BaseProvider {
             // to a dropped download would be the worst possible moment to fail.
             await this.retryTransport(
                 'video-download',
-                async () => await this.client.files.download({
-                    file: video as any,
-                    downloadPath: outPath,
-                } as any),
+                async () =>
+                    await this.client.files.download({
+                        file: video as any,
+                        downloadPath: outPath,
+                    } as any),
             )
             return await readFile(outPath)
         } finally {

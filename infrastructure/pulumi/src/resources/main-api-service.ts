@@ -10,14 +10,14 @@ import {
 
 import {
     buildDockerImage,
-    type DockerImageBuildResult
+    type DockerImageBuildResult,
 } from '../helpers/docker/build-helpers.ts'
 
 import { LOG_RETENTION_DAYS } from '../constants/logging.ts'
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
 export type MainApiServiceArgs = {
@@ -96,8 +96,8 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         privateSubnets,
         serviceName = 'api',
         containerPort = 3000,
-        cpu = 512,       // 0.5 vCPU
-        memory = 512,    // 512 MiB
+        cpu = 512, // 0.5 vCPU
+        memory = 512, // 512 MiB
         desiredCount = 1,
         resourceBindings,
         environment,
@@ -108,7 +108,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     // Format names consistently
     const formattedServiceName = formatStageResourceName(serviceName, ORG_NAME, STAGE)
 
-        // Build and push main-api Docker image to ECR
+    // Build and push main-api Docker image to ECR
     const { repository, image, imageRef } = buildDockerImage({
         imageName: serviceName,
         dockerBuildContext,
@@ -117,7 +117,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         push: true,
         buildOnPreview: true,
         noCache: true,
-    }) as DockerImageBuildResult;
+    }) as DockerImageBuildResult
 
     // ECS Task Execution Role - used by ECS agent
     const executionRole = new aws.iam.Role(`${formattedServiceName}-execution-role`, {
@@ -143,7 +143,7 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     new aws.iam.RolePolicyAttachment(`${formattedServiceName}-ecr-policy`, {
         role: executionRole.name,
         policyArn: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly',
-    });
+    })
 
     // ECS Task Role - used by the containers
     const taskRole = new aws.iam.Role(`${formattedServiceName}-task-role`, {
@@ -162,24 +162,26 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     // Allow containers to access bound DynamoDB tables
     resourceBindings.tables && Object.values(resourceBindings.tables).forEach((table, i) => {
         const tablePolicy = new aws.iam.Policy(`${formattedServiceName}-dynamo-policy-${i}`, {
-            policy: table.arn.apply(arn => JSON.stringify({
-                Version: '2012-10-17',
-                Statement: [{
-                    Effect: 'Allow',
-                    Action: [
-                        'dynamodb:BatchGetItem',
-                        'dynamodb:GetItem',
-                        'dynamodb:Query',
-                        'dynamodb:Scan',
-                        'dynamodb:BatchWriteItem',
-                        'dynamodb:PutItem',
-                        'dynamodb:UpdateItem',
-                        'dynamodb:DeleteItem',
-                        'dynamodb:TransactWriteItems',
-                    ],
-                    Resource: [arn, `${arn}/index/*`],
-                }],
-            })),
+            policy: table.arn.apply(arn =>
+                JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [{
+                        Effect: 'Allow',
+                        Action: [
+                            'dynamodb:BatchGetItem',
+                            'dynamodb:GetItem',
+                            'dynamodb:Query',
+                            'dynamodb:Scan',
+                            'dynamodb:BatchWriteItem',
+                            'dynamodb:PutItem',
+                            'dynamodb:UpdateItem',
+                            'dynamodb:DeleteItem',
+                            'dynamodb:TransactWriteItems',
+                        ],
+                        Resource: [arn, `${arn}/index/*`],
+                    }],
+                })
+            ),
         })
 
         new aws.iam.RolePolicyAttachment(`${formattedServiceName}-dynamo-attachment-${i}`, {
@@ -265,39 +267,41 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         containerDefinitions: pulumi.all([
             logGroup.name,
             imageRef,
-        ]).apply(([logGroupName, imageReference]) => JSON.stringify([{
-            name: formattedServiceName,
-            image: imageReference,
-            cpu: cpu,
-            memory: memory,
-            essential: true,
-            portMappings: [{
-                containerPort: containerPort,
-                protocol: 'tcp',
-            }],
-            environment: Object.entries(environment).map(([name, value]) => ({
-                name,
-                value: value || '',
-            })),
-            logConfiguration: {
-                logDriver: 'awslogs',
-                options: {
-                    'awslogs-group': logGroupName,
-                    'awslogs-region': aws.config.region,
-                    'awslogs-stream-prefix': 'ecs',
-                    'awslogs-create-group': 'true'
+        ]).apply(([logGroupName, imageReference]) =>
+            JSON.stringify([{
+                name: formattedServiceName,
+                image: imageReference,
+                cpu: cpu,
+                memory: memory,
+                essential: true,
+                portMappings: [{
+                    containerPort: containerPort,
+                    protocol: 'tcp',
+                }],
+                environment: Object.entries(environment).map(([name, value]) => ({
+                    name,
+                    value: value || '',
+                })),
+                logConfiguration: {
+                    logDriver: 'awslogs',
+                    options: {
+                        'awslogs-group': logGroupName,
+                        'awslogs-region': aws.config.region,
+                        'awslogs-stream-prefix': 'ecs',
+                        'awslogs-create-group': 'true',
+                    },
                 },
-            },
-            healthCheck: {
-                command: ['CMD-SHELL', `curl -f http://localhost:${containerPort}/health-check || exit 1`],
-                interval: 10,
-                timeout: 5,
-                retries: 2,
-                startPeriod: 5,
-            },
-        }])),
+                healthCheck: {
+                    command: ['CMD-SHELL', `curl -f http://localhost:${containerPort}/health-check || exit 1`],
+                    interval: 10,
+                    timeout: 5,
+                    retries: 2,
+                    startPeriod: 5,
+                },
+            }])
+        ),
     }, {
-        dependsOn: [image],  // Ensure image is fully built and pushed before creating task definition
+        dependsOn: [image], // Ensure image is fully built and pushed before creating task definition
     })
 
     // Security group for the ECS tasks
@@ -328,17 +332,17 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         deploymentMaximumPercent: 200,
         deploymentCircuitBreaker: {
             enable: true,
-            rollback: true
+            rollback: true,
         },
         networkConfiguration: {
-            subnets: privateSubnets.map(subnet => subnet.id),  // Changed from publicSubnets to privateSubnets
+            subnets: privateSubnets.map(subnet => subnet.id), // Changed from publicSubnets to privateSubnets
             securityGroups: [taskSecurityGroup.id],
-            assignPublicIp: false,  // Changed from true to false since we're in private subnets
+            assignPublicIp: false, // Changed from true to false since we're in private subnets
         },
-        forceNewDeployment: true,  // Ensure we deploy a fresh version on updates
+        forceNewDeployment: true, // Ensure we deploy a fresh version on updates
         enableEcsManagedTags: true,
         propagateTags: 'SERVICE',
-        waitForSteadyState: true,  // Wait until service reaches a steady state before considering deployment complete
+        waitForSteadyState: true, // Wait until service reaches a steady state before considering deployment complete
         forceDelete: true,
     }, {
         customTimeouts: {
@@ -348,8 +352,8 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
         },
         // Force replacement when image changes
         replaceOnChanges: [
-            "taskDefinition"
-        ]
+            'taskDefinition',
+        ],
     })
 
     return {

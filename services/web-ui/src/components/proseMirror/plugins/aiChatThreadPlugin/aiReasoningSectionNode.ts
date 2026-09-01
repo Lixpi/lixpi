@@ -4,7 +4,7 @@
 // its own aiReasoningSection holding that model's reply text, its image/video
 // generation trace, and its generated media — kept separate so the
 // concurrently-streaming models never interleave their content.
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 import {
     aiReasoningSectionNodeSpec,
     aiReasoningSectionNodeType,
@@ -23,15 +23,15 @@ export const aiReasoningSectionNodeView = (node) => {
         <div
             className="ai-reasoning-section"
             data=${{
-                generationRequestId: node.attrs.generationRequestId || '',
-                reasoningRunId: node.attrs.reasoningRunId || '',
-                reasoningModelId: node.attrs.reasoningModelId || '',
-                reasoningIndex: node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
-                branchOriginNodeId: node.attrs.branchOriginNodeId || '',
-                branchForkNodeId: node.attrs.branchForkNodeId || '',
-                branchLineNodeId: node.attrs.branchLineNodeId || '',
-                lineageProjectionScope: node.attrs.lineageProjectionScope || 'conversation',
-            }}
+        generationRequestId: node.attrs.generationRequestId || '',
+        reasoningRunId: node.attrs.reasoningRunId || '',
+        reasoningModelId: node.attrs.reasoningModelId || '',
+        reasoningIndex: node.attrs.reasoningIndex == null ? '' : String(node.attrs.reasoningIndex),
+        branchOriginNodeId: node.attrs.branchOriginNodeId || '',
+        branchForkNodeId: node.attrs.branchForkNodeId || '',
+        branchLineNodeId: node.attrs.branchLineNodeId || '',
+        lineageProjectionScope: node.attrs.lineageProjectionScope || 'conversation',
+    }}
         >
             <div className="ai-reasoning-section-lineage-markers"></div>
             <div className="ai-reasoning-section-content"></div>

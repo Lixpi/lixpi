@@ -2,12 +2,16 @@ packages:
   - "packages/lixpi/auth-service"
   - "packages/lixpi/capability-system"
   - "packages/lixpi/canvas-engine"
+  - "packages/lixpi/canvas-components"
+  - "packages/lixpi/canvas-components-lixpi-specific"
   - "packages/lixpi/constants/ts"
   - "packages/lixpi/debug-tools/ts"
   - "packages/lixpi/dynamodb-service"
   - "packages/lixpi/nats-auth-callout-service"
   - "packages/lixpi/nats-service/ts"
   - "packages/lixpi/prosemirror"
+  - "packages/lixpi/ui-primitives"
+  - "packages/lixpi/ui-kit"
 
 allowBuilds:
   "@google/genai": true

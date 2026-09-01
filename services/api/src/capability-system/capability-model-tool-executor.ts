@@ -155,8 +155,8 @@ export class CapabilityModelToolExecutor {
         const sealedPlan = this.state.resolvedCapabilityPlan?.getManifest(capabilityId)
             ? this.state.resolvedCapabilityPlan
             : canResolvePlan
-                ? await this.dispatcher.resolveToolPlan(capabilityId, requester, signal)
-                : undefined
+            ? await this.dispatcher.resolveToolPlan(capabilityId, requester, signal)
+            : undefined
         const configuredInput = this.state.capabilityInputs?.[capabilityId]
         const args = configuredInput
             ? {
@@ -165,8 +165,10 @@ export class CapabilityModelToolExecutor {
                 ...configuredInput,
             }
             : { ...modelArgs }
-        if (!Object.hasOwn(args, 'referenceAssetIds')
-            && toolInputDeclaresProperty(sealedPlan, capabilityId, 'referenceAssetIds')) {
+        if (
+            !Object.hasOwn(args, 'referenceAssetIds')
+            && toolInputDeclaresProperty(sealedPlan, capabilityId, 'referenceAssetIds')
+        ) {
             args.referenceAssetIds = collectExplicitReferenceAssetIds(this.state)
         }
         const variant = resolveModelToolVariant(this.state, sealedPlan, capabilityId)
@@ -190,7 +192,7 @@ export class CapabilityModelToolExecutor {
             outputAssetIds: execution.run.outputAssetIds,
         })
         const outputAssetId = execution.output.outputKind === 'capabilityArtifact'
-            && typeof execution.output.assetId === 'string'
+                && typeof execution.output.assetId === 'string'
             ? execution.output.assetId
             : undefined
         if (outputAssetId && variant.axis === 'reasoning-model' && this.state.generationRun) {
@@ -239,8 +241,10 @@ function resolveModelToolVariant(
     capabilityId: string,
 ): { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant {
     const tool = plan?.getManifest(capabilityId)?.manifest.tool
-    if (!tool || (tool.executionMultiplicity !== 'per-reasoning-model'
-        && (tool.modelAxisPolicy?.reasoning ?? 'ignore') === 'ignore')) {
+    if (
+        !tool || (tool.executionMultiplicity !== 'per-reasoning-model'
+            && (tool.modelAxisPolicy?.reasoning ?? 'ignore') === 'ignore')
+    ) {
         return { axis: 'request', variantKey: 'request' }
     }
     return reasoningVariantFromState(state)
@@ -267,20 +271,22 @@ function buildGenerationTraceSteps(
 ): CapabilityGenerationTraceStep[] {
     return events.flatMap(event => {
         if (!event.stepId || !event.stepTitle) return []
-        if (event.eventType !== 'STEP_COMPLETED'
+        if (
+            event.eventType !== 'STEP_COMPLETED'
             && event.eventType !== 'STEP_SKIPPED'
             && event.eventType !== 'STEP_FAILED'
-            && event.eventType !== 'STEP_CANCELLED') return []
+            && event.eventType !== 'STEP_CANCELLED'
+        ) return []
         return [{
             stepId: event.stepId,
             title: event.stepTitle,
             status: event.eventType === 'STEP_COMPLETED'
                 ? 'completed' as const
                 : event.eventType === 'STEP_SKIPPED'
-                    ? 'skipped' as const
-                    : event.eventType === 'STEP_CANCELLED'
-                        ? 'cancelled' as const
-                        : 'failed' as const,
+                ? 'skipped' as const
+                : event.eventType === 'STEP_CANCELLED'
+                ? 'cancelled' as const
+                : 'failed' as const,
             ...(event.safeInputSummary ? { inputSummary: event.safeInputSummary } : {}),
             ...(event.safeOutputSummary ? { outputSummary: event.safeOutputSummary } : {}),
             ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
@@ -293,7 +299,5 @@ export function shouldExposeCapabilityModelTools(state: ProviderState): boolean 
     if ((state.capabilityInvocationDepth ?? 0) !== 0) return false
     const plan = state.resolvedCapabilityPlan
     if (!plan) return true
-    return !plan.serializable.rootCapabilityIds.some(capabilityId =>
-        plan.getManifest(capabilityId)?.manifest.tool?.executionPolicy === 'required',
-    )
+    return !plan.serializable.rootCapabilityIds.some(capabilityId => plan.getManifest(capabilityId)?.manifest.tool?.executionPolicy === 'required')
 }

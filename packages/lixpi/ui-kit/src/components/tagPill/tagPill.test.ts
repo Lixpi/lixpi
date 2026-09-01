@@ -1,6 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    vi,
+} from 'vitest'
 import { select } from 'd3-selection'
-import { stabilityIcon, xIcon } from '../../svg/svgIcons.ts'
+import {
+    stabilityIcon,
+    xIcon,
+} from '../../svg/svgIcons.ts'
 import { createTagPill } from './tagPill.ts'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'

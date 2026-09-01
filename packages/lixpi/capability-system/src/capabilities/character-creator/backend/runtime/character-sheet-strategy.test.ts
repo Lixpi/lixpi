@@ -3,14 +3,24 @@
 import { readFile } from 'node:fs/promises'
 
 import sharp from 'sharp'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeAll,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import type { OperationProgressItem } from '@lixpi/constants'
 
 import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
 import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
-import { CharacterSheetStrategy, type CharacterSheetStrategyDeps } from './character-sheet-strategy.ts'
+import {
+    CharacterSheetStrategy,
+    type CharacterSheetStrategyDeps,
+} from './character-sheet-strategy.ts'
 
 const mocks = {
     clear: vi.fn(async () => undefined),
@@ -51,11 +61,12 @@ const providerResult = (request: CharacterImageGenerationRequest) => ({
 
 let panelPng: Buffer
 
-const plan = () => buildCharacterSheetRenderPlan({
-    capabilityRunId: 'run-1',
-    sourceAssetIds: [],
-    userPrompt: 'A courier',
-})
+const plan = () =>
+    buildCharacterSheetRenderPlan({
+        capabilityRunId: 'run-1',
+        sourceAssetIds: [],
+        userPrompt: 'A courier',
+    })
 
 const context = (mediaRunId = 'media-1'): CapabilityMediaExecutionContext => ({
     organizationId: 'org-1',
@@ -112,11 +123,13 @@ const assessment = (
         'target-view',
         'framing',
         ...(![
-            'single-panel-composition',
-            'template-conformance',
-            'target-view',
-            'framing',
-        ].includes(failedDimension) ? [failedDimension] : []),
+                'single-panel-composition',
+                'template-conformance',
+                'target-view',
+                'framing',
+            ].includes(failedDimension)
+            ? [failedDimension]
+            : []),
     ].map(dimension => ({
         dimension,
         score: failed && dimension === failedDimension ? score : 0.95,
@@ -138,20 +151,25 @@ const runtime = (): CharacterSheetStrategyDeps => ({
     },
     imageGeneration: { generate: mocks.render },
     structuredVlm: {
-        call: async () => { throw new Error('Unexpected structured VLM call') },
+        call: async () => {
+            throw new Error('Unexpected structured VLM call')
+        },
     },
     fidelity: {
-        assess: async () => { throw new Error('Unexpected fidelity call') },
+        assess: async () => {
+            throw new Error('Unexpected fidelity call')
+        },
     },
     compositor: mocks.compose,
     providerConcurrency: 4,
 })
 
-const strategy = (assess: (request: Parameters<NonNullable<CharacterSheetStrategyDeps['panelAssessor']>['assess']>[0]) => Promise<ReturnType<typeof assessment>>) => new CharacterSheetStrategy({
-    ...runtime(),
-    panelAssessor: { assess },
-    evidenceAnalyzer: { analyze: async () => ({ medium: 'unknown' }) },
-})
+const strategy = (assess: (request: Parameters<NonNullable<CharacterSheetStrategyDeps['panelAssessor']>['assess']>[0]) => Promise<ReturnType<typeof assessment>>) =>
+    new CharacterSheetStrategy({
+        ...runtime(),
+        panelAssessor: { assess },
+        evidenceAnalyzer: { analyze: async () => ({ medium: 'unknown' }) },
+    })
 
 const createFlattenedSheet = async (executionPlan: ReturnType<typeof plan>): Promise<Buffer> => {
     const layout = buildCharacterSheetLayout(executionPlan.panels)
@@ -258,9 +276,11 @@ describe('CharacterSheetStrategy', () => {
         const profileRequest = mocks.render.mock.calls.find(([request]) => (
             request.operationKey.includes(':body-profile:')
         ))?.[0]
-        expect(profileRequest?.references.filter(reference => (
-            ['canonical-anchor', 'adjacent-angle', 'opposite-angle'].includes(reference.role)
-        ))).toEqual([
+        expect(
+            profileRequest?.references.filter(reference => (
+                ['canonical-anchor', 'adjacent-angle', 'opposite-angle'].includes(reference.role)
+            )),
+        ).toEqual([
             expect.objectContaining({
                 role: 'adjacent-angle',
                 fileName: 'GENERATED_IDENTITY_ANCHOR.png',
@@ -285,32 +305,36 @@ describe('CharacterSheetStrategy', () => {
         const executionContext = context()
         executionContext.sharedState.authoritativePrompt = executionPlan.userPrompt
         executionContext.sharedState.editTargetAssetId = 'sheet-1'
-        mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) => assetId === 'sheet-1' ? {
-            assetId: 'sheet-1',
-            organizationId: 'org-1',
-            composition: {
-                schemaVersion: 'asset-media-composition-v1',
-                kind: 'character-sheet',
-                capabilityId: 'global.character-creator',
-                sourceAssetIds: ['source-1'],
-                components: executionPlan.panels.map(panel => ({
-                    componentId: panel.panelId,
-                    role: 'character-sheet-panel',
-                    title: panel.title,
-                    blobHash: `${panel.panelId}-hash`,
-                    mimeType: 'image/png',
-                    byteSize: panelPng.byteLength,
-                })),
-            },
-        } : {
-            assetId: 'source-1',
-            organizationId: 'org-1',
-            media: {
-                renditions: {
-                    canonical: { status: 'ready', blobHash: 'source-hash', mimeType: 'image/png' },
-                },
-            },
-        })
+        mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) =>
+            assetId === 'sheet-1'
+                ? {
+                    assetId: 'sheet-1',
+                    organizationId: 'org-1',
+                    composition: {
+                        schemaVersion: 'asset-media-composition-v1',
+                        kind: 'character-sheet',
+                        capabilityId: 'global.character-creator',
+                        sourceAssetIds: ['source-1'],
+                        components: executionPlan.panels.map(panel => ({
+                            componentId: panel.panelId,
+                            role: 'character-sheet-panel',
+                            title: panel.title,
+                            blobHash: `${panel.panelId}-hash`,
+                            mimeType: 'image/png',
+                            byteSize: panelPng.byteLength,
+                        })),
+                    },
+                }
+                : {
+                    assetId: 'source-1',
+                    organizationId: 'org-1',
+                    media: {
+                        renditions: {
+                            canonical: { status: 'ready', blobHash: 'source-hash', mimeType: 'image/png' },
+                        },
+                    },
+                }
+        )
         const editStrategy = new CharacterSheetStrategy({
             ...runtime(),
             panelAssessor: { assess: async () => assessment(false) },
@@ -426,32 +450,36 @@ describe('CharacterSheetStrategy', () => {
             { assetId: 'source-1', alias: 'REFERENCE_1' },
             { assetId: 'sheet-1', alias: 'REFERENCE_2' },
         ]
-        mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) => assetId === 'sheet-1' ? {
-            assetId: 'sheet-1',
-            organizationId: 'org-1',
-            composition: {
-                schemaVersion: 'asset-media-composition-v1',
-                kind: 'character-sheet',
-                capabilityId: 'global.character-creator',
-                sourceAssetIds: ['source-1'],
-                components: executionPlan.panels.map(panel => ({
-                    componentId: panel.panelId,
-                    role: 'character-sheet-panel',
-                    title: panel.title,
-                    blobHash: `${panel.panelId}-hash`,
-                    mimeType: 'image/png',
-                    byteSize: panelPng.byteLength,
-                })),
-            },
-        } : {
-            assetId: 'source-1',
-            organizationId: 'org-1',
-            media: {
-                renditions: {
-                    canonical: { status: 'ready', blobHash: 'source-hash', mimeType: 'image/png' },
-                },
-            },
-        })
+        mocks.getAuthorizedAsset.mockImplementation(async ({ assetId }) =>
+            assetId === 'sheet-1'
+                ? {
+                    assetId: 'sheet-1',
+                    organizationId: 'org-1',
+                    composition: {
+                        schemaVersion: 'asset-media-composition-v1',
+                        kind: 'character-sheet',
+                        capabilityId: 'global.character-creator',
+                        sourceAssetIds: ['source-1'],
+                        components: executionPlan.panels.map(panel => ({
+                            componentId: panel.panelId,
+                            role: 'character-sheet-panel',
+                            title: panel.title,
+                            blobHash: `${panel.panelId}-hash`,
+                            mimeType: 'image/png',
+                            byteSize: panelPng.byteLength,
+                        })),
+                    },
+                }
+                : {
+                    assetId: 'source-1',
+                    organizationId: 'org-1',
+                    media: {
+                        renditions: {
+                            canonical: { status: 'ready', blobHash: 'source-hash', mimeType: 'image/png' },
+                        },
+                    },
+                }
+        )
         const editStrategy = new CharacterSheetStrategy({
             ...runtime(),
             panelAssessor: { assess: async () => assessment(false) },
@@ -507,16 +535,36 @@ describe('CharacterSheetStrategy', () => {
             request.operationKey.includes(':body-back:')
         ))?.[0]
 
-        expect(headRequest?.references.some(reference => reference.role === 'edit-target-identity'
-            && reference.fileName === 'EDIT_TARGET_IDENTITY_FACE.png')).toBe(true)
-        expect(headRequest?.references.some(reference => reference.role === 'original-source'
-            || reference.role === 'face-crop')).toBe(false)
-        expect(headRequest?.references.some(reference => reference.role === 'body-outfit-crop'
-            || reference.role === 'prop-crop')).toBe(false)
-        expect(frontRequest?.references.some(reference => reference.role === 'edit-target'
-            || reference.role === 'edit-target-identity')).toBe(false)
-        expect(backRequest?.references.some(reference => reference.role === 'edit-target'
-            || reference.role === 'edit-target-identity')).toBe(false)
+        expect(
+            headRequest?.references.some(reference =>
+                reference.role === 'edit-target-identity'
+                && reference.fileName === 'EDIT_TARGET_IDENTITY_FACE.png'
+            ),
+        ).toBe(true)
+        expect(
+            headRequest?.references.some(reference =>
+                reference.role === 'original-source'
+                || reference.role === 'face-crop'
+            ),
+        ).toBe(false)
+        expect(
+            headRequest?.references.some(reference =>
+                reference.role === 'body-outfit-crop'
+                || reference.role === 'prop-crop'
+            ),
+        ).toBe(false)
+        expect(
+            frontRequest?.references.some(reference =>
+                reference.role === 'edit-target'
+                || reference.role === 'edit-target-identity'
+            ),
+        ).toBe(false)
+        expect(
+            backRequest?.references.some(reference =>
+                reference.role === 'edit-target'
+                || reference.role === 'edit-target-identity'
+            ),
+        ).toBe(false)
         expect(frontRequest?.references).toEqual(expect.arrayContaining([
             expect.objectContaining({ role: 'original-source', fileName: 'REFERENCE_1.png' }),
             expect.objectContaining({ role: 'body-outfit-crop', fileName: 'REFERENCE_1_BODY_OUTFIT_CROP.png' }),
@@ -753,7 +801,7 @@ describe('CharacterSheetStrategy', () => {
                 ...result,
                 dimensions: result.dimensions.map(dimension => (
                     dimension.dimension === 'template-conformance'
-                    || dimension.dimension === 'framing'
+                        || dimension.dimension === 'framing'
                         ? {
                             ...dimension,
                             score: 0.6,
@@ -763,10 +811,12 @@ describe('CharacterSheetStrategy', () => {
                 )),
             }
         }).execute(context(), executionPlan, {})
-        const trace = result.capabilityMediaTrace as { panels: Array<{
-            panelId: string
-            failedDimensions: string[]
-        }> }
+        const trace = result.capabilityMediaTrace as {
+            panels: Array<{
+                panelId: string
+                failedDimensions: string[]
+            }>
+        }
 
         expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
         expect(trace.panels).toEqual(expect.arrayContaining([
@@ -788,16 +838,20 @@ describe('CharacterSheetStrategy', () => {
                 diagnostic: 'The structured response dimensions field was a string.',
             },
         })).execute(context(), executionPlan, {})
-        const trace = result.capabilityMediaTrace as { panels: Array<{
-            status: string
-            failedDimensions: string[]
-        }> }
+        const trace = result.capabilityMediaTrace as {
+            panels: Array<{
+                status: string
+                failedDimensions: string[]
+            }>
+        }
 
         expect(mocks.render).toHaveBeenCalledTimes(executionPlan.panels.length)
         expect(result.mediaComposition?.components).toHaveLength(executionPlan.panels.length)
-        expect(result.mediaComposition?.components.every(component => (
-            component.role === 'character-sheet-panel'
-        ))).toBe(true)
+        expect(
+            result.mediaComposition?.components.every(component => (
+                component.role === 'character-sheet-panel'
+            )),
+        ).toBe(true)
         expect(trace.panels).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 status: 'needs-review',
@@ -820,16 +874,20 @@ describe('CharacterSheetStrategy', () => {
         })
         const publishImagePartial = vi.fn(async () => undefined)
 
-        const result = await strategy(async () => assessment(
-            true,
-            0.1,
-            'single-panel-composition',
-        )).execute(context(), executionPlan, { publishImagePartial })
-        const trace = result.capabilityMediaTrace as { panels: Array<{
-            panelId: string
-            status: string
-            warning?: string
-        }> }
+        const result = await strategy(async () =>
+            assessment(
+                true,
+                0.1,
+                'single-panel-composition',
+            )
+        ).execute(context(), executionPlan, { publishImagePartial })
+        const trace = result.capabilityMediaTrace as {
+            panels: Array<{
+                panelId: string
+                status: string
+                warning?: string
+            }>
+        }
 
         expect(mocks.render).toHaveBeenCalledOnce()
         expect(publishImagePartial).toHaveBeenCalledTimes(2)
@@ -888,7 +946,9 @@ describe('CharacterSheetStrategy', () => {
     })
 
     it('propagates provider failure and cancellation while cleaning all transient objects', async () => {
-        mocks.render.mockImplementationOnce(async () => { throw new Error('provider rejected') })
+        mocks.render.mockImplementationOnce(async () => {
+            throw new Error('provider rejected')
+        })
         await expect(strategy(async () => assessment(false)).execute(context(), plan(), {}))
             .rejects.toThrow('provider rejected')
         expect(mocks.clear).toHaveBeenCalledOnce()
@@ -978,14 +1038,18 @@ describe('CharacterSheetStrategy', () => {
     })
 
     it('retains a rejected body-front candidate while preventing back-body generation', async () => {
-        const result = await strategy(async request => request.panel.panelId === 'body-front'
-            ? assessment(true, 0.1, 'target-view')
-            : assessment(false)).execute(context(), plan(), {})
-        const trace = result.capabilityMediaTrace as { panels: Array<{
-            panelId: string
-            status: string
-            warning?: string
-        }> }
+        const result = await strategy(async request =>
+            request.panel.panelId === 'body-front'
+                ? assessment(true, 0.1, 'target-view')
+                : assessment(false)
+        ).execute(context(), plan(), {})
+        const trace = result.capabilityMediaTrace as {
+            panels: Array<{
+                panelId: string
+                status: string
+                warning?: string
+            }>
+        }
 
         expect(mocks.render).toHaveBeenCalledTimes(2)
         expect(mocks.render.mock.calls.some(([request]) => request.operationKey.includes(':body-back:')))
@@ -1031,7 +1095,11 @@ describe('CharacterSheetStrategy', () => {
         executionPlan.sourceAssetIds = ['asset-1']
         const failing = new CharacterSheetStrategy({
             ...runtime(),
-            evidenceAnalyzer: { analyze: async () => { throw new Error('analysis failed') } },
+            evidenceAnalyzer: {
+                analyze: async () => {
+                    throw new Error('analysis failed')
+                },
+            },
             panelAssessor: { assess: async () => assessment(false) },
         })
 

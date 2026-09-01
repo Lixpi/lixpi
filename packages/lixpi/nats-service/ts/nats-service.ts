@@ -1,20 +1,33 @@
 'use strict'
 
 import c from 'chalk'
-import { wsconnect, tokenAuthenticator } from '@nats-io/nats-core'
-import { connect } from "@nats-io/transport-node"
+import {
+    wsconnect,
+    tokenAuthenticator,
+} from '@nats-io/nats-core'
+import { connect } from '@nats-io/transport-node'
 import { fromSeed } from '@nats-io/nkeys'
-import { jetstream, jetstreamManager } from '@nats-io/jetstream'
+import {
+    jetstream,
+    jetstreamManager,
+} from '@nats-io/jetstream'
 import { Objm } from '@nats-io/obj'
 
 import type {
     NatsConnection,
     Msg,
     Subscription,
-    ConnectionOptions
+    ConnectionOptions,
 } from '@nats-io/nats-core'
-import type { JetStreamClient, JetStreamManager } from '@nats-io/jetstream'
-import type { ObjectStore, ObjectStoreOptions, ObjectInfo } from '@nats-io/obj'
+import type {
+    JetStreamClient,
+    JetStreamManager,
+} from '@nats-io/jetstream'
+import type {
+    ObjectStore,
+    ObjectStoreOptions,
+    ObjectInfo,
+} from '@nats-io/obj'
 
 // Default JetStream replication factor for all stores we create. The cluster
 // runs 3 nodes, so R3 keeps a quorum copy on every node: a single node lagging
@@ -23,13 +36,17 @@ import type { ObjectStore, ObjectStoreOptions, ObjectInfo } from '@nats-io/obj'
 // silently lost when the meta-layer reassigns it during a health blip.
 const DEFAULT_STREAM_REPLICAS = 3
 
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
-export type NatsMiddleware<T = any> = (data: T, msg: Msg) =>
-    Promise<{ data: T, msg: Msg }> | { data: T, msg: Msg }
+export type NatsMiddleware<T = any> = (data: T, msg: Msg) => Promise<{ data: T; msg: Msg }> | { data: T; msg: Msg }
 
-export type ReplyMiddleware<T = any, R = any> = (data: T, msg: Msg) =>
-    Promise<{ data: T, msg: Msg }> | { data: T, msg: Msg }
+export type ReplyMiddleware<T = any, R = any> = (data: T, msg: Msg) => Promise<{ data: T; msg: Msg }> | { data: T; msg: Msg }
 
 export type NatsServiceConfig = {
     servers?: string[]
@@ -38,8 +55,8 @@ export type NatsServiceConfig = {
     token?: string
     user?: string
     pass?: string
-    nkeySeed?: string       // Optional NKey seed for self-issued JWT
-    userId?: string         // Optional user ID for JWT subject (used with nkeySeed)
+    nkeySeed?: string // Optional NKey seed for self-issued JWT
+    userId?: string // Optional user ID for JWT subject (used with nkeySeed)
     // Optional async provider used to (re)fetch a fresh auth token before every
     // connect/reconnect attempt. When supplied it takes precedence over the
     // static `token` and lets the connection recover from token expiry or
@@ -49,9 +66,9 @@ export type NatsServiceConfig = {
     // caller can invalidate any cached token before `getToken` is called again.
     onAuthError?: (error: unknown) => void | Promise<void>
     subscriptions?: NatsSubjectSubscription[]
-    middleware?: NatsMiddleware[]              // Middleware for all subscriptions
-    replyMiddleware?: ReplyMiddleware[]        // Middleware specifically for replies
-    streamReplicas?: number                    // Replication factor for created stores (defaults to DEFAULT_STREAM_REPLICAS)
+    middleware?: NatsMiddleware[] // Middleware for all subscriptions
+    replyMiddleware?: ReplyMiddleware[] // Middleware specifically for replies
+    streamReplicas?: number // Replication factor for created stores (defaults to DEFAULT_STREAM_REPLICAS)
 }
 
 export type NatsSubjectSubscription<T = any> = {
@@ -144,16 +161,16 @@ export function generateSelfIssuedJWT(nkeySeed: string, userId: string, expiryHo
     // Create JWT claims
     const now = Math.floor(Date.now() / 1000)
     const claims = {
-        sub: userId,           // Subject: service identity
-        iss: publicKey,        // Issuer: our public key
-        iat: now,              // Issued at
-        exp: now + (expiryHours * 3600)  // Expiry
+        sub: userId, // Subject: service identity
+        iss: publicKey, // Issuer: our public key
+        iat: now, // Issued at
+        exp: now + (expiryHours * 3600), // Expiry
     }
 
     // Create JWT header
     const header = {
         typ: 'JWT',
-        alg: 'EdDSA'  // Ed25519 signature algorithm
+        alg: 'EdDSA', // Ed25519 signature algorithm
     }
 
     // Encode header and claims as base64url
@@ -243,24 +260,23 @@ export default class NatsService {
     private monitorStatus(): void {
         if (!this.nc || this.isMonitoring) return
         this.isMonitoring = true
-
         ;(async () => {
             for await (const status of this.nc.status()) {
                 switch (status.type) {
-                    case "disconnect":
+                    case 'disconnect':
                         err('NATS -> disconnected:', status)
                         break
-                    case "reconnecting":
+                    case 'reconnecting':
                         warn('NATS -> reconnecting:', status)
                         break
-                    case "reconnect":
+                    case 'reconnect':
                         info('NATS -> reconnected:', status)
                         // Check if subscriptions need to be initialized after reconnect
                         if (!this.subscriptionsInitialized) {
                             await this.initSubscriptions()
                         }
                         break
-                    case "error":
+                    case 'error':
                         err('NATS -> connection error:', status)
                         // The client keeps retrying internally (maxReconnectAttempts: -1),
                         // but with the credentials captured at connect time. If the server
@@ -271,7 +287,7 @@ export default class NatsService {
                             await this.refreshToken()
                         }
                         break
-                    case "close":
+                    case 'close':
                         warn('NATS -> connection closed:', status)
                         // Reset the initialized flag on close so we can reconnect properly
                         this.subscriptionsInitialized = false
@@ -304,14 +320,14 @@ export default class NatsService {
                         listener.subject,
                         listener.handler as ReplyHandler,
                         { queue: listener.queue },
-                        listener.payloadType
+                        listener.payloadType,
                     )
                 } else {
                     subscription = this.subscribe(
                         listener.subject,
                         listener.handler as MessageHandler,
                         { queue: listener.queue },
-                        listener.payloadType
+                        listener.payloadType,
                     )
                 }
 
@@ -322,7 +338,7 @@ export default class NatsService {
                         c.white.italic(subscriptionType.padEnd(10, ' ')),
                         c.grey(': '),
                         c.green(listener.subject),
-                        listener.queue ? `${c.white(' with queue:')} ${c.green(listener.queue)}` : ''
+                        listener.queue ? `${c.white(' with queue:')} ${c.green(listener.queue)}` : '',
                     ])
                 }
             } catch (error) {
@@ -336,8 +352,8 @@ export default class NatsService {
     private async applyMiddleware<T = any>(
         data: T,
         msg: Msg,
-        handlers: Array<NatsMiddleware<T> | ReplyMiddleware<T>>
-    ): Promise<{ data: T, msg: Msg }> {
+        handlers: Array<NatsMiddleware<T> | ReplyMiddleware<T>>,
+    ): Promise<{ data: T; msg: Msg }> {
         let currentData = { data, msg }
         for (const middlewareFunc of handlers) {
             currentData = await Promise.resolve(middlewareFunc(currentData.data, currentData.msg))
@@ -397,7 +413,7 @@ export default class NatsService {
             this.reconnectAttempts = 0
             infoStr([
                 c.green('NATS -> listening on: '),
-                c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`)
+                c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`),
             ])
             this.monitorStatus()
             await this.initSubscriptions()
@@ -538,7 +554,7 @@ export default class NatsService {
         subject: string,
         handler: (data: T, msg: Msg) => void | Promise<void>,
         options: SubscriptionOptions = {},
-        payloadType: 'json' | 'buffer' = 'json'
+        payloadType: 'json' | 'buffer' = 'json',
     ): Subscription | null {
         if (!this.nc) {
             err('NATS client is not connected.')
@@ -549,9 +565,8 @@ export default class NatsService {
         const subscription = this.nc.subscribe(subject, subOptions)
 
         // Apply middleware
-        //TODO it hould use both middleware types
+        // TODO it hould use both middleware types
         const middlewareChain = this.config.replyMiddleware || this.config.middleware || []
-
         ;(async () => {
             for await (const msg of subscription) {
                 try {
@@ -567,7 +582,7 @@ export default class NatsService {
                         messageData: msg.data ? new TextDecoder().decode(msg.data) : 'no data',
                         messageHeaders: msg.headers ? Object.fromEntries(msg.headers) : 'no headers',
                         subject: msg.subject,
-                        payloadType
+                        payloadType,
                     })
                 }
             }
@@ -586,10 +601,6 @@ export default class NatsService {
         return JSON.parse(response.string()) as R
     }
 
-
-
-
-
     // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // TODO: vefify that subscribe works as expected, specially that it creates queue groups automatically
     // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -599,7 +610,7 @@ export default class NatsService {
         subject: string,
         handler: ReplyHandler<T, R>,
         options: SubscriptionOptions = {},
-        payloadType: 'json' | 'buffer' = 'json'
+        payloadType: 'json' | 'buffer' = 'json',
     ): Subscription | null {
         if (!this.nc) {
             err('NATS client is not connected.')
@@ -610,13 +621,11 @@ export default class NatsService {
         const subscription = this.nc.subscribe(subject, subOptions)
 
         // Apply middleware
-        //TODO it hould use both middleware types
+        // TODO it hould use both middleware types
         const middlewareChain = this.config.replyMiddleware || this.config.middleware || []
-
         ;(async () => {
             for await (const msg of subscription) {
                 try {
-
                     // let data: T = payloadType === 'json' ? JSON.parse(msg.string()) as T : msg.string() as T
                     let data = decode(msg, payloadType)
 
@@ -899,7 +908,7 @@ export default class NatsService {
             pull(controller) {
                 controller.enqueue(data)
                 controller.close()
-            }
+            },
         })
     }
 

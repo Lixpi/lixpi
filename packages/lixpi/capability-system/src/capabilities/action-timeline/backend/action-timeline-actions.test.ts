@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     CapabilityActionRegistry,
@@ -77,26 +82,32 @@ describe('Action Timeline registered actions', () => {
         const registry = new CapabilityActionRegistry()
         registerActionTimelineActions(registry, makeDependencies())
 
-        expect(registry.allowedActionKeys()).toEqual(new Set([
-            'action-timeline.validate-request',
-            'action-timeline.write-segments',
-            'action-timeline.persist-timeline',
-        ]))
-        expect(await registry.get('action-timeline.write-segments').authorize({
-            ...makeContext(),
-            rootCapabilityId: 'global.unrelated',
-        }, {})).toBe(false)
+        expect(registry.allowedActionKeys()).toEqual(
+            new Set([
+                'action-timeline.validate-request',
+                'action-timeline.write-segments',
+                'action-timeline.persist-timeline',
+            ]),
+        )
+        expect(
+            await registry.get('action-timeline.write-segments').authorize({
+                ...makeContext(),
+                rootCapabilityId: 'global.unrelated',
+            }, {}),
+        ).toBe(false)
     })
 
     it('validates timing, deduplicates references, and resolves every input before model dispatch', async () => {
         const dependencies = makeDependencies()
-        dependencies.resolveModelInputs = vi.fn(async ({ assetIds }) => assetIds.map(assetId => ({
-            kind: 'document-text' as const,
-            assetId,
-            marker: `<${assetId}>`,
-            title: assetId,
-            text: assetId,
-        })))
+        dependencies.resolveModelInputs = vi.fn(async ({ assetIds }) =>
+            assetIds.map(assetId => ({
+                kind: 'document-text' as const,
+                assetId,
+                marker: `<${assetId}>`,
+                title: assetId,
+                text: assetId,
+            }))
+        )
         const registry = new CapabilityActionRegistry()
         registerActionTimelineActions(registry, dependencies)
         const context = makeContext()
@@ -161,10 +172,12 @@ describe('Action Timeline registered actions', () => {
 
         const written = await registry.get('action-timeline.write-segments').execute({ prepared }, makeContext())
 
-        expect(written).toMatchObject({ segments: [
-            { slotIndex: 0, runs: [{ text: 'Beat 0' }] },
-            { slotIndex: 1, runs: [{ text: 'Beat 1' }] },
-        ] })
+        expect(written).toMatchObject({
+            segments: [
+                { slotIndex: 0, runs: [{ text: 'Beat 0' }] },
+                { slotIndex: 1, runs: [{ text: 'Beat 1' }] },
+            ],
+        })
         expect(call).toHaveBeenCalledTimes(3)
         expect(call.mock.calls[1]![0].userPrompt).toContain('Correction required')
         expect(call.mock.calls[1]![0].userPrompt).toContain('ACTION_TIMELINE_BATCH_SLOTS_INVALID')
@@ -177,7 +190,7 @@ describe('Action Timeline registered actions', () => {
             parsed: {
                 segments: [{
                     slotIndex: 0,
-                    runs: [{ text: 'Shelby boards Slop Train while Shelby\'s bag remains visible.' }],
+                    runs: [{ text: "Shelby boards Slop Train while Shelby's bag remains visible." }],
                 }],
                 continuity: 'Shelby is aboard Slop Train.',
             },

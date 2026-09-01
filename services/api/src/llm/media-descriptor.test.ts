@@ -1,8 +1,18 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import { buildMediaDescriptorSchema, buildTextDescriptorSchema, describeMediaStill, describeTextContent } from './media-descriptor.ts'
+import {
+    buildMediaDescriptorSchema,
+    buildTextDescriptorSchema,
+    describeMediaStill,
+    describeTextContent,
+} from './media-descriptor.ts'
 
 // =============================================================================
 // MEDIA DESCRIPTOR — schema + describe contract

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { v4 as uuidv4 } from 'uuid'
 import { Selection } from 'prosemirror-state'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 import {
     aiChatThreadNodeSpec,
     aiChatThreadNodeType,
@@ -14,7 +14,7 @@ export {
 
 export const defaultAttrs = {
     threadId: () => uuidv4(),
-    status: 'active'
+    status: 'active',
 }
 
 // Define the node view for AI chat thread
@@ -67,7 +67,7 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
                     const newThreadId = defaultAttrs.threadId()
                     const tr = view.state.tr.setNodeMarkup(pos, undefined, {
                         ...updatedNode.attrs,
-                        threadId: newThreadId
+                        threadId: newThreadId,
                     })
                     view.dispatch(tr)
                 }
@@ -78,7 +78,7 @@ export const aiChatThreadNodeView = (node, view, getPos) => {
         },
         destroy: () => {
             // No-op
-        }
+        },
     }
 }
 

@@ -6,8 +6,16 @@
 import './styles.scss'
 
 import type {
-    Catalog, CatalogGroup, CatalogParam, CatalogProvider, CategoryMeta,
-    Decision, SelectionEntry, SelectionMap, Status, Summary,
+    Catalog,
+    CatalogGroup,
+    CatalogParam,
+    CatalogProvider,
+    CategoryMeta,
+    Decision,
+    SelectionEntry,
+    SelectionMap,
+    Status,
+    Summary,
 } from './types.ts'
 
 const STATE_LABELS: Record<string, string> = {
@@ -49,16 +57,18 @@ const SCROLL_STORAGE_KEY = 'ai-model-registry:scroll'
 // gpt-image-2 keeps the digit that is part of the name.
 const shortModel = (model: string): string => String(model).replace(/-\d{3,}$/u, '')
 
-const titleFromSlug = (slug: string): string => String(slug)
-    .split('-')
-    .map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
-    .join(' ')
+const titleFromSlug = (slug: string): string =>
+    String(slug)
+        .split('-')
+        .map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+        .join(' ')
 
-const escapeHtml = (value: unknown): string => String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
+const escapeHtml = (value: unknown): string =>
+    String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
 
 // Which selection field each value control writes to. `fixed` is the value sent
 // when a parameter is used but not exposed; `default` is where an exposed
@@ -83,9 +93,12 @@ const STATUS_FILTERS = new Set(STATUSES.map(({ value }) => value))
 
 // The control shape follows what the provider accepts: a picker when there is a
 // published value list or a boolean, a free-text field otherwise.
-const chipOptionsFor = (parameter: CatalogParam): string[] | null => parameter.values?.length ? parameter.values
-    : parameter.type === 'boolean' ? ['true', 'false']
-    : null
+const chipOptionsFor = (parameter: CatalogParam): string[] | null =>
+    parameter.values?.length
+        ? parameter.values
+        : parameter.type === 'boolean'
+        ? ['true', 'false']
+        : null
 
 const renderValueControl = (id: string, parameter: CatalogParam, { role, label }: ValueControl, value: string): string => {
     // A parameter with a value list is picked straight from its chips, so it
@@ -97,7 +110,6 @@ const renderValueControl = (id: string, parameter: CatalogParam, { role, label }
                 <input type="text" data-role="${role}" data-id="${escapeHtml(id)}" value="${escapeHtml(value)}" />
             </div>`
 }
-
 
 type StatusReporter = (state: string, summary?: Summary | null, message?: string) => void
 
@@ -243,10 +255,12 @@ class ParamPicker {
     // the heights above it. Those are measured rather than assumed: a hardcoded
     // offset leaves a band of scrolled content showing between two headers.
     #measureHeaderHeights(): void {
-        for (const [selector, property, fallback] of [
-            ['.section-head', '--section-h', 32],
-            ['.group-head', '--group-h', 52],
-        ]) {
+        for (
+            const [selector, property, fallback] of [
+                ['.section-head', '--section-h', 32],
+                ['.group-head', '--group-h', 52],
+            ]
+        ) {
             const head = this.root.querySelector(selector)
             document.documentElement.style.setProperty(property, `${head?.offsetHeight ?? fallback}px`)
         }
@@ -408,7 +422,6 @@ class ParamPicker {
         })
     }
 
-
     #activeValue(id: string, currentState: string): string {
         const entry = this.#entry(id, currentState)
         if (entry.decision === 'expose') return entry.defaultValue
@@ -491,8 +504,10 @@ class ParamPicker {
     #applyFilter(): void {
         for (const row of this.root.querySelectorAll('[data-row]')) {
             const matchesState = this.#filter === 'all'
-                || (this.#filter === 'unreviewed' ? row.dataset.reviewed === 'false'
-                    : STATUS_FILTERS.has(this.#filter) ? row.dataset.status === this.#filter
+                || (this.#filter === 'unreviewed'
+                    ? row.dataset.reviewed === 'false'
+                    : STATUS_FILTERS.has(this.#filter)
+                    ? row.dataset.status === this.#filter
                     : row.dataset.currentState === this.#filter)
             const matchesQuery = this.#query === '' || row.dataset.haystack.includes(this.#query)
             const matchesModel = this.#modelFilter === 'all'
@@ -519,9 +534,11 @@ class ParamPicker {
     // between four providers. Provider stays on each group header.
     #render(): void {
         this.root.innerHTML = MEDIA_SECTIONS.map(({ mediaType, title }) => {
-            const groups = this.#catalog.providers.flatMap((provider) => provider.groups
-                .filter((group) => group.mediaType === mediaType)
-                .map((group) => this.#renderGroup(provider, group)))
+            const groups = this.#catalog.providers.flatMap((provider) =>
+                provider.groups
+                    .filter((group) => group.mediaType === mediaType)
+                    .map((group) => this.#renderGroup(provider, group))
+            )
             if (groups.length === 0) return ''
             return `
                 <section class="section" data-collapsed="${this.#collapsed.has(mediaType)}">
@@ -595,8 +612,11 @@ class ParamPicker {
         const valueByRole = { fixed: fixedValue, default: defaultValue }
         const used = decision === 'internal' || decision === 'expose'
         const haystack = [
-            parameter.key, parameter.apiField, parameter.summary,
-            parameter.values?.join(' ') ?? '', parameter.combines.join(' '),
+            parameter.key,
+            parameter.apiField,
+            parameter.summary,
+            parameter.values?.join(' ') ?? '',
+            parameter.combines.join(' '),
         ].join(' ').toLowerCase()
 
         const chosenValue = decision === 'expose' ? defaultValue : decision === 'internal' ? fixedValue : ''
@@ -604,26 +624,30 @@ class ParamPicker {
         const chipOptions = chipOptionsFor(parameter)
         const values = chipOptions
             ? `<div class="values is-pickable">
-                   ${chipOptions.map((v) => {
-                       const classes = [
-                           v === providerDefault ? 'is-provider-default' : '',
-                           v !== '' && v === chosenValue ? 'is-selected' : '',
-                       ].filter(Boolean).join(' ')
-                       return `<code data-role="chip" data-value="${escapeHtml(v)}"${classes ? ` class="${classes}"` : ''}>${escapeHtml(v)}</code>`
-                   }).join('')}
+                   ${
+                chipOptions.map((v) => {
+                    const classes = [
+                        v === providerDefault ? 'is-provider-default' : '',
+                        v !== '' && v === chosenValue ? 'is-selected' : '',
+                    ].filter(Boolean).join(' ')
+                    return `<code data-role="chip" data-value="${escapeHtml(v)}"${classes ? ` class="${classes}"` : ''}>${escapeHtml(v)}</code>`
+                }).join('')
+            }
                </div>`
-            : parameter.range ? `<div class="values"><code>${escapeHtml(parameter.range)}</code></div>` : ''
+            : parameter.range
+            ? `<div class="values"><code>${escapeHtml(parameter.range)}</code></div>`
+            : ''
 
         const combines = parameter.combines.length
             ? `<ul class="combines">${parameter.combines.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>`
             : ''
 
-        const pills = (items, kind) => items.map((item) =>
-            `<span class="pill" data-kind="${kind}">${escapeHtml(shortModel(item))}</span>`).join('')
-        const compatRow = (label, supported, unsupported) => (supported.length || unsupported.length)
-            ? `<div class="compat-row"><span class="compat-label">${label}</span>
+        const pills = (items, kind) => items.map((item) => `<span class="pill" data-kind="${kind}">${escapeHtml(shortModel(item))}</span>`).join('')
+        const compatRow = (label, supported, unsupported) =>
+            (supported.length || unsupported.length)
+                ? `<div class="compat-row"><span class="compat-label">${label}</span>
                    <div class="pills">${pills(supported, 'yes')}${pills(unsupported, 'no')}</div></div>`
-            : ''
+                : ''
         // Hostname alone is useless when a parameter cites two pages on the same
         // site, so the last path segment comes along to tell them apart.
         const sourceLabel = (url) => {
@@ -637,8 +661,7 @@ class ParamPicker {
         }
         const sources = (parameter.sources ?? []).length
             ? `<div class="compat-row"><span class="compat-label">Source</span>
-                   <span class="source-links">${parameter.sources.map((url) =>
-                       `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(sourceLabel(url))}</a>`).join(', ')}</span></div>`
+                   <span class="source-links">${parameter.sources.map((url) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(sourceLabel(url))}</a>`).join(', ')}</span></div>`
             : ''
 
         const compatibility = `<div class="compat">
@@ -701,14 +724,16 @@ class ParamPicker {
                 <input class="note" type="text" data-role="note" data-id="${escapeHtml(id)}"
                     value="${escapeHtml(note)}" />
                 <div class="row-footer">
-                    ${STATUSES.map(({ value, label }) => `
+                    ${
+            STATUSES.map(({ value, label }) => `
                         <label class="check">
                             <input type="checkbox" data-role="status" data-status="${value}" data-id="${escapeHtml(id)}"
                                 ${status === value ? 'checked' : ''}
                                 ${value === 'approved' && decision === 'skip' ? 'disabled' : ''} />
                             <span>${escapeHtml(label)}</span>
                         </label>
-                    `).join('')}
+                    `).join('')
+        }
                 </div>
             </article>
         `
@@ -719,4 +744,3 @@ const picker = new ParamPicker(document.getElementById('providers') as HTMLEleme
 picker.init().catch((error: Error) => {
     document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
 })
-

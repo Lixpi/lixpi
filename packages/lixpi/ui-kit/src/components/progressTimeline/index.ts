@@ -10,8 +10,3 @@ export {
     type ProgressTimelineViewMode,
     type ProgressTimelineViewState,
 } from './progressTimeline.ts'
-export {
-    createProgressRippleIcon,
-    type ProgressRippleIconConfig,
-    type ProgressRippleIconInstance,
-} from './progressRippleIcon.ts'

@@ -200,15 +200,19 @@ async function main(): Promise<void> {
     const dryRunRepair = removePendingStateFromMarkers(canvasState, args.generationRequestId)
 
     if (!args.apply) {
-        console.log(JSON.stringify({
-            mode: 'dry-run',
-            workspaceId: args.workspaceId,
-            generationRequestId: args.generationRequestId,
-            wouldChange: dryRunRepair.changed,
-            wouldRemovePendingStateCount: dryRunRepair.removedMarkers.length,
-            removedMarkers: dryRunRepair.removedMarkers,
-            before: beforeSummary,
-        }, null, 2))
+        console.log(JSON.stringify(
+            {
+                mode: 'dry-run',
+                workspaceId: args.workspaceId,
+                generationRequestId: args.generationRequestId,
+                wouldChange: dryRunRepair.changed,
+                wouldRemovePendingStateCount: dryRunRepair.removedMarkers.length,
+                removedMarkers: dryRunRepair.removedMarkers,
+                before: beforeSummary,
+            },
+            null,
+            2,
+        ))
         return
     }
 
@@ -224,16 +228,20 @@ async function main(): Promise<void> {
         edges: repairedWorkspace?.canvasState?.edges ?? [],
     } as CanvasState
 
-    console.log(JSON.stringify({
-        mode: 'apply',
-        workspaceId: args.workspaceId,
-        generationRequestId: args.generationRequestId,
-        applied: applied.changed,
-        removedPendingStateCount: dryRunRepair.removedMarkers.length,
-        removedMarkers: dryRunRepair.removedMarkers,
-        before: beforeSummary,
-        after: summarizeCanvas(repairedCanvasState, args.generationRequestId),
-    }, null, 2))
+    console.log(JSON.stringify(
+        {
+            mode: 'apply',
+            workspaceId: args.workspaceId,
+            generationRequestId: args.generationRequestId,
+            applied: applied.changed,
+            removedPendingStateCount: dryRunRepair.removedMarkers.length,
+            removedMarkers: dryRunRepair.removedMarkers,
+            before: beforeSummary,
+            after: summarizeCanvas(repairedCanvasState, args.generationRequestId),
+        },
+        null,
+        2,
+    ))
 }
 
 try {

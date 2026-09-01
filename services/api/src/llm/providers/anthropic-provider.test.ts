@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import type { AiModelInferenceCapabilities } from '@lixpi/constants'
 
 const debugTools = vi.hoisted(() => ({
@@ -16,7 +23,7 @@ const anthropicMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@anthropic-ai/sdk', () => ({
-    default: vi.fn(function () {
+    default: vi.fn(function() {
         return {
             messages: {
                 stream: anthropicMocks.stream,
@@ -26,7 +33,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }))
 
 vi.mock('@anthropic-ai/bedrock-sdk', () => ({
-    AnthropicBedrock: vi.fn(function () {
+    AnthropicBedrock: vi.fn(function() {
         return { messages: { stream: anthropicMocks.stream } }
     }),
 }))
@@ -59,7 +66,7 @@ const makeAnthropicStream = (
     textChunks: string[],
     finalMessage: Record<string, any>,
 ) => ({
-    [Symbol.asyncIterator]: async function* () {
+    [Symbol.asyncIterator]: async function*() {
         for (const text of textChunks) {
             yield { type: 'content_block_delta', delta: { type: 'text_delta', text } }
         }

@@ -12,28 +12,25 @@ import type { ProviderName } from '@lixpi/constants'
 
 export const VIDEO_TOOL_NAME = 'generate_video'
 
-const TOOL_DESCRIPTION =
-    'Generate moving visual media from the user request and authorized references. ' +
-    'Call this tool only when the user explicitly requests a video, clip, animation, filming, animating, ' +
-    'or continuation of a source video. Action or event verbs that can be depicted in one still image do not ' +
-    'establish video intent. Preserve the request scope, ' +
-    'temporal intent, and reference roles; do not add unrequested semantic or aesthetic content. ' +
-    'The prompt must be safe and moderation-compliant.'
+const TOOL_DESCRIPTION = 'Generate moving visual media from the user request and authorized references. '
+    + 'Call this tool only when the user explicitly requests a video, clip, animation, filming, animating, '
+    + 'or continuation of a source video. Action or event verbs that can be depicted in one still image do not '
+    + 'establish video intent. Preserve the request scope, '
+    + 'temporal intent, and reference roles; do not add unrequested semantic or aesthetic content. '
+    + 'The prompt must be safe and moderation-compliant.'
 
 const BASE_PARAMETERS = {
     type: 'object',
     properties: {
         prompt: {
             type: 'string',
-            description:
-                'The exact moving-media prompt derived from the user request and authorized reference roles. ' +
-                'It must preserve requested temporal behavior, avoid invented content, and be moderation-compliant.',
+            description: 'The exact moving-media prompt derived from the user request and authorized reference roles. '
+                + 'It must preserve requested temporal behavior, avoid invented content, and be moderation-compliant.',
         },
         negativePrompt: {
             type: 'string',
-            description:
-                'Content the user explicitly wants excluded from the video. Preserve an explicit user negative prompt as-is. ' +
-                'Otherwise include only concrete unwanted output derived from the request, or omit this field when none applies.',
+            description: 'Content the user explicitly wants excluded from the video. Preserve an explicit user negative prompt as-is. '
+                + 'Otherwise include only concrete unwanted output derived from the request, or omit this field when none applies.',
         },
     },
     required: ['prompt'],

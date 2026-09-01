@@ -2,10 +2,16 @@
 
 import sharp from 'sharp'
 import { createHash } from 'node:crypto'
-import { warn, err } from '@lixpi/debug-tools'
+import {
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 
-import { parseDataUrl, parseNatsObjectRef } from '../../../llm/utils/attachments.ts'
+import {
+    parseDataUrl,
+    parseNatsObjectRef,
+} from '../../../llm/utils/attachments.ts'
 import type {
     StyleExtractionDependencies,
     StyleExtractionState,
@@ -25,7 +31,7 @@ const SUBJECT_CROPS_PER_SECONDARY = 1
 const REGION_CROPS_PER_REGION = 1
 
 // Seeded RNG so crop positions are deterministic per styleExtractionRunId.
-const mulberry32 = (seed: number): (() => number) => {
+const mulberry32 = (seed: number): () => number => {
     let s = seed >>> 0
     return () => {
         s = (s + 0x6d2b79f5) >>> 0

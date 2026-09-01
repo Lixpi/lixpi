@@ -1,0 +1,157 @@
+@import '@lixpi/ui-primitives/styles/transitions';
+
+.workspace-upload-placeholder-node {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    // Hug the content instead of the fixed inline node height (set from canvas
+    // state) — otherwise the short text floats centered in a tall box.
+    height: auto !important;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--workspace-media-node-border-radius);
+    background: rgba(248, 250, 252, 0.94);
+    box-shadow: var(--workspace-media-node-default-box-shadow);
+    color: #39455d;
+    overflow: hidden;
+
+    &.is-failed {
+        background: rgba(254, 242, 242, 0.96);
+        color: #7f1d1d;
+    }
+}
+
+.workspace-upload-placeholder-content {
+    position: relative;
+    display: grid;
+    width: 100%;
+    gap: 3px;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.workspace-upload-placeholder-loading-spinner {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    z-index: 20;    // above the transparent drag overlay (z-index: 15)
+}
+
+.workspace-upload-placeholder-dismiss {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 20;    // above the transparent drag overlay (z-index: 15)
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(127, 29, 29, 0.08);
+    color: #991b1b;
+    cursor: pointer;
+    pointer-events: auto;
+    transition:
+        hoverTransition(background, $defaultHoverTransitionDuration),
+        hoverTransition(color, $defaultHoverTransitionDuration);
+
+    &:hover {
+        background: rgba(127, 29, 29, 0.16);
+        color: #7f1d1d;
+    }
+}
+
+.workspace-upload-placeholder-status,
+.workspace-upload-placeholder-name,
+.workspace-upload-placeholder-message {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-upload-placeholder-status {
+    font-size: 12px;
+    font-weight: 680;
+    color: #5f8fcf;
+    text-transform: uppercase;
+}
+
+.workspace-upload-placeholder-node.is-failed .workspace-upload-placeholder-status {
+    color: #dc2626;
+}
+
+.workspace-upload-placeholder-name {
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.workspace-upload-placeholder-message {
+    font-size: 12px;
+    color: #697388;
+}
+
+.workspace-upload-placeholder-node.is-failed .workspace-upload-placeholder-message {
+    color: #991b1b;
+}
+
+.workspace-media-operation-actions {
+    position: relative;
+    // Escape the content flow's stacking order so controls stay above the
+    // full-node drag overlay while the rest of the card remains draggable.
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    pointer-events: auto;
+}
+
+.workspace-media-operation-action {
+    min-height: 28px;
+    padding: 5px 9px;
+    border: 1px solid rgba(95, 143, 207, 0.38);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.9);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: progress;
+        opacity: 0.55;
+    }
+}
+
+.workspace-media-operation-problem {
+    flex-basis: 100%;
+    font-size: 11px;
+
+    summary {
+        cursor: pointer;
+        font-weight: 650;
+    }
+
+    span,
+    code {
+        display: block;
+        margin-top: 4px;
+        white-space: normal;
+    }
+}
+
+.upload-placeholder-drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    background: transparent;
+}

@@ -1,0 +1,19 @@
+{
+    "$schema": "./services/typescript-quality-runner/node_modules/oxlint/configuration_schema.json",
+    "categories": {
+        "correctness": "off"
+    },
+    "ignorePatterns": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/coverage/**",
+        "packages-vendor/**",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs"
+    ],
+    "rules": {
+        "no-debugger": "error"
+    }
+}

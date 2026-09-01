@@ -35,10 +35,13 @@ export class CapabilityArtifactSharedRegistry {
         if (this.definitions.has(definition.artifactTypeId)) {
             throw new Error(`CAPABILITY_ARTIFACT_ALREADY_REGISTERED:${definition.artifactTypeId}`)
         }
-        this.definitions.set(definition.artifactTypeId, Object.freeze({
-            ...definition,
-            allowedEmbeddedReferenceTypes: Object.freeze([...definition.allowedEmbeddedReferenceTypes]),
-        }))
+        this.definitions.set(
+            definition.artifactTypeId,
+            Object.freeze({
+                ...definition,
+                allowedEmbeddedReferenceTypes: Object.freeze([...definition.allowedEmbeddedReferenceTypes]),
+            }),
+        )
     }
 
     get(artifactTypeId: string): CapabilityArtifactSharedDefinition | undefined {

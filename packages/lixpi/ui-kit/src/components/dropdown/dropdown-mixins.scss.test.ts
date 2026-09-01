@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 function expectSourceToContain(source: string, snippet: string): void {
     expect(
         source.includes(snippet),
-        `dropdown mixins should contain:\n${snippet}`
+        `dropdown mixins should contain:\n${snippet}`,
     ).toBe(true)
 }
 

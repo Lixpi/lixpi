@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import Workspace from './workspace.ts'
 import type { ContentDescriptor } from '@lixpi/constants'
@@ -13,10 +19,11 @@ const dynamo = {
 
 // Transactions surface a failed per-item condition as a cancelled transaction,
 // not as ConditionalCheckFailedException.
-const transactionalConditionalFailure = (message: string) => Object.assign(new Error(message), {
-    name: 'TransactionCanceledException',
-    CancellationReasons: [{ Code: 'ConditionalCheckFailed' }, { Code: 'None' }],
-})
+const transactionalConditionalFailure = (message: string) =>
+    Object.assign(new Error(message), {
+        name: 'TransactionCanceledException',
+        CancellationReasons: [{ Code: 'ConditionalCheckFailed' }, { Code: 'None' }],
+    })
 
 beforeEach(() => {
     vi.useRealTimers()

@@ -1,7 +1,17 @@
 'use strict'
 
-import type { Asset, CanvasState, MediaGenerationRunMeta } from '@lixpi/constants'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type {
+    Asset,
+    CanvasState,
+    MediaGenerationRunMeta,
+} from '@lixpi/constants'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
     assertAssetComponents: vi.fn(),
@@ -85,24 +95,26 @@ const asset = (originalReady: boolean): Asset => ({
     originWorkspaceId: 'workspace-1',
     ownerUserId: 'user-1',
     documents: {},
-    ...(originalReady ? {
-        media: {
-            kind: 'image',
-            originalName: 'image.png',
-            sourceMimeType: 'image/png',
-            modelSafe: true,
-            renditions: {
-                original: {
-                    name: 'original',
-                    status: 'ready',
-                    blobHash: 'hash-1',
-                    mimeType: 'image/png',
-                    byteSize: 100,
-                    updatedAt: 1,
+    ...(originalReady
+        ? {
+            media: {
+                kind: 'image',
+                originalName: 'image.png',
+                sourceMimeType: 'image/png',
+                modelSafe: true,
+                renditions: {
+                    original: {
+                        name: 'original',
+                        status: 'ready',
+                        blobHash: 'hash-1',
+                        mimeType: 'image/png',
+                        byteSize: 100,
+                        updatedAt: 1,
+                    },
                 },
             },
-        },
-    } : {}),
+        }
+        : {}),
     states: {
         lifecycle: 'creating',
         media: 'processing',
@@ -209,10 +221,12 @@ describe('resolveInheritedGenerationSeed', () => {
             'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [], generationSeed: 999 }),
         }[assetId]))
 
-        expect(await resolveInheritedGenerationSeed({
-            assetId: 'pending-asset',
-            maxValue: 2147483647,
-        })).toBe(777)
+        expect(
+            await resolveInheritedGenerationSeed({
+                assetId: 'pending-asset',
+                maxValue: 2147483647,
+            }),
+        ).toBe(777)
     })
 
     it('falls back to a referenced generated Asset when there is no parent', async () => {
@@ -222,10 +236,12 @@ describe('resolveInheritedGenerationSeed', () => {
             'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [], generationSeed: 999 }),
         }[assetId]))
 
-        expect(await resolveInheritedGenerationSeed({
-            assetId: 'pending-asset',
-            maxValue: 2147483647,
-        })).toBe(999)
+        expect(
+            await resolveInheritedGenerationSeed({
+                assetId: 'pending-asset',
+                maxValue: 2147483647,
+            }),
+        ).toBe(999)
     })
 
     it('skips a seed the target provider would reject and reports none', async () => {
@@ -234,10 +250,12 @@ describe('resolveInheritedGenerationSeed', () => {
             'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [], generationSeed: 4294967000 }),
         }[assetId]))
 
-        expect(await resolveInheritedGenerationSeed({
-            assetId: 'pending-asset',
-            maxValue: 2147483647,
-        })).toBeUndefined()
+        expect(
+            await resolveInheritedGenerationSeed({
+                assetId: 'pending-asset',
+                maxValue: 2147483647,
+            }),
+        ).toBeUndefined()
     })
 
     it('reports none when nothing in the lineage carries a seed', async () => {
@@ -246,10 +264,12 @@ describe('resolveInheritedGenerationSeed', () => {
             'reference-asset': seededAsset('reference-asset', { sourceAssetIds: [] }),
         }[assetId]))
 
-        expect(await resolveInheritedGenerationSeed({
-            assetId: 'pending-asset',
-            maxValue: 2147483647,
-        })).toBeUndefined()
+        expect(
+            await resolveInheritedGenerationSeed({
+                assetId: 'pending-asset',
+                maxValue: 2147483647,
+            }),
+        ).toBeUndefined()
     })
 })
 

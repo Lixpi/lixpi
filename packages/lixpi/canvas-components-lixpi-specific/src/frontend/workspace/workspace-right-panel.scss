@@ -1,0 +1,61 @@
+.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror {
+    padding: 0 0 1rem;
+    font-size: var(--workspace-right-sidebar-content-font-size);
+}
+
+.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor .ProseMirror p {
+    font-size: inherit;
+    line-height: 1.45;
+}
+
+.workspace-ai-chat-floating-panel {
+    position: absolute;
+    top: 0px;
+    right: calc(0px - var(--workspace-canvas-padding-inline));
+    bottom: calc(0px - var(--workspace-canvas-padding-bottom));
+    width: var(--workspace-right-side-panel-width);
+    box-sizing: border-box;
+    height: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 var(--workspace-right-side-panel-content-inset);
+    z-index: var(--side-panel-surface-z-index, 10030);
+    pointer-events: auto;
+    border-radius: 10px;
+    background: transparent;
+    overflow: visible;
+
+    &[data-thread-empty="true"] {
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+}
+
+// Top-level Capabilities / Media / AI Threads switch at the top of the right side panel.
+.workspace-right-panel-mode-switch {
+    position: relative;
+    z-index: 3;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    flex: 0 0 auto;
+    padding: 10px 0px 18px;
+}
+
+.workspace-right-panel-mode-switch-svg {
+    display: block;
+    width: 100%;
+    overflow: visible;
+}
+
+.workspace-ai-chat-floating-panel .ai-chat-thread-node-editor {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
+
+.workspace-ai-chat-floating-panel.is-resizing {
+    user-select: none;
+}

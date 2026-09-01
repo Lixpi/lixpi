@@ -1,6 +1,6 @@
 @use "sass:color";
 @use '../../styles/tokens' as *;
-@use '../../styles/transitions' as *;
+@use '@lixpi/ui-primitives/styles/transitions' as *;
 
 // Use same colors as dropdown and infoBubble primitives
 $bubbleMenuBg: $steelBlue;

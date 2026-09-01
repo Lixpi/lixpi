@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 const {
     decodeMock,
@@ -26,7 +33,7 @@ const {
 
 vi.mock('jsonwebtoken', () => ({
     default: {
-        decode: decodeMock
+        decode: decodeMock,
     },
 }))
 
@@ -99,13 +106,13 @@ describe('startNatsAuthCalloutService', () => {
         vi.clearAllMocks()
 
         authorizationIssuerKeyPair = {
-            getPublicKey: vi.fn().mockReturnValue('NKEY-ISSUER')
+            getPublicKey: vi.fn().mockReturnValue('NKEY-ISSUER'),
         }
         authorizationRequestCurveKeyPair = {
-            open: vi.fn()
+            open: vi.fn(),
         }
         rawNKeyVerifier = {
-            verify: vi.fn()
+            verify: vi.fn(),
         }
 
         fromSeedMock.mockImplementation((seed: Buffer) => {
@@ -118,7 +125,7 @@ describe('startNatsAuthCalloutService', () => {
         fromPublicMock.mockReturnValue(rawNKeyVerifier)
 
         auth0JwtVerifier = {
-            verify: vi.fn().mockResolvedValue({ decoded: { sub: auth0User } })
+            verify: vi.fn().mockResolvedValue({ decoded: { sub: auth0User } }),
         }
         createJwtVerifierMock.mockReturnValue(auth0JwtVerifier)
 
@@ -246,7 +253,7 @@ describe('startNatsAuthCalloutService', () => {
             },
             {
                 signer: authorizationIssuerKeyPair,
-            }
+            },
         )
         expect(encodeUserMock).toHaveBeenCalledWith(
             auth0User,
@@ -260,7 +267,7 @@ describe('startNatsAuthCalloutService', () => {
                     allow: ['_INBOX.>', 'notify.user:regular', 'notify.user:regular.done'],
                 },
             }),
-            { aud: 'AUTH' }
+            { aud: 'AUTH' },
         )
     })
 
@@ -323,7 +330,7 @@ describe('startNatsAuthCalloutService', () => {
                 type: 'user',
                 version: 2,
             }),
-            { aud: 'NEX' }
+            { aud: 'NEX' },
         )
     })
 
@@ -371,14 +378,14 @@ describe('startNatsAuthCalloutService', () => {
         expect(fromPublicMock).toHaveBeenCalledWith(rawServicePublicKey)
         expect(rawNKeyVerifier.verify).toHaveBeenCalledWith(
             Buffer.from(requestNonce),
-            Buffer.from('hello')
+            Buffer.from('hello'),
         )
         expect(encodeUserMock).toHaveBeenCalledWith(
             rawServiceUser,
             natsServicePublicKey,
             authorizationIssuerKeyPair,
             expect.objectContaining({ type: 'user', version: 2 }),
-            { aud: 'AUTH' }
+            { aud: 'AUTH' },
         )
     })
 

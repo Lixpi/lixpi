@@ -1,8 +1,19 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
-import { getAssetDocumentEventSubject, type AssetStepStreamEvent, type SubmitResult } from '@lixpi/prosemirror'
+import {
+    getAssetDocumentEventSubject,
+    type AssetStepStreamEvent,
+    type SubmitResult,
+} from '@lixpi/prosemirror'
 
 import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
 

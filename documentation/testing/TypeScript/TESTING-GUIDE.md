@@ -23,15 +23,18 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner api
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner nex
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner shared
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner docs-site
 docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner all
 ```
 
+`docs-site` runs the source-registry and Markdoc link tests from `documentation/site`. It has its own dependency volume and a read-only repository mount for checking authored source paths. It does not run the documentation build or write rendered output. `all` runs service and shared-package suites; invoke `docs-site` separately.
+
 (`--rm` removes the container once it exits; `-T` disables pseudo-TTY allocation for non-interactive shells; `--no-deps` prevents Compose from starting unrelated services; both `--profile dev` and `--profile main` are required because the compose file has a cross-profile `depends_on` elsewhere that Compose validates regardless of which service you're targeting.)
 
-Pass a specific test file after the domain to target it (for `api`/`web-ui`/`nex` only — `shared` runs every `packages/lixpi/*` package that defines a `test:run` script):
+Pass a specific test file after the domain to target it (for `api`/`web-ui`/`nex`/`docs-site` — `shared` runs every `packages/lixpi/*` package that defines a `test:run` script):
 
 ```bash
-docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/infographics/workspace/workspace-canvas.test.ts
+docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescript-test-runner web-ui src/canvas-adapters/workspace-canvas.test.ts
 ```
 
 For `shared`, an optional first argument selects a single package by its directory name under `packages/lixpi` (e.g. `auth-service`, or `debug-tools`/`nats-service` as shorthand for their nested `ts/` subfolder); any remaining arguments are passed through to vitest:

@@ -1,3 +1,4 @@
+'use strict'
 // SidePanel - reusable resizable side panel for a canvas-hosted panel.
 //
 // Renderer: TypeScript `html` DOM. It is meant to be mounted as a
@@ -24,7 +25,11 @@
 //   - side: 'left'   -> panel lives on the left, its resize handle hugs the
 //     panel's right edge; dragging right grows the panel.
 
-import { applyStyle, html } from '../../dom/domTemplates.ts'
+import {
+    applyStyle,
+    createDocumentHtml,
+    ElementStyleLease,
+} from '@lixpi/ui-primitives/dom'
 
 export type SidePanelSide = 'left' | 'right'
 
@@ -93,6 +98,7 @@ export type SidePanelSetWidthOptions = {
 }
 
 export type SidePanelConfig = {
+    root?: HTMLElement
     // Which edge of the screen the panel (and therefore its resize handle) hugs.
     side: SidePanelSide
     // Distance in px from the panel edge to the resize handle center.
@@ -215,6 +221,8 @@ type OutsidePointerStart = {
 }
 
 class SidePanel implements SidePanelInstance {
+    private readonly document: Document
+    private readonly html: ReturnType<typeof createDocumentHtml>
     readonly element: HTMLDivElement
     readonly backdropElement: HTMLDivElement
     readonly overlayElement: HTMLDivElement | null
@@ -234,6 +242,8 @@ class SidePanel implements SidePanelInstance {
     private closeFromCurrentTransforms = false
 
     constructor(private readonly config: SidePanelConfig) {
+        this.document = config.root?.ownerDocument ?? document
+        this.html = createDocumentHtml(this.document)
         const loaded = config.loadState?.()
         if (loaded && loaded.width != null) this.width = loaded.width
 
@@ -247,7 +257,7 @@ class SidePanel implements SidePanelInstance {
             ...(side === 'left' ? { right: edgeOffset } : { left: edgeOffset }),
         }
 
-        this.element = html`<div
+        this.element = this.html`<div
             className=${`side-panel-resize-handle side-panel-resize-handle-${side} nopan${className ? ` ${className}` : ''}`}
             style=${resizeHandleStyle}
         ></div>` as HTMLDivElement
@@ -256,7 +266,7 @@ class SidePanel implements SidePanelInstance {
         if (styles?.gradient) this.element.style.setProperty('--side-panel-resize-handle-gradient', styles.gradient)
         if (styles?.width) this.element.style.setProperty('--side-panel-resize-handle-width', styles.width)
 
-        const resizeHandleLine = html`<div className="side-panel-resize-handle-line"></div>` as HTMLDivElement
+        const resizeHandleLine = this.html`<div className="side-panel-resize-handle-line"></div>` as HTMLDivElement
         this.element.appendChild(resizeHandleLine)
         this.applyAnimationSettings(this.element)
         // Pointer events unify mouse, touch, and pen, so the resize handle works
@@ -266,7 +276,7 @@ class SidePanel implements SidePanelInstance {
         // Translucent glass backdrop. It is a sibling that sits behind the panel
         // (lower z-index) and blurs the canvas behind it. Its width tracks the
         // panel width so its inner edge sits flush with the panel edge.
-        this.backdropElement = html`<div
+        this.backdropElement = this.html`<div
             className=${`side-panel-backdrop side-panel-backdrop-${side}`}
             aria-hidden="true"
         ></div>` as HTMLDivElement
@@ -277,8 +287,8 @@ class SidePanel implements SidePanelInstance {
         if (this.overlayElement) this.applyOverlaySettings(this.overlayElement)
         if (this.toggleElement) this.applyAnimationSettings(this.toggleElement)
         if (this.isOutsideCloseEnabled()) {
-            document.addEventListener('pointerdown', this.handleOutsidePointerDown, true)
-            document.addEventListener('click', this.handleOutsideClick, true)
+            this.document.addEventListener('pointerdown', this.handleOutsidePointerDown, true)
+            this.document.addEventListener('click', this.handleOutsideClick, true)
         }
         this.setOpen(false)
         if (this.toggleElement) {
@@ -312,7 +322,7 @@ class SidePanel implements SidePanelInstance {
         this.setWidth(this.width)
     }
 
-    subscribe = (listener: (width: number) => void): (() => void) => {
+    subscribe = (listener: (width: number) => void): () => void => {
         this.listeners.add(listener)
         return () => {
             this.listeners.delete(listener)
@@ -339,8 +349,8 @@ class SidePanel implements SidePanelInstance {
         const easing = direction === 'in'
             ? this.config.animation?.openEasing?.trim()
             : direction === 'out'
-                ? this.config.animation?.closeEasing?.trim()
-                : this.config.animation?.easing?.trim()
+            ? this.config.animation?.closeEasing?.trim()
+            : this.config.animation?.easing?.trim()
         const fallback = this.config.animation?.easing?.trim()
         if (easing) return easing
         if (fallback) return fallback
@@ -366,9 +376,10 @@ class SidePanel implements SidePanelInstance {
             : OVERLAY_DEFAULT_OPACITY
     }
 
-    private isOutsideCloseEnabled = (): boolean => Boolean(
-        this.config.overlay && this.config.overlay.closeOnPointerDown !== false
-    )
+    private isOutsideCloseEnabled = (): boolean =>
+        Boolean(
+            this.config.overlay && this.config.overlay.closeOnPointerDown !== false,
+        )
 
     // Resolve the width to start a drag from. Prefer the stored width; otherwise
     // measure the actual rendered panel, falling back to the resolved default.
@@ -399,7 +410,7 @@ class SidePanel implements SidePanelInstance {
     private handleResizeStart = (event: PointerEvent): void => {
         // Only the primary button/contact starts a resize; ignore secondary
         // mouse buttons and multi-touch.
-        if (event.button !== 0) return
+        if (event.button !== 0 || this.detachDrag) return
 
         event.preventDefault()
         event.stopPropagation()
@@ -407,12 +418,10 @@ class SidePanel implements SidePanelInstance {
         const startX = event.clientX
         const startWidth = this.getDragStartWidth()
         const sign = this.config.side === 'left' ? 1 : -1
-        const previousBodyCursor = document.body.style.cursor
-        const previousBodyUserSelect = document.body.style.userSelect
         const pointerId = event.pointerId
 
         this.setResizing(true)
-        applyStyle(document.body, { cursor: 'ew-resize', userSelect: 'none' })
+        const bodyStyle = new ElementStyleLease(this.document.body, { cursor: 'ew-resize', 'user-select': 'none' })
         this.config.onResizeStart?.()
 
         // Capture the pointer so the drag keeps tracking past the thin resize
@@ -429,22 +438,23 @@ class SidePanel implements SidePanelInstance {
             if (upEvent.pointerId !== pointerId) return
             this.detach()
             this.setResizing(false)
-            applyStyle(document.body, { cursor: previousBodyCursor, userSelect: previousBodyUserSelect })
             this.persist()
             this.config.onResizeEnd?.(this.getWidth())
         }
 
         this.detachDrag = (): void => {
+            bodyStyle.destroy()
+            this.setResizing(false)
             if (canCapture && this.element.hasPointerCapture(pointerId)) this.element.releasePointerCapture(pointerId)
-            document.removeEventListener('pointermove', handlePointerMove)
-            document.removeEventListener('pointerup', handlePointerUp)
-            document.removeEventListener('pointercancel', handlePointerUp)
+            this.document.removeEventListener('pointermove', handlePointerMove)
+            this.document.removeEventListener('pointerup', handlePointerUp)
+            this.document.removeEventListener('pointercancel', handlePointerUp)
             this.detachDrag = null
         }
 
-        document.addEventListener('pointermove', handlePointerMove)
-        document.addEventListener('pointerup', handlePointerUp)
-        document.addEventListener('pointercancel', handlePointerUp)
+        this.document.addEventListener('pointermove', handlePointerMove)
+        this.document.addEventListener('pointerup', handlePointerUp)
+        this.document.addEventListener('pointercancel', handlePointerUp)
     }
 
     private detach = (): void => {
@@ -459,7 +469,7 @@ class SidePanel implements SidePanelInstance {
                 ? { left: toggleConfig.openOffset ?? '20px' }
                 : { right: toggleConfig.openOffset ?? '20px' }),
         }
-        const toggleElement = html`<button
+        const toggleElement = this.html`<button
             className=${`side-panel-toggle side-panel-toggle-${this.config.side} nopan${toggleConfig.className ? ` ${toggleConfig.className}` : ''}`}
             type="button"
             style=${toggleStyle}
@@ -471,7 +481,7 @@ class SidePanel implements SidePanelInstance {
     }
 
     private createOverlayElement(overlayConfig: SidePanelOverlayConfig): HTMLDivElement {
-        const overlayElement = html`<div
+        const overlayElement = this.html`<div
             className=${`side-panel-overlay side-panel-overlay-${this.config.side}${overlayConfig.closeOnPointerDown === false ? '' : ' side-panel-overlay-dismissible'}${overlayConfig.className ? ` ${overlayConfig.className}` : ''}`}
             aria-hidden="true"
         ></div>` as HTMLDivElement
@@ -519,10 +529,10 @@ class SidePanel implements SidePanelInstance {
         const rect = this.overlayElement?.getBoundingClientRect()
             ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
         return (
-            event.clientX >= rect.left &&
-            event.clientX <= rect.right &&
-            event.clientY >= rect.top &&
-            event.clientY <= rect.bottom
+            event.clientX >= rect.left
+            && event.clientX <= rect.right
+            && event.clientY >= rect.top
+            && event.clientY <= rect.bottom
         )
     }
 
@@ -638,9 +648,10 @@ class SidePanel implements SidePanelInstance {
         for (const target of targets) void target.element.offsetWidth
     }
 
-    private nextAnimationFrame = (): Promise<void> => new Promise((resolve) => {
-        requestAnimationFrame(() => resolve())
-    })
+    private nextAnimationFrame = (): Promise<void> =>
+        new Promise((resolve) => {
+            requestAnimationFrame(() => resolve())
+        })
 
     private waitForSlideFrame = async (): Promise<void> => {
         await this.nextAnimationFrame()
@@ -688,25 +699,26 @@ class SidePanel implements SidePanelInstance {
         await this.waitForSlideEnd(targets.map((target) => target.element), runId)
     }
 
-    private waitForSlideEnd = (targets: HTMLElement[], runId: number): Promise<void> => new Promise((resolve) => {
-        const pendingTargets = new Set(targets)
-        const handleTransitionEnd = (event: TransitionEvent): void => {
-            if (event.target !== event.currentTarget) return
-            if (event.propertyName !== 'transform') return
-            pendingTargets.delete(event.currentTarget as HTMLElement)
-            if (pendingTargets.size === 0) finish()
-        }
-        const finish = (): void => {
-            for (const target of targets) target.removeEventListener('transitionend', handleTransitionEnd)
-            window.clearTimeout(timeoutId)
-            if (this.slideRunId === runId) this.finishSlideWait = null
-            resolve()
-        }
-        const timeoutId = window.setTimeout(finish, this.getSlideDurationMs() + SLIDE_FALLBACK_BUFFER_MS)
+    private waitForSlideEnd = (targets: HTMLElement[], runId: number): Promise<void> =>
+        new Promise((resolve) => {
+            const pendingTargets = new Set(targets)
+            const handleTransitionEnd = (event: TransitionEvent): void => {
+                if (event.target !== event.currentTarget) return
+                if (event.propertyName !== 'transform') return
+                pendingTargets.delete(event.currentTarget as HTMLElement)
+                if (pendingTargets.size === 0) finish()
+            }
+            const finish = (): void => {
+                for (const target of targets) target.removeEventListener('transitionend', handleTransitionEnd)
+                window.clearTimeout(timeoutId)
+                if (this.slideRunId === runId) this.finishSlideWait = null
+                resolve()
+            }
+            const timeoutId = window.setTimeout(finish, this.getSlideDurationMs() + SLIDE_FALLBACK_BUFFER_MS)
 
-        this.finishSlideWait = finish
-        for (const target of targets) target.addEventListener('transitionend', handleTransitionEnd)
-    })
+            this.finishSlideWait = finish
+            for (const target of targets) target.addEventListener('transitionend', handleTransitionEnd)
+        })
 
     private setAnimatedPanel = (panelElement: HTMLElement | null): void => {
         if (this.animatedPanel === panelElement) return
@@ -836,8 +848,8 @@ class SidePanel implements SidePanelInstance {
         const closeThreshold = this.config.drag?.closeThreshold ?? DRAG_CLOSE_THRESHOLD
         const velocityThreshold = this.config.drag?.velocityThreshold ?? DRAG_VELOCITY_THRESHOLD
         const shouldClose = state.hasStarted && (
-            velocity > velocityThreshold ||
-            closeDistance >= state.panelWidth * closeThreshold
+            velocity > velocityThreshold
+            || closeDistance >= state.panelWidth * closeThreshold
         )
         if (typeof this.animatedPanel.releasePointerCapture === 'function' && this.animatedPanel.hasPointerCapture(state.pointerId)) {
             this.animatedPanel.releasePointerCapture(state.pointerId)
@@ -883,8 +895,8 @@ class SidePanel implements SidePanelInstance {
         this.listeners.clear()
         this.element.removeEventListener('pointerdown', this.handleResizeStart)
         if (this.isOutsideCloseEnabled()) {
-            document.removeEventListener('pointerdown', this.handleOutsidePointerDown, true)
-            document.removeEventListener('click', this.handleOutsideClick, true)
+            this.document.removeEventListener('pointerdown', this.handleOutsidePointerDown, true)
+            this.document.removeEventListener('click', this.handleOutsideClick, true)
         }
         this.toggleElement?.remove()
     }

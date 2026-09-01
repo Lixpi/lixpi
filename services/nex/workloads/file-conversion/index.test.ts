@@ -2,9 +2,19 @@
 
 import process from 'process'
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 
-import { NATS_SUBJECTS, type GenerateRenditionsRequest } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    type GenerateRenditionsRequest,
+} from '@lixpi/constants'
 
 const generateAssetRenditionsMock = vi.fn()
 

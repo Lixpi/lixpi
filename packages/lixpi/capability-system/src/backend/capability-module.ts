@@ -112,12 +112,16 @@ export class CapabilityModuleCatalog {
     listModules(query = ''): CapabilityModuleMeta[] {
         const normalizedQuery = query.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
         return [...this.modules.values()]
-            .filter((definition) => !normalizedQuery
+            .filter((definition) =>
+                !normalizedQuery
                 || definition.normalizedName.startsWith(normalizedQuery)
-                || definition.tags.some((tag) => tag.startsWith(normalizedQuery)))
+                || definition.tags.some((tag) => tag.startsWith(normalizedQuery))
+            )
             .map((definition) => this.toMeta(definition))
-            .sort((left, right) => left.normalizedName.localeCompare(right.normalizedName)
-                || left.moduleId.localeCompare(right.moduleId))
+            .sort((left, right) =>
+                left.normalizedName.localeCompare(right.normalizedName)
+                || left.moduleId.localeCompare(right.moduleId)
+            )
     }
 
     listModuleIds(): string[] {
@@ -239,8 +243,10 @@ function validateExpectedInput(moduleId: string, input: CapabilityExpectedInput,
     if (!EXPECTED_INPUT_REQUIREMENTS.has(input.requirement)) {
         throw new Error(`CAPABILITY_MODULE_DESCRIPTION_INPUT_REQUIREMENT_INVALID:${moduleId}:${normalizedName}`)
     }
-    if (!Array.isArray(input.accepts) || input.accepts.length === 0
-        || input.accepts.some(kind => !EXPECTED_INPUT_KINDS.has(kind))) {
+    if (
+        !Array.isArray(input.accepts) || input.accepts.length === 0
+        || input.accepts.some(kind => !EXPECTED_INPUT_KINDS.has(kind))
+    ) {
         throw new Error(`CAPABILITY_MODULE_DESCRIPTION_INPUT_ACCEPTS_INVALID:${moduleId}:${normalizedName}`)
     }
     if (new Set(input.accepts).size !== input.accepts.length) {

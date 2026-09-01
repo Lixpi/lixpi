@@ -35,15 +35,16 @@ const getEventRequester = async ({
     }
 
     const references = await AssetModel.listReferences(assetId)
-    const referencedWorkspaceIds = [...new Set(references.flatMap((reference) => {
-        if (reference.type === 'workspace' && reference.workspaceId) return [reference.workspaceId]
-        if (reference.type === 'catalog' && reference.scope === 'workspace' && reference.scopeOwnerId) {
-            return [reference.scopeOwnerId]
-        }
-        return []
-    }))]
-    const workspaces = await Promise.all(referencedWorkspaceIds.map(async (workspaceId) =>
-        await Workspace.getWorkspace({ workspaceId, userId })))
+    const referencedWorkspaceIds = [
+        ...new Set(references.flatMap((reference) => {
+            if (reference.type === 'workspace' && reference.workspaceId) return [reference.workspaceId]
+            if (reference.type === 'catalog' && reference.scope === 'workspace' && reference.scopeOwnerId) {
+                return [reference.scopeOwnerId]
+            }
+            return []
+        })),
+    ]
+    const workspaces = await Promise.all(referencedWorkspaceIds.map(async (workspaceId) => await Workspace.getWorkspace({ workspaceId, userId })))
     return workspaces.reduce<AssetRequesterContext>((requester, workspace) => {
         if ('error' in workspace || workspace.deletingAt || workspace.organizationId !== organizationId) return requester
         const scoped = createAssetRequesterForWorkspaceUser(workspace, userId, true)
@@ -86,8 +87,10 @@ export const ensureAssetEventRelay = ({
                     } catch {
                         continue
                     }
-                    if (typeof payload.organizationId !== 'string'
-                        || typeof payload.assetId !== 'string') continue
+                    if (
+                        typeof payload.organizationId !== 'string'
+                        || typeof payload.assetId !== 'string'
+                    ) continue
 
                     const wasAuthorized = relay.authorizedAssetIds.has(payload.assetId)
                     let eventRequester: AssetRequesterContext

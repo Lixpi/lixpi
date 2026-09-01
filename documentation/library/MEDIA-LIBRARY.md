@@ -86,5 +86,5 @@ Generated Capability Artifacts use the same candidate/accepted/superseded output
 - [`services/api/src/models/asset.ts`](../../services/api/src/models/asset.ts)
 - [`services/api/src/NATS/subscriptions/asset-subjects.ts`](../../services/api/src/NATS/subscriptions/asset-subjects.ts)
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
-- [`services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/mediaLibraryPanel.ts)
-- [`services/web-ui/src/infographics/workspace/artifactLibraryPanel.ts`](../../services/web-ui/src/infographics/workspace/artifactLibraryPanel.ts)
+- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts)
+- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/artifact-library-panel.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/artifact-library-panel.ts)

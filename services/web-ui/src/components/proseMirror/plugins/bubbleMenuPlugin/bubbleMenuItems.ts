@@ -1,8 +1,18 @@
 import type { EditorView } from 'prosemirror-view'
-import type { Schema, Node as ProseMirrorNode } from 'prosemirror-model'
-import { toggleMark, wrapIn, setBlockType } from 'prosemirror-commands'
+import type {
+    Schema,
+    Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    toggleMark,
+    wrapIn,
+    setBlockType,
+} from 'prosemirror-commands'
 import { NodeSelection } from 'prosemirror-state'
-import { createEl, applyStyle } from '$src/utils/domTemplates.ts'
+import {
+    createEl,
+    applyStyle,
+} from '@lixpi/ui-primitives/dom'
 import type { BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
 import AuthService from '$src/services/auth-service.ts'
 import {
@@ -79,7 +89,7 @@ const magicIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" s
 // =============================================================================
 
 type MenuItemBase = {
-    context: SelectionContext[]  // Which contexts this item appears in
+    context: SelectionContext[] // Which contexts this item appears in
 }
 
 type SeparatorItem = MenuItemBase & { type: 'separator' }
@@ -245,7 +255,7 @@ function createButton(
     command: Command | null,
     view: EditorView,
     bubbleMenuView: BubbleMenuView,
-    markType?: string
+    markType?: string,
 ): HTMLElement | null {
     if (!command) return null
 
@@ -289,7 +299,7 @@ function createSeparator(): HTMLElement {
 
 function createDropdown(
     item: DropdownItem,
-    view: EditorView
+    view: EditorView,
 ): { element: HTMLElement; update: () => void } {
     const { schema } = view.state
     const menu = createEl('div', { className: 'bubble-menu-dropdown-menu' })
@@ -352,7 +362,7 @@ function createDropdown(
             if (parentNode.type.name === opt.node) {
                 if (opt.attrs) {
                     const attrsMatch = Object.entries(opt.attrs).every(
-                        ([key, value]) => parentNode.attrs[key] === value
+                        ([key, value]) => parentNode.attrs[key] === value,
                     )
                     if (attrsMatch) {
                         currentIcon = opt.icon
@@ -371,7 +381,7 @@ function createDropdown(
             let isActive = parentNode.type.name === node
             if (isActive && attrs) {
                 isActive = Object.entries(attrs).every(
-                    ([key, value]) => parentNode.attrs[key] === value
+                    ([key, value]) => parentNode.attrs[key] === value,
                 )
             }
             btn.classList.toggle('is-active', isActive)
@@ -383,7 +393,7 @@ function createDropdown(
 
 function createImageAlignmentButton(
     item: ImageAlignmentItem,
-    bubbleMenuView: BubbleMenuView
+    bubbleMenuView: BubbleMenuView,
 ): HTMLElement {
     const button = createEl('button', {
         className: 'bubble-menu-button',
@@ -420,7 +430,7 @@ function createImageAlignmentButton(
 
 function createImageWrapButton(
     item: ImageWrapItem,
-    bubbleMenuView: BubbleMenuView
+    bubbleMenuView: BubbleMenuView,
 ): HTMLElement {
     const button = createEl('button', {
         className: 'bubble-menu-button',
@@ -457,7 +467,7 @@ function createImageWrapButton(
 
 function createImageActionButton(
     item: ImageActionItem,
-    bubbleMenuView: BubbleMenuView
+    bubbleMenuView: BubbleMenuView,
 ): HTMLElement {
     const button = createEl('button', {
         className: 'bubble-menu-button',
@@ -497,10 +507,12 @@ function createImageActionButton(
             case 'createVariant': {
                 // Check if image has AI-related attrs (is an AI-generated image)
                 if (node.attrs.revisedPrompt || node.attrs.responseId) {
-                    view.dom.dispatchEvent(new CustomEvent('create-ai-image-variant', {
-                        detail: { node, pos },
-                        bubbles: true
-                    }))
+                    view.dom.dispatchEvent(
+                        new CustomEvent('create-ai-image-variant', {
+                            detail: { node, pos },
+                            bubbles: true,
+                        }),
+                    )
                 }
                 bubbleMenuView.forceHide()
                 break
@@ -604,7 +616,7 @@ export type MenuItemElement = BubbleMenuItem & {
 
 export function buildBubbleMenuItems(
     view: EditorView,
-    bubbleMenuView: BubbleMenuView
+    bubbleMenuView: BubbleMenuView,
 ): { items: MenuItemElement[]; linkInputPanel: HTMLElement } {
     const { schema } = view.state
     const items: MenuItemElement[] = []

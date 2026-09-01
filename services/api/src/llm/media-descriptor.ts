@@ -8,7 +8,12 @@ import {
     type ProviderName,
 } from '@lixpi/constants'
 
-import { callStructuredVlm, type VlmCallArgs, type VlmCallResult, type VlmJsonSchema } from './structured-vlm/structured-vlm-client.ts'
+import {
+    callStructuredVlm,
+    type VlmCallArgs,
+    type VlmCallResult,
+    type VlmJsonSchema,
+} from './structured-vlm/structured-vlm-client.ts'
 import type { ChatMessage } from './graph/state.ts'
 
 // Compact, model-friendly description of a single media still. Generated and
@@ -91,12 +96,14 @@ const buildDescriptorMessages = (imageUrl: string): ChatMessage[] => [
 
 const sanitizeTags = (tags: unknown): string[] => {
     if (!Array.isArray(tags)) return []
-    return Array.from(new Set(
-        tags
-            .filter((tag): tag is string => typeof tag === 'string')
-            .map((tag) => tag.trim())
-            .filter(Boolean)
-    ))
+    return Array.from(
+        new Set(
+            tags
+                .filter((tag): tag is string => typeof tag === 'string')
+                .map((tag) => tag.trim())
+                .filter(Boolean),
+        ),
+    )
 }
 
 const normalizeDescriptorResult = (parsed: MediaDescriptorResult | undefined): MediaDescriptorResult => {

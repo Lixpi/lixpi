@@ -1,7 +1,12 @@
 'use strict'
 
-import { describe, it, expect, vi } from 'vitest'
-import { applyStyle } from '$src/utils/domTemplates.ts'
+import {
+    describe,
+    it,
+    expect,
+    vi,
+} from 'vitest'
+import { applyStyle } from '@lixpi/ui-primitives/dom'
 import {
     schema,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
@@ -16,7 +21,7 @@ import {
 
 function createUserMessageNodeView(attrs: Record<string, unknown> = {}, options: any = undefined) {
     const node = schema.nodes.aiUserMessage.create(
-        { id: 'user-msg-test-1', createdAt: 1700000000000, ...attrs }
+        { id: 'user-msg-test-1', createdAt: 1700000000000, ...attrs },
     )
 
     const mockView = {} as any
@@ -44,8 +49,13 @@ function createMockContextPreview(nodes: Record<string, any>): any {
         environment: {
             getDocuments: () => [],
             getThreads: () => [],
-            getApiBaseUrl: () => 'https://api.example.com',
-            getAuthToken: async () => 'token-123',
+            document,
+            tooltipHideDelayMs: 0,
+            getArtifactIcon: () => '',
+            extractDocumentText: () => '',
+            initialRenditionUrl: () => '',
+            resolveRenditionUrl: async () => '',
+            onError: vi.fn(),
         },
     }
 }
@@ -139,7 +149,7 @@ describe('aiUserMessageNodeView — marginBottom survives update()', () => {
         expect(dom.style.marginBottom).toBe('150px')
 
         const updatedNode = schema.nodes.aiUserMessage.create(
-            { id: 'user-msg-test-1', createdAt: 1700000000001 }
+            { id: 'user-msg-test-1', createdAt: 1700000000001 },
         )
 
         const result = nodeView.update!(updatedNode, [])
@@ -155,7 +165,7 @@ describe('aiUserMessageNodeView — marginBottom survives update()', () => {
 
         for (let i = 0; i < 8; i++) {
             const updatedNode = schema.nodes.aiUserMessage.create(
-                { id: 'user-msg-test-1', createdAt: 1700000000000 + i }
+                { id: 'user-msg-test-1', createdAt: 1700000000000 + i },
             )
             nodeView.update!(updatedNode, [])
         }
@@ -287,7 +297,7 @@ describe('aiUserMessageNodeView — update()', () => {
         const { nodeView } = createUserMessageNodeView()
 
         const updatedNode = schema.nodes.aiUserMessage.create(
-            { id: 'user-msg-test-2', createdAt: 1700000000002 }
+            { id: 'user-msg-test-2', createdAt: 1700000000002 },
         )
         const result = nodeView.update!(updatedNode, [])
 

@@ -7,9 +7,16 @@ import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 import type NatsService from '@lixpi/nats-service'
-import { warn, info, err } from '@lixpi/debug-tools'
+import {
+    warn,
+    info,
+    err,
+} from '@lixpi/debug-tools'
 
-import type { AiModelInferenceCapabilities, ProviderName } from '@lixpi/constants'
+import type {
+    AiModelInferenceCapabilities,
+    ProviderName,
+} from '@lixpi/constants'
 import type { ChatMessage } from '../graph/state.ts'
 import { bedrockInference } from '../providers/bedrock-inference.ts'
 import {
@@ -369,7 +376,9 @@ const schemaNeedsOpenAIAdapter = (schema: unknown): boolean => {
 
     const itemSchemas = Array.isArray(node.items)
         ? node.items
-        : node.items ? [node.items] : []
+        : node.items
+        ? [node.items]
+        : []
     for (const child of itemSchemas) {
         if (schemaNeedsOpenAIAdapter(child)) return true
     }
@@ -399,14 +408,15 @@ const buildClosedSchemaPayloadEnvelope = (schema: VlmJsonSchema): VlmJsonSchema 
     },
 })
 
-const buildClosedSchemaPayloadInstructions = (systemPrompt: string, schema: VlmJsonSchema): string => [
-    systemPrompt,
-    '',
-    'Structured output adapter:',
-    'Return a JSON object with exactly one field named "payload".',
-    'The payload value must be a JSON string, not markdown.',
-    `The payload JSON string must conform to this original schema: ${JSON.stringify(schema.schema)}`,
-].join('\n')
+const buildClosedSchemaPayloadInstructions = (systemPrompt: string, schema: VlmJsonSchema): string =>
+    [
+        systemPrompt,
+        '',
+        'Structured output adapter:',
+        'Return a JSON object with exactly one field named "payload".',
+        'The payload value must be a JSON string, not markdown.',
+        `The payload JSON string must conform to this original schema: ${JSON.stringify(schema.schema)}`,
+    ].join('\n')
 
 const parseClosedSchemaPayloadEnvelope = <T>(outer: unknown, provider: ProviderName, schemaName: string): { parsed: T; payloadText: string } => {
     const payload = (outer as any)?.payload
@@ -503,8 +513,11 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     }
     if (!outputText) throw new Error(`OpenAI ${args.modelVersion} returned empty structured output for schema=${args.schema.name}`)
     let parsedOuter: unknown
-    try { parsedOuter = JSON.parse(outputText) }
-    catch (e: any) { throw new Error(`OpenAI returned non-JSON structured output: ${e?.message}`) }
+    try {
+        parsedOuter = JSON.parse(outputText)
+    } catch (e: any) {
+        throw new Error(`OpenAI returned non-JSON structured output: ${e?.message}`)
+    }
     if (usesClosedSchemaEnvelope) {
         const payload = parseClosedSchemaPayloadEnvelope<T>(parsedOuter, args.provider, args.schema.name)
         return { parsed: payload.parsed, rawText: payload.payloadText, modelName, promptTokens, completionTokens }
@@ -613,8 +626,9 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 
     let parsed: T
-    try { parsed = JSON.parse(cleaned) as T }
-    catch (e: any) {
+    try {
+        parsed = JSON.parse(cleaned) as T
+    } catch (e: any) {
         const finish = finishReason ? ` finishReason=${finishReason}.` : ''
         throw new Error(`Google returned non-JSON output:${finish} ${e?.message}. Preview: ${cleaned.slice(0, 200)}`)
     }
@@ -634,8 +648,7 @@ const describeProviderError = (error: any): string => {
     if (error.status !== undefined) parts.push(`status=${error.status}`)
     if (error.code !== undefined) parts.push(`code=${error.code}`)
     const headers = error.headers
-    const getHeader = (key: string): string | undefined =>
-        typeof headers?.get === 'function' ? headers.get(key) : headers?.[key]
+    const getHeader = (key: string): string | undefined => typeof headers?.get === 'function' ? headers.get(key) : headers?.[key]
     const retryAfter = getHeader('retry-after')
     if (retryAfter) parts.push(`retry-after=${retryAfter}`)
     const requestId = error.request_id ?? error.requestID ?? getHeader('request-id') ?? getHeader('x-request-id')
@@ -658,8 +671,16 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 // Transient = worth retrying: rate limits (429), server errors (5xx), and the
 // connection/timeout family the SDK surfaces as APIConnectionError + a network cause.
 const TRANSIENT_CAUSE_CODES = new Set([
-    'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'ENOTFOUND',
-    'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'EPIPE',
+    'EAI_AGAIN',
+    'ENOTFOUND',
+    'UND_ERR_SOCKET',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_BODY_TIMEOUT',
 ])
 
 const isTransientError = (error: any): boolean => {
@@ -708,7 +729,7 @@ export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallRe
     // Answer budget for the current attempt; doubled on truncation.
     let answerTokens = resolveOutputBudget(args, caps).answerTokens
 
-    for (let attempt = 0; ; attempt++) {
+    for (let attempt = 0;; attempt++) {
         try {
             return await dispatch({ ...args, maxTokens: answerTokens })
         } catch (error: any) {

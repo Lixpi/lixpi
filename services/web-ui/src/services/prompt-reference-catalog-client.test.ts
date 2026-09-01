@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 const getData = vi.hoisted(() => vi.fn())
@@ -71,11 +77,19 @@ describe('PromptReferenceCatalogClient', () => {
         await expect(client.getModule('character-creator')).resolves.toMatchObject({
             entry: { capabilityId: 'global.character-creator', kind: 'tool' },
         })
-        expect(request).toHaveBeenNthCalledWith(1, NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.LIST, expect.objectContaining({
-            query: 'character',
-        }))
-        expect(request).toHaveBeenNthCalledWith(2, NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.GET, expect.objectContaining({
-            moduleId: 'character-creator',
-        }))
+        expect(request).toHaveBeenNthCalledWith(
+            1,
+            NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.LIST,
+            expect.objectContaining({
+                query: 'character',
+            }),
+        )
+        expect(request).toHaveBeenNthCalledWith(
+            2,
+            NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.GET,
+            expect.objectContaining({
+                moduleId: 'character-creator',
+            }),
+        )
     })
 })

@@ -2,7 +2,11 @@
 
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import {
     parseAiModelSelectionAttr,
@@ -109,7 +113,7 @@ describe('media generation mode switch', () => {
 
         expect(switchStart, 'media mode switch should be configured').toBeGreaterThan(-1)
         expect(switchEnd, 'media mode switch should notify its node view').toBeGreaterThan(switchStart)
-        expectSourceToContain(mediaModeSwitchSource, 'reshuffleItemsOnValueChange: {\n                enable: true,\n                selectedElementPosition: \'right\',\n            },')
+        expectSourceToContain(mediaModeSwitchSource, "reshuffleItemsOnValueChange: {\n                enable: true,\n                selectedElementPosition: 'right',\n            },")
         expectSourceNotToContain(mediaModeSwitchSource, 'transition:')
     })
 })

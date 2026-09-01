@@ -10,9 +10,11 @@ export const LEGACY_CAPABILITY_REFERENCE_NODE_TYPE = 'capability_reference'
 export function normalizeLegacyCapabilityReferenceAttrs(input: unknown): PromptReferenceAtomAttrs | null {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return null
     const candidate = input as Record<string, unknown>
-    if ((candidate.kind !== 'tool' && candidate.kind !== 'skill')
+    if (
+        (candidate.kind !== 'tool' && candidate.kind !== 'skill')
         || !isNonEmptyString(candidate.capabilityId)
-        || !isNonEmptyString(candidate.displayName)) return null
+        || !isNonEmptyString(candidate.displayName)
+    ) return null
     return {
         referenceType: candidate.kind,
         capabilityId: candidate.capabilityId.trim(),
@@ -27,8 +29,10 @@ export function normalizePromptReferenceAttrs(input: unknown): PromptReferenceAt
     const displayName = candidate.displayName.trim()
 
     if (candidate.referenceType === 'media') {
-        if (!isNonEmptyString(candidate.assetId) || !isMediaKind(candidate.mediaKind)
-            || hasNonEmptyString(candidate.moduleId) || hasNonEmptyString(candidate.capabilityId)) return null
+        if (
+            !isNonEmptyString(candidate.assetId) || !isMediaKind(candidate.mediaKind)
+            || hasNonEmptyString(candidate.moduleId) || hasNonEmptyString(candidate.capabilityId)
+        ) return null
         return {
             referenceType: 'media',
             assetId: candidate.assetId.trim(),
@@ -38,9 +42,11 @@ export function normalizePromptReferenceAttrs(input: unknown): PromptReferenceAt
         }
     }
     if (candidate.referenceType === 'capability-module') {
-        if (!isNonEmptyString(candidate.moduleId)
+        if (
+            !isNonEmptyString(candidate.moduleId)
             || hasNonEmptyString(candidate.assetId) || hasNonEmptyString(candidate.nodeId)
-            || hasNonEmptyString(candidate.mediaKind) || hasNonEmptyString(candidate.capabilityId)) return null
+            || hasNonEmptyString(candidate.mediaKind) || hasNonEmptyString(candidate.capabilityId)
+        ) return null
         return {
             referenceType: 'capability-module',
             moduleId: candidate.moduleId.trim(),
@@ -48,9 +54,11 @@ export function normalizePromptReferenceAttrs(input: unknown): PromptReferenceAt
         }
     }
     if (candidate.referenceType === 'capability-artifact') {
-        if (!isNonEmptyString(candidate.assetId) || !isNonEmptyString(candidate.artifactTypeId)
+        if (
+            !isNonEmptyString(candidate.assetId) || !isNonEmptyString(candidate.artifactTypeId)
             || hasNonEmptyString(candidate.mediaKind) || hasNonEmptyString(candidate.moduleId)
-            || hasNonEmptyString(candidate.capabilityId)) return null
+            || hasNonEmptyString(candidate.capabilityId)
+        ) return null
         return {
             referenceType: 'capability-artifact',
             artifactTypeId: candidate.artifactTypeId.trim(),
@@ -60,9 +68,11 @@ export function normalizePromptReferenceAttrs(input: unknown): PromptReferenceAt
         }
     }
     if (candidate.referenceType === 'tool' || candidate.referenceType === 'skill') {
-        if (!isNonEmptyString(candidate.capabilityId)
+        if (
+            !isNonEmptyString(candidate.capabilityId)
             || hasNonEmptyString(candidate.assetId) || hasNonEmptyString(candidate.nodeId)
-            || hasNonEmptyString(candidate.mediaKind) || hasNonEmptyString(candidate.moduleId)) return null
+            || hasNonEmptyString(candidate.mediaKind) || hasNonEmptyString(candidate.moduleId)
+        ) return null
         return {
             referenceType: candidate.referenceType,
             capabilityId: candidate.capabilityId.trim(),

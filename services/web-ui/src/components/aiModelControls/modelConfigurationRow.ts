@@ -1,5 +1,5 @@
 import { xIcon } from '@lixpi/ui-kit/svg'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type ModelConfigurationRowConfig = {
     modelDropdownHost: HTMLElement
@@ -51,16 +51,22 @@ class ModelConfigurationRow implements ModelConfigurationRowInstance {
                             <span className="ai-model-config-dropdown">${config.modelDropdownHost}</span>
                         </div>
                     </div>
-                    ${config.inlineControls?.map(control => html`
+                    ${
+            config.inlineControls?.map(control =>
+                html`
                         <div className="ai-model-config-inline-control">
                             ${control}
                         </div>
-                    `)}
+                    `
+            )
+        }
                     ${removeButton}
                 </div>
-                ${config.controls && config.controls.length > 0
-                    ? html`<div className="ai-model-config-controls">${config.controls}</div>`
-                    : undefined}
+                ${
+            config.controls && config.controls.length > 0
+                ? html`<div className="ai-model-config-controls">${config.controls}</div>`
+                : undefined
+        }
             </div>
         ` as HTMLElement
     }

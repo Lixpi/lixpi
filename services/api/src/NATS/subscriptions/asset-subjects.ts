@@ -1,6 +1,9 @@
 'use strict'
 
-import { v4 as uuid, validate as isUuid } from 'uuid'
+import {
+    v4 as uuid,
+    validate as isUuid,
+} from 'uuid'
 import {
     NATS_SUBJECTS,
     type AssetPrimaryCategory,
@@ -8,7 +11,11 @@ import {
     type GeneratedOutputReviewRequest,
     type SubjectIdentityClassification,
 } from '@lixpi/constants'
-import { DOCUMENT_TYPE, HeadlessProseMirrorEngine, PROSEMIRROR_SCHEMA_VERSION } from '@lixpi/prosemirror'
+import {
+    DOCUMENT_TYPE,
+    HeadlessProseMirrorEngine,
+    PROSEMIRROR_SCHEMA_VERSION,
+} from '@lixpi/prosemirror'
 
 import AssetModel, {
     buildAssetScopeAndOwnerKey,
@@ -258,12 +265,13 @@ export const assetSubjects = [
             pub: { allow: [ASSET_SUBJECTS.SUBJECT_IDENTITY_ATTEST] },
             sub: { allow: [] },
         },
-        handler: async (data: any) => await assetSubjectIdentityService.attest({
-            assetId: data.assetId,
-            assetRevision: data.assetRevision,
-            classification: data.classification as SubjectIdentityClassification,
-            requester: await getRequesterContext(data.user.userId),
-        }),
+        handler: async (data: any) =>
+            await assetSubjectIdentityService.attest({
+                assetId: data.assetId,
+                assetRevision: data.assetRevision,
+                classification: data.classification as SubjectIdentityClassification,
+                requester: await getRequesterContext(data.user.userId),
+            }),
     },
     {
         subject: ASSET_SUBJECTS.CHANGE_SCOPE,

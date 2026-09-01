@@ -1,5 +1,5 @@
 import { xIcon } from '../../svg/svgIcons.ts'
-import { appendSvgPathIcon } from '../../svg/svgIconPaths.ts'
+import { appendSvgPathIcon } from '@lixpi/ui-primitives/svg'
 
 export type TagPillVariant = 'neutral' | 'explicit' | 'auto'
 export type TagPillCloseVisibility = 'always' | 'hover'
@@ -56,37 +56,41 @@ export type TagPillConfig = TagPillSizing & {
     onClose?: (id: string, event: Event) => void
 }
 
-export type TagPillRenderState = Partial<Pick<
-    TagPillConfig,
-    | 'label'
-    | 'icon'
-    | 'iconColor'
-    | 'textColor'
-    | 'colors'
-    | 'selected'
-    | 'hovered'
-    | 'disabled'
-    | 'closable'
-    | 'variant'
-    | 'closeVisibility'
-    | 'labelAlign'
-    | 'closePlacement'
-    | 'closeAriaLabel'
-    | 'size'
-    | 'minWidth'
-    | 'fontSize'
-    | 'fontWeight'
-    | 'horizontalPadding'
-    | 'closeSize'
-    | 'closeIconSize'
-    | 'closeGap'
-    | 'iconSize'
-    | 'iconGap'
-    | 'textWidthFactor'
->> & {
-    width?: number
-    height?: number
-}
+export type TagPillRenderState =
+    & Partial<
+        Pick<
+            TagPillConfig,
+            | 'label'
+            | 'icon'
+            | 'iconColor'
+            | 'textColor'
+            | 'colors'
+            | 'selected'
+            | 'hovered'
+            | 'disabled'
+            | 'closable'
+            | 'variant'
+            | 'closeVisibility'
+            | 'labelAlign'
+            | 'closePlacement'
+            | 'closeAriaLabel'
+            | 'size'
+            | 'minWidth'
+            | 'fontSize'
+            | 'fontWeight'
+            | 'horizontalPadding'
+            | 'closeSize'
+            | 'closeIconSize'
+            | 'closeGap'
+            | 'iconSize'
+            | 'iconGap'
+            | 'textWidthFactor'
+        >
+    >
+    & {
+        width?: number
+        height?: number
+    }
 
 export type TagPillInstance = {
     render: (state?: TagPillRenderState) => void
@@ -158,7 +162,7 @@ function estimateTagPillWidthFromLabelWidth(
     horizontalPadding: number,
     closeSize: number,
     closeGap: number,
-    labelAlign: TagPillLabelAlign
+    labelAlign: TagPillLabelAlign,
 ): number {
     const closeReserve = getCloseReserve(closable, closeSize, closeGap)
     const reservedCloseWidth = labelAlign === 'center' ? closeReserve * 2 : closeReserve
@@ -285,7 +289,7 @@ class TagPill implements TagPillInstance {
             this.horizontalPadding,
             this.closeSize,
             this.closeGap,
-            this.labelAlign
+            this.labelAlign,
         )
     }
 
@@ -389,9 +393,10 @@ class TagPill implements TagPillInstance {
                     .attr('fill', closeHover)
                     .style('fill', closeHover)
             })
-            .on('mouseleave', () => this.closeBackground
-                .attr('fill', 'transparent')
-                .style('fill', 'transparent'))
+            .on('mouseleave', () =>
+                this.closeBackground
+                    .attr('fill', 'transparent')
+                    .style('fill', 'transparent'))
     }
 
     private handleClick(event: Event): void {
@@ -479,10 +484,16 @@ class TagPill implements TagPillInstance {
             : textStartX + this.iconSize / 2
         const fill = this.surface === 'content'
             ? !this.selected && this.hovered ? CONTENT_HOVER_FILL : 'transparent'
-            : this.selected ? palette.fillActive : this.hovered ? palette.fillHover : palette.fill
+            : this.selected
+            ? palette.fillActive
+            : this.hovered
+            ? palette.fillHover
+            : palette.fill
         const stroke = this.surface === 'content'
             ? 'transparent'
-            : this.selected ? palette.strokeActive : palette.stroke
+            : this.selected
+            ? palette.strokeActive
+            : palette.stroke
         const opacity = this.disabled ? 0.45 : this.selected || this.hovered ? 1 : 0.7
 
         this.updateHostSvgGeometry()

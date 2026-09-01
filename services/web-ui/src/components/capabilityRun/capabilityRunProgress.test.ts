@@ -1,5 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { CapabilityRun, CapabilityRunEvent } from '@lixpi/constants'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import type {
+    CapabilityRun,
+    CapabilityRunEvent,
+} from '@lixpi/constants'
 
 import {
     createCapabilityRunProgress,
@@ -55,9 +63,11 @@ describe('projectCapabilityRunEvents', () => {
 describe('CapabilityRunProgress replay', () => {
     it('subscribes before replay and merges buffered and subsequent live events by sequence', async () => {
         let resolveReplay: ((value: { run: CapabilityRun; events: CapabilityRunEvent[] }) => void) | undefined
-        const replay = vi.fn(() => new Promise<{ run: CapabilityRun; events: CapabilityRunEvent[] }>((resolve) => {
-            resolveReplay = resolve
-        }))
+        const replay = vi.fn(() =>
+            new Promise<{ run: CapabilityRun; events: CapabilityRunEvent[] }>((resolve) => {
+                resolveReplay = resolve
+            })
+        )
         let liveListener: ((event: CapabilityRunEvent) => void) | undefined
         const unsubscribe = vi.fn()
         const subscribeToRunEvents = vi.fn((_runId: string, listener: (event: CapabilityRunEvent) => void) => {

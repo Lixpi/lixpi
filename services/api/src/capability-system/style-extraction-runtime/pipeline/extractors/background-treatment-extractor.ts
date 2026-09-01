@@ -38,8 +38,7 @@ const extractor: StyleExtractor = {
     description: 'Extracts how the background is rendered relative to the subject: style, focus, elements, palette, relationship, depth cues.',
     minDominance: 0.3,
     applicableTo: (scene) => (scene.axisDominance['background-treatment'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

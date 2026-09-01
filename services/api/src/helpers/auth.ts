@@ -6,9 +6,15 @@ import process from 'process'
 
 import {
     createJwtVerifier,
-    type JwtVerificationResult
+    type JwtVerificationResult,
 } from '@lixpi/auth-service'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import RegistrationService from '../services/registration-service.ts'
 
@@ -37,7 +43,7 @@ const jwtVerifier = createJwtVerifier({
     jwksUri,
     audience: AUTH0_API_IDENTIFIER!,
     issuer: jwtIssuer,
-    algorithms: ['RS256']
+    algorithms: ['RS256'],
 })
 
 const AUTH_REQUEST_CACHE_MS = 5000
@@ -76,7 +82,7 @@ function getAuthCacheExpiresAt(decoded: JwtVerificationResult['decoded']): numbe
     return Math.min(maxCacheExpiresAt, tokenExpiresAt)
 }
 
-export const authenticateTokenOnRequest = async ({ token, eventName }: { token: string, eventName?: string }): Promise<JwtVerificationResult> => {
+export const authenticateTokenOnRequest = async ({ token, eventName }: { token: string; eventName?: string }): Promise<JwtVerificationResult> => {
     if (!token) return { error: 'No token provided' }
 
     const cacheKey = getAuthRequestCacheKey(token, eventName)
@@ -94,13 +100,13 @@ export const authenticateTokenOnRequest = async ({ token, eventName }: { token: 
             // TODO: Remove this temporary hack
             await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token })
             // DO NOT DELETE ANY OF THE COMMENTED OUT CODE IN THIS FILE
-//             err(`
-// calling  await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }) in the authenticateTokenOnRequest method.'
-// this is wrong and very quick hack just to make it work temporarily'
-// it used to be called on the connection-auth path in the previous transport, but with NATS it makes no sense'
-// the issue must be addressed when registration flow is complete'
-// const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
-//             `)
+            //             err(`
+            // calling  await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }) in the authenticateTokenOnRequest method.'
+            // this is wrong and very quick hack just to make it work temporarily'
+            // it used to be called on the connection-auth path in the previous transport, but with NATS it makes no sense'
+            // the issue must be addressed when registration flow is complete'
+            // const { user, error } = await registrationService.verifyRegistration({ decodedToken: decoded, accessToken: token }
+            //             `)
 
             // TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             // err('TODO: Turn back balance verification !!!!!!!!!!!!!!!', decoded)

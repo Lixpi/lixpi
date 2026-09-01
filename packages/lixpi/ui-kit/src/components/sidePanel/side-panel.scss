@@ -1,4 +1,4 @@
-@use '../../styles/transitions' as *;
+@use '@lixpi/ui-primitives/styles/transitions' as *;
 
 // SidePanel - reusable resizable side panel.
 //
@@ -98,7 +98,7 @@
     position: absolute;
     z-index: var(--side-panel-backdrop-z-index, 90);
     top: 0;
-    bottom: calc(0px - var(--workspace-canvas-padding-bottom, 0px));
+    bottom: calc(0px - var(--side-panel-backdrop-bottom-outset, 0px));
     width: var(--side-panel-backdrop-width, 0px);
     pointer-events: none;
     background: var(--side-panel-backdrop-fill, rgb(248 250 253 / 84%));
@@ -107,11 +107,11 @@
 }
 
 .side-panel-backdrop-right {
-    right: calc(0px - var(--workspace-canvas-padding-inline, 0px));
+    right: calc(0px - var(--side-panel-backdrop-inline-outset, 0px));
 }
 
 .side-panel-backdrop-left {
-    left: calc(0px - var(--workspace-canvas-padding-inline, 0px));
+    left: calc(0px - var(--side-panel-backdrop-inline-outset, 0px));
 }
 
 @media (prefers-reduced-transparency: reduce) {

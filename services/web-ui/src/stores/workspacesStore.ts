@@ -26,7 +26,7 @@ const workspaces: ReadonlyDeep<WorkspacesStore> = deepFreeze({
     data: [],
 })
 
-const store = writable({...workspaces})
+const store = writable({ ...workspaces })
 
 export const workspacesStore = {
     ...store,
@@ -51,39 +51,44 @@ export const workspacesStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): void => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): void =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    addWorkspaces: (workspaces: WorkspaceMeta[] = []): void => store.update(state => ({
-        ...state,
-        data: [
-            ...workspaces,
-            ...state.data,
-        ],
-    })),
+    addWorkspaces: (workspaces: WorkspaceMeta[] = []): void =>
+        store.update(state => ({
+            ...state,
+            data: [
+                ...workspaces,
+                ...state.data,
+            ],
+        })),
 
-    setWorkspaces: (workspaces: WorkspaceMeta[] = []): void => store.update(state => ({
-        ...state,
-        data: [...workspaces],
-    })),
+    setWorkspaces: (workspaces: WorkspaceMeta[] = []): void =>
+        store.update(state => ({
+            ...state,
+            data: [...workspaces],
+        })),
 
-    deleteWorkspace: (workspaceId: string): void => store.update(state => ({
-        ...state,
-        data: state.data.filter((workspace: WorkspaceMeta) => workspace.workspaceId !== workspaceId),
-    })),
+    deleteWorkspace: (workspaceId: string): void =>
+        store.update(state => ({
+            ...state,
+            data: state.data.filter((workspace: WorkspaceMeta) => workspace.workspaceId !== workspaceId),
+        })),
 
-    updateWorkspace: (workspaceId: string, newValues: Partial<WorkspaceMeta>): void => store.update(state => {
-        const workspaceIndex = state.data.findIndex((workspace: WorkspaceMeta) => workspace.workspaceId === workspaceId)
-        if (workspaceIndex !== -1) {
-            state.data[workspaceIndex] = { ...state.data[workspaceIndex], ...newValues }
-        }
-        return { ...state }
-    }),
+    updateWorkspace: (workspaceId: string, newValues: Partial<WorkspaceMeta>): void =>
+        store.update(state => {
+            const workspaceIndex = state.data.findIndex((workspace: WorkspaceMeta) => workspace.workspaceId === workspaceId)
+            if (workspaceIndex !== -1) {
+                state.data[workspaceIndex] = { ...state.data[workspaceIndex], ...newValues }
+            }
+            return { ...state }
+        }),
 
-    resetStore: (): void => store.set({...workspaces}),
+    resetStore: (): void => store.set({ ...workspaces }),
 }

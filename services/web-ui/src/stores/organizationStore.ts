@@ -43,7 +43,7 @@ const organization: OrganizationStore = {
         availableModels: [],
         createdAt: 0,
         updatedAt: 0,
-    }
+    },
 }
 
 const store = writable(organization)
@@ -73,45 +73,50 @@ export const organizationStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): void => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): void =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    setDataValues: (values: Partial<Organization> = {}): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            ...values
-        }
-    })),
+    setDataValues: (values: Partial<Organization> = {}): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                ...values,
+            },
+        })),
 
-    addTag: (tags: Record<string, Tag>): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            tags: { ...state.data.tags, ...tags }
-        }
-    })),
+    addTag: (tags: Record<string, Tag>): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                tags: { ...state.data.tags, ...tags },
+            },
+        })),
 
-    updateTag: (updatedTag: Tag): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            tags: state.data.tags.map(tag => tag.tagId === updatedTag.tagId ? updatedTag : tag)
-        }
-    })),
+    updateTag: (updatedTag: Tag): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                tags: state.data.tags.map(tag => tag.tagId === updatedTag.tagId ? updatedTag : tag),
+            },
+        })),
 
-    removeTag: (tagId: string): void => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            tags: state.data.tags.filter(tag => tag.tagId !== tagId)
-        }
-    })),
+    removeTag: (tagId: string): void =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                tags: state.data.tags.filter(tag => tag.tagId !== tagId),
+            },
+        })),
 
     resetStore: (): void => store.set(organization),
 }

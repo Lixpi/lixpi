@@ -15,17 +15,19 @@ export function buildCandidateTranscriptContext(
     promptText: string,
     activeTargetCandidateId: string | undefined,
 ): string {
-    const candidateLines = candidates.map((candidate) => [
-        `candidateId=${candidate.candidateId}`,
-        candidate.nodeId ? `nodeId=${candidate.nodeId}` : undefined,
-        `assetId=${candidate.assetId}`,
-        `kind=${candidate.mediaKind ?? 'image'}`,
-        `roles=${candidate.roleHints.join(',')}`,
-        candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
-        candidate.visualEntitySummary ? `visualEntity=${candidate.visualEntitySummary}` : undefined,
-        candidate.visualStyleSummary ? `visualStyle=${candidate.visualStyleSummary}` : undefined,
-        candidate.promptText ? `promptText=${candidate.promptText.slice(0, 800)}` : undefined,
-    ].filter(Boolean).join(' | '))
+    const candidateLines = candidates.map((candidate) =>
+        [
+            `candidateId=${candidate.candidateId}`,
+            candidate.nodeId ? `nodeId=${candidate.nodeId}` : undefined,
+            `assetId=${candidate.assetId}`,
+            `kind=${candidate.mediaKind ?? 'image'}`,
+            `roles=${candidate.roleHints.join(',')}`,
+            candidate.branchId ? `branchId=${candidate.branchId}` : undefined,
+            candidate.visualEntitySummary ? `visualEntity=${candidate.visualEntitySummary}` : undefined,
+            candidate.visualStyleSummary ? `visualStyle=${candidate.visualStyleSummary}` : undefined,
+            candidate.promptText ? `promptText=${candidate.promptText.slice(0, 800)}` : undefined,
+        ].filter(Boolean).join(' | ')
+    )
 
     return [
         `Current user prompt: ${promptText}`,
@@ -91,11 +93,13 @@ export function deduplicateMediaBranchSnapshotCandidatesByAsset(
     }
     const activeTargetCandidateId = remapCandidateId(snapshot.activeTargetCandidateId)
     const resolvedTargetCandidateId = remapCandidateId(snapshot.resolvedTargetCandidateId)
-    const explicitReferenceCandidateIds = [...new Set(
-        (snapshot.explicitReferenceCandidateIds ?? [])
-            .map((candidateId) => remapCandidateId(candidateId))
-            .filter((candidateId): candidateId is string => Boolean(candidateId)),
-    )]
+    const explicitReferenceCandidateIds = [
+        ...new Set(
+            (snapshot.explicitReferenceCandidateIds ?? [])
+                .map((candidateId) => remapCandidateId(candidateId))
+                .filter((candidateId): candidateId is string => Boolean(candidateId)),
+        ),
+    ]
     const normalized: MediaBranchCandidateSnapshot = {
         ...snapshot,
         candidates,
@@ -127,7 +131,7 @@ export function restrictSnapshotToExplicitRefs(
         ? snapshot.activeTargetCandidateId
         : undefined
     const resolvedTargetCandidateId = snapshot.resolvedTargetCandidateId
-        && explicitCandidateIds.has(snapshot.resolvedTargetCandidateId)
+            && explicitCandidateIds.has(snapshot.resolvedTargetCandidateId)
         ? snapshot.resolvedTargetCandidateId
         : undefined
 

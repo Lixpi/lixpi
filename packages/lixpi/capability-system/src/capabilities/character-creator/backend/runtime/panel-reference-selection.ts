@@ -24,9 +24,9 @@ export function selectCharacterPanelReferenceEntries(
     ))
     const assignedFaceSourceIds = new Set(evidence.facts.flatMap(fact => (
         fact.visibility === 'observed'
-        && fact.region === 'face'
-        && fact.requestAuthority === 'assigned'
-        && fact.sourceAssetId
+            && fact.region === 'face'
+            && fact.requestAuthority === 'assigned'
+            && fact.sourceAssetId
             ? [fact.sourceAssetId]
             : []
     )))

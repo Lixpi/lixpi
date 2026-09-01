@@ -36,11 +36,10 @@ const FIELDS_SCHEMA = {
 const extractor: StyleExtractor = {
     axis: 'medium-signature',
     displayName: 'Medium signature',
-    description: 'Classifies the medium and enumerates the concrete technique signatures and artifacts that justify the classification. Cross-checks the router\'s medium claim.',
+    description: "Classifies the medium and enumerates the concrete technique signatures and artifacts that justify the classification. Cross-checks the router's medium claim.",
     minDominance: 0.0,
     applicableTo: () => true,
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

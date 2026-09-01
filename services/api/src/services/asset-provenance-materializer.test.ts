@@ -1,8 +1,15 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
-import type { MediaGenerationProgressState, MediaGenerationRunMeta } from '@lixpi/constants'
+import type {
+    MediaGenerationProgressState,
+    MediaGenerationRunMeta,
+} from '@lixpi/constants'
 
 import {
     getReasoningPreambleSummary,

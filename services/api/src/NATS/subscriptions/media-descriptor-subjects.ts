@@ -17,7 +17,10 @@ import BlobModel from '../../models/blob.ts'
 import AiModel from '../../models/ai-model.ts'
 import Organization from '../../models/organization.ts'
 import Workspace from '../../models/workspace.ts'
-import { describeMediaStill, describeTextContent } from '../../llm/media-descriptor.ts'
+import {
+    describeMediaStill,
+    describeTextContent,
+} from '../../llm/media-descriptor.ts'
 import { settings } from '../../settings.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
@@ -50,10 +53,10 @@ const selectDescriptorRendition = (asset: Asset) => {
     const names = asset.media.kind === 'image'
         ? ['preview', 'original'] as const
         : asset.media.kind === 'video'
-            ? ['representativeFrame', 'poster', 'thumbnail'] as const
-            : asset.media.kind === 'document'
-                ? ['poster', 'thumbnail'] as const
-                : [] as const
+        ? ['representativeFrame', 'poster', 'thumbnail'] as const
+        : asset.media.kind === 'document'
+        ? ['poster', 'thumbnail'] as const
+        : [] as const
     return names
         .map((name) => renditions[name])
         .find((rendition) => rendition?.status === 'ready' && rendition.blobHash)

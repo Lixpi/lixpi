@@ -1,6 +1,9 @@
 'use strict'
 
-import type { CapabilityJsonValue, ExecutionTraceHandle } from '@lixpi/constants'
+import type {
+    CapabilityJsonValue,
+    ExecutionTraceHandle,
+} from '@lixpi/constants'
 
 import {
     type CapabilityActionExecutionContext,
@@ -57,15 +60,17 @@ export function registerCharacterCreatorActions(
 // that could drift after the trace is sealed.
 function characterReferenceHandles(value: unknown): ExecutionTraceHandle[] {
     if (!Array.isArray(value)) return []
-    return value.flatMap(assetId => typeof assetId === 'string' && assetId.trim()
-        ? [{
-            kind: 'media' as const,
-            id: assetId,
-            displayName: assetId,
-            mediaKind: 'image' as const,
-            role: 'character-reference',
-        }]
-        : [])
+    return value.flatMap(assetId =>
+        typeof assetId === 'string' && assetId.trim()
+            ? [{
+                kind: 'media' as const,
+                id: assetId,
+                displayName: assetId,
+                mediaKind: 'image' as const,
+                role: 'character-reference',
+            }]
+            : []
+    )
 }
 
 function buildPlanOutput(

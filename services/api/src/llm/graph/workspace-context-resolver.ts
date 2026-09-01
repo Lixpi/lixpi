@@ -28,7 +28,10 @@ import {
     deduplicateMediaBranchSnapshotCandidatesByAsset,
     restrictSnapshotToExplicitRefs,
 } from './media-branch-snapshot.ts'
-import type { ChatMessage, ProviderState } from './state.ts'
+import type {
+    ChatMessage,
+    ProviderState,
+} from './state.ts'
 import type { StreamPublisher } from './stream-publisher.ts'
 
 type ResolveWorkspaceContextDeps = {
@@ -79,8 +82,7 @@ const extractTextFromProseMirror = (content: string | object | undefined): strin
     return doc.content.map(extractTextFromNode).join('').trim()
 }
 
-const hasModelError = (value: unknown): value is { error: string } =>
-    typeof value === 'object' && value !== null && typeof (value as any).error === 'string'
+const hasModelError = (value: unknown): value is { error: string } => typeof value === 'object' && value !== null && typeof (value as any).error === 'string'
 
 const resolveContextAsset = async (
     assetId: string,
@@ -117,10 +119,10 @@ const resolveAssetMediaUrl = async (asset: Asset): Promise<string | undefined> =
     const names = asset.media.kind === 'image'
         ? ['preview', 'original'] as const
         : asset.media.kind === 'video'
-            ? ['representativeFrame', 'poster', 'thumbnail'] as const
-            : asset.media.kind === 'document'
-                ? ['poster', 'thumbnail'] as const
-                : [] as const
+        ? ['representativeFrame', 'poster', 'thumbnail'] as const
+        : asset.media.kind === 'document'
+        ? ['poster', 'thumbnail'] as const
+        : [] as const
     const rendition = names
         .map((name) => asset.media!.renditions[name])
         .find((candidate) => candidate?.status === 'ready' && candidate.blobHash)
@@ -129,8 +131,7 @@ const resolveAssetMediaUrl = async (asset: Asset): Promise<string | undefined> =
     return blob ? `nats-obj://${blob.bucketName}/${blob.objectKey}` : undefined
 }
 
-const getFallbackText = (node: WorkspaceContextNode): string =>
-    [node.title, node.descriptorSummary].filter((part): part is string => Boolean(part?.trim())).join('\n')
+const getFallbackText = (node: WorkspaceContextNode): string => [node.title, node.descriptorSummary].filter((part): part is string => Boolean(part?.trim())).join('\n')
 
 const resolveDocumentText = async (
     node: WorkspaceContextNode,
@@ -224,10 +225,12 @@ const resolveCapabilityArtifactContextBlocks = async (
 ): Promise<Array<Record<string, any>>> => {
     if (!node.assetId) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_ASSET_REQUIRED:${node.nodeId}`)
     const artifactAsset = await resolveContextAsset(node.assetId, state, deps)
-    if (hasModelError(artifactAsset)
+    if (
+        hasModelError(artifactAsset)
         || artifactAsset.states.lifecycle !== 'active'
         || !artifactAsset.artifact
-        || !artifactAsset.documents.capabilityArtifact) {
+        || !artifactAsset.documents.capabilityArtifact
+    ) {
         throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:${node.assetId}`)
     }
     if (node.artifactTypeId && node.artifactTypeId !== artifactAsset.artifact.artifactTypeId) {
@@ -357,11 +360,11 @@ const sanitizeContextBlocks = (
     if (!bindings?.length) return blocks
     return blocks.map(block => (typeof block.text === 'string'
         ? { ...block, text: sanitizeMediaReferenceText(block.text, bindings) }
-        : block))
+        : block)
+    )
 }
 
-const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode =>
-    Boolean(node && (node.type === 'image' || node.type === 'video'))
+const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode => Boolean(node && (node.type === 'image' || node.type === 'video'))
 
 const buildExplicitResolution = (state: ProviderState): WorkspaceContextResolution => {
     const snapshot = state.workspaceContextSnapshot
@@ -432,7 +435,7 @@ const buildExplicitMediaBranchSnapshot = async (
     const candidates = [...candidatesById.values()]
     const explicitReferenceCandidateIds = candidates.map((candidate) => candidate.candidateId)
     const activeTargetCandidateId = existingSnapshot?.activeTargetCandidateId
-        && explicitReferenceCandidateIds.includes(existingSnapshot.activeTargetCandidateId)
+            && explicitReferenceCandidateIds.includes(existingSnapshot.activeTargetCandidateId)
         ? existingSnapshot.activeTargetCandidateId
         : undefined
     const promptText = existingSnapshot?.promptText ?? contextSnapshot.promptText
@@ -480,12 +483,18 @@ export const resolveWorkspaceContext = async (
         const mediaBranchCandidateSnapshot = await buildExplicitMediaBranchSnapshot(state, resolution, scopedDeps)
 
         deps.publisher.contextRelevanceResolved(resolution)
-        info(`[WorkspaceContextResolver] resolved explicit context ${JSON.stringify({
-            workspaceId: state.workspaceId,
-            aiChatThreadId: state.aiChatThreadId,
-            selectedNodeIds: resolution.selections.map((selection) => selection.nodeId),
-            narrowedMediaNodeIds: resolution.narrowedMediaNodeIds,
-        }, null, 0)}`)
+        info(`[WorkspaceContextResolver] resolved explicit context ${
+            JSON.stringify(
+                {
+                    workspaceId: state.workspaceId,
+                    aiChatThreadId: state.aiChatThreadId,
+                    selectedNodeIds: resolution.selections.map((selection) => selection.nodeId),
+                    narrowedMediaNodeIds: resolution.narrowedMediaNodeIds,
+                },
+                null,
+                0,
+            )
+        }`)
 
         return {
             workspaceContextResolution: resolution,

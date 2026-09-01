@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { MediaGenerationRunPlanner } from './media-generation-run-planner.ts'
 

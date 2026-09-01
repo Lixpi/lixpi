@@ -14,8 +14,7 @@ const getNatsService = (): NATS_Service => {
     return natsService
 }
 
-export const getOrganizationBlobBucketName = (organizationId: string): string =>
-    `blobs-${organizationId}-files`
+export const getOrganizationBlobBucketName = (organizationId: string): string => `blobs-${organizationId}-files`
 
 export const getBlobObjectKey = (blobHash: string): string => {
     if (!BLOB_HASH_PATTERN.test(blobHash)) throw new Error('INVALID_BLOB_HASH')
@@ -48,8 +47,7 @@ export const ensureOrganizationAssetStorage = async (organizationId: string): Pr
     }
 }
 
-export const hashBlobBytes = (bytes: Uint8Array): string =>
-    createHash('sha256').update(bytes).digest('hex')
+export const hashBlobBytes = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
 
 export const putContentAddressedBlob = async ({
     organizationId,

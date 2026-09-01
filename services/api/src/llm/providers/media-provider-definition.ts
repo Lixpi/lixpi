@@ -101,13 +101,15 @@ const readModerationMetadata = (error: unknown): {
     const explicitCategories = Array.isArray(rawCategories)
         ? rawCategories.filter((value): value is string => typeof value === 'string')
         : rawCategories && typeof rawCategories === 'object'
-            ? Object.entries(rawCategories as Record<string, unknown>)
-                .filter(([, value]) => value === true)
-                .map(([key]) => key)
-            : []
+        ? Object.entries(rawCategories as Record<string, unknown>)
+            .filter(([, value]) => value === true)
+            .map(([key]) => key)
+        : []
     const message = typeof candidate.message === 'string'
         ? candidate.message
-        : typeof nestedError.message === 'string' ? nestedError.message : ''
+        : typeof nestedError.message === 'string'
+        ? nestedError.message
+        : ''
     const legacyMatch = /safety_violations=\[([^\]]+)\]/iu.exec(message)
     const legacyCategories = legacyMatch?.[1]
         ?.split(',')
@@ -146,12 +148,12 @@ export const normalizeProviderProblem = ({
     const stage: MediaGenerationProblem['stage'] = context.stage !== 'submit'
         ? context.stage
         : /download|fetch.*(?:file|output|video|image)/iu.test(evidence)
-            ? 'download'
-            : /persist|storage|rendition|object store/iu.test(evidence)
-                ? 'persist'
-                : /poll|operation|retrieve.*task|task.*(?:failed|cancelled|expired)|raiMediaFilteredCount/iu.test(evidence)
-                    ? 'poll'
-                    : context.stage
+        ? 'download'
+        : /persist|storage|rendition|object store/iu.test(evidence)
+        ? 'persist'
+        : /poll|operation|retrieve.*task|task.*(?:failed|cancelled|expired)|raiMediaFilteredCount/iu.test(evidence)
+        ? 'poll'
+        : context.stage
     const moderation = /moderation|filter|policy|rai|safety/iu.test(evidence)
     const moderationMetadata: ReturnType<typeof readModerationMetadata> = moderation
         ? readModerationMetadata(error)
@@ -163,24 +165,30 @@ export const normalizeProviderProblem = ({
     const category: MediaGenerationProblem['category'] = moderation
         ? 'provider-moderation'
         : configuration
-            ? 'provider-configuration'
-            : capacity
-                ? 'provider-capacity'
-                : output ? 'provider-output' : 'provider-transport'
+        ? 'provider-configuration'
+        : capacity
+        ? 'provider-capacity'
+        : output
+        ? 'provider-output'
+        : 'provider-transport'
     return {
         problemVersion: '1',
         type: `urn:lixpi:media-problem:${category}`,
         title: moderation
             ? 'Provider moderation rejected this generation'
-            : configuration ? 'Provider configuration rejected this generation'
-                : capacity ? 'Provider capacity prevented this generation'
-                    : output ? 'Provider output could not be used' : 'Provider generation failed',
+            : configuration
+            ? 'Provider configuration rejected this generation'
+            : capacity
+            ? 'Provider capacity prevented this generation'
+            : output
+            ? 'Provider output could not be used'
+            : 'Provider generation failed',
         detail: moderation
             ? moderationMetadata.stage === 'output'
                 ? 'The provider blocked the generated result during its output safety check. Edit the request before submitting another attempt.'
                 : moderationMetadata.stage === 'input'
-                    ? 'The provider rejected the request during its input safety check. Edit the request before submitting another attempt.'
-                    : 'The provider rejected this attempt. Edit the request before submitting another attempt.'
+                ? 'The provider rejected the request during its input safety check. Edit the request before submitting another attempt.'
+                : 'The provider rejected this attempt. Edit the request before submitting another attempt.'
             : 'The provider could not complete this attempt. Edit the request before submitting again.',
         category,
         stage,
@@ -222,15 +230,19 @@ export const assertValidMediaProviderDefinition = (definition: MediaProviderDefi
     if (!definition.mediaCapabilities.includes('image') && definition.imageReferenceAdapter) {
         throw new Error(`MEDIA_PROVIDER_IMAGE_REFERENCE_ADAPTER_UNEXPECTED:${definition.provider}`)
     }
-    if (definition.referenceRules.aliases !== 'positional-reference'
+    if (
+        definition.referenceRules.aliases !== 'positional-reference'
         || definition.referenceRules.supportedInputs.length === 0
-        || typeof definition.referenceRules.compile !== 'function') {
+        || typeof definition.referenceRules.compile !== 'function'
+    ) {
         throw new Error(`MEDIA_PROVIDER_REFERENCE_RULES_REQUIRED:${definition.provider}`)
     }
-    if (!['low', 'input-mode-least-restrictive', 'fixed-provider-policy'].includes(definition.moderation.policy)
+    if (
+        !['low', 'input-mode-least-restrictive', 'fixed-provider-policy'].includes(definition.moderation.policy)
         || definition.moderation.automaticRetry !== 'never'
         || !['charged', 'not-documented', 'provider-dependent'].includes(definition.moderation.costOnFilter)
-        || typeof definition.moderation.settings !== 'function') {
+        || typeof definition.moderation.settings !== 'function'
+    ) {
         throw new Error(`MEDIA_PROVIDER_MODERATION_PROFILE_REQUIRED:${definition.provider}`)
     }
     if (typeof definition.normalizeProblem !== 'function') {
@@ -239,9 +251,11 @@ export const assertValidMediaProviderDefinition = (definition: MediaProviderDefi
     if (!['unsupported', 'provider-hosted-session'].includes(definition.verification.strategy)) {
         throw new Error(`MEDIA_PROVIDER_VERIFICATION_STRATEGY_REQUIRED:${definition.provider}`)
     }
-    if (!definition.retentionNotes || !definition.sensitiveDataNotes || definition.documentationUrls.length === 0
+    if (
+        !definition.retentionNotes || !definition.sensitiveDataNotes || definition.documentationUrls.length === 0
         || definition.documentationUrls.some(url => !url.startsWith('https://'))
-        || !/^\d{4}-\d{2}-\d{2}$/u.test(definition.reviewedAt) || !definition.profileVersion) {
+        || !/^\d{4}-\d{2}-\d{2}$/u.test(definition.reviewedAt) || !definition.profileVersion
+    ) {
         throw new Error(`MEDIA_PROVIDER_POLICY_METADATA_REQUIRED:${definition.provider}`)
     }
     if (definition.provider === 'OpenAI') {
@@ -255,9 +269,11 @@ export const assertValidMediaProviderDefinition = (definition: MediaProviderDefi
             throw new Error('GOOGLE_VEO_PERSON_GENERATION_PROFILE_INVALID')
         }
     }
-    if (definition.provider === 'BytePlus'
+    if (
+        definition.provider === 'BytePlus'
         && (definition.verification.strategy !== 'provider-hosted-session'
-            || definition.verification.derivativeReuse !== 'documented-lineage')) {
+            || definition.verification.derivativeReuse !== 'documented-lineage')
+    ) {
         throw new Error('BYTEPLUS_VERIFICATION_PROFILE_REQUIRED')
     }
     if ((definition.provider as string) === 'Runway') {

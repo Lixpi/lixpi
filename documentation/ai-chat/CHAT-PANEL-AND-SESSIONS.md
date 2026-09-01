@@ -55,7 +55,7 @@ Panel state is saved through normal Workspace metadata persistence. Refreshing t
 
 ## Unified generated-output details
 
-`generatedOutputDetailsSidebar.ts` is the only right-panel entry point for an output or branch marker. It renders current Asset metadata first: the full-size editable title and description, descriptor tags, scope, subject identity, storage/rendition status, lineage, and Capability Artifact fields where applicable. A separator then starts `Generation details`, which contains the original user turn, assistant reasoning, purple reasoning-authored model-prompt blocks, references, resolver audit, and recursive pipeline timeline.
+`generated-output-details-sidebar.ts` is the only right-panel entry point for an output or branch marker. It renders current Asset metadata first: the full-size editable title and description, descriptor tags, scope, subject identity, storage/rendition status, lineage, and Capability Artifact fields where applicable. A separator then starts `Generation details`, which contains the original user turn, assistant reasoning, purple reasoning-authored model-prompt blocks, references, resolver audit, and recursive pipeline timeline.
 
 The component body owns the only vertical scrollbar. Nested ProseMirror, prompt, reasoning, and trace content expands inside that flow. During generation, detached conversation authority and durable JetStream pipeline events rebuild all prior steps, then continue applying live events to the selected sidebar instance. Terminal outputs rebuild the same history from sealed provenance.
 
@@ -142,6 +142,6 @@ Panel width, open state, top-level mode, context chips, and the selected generat
 - [`services/api/src/prosemirror/ai-chat-stream-assembler.ts`](../../services/api/src/prosemirror/ai-chat-stream-assembler.ts)
 - [`services/web-ui/src/services/prosemirror-authority-service.ts`](../../services/web-ui/src/services/prosemirror-authority-service.ts)
 - [`services/web-ui/src/services/asset-service.ts`](../../services/web-ui/src/services/asset-service.ts)
-- [`services/web-ui/src/infographics/workspace/aiChatPanelState.ts`](../../services/web-ui/src/infographics/workspace/aiChatPanelState.ts)
-- [`services/web-ui/src/infographics/workspace/generatedOutputDetailsSidebar.ts`](../../services/web-ui/src/infographics/workspace/generatedOutputDetailsSidebar.ts)
+- [`packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-panel-state.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/shared/scene/workspace-panel-state.ts)
+- [`packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.ts`](../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/review/generated-output-details-sidebar.ts)
 - [`packages/lixpi/ui-kit/src/components/blockCardTilesList/`](../../packages/lixpi/ui-kit/src/components/blockCardTilesList/)

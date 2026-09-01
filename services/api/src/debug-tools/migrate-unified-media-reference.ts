@@ -30,9 +30,11 @@ async function main(): Promise<void> {
     const result = await migration.run()
     const postflight = await migration.audit()
     process.stdout.write(`${JSON.stringify({ phase: 'applied', ...result, postflight }, null, 2)}\n`)
-    if (postflight.legacyAssetIds.length > 0
+    if (
+        postflight.legacyAssetIds.length > 0
         || postflight.legacyWorkspaceIds.length > 0
-        || postflight.quarantined.length > 0) {
+        || postflight.quarantined.length > 0
+    ) {
         throw new Error('UNIFIED_MEDIA_REFERENCE_MIGRATION_POSTFLIGHT_FAILED')
     }
 }

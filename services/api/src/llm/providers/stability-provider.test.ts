@@ -1,7 +1,14 @@
 'use strict'
 
 import sharp from 'sharp'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { StabilityProvider } from './stability-provider.ts'
 import type { BaseProviderDeps } from './base-provider.ts'
@@ -405,10 +412,15 @@ describe('StabilityProvider stream validation', () => {
     it('returns stability API error details when request status is not successful', async () => {
         const providerDeps = makeDeps()
         const provider = new StabilityProvider('ws-1:thread-1', providerDeps)
-        vi.stubGlobal('fetch', vi.fn(async () => new Response(
-            JSON.stringify({ name: 'invalid_request', errors: ['Missing prompt field'] }),
-            { status: 400, headers: { 'content-type': 'application/json' } },
-        )))
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({ name: 'invalid_request', errors: ['Missing prompt field'] }),
+                    { status: 400, headers: { 'content-type': 'application/json' } },
+                )
+            ),
+        )
 
         const result = await provider.process({
             workspaceId: 'ws-1',
@@ -436,10 +448,15 @@ describe('StabilityProvider stream validation', () => {
     it('returns stability API error when image is filtered by content policy', async () => {
         const providerDeps = makeDeps()
         const provider = new StabilityProvider('ws-1:thread-1', providerDeps)
-        vi.stubGlobal('fetch', vi.fn(async () => new Response(
-            JSON.stringify({ image: TINY_PNG_BASE64, finish_reason: 'CONTENT_FILTERED' }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-        )))
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({ image: TINY_PNG_BASE64, finish_reason: 'CONTENT_FILTERED' }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                )
+            ),
+        )
 
         const result = await provider.process({
             workspaceId: 'ws-1',
@@ -470,10 +487,15 @@ describe('StabilityProvider stream validation', () => {
     it('returns stability API error when the response image payload is empty', async () => {
         const providerDeps = makeDeps()
         const provider = new StabilityProvider('ws-1:thread-1', providerDeps)
-        vi.stubGlobal('fetch', vi.fn(async () => new Response(
-            JSON.stringify({ image: '', finish_reason: 'SUCCESS' }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-        )))
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () =>
+                new Response(
+                    JSON.stringify({ image: '', finish_reason: 'SUCCESS' }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                )
+            ),
+        )
 
         const result = await provider.process({
             workspaceId: 'ws-1',

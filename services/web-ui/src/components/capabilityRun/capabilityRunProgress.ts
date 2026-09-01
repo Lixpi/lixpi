@@ -11,10 +11,10 @@ import {
 } from '@lixpi/ui-kit/components/progress-timeline'
 
 import { createExecutionTraceTimelineDetailAdapter } from '$src/components/executionTrace/index.ts'
-import type { PromptReferencePreviewRenderer } from '$src/components/proseMirror/plugins/promptReferencePickerPlugin/index.ts'
+import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 import type { CapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 export type CapabilityProgressStep = {
     stepId: string
@@ -170,12 +170,15 @@ class CapabilityRunProgress implements CapabilityRunProgressInstance {
             ...(step.trace ? { detail: step.trace } : {}),
         }))
         this.timeline.setItems(steps)
-        this.element.replaceChildren(html`
+        this.element.replaceChildren(
+            html`
             <header className="capability-run-progress-header">
                 <strong>Tool run</strong>
                 <span>${state.status}</span>
             </header>
-        `, this.timeline.element)
+        `,
+            this.timeline.element,
+        )
     }
 
     private stopLiveEventsIfSettled(): void {

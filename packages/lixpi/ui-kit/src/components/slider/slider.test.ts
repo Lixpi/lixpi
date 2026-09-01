@@ -1,5 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { select, selection } from 'd3-selection'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    select,
+    selection,
+} from 'd3-selection'
 import { easeCubicOut } from 'd3-ease'
 import { createSlider } from './slider.ts'
 
@@ -36,8 +46,7 @@ const makeImmediateTransition = (target: any): any => {
     }
     return chain
 }
-
-;(selection.prototype as any).transition = function (): any {
+;(selection.prototype as any).transition = function(): any {
     return makeImmediateTransition(this)
 }
 
@@ -161,13 +170,15 @@ describe('createSlider — initial render', () => {
         host.appendChild(svg)
         document.body.appendChild(host)
 
-        expect(() => createSlider<Value>(select(svg), {
-            id: 'empty',
-            x: 0,
-            y: 0,
-            width: WIDTH,
-            options: [],
-        })).toThrow('Slider requires at least one option')
+        expect(() =>
+            createSlider<Value>(select(svg), {
+                id: 'empty',
+                x: 0,
+                y: 0,
+                width: WIDTH,
+                options: [],
+            })
+        ).toThrow('Slider requires at least one option')
     })
 })
 

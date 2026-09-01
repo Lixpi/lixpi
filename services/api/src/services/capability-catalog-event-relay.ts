@@ -1,6 +1,9 @@
 'use strict'
 
-import { getCapabilityUserEventSubject, NATS_SUBJECTS } from '@lixpi/constants'
+import {
+    getCapabilityUserEventSubject,
+    NATS_SUBJECTS,
+} from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 
 import type { CapabilityRequesterContext } from '../models/capability.ts'
@@ -43,18 +46,22 @@ export function ensureCapabilityCatalogEventRelay(requester: CapabilityRequester
                 } catch {
                     continue
                 }
-                if (typeof payload.capabilityId !== 'string'
+                if (
+                    typeof payload.capabilityId !== 'string'
                     || !['user', 'organization', 'global'].includes(payload.scope ?? '')
                     || typeof payload.scopeOwnerId !== 'string'
                     || (payload.audienceUserIds !== undefined
                         && (!Array.isArray(payload.audienceUserIds)
-                            || payload.audienceUserIds.some((item) => typeof item !== 'string')))) continue
+                            || payload.audienceUserIds.some((item) => typeof item !== 'string')))
+                ) continue
                 const currentRequester = activeRelays.get(requester.userId)
                 if (!currentRequester) continue
-                if (!shouldRelayCapabilityCatalogInvalidation(
-                    payload as CapabilityCatalogInvalidation,
-                    currentRequester,
-                )) continue
+                if (
+                    !shouldRelayCapabilityCatalogInvalidation(
+                        payload as CapabilityCatalogInvalidation,
+                        currentRequester,
+                    )
+                ) continue
                 connection.publish(
                     getCapabilityUserEventSubject(
                         requester.userId,

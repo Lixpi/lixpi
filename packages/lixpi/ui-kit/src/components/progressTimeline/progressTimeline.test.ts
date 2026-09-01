@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     createProgressTimeline,
@@ -19,7 +24,9 @@ function makeDetailRenderer() {
         element.dataset.detailLabel = payload.label
         return {
             element,
-            destroy: () => { destroyed.push(payload.label) },
+            destroy: () => {
+                destroyed.push(payload.label)
+            },
         }
     })
     return { renderItemDetail, destroyed, rendered }

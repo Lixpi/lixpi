@@ -1,8 +1,17 @@
 'use strict'
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import {
+    createServer,
+    type IncomingMessage,
+    type ServerResponse,
+} from 'node:http'
 import { readFile } from 'node:fs/promises'
-import { dirname, extname, join, normalize } from 'node:path'
+import {
+    dirname,
+    extname,
+    join,
+    normalize,
+} from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 
@@ -50,9 +59,24 @@ const DECISION_FIELDS = ['decision', 'reviewed', 'status', 'irrelevant', 'fixedV
 // purpose: it is the file's identity, and renaming it would orphan the decision
 // attached to that parameter.
 const DOCUMENTATION_FIELDS = [
-    'category', 'apiField', 'controlKey', 'type', 'values', 'range', 'providerDefault', 'lixpiValue',
-    'currentState', 'availability', 'summary', 'combines', 'usage',
-    'supportedModels', 'unsupportedModels', 'supportedApis', 'unsupportedApis', 'sources',
+    'category',
+    'apiField',
+    'controlKey',
+    'type',
+    'values',
+    'range',
+    'providerDefault',
+    'lixpiValue',
+    'currentState',
+    'availability',
+    'summary',
+    'combines',
+    'usage',
+    'supportedModels',
+    'unsupportedModels',
+    'supportedApis',
+    'unsupportedApis',
+    'sources',
 ] as const
 
 const GROUP_DOCUMENTATION_FIELDS = ['title', 'models', 'docs'] as const
@@ -71,8 +95,7 @@ const readJsonBody = async (req: IncomingMessage): Promise<unknown> => {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
 
-const paramKey = (group: LoadedGroup, param: ParamRecord): string =>
-    `${group.meta.providerId}/${group.meta.groupId}/${param.key}`
+const paramKey = (group: LoadedGroup, param: ParamRecord): string => `${group.meta.providerId}/${group.meta.groupId}/${param.key}`
 
 class AiModelRegistryServer {
     private readonly tree: ParamTree
@@ -151,8 +174,16 @@ class AiModelRegistryServer {
 
     private static summarise(groups: LoadedGroup[], incoming: SelectionMap): Record<string, number> {
         const counts: Record<string, number> = {
-            total: 0, expose: 0, internal: 0, skip: 0, reviewed: 0, unreviewed: 0,
-            approved: 0, needsParamClarification: 0, needsImplementationInvestigation: 0, irrelevant: 0,
+            total: 0,
+            expose: 0,
+            internal: 0,
+            skip: 0,
+            reviewed: 0,
+            unreviewed: 0,
+            approved: 0,
+            needsParamClarification: 0,
+            needsImplementationInvestigation: 0,
+            irrelevant: 0,
         }
         for (const group of groups) {
             for (const param of group.parameters) {
@@ -214,7 +245,9 @@ class AiModelRegistryServer {
             // page always sends the full map, so a shrinking reviewed count means
             // a bug or a stray request, never a real edit.
             const storedReviewed = groups.reduce(
-                (total, group) => total + group.parameters.filter(param => param.reviewed).length, 0)
+                (total, group) => total + group.parameters.filter(param => param.reviewed).length,
+                0,
+            )
             const incomingReviewed = Object.values(incoming).filter(entry => entry?.reviewed === true).length
             if (incomingReviewed < storedReviewed) {
                 AiModelRegistryServer.sendJson(res, 409, {
@@ -287,11 +320,9 @@ class AiModelRegistryServer {
             ]))
 
             const unknownKeys = Object.keys(incoming).filter(key => !index.has(key))
-            const unknownFields = Object.entries(incoming).flatMap(([key, patch]) =>
-                Object.keys(patch).filter(field => !EDITABLE_FIELDS.has(field)).map(field => `${key}.${field}`))
+            const unknownFields = Object.entries(incoming).flatMap(([key, patch]) => Object.keys(patch).filter(field => !EDITABLE_FIELDS.has(field)).map(field => `${key}.${field}`))
             const unknownGroupKeys = Object.keys(incomingGroups).filter(key => !groupIndex.has(key))
-            const unknownGroupFields = Object.entries(incomingGroups).flatMap(([key, patch]) =>
-                Object.keys(patch).filter(field => !EDITABLE_GROUP_FIELDS.has(field)).map(field => `${key}.${field}`))
+            const unknownGroupFields = Object.entries(incomingGroups).flatMap(([key, patch]) => Object.keys(patch).filter(field => !EDITABLE_GROUP_FIELDS.has(field)).map(field => `${key}.${field}`))
             const invalidGroupValues = Object.entries(incomingGroups).flatMap(([key, patch]) => {
                 const invalid: string[] = []
                 if ('title' in patch && (typeof patch.title !== 'string' || patch.title.trim().length === 0)) {
@@ -300,17 +331,21 @@ class AiModelRegistryServer {
                 if ('docs' in patch && (typeof patch.docs !== 'string' || patch.docs.trim().length === 0)) {
                     invalid.push(`${key}.docs`)
                 }
-                if ('models' in patch && (!Array.isArray(patch.models)
-                    || patch.models.length === 0
-                    || patch.models.some(model => typeof model !== 'string' || model.trim().length === 0)
-                    || new Set(patch.models).size !== patch.models.length)) {
+                if (
+                    'models' in patch && (!Array.isArray(patch.models)
+                        || patch.models.length === 0
+                        || patch.models.some(model => typeof model !== 'string' || model.trim().length === 0)
+                        || new Set(patch.models).size !== patch.models.length)
+                ) {
                     invalid.push(`${key}.models`)
                 }
                 return invalid
             })
-            if (unknownKeys.length > 0 || unknownFields.length > 0
+            if (
+                unknownKeys.length > 0 || unknownFields.length > 0
                 || unknownGroupKeys.length > 0 || unknownGroupFields.length > 0
-                || invalidGroupValues.length > 0) {
+                || invalidGroupValues.length > 0
+            ) {
                 AiModelRegistryServer.sendJson(res, 400, {
                     error: invalidGroupValues.length > 0 ? 'INVALID_VALUE' : 'UNKNOWN_TARGET',
                     unknownKeys,

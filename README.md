@@ -156,7 +156,7 @@ For the full architecture deep-dive — including AI chat request/response flow,
 - [Style Extraction & Library](documentation/library/STYLE-EXTRACTION-OVERVIEW.md)
 - [Media Library](documentation/library/MEDIA-LIBRARY.md)
 - [Branch Lineage & Provenance](documentation/media-generation/BRANCH-LINEAGE.md)
-- [Canvas Rendering Engine](documentation/canvas/RENDERING-ENGINE.md) — DOM/PIXI rendering, pan/zoom, node interactions
+- [Canvas Rendering Engine](packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — DOM/PIXI rendering, pan/zoom, node interactions
 - [Image Generation](documentation/media-generation/IMAGE-GENERATION.md) — streaming, placement, multi-turn editing
 - [Video Generation](documentation/media-generation/VIDEO-GENERATION.md) — Google VEO, async submit/poll, inline playback
 - [Why Different Model Combinations Produce Different Styles](documentation/knowledge/WHY-DIFFERENT-MODEL-COMBINATIONS-PRODUCE-DIFFERENT-STYLES.md)

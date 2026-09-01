@@ -1,6 +1,9 @@
 'use strict'
 
-import { MEDIA_POLICY, type AssetMediaKind } from '@lixpi/constants'
+import {
+    MEDIA_POLICY,
+    type AssetMediaKind,
+} from '@lixpi/constants'
 
 import AssetModel from '../models/asset.ts'
 import BlobModel from '../models/blob.ts'

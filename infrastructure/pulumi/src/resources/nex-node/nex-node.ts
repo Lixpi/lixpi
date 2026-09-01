@@ -133,23 +133,25 @@ export const createNexNodeService = async (args: NexNodeServiceArgs) => {
     // DynamoDB access per bound table (mirrors main-api-service.ts).
     Object.values(tables).forEach((table, i) => {
         const tablePolicy = new aws.iam.Policy(`${serviceName}-dynamo-policy-${i}`, {
-            policy: table.arn.apply(arn => JSON.stringify({
-                Version: '2012-10-17',
-                Statement: [{
-                    Effect: 'Allow',
-                    Action: [
-                        'dynamodb:GetItem',
-                        'dynamodb:Query',
-                        'dynamodb:Scan',
-                        'dynamodb:BatchWriteItem',
-                        'dynamodb:PutItem',
-                        'dynamodb:UpdateItem',
-                        'dynamodb:DeleteItem',
-                        'dynamodb:DescribeTable',
-                    ],
-                    Resource: [arn, `${arn}/index/*`],
-                }],
-            })),
+            policy: table.arn.apply(arn =>
+                JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [{
+                        Effect: 'Allow',
+                        Action: [
+                            'dynamodb:GetItem',
+                            'dynamodb:Query',
+                            'dynamodb:Scan',
+                            'dynamodb:BatchWriteItem',
+                            'dynamodb:PutItem',
+                            'dynamodb:UpdateItem',
+                            'dynamodb:DeleteItem',
+                            'dynamodb:DescribeTable',
+                        ],
+                        Resource: [arn, `${arn}/index/*`],
+                    }],
+                })
+            ),
         })
 
         new aws.iam.RolePolicyAttachment(`${serviceName}-dynamo-attachment-${i}`, {
@@ -245,19 +247,19 @@ export const createNexNodeService = async (args: NexNodeServiceArgs) => {
     const ecsService = new aws.ecs.Service(`${serviceName}-service`, {
         cluster: ecsCluster.id,
         taskDefinition: taskDefinition.arn,
-        desiredCount,                  // singleton — see proposal Risk "duplicate hourly runs"
+        desiredCount, // singleton — see proposal Risk "duplicate hourly runs"
         launchType: 'FARGATE',
         schedulingStrategy: 'REPLICA',
-        deploymentMinimumHealthyPercent: 0,   // single task: allow it to stop before the new one starts
+        deploymentMinimumHealthyPercent: 0, // single task: allow it to stop before the new one starts
         deploymentMaximumPercent: 100,
         deploymentCircuitBreaker: { enable: true, rollback: true },
         networkConfiguration: {
-            subnets: privateSubnets.map(subnet => subnet.id),  // internal only
+            subnets: privateSubnets.map(subnet => subnet.id), // internal only
             securityGroups: [securityGroup.id],
             assignPublicIp: false,
         },
         forceNewDeployment: true,
-        enableExecuteCommand: true,    // for `aws ecs execute-command` debugging
+        enableExecuteCommand: true, // for `aws ecs execute-command` debugging
         waitForSteadyState: false,
     }, {
         customTimeouts: { create: '10m', update: '10m', delete: '10m' },

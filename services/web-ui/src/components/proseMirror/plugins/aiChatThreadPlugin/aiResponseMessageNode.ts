@@ -77,12 +77,12 @@ export const aiResponseMessageNodeView = (node, view, getPos) => {
                 return false
             }
 
-            node = updatedNode    // Update the node reference and refresh the animation
+            node = updatedNode // Update the node reference and refresh the animation
             responseShell.setMessageId(node.attrs.id)
-            updateAnimation()    // Update the content-reveal animation state
+            updateAnimation() // Update the content-reveal animation state
             updateLoadingState()
 
-            return true    // Indicate successful update
+            return true // Indicate successful update
         },
         destroy: () => {},
     }

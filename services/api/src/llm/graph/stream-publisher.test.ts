@@ -1,6 +1,13 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { STREAM_STATUS } from '@lixpi/constants'
 
 const canvasProjectionMocks = vi.hoisted(() => ({
@@ -13,10 +20,13 @@ const canvasProjectionMocks = vi.hoisted(() => ({
 
 vi.mock('../../services/asset-canvas-projection.ts', () => canvasProjectionMocks)
 
-import { StreamPublisher, TagAwareStream } from './stream-publisher.ts'
+import {
+    StreamPublisher,
+    TagAwareStream,
+} from './stream-publisher.ts'
 
-type Published = { subject: string, payload: any }
-type JetStreamPublished = { subject: string, payload: any, options: any }
+type Published = { subject: string; payload: any }
+type JetStreamPublished = { subject: string; payload: any; options: any }
 
 const makeFakeNats = () => {
     const published: Published[] = []
@@ -68,8 +78,7 @@ const flatTexts = (published: Published[]): string =>
         .map(p => p.payload.content.text)
         .join('')
 
-const statuses = (published: Published[]): string[] =>
-    published.map(p => p.payload.content.status)
+const statuses = (published: Published[]): string[] => published.map(p => p.payload.content.status)
 
 const generationRun = {
     generationRequestId: 'request-1',
@@ -114,11 +123,11 @@ describe('TagAwareStream', () => {
         stream.flush()
 
         expect(statuses(tagAware.published)).toEqual([
-            STREAM_STATUS.STREAMING,           // 'before'
+            STREAM_STATUS.STREAMING, // 'before'
             STREAM_STATUS.COLLAPSIBLE_START,
-            STREAM_STATUS.STREAMING,           // 'inner content'
+            STREAM_STATUS.STREAMING, // 'inner content'
             STREAM_STATUS.COLLAPSIBLE_END,
-            STREAM_STATUS.STREAMING,           // 'after'
+            STREAM_STATUS.STREAMING, // 'after'
         ])
         const texts = tagAware.published
             .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
@@ -134,11 +143,11 @@ describe('TagAwareStream', () => {
         stream.flush()
 
         expect(statuses(tagAware.published)).toEqual([
-            STREAM_STATUS.STREAMING,           // 'Sure!'
+            STREAM_STATUS.STREAMING, // 'Sure!'
             STREAM_STATUS.COLLAPSIBLE_START,
-            STREAM_STATUS.STREAMING,           // inner video prompt
+            STREAM_STATUS.STREAMING, // inner video prompt
             STREAM_STATUS.COLLAPSIBLE_END,
-            STREAM_STATUS.STREAMING,           // 'done'
+            STREAM_STATUS.STREAMING, // 'done'
         ])
         const texts = tagAware.published
             .filter(p => p.payload.content.status === STREAM_STATUS.STREAMING)
@@ -156,9 +165,9 @@ describe('TagAwareStream', () => {
 
         expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.COLLAPSIBLE_START,
-            STREAM_STATUS.STREAMING,           // 'inner'
+            STREAM_STATUS.STREAMING, // 'inner'
             STREAM_STATUS.COLLAPSIBLE_END,
-            STREAM_STATUS.STREAMING,           // 'tail'
+            STREAM_STATUS.STREAMING, // 'tail'
         ])
     })
 
@@ -168,9 +177,9 @@ describe('TagAwareStream', () => {
         stream.flush()
 
         expect(statuses(tagAware.published)).toEqual([
-            STREAM_STATUS.STREAMING,           // 'before'
+            STREAM_STATUS.STREAMING, // 'before'
             STREAM_STATUS.COLLAPSIBLE_START,
-            STREAM_STATUS.STREAMING,           // 'inner'
+            STREAM_STATUS.STREAMING, // 'inner'
             STREAM_STATUS.COLLAPSIBLE_END,
         ])
     })
@@ -182,9 +191,9 @@ describe('TagAwareStream', () => {
 
         expect(statuses(tagAware.published)).toEqual([
             STREAM_STATUS.COLLAPSIBLE_START,
-            STREAM_STATUS.STREAMING,           // 'inner'
+            STREAM_STATUS.STREAMING, // 'inner'
             STREAM_STATUS.COLLAPSIBLE_END,
-            STREAM_STATUS.STREAMING,           // 'tail'
+            STREAM_STATUS.STREAMING, // 'tail'
         ])
     })
 
@@ -710,14 +719,14 @@ describe('StreamPublisher extraction progress', () => {
             generationRequestId: 'request-1',
             removeProjectedPendingNodes: true,
         })
-        expect(nats.published.some(entry => [
-            STREAM_STATUS.ERROR,
-            STREAM_STATUS.IMAGE_ERROR,
-            STREAM_STATUS.VIDEO_ERROR,
-        ].includes(entry.payload?.content?.status))).toBe(false)
-        expect(nats.published.filter(entry =>
-            entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE
-        )).toHaveLength(1)
+        expect(nats.published.some(entry =>
+            [
+                STREAM_STATUS.ERROR,
+                STREAM_STATUS.IMAGE_ERROR,
+                STREAM_STATUS.VIDEO_ERROR,
+            ].includes(entry.payload?.content?.status)
+        )).toBe(false)
+        expect(nats.published.filter(entry => entry.payload?.content?.status === STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE)).toHaveLength(1)
     })
 
     it('deduplicates media request completion calls and avoids duplicate settle writes', async () => {
@@ -912,9 +921,7 @@ describe('StreamPublisher trace payloads', () => {
         await flushPipelinePublishes()
 
         expect(canvasProjectionMocks.refreshMediaGenerationRequestCanvasGeometry).not.toHaveBeenCalled()
-        const publishedGeometryEvent = nats.published.some(entry =>
-            entry.payload.content?.status === STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED
-        )
+        const publishedGeometryEvent = nats.published.some(entry => entry.payload.content?.status === STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED)
         expect(publishedGeometryEvent).toBe(false)
     })
 })
@@ -937,9 +944,7 @@ describe('StreamPublisher ProseMirror integration options', () => {
         publisher.end()
         await flushPipelinePublishes()
 
-        expect(nats.published.map(event => event.payload.content.status).filter((status, index, statuses) =>
-            status !== STREAM_STATUS.STREAMING || statuses[index - 1] !== STREAM_STATUS.STREAMING
-        )).toEqual([
+        expect(nats.published.map(event => event.payload.content.status).filter((status, index, statuses) => status !== STREAM_STATUS.STREAMING || statuses[index - 1] !== STREAM_STATUS.STREAMING)).toEqual([
             STREAM_STATUS.START_STREAM,
             STREAM_STATUS.STREAMING,
             STREAM_STATUS.END_STREAM,
@@ -974,14 +979,20 @@ describe('StreamPublisher ProseMirror integration options', () => {
             aiProvider: 'Anthropic',
         })
         expect(publisherSpy).toHaveBeenCalledTimes(2)
-        expect(publisherSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({
-            status: STREAM_STATUS.STREAMING,
-            text: 'streaming hint',
-        }))
-        expect(publisherSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({
-            status: STREAM_STATUS.ERROR,
-            error: 'temporary failure',
-        }))
+        expect(publisherSpy).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({
+                status: STREAM_STATUS.STREAMING,
+                text: 'streaming hint',
+            }),
+        )
+        expect(publisherSpy).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+                status: STREAM_STATUS.ERROR,
+                error: 'temporary failure',
+            }),
+        )
     })
 
     it('delegates prose-mirror end strategy based on deferProseMirrorEnd', async () => {

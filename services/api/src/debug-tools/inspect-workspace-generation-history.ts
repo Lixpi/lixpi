@@ -290,11 +290,15 @@ async function inspectAsset(
         if (!asset.documents[role]) continue
         const settled = await AssetDocumentService.loadSnapshot(asset, role)
         const current = await AssetDocumentService.loadCurrentSnapshot(asset, role)
-        const events = await AssetProseMirrorStepTransport.fromSingleton().replay({
-            organizationId: asset.organizationId,
-            assetId: asset.assetId,
-            role,
-        }, 1, 10000)
+        const events = await AssetProseMirrorStepTransport.fromSingleton().replay(
+            {
+                organizationId: asset.organizationId,
+                assetId: asset.assetId,
+                role,
+            },
+            1,
+            10000,
+        )
         documents[role] = {
             pointer: asset.documents[role],
             settled: settled ? summarizeDocument(settled.doc) : null,
@@ -337,29 +341,43 @@ async function main(): Promise<void> {
             const generatedBy = asRecord((node as CanvasNode & JsonRecord).generatedBy)
             return Boolean(generatedBy?.generationRequestId || generatedBy?.conversationAssetId)
         })
-        const generationRequestIds = new Set(generatedNodes
-            .map(node => stringValue(asRecord((node as CanvasNode & JsonRecord).generatedBy)?.generationRequestId))
-            .filter((value): value is string => Boolean(value)))
-        const conversationAssetIds = new Set(generatedNodes
-            .map(node => stringValue(asRecord((node as CanvasNode & JsonRecord).generatedBy)?.conversationAssetId))
-            .filter((value): value is string => Boolean(value)))
-        const outputAssetIds = new Set(generatedNodes
-            .map(node => stringValue((node as CanvasNode & JsonRecord).assetId))
-            .filter((value): value is string => Boolean(value)))
+        const generationRequestIds = new Set(
+            generatedNodes
+                .map(node => stringValue(asRecord((node as CanvasNode & JsonRecord).generatedBy)?.generationRequestId))
+                .filter((value): value is string => Boolean(value)),
+        )
+        const conversationAssetIds = new Set(
+            generatedNodes
+                .map(node => stringValue(asRecord((node as CanvasNode & JsonRecord).generatedBy)?.conversationAssetId))
+                .filter((value): value is string => Boolean(value)),
+        )
+        const outputAssetIds = new Set(
+            generatedNodes
+                .map(node => stringValue((node as CanvasNode & JsonRecord).assetId))
+                .filter((value): value is string => Boolean(value)),
+        )
 
         const requestMetas = await MediaGenerationRequestModel.listWorkspace(args.workspaceId)
-        const requests = (await Promise.all(requestMetas
-            .filter(meta => args.generationRequestId
-                ? meta.generationRequestId === args.generationRequestId
-                : generationRequestIds.size === 0 || generationRequestIds.has(meta.generationRequestId))
-            .map(meta => MediaGenerationRequestModel.get({
-                generationRequestId: meta.generationRequestId,
-                workspaceId: args.workspaceId,
-            })))).filter((request): request is MediaGenerationRequest => Boolean(request))
-        const requestSummaries = await Promise.all(requests.map(async request => summarizeRequest(
-            request,
-            await loadJsonBlob(nats, request.organizationId, request.checkpointBlobHash),
-        )))
+        const requests = (await Promise.all(
+            requestMetas
+                .filter(meta =>
+                    args.generationRequestId
+                        ? meta.generationRequestId === args.generationRequestId
+                        : generationRequestIds.size === 0 || generationRequestIds.has(meta.generationRequestId)
+                )
+                .map(meta =>
+                    MediaGenerationRequestModel.get({
+                        generationRequestId: meta.generationRequestId,
+                        workspaceId: args.workspaceId,
+                    })
+                ),
+        )).filter((request): request is MediaGenerationRequest => Boolean(request))
+        const requestSummaries = await Promise.all(requests.map(async request =>
+            summarizeRequest(
+                request,
+                await loadJsonBlob(nats, request.organizationId, request.checkpointBlobHash),
+            )
+        ))
 
         const conversationAssets = (await Promise.all([...conversationAssetIds].map(assetId => (
             getAssetRecord(assetId, 'inspect-workspace-generation-history')
@@ -370,19 +388,25 @@ async function main(): Promise<void> {
         ))))
             .filter((asset): asset is Asset => Boolean(asset))
 
-        process.stdout.write(`${JSON.stringify({
-            inspectedAt: new Date().toISOString(),
-            workspace: {
-                workspaceId: args.workspaceId,
-                name: workspace.name,
-                updatedAt: workspace.updatedAt,
-                canvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
-                generatedNodes: generatedNodes.map(summarizeCanvasNode),
-            },
-            requests: requestSummaries,
-            conversationAssets: await Promise.all(conversationAssets.map(asset => inspectAsset(asset, ['conversation']))),
-            outputAssets: await Promise.all(outputAssets.map(asset => inspectAsset(asset, ['provenance']))),
-        }, null, 2)}\n`)
+        process.stdout.write(`${
+            JSON.stringify(
+                {
+                    inspectedAt: new Date().toISOString(),
+                    workspace: {
+                        workspaceId: args.workspaceId,
+                        name: workspace.name,
+                        updatedAt: workspace.updatedAt,
+                        canvasStateUpdatedAt: workspace.canvasStateUpdatedAt,
+                        generatedNodes: generatedNodes.map(summarizeCanvasNode),
+                    },
+                    requests: requestSummaries,
+                    conversationAssets: await Promise.all(conversationAssets.map(asset => inspectAsset(asset, ['conversation']))),
+                    outputAssets: await Promise.all(outputAssets.map(asset => inspectAsset(asset, ['provenance']))),
+                },
+                null,
+                2,
+            )
+        }\n`)
     } finally {
         await nats.disconnect()
     }

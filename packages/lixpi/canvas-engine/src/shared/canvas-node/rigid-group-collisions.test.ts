@@ -1,9 +1,15 @@
 'use strict'
 
-import type { CanvasNode } from '@lixpi/constants'
-import { describe, expect, it } from 'vitest'
+import type { CanvasGeometryNode } from '../scene/types.ts'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { resolveRigidCanvasNodeGroupCollisions } from './rigid-group-collisions.ts'
+
+type CanvasNode = CanvasGeometryNode & { label: string }
 
 function makeImageNode(
     nodeId: string,
@@ -12,11 +18,7 @@ function makeImageNode(
 ): CanvasNode {
     return {
         nodeId,
-        type: 'image',
-        fileId: `file-${nodeId}`,
-        workspaceId: 'workspace-1',
-        src: `/api/images/${nodeId}`,
-        aspectRatio: 1,
+        label: `Card ${nodeId}`,
         position: { x, y },
         dimensions: { width: 100, height: 100 },
     }

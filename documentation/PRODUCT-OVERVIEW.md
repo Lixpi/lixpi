@@ -141,7 +141,7 @@ graph LR
 
 **Progressive streaming**: An animated placeholder appears immediately when generation starts (`IMAGE_PARTIAL` with empty data). Up to three ephemeral partial previews update that pending run. The final bytes settle the preassigned output Asset, trigger content-addressed renditions, and attach the final node through the API-owned Asset/canvas transaction.
 
-**Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge. The retired overlapping-thread placement prototype is archived in [ANCHORED-GENERATED-IMAGES.md](knowledge/archive/ANCHORED-GENERATED-IMAGES.md).
+**Placement**: Generated images appear as separate canvas nodes connected back to the source thread/response by an edge.
 
 **Multi-turn editing**: "Edit in New Thread" creates a fresh AI thread pre-linked to the image, carrying OpenAI's `previousResponseId` for fidelity continuity. The AI remembers the exact image it generated and can make targeted modifications without regenerating from scratch. Users can branch at any point — editing the same image in multiple directions simultaneously.
 
@@ -219,7 +219,7 @@ graph TB
 
 **NATS-native**: The system uses NATS for auth, messaging, organization Blob Object Stores, live events, replay logs, and Asset-document step streams. The browser connects over WebSocket. The API remains the Asset/Blob authority and converts provider output into durable pipeline/provenance and document events.
 
-**Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. The whole UI is vanilla TypeScript DOM built with the `html` helper in `utils/domTemplates.ts`, and component state lives in Nano Stores under `src/stores/`. This insulates the canvas from framework churn.
+**Framework-agnostic canvas**: `WorkspaceCanvas.ts` is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks. The whole UI is vanilla TypeScript DOM built with the `html` helper in `@lixpi/ui-primitives/dom`, and component state lives in Nano Stores under `src/stores/`. This insulates the canvas from framework churn.
 
 **Provider-agnostic AI**: Every AI request sends the full conversation history — no provider-specific session IDs. Users can start a conversation with Claude, switch to GPT-5, switch to Gemini, and switch back. Adding a new provider means implementing the `BaseProvider` class in `services/api/src/llm/providers/`, which plugs into the shared LangGraph workflow.
 
@@ -415,7 +415,7 @@ Shared packages keep service contracts in sync:
 This page is the product-level picture. For the technical deep dives, start at the [documentation index](README.md):
 
 - **Platform** — [System Architecture](platform/SYSTEM-ARCHITECTURE.md), [AI Generation Pipeline](platform/AI-GENERATION-PIPELINE.md), [Streaming & Events](platform/STREAMING-AND-EVENTS.md), [Authentication](platform/AUTHENTICATION.md).
-- **Canvas** — [Workspace Model](canvas/WORKSPACE-MODEL.md), [Rendering Engine](canvas/RENDERING-ENGINE.md).
+- **Canvas** — [Workspace Model](canvas/WORKSPACE-MODEL.md), [Rendering Engine](../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md).
 - **AI chat**: [Chat Panel & Sessions](ai-chat/CHAT-PANEL-AND-SESSIONS.md), [Explicit Workspace Context](ai-chat/CONTEXT-RELEVANCE.md).
 - **Media generation** — [Image Generation](media-generation/IMAGE-GENERATION.md), [Video Generation](media-generation/VIDEO-GENERATION.md), [Branch Lineage & Provenance](media-generation/BRANCH-LINEAGE.md), [Media Reference Identity and Provider Moderation](media-generation/MEDIA-REFERENCE-IDENTITY-AND-MODERATION.md).
 - **Library** - [Tools and Skills](library/TOOLS-AND-SKILLS.md), [Character Creator](library/CHARACTER-CREATOR.md), [Style Extraction Tool](library/STYLE-EXTRACTION-TOOL.md), [Media Library](library/MEDIA-LIBRARY.md), [Workspace Export & Import](library/WORKSPACE-EXPORT-IMPORT.md).

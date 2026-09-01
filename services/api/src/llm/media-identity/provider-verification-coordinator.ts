@@ -1,7 +1,11 @@
 'use strict'
 
 import * as process from 'node:process'
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import {
+    createHash,
+    createHmac,
+    timingSafeEqual,
+} from 'node:crypto'
 import { v4 as uuid } from 'uuid'
 
 import type {
@@ -144,8 +148,10 @@ export class ProviderVerificationCoordinator {
         if ('error' in asset || !authorized.bindings.some(binding => binding.assetId === assetId)) {
             throw new Error('PROVIDER_VERIFICATION_ASSET_NOT_AUTHORIZED')
         }
-        if (asset.subjectIdentity.classification !== 'self'
-            && asset.subjectIdentity.classification !== 'authorized-real-person') {
+        if (
+            asset.subjectIdentity.classification !== 'self'
+            && asset.subjectIdentity.classification !== 'authorized-real-person'
+        ) {
             throw new Error('PROVIDER_VERIFICATION_IDENTITY_CLASSIFICATION_REQUIRED')
         }
         const providerAccountScope = process.env.BYTEPLUS_ACCOUNT_SCOPE
@@ -187,11 +193,15 @@ export class ProviderVerificationCoordinator {
         const next: MediaGenerationRequest = {
             ...authorized,
             status: 'action-required',
-            runs: authorized.runs.map(candidate => candidate.generationRun === generationRun ? {
-                ...candidate,
-                status: 'awaiting-provider-verification',
-                requiredVerificationAssetIds: [assetId],
-            } : candidate),
+            runs: authorized.runs.map(candidate =>
+                candidate.generationRun === generationRun
+                    ? {
+                        ...candidate,
+                        status: 'awaiting-provider-verification',
+                        requiredVerificationAssetIds: [assetId],
+                    }
+                    : candidate
+            ),
             verificationSessions: [...(authorized.verificationSessions ?? []), session],
             revision: authorized.revision + 1,
             updatedAt: now,
@@ -251,8 +261,10 @@ export class ProviderVerificationCoordinator {
         if (session.expiresAt <= Date.now() || session.stateNonceHash !== hashNonce(state.nonce)) {
             throw new Error('PROVIDER_VERIFICATION_SESSION_EXPIRED')
         }
-        if (!session.providerSessionTokenHash
-            || session.providerSessionTokenHash !== hashNonce(resultToken)) {
+        if (
+            !session.providerSessionTokenHash
+            || session.providerSessionTokenHash !== hashNonce(resultToken)
+        ) {
             throw new Error('PROVIDER_VERIFICATION_RESULT_TOKEN_MISMATCH')
         }
         const exchange = await exchangeBytePlusResult(resultToken)
@@ -281,24 +293,30 @@ export class ProviderVerificationCoordinator {
         })
         if ('error' in updatedAsset) throw new Error(updatedAsset.error)
         const now = Date.now()
-        const updatedBindings = authorized.bindings.map(binding => binding.assetId === updatedAsset.assetId ? {
-            ...binding,
-            assetRevision: updatedAsset.revision,
-            depictionMedium: updatedAsset.depictionMedium,
-            subjectIdentity: updatedAsset.subjectIdentity,
-        } : binding)
+        const updatedBindings = authorized.bindings.map(binding =>
+            binding.assetId === updatedAsset.assetId
+                ? {
+                    ...binding,
+                    assetRevision: updatedAsset.revision,
+                    depictionMedium: updatedAsset.depictionMedium,
+                    subjectIdentity: updatedAsset.subjectIdentity,
+                }
+                : binding
+        )
         const verificationRun = authorized.runs.find(run => run.generationRun === session.generationRun)
         if (!verificationRun) throw new Error('PROVIDER_VERIFICATION_RUN_NOT_FOUND')
         const remainingVerificationAssetIds = (verificationRun.requiredVerificationAssetIds ?? [])
-            .filter(assetId => !updatedBindings.some(binding => (
-                binding.assetId === assetId
-                && binding.subjectIdentity.providerVerifications.some(candidate => (
-                    candidate.provider === session.provider
-                    && candidate.providerAccountScope === session.providerAccountScope
-                    && candidate.status === 'valid'
-                    && (candidate.expiresAt === undefined || candidate.expiresAt > now)
+            .filter(assetId =>
+                !updatedBindings.some(binding => (
+                    binding.assetId === assetId
+                    && binding.subjectIdentity.providerVerifications.some(candidate => (
+                        candidate.provider === session.provider
+                        && candidate.providerAccountScope === session.providerAccountScope
+                        && candidate.status === 'valid'
+                        && (candidate.expiresAt === undefined || candidate.expiresAt > now)
+                    ))
                 ))
-            )))
+            )
         const resumedRuns = authorized.runs.map(run => {
             if (run.generationRun !== session.generationRun) return run
             if (remainingVerificationAssetIds.length > 0) {
@@ -317,11 +335,15 @@ export class ProviderVerificationCoordinator {
             status: hasOtherActionRequired ? 'action-required' : 'submitted',
             bindings: updatedBindings,
             runs: resumedRuns,
-            verificationSessions: (authorized.verificationSessions ?? []).map(candidate => candidate.sessionId === session.sessionId ? {
-                ...candidate,
-                status: 'consumed',
-                consumedAt: now,
-            } : candidate),
+            verificationSessions: (authorized.verificationSessions ?? []).map(candidate =>
+                candidate.sessionId === session.sessionId
+                    ? {
+                        ...candidate,
+                        status: 'consumed',
+                        consumedAt: now,
+                    }
+                    : candidate
+            ),
             revision: authorized.revision + 1,
             updatedAt: now,
             statusUpdatedAt: now,
@@ -336,9 +358,11 @@ export class ProviderVerificationCoordinator {
                 ? 'BytePlus requires identity verification for another reference.'
                 : 'Verification completed. Resuming the media request.',
             requestRevision: next.revision,
-            ...(remainingVerificationAssetIds[0] ? {
-                verificationAssetId: remainingVerificationAssetIds[0],
-            } : { clearAction: true }),
+            ...(remainingVerificationAssetIds[0]
+                ? {
+                    verificationAssetId: remainingVerificationAssetIds[0],
+                }
+                : { clearAction: true }),
         })
         await MediaGenerationRequestEventLog.fromSingleton().append({
             userId,
@@ -354,9 +378,11 @@ export class ProviderVerificationCoordinator {
                 payload: {
                     status: next.status,
                     verificationProvider: state.provider,
-                    ...(remainingVerificationAssetIds[0] ? {
-                        verificationAssetId: remainingVerificationAssetIds[0],
-                    } : {}),
+                    ...(remainingVerificationAssetIds[0]
+                        ? {
+                            verificationAssetId: remainingVerificationAssetIds[0],
+                        }
+                        : {}),
                 },
                 createdAt: now,
             },

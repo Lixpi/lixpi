@@ -5,6 +5,7 @@ This guide applies to every TypeScript file in the repository — `services/api`
 ## Imports
 
 - Always use `.ts` extension when importing files — never `.js`.
+- A named import list with two or more items must be multiline, with one imported item per line. Inline `type` imports count as items. A named import list with one item may stay on one line. dprint enforces this with `importDeclaration.forceMultiLine: "whenMultiple"` through the Dockerized [TypeScript quality runner](../testing/TypeScript/TYPESCRIPT-QUALITY.md).
 - Combine type and value imports in a single import block:
 
 ```typescript
@@ -38,7 +39,7 @@ interface UserProfile {
 - If you are unsure whether a module is "simple enough" for plain functions, use a class. Plain functions are the exception, not the default.
 - Do not hide component, controller, service, manager, menu, switch, tooltip/popover, editor, canvas-control, or other stateful behavior inside a closure-backed factory. A factory can stay as the public entry point, but it must return a class instance for these module types:
   ```typescript
-  import { html } from '$src/utils/domTemplates.ts'
+  import { html } from '@lixpi/ui-primitives/dom'
 
   export type ExampleWidgetConfig = {
       label: string
@@ -113,10 +114,10 @@ fetchData().then((data) => { ... })
 
 **This rule is mandatory. No exceptions outside of test files.**
 
-In all `services/web-ui` `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components, canvas code (`WorkspaceCanvas.ts`, utilities, etc.), and any other file that builds UI — always use the `html` tagged template from `domTemplates.ts`:
+In all `services/web-ui` `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components, canvas code (`WorkspaceCanvas.ts`, utilities, etc.), and any other file that builds UI — always use the `html` tagged template from `@lixpi/ui-primitives/dom`:
 
 ```typescript
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 
 const el = html`
     <div className="my-component" onclick=${handleClick}>
@@ -145,9 +146,9 @@ const el = html`
 
 CSS custom properties (`--foo`) cannot be set via the `style` object — use `.style.setProperty('--foo', value)` on the element after creation. That is fine.
 
-To apply multiple style properties to an **existing** element, use `applyStyle` from `domTemplates.ts` — never set properties one line at a time:
+To apply multiple style properties to an **existing** element, use `applyStyle` from `@lixpi/ui-primitives/dom` — never set properties one line at a time:
 ```ts
-import { applyStyle } from '$src/utils/domTemplates.ts'
+import { applyStyle } from '@lixpi/ui-primitives/dom'
 
 // CORRECT
 applyStyle(el, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` })

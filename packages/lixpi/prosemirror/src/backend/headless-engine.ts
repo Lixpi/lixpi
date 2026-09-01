@@ -1,5 +1,11 @@
-import type { Node as ProseMirrorNode, Schema } from 'prosemirror-model'
-import { EditorState, type Transaction } from 'prosemirror-state'
+import type {
+    Node as ProseMirrorNode,
+    Schema,
+} from 'prosemirror-model'
+import {
+    EditorState,
+    type Transaction,
+} from 'prosemirror-state'
 import { Step } from 'prosemirror-transform'
 import {
     createProseMirrorSchema,

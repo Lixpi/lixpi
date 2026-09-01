@@ -1,12 +1,20 @@
 'use strict'
 
 import chalk from 'chalk'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
-import { NATS_SUBJECTS, AuthenticationStatus } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    AuthenticationStatus,
+} from '@lixpi/constants'
 
 import User from '../models/user.ts'
-
 
 const logStats = ({ operation, userId, origin }) => {
     const logOrigin = `Subscription -> ${operation}`
@@ -15,7 +23,7 @@ const logStats = ({ operation, userId, origin }) => {
         ' (User: ',
         userId,
         '), origin: ',
-        origin
+        origin,
     ])
 }
 
@@ -26,7 +34,7 @@ class SubscriptionService {
         const user = await User.get(userId)
 
         if (!user) return AuthenticationStatus.userNotFound
-        if (!user.hasActiveSubscription) return AuthenticationStatus.noActiveSubscription    // On every request verify that user has active subscription
+        if (!user.hasActiveSubscription) return AuthenticationStatus.noActiveSubscription // On every request verify that user has active subscription
 
         return AuthenticationStatus.success
     }
@@ -39,7 +47,6 @@ class SubscriptionService {
     async deletePaymentMethod({ userId, stripeCustomerId, paymentMethodId, origin = 'undefined' }) {
         console.log('//TODO put it back!!!! getPaymentMethods deletePaymentMethod')
 
-
         // logStats({ operation: 'deletePaymentMethod', userId, origin: 'SubscriptionService' })
 
         // return deletePaymentMethodResponse
@@ -47,7 +54,6 @@ class SubscriptionService {
 
     async topUpUserBalance({ userId, stripeCustomerId, amount, origin = 'undefined' }) {
         console.log('//TODO put it back!!!! getPaymentMethods topUpUserBalance')
-
     }
 }
 

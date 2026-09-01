@@ -28,9 +28,7 @@ const createDefinition = ({
     documentationUrls,
     retentionNotes,
     sensitiveDataNotes,
-}: Pick<MediaProviderDefinition,
-    'provider' | 'constructor' | 'mediaCapabilities' | 'imageReferenceAdapter' | 'moderation' | 'verification' | 'documentationUrls' | 'retentionNotes' | 'sensitiveDataNotes'
->): MediaProviderDefinition => ({
+}: Pick<MediaProviderDefinition, 'provider' | 'constructor' | 'mediaCapabilities' | 'imageReferenceAdapter' | 'moderation' | 'verification' | 'documentationUrls' | 'retentionNotes' | 'sensitiveDataNotes'>): MediaProviderDefinition => ({
     provider,
     constructor,
     mediaCapabilities,
@@ -96,7 +94,9 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
                 return {
                     personGeneration: context.regionProfile === 'restricted'
                         ? 'allow_adult'
-                        : inputMode === 'image-conditioned' ? 'allow_adult' : 'allow_all',
+                        : inputMode === 'image-conditioned'
+                        ? 'allow_adult'
+                        : 'allow_all',
                 }
             },
             automaticRetry: 'never',

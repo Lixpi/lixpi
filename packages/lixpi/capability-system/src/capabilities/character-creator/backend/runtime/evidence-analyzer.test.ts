@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { buildCharacterPanelSpecs } from '../../shared/character-sheet-media-plan.ts'
 import {
@@ -102,16 +106,29 @@ describe('character evidence analysis', () => {
                     medium: 'illustration',
                     facts: [
                         {
-                            feature: 'coat color', value: 'red', visibility: 'observed', sourceAssetId: 'asset-front',
-                            targetAngles: ['front'], confidence: 0.9, conflictGroupId: 'coat-1',
+                            feature: 'coat color',
+                            value: 'red',
+                            visibility: 'observed',
+                            sourceAssetId: 'asset-front',
+                            targetAngles: ['front'],
+                            confidence: 0.9,
+                            conflictGroupId: 'coat-1',
                         },
                         {
-                            feature: 'coat color', value: 'brown', visibility: 'observed', sourceAssetId: 'asset-profile',
-                            targetAngles: ['profile'], confidence: 0.85, conflictGroupId: 'coat-1',
+                            feature: 'coat color',
+                            value: 'brown',
+                            visibility: 'observed',
+                            sourceAssetId: 'asset-profile',
+                            targetAngles: ['profile'],
+                            confidence: 0.85,
+                            conflictGroupId: 'coat-1',
                         },
                         {
-                            feature: 'footwear', value: 'boots', visibility: 'inferred',
-                            targetAngles: ['unspecified'], confidence: 0.4,
+                            feature: 'footwear',
+                            value: 'boots',
+                            visibility: 'inferred',
+                            targetAngles: ['unspecified'],
+                            confidence: 0.4,
                         },
                     ],
                 }),
@@ -119,8 +136,10 @@ describe('character evidence analysis', () => {
         })
 
         expect(evidence.conflicts).toEqual([expect.objectContaining({ conflictGroupId: 'coat-1', factIndexes: [0, 1] })])
-        expect(selectCharacterEvidenceFacts({ evidence, targetAngle: 'profile', promptChangedFeatures: [] })
-            .find(fact => fact.feature === 'coat color')?.value).toBe('brown')
+        expect(
+            selectCharacterEvidenceFacts({ evidence, targetAngle: 'profile', promptChangedFeatures: [] })
+                .find(fact => fact.feature === 'coat color')?.value,
+        ).toBe('brown')
     })
 
     it('retains changed original-source facts so requests can explicitly reuse them', async () => {
@@ -133,8 +152,12 @@ describe('character evidence analysis', () => {
                     promptDirectives: ['Change the coat to blue.'],
                     promptChangedFeatures: ['coat color'],
                     facts: [{
-                        feature: 'coat color', value: 'red', visibility: 'observed', sourceAssetId: 'asset-front',
-                        targetAngles: ['front'], confidence: 1,
+                        feature: 'coat color',
+                        value: 'red',
+                        visibility: 'observed',
+                        sourceAssetId: 'asset-front',
+                        targetAngles: ['front'],
+                        confidence: 1,
                     }],
                 }),
             },

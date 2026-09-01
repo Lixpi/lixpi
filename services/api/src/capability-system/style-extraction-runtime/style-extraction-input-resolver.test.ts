@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import type { CapabilityActionExecutionContext } from '@lixpi/capability-system/backend'
 
 const mocks = vi.hoisted(() => ({
@@ -111,7 +117,7 @@ describe('resolveStyleExtractionInput', () => {
     })
 
     it('resolves an optional image model id in addition to the analysis model', async () => {
-        mocks.aiModel.getAiModel.mockImplementation(async ({ provider, model }: { provider: string, model: string }) => ({
+        mocks.aiModel.getAiModel.mockImplementation(async ({ provider, model }: { provider: string; model: string }) => ({
             provider,
             model,
             modelVersion: model,

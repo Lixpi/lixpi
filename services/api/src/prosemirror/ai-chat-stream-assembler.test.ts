@@ -1,7 +1,16 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
-import { STREAM_STATUS, type CapabilityGenerationTrace, type MediaGenerationRunMeta } from '@lixpi/constants'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    STREAM_STATUS,
+    type CapabilityGenerationTrace,
+    type MediaGenerationRunMeta,
+} from '@lixpi/constants'
 
 import {
     AiChatProseMirrorStreamAssembler,

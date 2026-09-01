@@ -64,7 +64,9 @@ function validateNode(
 
     const allowedTypes = typeof schema.type === 'string'
         ? [schema.type]
-        : Array.isArray(schema.type) ? schema.type.filter(type => typeof type === 'string') : []
+        : Array.isArray(schema.type)
+        ? schema.type.filter(type => typeof type === 'string')
+        : []
     if (allowedTypes.length > 0 && !allowedTypes.some(type => matchesType(type, value))) {
         errors.push(`${path}: expected ${allowedTypes.join(' or ')}`)
         return

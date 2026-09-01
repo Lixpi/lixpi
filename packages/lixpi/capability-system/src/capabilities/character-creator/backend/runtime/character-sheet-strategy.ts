@@ -246,9 +246,13 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
         title: panel.title,
         status: snapshot.renderFailures.has(panel.panelId)
             ? 'failed'
-            : snapshot.renderedPanels.has(panel.panelId) ? 'completed'
-                : snapshot.runningPanelIds.has(panel.panelId) ? 'running'
-                    : phaseIndex > phaseOrder.indexOf('rendering') ? 'skipped' : 'pending',
+            : snapshot.renderedPanels.has(panel.panelId)
+            ? 'completed'
+            : snapshot.runningPanelIds.has(panel.panelId)
+            ? 'running'
+            : phaseIndex > phaseOrder.indexOf('rendering')
+            ? 'skipped'
+            : 'pending',
         summary: formatRenderProgressSummary(panel.panelId, snapshot),
     }))
     const assessmentChildren = snapshot.plan.panels.map((panel): OperationProgressItem => ({
@@ -320,12 +324,12 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
             summary: snapshot.renderFailures.size > 0
                 ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; ${snapshot.renderFailures.size} unavailable. No automatic retry was started.`
                 : snapshot.renderedPanels.has(CHARACTER_BACK_ANCHOR_PANEL_ID)
-                    ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; all three generated anchors are available to every optional shot.`
-                    : snapshot.renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
-                        ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the back full-body outfit anchor is the remaining barrier.`
-                        : snapshot.renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
-                            ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the front full-body outfit anchor is the next barrier.`
-                            : `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the front identity portrait is the first barrier.`,
+                ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; all three generated anchors are available to every optional shot.`
+                : snapshot.renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
+                ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the back full-body outfit anchor is the remaining barrier.`
+                : snapshot.renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+                ? `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the front full-body outfit anchor is the next barrier.`
+                : `${availablePanelCount} of ${snapshot.plan.panels.length} shots rendered; the front identity portrait is the first barrier.`,
             children: renderChildren,
         },
         {
@@ -334,8 +338,8 @@ function buildCharacterProgressItems(snapshot: CharacterProgressSnapshot): Opera
             status: assessmentExecutionFailed && phaseIsComplete('assessing')
                 ? 'failed'
                 : assessmentNeedsAttention && phaseIsComplete('assessing')
-                    ? 'attention'
-                    : getPhaseStatus('assessing'),
+                ? 'attention'
+                : getPhaseStatus('assessing'),
             summary: formatAssessmentGroupSummary(snapshot),
             meta: formatAssessmentGroupMeta(snapshot),
             children: assessmentChildren,
@@ -438,16 +442,16 @@ function formatRenderProgressSummary(panelId: string, snapshot: CharacterProgres
                 ? generatedReferenceRoles.includes('opposite-angle')
                     ? ' The generated portrait, front full-body, and back full-body anchors were all used.'
                     : generatedReferenceRoles.includes('adjacent-angle')
-                        ? ' The generated portrait and front full-body anchors were both used.'
-                        : ' The generated neutral-front identity anchor was used.'
+                    ? ' The generated portrait and front full-body anchors were both used.'
+                    : ' The generated neutral-front identity anchor was used.'
                 : ' One or more required generated reference roles were not reported by the provider.'
             : panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-                ? ' This shot is the generated identity anchor for the front full-body shot and every later shot.'
-                : panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
-                    ? ' This shot is the generated outfit anchor used with the identity portrait by every later shot.'
-                    : panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
-                        ? ' This shot is the generated rear-outfit anchor used with the portrait and front full-body shot by every optional shot.'
-                : ''
+            ? ' This shot is the generated identity anchor for the front full-body shot and every later shot.'
+            : panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+            ? ' This shot is the generated outfit anchor used with the identity portrait by every later shot.'
+            : panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
+            ? ' This shot is the generated rear-outfit anchor used with the portrait and front full-body shot by every optional shot.'
+            : ''
         return `Rendered in one provider attempt. References used: ${included}.${anchorResult}${omitted}`
     }
     if (snapshot.runningPanelIds.has(panelId)) {
@@ -508,8 +512,10 @@ function formatAssessmentProgressSummary(panelId: string, snapshot: CharacterPro
     if (failure) return formatAssessmentFailureProgress(failure)
     const assessment = snapshot.assessments.get(panelId)
     if (assessment) return formatAssessmentResult(assessment)
-    if (!snapshot.assessmentEligiblePanelIds.has(panelId)
-        && (snapshot.phase === 'assessing' || snapshot.phase === 'composing')) {
+    if (
+        !snapshot.assessmentEligiblePanelIds.has(panelId)
+        && (snapshot.phase === 'assessing' || snapshot.phase === 'composing')
+    ) {
         return 'Evaluation unavailable because the rendered shot could not be staged for comparison; shot retained for review.'
     }
     if (snapshot.runningAssessmentPanelIds.has(panelId)) {
@@ -554,7 +560,7 @@ function formatAssessmentProgressMeta(panelId: string, snapshot: CharacterProgre
     if (assessment) {
         if (assessment.dimensions.length === 0) {
             const faceResult = assessment.fidelityMetric.available
-                && assessment.fidelityMetric.cosineSimilarity !== undefined
+                    && assessment.fidelityMetric.cosineSimilarity !== undefined
                 ? `face ${formatPercent(assessment.fidelityMetric.cosineSimilarity)}`
                 : 'face unavailable'
             return `Dimension scoring unavailable · ${faceResult}`
@@ -563,8 +569,10 @@ function formatAssessmentProgressMeta(panelId: string, snapshot: CharacterProgre
         const faceUnavailable = isRequiredFaceFidelityUnavailable(assessment) ? ' · face unavailable' : ''
         return `${formatPercent(assessment.score)} · ${reviewCount === 0 ? 'passed' : `${reviewCount} flag(s)`}${faceUnavailable}`
     }
-    if (!snapshot.assessmentEligiblePanelIds.has(panelId)
-        && (snapshot.phase === 'assessing' || snapshot.phase === 'composing')) {
+    if (
+        !snapshot.assessmentEligiblePanelIds.has(panelId)
+        && (snapshot.phase === 'assessing' || snapshot.phase === 'composing')
+    ) {
         return 'Unavailable'
     }
     if (snapshot.runningAssessmentPanelIds.has(panelId)) return 'Scoring now'
@@ -605,8 +613,10 @@ function formatAssessmentGroupMeta(snapshot: CharacterProgressSnapshot): string 
 }
 
 function formatFaceFidelityResult(assessment: CharacterPanelAssessment): string {
-    if (assessment.fidelityMetric.available
-        && assessment.fidelityMetric.cosineSimilarity !== undefined) {
+    if (
+        assessment.fidelityMetric.available
+        && assessment.fidelityMetric.cosineSimilarity !== undefined
+    ) {
         return `face similarity ${formatPercent(assessment.fidelityMetric.cosineSimilarity)}`
     }
     const unavailableReason = assessment.fidelityMetric.unavailableReason
@@ -687,9 +697,13 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
         assertValidCharacterSheetRenderPlan(planValue)
         const plan: CharacterSheetRenderPlan = planValue
         const authoritativePrompt = state.sharedState.authoritativePrompt.trim() || plan.userPrompt
-        const capabilityInstructions = [...new Set(state.sharedState.capabilityInstructions
-            .map(instruction => instruction.trim())
-            .filter(Boolean))]
+        const capabilityInstructions = [
+            ...new Set(
+                state.sharedState.capabilityInstructions
+                    .map(instruction => instruction.trim())
+                    .filter(Boolean),
+            ),
+        ]
         const capabilityReferences = buildSharedCapabilityReferences(state.sharedState.capabilityReferences)
         const completeRequest = [
             authoritativePrompt,
@@ -697,15 +711,19 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
         ].join('\n\n')
         const modelCapabilities = state.imageModel.meta.imageReferenceCapabilities
         if (!modelCapabilities) throw new Error('IMAGE_REFERENCE_CAPABILITIES_REQUIRED')
-        if (!modelCapabilities.conditioningModes.includes('identity')
-            || modelCapabilities.maxIdentityReferenceImages === 0) {
+        if (
+            !modelCapabilities.conditioningModes.includes('identity')
+            || modelCapabilities.maxIdentityReferenceImages === 0
+        ) {
             throw new Error('CHARACTER_CREATOR_IDENTITY_CONDITIONING_UNSUPPORTED')
         }
         const requiredGeneratedReferenceCount = Math.max(
             ...plan.panels.map(panel => panel.outputBindings.filter(binding => binding.required).length),
         )
-        if (modelCapabilities.maxIdentityReferenceImages < requiredGeneratedReferenceCount
-            || modelCapabilities.maxReferenceImages < requiredGeneratedReferenceCount) {
+        if (
+            modelCapabilities.maxIdentityReferenceImages < requiredGeneratedReferenceCount
+            || modelCapabilities.maxReferenceImages < requiredGeneratedReferenceCount
+        ) {
             throw new Error('CHARACTER_CREATOR_GENERATED_REFERENCE_BUDGET_UNSUPPORTED')
         }
         const vlmPorts = createCharacterVlmPorts({
@@ -726,9 +744,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
         const observedPanelIds = new Set<string>()
         const progressTraces = new Map<string, ExecutionTrace>()
         const recordTrace = (itemId: string, update: (current: ExecutionTrace) => ExecutionTrace): void => {
-            progressTraces.set(itemId, update(
-                progressTraces.get(itemId) ?? { traceVersion: 'execution-trace-v1' },
-            ))
+            progressTraces.set(
+                itemId,
+                update(
+                    progressTraces.get(itemId) ?? { traceVersion: 'execution-trace-v1' },
+                ),
+            )
         }
         const recordModelCall = (itemId: string, modelCall: ExecutionTraceModelCall): void => {
             recordTrace(itemId, current => ({
@@ -781,13 +802,14 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 ],
             }))
         }
-        const sourceAssetHandles = (role: string): ExecutionTraceHandle[] => plan.sourceAssetIds.map(assetId => ({
-            kind: 'media' as const,
-            id: assetId,
-            displayName: assetId,
-            mediaKind: 'image' as const,
-            role,
-        }))
+        const sourceAssetHandles = (role: string): ExecutionTraceHandle[] =>
+            plan.sourceAssetIds.map(assetId => ({
+                kind: 'media' as const,
+                id: assetId,
+                displayName: assetId,
+                mediaKind: 'image' as const,
+                role,
+            }))
         let preparationStage: CharacterProgressSnapshot['preparationStage'] = 'resolving-references'
         let preparationSourceCount: number | undefined
         let preparationEvidenceSummary: string | undefined
@@ -848,26 +870,31 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     totalSteps: 3,
                     message: `Source loading is active: authorizing and reading ${plan.sourceAssetIds.length} image(s) at usable resolution; ${formatElapsedTime(elapsedMs)}.`,
                 }),
-                execute: () => resolveCharacterReferences({
-                    assetIds: plan.sourceAssetIds,
-                    organizationId: state.organizationId,
-                    workspaceId: state.workspaceId,
-                    userId: state.userId,
-                    assets: this.deps.referenceAssets,
-                    panels: plan.panels,
-                }),
+                execute: () =>
+                    resolveCharacterReferences({
+                        assetIds: plan.sourceAssetIds,
+                        organizationId: state.organizationId,
+                        workspaceId: state.workspaceId,
+                        userId: state.userId,
+                        assets: this.deps.referenceAssets,
+                        panels: plan.panels,
+                    }),
             })
             const storedComponents = new Map<string, ResolvedCharacterReference>()
             for (const source of sources) {
-                if (source.sourceKind === 'composition-component'
+                if (
+                    source.sourceKind === 'composition-component'
                     && source.assetId === state.sharedState.editTargetAssetId
-                    && source.componentId) {
+                    && source.componentId
+                ) {
                     storedComponents.set(source.componentId, source)
                 }
             }
             const assetSources = sources.filter(source => source.sourceKind === 'asset-rendition')
-            const evidenceSources = sources.filter(source => !(source.sourceKind === 'composition-component'
-                && source.assetId === state.sharedState.editTargetAssetId))
+            const evidenceSources = sources.filter(source =>
+                !(source.sourceKind === 'composition-component'
+                    && source.assetId === state.sharedState.editTargetAssetId)
+            )
             preparationSourceCount = evidenceSources.length
             recordTrace('resolve-source-references', current => ({
                 ...current,
@@ -896,16 +923,17 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         totalSteps: 3,
                         message: `Identity analysis is active on ${evidenceSources.length} original source image(s): checking observed facial traits, outfit, materials, palette, conflicts, and source coverage; ${formatElapsedTime(elapsedMs)}.`,
                     }),
-                    execute: () => analyzeCharacterEvidence({
-                        sources: evidenceSources,
-                        editTargets: [...storedComponents.values()],
-                        referenceAliases: state.sharedState.mediaReferenceAliases,
-                        panels: plan.panels,
-                        userPrompt: completeRequest,
-                        editTargetPresent: storedComponents.size > 0,
-                        analyzer: this.deps.evidenceAnalyzer ?? vlmPorts.evidenceAnalyzer,
-                        signal: options.signal,
-                    }),
+                    execute: () =>
+                        analyzeCharacterEvidence({
+                            sources: evidenceSources,
+                            editTargets: [...storedComponents.values()],
+                            referenceAliases: state.sharedState.mediaReferenceAliases,
+                            panels: plan.panels,
+                            userPrompt: completeRequest,
+                            editTargetPresent: storedComponents.size > 0,
+                            analyzer: this.deps.evidenceAnalyzer ?? vlmPorts.evidenceAnalyzer,
+                            signal: options.signal,
+                        }),
                 })
                 recordModelCall('analyze-identity-evidence', {
                     id: 'evidence-analysis',
@@ -1005,27 +1033,30 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     totalSteps: 3,
                     message: `Reference-pack construction is active: preparing lossless identity crops and model-compatible source references from ${evidenceSources.length} original source image(s); ${formatElapsedTime(elapsedMs)}.`,
                 }),
-                execute: () => buildCharacterReferencePack({
-                    sources,
-                    evidence,
-                    editTargetAssetId: state.sharedState.editTargetAssetId,
-                    referenceAliases: state.sharedState.mediaReferenceAliases,
-                    capabilities: modelCapabilities,
-                    store,
-                }),
+                execute: () =>
+                    buildCharacterReferencePack({
+                        sources,
+                        evidence,
+                        editTargetAssetId: state.sharedState.editTargetAssetId,
+                        referenceAliases: state.sharedState.mediaReferenceAliases,
+                        capabilities: modelCapabilities,
+                        store,
+                    }),
             })
             preparationReferenceSummary = summarizeReferencePack(referencePack.entries)
             recordTrace('build-reference-pack', current => ({
                 ...current,
-                handles: referencePack.entries.flatMap(entry => entry.sourceAssetId
-                    ? [{
-                        kind: 'media' as const,
-                        id: entry.sourceAssetId,
-                        displayName: entry.sourceAssetId,
-                        mediaKind: 'image' as const,
-                        role: entry.role,
-                    }]
-                    : []),
+                handles: referencePack.entries.flatMap(entry =>
+                    entry.sourceAssetId
+                        ? [{
+                            kind: 'media' as const,
+                            id: entry.sourceAssetId,
+                            displayName: entry.sourceAssetId,
+                            mediaKind: 'image' as const,
+                            role: entry.role,
+                        }]
+                        : []
+                ),
                 facts: [
                     { label: 'Reference entries', value: String(referencePack.entries.length) },
                     ...referencePack.entries.map(entry => ({
@@ -1046,8 +1077,8 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             const observedProp = referencePack.entries.find(entry => entry.role === 'prop-crop')
             const regeneratePanelIds = new Set(regenerationDecision.regeneratePanelIds)
             const observedPropSpec = observedProp
-                && !renderedPanels.has('prop-primary')
-                && !(storedComponents.size > 0 && regeneratePanelIds.has('prop-primary'))
+                    && !renderedPanels.has('prop-primary')
+                    && !(storedComponents.size > 0 && regeneratePanelIds.has('prop-primary'))
                 ? plan.panels.find(panel => panel.panelId === 'prop-primary')
                 : undefined
             if (observedProp && observedPropSpec) {
@@ -1145,10 +1176,10 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     const waitingSummary = renderedPanels.has(CHARACTER_BACK_ANCHOR_PANEL_ID)
                         ? `${remainingPanelCount} queued`
                         : renderedPanels.has(CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
-                            ? `${remainingPanelCount} waiting for the back full-body outfit anchor`
-                            : renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
-                                ? `${remainingPanelCount} waiting for the front full-body outfit anchor`
-                                : `${remainingPanelCount} waiting for the front identity portrait`
+                        ? `${remainingPanelCount} waiting for the back full-body outfit anchor`
+                        : renderedPanels.has(CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
+                        ? `${remainingPanelCount} waiting for the front full-body outfit anchor`
+                        : `${remainingPanelCount} waiting for the front identity portrait`
                     return {
                         phase: 'rendering',
                         completedSteps: completedRenders,
@@ -1156,262 +1187,275 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         message: `Provider rendering is active: ${completedRenders} of ${plan.panels.length} shot(s) finished; ${activePanelTitles.length} in flight${activePanelTitles.length > 0 ? ` (${activePanelTitles.join(', ')})` : ''}; ${waitingSummary}; ${formatElapsedTime(elapsedMs)}.`,
                     }
                 },
-                execute: () => runner.run({
-                    initialResults: initialPanelResults,
-                    signal: options.signal,
-                    allowTerminalFailure: (_panel, error) => !isAbortFailure(error),
-                    onNodeBlocked: async (panel, blocked) => {
-                        renderFailures.set(
-                            panel.panelId,
-                            `Required generated output unavailable: ${blocked.missingBindingKeys.join(', ')}.`,
-                        )
-                        completedRenders += 1
-                        await reportProgressSafely({
-                            phase: 'rendering',
-                            completedSteps: completedRenders,
-                            totalSteps: plan.panels.length,
-                            message: `${panel.title} was not started because required generated reference output was unavailable: ${blocked.missingBindingKeys.join(', ')}.`,
-                        })
-                    },
-                    execute: async (panel, executionContext) => {
-                        runningPanelIds.add(panel.panelId)
-                        const generatedReferences = buildGeneratedPanelReferences(
-                            panel.outputBindings,
-                            executionContext.boundOutputs,
-                        )
-                        const selectedReferenceEntries = selectCharacterPanelReferenceEntries(
-                            referencePack.entries,
-                            panel,
-                            evidence,
-                        )
-                        const references: CharacterImageReference[] = [
-                            ...generatedReferences,
-                            ...selectedReferenceEntries,
-                            ...capabilityReferences,
-                        ]
-                        void reportProgressSafely({
-                            phase: 'rendering',
-                            completedSteps: completedRenders,
-                            totalSteps: plan.panels.length,
-                            message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-                                ? `Generating ${panel.title} as the required identity anchor from the authorized source evidence.`
-                                : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                execute: () =>
+                    runner.run({
+                        initialResults: initialPanelResults,
+                        signal: options.signal,
+                        allowTerminalFailure: (_panel, error) => !isAbortFailure(error),
+                        onNodeBlocked: async (panel, blocked) => {
+                            renderFailures.set(
+                                panel.panelId,
+                                `Required generated output unavailable: ${blocked.missingBindingKeys.join(', ')}.`,
+                            )
+                            completedRenders += 1
+                            await reportProgressSafely({
+                                phase: 'rendering',
+                                completedSteps: completedRenders,
+                                totalSteps: plan.panels.length,
+                                message: `${panel.title} was not started because required generated reference output was unavailable: ${blocked.missingBindingKeys.join(', ')}.`,
+                            })
+                        },
+                        execute: async (panel, executionContext) => {
+                            runningPanelIds.add(panel.panelId)
+                            const generatedReferences = buildGeneratedPanelReferences(
+                                panel.outputBindings,
+                                executionContext.boundOutputs,
+                            )
+                            const selectedReferenceEntries = selectCharacterPanelReferenceEntries(
+                                referencePack.entries,
+                                panel,
+                                evidence,
+                            )
+                            const references: CharacterImageReference[] = [
+                                ...generatedReferences,
+                                ...selectedReferenceEntries,
+                                ...capabilityReferences,
+                            ]
+                            void reportProgressSafely({
+                                phase: 'rendering',
+                                completedSteps: completedRenders,
+                                totalSteps: plan.panels.length,
+                                message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
+                                    ? `Generating ${panel.title} as the required identity anchor from the authorized source evidence.`
+                                    : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
                                     ? `Generating ${panel.title} from the completed identity portrait to establish the complete outfit.`
                                     : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
-                                        ? `Generating ${panel.title} from the completed portrait and front full-body shot to establish the rear outfit.`
-                                        : `Generating ${panel.title} with all three completed anchors, plus original evidence and pose control.`,
-                        })
-                        try {
-                            const sourceEvidenceSummary = selectCharacterEvidenceFacts({
-                                evidence,
-                                targetAngle: panel.target,
-                                promptChangedFeatures: evidence.promptChangedFeatures,
+                                    ? `Generating ${panel.title} from the completed portrait and front full-body shot to establish the rear outfit.`
+                                    : `Generating ${panel.title} with all three completed anchors, plus original evidence and pose control.`,
                             })
-                                .filter(fact => fact.visibility === 'observed')
-                                .slice(0, 16)
-                                .map(fact => `${evidence.promptChangedFeatures.some(feature => (
-                                    normalizeEvidenceFeature(feature) === normalizeEvidenceFeature(fact.feature)
-                                )) ? '[REQUEST-CHANGED] ' : ''}${formatEvidenceSourceAlias(
-                                    fact.sourceAssetId,
-                                    state.sharedState.mediaReferenceAliases,
-                                )}${fact.feature}: ${fact.value}`)
-                                .join('; ')
-                            const prompt = buildCharacterPanelPrompt({
-                                panel,
-                                authoritativePrompt,
-                                sourceMedium: evidence.medium,
-                                sourceEvidenceSummary,
-                                promptDirectives: evidence.promptDirectives,
-                                sourceSubjectIdentityClassifications:
-                                    state.sharedState.sourceSubjectIdentityClassifications,
-                                capabilityInstructions,
-                                capabilityReferenceCount: capabilityReferences.length,
-                                generatedReferenceBindings: panel.outputBindings,
-                                editTargetReferences: references.filter(reference => (
-                                    reference.role === 'edit-target'
-                                    || reference.role === 'edit-target-identity'
-                                )),
-                                originalSourceReferenceCount: selectedReferenceEntries.filter(entry => (
-                                    entry.role === 'original-source'
-                                    || entry.role === 'face-crop'
-                                    || entry.role === 'body-outfit-crop'
-                                    || entry.role === 'prop-crop'
-                                )).length,
-                            })
-                            providerOperationAttempts += 1
-                            const panelRenderStartedAt = Date.now()
-                            const rendered = await renderCharacterPanel({
-                                imageGeneration: this.deps.imageGeneration,
-                                context: state,
-                                plan,
-                                panel,
-                                attempt: 1,
-                                prompt,
-                                references,
-                                onImagePartial: async (imageBase64, providerPartialIndex) => {
-                                    if (!imageBase64) return
-                                    livePartialPanels.set(
-                                        panel.panelId,
-                                        decodeProviderPartialImage(imageBase64),
+                            try {
+                                const sourceEvidenceSummary = selectCharacterEvidenceFacts({
+                                    evidence,
+                                    targetAngle: panel.target,
+                                    promptChangedFeatures: evidence.promptChangedFeatures,
+                                })
+                                    .filter(fact => fact.visibility === 'observed')
+                                    .slice(0, 16)
+                                    .map(fact =>
+                                        `${
+                                            evidence.promptChangedFeatures.some(feature => (
+                                                    normalizeEvidenceFeature(feature) === normalizeEvidenceFeature(fact.feature)
+                                                )
+                                                )
+                                                ? '[REQUEST-CHANGED] '
+                                                : ''
+                                        }${
+                                            formatEvidenceSourceAlias(
+                                                fact.sourceAssetId,
+                                                state.sharedState.mediaReferenceAliases,
+                                            )
+                                        }${fact.feature}: ${fact.value}`
                                     )
-                                    await publishProgressiveSheet(
-                                        `provider:${panel.panelId}:${providerPartialIndex}`,
-                                    )
-                                },
-                                signal: options.signal,
-                            })
-                            recordModelCall(`render:${panel.panelId}`, {
-                                id: `render:${panel.panelId}`,
-                                role: 'media',
-                                provider: state.imageModel.provider,
-                                modelId: state.imageModel.modelVersion,
-                                purpose: `Render ${panel.title}.`,
-                                params: [
-                                    // What the provider was actually called with, which the
-                                    // adapter resolves from the model's supported sizes.
-                                    { name: 'size', value: rendered.resolvedImageSize ?? String(state.imageModel.requestedSize ?? 'auto') },
-                                    { name: 'attempt', value: '1' },
-                                    { name: 'referenceImages', value: String(references.length) },
-                                    { name: 'conditioning', value: modelCapabilities.conditioningModes.join(', ') },
-                                ],
-                                prompt,
-                                inputHandles: buildPanelReferenceHandles(references, selectedReferenceEntries),
-                                ...(rendered.providerOperationId
-                                    ? { providerOperationId: rendered.providerOperationId }
-                                    : {}),
-                                startedAt: panelRenderStartedAt,
-                                completedAt: Date.now(),
-                            })
-                            recordTrace(`render:${panel.panelId}`, current => ({
-                                ...current,
-                                facts: [
-                                    { label: 'References accepted by provider', value: rendered.includedReferenceRoles.join(', ') || 'none reported' },
-                                    ...(rendered.omittedReferenceRoles.length
-                                        ? [{ label: 'References omitted by provider', value: rendered.omittedReferenceRoles.join(', ') }]
-                                        : []),
-                                    ...(panel.outputBindings.length
-                                        ? [{ label: 'Generated anchors attached', value: panel.outputBindings.map(binding => binding.referenceRole).join(', ') }]
-                                        : []),
-                                ],
-                            }))
-                            const stored = await store.putWithCoordinate({
-                                mediaKind: 'image',
-                                slot: `candidate-${panel.panelId}`,
-                                bytes: rendered.bytes,
-                                mimeType: 'image/png',
-                                revision: 1,
-                            })
-                            reviewOnlyPanels.set(panel.panelId, {
-                                ...rendered,
-                                coordinate: stored.coordinate,
-                            })
-                            assessmentEligiblePanelIds.add(panel.panelId)
-                            const poseReference = await loadCharacterPoseReference(panel)
-                            const assessment = await assessCharacterPanel({
-                                panel,
-                                attemptId: `${plan.capabilityRunId}:${panel.panelId}:1`,
-                                candidateBytes: rendered.bytes,
-                                candidateCoordinate: stored.coordinate,
-                                sourceCoordinates: selectedReferenceEntries
-                                    .filter(entry => entry.role === 'edit-target'
-                                        || entry.role === 'edit-target-identity'
-                                        || entry.role === 'original-source'
-                                        || entry.role === 'face-crop')
-                                    .slice(0, 5)
-                                    .map(entry => entry.coordinate),
-                                sourceDataUrls: selectedReferenceEntries
-                                    .filter(entry => entry.role === 'edit-target'
-                                        || entry.role === 'edit-target-identity'
-                                        || entry.role === 'original-source'
+                                    .join('; ')
+                                const prompt = buildCharacterPanelPrompt({
+                                    panel,
+                                    authoritativePrompt,
+                                    sourceMedium: evidence.medium,
+                                    sourceEvidenceSummary,
+                                    promptDirectives: evidence.promptDirectives,
+                                    sourceSubjectIdentityClassifications: state.sharedState.sourceSubjectIdentityClassifications,
+                                    capabilityInstructions,
+                                    capabilityReferenceCount: capabilityReferences.length,
+                                    generatedReferenceBindings: panel.outputBindings,
+                                    editTargetReferences: references.filter(reference => (
+                                        reference.role === 'edit-target'
+                                        || reference.role === 'edit-target-identity'
+                                    )),
+                                    originalSourceReferenceCount: selectedReferenceEntries.filter(entry => (
+                                        entry.role === 'original-source'
                                         || entry.role === 'face-crop'
-                                        || entry.role === 'body-outfit-crop')
-                                    .map(entry => entry.url),
-                                authoritativePrompt,
-                                capabilityInstructions,
-                                capabilityReferenceDataUrls: capabilityReferences
-                                    .map(reference => reference.url)
-                                    .filter(isInlineImageDataUrl),
-                                ...(poseReference ? { poseReferenceDataUrl: poseReference.url } : {}),
-                                evidence,
-                                vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
-                                fidelity,
-                                signal: options.signal,
-                            })
-                            assessments.set(panel.panelId, assessment)
-                            recordPanelAssessmentTrace(panel.panelId, assessment)
-                            const structuralFailures = getCharacterPanelStructuralFailures(panel, assessment)
-                            console.info('[CharacterCreatorStructuralAssessment]', {
-                                capabilityRunId: plan.capabilityRunId,
-                                panelId: panel.panelId,
-                                releaseFailures: structuralFailures,
-                                dimensions: assessment.dimensions.map(dimension => ({
-                                    dimension: dimension.dimension,
-                                    score: dimension.score,
-                                    mismatchCodes: dimension.mismatchCodes,
-                                })),
-                            })
-                            if (structuralFailures.length > 0) {
-                                throw new Error(
-                                    `CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:${panel.panelId}:${structuralFailures.join(',')}`,
-                                )
-                            }
-                            livePartialPanels.delete(panel.panelId)
-                            reviewOnlyPanels.delete(panel.panelId)
-                            renderedPanels.set(panel.panelId, {
-                                ...rendered,
-                                coordinate: stored.coordinate,
-                            })
-                            completedRenders += 1
-                            runningPanelIds.delete(panel.panelId)
-                            await reportProgress({
-                                phase: 'rendering',
-                                completedSteps: completedRenders,
-                                totalSteps: plan.panels.length,
-                                message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-                                    ? 'The neutral-front identity anchor is complete. Releasing the front full-body outfit shot.'
-                                    : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
-                                        ? 'The front full-body outfit anchor is complete. Releasing the back full-body outfit shot.'
-                                        : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
-                                            ? `The back full-body outfit anchor is complete. Releasing ${plan.panels.length - 3} optional shot(s) with all three generated references attached.`
-                                            : `Rendered ${completedRenders} of ${plan.panels.length} shots with all three generated anchors; the sheet preview is updating.`,
-                            })
-                            await publishProgressiveSheet(`terminal:${panel.panelId}`)
-                            return rendered
-                        } catch (error) {
-                            runningPanelIds.delete(panel.panelId)
-                            const livePartial = livePartialPanels.get(panel.panelId)
-                            if (options.signal?.aborted || isAbortFailure(error)) {
+                                        || entry.role === 'body-outfit-crop'
+                                        || entry.role === 'prop-crop'
+                                    )).length,
+                                })
+                                providerOperationAttempts += 1
+                                const panelRenderStartedAt = Date.now()
+                                const rendered = await renderCharacterPanel({
+                                    imageGeneration: this.deps.imageGeneration,
+                                    context: state,
+                                    plan,
+                                    panel,
+                                    attempt: 1,
+                                    prompt,
+                                    references,
+                                    onImagePartial: async (imageBase64, providerPartialIndex) => {
+                                        if (!imageBase64) return
+                                        livePartialPanels.set(
+                                            panel.panelId,
+                                            decodeProviderPartialImage(imageBase64),
+                                        )
+                                        await publishProgressiveSheet(
+                                            `provider:${panel.panelId}:${providerPartialIndex}`,
+                                        )
+                                    },
+                                    signal: options.signal,
+                                })
+                                recordModelCall(`render:${panel.panelId}`, {
+                                    id: `render:${panel.panelId}`,
+                                    role: 'media',
+                                    provider: state.imageModel.provider,
+                                    modelId: state.imageModel.modelVersion,
+                                    purpose: `Render ${panel.title}.`,
+                                    params: [
+                                        // What the provider was actually called with, which the
+                                        // adapter resolves from the model's supported sizes.
+                                        { name: 'size', value: rendered.resolvedImageSize ?? String(state.imageModel.requestedSize ?? 'auto') },
+                                        { name: 'attempt', value: '1' },
+                                        { name: 'referenceImages', value: String(references.length) },
+                                        { name: 'conditioning', value: modelCapabilities.conditioningModes.join(', ') },
+                                    ],
+                                    prompt,
+                                    inputHandles: buildPanelReferenceHandles(references, selectedReferenceEntries),
+                                    ...(rendered.providerOperationId
+                                        ? { providerOperationId: rendered.providerOperationId }
+                                        : {}),
+                                    startedAt: panelRenderStartedAt,
+                                    completedAt: Date.now(),
+                                })
+                                recordTrace(`render:${panel.panelId}`, current => ({
+                                    ...current,
+                                    facts: [
+                                        { label: 'References accepted by provider', value: rendered.includedReferenceRoles.join(', ') || 'none reported' },
+                                        ...(rendered.omittedReferenceRoles.length
+                                            ? [{ label: 'References omitted by provider', value: rendered.omittedReferenceRoles.join(', ') }]
+                                            : []),
+                                        ...(panel.outputBindings.length
+                                            ? [{ label: 'Generated anchors attached', value: panel.outputBindings.map(binding => binding.referenceRole).join(', ') }]
+                                            : []),
+                                    ],
+                                }))
+                                const stored = await store.putWithCoordinate({
+                                    mediaKind: 'image',
+                                    slot: `candidate-${panel.panelId}`,
+                                    bytes: rendered.bytes,
+                                    mimeType: 'image/png',
+                                    revision: 1,
+                                })
+                                reviewOnlyPanels.set(panel.panelId, {
+                                    ...rendered,
+                                    coordinate: stored.coordinate,
+                                })
+                                assessmentEligiblePanelIds.add(panel.panelId)
+                                const poseReference = await loadCharacterPoseReference(panel)
+                                const assessment = await assessCharacterPanel({
+                                    panel,
+                                    attemptId: `${plan.capabilityRunId}:${panel.panelId}:1`,
+                                    candidateBytes: rendered.bytes,
+                                    candidateCoordinate: stored.coordinate,
+                                    sourceCoordinates: selectedReferenceEntries
+                                        .filter(entry =>
+                                            entry.role === 'edit-target'
+                                            || entry.role === 'edit-target-identity'
+                                            || entry.role === 'original-source'
+                                            || entry.role === 'face-crop'
+                                        )
+                                        .slice(0, 5)
+                                        .map(entry => entry.coordinate),
+                                    sourceDataUrls: selectedReferenceEntries
+                                        .filter(entry =>
+                                            entry.role === 'edit-target'
+                                            || entry.role === 'edit-target-identity'
+                                            || entry.role === 'original-source'
+                                            || entry.role === 'face-crop'
+                                            || entry.role === 'body-outfit-crop'
+                                        )
+                                        .map(entry => entry.url),
+                                    authoritativePrompt,
+                                    capabilityInstructions,
+                                    capabilityReferenceDataUrls: capabilityReferences
+                                        .map(reference => reference.url)
+                                        .filter(isInlineImageDataUrl),
+                                    ...(poseReference ? { poseReferenceDataUrl: poseReference.url } : {}),
+                                    evidence,
+                                    vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
+                                    fidelity,
+                                    signal: options.signal,
+                                })
+                                assessments.set(panel.panelId, assessment)
+                                recordPanelAssessmentTrace(panel.panelId, assessment)
+                                const structuralFailures = getCharacterPanelStructuralFailures(panel, assessment)
+                                console.info('[CharacterCreatorStructuralAssessment]', {
+                                    capabilityRunId: plan.capabilityRunId,
+                                    panelId: panel.panelId,
+                                    releaseFailures: structuralFailures,
+                                    dimensions: assessment.dimensions.map(dimension => ({
+                                        dimension: dimension.dimension,
+                                        score: dimension.score,
+                                        mismatchCodes: dimension.mismatchCodes,
+                                    })),
+                                })
+                                if (structuralFailures.length > 0) {
+                                    throw new Error(
+                                        `CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:${panel.panelId}:${structuralFailures.join(',')}`,
+                                    )
+                                }
                                 livePartialPanels.delete(panel.panelId)
                                 reviewOnlyPanels.delete(panel.panelId)
-                                throw error
-                            }
-                            if (!reviewOnlyPanels.has(panel.panelId) && livePartial) {
-                                reviewOnlyPanels.set(panel.panelId, {
-                                    bytes: livePartial,
-                                    includedReferenceRoles: [...new Set(references.map(reference => reference.role))],
-                                    omittedReferenceRoles: [],
+                                renderedPanels.set(panel.panelId, {
+                                    ...rendered,
+                                    coordinate: stored.coordinate,
                                 })
-                            }
-                            livePartialPanels.delete(panel.panelId)
-                            renderFailures.set(panel.panelId, (error as Error).message || 'Panel generation failed')
-                            completedRenders += 1
-                            await reportProgress({
-                                phase: 'rendering',
-                                completedSteps: completedRenders,
-                                totalSteps: plan.panels.length,
-                                message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-                                    ? 'The required neutral-front identity anchor failed. Dependent provider work will not start.'
-                                    : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                                completedRenders += 1
+                                runningPanelIds.delete(panel.panelId)
+                                await reportProgress({
+                                    phase: 'rendering',
+                                    completedSteps: completedRenders,
+                                    totalSteps: plan.panels.length,
+                                    message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
+                                        ? 'The neutral-front identity anchor is complete. Releasing the front full-body outfit shot.'
+                                        : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+                                        ? 'The front full-body outfit anchor is complete. Releasing the back full-body outfit shot.'
+                                        : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
+                                        ? `The back full-body outfit anchor is complete. Releasing ${plan.panels.length - 3} optional shot(s) with all three generated references attached.`
+                                        : `Rendered ${completedRenders} of ${plan.panels.length} shots with all three generated anchors; the sheet preview is updating.`,
+                                })
+                                await publishProgressiveSheet(`terminal:${panel.panelId}`)
+                                return rendered
+                            } catch (error) {
+                                runningPanelIds.delete(panel.panelId)
+                                const livePartial = livePartialPanels.get(panel.panelId)
+                                if (options.signal?.aborted || isAbortFailure(error)) {
+                                    livePartialPanels.delete(panel.panelId)
+                                    reviewOnlyPanels.delete(panel.panelId)
+                                    throw error
+                                }
+                                if (!reviewOnlyPanels.has(panel.panelId) && livePartial) {
+                                    reviewOnlyPanels.set(panel.panelId, {
+                                        bytes: livePartial,
+                                        includedReferenceRoles: [...new Set(references.map(reference => reference.role))],
+                                        omittedReferenceRoles: [],
+                                    })
+                                }
+                                livePartialPanels.delete(panel.panelId)
+                                renderFailures.set(panel.panelId, (error as Error).message || 'Panel generation failed')
+                                completedRenders += 1
+                                await reportProgress({
+                                    phase: 'rendering',
+                                    completedSteps: completedRenders,
+                                    totalSteps: plan.panels.length,
+                                    message: panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
+                                        ? 'The required neutral-front identity anchor failed. Dependent provider work will not start.'
+                                        : panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
                                         ? 'The required front full-body outfit anchor failed. Later provider work will not start.'
                                         : panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID
-                                            ? 'The required back full-body outfit anchor failed. Optional provider work will not start.'
-                                            : `${panel.title} was unavailable; continuing with the rendered shots.`,
-                            })
-                            await publishProgressiveSheet(`failed:${panel.panelId}`)
-                            throw error
-                        }
-                    },
-                }),
+                                        ? 'The required back full-body outfit anchor failed. Optional provider work will not start.'
+                                        : `${panel.title} was unavailable; continuing with the rendered shots.`,
+                                })
+                                await publishProgressiveSheet(`failed:${panel.panelId}`)
+                                throw error
+                            }
+                        },
+                    }),
             })
             const availablePanels = new Map(renderedPanels)
             for (const [panelId, rendered] of reviewOnlyPanels) {
@@ -1452,82 +1496,87 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         message: `Identity fidelity evaluation is active: ${completedAssessments} of ${assessablePanels.length} eligible shot(s) scored; ${activePanelTitles.length} in flight${activePanelTitles.length > 0 ? ` (${activePanelTitles.join(', ')})` : ''}; ${formatElapsedTime(elapsedMs)}.`,
                     }
                 },
-                execute: () => runInBatches(
-                    assessablePanels,
-                    this.deps.providerConcurrency ?? 3,
-                    options.signal,
-                    async panel => {
-                        runningAssessmentPanelIds.add(panel.panelId)
-                        void reportProgressSafely({
-                            phase: 'assessing',
-                            completedSteps: completedAssessments,
-                            totalSteps: assessablePanels.length,
-                            message: `Evaluating ${panel.title} against the source identity evidence.`,
-                        })
-                        try {
-                            const rendered = renderedPanels.get(panel.panelId)!
-                            const assessment = await assessCharacterPanel({
-                                panel,
-                                attemptId: `${plan.capabilityRunId}:${panel.panelId}:1`,
-                                candidateBytes: rendered.bytes,
-                                candidateCoordinate: rendered.coordinate!,
-                                sourceCoordinates: referencePack.entries
-                                    .filter(entry => entry.role === 'edit-target'
-                                        || entry.role === 'edit-target-identity'
-                                        || entry.role === 'original-source'
-                                        || entry.role === 'face-crop')
-                                    .slice(0, 5)
-                                    .map(entry => entry.coordinate),
-                                sourceDataUrls: referencePack.entries
-                                    .filter(entry => entry.role === 'edit-target'
-                                        || entry.role === 'edit-target-identity'
-                                        || entry.role === 'original-source'
-                                        || entry.role === 'face-crop'
-                                        || entry.role === 'body-outfit-crop')
-                                    .map(entry => entry.url),
-                                authoritativePrompt,
-                                capabilityInstructions,
-                                capabilityReferenceDataUrls: capabilityReferences
-                                    .map(reference => reference.url)
-                                    .filter(isInlineImageDataUrl),
-                                evidence,
-                                vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
-                                fidelity,
-                                signal: options.signal,
+                execute: () =>
+                    runInBatches(
+                        assessablePanels,
+                        this.deps.providerConcurrency ?? 3,
+                        options.signal,
+                        async panel => {
+                            runningAssessmentPanelIds.add(panel.panelId)
+                            void reportProgressSafely({
+                                phase: 'assessing',
+                                completedSteps: completedAssessments,
+                                totalSteps: assessablePanels.length,
+                                message: `Evaluating ${panel.title} against the source identity evidence.`,
                             })
-                            assessments.set(panel.panelId, assessment)
-                            recordPanelAssessmentTrace(panel.panelId, assessment)
-                        } catch (error) {
-                            if (options.signal?.aborted) throw error
-                            const failure = describeCharacterPanelAssessmentFailure(error)
-                            assessmentFailures.set(panel.panelId, failure.progressMessage)
-                            console.warn('[CharacterCreatorFidelity] panel evaluation unavailable', {
-                                capabilityRunId: plan.capabilityRunId,
-                                panelId: panel.panelId,
-                                panelTitle: panel.title,
-                                code: failure.code,
-                                diagnostic: failure.diagnostic,
-                                ...failure.context,
-                            })
-                            throw error
-                        } finally {
-                            runningAssessmentPanelIds.delete(panel.panelId)
-                            if (!options.signal?.aborted) {
-                                completedAssessments += 1
-                                const assessment = assessments.get(panel.panelId)
-                                const assessmentFailure = assessmentFailures.get(panel.panelId)
-                                await reportProgress({
-                                    phase: 'assessing',
-                                    completedSteps: completedAssessments,
-                                    totalSteps: assessablePanels.length,
-                                    message: assessment
-                                        ? `${panel.title}: ${formatAssessmentResult(assessment)}. ${completedAssessments} of ${assessablePanels.length} evaluations finished.`
-                                        : `${panel.title}: ${formatAssessmentFailureProgress(assessmentFailure ?? 'No evaluation result was returned.')}. ${completedAssessments} of ${assessablePanels.length} evaluations finished.`,
+                            try {
+                                const rendered = renderedPanels.get(panel.panelId)!
+                                const assessment = await assessCharacterPanel({
+                                    panel,
+                                    attemptId: `${plan.capabilityRunId}:${panel.panelId}:1`,
+                                    candidateBytes: rendered.bytes,
+                                    candidateCoordinate: rendered.coordinate!,
+                                    sourceCoordinates: referencePack.entries
+                                        .filter(entry =>
+                                            entry.role === 'edit-target'
+                                            || entry.role === 'edit-target-identity'
+                                            || entry.role === 'original-source'
+                                            || entry.role === 'face-crop'
+                                        )
+                                        .slice(0, 5)
+                                        .map(entry => entry.coordinate),
+                                    sourceDataUrls: referencePack.entries
+                                        .filter(entry =>
+                                            entry.role === 'edit-target'
+                                            || entry.role === 'edit-target-identity'
+                                            || entry.role === 'original-source'
+                                            || entry.role === 'face-crop'
+                                            || entry.role === 'body-outfit-crop'
+                                        )
+                                        .map(entry => entry.url),
+                                    authoritativePrompt,
+                                    capabilityInstructions,
+                                    capabilityReferenceDataUrls: capabilityReferences
+                                        .map(reference => reference.url)
+                                        .filter(isInlineImageDataUrl),
+                                    evidence,
+                                    vlm: this.deps.panelAssessor ?? vlmPorts.panelAssessor,
+                                    fidelity,
+                                    signal: options.signal,
                                 })
+                                assessments.set(panel.panelId, assessment)
+                                recordPanelAssessmentTrace(panel.panelId, assessment)
+                            } catch (error) {
+                                if (options.signal?.aborted) throw error
+                                const failure = describeCharacterPanelAssessmentFailure(error)
+                                assessmentFailures.set(panel.panelId, failure.progressMessage)
+                                console.warn('[CharacterCreatorFidelity] panel evaluation unavailable', {
+                                    capabilityRunId: plan.capabilityRunId,
+                                    panelId: panel.panelId,
+                                    panelTitle: panel.title,
+                                    code: failure.code,
+                                    diagnostic: failure.diagnostic,
+                                    ...failure.context,
+                                })
+                                throw error
+                            } finally {
+                                runningAssessmentPanelIds.delete(panel.panelId)
+                                if (!options.signal?.aborted) {
+                                    completedAssessments += 1
+                                    const assessment = assessments.get(panel.panelId)
+                                    const assessmentFailure = assessmentFailures.get(panel.panelId)
+                                    await reportProgress({
+                                        phase: 'assessing',
+                                        completedSteps: completedAssessments,
+                                        totalSteps: assessablePanels.length,
+                                        message: assessment
+                                            ? `${panel.title}: ${formatAssessmentResult(assessment)}. ${completedAssessments} of ${assessablePanels.length} evaluations finished.`
+                                            : `${panel.title}: ${formatAssessmentFailureProgress(assessmentFailure ?? 'No evaluation result was returned.')}. ${completedAssessments} of ${assessablePanels.length} evaluations finished.`,
+                                    })
+                                }
                             }
-                        }
-                    },
-                ),
+                        },
+                    ),
             })
 
             compositionStage = 'assembling'
@@ -1546,18 +1595,19 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     totalSteps: 2,
                     message: `Final sheet composition is active: fitting ${availablePanels.size} available shot(s) into the deterministic 3840×2560 layout; ${formatElapsedTime(elapsedMs)}.`,
                 }),
-                execute: () => (this.deps.compositor ?? composeCharacterSheet)({
-                    panelSpecs: plan.panels,
-                    panels: [...availablePanels.entries()].map(([panelId, rendered]) => ({
-                        panelId,
-                        bytes: rendered.bytes,
-                    })),
-                    evidence,
-                    assessments,
-                    unavailablePanelIds: new Set(renderFailures.keys()),
-                    ...(evidenceAnalysisWarning ? { additionalIssues: [evidenceAnalysisWarning] } : {}),
-                    final: true,
-                }),
+                execute: () =>
+                    (this.deps.compositor ?? composeCharacterSheet)({
+                        panelSpecs: plan.panels,
+                        panels: [...availablePanels.entries()].map(([panelId, rendered]) => ({
+                            panelId,
+                            bytes: rendered.bytes,
+                        })),
+                        evidence,
+                        assessments,
+                        unavailablePanelIds: new Set(renderFailures.keys()),
+                        ...(evidenceAnalysisWarning ? { additionalIssues: [evidenceAnalysisWarning] } : {}),
+                        final: true,
+                    }),
             })
             recordTrace('assemble-sheet', current => ({
                 ...current,
@@ -1578,20 +1628,22 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
             await progressivePublishQueue.waitForIdle()
             compositionStage = 'completed'
             const fidelityReviewCount = plan.panels
-                .filter(panel => assessmentPanelNeedsReview(panel.panelId, {
-                    phase: 'composing',
-                    plan,
-                    preparationStage,
-                    renderedPanels,
-                    renderFailures,
-                    runningPanelIds,
-                    assessments,
-                    assessmentFailures,
-                    assessmentEligiblePanelIds,
-                    runningAssessmentPanelIds,
-                    observedPanelIds,
-                    compositionStage,
-                }))
+                .filter(panel =>
+                    assessmentPanelNeedsReview(panel.panelId, {
+                        phase: 'composing',
+                        plan,
+                        preparationStage,
+                        renderedPanels,
+                        renderFailures,
+                        runningPanelIds,
+                        assessments,
+                        assessmentFailures,
+                        assessmentEligiblePanelIds,
+                        runningAssessmentPanelIds,
+                        observedPanelIds,
+                        compositionStage,
+                    })
+                )
                 .length
             await reportProgress({
                 phase: 'composing',
@@ -1599,13 +1651,15 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                 totalSteps: 2,
                 message: `Character sheet complete: ${availablePanels.size} available shot(s), ${fidelityReviewCount} fidelity review flag(s), ${renderFailures.size} render error(s). Finalizing the generated asset.`,
             })
-            const panelTraces = plan.panels.map(panel => buildPanelTrace({
-                panel,
-                rendered: availablePanels.get(panel.panelId),
-                assessment: assessments.get(panel.panelId),
-                failure: renderFailures.get(panel.panelId),
-                observed: panel.panelId === observedPropSpec?.panelId,
-            }))
+            const panelTraces = plan.panels.map(panel =>
+                buildPanelTrace({
+                    panel,
+                    rendered: availablePanels.get(panel.panelId),
+                    assessment: assessments.get(panel.panelId),
+                    failure: renderFailures.get(panel.panelId),
+                    observed: panel.panelId === observedPropSpec?.panelId,
+                })
+            )
             const needsReview = panelTraces.filter(panel => panel.status !== 'completed')
             const reviewIssueCount = needsReview.length + (evidenceAnalysisWarning ? 1 : 0)
             const trace: CharacterSheetTrace = {
@@ -1624,12 +1678,14 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     ? 'Review the flagged shots. Keep this candidate or explicitly generate another variant; no retry was started automatically.'
                     : 'Keep this candidate or explicitly generate another variant.',
                 steps: [
-                    ...(evidenceAnalysisWarning ? [{
-                        stepId: 'source-evidence',
-                        title: 'Source evidence',
-                        status: 'needs-review' as const,
-                        issues: [evidenceAnalysisWarning],
-                    }] : []),
+                    ...(evidenceAnalysisWarning
+                        ? [{
+                            stepId: 'source-evidence',
+                            title: 'Source evidence',
+                            status: 'needs-review' as const,
+                            issues: [evidenceAnalysisWarning],
+                        }]
+                        : []),
                     ...panelTraces.map(panel => ({
                         stepId: panel.panelId,
                         title: panel.title,
@@ -1637,10 +1693,12 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         ...(panel.attempts > 0 && !panel.failedDimensions.includes('comparison-unavailable')
                             ? { score: panel.score }
                             : {}),
-                        issues: [...new Set([
-                            ...panel.failedDimensions,
-                            ...(panel.warning ? [panel.warning] : []),
-                        ])],
+                        issues: [
+                            ...new Set([
+                                ...panel.failedDimensions,
+                                ...(panel.warning ? [panel.warning] : []),
+                            ]),
+                        ],
                     })),
                 ],
                 panels: panelTraces,
@@ -1658,15 +1716,17 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     sourceAssetIds: [...new Set(assetSources.map(source => source.assetId))],
                     components: plan.panels.flatMap(panel => {
                         const rendered = availablePanels.get(panel.panelId)
-                        return rendered ? [{
-                            componentId: panel.panelId,
-                            role: renderedPanels.has(panel.panelId)
-                                ? 'character-sheet-panel'
-                                : 'character-sheet-panel-review-only',
-                            title: panel.title,
-                            imageBase64: rendered.bytes.toString('base64'),
-                            mimeType: 'image/png' as const,
-                        }] : []
+                        return rendered
+                            ? [{
+                                componentId: panel.panelId,
+                                role: renderedPanels.has(panel.panelId)
+                                    ? 'character-sheet-panel'
+                                    : 'character-sheet-panel-review-only',
+                                title: panel.title,
+                                imageBase64: rendered.bytes.toString('base64'),
+                                mimeType: 'image/png' as const,
+                            }]
+                            : []
                     }),
                 },
                 imageUsage: {
@@ -1752,33 +1812,39 @@ function buildPanelTrace(args: {
         status: comparisonUnavailable || failedDimensions.length > 0 ? 'needs-review' : 'completed',
         failedDimensions: traceFailures,
         dimensionResults: args.assessment?.dimensions ?? [],
-        ...(args.assessment ? {
-            faceFidelity: {
-                available: args.assessment.fidelityMetric.available,
-                ...(args.assessment.fidelityMetric.cosineSimilarity !== undefined
-                    ? { cosineSimilarity: args.assessment.fidelityMetric.cosineSimilarity }
-                    : {}),
-                ...(args.assessment.fidelityMetric.unavailableReason
-                    ? { unavailableReason: args.assessment.fidelityMetric.unavailableReason }
-                    : {}),
-                ...(args.assessment.fidelityError?.code
-                    ? { errorCode: args.assessment.fidelityError.code }
-                    : {}),
-                ...(args.assessment.fidelityModelIds?.detector
-                    ? { detectorArtifactId: args.assessment.fidelityModelIds.detector }
-                    : {}),
-                ...(args.assessment.fidelityModelIds?.recognizer
-                    ? { recognizerArtifactId: args.assessment.fidelityModelIds.recognizer }
-                    : {}),
-            },
-        } : {}),
+        ...(args.assessment
+            ? {
+                faceFidelity: {
+                    available: args.assessment.fidelityMetric.available,
+                    ...(args.assessment.fidelityMetric.cosineSimilarity !== undefined
+                        ? { cosineSimilarity: args.assessment.fidelityMetric.cosineSimilarity }
+                        : {}),
+                    ...(args.assessment.fidelityMetric.unavailableReason
+                        ? { unavailableReason: args.assessment.fidelityMetric.unavailableReason }
+                        : {}),
+                    ...(args.assessment.fidelityError?.code
+                        ? { errorCode: args.assessment.fidelityError.code }
+                        : {}),
+                    ...(args.assessment.fidelityModelIds?.detector
+                        ? { detectorArtifactId: args.assessment.fidelityModelIds.detector }
+                        : {}),
+                    ...(args.assessment.fidelityModelIds?.recognizer
+                        ? { recognizerArtifactId: args.assessment.fidelityModelIds.recognizer }
+                        : {}),
+                },
+            }
+            : {}),
         ...(args.assessment?.vlmError ? { vlmEvaluationError: args.assessment.vlmError } : {}),
-        ...(args.failure ? {
-            warning: args.failure,
-        } : comparisonUnavailable ? {
-            warning: args.assessment?.vlmError?.message
-                ?? 'Per-dimension comparison was unavailable; the rendered shot was preserved.',
-        } : {}),
+        ...(args.failure
+            ? {
+                warning: args.failure,
+            }
+            : comparisonUnavailable
+            ? {
+                warning: args.assessment?.vlmError?.message
+                    ?? 'Per-dimension comparison was unavailable; the rendered shot was preserved.',
+            }
+            : {}),
         vlmAssessor: args.assessment?.vlmAssessor ?? 'assessment-unavailable',
         providerOperationIds: args.rendered.providerOperationId ? [args.rendered.providerOperationId] : [],
         includedReferenceRoles: args.rendered.includedReferenceRoles,

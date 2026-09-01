@@ -32,9 +32,11 @@ export async function resolveCapabilitiesForState(
     const skillContext = buildSkillContext(plan)
     return {
         resolvedCapabilityPlan: plan,
-        ...(skillContext ? {
-            messages: [{ role: 'user', content: skillContext }, ...state.messages],
-        } : {}),
+        ...(skillContext
+            ? {
+                messages: [{ role: 'user', content: skillContext }, ...state.messages],
+            }
+            : {}),
     }
 }
 
@@ -62,18 +64,20 @@ export async function executeRequiredCapabilitiesForState(
             reasoningVariants,
             state,
         )
-        const settled = await Promise.allSettled(variants.map(async variant => await dispatcher.use({
-            capabilityId,
-            arguments: configuredInput,
-            requester: requesterFromState(state),
-            origin: 'prompt',
-            conversationAssetId: state.aiChatThreadId,
-            sealedPlan: plan,
-            invocationDepth: state.capabilityInvocationDepth,
-            invocationGenerationRequestId: state.generationRun?.generationRequestId,
-            signal,
-            variant,
-        })))
+        const settled = await Promise.allSettled(variants.map(async variant =>
+            await dispatcher.use({
+                capabilityId,
+                arguments: configuredInput,
+                requester: requesterFromState(state),
+                origin: 'prompt',
+                conversationAssetId: state.aiChatThreadId,
+                sealedPlan: plan,
+                invocationDepth: state.capabilityInvocationDepth,
+                invocationGenerationRequestId: state.generationRun?.generationRequestId,
+                signal,
+                variant,
+            })
+        ))
         const fulfilled = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
         if (fulfilled.length === 0) {
             const failed = settled.find(result => result.status === 'rejected')
@@ -98,12 +102,14 @@ export async function executeRequiredCapabilitiesForState(
         const referenceImageTraceUrls = output.output.referenceImageTraceUrls
         const mediaGenerationMode = output.output.mediaGenerationMode
         const preserveUserPrompt = output.output.preserveUserPrompt
-        if (typeof visualInstructions !== 'string'
+        if (
+            typeof visualInstructions !== 'string'
             || !Array.isArray(referenceImages)
             || !referenceImages.every(value => typeof value === 'string')
             || !Array.isArray(referenceImageTraceUrls)
             || !referenceImageTraceUrls.every(value => typeof value === 'string')
-            || typeof mediaGenerationMode !== 'string') return []
+            || typeof mediaGenerationMode !== 'string'
+        ) return []
         return {
             mediaGenerationMode: mediaGenerationMode as NonNullable<ProviderState['capabilityUsageMode']>,
             preserveUserPrompt: preserveUserPrompt === true,
@@ -121,24 +127,30 @@ export async function executeRequiredCapabilitiesForState(
     const requestPrompt = extractUserPrompt([...state.messages].reverse().find(message => message.role === 'user')?.content)
     return {
         capabilityToolResults: [...(state.capabilityToolResults ?? []), ...outputs],
-        ...(outputAssetIds.length > 0 || capabilityOnlyOutput ? {
-            capabilityOutputAssetIds: [...new Set(outputAssetIds)],
-            capabilityOutputMediaAssetIds: [...new Set(outputMediaAssetIds)],
-            enableImageGeneration: false,
-            enableVideoGeneration: false,
-        } : {}),
-        ...(mediaGenerationOutputs.length > 0 ? {
-            capabilityUsagePrompt: mediaGenerationOutputs.map(output => output.visualInstructions).join('\n\n'),
-            capabilityReferenceImages: mediaGenerationOutputs.flatMap(output => output.referenceImages),
-            capabilityReferenceImageTraceUrls: mediaGenerationOutputs.flatMap(output => output.referenceImageTraceUrls),
-            ...(mediaGenerationMode ? { capabilityUsageMode: mediaGenerationMode } : {}),
-            ...(preserveUserPrompt && requestPrompt ? { generatedImagePrompt: requestPrompt } : {}),
-        } : {}),
-        ...(mediaExecutionPlans.length > 0 ? {
-            capabilityMediaExecutionPlan: mediaExecutionPlans.at(-1),
-            capabilityUsageMode: 'character-creator',
-            ...(requestPrompt ? { generatedImagePrompt: requestPrompt } : {}),
-        } : {}),
+        ...(outputAssetIds.length > 0 || capabilityOnlyOutput
+            ? {
+                capabilityOutputAssetIds: [...new Set(outputAssetIds)],
+                capabilityOutputMediaAssetIds: [...new Set(outputMediaAssetIds)],
+                enableImageGeneration: false,
+                enableVideoGeneration: false,
+            }
+            : {}),
+        ...(mediaGenerationOutputs.length > 0
+            ? {
+                capabilityUsagePrompt: mediaGenerationOutputs.map(output => output.visualInstructions).join('\n\n'),
+                capabilityReferenceImages: mediaGenerationOutputs.flatMap(output => output.referenceImages),
+                capabilityReferenceImageTraceUrls: mediaGenerationOutputs.flatMap(output => output.referenceImageTraceUrls),
+                ...(mediaGenerationMode ? { capabilityUsageMode: mediaGenerationMode } : {}),
+                ...(preserveUserPrompt && requestPrompt ? { generatedImagePrompt: requestPrompt } : {}),
+            }
+            : {}),
+        ...(mediaExecutionPlans.length > 0
+            ? {
+                capabilityMediaExecutionPlan: mediaExecutionPlans.at(-1),
+                capabilityUsageMode: 'character-creator',
+                ...(requestPrompt ? { generatedImagePrompt: requestPrompt } : {}),
+            }
+            : {}),
         messages: [
             ...outputs.map(output => ({
                 role: 'user',
@@ -213,12 +225,14 @@ export function applyModelCapabilityExecutionToState(args: {
         state.capabilityMediaExecutionPlan = mediaExecutionPlan
         state.capabilityUsageMode = 'character-creator'
     }
-    if (typeof visualInstructions !== 'string'
+    if (
+        typeof visualInstructions !== 'string'
         || !Array.isArray(referenceImages)
         || !referenceImages.every(value => typeof value === 'string')
         || !Array.isArray(referenceImageTraceUrls)
         || !referenceImageTraceUrls.every(value => typeof value === 'string')
-        || typeof mediaGenerationMode !== 'string') return
+        || typeof mediaGenerationMode !== 'string'
+    ) return
 
     state.capabilityUsagePrompt = [state.capabilityUsagePrompt, visualInstructions]
         .filter((value): value is string => Boolean(value))
@@ -274,11 +288,15 @@ export function requiredCapabilityProducedOutput(state: ProviderState): boolean 
 }
 
 export function requiredCapabilityProducedCapabilityOnlyOutput(
-    state: Partial<Pick<ProviderState,
-        'capabilityOutputAssetIds'
-        | 'capabilityOutputMediaAssetIds'
-        | 'enableImageGeneration'
-        | 'enableVideoGeneration'>>,
+    state: Partial<
+        Pick<
+            ProviderState,
+            | 'capabilityOutputAssetIds'
+            | 'capabilityOutputMediaAssetIds'
+            | 'enableImageGeneration'
+            | 'enableVideoGeneration'
+        >
+    >,
 ): boolean {
     return (state.capabilityOutputAssetIds?.length ?? 0) > 0
         && state.capabilityOutputMediaAssetIds !== undefined

@@ -4,7 +4,7 @@
 
 const {
     CLOUDWATCH_LOG_RETENTION_DAYS,
-    CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED
+    CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED,
 } = process.env
 
 // Valid CloudWatch log retention values (in days)

@@ -1,3 +1,4 @@
+'use strict'
 // =============================================================================
 // CORE BUBBLE MENU
 //
@@ -9,7 +10,10 @@
 // and supply a target rect + placement for positioning.
 // =============================================================================
 
-import { applyStyle, createEl } from '../../dom/domTemplates.ts'
+import {
+    applyStyle,
+    createDocumentHtml,
+} from '@lixpi/ui-primitives/dom'
 import type {
     BubbleMenuItem,
     BubbleMenuOptions,
@@ -18,9 +22,10 @@ import type {
 
 const noEntranceMotionClass = 'bubble-menu-no-entrance-motion'
 
-const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0
-
 export class BubbleMenu {
+    private readonly view: Window
+    private positionFrame: number | null = null
+    private destroyed = false
     private menu: HTMLElement
     private menuContent: HTMLElement
     private parentEl: HTMLElement
@@ -28,7 +33,7 @@ export class BubbleMenu {
     private panels: HTMLElement[]
     private currentContext: string = ''
     private lastPosition: BubbleMenuPositionRequest | null = null
-    private scrollContainer: HTMLElement | Window = window
+    private scrollContainer: HTMLElement | Window
     private onShow?: (context: string) => void
     private onHide?: () => void
     private getVisualScale?: () => number
@@ -39,25 +44,17 @@ export class BubbleMenu {
 
     constructor(options: BubbleMenuOptions) {
         this.parentEl = options.parentEl
+        this.view = options.parentEl.ownerDocument.defaultView ?? window
         this.items = options.items
         this.panels = options.panels ?? []
         this.onShow = options.onShow
         this.onHide = options.onHide
         this.getVisualScale = options.getVisualScale
 
-        this.menu = createEl('div', {
-            className: 'bubble-menu',
-            role: 'toolbar',
-            'aria-label': 'Formatting toolbar',
-            tabIndex: 0,
-            style: {
-                position: 'absolute',
-                visibility: 'hidden',
-                zIndex: '100',
-            },
-        })
-
-        this.menuContent = createEl('div', { className: 'bubble-menu-content' })
+        const html = createDocumentHtml(options.parentEl.ownerDocument)
+        const style = { position: 'absolute', visibility: 'hidden', zIndex: '100' }
+        this.menu = html`<div className="bubble-menu" role="toolbar" aria-label=${options.label ?? 'Formatting toolbar'} tabindex="0" style=${style}></div>` as HTMLElement
+        this.menuContent = html`<div className="bubble-menu-content"></div>` as HTMLElement
         this.menu.appendChild(this.menuContent)
 
         for (const item of this.items) {
@@ -75,8 +72,8 @@ export class BubbleMenu {
 
         this.parentEl.appendChild(this.menu)
 
-        if (isTouchDevice()) {
-            window.visualViewport?.addEventListener('resize', this.handleViewportResize)
+        if ('ontouchstart' in this.view || this.view.navigator.maxTouchPoints > 0) {
+            this.view.visualViewport?.addEventListener('resize', this.handleViewportResize)
         }
     }
 
@@ -97,6 +94,7 @@ export class BubbleMenu {
     // =========================================================================
 
     show(context: string, position: BubbleMenuPositionRequest): void {
+        if (this.destroyed) return
         this.updateVisibleItems(context)
         this.menu.classList.toggle(noEntranceMotionClass, position.animateOnShow === false)
         applyStyle(this.menu, { visibility: 'hidden' })
@@ -107,6 +105,7 @@ export class BubbleMenu {
     }
 
     hide(): void {
+        this.cancelPositionFrame()
         if (!this.isVisible && this.currentContext === '') return
         applyStyle(this.menu, { visibility: 'hidden' })
         this.menu.classList.remove('is-visible')
@@ -144,9 +143,12 @@ export class BubbleMenu {
     }
 
     destroy(): void {
+        if (this.destroyed) return
+        this.destroyed = true
+        this.cancelPositionFrame()
         this.menu.removeEventListener('mousedown', this.handleMenuMouseDown)
         this.scrollContainer.removeEventListener('scroll', this.handleScroll)
-        window.visualViewport?.removeEventListener('resize', this.handleViewportResize)
+        this.view.visualViewport?.removeEventListener('resize', this.handleViewportResize)
         this.menu.remove()
     }
 
@@ -167,6 +169,8 @@ export class BubbleMenu {
     // =========================================================================
 
     private updatePosition(position: BubbleMenuPositionRequest, retryCount = 0): void {
+        if (this.destroyed) return
+        this.cancelPositionFrame()
         const scale = this.getScale()
         const visualScale = this.getMenuVisualScale()
         const { targetRect, placement } = position
@@ -174,7 +178,10 @@ export class BubbleMenu {
 
         if (!targetRect.width && !targetRect.height) {
             if (retryCount < 3) {
-                requestAnimationFrame(() => this.updatePosition(position, retryCount + 1))
+                this.positionFrame = this.view.requestAnimationFrame(() => {
+                    this.positionFrame = null
+                    if (this.lastPosition === position) this.updatePosition(position, retryCount + 1)
+                })
             }
             return
         }
@@ -250,7 +257,7 @@ export class BubbleMenu {
     findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
         let current: HTMLElement | null = this.parentEl
         while (current) {
-            const style = getComputedStyle(current)
+            const style = this.view.getComputedStyle(current)
             const transform = style.transform
             if (transform && transform !== 'none') {
                 const match = transform.match(/matrix\(([^,]+),/)
@@ -316,13 +323,21 @@ export class BubbleMenu {
     private findScrollContainer(element: HTMLElement): HTMLElement | Window {
         let current: HTMLElement | null = element
         while (current) {
-            const style = getComputedStyle(current)
-            if (style.overflow === 'auto' || style.overflow === 'scroll' ||
-                style.overflowY === 'auto' || style.overflowY === 'scroll') {
+            const style = this.view.getComputedStyle(current)
+            if (
+                style.overflow === 'auto' || style.overflow === 'scroll'
+                || style.overflowY === 'auto' || style.overflowY === 'scroll'
+            ) {
                 return current
             }
             current = current.parentElement
         }
-        return window
+        return this.view
+    }
+
+    private cancelPositionFrame(): void {
+        if (this.positionFrame === null) return
+        this.view.cancelAnimationFrame(this.positionFrame)
+        this.positionFrame = null
     }
 }

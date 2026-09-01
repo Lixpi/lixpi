@@ -30,7 +30,7 @@ export function renderNav(tree, rootPrefix, currentRel) {
     return `<nav class="sidebar-nav" aria-label="Documentation">${renderNavTree(tree, rootPrefix, currentRel)}</nav>`
 }
 
-export function renderPage({ title, description, contentHtml, navHtml, rootPrefix }) {
+export function renderPage({ title, description, contentHtml, navHtml, rootPrefix, sourceUrl }) {
     const safeTitle = escapeHtml(title || 'Lixpi Documentation')
     const metaDescription = description
         ? `\n    <meta name="description" content="${escapeHtml(description)}">`
@@ -52,6 +52,7 @@ export function renderPage({ title, description, contentHtml, navHtml, rootPrefi
         </aside>
         <main class="content lixpi-markdown">
 ${contentHtml}
+            <p><a href="${escapeHtml(sourceUrl)}">Edit this documentation source</a></p>
         </main>
     </div>
 </body>

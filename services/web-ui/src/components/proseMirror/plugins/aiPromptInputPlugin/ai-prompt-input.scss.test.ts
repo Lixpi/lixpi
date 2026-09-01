@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -45,12 +49,15 @@ describe('ai-prompt-input.scss', () => {
         expectSourceToContain(scss, '.ai-model-config-primary-row')
         expectSourceToContain(scss, 'flex-wrap: nowrap;')
         expectSourceToContain(scss, '.ai-model-config-model-column {')
-        expectSourceToContain(scss, `.ai-model-config-inline-control {
+        expectSourceToContain(
+            scss,
+            `.ai-model-config-inline-control {
     display: flex;
     min-width: max-content;
     flex: 0 0 auto;
     justify-content: flex-start;
-}`)
+}`,
+        )
         expectSourceToContain(scss, 'width: max-content;')
         expectSourceNotToContain(scss, '.ai-model-config-inline-control .ai-prompt-model-menu-control-label')
         expectSourceNotToContain(scss, '.ai-model-config-inline-control .ai-media-config-control-field')

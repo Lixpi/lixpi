@@ -2,7 +2,10 @@
 
 import { v4 as uuid } from 'uuid'
 
-import type { MediaReferenceBinding, UnresolvedReferenceBinding } from '@lixpi/constants'
+import type {
+    MediaReferenceBinding,
+    UnresolvedReferenceBinding,
+} from '@lixpi/constants'
 
 export const MEDIA_REFERENCE_MATCHER_VERSION = 'bounded-local-v3'
 export const MEDIA_REFERENCE_UNIQUE_THRESHOLD = 0.78
@@ -95,23 +98,25 @@ const singularizeToken = (token: string): string => {
     return token
 }
 
-export const normalizeMediaReferenceVariant = (value: string): string => value
-    .normalize('NFKC')
-    .toLocaleLowerCase('en-US')
-    .replace(/[’']/g, '')
-    .replace(/\b([\p{L}\p{N}_-]+)s\b/gu, '$1')
-    .replace(/\.[a-z0-9]{1,8}$/iu, '')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
-    .split(/\s+/u)
-    .map(singularizeToken)
-    .filter(token => token.length > 0 && !GENERIC_SUFFIXES.has(token))
-    .join(' ')
+export const normalizeMediaReferenceVariant = (value: string): string =>
+    value
+        .normalize('NFKC')
+        .toLocaleLowerCase('en-US')
+        .replace(/[’']/g, '')
+        .replace(/\b([\p{L}\p{N}_-]+)s\b/gu, '$1')
+        .replace(/\.[a-z0-9]{1,8}$/iu, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .split(/\s+/u)
+        .map(singularizeToken)
+        .filter(token => token.length > 0 && !GENERIC_SUFFIXES.has(token))
+        .join(' ')
 
 const tokenSet = (value: string): Set<string> => new Set(value.split(' ').filter(Boolean))
-const identifyingTokenSet = (value: string): Set<string> => new Set(
-    [...tokenSet(value)].filter(token => !NON_IDENTIFYING_TOKENS.has(token)),
-)
+const identifyingTokenSet = (value: string): Set<string> =>
+    new Set(
+        [...tokenSet(value)].filter(token => !NON_IDENTIFYING_TOKENS.has(token)),
+    )
 
 export const isIdentifyingMediaReferencePhrase = (value: string): boolean => (
     identifyingTokenSet(normalizeMediaReferenceVariant(value)).size > 0
@@ -170,8 +175,8 @@ export const scoreMediaReferenceVariant = (phrase: string, variant: string): num
     if (normalizedPhrase === normalizedVariant) return 1
     const variantTokens = identifyingTokenSet(normalizedVariant)
     const boundedSubsetScore = normalizedPhrase.length >= 3
-        && phraseTokens.size > 0
-        && [...phraseTokens].every(token => variantTokens.has(token))
+            && phraseTokens.size > 0
+            && [...phraseTokens].every(token => variantTokens.has(token))
         ? 0.88
         : 0
     const maximumDistance = Math.max(1, Math.floor(Math.max(normalizedPhrase.length, normalizedVariant.length) * 0.2))
@@ -187,10 +192,14 @@ export const scoreMediaReferenceVariant = (phrase: string, variant: string): num
     )
 }
 
-export const getMediaReferenceBindingVariants = (binding: MediaReferenceBinding): string[] => [...new Set([
-    binding.displayNameSnapshot,
-    ...binding.forbiddenNameVariants,
-].map(value => value.trim()).filter(Boolean))]
+export const getMediaReferenceBindingVariants = (binding: MediaReferenceBinding): string[] => [
+    ...new Set(
+        [
+            binding.displayNameSnapshot,
+            ...binding.forbiddenNameVariants,
+        ].map(value => value.trim()).filter(Boolean),
+    ),
+]
 
 export type MediaReferenceMatch = {
     kind: 'unique' | 'ambiguous' | 'none'
@@ -212,8 +221,10 @@ export const matchMediaReferencePhrase = ({
     const scores = bindings
         .map(binding => ({
             binding,
-            score: Math.max(...getMediaReferenceBindingVariants(binding)
-                .map(variant => scoreMediaReferenceVariant(phrase, variant))),
+            score: Math.max(
+                ...getMediaReferenceBindingVariants(binding)
+                    .map(variant => scoreMediaReferenceVariant(phrase, variant)),
+            ),
         }))
         .filter(candidate => candidate.score >= MEDIA_REFERENCE_UNIQUE_THRESHOLD)
         .sort((left, right) => right.score - left.score || left.binding.assetId.localeCompare(right.binding.assetId))

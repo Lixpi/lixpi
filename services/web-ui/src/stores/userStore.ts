@@ -7,7 +7,7 @@ import {
 } from '@lixpi/constants'
 
 import type {
-    User
+    User,
 } from '@lixpi/constants'
 
 import type { ReadonlyDeep } from 'type-fest'
@@ -41,10 +41,10 @@ const user: ReadonlyDeep<UserStore> = deepFreeze({
         organizations: [],
         createdAt: 0,
         updatedAt: 0,
-    }
+    },
 })
 
-const store = writable({...user})
+const store = writable({ ...user })
 
 export const userStore = {
     ...store,
@@ -69,23 +69,26 @@ export const userStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): any => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): any =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    setDataValues: (values: Partial<User> = {}): any => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            ...values
-        }
-    })),
+    setDataValues: (values: Partial<User> = {}): any =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                ...values,
+            },
+        })),
 
-    resetStore: (): any => store.update(state => ({
-        ...user
-    })),
+    resetStore: (): any =>
+        store.update(state => ({
+            ...user,
+        })),
 }

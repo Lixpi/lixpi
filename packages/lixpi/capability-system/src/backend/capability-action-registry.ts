@@ -10,7 +10,10 @@ import type {
 
 import { CapabilityError } from '../shared/capability-errors.ts'
 import type { CapabilityTraceRecorder } from './capability-trace-recorder.ts'
-import type { LoadedCapabilityResource, SealedResolvedCapabilityPlan } from './capability-resolver.ts'
+import type {
+    LoadedCapabilityResource,
+    SealedResolvedCapabilityPlan,
+} from './capability-resolver.ts'
 
 export type CapabilityActionAuthorizationContext = {
     userId: string

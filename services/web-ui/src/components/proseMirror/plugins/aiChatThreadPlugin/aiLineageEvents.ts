@@ -1,5 +1,9 @@
-import { branchForkfIcon, branchLineIcon, branchMidIcon } from '@lixpi/ui-kit/svg'
-import { html } from '$src/utils/domTemplates.ts'
+import {
+    branchForkfIcon,
+    branchLineIcon,
+    branchMidIcon,
+} from '@lixpi/ui-kit/svg'
+import { html } from '@lixpi/ui-primitives/dom'
 import {
     getAiLineageEventLabel,
     getAiLineageEventsForProjection,
@@ -36,12 +40,12 @@ export function createAiLineageEventMarker(event: AiLineageEventDescriptor): HTM
             className=${`ai-lineage-event ai-lineage-event-${event.kind}`}
             aria-label=${label}
             data=${{
-                helpTooltip: 'aria-label',
-                lineageEventKind: event.kind,
-                branchOriginNodeId: event.branchOriginNodeId ?? '',
-                branchForkNodeId: event.branchForkNodeId ?? '',
-                branchLineNodeId: event.branchLineNodeId ?? '',
-            }}
+        helpTooltip: 'aria-label',
+        lineageEventKind: event.kind,
+        branchOriginNodeId: event.branchOriginNodeId ?? '',
+        branchForkNodeId: event.branchForkNodeId ?? '',
+        branchLineNodeId: event.branchLineNodeId ?? '',
+    }}
         >
             <span className="ai-lineage-event-icon" innerHTML=${icon}></span>
             <span className="ai-lineage-event-label">${label}</span>

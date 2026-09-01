@@ -58,7 +58,6 @@ class SegmentsReceiver {
     }
 }
 
-
 // Ensure that SegmentsReceiver.getInstance() is now the only way to get an instance of the parser
 const markdownStreamParserInstance = SegmentsReceiver.getInstance()
 

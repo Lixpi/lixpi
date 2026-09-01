@@ -1,7 +1,17 @@
 'use strict'
 
-import type { Asset, AssetReference, CanvasState } from '@lixpi/constants'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type {
+    Asset,
+    AssetReference,
+    CanvasState,
+} from '@lixpi/constants'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 vi.mock('@lixpi/nats-service', () => ({
     default: { getInstance: vi.fn(() => undefined) },
@@ -243,14 +253,16 @@ describe('Asset prompt-reference search', () => {
         expect(buildAssetSearchRecord({
             ...asset,
             title: '  Portrait Study  ',
-            documents: { content: {
-                role: 'content',
-                blobHash: 'a'.repeat(64),
-                version: 1,
-                schemaVersion: '1',
-                byteSize: 10,
-                updatedAt: 1,
-            } },
+            documents: {
+                content: {
+                    role: 'content',
+                    blobHash: 'a'.repeat(64),
+                    version: 1,
+                    schemaVersion: '1',
+                    byteSize: 10,
+                    updatedAt: 1,
+                },
+            },
         })).toMatchObject({
             searchKey: 'document#portrait study#asset-1',
             normalizedTitle: 'portrait study',
@@ -258,27 +270,31 @@ describe('Asset prompt-reference search', () => {
         })
         expect(buildAssetSearchRecord({
             ...asset,
-            documents: { conversation: {
-                role: 'conversation',
-                blobHash: 'a'.repeat(64),
-                version: 1,
-                schemaVersion: '1',
-                byteSize: 10,
-                updatedAt: 1,
-            } },
+            documents: {
+                conversation: {
+                    role: 'conversation',
+                    blobHash: 'a'.repeat(64),
+                    version: 1,
+                    schemaVersion: '1',
+                    byteSize: 10,
+                    updatedAt: 1,
+                },
+            },
         })).toBeNull()
         expect(buildAssetSearchRecord({
             ...asset,
             title: 'Action Timeline',
             artifact: { artifactTypeId: 'action-timeline', schemaVersion: 'action-timeline-v1' },
-            documents: { capabilityArtifact: {
-                role: 'capabilityArtifact',
-                blobHash: 'b'.repeat(64),
-                version: 0,
-                schemaVersion: 'action-timeline-v1',
-                byteSize: 100,
-                updatedAt: 1,
-            } },
+            documents: {
+                capabilityArtifact: {
+                    role: 'capabilityArtifact',
+                    blobHash: 'b'.repeat(64),
+                    version: 0,
+                    schemaVersion: 'action-timeline-v1',
+                    byteSize: 100,
+                    updatedAt: 1,
+                },
+            },
             states: { ...asset.states, media: 'none' },
         })).toMatchObject({
             primaryCategory: 'capabilityArtifact',
@@ -300,8 +316,8 @@ describe('Asset prompt-reference search', () => {
             items: keyConditions.scopeAndOwner === 'organization#organization-1'
                 ? [baseRecord]
                 : keyConditions.scopeAndOwner === 'principal#user-1'
-                    ? [{ ...baseRecord, scopeAndOwner: 'principal#user-1' }]
-                    : [],
+                ? [{ ...baseRecord, scopeAndOwner: 'principal#user-1' }]
+                : [],
         }))
 
         const result = await AssetModel.searchAvailable({
@@ -367,19 +383,22 @@ describe('Asset prompt-reference search', () => {
     })
 
     it('reauthorizes buffered search cursor rows instead of trusting cursor metadata', async () => {
-        const cursor = Buffer.from(JSON.stringify({
-            partitions: {},
-            query: 'portrait',
-            categories: ['document'],
-            completed: [
-                'organization#organization-1|document',
-                'principal#user-1|document',
-            ],
-            buffered: [{
-                scopeAndOwner: 'organization#organization-1',
-                searchKey: 'document#portrait secret#asset-secret',
-            }],
-        }), 'utf8').toString('base64url')
+        const cursor = Buffer.from(
+            JSON.stringify({
+                partitions: {},
+                query: 'portrait',
+                categories: ['document'],
+                completed: [
+                    'organization#organization-1|document',
+                    'principal#user-1|document',
+                ],
+                buffered: [{
+                    scopeAndOwner: 'organization#organization-1',
+                    searchKey: 'document#portrait secret#asset-secret',
+                }],
+            }),
+            'utf8',
+        ).toString('base64url')
         dynamo.getItem.mockResolvedValue(undefined)
 
         const result = await AssetModel.searchAvailable({

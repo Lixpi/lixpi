@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { CHARACTER_FIDELITY_MODEL_MANIFEST } from './model-manifest.ts'
 

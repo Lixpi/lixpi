@@ -42,8 +42,7 @@ const extractor: StyleExtractor = {
     description: 'Extracts the composition: framing, aspect ratio, focus hierarchy, negative space, composition rule, perspective, viewpoint, balance.',
     minDominance: 0.3,
     applicableTo: (scene) => (scene.axisDominance['composition'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) =>
-        runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
 }
 
 registerExtractor(extractor)

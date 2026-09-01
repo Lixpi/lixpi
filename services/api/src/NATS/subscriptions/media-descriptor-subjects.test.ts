@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -75,9 +81,7 @@ vi.mock('../../services/asset-document-service.ts', () => ({ default: mocks.asse
 import { mediaDescriptorSubjects } from './media-descriptor-subjects.ts'
 
 const getHandler = () => {
-    const subscription = mediaDescriptorSubjects.find((candidate) =>
-        candidate.subject === NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_DESCRIBE
-    )
+    const subscription = mediaDescriptorSubjects.find((candidate) => candidate.subject === NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.MEDIA_DESCRIBE)
     if (!subscription) {
         throw new Error('Missing MEDIA_DESCRIBE subject')
     }
@@ -125,8 +129,7 @@ describe('MEDIA_DESCRIBE request handling', () => {
         vi.clearAllMocks()
         mocks.requesterContext.get.mockResolvedValue(requester)
         mocks.asset.canEditAssetMetadata.mockResolvedValue(true)
-        mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) =>
-            assetId === mediaAsset.assetId ? mediaAsset : assetId === textAsset.assetId ? textAsset : { error: 'NOT_FOUND' })
+        mocks.asset.get.mockImplementation(async ({ assetId }: { assetId: string }) => assetId === mediaAsset.assetId ? mediaAsset : assetId === textAsset.assetId ? textAsset : { error: 'NOT_FOUND' })
         mocks.asset.updateMetadata.mockImplementation(async ({ descriptor, title }: any) => ({ descriptor, title }))
         mocks.nats.instance = { connectionId: 'nats-1' }
         mocks.settings.mediaDescriptor.defaultVlmMaxTokens = 8192

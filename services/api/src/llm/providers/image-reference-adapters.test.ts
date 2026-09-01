@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import type { ImageReferenceCapabilities } from '@lixpi/constants'
 
 import type {
@@ -157,15 +161,17 @@ describe('image reference adapters', () => {
     })
 
     it('rejects Stability identity conditioning before provider work', () => {
-        expect(() => STABILITY_IMAGE_REFERENCE_ADAPTER.adapt({
-            references: [reference('face-crop', 1)],
-            capabilities: capabilities({
-                maxIdentityReferenceImages: 0,
-                conditioningModes: ['edit', 'style', 'structure'],
-                supportsStructureControl: true,
-            }),
-            requiresIdentity: true,
-        })).toThrow('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
+        expect(() =>
+            STABILITY_IMAGE_REFERENCE_ADAPTER.adapt({
+                references: [reference('face-crop', 1)],
+                capabilities: capabilities({
+                    maxIdentityReferenceImages: 0,
+                    conditioningModes: ['edit', 'style', 'structure'],
+                    supportsStructureControl: true,
+                }),
+                requiresIdentity: true,
+            })
+        ).toThrow('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
     })
 
     it('omits an explicit fidelity request for provider-managed models', () => {

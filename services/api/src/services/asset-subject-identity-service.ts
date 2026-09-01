@@ -26,11 +26,12 @@ import AssetModel, {
 
 const { ORG_NAME, STAGE } = process.env
 const assetsTableName = (): string => getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE)
-const attestationsTableName = (): string => getDynamoDbTableStageName(
-    'ASSET_SUBJECT_IDENTITY_ATTESTATIONS',
-    ORG_NAME,
-    STAGE,
-)
+const attestationsTableName = (): string =>
+    getDynamoDbTableStageName(
+        'ASSET_SUBJECT_IDENTITY_ATTESTATIONS',
+        ORG_NAME,
+        STAGE,
+    )
 
 export const ASSET_SUBJECT_IDENTITY_DERIVATION_VERSION = 'asset-subject-identity-lineage-v1'
 
@@ -42,11 +43,12 @@ export const SUBJECT_IDENTITY_STATEMENT_VERSIONS: Readonly<Record<SubjectIdentit
     'authorized-real-person': 'authorized-real-person-2026-07-01',
 }
 
-const normalizeDescriptorText = (asset: Pick<Asset, 'descriptor'>): string => [
-    asset.descriptor?.summary ?? '',
-    ...(asset.descriptor?.entityTags ?? []),
-    ...(asset.descriptor?.styleTags ?? []),
-].join(' ').normalize('NFKC').toLocaleLowerCase('en-US')
+const normalizeDescriptorText = (asset: Pick<Asset, 'descriptor'>): string =>
+    [
+        asset.descriptor?.summary ?? '',
+        ...(asset.descriptor?.entityTags ?? []),
+        ...(asset.descriptor?.styleTags ?? []),
+    ].join(' ').normalize('NFKC').toLocaleLowerCase('en-US')
 
 export function deriveDepictionMedium(asset: Pick<Asset, 'media' | 'descriptor'>): DepictionMedium {
     const descriptor = normalizeDescriptorText(asset)
@@ -75,18 +77,24 @@ function makeInheritedIdentityGroupId(inputs: Asset[]): string | undefined {
 
 function inheritProviderVerifications(inputs: Asset[]): ProviderIdentityVerification[] {
     if (inputs.length === 0) return []
-    const verificationSets = inputs.map(asset => asset.subjectIdentity.providerVerifications.filter(verification => (
-        verification.status === 'valid'
-        && verification.derivativeReuse === 'documented-lineage'
-        && (verification.expiresAt === undefined || verification.expiresAt > Date.now())
-    )))
+    const verificationSets = inputs.map(asset =>
+        asset.subjectIdentity.providerVerifications.filter(verification => (
+            verification.status === 'valid'
+            && verification.derivativeReuse === 'documented-lineage'
+            && (verification.expiresAt === undefined || verification.expiresAt > Date.now())
+        ))
+    )
     const first = verificationSets[0] ?? []
-    return first.filter(candidate => verificationSets.every(verifications => verifications.some(verification => (
-        verification.provider === candidate.provider
-        && verification.providerAccountScope === candidate.providerAccountScope
-        && verification.subjectHandle === candidate.subjectHandle
-        && verification.policyProfileVersion === candidate.policyProfileVersion
-    ))))
+    return first.filter(candidate =>
+        verificationSets.every(verifications =>
+            verifications.some(verification => (
+                verification.provider === candidate.provider
+                && verification.providerAccountScope === candidate.providerAccountScope
+                && verification.subjectHandle === candidate.subjectHandle
+                && verification.policyProfileVersion === candidate.policyProfileVersion
+            ))
+        )
+    )
 }
 
 export function deriveSubjectIdentityFromLineage(
@@ -108,9 +116,13 @@ export function deriveSubjectIdentityFromLineage(
     }
 
     const classifications = [...new Set(personBearingSources.map(asset => asset.subjectIdentity.classification))]
-    const identityGroups = [...new Set(personBearingSources
-        .map(asset => asset.subjectIdentity.identityGroupId)
-        .filter((value): value is string => Boolean(value)))]
+    const identityGroups = [
+        ...new Set(
+            personBearingSources
+                .map(asset => asset.subjectIdentity.identityGroupId)
+                .filter((value): value is string => Boolean(value)),
+        ),
+    ]
     const hasInvalidAttestation = personBearingSources.some(asset => (
         asset.subjectIdentity.classification === 'unknown'
         || (asset.subjectIdentity.source === 'user-attestation' && !asset.subjectIdentity.currentAttestationId)
@@ -132,9 +144,11 @@ export function deriveSubjectIdentityFromLineage(
     return {
         classification: classifications[0]!,
         source: 'inherited-lineage',
-        ...(makeInheritedIdentityGroupId(personBearingSources) ? {
-            identityGroupId: makeInheritedIdentityGroupId(personBearingSources),
-        } : {}),
+        ...(makeInheritedIdentityGroupId(personBearingSources)
+            ? {
+                identityGroupId: makeInheritedIdentityGroupId(personBearingSources),
+            }
+            : {}),
         inheritedFromAssetIds: personBearingSources.map(asset => asset.assetId),
         derivationVersion: ASSET_SUBJECT_IDENTITY_DERIVATION_VERSION,
         providerVerifications: inheritProviderVerifications(personBearingSources),
@@ -157,16 +171,20 @@ export class AssetSubjectIdentityService {
         if ('error' in asset) return asset
         if (!await canEditAssetMetadata(asset, requester)) return { error: 'PERMISSION_DENIED' }
         if (asset.revision !== assetRevision) return { error: 'REVISION_CONFLICT' }
-        if (asset.subjectIdentity.classification !== 'self'
-            && asset.subjectIdentity.classification !== 'authorized-real-person') {
+        if (
+            asset.subjectIdentity.classification !== 'self'
+            && asset.subjectIdentity.classification !== 'authorized-real-person'
+        ) {
             return { error: 'PROVIDER_VERIFICATION_IDENTITY_CLASSIFICATION_REQUIRED' }
         }
         const now = Date.now()
         const providerVerifications = [
-            ...asset.subjectIdentity.providerVerifications.filter(existing => !(
-                existing.provider === verification.provider
-                && existing.providerAccountScope === verification.providerAccountScope
-            )),
+            ...asset.subjectIdentity.providerVerifications.filter(existing =>
+                !(
+                    existing.provider === verification.provider
+                    && existing.providerAccountScope === verification.providerAccountScope
+                )
+            ),
             verification,
         ]
         const next: Asset = {
@@ -232,9 +250,11 @@ export class AssetSubjectIdentityService {
             classification,
             statementVersion: SUBJECT_IDENTITY_STATEMENT_VERSIONS[classification],
             status,
-            ...(asset.subjectIdentity.currentAttestationId ? {
-                supersedesAttestationId: asset.subjectIdentity.currentAttestationId,
-            } : {}),
+            ...(asset.subjectIdentity.currentAttestationId
+                ? {
+                    supersedesAttestationId: asset.subjectIdentity.currentAttestationId,
+                }
+                : {}),
             createdAt: now,
         }
         const subjectIdentity: AssetSubjectIdentity = {

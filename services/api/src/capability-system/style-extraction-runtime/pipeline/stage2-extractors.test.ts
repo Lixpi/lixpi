@@ -1,9 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 vi.mock('@lixpi/debug-tools', () => ({ warn: vi.fn() }))
 
-import { runExtractorAxis, selectApplicableExtractors } from './stage2-extractors.ts'
-import type { StyleExtractionState, StyleExtractor, StageLogger } from './types.ts'
+import {
+    runExtractorAxis,
+    selectApplicableExtractors,
+} from './stage2-extractors.ts'
+import type {
+    StyleExtractionState,
+    StyleExtractor,
+    StageLogger,
+} from './types.ts'
 
 function makeState(): StyleExtractionState {
     return {

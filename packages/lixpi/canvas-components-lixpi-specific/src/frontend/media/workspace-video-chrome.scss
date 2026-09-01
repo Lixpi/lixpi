@@ -1,0 +1,57 @@
+.workspace-media-chrome-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+    pointer-events: none;
+    z-index: 3;
+}
+
+
+.workspace-video-chrome {
+    position: absolute;
+    pointer-events: none;
+}
+
+.workspace-video-surface {
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    border-radius: var(--workspace-media-node-border-radius);
+    background: #1c1c1c;
+    pointer-events: auto;
+
+    video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
+    }
+}
+
+.workspace-video-controls-host {
+    position: absolute;
+    opacity: 1;
+    pointer-events: none;
+    border-radius: var(--video-controls-host-border-radius, 18px);
+    filter: var(--video-controls-host-drop-shadow, drop-shadow(0 12px 30px rgba(0, 0, 0, 0.30)));
+    backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
+    -webkit-backdrop-filter: var(--video-controls-host-backdrop-filter, blur(22px) saturate(155%) contrast(108%));
+}
+
+.workspace-video-controls-svg {
+    display: block;
+    overflow: visible;
+    pointer-events: none;
+}
+
+
+@media (prefers-reduced-transparency: reduce) {
+    .workspace-video-controls-host {
+        background: var(--video-controls-host-reduced-transparency-background, rgba(24, 28, 34, 0.88));
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}

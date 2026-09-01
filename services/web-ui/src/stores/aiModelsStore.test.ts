@@ -1,6 +1,12 @@
 'use strict'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 import { LoadingStatus } from '@lixpi/constants'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
 

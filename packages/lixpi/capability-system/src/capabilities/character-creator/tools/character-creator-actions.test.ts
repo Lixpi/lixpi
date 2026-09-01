@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import { CapabilityActionRegistry } from '../../../backend/capability-action-registry.ts'
 import { createCapabilityTraceRecorder } from '../../../backend/capability-trace-recorder.ts'
@@ -45,10 +49,12 @@ describe('Character Creator actions', () => {
         const registry = new CapabilityActionRegistry()
         registerCharacterCreatorActions(registry)
 
-        expect(registry.get('character.validate-request').execute({
-            prompt: '  Desert courier  ',
-            referenceAssetIds: ['asset-1', 'asset-1', 'asset-2'],
-        }, executionContext())).toEqual({
+        expect(
+            registry.get('character.validate-request').execute({
+                prompt: '  Desert courier  ',
+                referenceAssetIds: ['asset-1', 'asset-1', 'asset-2'],
+            }, executionContext()),
+        ).toEqual({
             prompt: 'Desert courier',
             referenceAssetIds: ['asset-1', 'asset-2'],
         })
@@ -78,10 +84,12 @@ describe('Character Creator actions', () => {
     it('builds a plan accepted by the public Tool output schema', async () => {
         const registry = new CapabilityActionRegistry()
         registerCharacterCreatorActions(registry)
-        const schema = JSON.parse(await readFile(
-            new URL('./resources/character-creator-output.schema.json', import.meta.url),
-            'utf8',
-        )) as unknown
+        const schema = JSON.parse(
+            await readFile(
+                new URL('./resources/character-creator-output.schema.json', import.meta.url),
+                'utf8',
+            ),
+        ) as unknown
 
         const output = await registry.get('character.build-render-plan').execute({
             prompt: 'Desert courier in four shots',
@@ -95,9 +103,11 @@ describe('Character Creator actions', () => {
         const registry = new CapabilityActionRegistry()
         registerCharacterCreatorActions(registry)
 
-        expect(() => registry.get('character.validate-request').execute({
-            prompt: 'Character',
-            referenceAssetIds: Array.from({ length: 9 }, (_, index) => `asset-${index}`),
-        }, executionContext())).toThrow('Character Creator accepts at most 8 reference Assets')
+        expect(() =>
+            registry.get('character.validate-request').execute({
+                prompt: 'Character',
+                referenceAssetIds: Array.from({ length: 9 }, (_, index) => `asset-${index}`),
+            }, executionContext())
+        ).toThrow('Character Creator accepts at most 8 reference Assets')
     })
 })

@@ -47,8 +47,8 @@ export function estimateInputTokens(request: unknown): ProviderInputTokenEstimat
         const mediaType = typeof record?.mimeType === 'string'
             ? record.mimeType
             : typeof record?.media_type === 'string'
-                ? record.media_type
-                : undefined
+            ? record.media_type
+            : undefined
         if (mediaType && typeof record?.data === 'string' && isBase64(record.data)) {
             const byteLength = base64ByteLength(record.data)
             mediaTokens += mediaType.startsWith('audio/')
@@ -73,8 +73,10 @@ export function assessProviderInputBudget({
     if (contextWindow === undefined) return undefined
     const reservedCompletionTokens = state.maxCompletionSize
         ?? state.aiModelMetaInfo?.maxCompletionSize
-    if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0
-        || !Number.isSafeInteger(reservedCompletionTokens) || reservedCompletionTokens < 0) {
+    if (
+        !Number.isSafeInteger(contextWindow) || contextWindow <= 0
+        || !Number.isSafeInteger(reservedCompletionTokens) || reservedCompletionTokens < 0
+    ) {
         throw contextError(state, 0, reservedCompletionTokens ?? 0, contextWindow)
     }
 

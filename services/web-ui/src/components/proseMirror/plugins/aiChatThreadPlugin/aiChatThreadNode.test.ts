@@ -1,9 +1,21 @@
 'use strict'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EditorState, TextSelection } from 'prosemirror-state'
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import {
+    EditorState,
+    TextSelection,
+} from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
-import { applyStyle } from '$src/utils/domTemplates.ts'
+import { CanvasGenerationEvents } from '@lixpi/canvas-components-lixpi-specific/shared'
+
+import { applyStyle } from '@lixpi/ui-primitives/dom'
 import {
     doc,
     p,
@@ -23,6 +35,11 @@ import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/a
 import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import type { ImageGenerationTrace } from '@lixpi/constants'
+
+const generationEventsForTests: CanvasGenerationEvents[] = []
+afterEach(() => {
+    for (const events of generationEventsForTests.splice(0)) events.destroy()
+})
 
 const authTokenMock = vi.hoisted(() => vi.fn(async () => 'token-123'))
 
@@ -116,7 +133,7 @@ function createImageGenerationTrace(overrides: Partial<ImageGenerationTrace> = {
 
 function createThreadNodeView(attrs: Record<string, unknown> = {}) {
     const node = schema.nodes.aiChatThread.create(
-        { threadId: 'thread-test-1', status: 'active', ...attrs }
+        { threadId: 'thread-test-1', status: 'active', ...attrs },
     )
 
     const mockView = {
@@ -200,12 +217,12 @@ describe('aiChatThreadNodeView — height survives update()', () => {
         const dom = nodeView.dom as HTMLElement
 
         // Simulate a canvas layout pass growing the thread height.
-    applyStyle(dom, { height: '800px' })
+        applyStyle(dom, { height: '800px' })
         expect(dom.style.height).toBe('800px')
 
         // Simulate ProseMirror calling update() with updated attributes
         const updatedNode = schema.nodes.aiChatThread.create(
-            { threadId: 'thread-test-1', status: 'completed' }
+            { threadId: 'thread-test-1', status: 'completed' },
         )
 
         const result = nodeView.update!(updatedNode, [])
@@ -225,7 +242,7 @@ describe('aiChatThreadNodeView — height survives update()', () => {
         const statuses = ['active', 'active', 'completed'] as const
         for (const status of statuses) {
             const updatedNode = schema.nodes.aiChatThread.create(
-                { threadId: 'thread-test-1', status }
+                { threadId: 'thread-test-1', status },
             )
             nodeView.update!(updatedNode, [])
         }
@@ -308,7 +325,7 @@ describe('aiChatThreadNodeView — update()', () => {
         const dom = nodeView.dom as HTMLElement
 
         const updatedNode = schema.nodes.aiChatThread.create(
-            { threadId: 'new-thread', status: 'active' }
+            { threadId: 'new-thread', status: 'active' },
         )
         nodeView.update!(updatedNode, [])
 
@@ -320,7 +337,7 @@ describe('aiChatThreadNodeView — update()', () => {
         const dom = nodeView.dom as HTMLElement
 
         const updatedNode = schema.nodes.aiChatThread.create(
-            { threadId: 'thread-test-1', status: 'completed' }
+            { threadId: 'thread-test-1', status: 'completed' },
         )
         nodeView.update!(updatedNode, [])
 
@@ -340,7 +357,7 @@ describe('aiChatThreadNodeView — update()', () => {
         const { nodeView } = createThreadNodeView()
 
         const updatedNode = schema.nodes.aiChatThread.create(
-            { threadId: 'thread-test-1', status: 'active' }
+            { threadId: 'thread-test-1', status: 'active' },
         )
         const result = nodeView.update!(updatedNode, [])
 
@@ -373,14 +390,15 @@ describe('aiChatThreadNodeSpec — schema', () => {
                 }
                 return attrs[attr] ?? null
             },
-            hasAttribute: (attr: string) => [
-                'data-thread-id',
-                'data-status',
-                'data-ai-reasoning-models',
-                'data-image-generation-enabled',
-                'data-image-generation-size',
-                'data-previous-response-id',
-            ].includes(attr),
+            hasAttribute: (attr: string) =>
+                [
+                    'data-thread-id',
+                    'data-status',
+                    'data-ai-reasoning-models',
+                    'data-image-generation-enabled',
+                    'data-image-generation-size',
+                    'data-previous-response-id',
+                ].includes(attr),
         }
 
         const parsed = parseRule.getAttrs(mockDom)
@@ -519,9 +537,9 @@ describe('aiChatThreadPlugin — image generation trace', () => {
                         { threadId: 'thread-1' },
                         response(
                             { id: 'resp-1', isReceivingAnimation: true, aiProvider: 'Anthropic' },
-                            ...children
-                        )
-                    )
+                            ...children,
+                        ),
+                    ),
                 ),
                 schema,
                 plugins: [plugin],
@@ -566,7 +584,7 @@ describe('aiChatThreadPlugin — image generation trace', () => {
     it('updates an existing prompt details block instead of inserting a duplicate', () => {
         const existingBlock = schema.nodes.aiCollapsibleBlock.create(
             { title: 'Image generation prompt', isOpen: true, isStreaming: true },
-            schema.nodes.paragraph.create(null, schema.text('Original tool prompt'))
+            schema.nodes.paragraph.create(null, schema.text('Original tool prompt')),
         )
         const { view, mount } = createView([p('Generating image'), existingBlock])
         const trace = createImageGenerationTrace({
@@ -616,13 +634,18 @@ describe('aiChatThreadPlugin — generated image completion', () => {
         additionalPlugins: any[] = [],
         onImageErrorToCanvas = vi.fn(),
         responseContent: any[] = [p('Generating image')],
-        responseAttrs: Record<string, unknown> = {}
+        responseAttrs: Record<string, unknown> = {},
     ) {
+        const events = new CanvasGenerationEvents(error => {
+            throw error
+        })
+        generationEventsForTests.push(events)
+        events.subscribeImages({ onImageCompleteToCanvas, onImagePartialToCanvas, onImageErrorToCanvas })
         const plugin = createAiChatThreadPlugin({
             sendAiRequestHandler: vi.fn(),
             stopAiRequestHandler: vi.fn(),
             placeholders: { titlePlaceholder: 'Title', paragraphPlaceholder: 'Type here…' },
-            imageCallbacks: { onImageCompleteToCanvas, onImagePartialToCanvas, onImageErrorToCanvas },
+            onStreamEvent: (event, options) => events.route(event, options),
         })
 
         const mount = document.createElement('div')
@@ -635,9 +658,9 @@ describe('aiChatThreadPlugin — generated image completion', () => {
                         { threadId: 'thread-1' },
                         response(
                             { id: 'resp-1', isReceivingAnimation: true, isInitialRenderAnimation: true, aiProvider: 'OpenAI', ...responseAttrs },
-                            ...responseContent
-                        )
-                    )
+                            ...responseContent,
+                        ),
+                    ),
                 ),
                 schema,
                 plugins: [...additionalPlugins, plugin],
@@ -907,10 +930,10 @@ describe('aiChatThreadPlugin — generated image completion', () => {
                         reasoningIndex: 0,
                         isReceivingAnimation: true,
                     },
-                    p('Generating image variants')
+                    p('Generating image variants'),
                 ),
             ],
-            { generationRequestId: requestId }
+            { generationRequestId: requestId },
         )
 
         SegmentsReceiver.receiveSegment({

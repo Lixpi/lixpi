@@ -2,7 +2,7 @@
 @import '$src/components/proseMirror/ProseMirrorMixings.scss';
 @import '$src/sass/components/animations';
 @import '$src/sass/_prompt-reference-chip.scss';
-@import '$src/components/contextPreview/context-preview.scss';
+@import '@lixpi/canvas-components-lixpi-specific/styles/context-preview';
 @import '$src/components/executionTrace/execution-trace.scss';
 @import '$src/components/capabilityRun/capability-run.scss';
 
@@ -47,7 +47,7 @@ $userMessageTextColor: #fff;
     display: none;
 }
 
-.ai-user-message-reference-previews .workspace-ai-chat-panel-context-preview-main {
+.ai-user-message-reference-previews .context-preview-main {
     flex: 0 0 58px;
     width: 58px;
     height: 42px;
@@ -611,7 +611,7 @@ $aiResponseMessageEmptyNodeMinHeight: 1.5rem;
     min-width: 0;
     width: 100%;
     margin-top: var(--workspace-generated-media-chrome-top-gap, 8px);
-    min-height: var(--workspace-generated-media-chrome-icon-size, 34px);
+    min-height: var(--canvas-node-footer-icon-size, 34px);
 }
 
 .ai-generated-media-section-title {

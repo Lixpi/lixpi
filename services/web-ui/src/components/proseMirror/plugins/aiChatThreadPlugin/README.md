@@ -18,7 +18,7 @@
 - Routes `CAPABILITY_RUN_EVENT` pipeline payloads into the generic Tool progress renderer inside the active assistant response and the canvas branch marker's preflight timeline. Events received before the response NodeView mounts remain projected in memory and attach on the next editor view update.
 - Applies ProseMirror document changes only through authority step events. Raw media/control pipeline events are routed to canvas placement without locally mutating the same ProseMirror doc.
 - Maintains receiving state per thread and per reasoning run so multiple model variants can stream without clearing sibling responses too early.
-- Delegates generated-image and generated-video canvas side effects through callback surfaces registered by `createAiChatThreadPlugin`.
+- Forwards media/control events through the editor's optional `onStreamEvent` observer. Canvas adapters route those events to their own package-owned subscriptions.
 - Preserves API media-lineage assignments on durable response/media nodes, then projects those ids into reusable lineage-event markers for the live thread, branch-root panels, branch-fork panels, and generated-media provenance.
 - Blocks paste inside thread logs. Users paste into the separate prompt input surface.
 - Supports read-only generated-media provenance projections through the shared AI chat NodeViews without subscribing the preview editor to live stream events.
@@ -32,6 +32,7 @@ createAiChatThreadPlugin({
     sendAiRequestHandler: val => this.onAiChatSubmit(val),
     stopAiRequestHandler: val => this.onAiChatStop(val),
     onReceivingStateChange: this.onReceivingStateChange,
+    onStreamEvent: this.onStreamEvent,
     renderContext: {
         readOnly: false,
         traceDetailsOptions: undefined,
@@ -41,7 +42,7 @@ createAiChatThreadPlugin({
 })
 ```
 
-The factory also accepts optional `imageCallbacks` and `videoCallbacks`, which are stored through `setAiGeneratedImageCallbacks()` and `setAiGeneratedVideoCallbacks()`.
+The optional `onStreamEvent` observer belongs to the plugin instance. It receives the segment and, when the editor has created one, its response-message ID. Canvas adapters forward it only while their workspace, conversation and editor scope remain current. The plugin does not register global image/video callbacks or import a canvas router.
 `renderContext.contextPreview` lets user-message NodeViews resolve stored explicit reference ids into shared context preview tiles; read-only provenance projections pass the same renderer so sent-message references match the live panel input previews.
 
 ```mermaid
@@ -347,9 +348,9 @@ Read-only projections do not subscribe to `SegmentsReceiver`, do not call thread
 
 ## Extension Points
 
-Add new streamed block types in `packages/lixpi/prosemirror/src/stream-assembly.ts`.
+Add new streamed block types in `packages/lixpi/prosemirror/src/shared/stream-assembly.ts`.
 
-Add new inline stream segment behavior in `packages/lixpi/prosemirror/src/stream-assembly.ts`.
+Add new inline stream segment behavior in `packages/lixpi/prosemirror/src/shared/stream-assembly.ts`.
 
 Add provider/model attribution in the generation trace block or the shared shell helpers.
 

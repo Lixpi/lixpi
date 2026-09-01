@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     parseProseMirrorJsonContent,
@@ -11,7 +15,10 @@ import {
     buildGeneratedMediaTurnProjectionFromThreadContent,
     getGeneratedImageTurnInfoFromThreadContent,
 } from '@lixpi/prosemirror/shared/generated-media-turn-projection'
-import type { ImageGenerationTrace, VideoGenerationTrace } from '@lixpi/constants'
+import type {
+    ImageGenerationTrace,
+    VideoGenerationTrace,
+} from '@lixpi/constants'
 
 function createTrace(): ImageGenerationTrace {
     return {
@@ -97,8 +104,8 @@ describe('collectResponseTextById', () => {
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First prompt' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First prompt' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-1' },
@@ -106,8 +113,8 @@ describe('collectResponseTextById', () => {
                         },
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second prompt' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Second prompt' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-2' },
@@ -137,8 +144,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt from user' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt from user' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-1', aiProvider: 'OpenAI' },
@@ -201,8 +208,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent', () => {
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Only prompt' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Only prompt' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-2' },
@@ -495,8 +502,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt one' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt one' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-1' },
@@ -525,8 +532,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt one' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Prompt one' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-1' },
@@ -551,8 +558,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Generate two files' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Generate two files' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-1', aiProvider: 'OpenAI' },
@@ -563,8 +570,8 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
                                     attrs: {
                                         imageGenerationTrace: createTrace(),
                                     },
-                                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Trace prompt.' }] },
-                                ]},
+                                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Trace prompt.' }] }],
+                                },
                                 { type: 'aiGeneratedImage', attrs: { assetId: 'file-a', mediaType: 'image', mediaRunId: 'run-a' } },
                                 { type: 'aiGeneratedImage', attrs: { assetId: 'file-b', mediaType: 'image', mediaRunId: 'run-b' } },
                             ],
@@ -592,7 +599,7 @@ describe('buildGeneratedMediaTurnProjectionFromThreadContent — projection filt
                     files.push(node.attrs?.assetId)
                     return
                 }
-                (node?.content ?? []).forEach((child: any) => walk(child))
+                ;(node?.content ?? []).forEach((child: any) => walk(child))
             }
             walk(root)
             return files
@@ -614,8 +621,8 @@ describe('getGeneratedImageTurnInfoFromThreadContent — locator edge cases', ()
                     content: [
                         {
                             type: 'aiUserMessage',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create multiple variants' }] },
-                        ]},
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Create multiple variants' }] }],
+                        },
                         {
                             type: 'aiResponseMessage',
                             attrs: { id: 'response-1', aiProvider: 'OpenAI' },
@@ -626,8 +633,8 @@ describe('getGeneratedImageTurnInfoFromThreadContent — locator edge cases', ()
                                     attrs: {
                                         imageGenerationTrace: createTrace(),
                                     },
-                                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Seed prompt one.' }] },
-                                ]},
+                                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Seed prompt one.' }] }],
+                                },
                                 { type: 'aiGeneratedImage', attrs: { assetId: 'file-a', variantIndex: 1, mediaType: 'image', mediaRunId: 'run-a', revisedPrompt: 'variant one' } },
                                 { type: 'aiGeneratedImage', attrs: { assetId: 'file-a', variantIndex: 2, mediaType: 'image', mediaRunId: 'run-b', revisedPrompt: 'variant two' } },
                             ],

@@ -333,9 +333,11 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
     if (new Set(plan.sourceAssetIds).size !== plan.sourceAssetIds.length) throw new Error('CHARACTER_SHEET_PLAN_SOURCE_ASSETS_DUPLICATE')
     if (plan.layoutId !== 'character-sheet-3840x2560') throw new Error('CHARACTER_SHEET_PLAN_LAYOUT_INVALID')
     if (plan.semanticRetryLimit !== 0) throw new Error('CHARACTER_SHEET_PLAN_RETRY_LIMIT_INVALID')
-    if (!Array.isArray(plan.panels)
+    if (
+        !Array.isArray(plan.panels)
         || plan.panels.length < CHARACTER_SHEET_DEFAULT_OPERATION_COUNT
-        || plan.panels.length > CHARACTER_SHEET_MAX_OPERATION_COUNT) {
+        || plan.panels.length > CHARACTER_SHEET_MAX_OPERATION_COUNT
+    ) {
         throw new Error('CHARACTER_SHEET_PLAN_PANEL_COUNT_INVALID')
     }
     const panelIds = new Set<string>()
@@ -345,8 +347,10 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
         panelIds.add(panel.panelId)
     }
     for (const panel of plan.panels) {
-        if (!Array.isArray(panel.dependsOn)
-            || panel.dependsOn.some(dependency => typeof dependency !== 'string')) {
+        if (
+            !Array.isArray(panel.dependsOn)
+            || panel.dependsOn.some(dependency => typeof dependency !== 'string')
+        ) {
             throw new Error(`CHARACTER_SHEET_PLAN_DEPENDENCIES_INVALID:${panel.panelId}`)
         }
         if (panel.dependsOn.some(dependency => !panelIds.has(dependency))) {
@@ -357,12 +361,14 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
         }
         const bindingKeys = new Set<string>()
         for (const binding of panel.outputBindings) {
-            if (!binding
+            if (
+                !binding
                 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(binding.bindingKey)
                 || typeof binding.sourceNodeId !== 'string'
                 || typeof binding.required !== 'boolean'
                 || !['canonical-anchor', 'adjacent-angle', 'opposite-angle'].includes(binding.referenceRole)
-                || !/^GENERATED_[A-Z0-9_]+\.png$/u.test(binding.fileName)) {
+                || !/^GENERATED_[A-Z0-9_]+\.png$/u.test(binding.fileName)
+            ) {
                 throw new Error(`CHARACTER_SHEET_PLAN_OUTPUT_BINDING_INVALID:${panel.panelId}`)
             }
             if (!panel.dependsOn.includes(binding.sourceNodeId)) {
@@ -380,9 +386,11 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
         }
     }
     const identityAnchor = plan.panels.find(panel => panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID)
-    if (!identityAnchor?.required
+    if (
+        !identityAnchor?.required
         || identityAnchor.dependsOn.length > 0
-        || identityAnchor.outputBindings.length > 0) {
+        || identityAnchor.outputBindings.length > 0
+    ) {
         throw new Error('CHARACTER_SHEET_PLAN_IDENTITY_ANCHOR_INVALID')
     }
     const outfitAnchor = plan.panels.find(panel => panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID)
@@ -392,8 +400,10 @@ export function assertValidCharacterSheetRenderPlan(value: unknown): asserts val
         characterSheetShotGraph.generatedReferenceSets.identity,
     )
     for (const panel of plan.panels) {
-        if (panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
-            || panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID) continue
+        if (
+            panel.panelId === CHARACTER_IDENTITY_ANCHOR_PANEL_ID
+            || panel.panelId === CHARACTER_OUTFIT_ANCHOR_PANEL_ID
+        ) continue
         if (panel.panelId === CHARACTER_BACK_ANCHOR_PANEL_ID) {
             assertGeneratedReferenceSet(
                 panel,
@@ -417,18 +427,22 @@ function assertGeneratedReferenceSet(
     expectedBindings: readonly CharacterPanelOutputBinding[],
 ): void {
     const expectedDependencies = [...new Set(expectedBindings.map(binding => binding.sourceNodeId))]
-    if (panel.dependsOn.length !== expectedDependencies.length
+    if (
+        panel.dependsOn.length !== expectedDependencies.length
         || panel.dependsOn.some((dependency, index) => dependency !== expectedDependencies[index])
-        || panel.outputBindings.length !== expectedBindings.length) {
+        || panel.outputBindings.length !== expectedBindings.length
+    ) {
         throw new Error(`CHARACTER_SHEET_PLAN_GENERATED_REFERENCE_SET_INVALID:${panel.panelId}`)
     }
     for (const [index, expected] of expectedBindings.entries()) {
         const actual = panel.outputBindings[index]
-        if (actual?.bindingKey !== expected.bindingKey
+        if (
+            actual?.bindingKey !== expected.bindingKey
             || actual.sourceNodeId !== expected.sourceNodeId
             || actual.required !== expected.required
             || actual.referenceRole !== expected.referenceRole
-            || actual.fileName !== expected.fileName) {
+            || actual.fileName !== expected.fileName
+        ) {
             throw new Error(`CHARACTER_SHEET_PLAN_GENERATED_REFERENCE_SET_INVALID:${panel.panelId}`)
         }
     }

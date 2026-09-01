@@ -127,11 +127,13 @@ export async function assessCharacterFidelity(
         const face = sourceFaceGroups[index]?.[0]
         return face ? [{ bytes, face, index }] : []
     })
-    const sourceEmbeddings = await Promise.all(usableSourceFaces.map(source => embedFace(
-        source.bytes,
-        source.face,
-        runtime.recognizer,
-    )))
+    const sourceEmbeddings = await Promise.all(usableSourceFaces.map(source =>
+        embedFace(
+            source.bytes,
+            source.face,
+            runtime.recognizer,
+        )
+    ))
     const candidateEmbedding = await embedFace(candidateBytes, candidateFaces[0]!, runtime.recognizer)
     logFidelityStage(request, 'embedding-completed', {
         durationMs: Date.now() - embeddingStartedAt,
@@ -157,13 +159,15 @@ const logFidelityStage = (
     stage: string,
     details: Readonly<Record<string, unknown>>,
 ): void => {
-    info(`character-fidelity: stage ${JSON.stringify({
-        jobId: request.jobId,
-        panelId: request.panelId,
-        attemptId: request.attemptId,
-        stage,
-        ...details,
-    })}`)
+    info(`character-fidelity: stage ${
+        JSON.stringify({
+            jobId: request.jobId,
+            panelId: request.panelId,
+            attemptId: request.attemptId,
+            stage,
+            ...details,
+        })
+    }`)
 }
 
 const summarizeDetections = (faces: readonly DetectedFace[]): Readonly<Record<string, unknown>> => ({
@@ -192,31 +196,37 @@ export async function loadCharacterFidelityModels(): Promise<RuntimeModels> {
             executionProviders: ['wasm'],
             logSeverityLevel: 3,
         }
-        info(`character-fidelity: model-stage ${JSON.stringify({
-            stage: 'load-started',
-            detectorArtifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.detector.artifactId,
-            recognizerArtifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.recognizer.artifactId,
-            wasmThreads: ort.env.wasm.numThreads,
-            wasmSimd: ort.env.wasm.simd,
-        })}`)
+        info(`character-fidelity: model-stage ${
+            JSON.stringify({
+                stage: 'load-started',
+                detectorArtifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.detector.artifactId,
+                recognizerArtifactId: CHARACTER_FIDELITY_MODEL_MANIFEST.recognizer.artifactId,
+                wasmThreads: ort.env.wasm.numThreads,
+                wasmSimd: ort.env.wasm.simd,
+            })
+        }`)
         const detectorBytes = await readAndVerifyArtifact('detector')
         const recognizerBytes = await readAndVerifyArtifact('recognizer')
-        info(`character-fidelity: model-stage ${JSON.stringify({
-            stage: 'artifacts-verified',
-            detectorByteLength: detectorBytes.byteLength,
-            recognizerByteLength: recognizerBytes.byteLength,
-            durationMs: Date.now() - startedAt,
-        })}`)
+        info(`character-fidelity: model-stage ${
+            JSON.stringify({
+                stage: 'artifacts-verified',
+                detectorByteLength: detectorBytes.byteLength,
+                recognizerByteLength: recognizerBytes.byteLength,
+                durationMs: Date.now() - startedAt,
+            })
+        }`)
         const detector = await ort.InferenceSession.create(detectorBytes, sessionOptions)
         const recognizer = await ort.InferenceSession.create(recognizerBytes, sessionOptions)
-        info(`character-fidelity: model-stage ${JSON.stringify({
-            stage: 'sessions-ready',
-            detectorInputs: detector.inputNames,
-            detectorOutputs: detector.outputNames,
-            recognizerInputs: recognizer.inputNames,
-            recognizerOutputs: recognizer.outputNames,
-            durationMs: Date.now() - startedAt,
-        })}`)
+        info(`character-fidelity: model-stage ${
+            JSON.stringify({
+                stage: 'sessions-ready',
+                detectorInputs: detector.inputNames,
+                detectorOutputs: detector.outputNames,
+                recognizerInputs: recognizer.inputNames,
+                recognizerOutputs: recognizer.outputNames,
+                durationMs: Date.now() - startedAt,
+            })
+        }`)
         return {
             detector,
             recognizer,
@@ -397,9 +407,11 @@ const readCoordinate = async (
     const height = metadata.height ?? 0
     const expectedFormat = coordinate.mimeType === 'image/jpeg' ? 'jpeg' : coordinate.mimeType.slice('image/'.length)
     if (metadata.format !== expectedFormat) throw new Error('CHARACTER_FIDELITY_OBJECT_MEDIA_TYPE_INVALID')
-    if (width < 1 || height < 1
+    if (
+        width < 1 || height < 1
         || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION
-        || width * height > MAX_IMAGE_PIXELS) {
+        || width * height > MAX_IMAGE_PIXELS
+    ) {
         throw new Error('CHARACTER_FIDELITY_IMAGE_DIMENSIONS_INVALID')
     }
     return bytes
@@ -421,7 +433,8 @@ const validateCoordinate = (coordinate: CharacterFidelityObjectCoordinate, organ
         'image/webp': 'webp',
     }
     const extension = extensionByMimeType[coordinate.mimeType]
-    if (coordinate.organizationId !== organizationId
+    if (
+        coordinate.organizationId !== organizationId
         || coordinate.bucketName !== `transient-media-${organizationId}-files`
         || !extension || !new RegExp(`^partial-[a-f0-9]{64}\\.${extension}$`, 'u').test(coordinate.objectKey)
         || coordinate.byteLength <= 0 || coordinate.byteLength > MAX_OBJECT_BYTES

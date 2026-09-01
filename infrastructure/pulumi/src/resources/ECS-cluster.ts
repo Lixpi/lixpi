@@ -12,7 +12,7 @@ import { CONTAINER_INSIGHTS_ENABLED } from '../constants/logging.ts'
 
 const {
     ORG_NAME,
-    STAGE
+    STAGE,
 } = process.env
 
 export type EcsClusterArgs = {
@@ -29,7 +29,7 @@ export type EcsClusterArgs = {
 }
 
 export const createEcsCluster = async (
-    args: EcsClusterArgs
+    args: EcsClusterArgs,
 ) => {
     const {
         vpc,
@@ -84,6 +84,6 @@ export const createEcsCluster = async (
             clusterId: cluster.id,
             clusterName: cluster.name,
             clusterArn: cluster.arn,
-        }
+        },
     }
 }

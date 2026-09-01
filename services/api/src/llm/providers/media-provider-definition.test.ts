@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import type { ProviderName } from '@lixpi/constants'
 import type { ProviderSafeMediaIntent } from '@lixpi/constants'
@@ -71,22 +75,26 @@ describe('current media provider policy definitions', () => {
     })
 
     it('rejects an OpenAI profile that does not enforce low moderation', () => {
-        expect(() => assertValidMediaProviderDefinition({
-            ...CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI,
-            moderation: {
-                ...CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI.moderation,
-                settings: () => ({ moderation: 'auto' }),
-            },
-        })).toThrow('OPENAI_LOW_MODERATION_PROFILE_REQUIRED')
+        expect(() =>
+            assertValidMediaProviderDefinition({
+                ...CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI,
+                moderation: {
+                    ...CURRENT_MEDIA_PROVIDER_DEFINITIONS.OpenAI.moderation,
+                    settings: () => ({ moderation: 'auto' }),
+                },
+            })
+        ).toThrow('OPENAI_LOW_MODERATION_PROFILE_REQUIRED')
     })
 
-    it.each([
-        ['standard text', 'text', 'standard', 'allow_all'],
-        ['standard extension', 'video-extension', 'standard', 'allow_all'],
-        ['standard image conditioning', 'image-conditioned', 'standard', 'allow_adult'],
-        ['restricted text', 'text', 'restricted', 'allow_adult'],
-        ['restricted image conditioning', 'image-conditioned', 'restricted', 'allow_adult'],
-    ] as const)('uses Google least-restrictive settings for %s', (_case, inputMode, regionProfile, expected) => {
+    it.each(
+        [
+            ['standard text', 'text', 'standard', 'allow_all'],
+            ['standard extension', 'video-extension', 'standard', 'allow_all'],
+            ['standard image conditioning', 'image-conditioned', 'standard', 'allow_adult'],
+            ['restricted text', 'text', 'restricted', 'allow_adult'],
+            ['restricted image conditioning', 'image-conditioned', 'restricted', 'allow_adult'],
+        ] as const,
+    )('uses Google least-restrictive settings for %s', (_case, inputMode, regionProfile, expected) => {
         expect(CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google.moderation.settings(
             'veo-3.1-generate-preview',
             inputMode,
@@ -95,10 +103,12 @@ describe('current media provider policy definitions', () => {
     })
 
     it('fails closed when Google region/account policy is not configured', () => {
-        expect(() => CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google.moderation.settings(
-            'veo-3.1-generate-preview',
-            'text',
-        )).toThrow('GOOGLE_VEO_PERSON_GENERATION_PROFILE_REQUIRED')
+        expect(() =>
+            CURRENT_MEDIA_PROVIDER_DEFINITIONS.Google.moderation.settings(
+                'veo-3.1-generate-preview',
+                'text',
+            )
+        ).toThrow('GOOGLE_VEO_PERSON_GENERATION_PROFILE_REQUIRED')
     })
 
     it('sanitizes provider details and preserves the exact failure stage', () => {
@@ -190,11 +200,12 @@ describe('current media provider policy definitions', () => {
     })
 
     it('recovers poll/download/persist stages from asynchronous provider failures', () => {
-        const normalize = (message: string) => normalizeProviderProblem({
-            provider: 'Google',
-            error: new Error(message),
-            context: { generationRequestId: 'request-1', stage: 'submit' },
-        }).stage
+        const normalize = (message: string) =>
+            normalizeProviderProblem({
+                provider: 'Google',
+                error: new Error(message),
+                context: { generationRequestId: 'request-1', stage: 'submit' },
+            }).stage
 
         expect(normalize('VEO operation completed with raiMediaFilteredCount=1')).toBe('poll')
         expect(normalize('failed to download provider video output')).toBe('download')
@@ -206,7 +217,7 @@ describe('current media provider policy definitions', () => {
             provider: 'OpenAI',
             error: new Error(
                 'CHARACTER_SHEET_IDENTITY_ANCHOR_UNAVAILABLE:'
-                + 'CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:head-front-neutral:single-panel-composition',
+                    + 'CHARACTER_PANEL_STRUCTURAL_CONTRACT_FAILED:head-front-neutral:single-panel-composition',
             ),
             context: {
                 generationRequestId: 'request-1',

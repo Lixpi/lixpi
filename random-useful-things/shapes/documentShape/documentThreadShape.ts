@@ -53,7 +53,7 @@ export function setupThreadGradient(defs: any, config: { gradientId: string }) {
     const threadGradient = defs.append('linearGradient')
         .attr('id', config.gradientId)
         .attr('gradientUnits', 'userSpaceOnUse')
-        .attr('x1', '0').attr('y1', '256')  // Center of the shape
+        .attr('x1', '0').attr('y1', '256') // Center of the shape
         .attr('x2', '512').attr('y2', '256')
 
     SvgGradientRenderer.appendRepeatingLinearGradientStops(threadGradient, settings.gradient.shiftingColors)
@@ -65,7 +65,7 @@ export function startThreadGradientAnimation(
     container: HTMLElement,
     nodeId: string = 'context',
     duration: number = 50,
-    threadGradientId: string = 'ctx-thread-grad'
+    threadGradientId: string = 'ctx-thread-grad',
 ): { stop: () => void } {
     let running = true
     let threadGradient: any = null
@@ -97,7 +97,7 @@ export function startThreadGradientAnimation(
                         running = false
                         gradientAnimation?.stop()
                         threadGradient?.interrupt()
-                    }
+                    },
                 }
             }
         }
@@ -124,6 +124,6 @@ export function startThreadGradientAnimation(
             running = false
             gradientAnimation?.stop()
             threadGradient?.interrupt()
-        }
+        },
     }
 }

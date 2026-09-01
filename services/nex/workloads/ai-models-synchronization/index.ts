@@ -17,10 +17,17 @@
 
 import process from 'process'
 
-import { connect, type NatsConnection } from '@nats-io/transport-node'
+import {
+    connect,
+    type NatsConnection,
+} from '@nats-io/transport-node'
 import { nkeyAuthenticator } from '@nats-io/nats-core'
 
-import { info, warn, err } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import { AiModelsSync } from './ai-models-synchronization.ts'
@@ -85,8 +92,8 @@ async function runOnce(): Promise<void> {
         info(`🚀 ai-models sync starting (${startedAt.toISOString()})`)
         const result = await sync.synchronizeModels()
         info(
-            `✅ ai-models sync done: new=${result.totalNew} updated=${result.totalUpdated} ` +
-            `deleted=${result.totalDeleted} processed=${result.totalProcessed}`,
+            `✅ ai-models sync done: new=${result.totalNew} updated=${result.totalUpdated} `
+                + `deleted=${result.totalDeleted} processed=${result.totalProcessed}`,
         )
         await publishCompleted({
             totalNew: result.totalNew,
@@ -106,18 +113,26 @@ async function runOnce(): Promise<void> {
 // run can never overlap the next one (no concurrent DynamoDB writes).
 async function loop(): Promise<void> {
     await runOnce()
-    timer = setTimeout(() => { void loop() }, intervalMs)
+    timer = setTimeout(() => {
+        void loop()
+    }, intervalMs)
 }
 
 const shutdown = async (signal: string): Promise<void> => {
     warn(`nex-entry received ${signal}; shutting down ai-models sync`)
     if (timer) clearTimeout(timer)
-    try { await nats?.drain() } catch { /* best-effort */ }
+    try {
+        await nats?.drain()
+    } catch { /* best-effort */ }
     process.exit(0)
 }
 
-process.on('SIGTERM', () => { void shutdown('SIGTERM') })
-process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('SIGTERM', () => {
+    void shutdown('SIGTERM')
+})
+process.on('SIGINT', () => {
+    void shutdown('SIGINT')
+})
 
 info(`nex-entry ai-models-sync up; interval=${intervalMs}ms`)
 void loop()

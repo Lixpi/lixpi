@@ -148,7 +148,7 @@ The exception is byte transport: media upload/download, video range reads, authe
 
 ### Framework-Agnostic Canvas
 
-The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks; the surrounding UI is also vanilla TypeScript DOM, with state held in Nano Stores. This insulates the canvas logic from framework changes and is why the rendering engine can stand on its own. See [Rendering Engine](../canvas/RENDERING-ENGINE.md).
+The canvas engine (`WorkspaceCanvas.ts`) is pure vanilla TypeScript with zero framework imports. It receives DOM elements and callbacks; the surrounding UI is also vanilla TypeScript DOM, with state held in Nano Stores. This insulates the canvas logic from framework changes and is why the rendering engine can stand on its own. See [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md).
 
 ### Self-Contained Capability Modules
 
@@ -219,6 +219,6 @@ Shared packages in `packages/lixpi/` keep service contracts in sync so that the 
 - [Authentication](./AUTHENTICATION.md) — the dual auth model, the NATS auth callout, and the two auth modes.
 - [AI Generation Pipeline](./AI-GENERATION-PIPELINE.md) — the LangGraph workflow, providers, and tool-call routing.
 - [Streaming & Events](./STREAMING-AND-EVENTS.md) — live AI events, durable replay logs, ProseMirror step streams, and the event catalog.
-- [Rendering Engine](../canvas/RENDERING-ENGINE.md) — the framework-agnostic canvas.
+- [Rendering Engine](../../packages/lixpi/canvas-engine/docs/RENDERING-ENGINE.md) — the framework-agnostic canvas.
 - [Explicit Workspace Context](../ai-chat/CONTEXT-RELEVANCE.md): how prompt references and composer chips become multimodal context.
 - [Infrastructure Overview](./deployment/INFRASTRUCTURE-OVERVIEW.md) and [Scaling & Operations](./deployment/SCALING-AND-OPERATIONS.md) — the AWS topology, Pulumi, and production scaling.

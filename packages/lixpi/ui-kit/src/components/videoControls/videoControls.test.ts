@@ -1,7 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+// @vitest-environment happy-dom
+import {
+    describe,
+    it,
+    expect,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest'
 import { select } from 'd3-selection'
-import { uiKitSettings } from '../../runtime-settings.ts'
-import { applyVideoControlsHostStyleProperties, createVideoControls } from './videoControls.ts'
+import {
+    createDefaultVideoControlsSettings,
+    type VideoControlsSettings,
+} from './settings.ts'
+
+const defaults = createDefaultVideoControlsSettings()
+const glyph = '<svg viewBox="0 0 10 10"><path d="M0 0 H10 V10 Z"/></svg>'
+const icons = { play: glyph, pause: glyph, volumeHigh: glyph, volumeMuted: glyph, fullscreenEnter: glyph, fullscreenExit: glyph }
+import {
+    applyVideoControlsHostStyleProperties,
+    createVideoControls,
+} from './videoControls.ts'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -36,7 +54,9 @@ function createMockVideo(overrides: {
     })
     Object.defineProperty(video, 'duration', {
         get: () => duration,
-        set: (value: number) => { duration = value },
+        set: (value: number) => {
+            duration = value
+        },
         configurable: true,
     })
     Object.defineProperty(video, 'paused', {
@@ -45,17 +65,23 @@ function createMockVideo(overrides: {
     })
     Object.defineProperty(video, 'volume', {
         get: () => volume,
-        set: (value: number) => { volume = value },
+        set: (value: number) => {
+            volume = value
+        },
         configurable: true,
     })
     Object.defineProperty(video, 'muted', {
         get: () => muted,
-        set: (value: boolean) => { muted = value },
+        set: (value: boolean) => {
+            muted = value
+        },
         configurable: true,
     })
     Object.defineProperty(video, 'playbackRate', {
         get: () => playbackRate,
-        set: (value: number) => { playbackRate = value },
+        set: (value: number) => {
+            playbackRate = value
+        },
         configurable: true,
     })
     Object.defineProperty(video, 'buffered', {
@@ -78,15 +104,19 @@ function createMockVideo(overrides: {
     video.requestFullscreen = vi.fn(async () => {})
 
     video._currentTimeWrites = []
-    video._setCurrentTime = (value: number) => { currentTime = value }
+    video._setCurrentTime = (value: number) => {
+        currentTime = value
+    }
 
     return video
 }
 
-function mount(width = 520, video = createMockVideo()) {
+function mount(width = 520, video = createMockVideo(), settings?: VideoControlsSettings) {
     const svg = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement
     document.body.appendChild(svg)
     const controls = createVideoControls(select(svg), {
+        icons,
+        settings,
         id: 'video-1',
         x: 0,
         y: 0,
@@ -128,6 +158,22 @@ function mockRect(element: Element, width: number): void {
 }
 
 describe('createVideoControls', () => {
+    it('keeps settings and SVG resource IDs independent when two players use the same node ID', () => {
+        const settings = createDefaultVideoControlsSettings()
+        settings.speed.minRate = 0.75
+        const first = mount(520, createMockVideo(), settings)
+        settings.speed.minRate = 0.9
+        const second = mount()
+        first.svg.querySelector('.video-controls-speed')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+        second.svg.querySelector('.video-controls-speed')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+        expect(first.video.playbackRate).toBe(0.75)
+        expect(second.video.playbackRate).toBe(0.5)
+        expect(first.svg.querySelector('filter')!.id).not.toBe(second.svg.querySelector('filter')!.id)
+        first.controls.destroy()
+        expect(second.svg.querySelector('.video-controls-group')).not.toBeNull()
+        second.controls.destroy()
+    })
+
     beforeEach(() => {
         document.body.innerHTML = ''
         vi.useFakeTimers()
@@ -176,13 +222,13 @@ describe('createVideoControls', () => {
         expect(video.playbackRate).toBeCloseTo(1.05, 2)
 
         speed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
-        expect(video.playbackRate).toBe(uiKitSettings.videoControls.speed.minRate)
+        expect(video.playbackRate).toBe(defaults.speed.minRate)
 
         speed.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
-        expect(video.playbackRate).toBe(uiKitSettings.videoControls.speed.maxRate)
+        expect(video.playbackRate).toBe(defaults.speed.maxRate)
 
         speed.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
-        expect(video.playbackRate).toBe(uiKitSettings.videoControls.speed.defaultRate)
+        expect(video.playbackRate).toBe(defaults.speed.defaultRate)
     })
 
     it('seeks by dragging on the seek rail', () => {
@@ -327,10 +373,10 @@ describe('createVideoControls', () => {
         const host = document.createElement('div')
         applyVideoControlsHostStyleProperties(host)
 
-        expect(host.style.getPropertyValue('--video-controls-host-border-radius')).toBe(uiKitSettings.videoControls.styles.hostBorderRadius)
-        expect(host.style.getPropertyValue('--video-controls-host-drop-shadow')).toBe(uiKitSettings.videoControls.styles.hostDropShadow)
-        expect(host.style.getPropertyValue('--video-controls-host-backdrop-filter')).toBe(uiKitSettings.videoControls.styles.hostBackdropFilter)
-        expect(host.style.getPropertyValue('--video-controls-host-reduced-transparency-background')).toBe(uiKitSettings.videoControls.styles.hostReducedTransparencyBackground)
+        expect(host.style.getPropertyValue('--video-controls-host-border-radius')).toBe(defaults.styles.hostBorderRadius)
+        expect(host.style.getPropertyValue('--video-controls-host-drop-shadow')).toBe(defaults.styles.hostDropShadow)
+        expect(host.style.getPropertyValue('--video-controls-host-backdrop-filter')).toBe(defaults.styles.hostBackdropFilter)
+        expect(host.style.getPropertyValue('--video-controls-host-reduced-transparency-background')).toBe(defaults.styles.hostReducedTransparencyBackground)
     })
 
     it('removes media listeners and DOM on destroy', () => {
@@ -341,6 +387,7 @@ describe('createVideoControls', () => {
         document.body.appendChild(svg)
 
         const controls = createVideoControls(select(svg), {
+            icons,
             id: 'video-1',
             x: 0,
             y: 0,

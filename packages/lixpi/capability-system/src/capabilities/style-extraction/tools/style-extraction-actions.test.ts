@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import { CapabilityActionRegistry } from '../../../backend/capability-action-registry.ts'
 import {
@@ -38,10 +43,12 @@ describe('Style Extraction package actions', () => {
     it('rejects invalid extractor concurrency before action registration', () => {
         const registry = new CapabilityActionRegistry()
 
-        expect(() => registerStyleExtractionActions(registry, {
-            runtime: runtime(),
-            extractorConcurrency: 0,
-        })).toThrow('Style extractor concurrency must be positive')
+        expect(() =>
+            registerStyleExtractionActions(registry, {
+                runtime: runtime(),
+                extractorConcurrency: 0,
+            })
+        ).toThrow('Style extractor concurrency must be positive')
         expect(registry.allowedActionKeys().size).toBe(0)
     })
 })

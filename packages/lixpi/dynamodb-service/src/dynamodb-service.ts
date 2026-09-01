@@ -2,7 +2,7 @@
 
 import chalk from 'chalk'
 
-import { fromSSO } from '@aws-sdk/credential-providers';
+import { fromSSO } from '@aws-sdk/credential-providers'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import {
     DynamoDBDocumentClient,
@@ -13,7 +13,7 @@ import {
     PutCommand,
     UpdateCommand,
     BatchWriteCommand,
-    TransactWriteCommand
+    TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb'
 
 // Export all methods from '@aws-sdk/util-dynamodb' module, specifically marshall and unmarshall methods that are used to read DynamoDB streams
@@ -95,7 +95,7 @@ export const isTransactionConditionalCheckFailure = (error: unknown): boolean =>
     const candidate = error as { name?: string; CancellationReasons?: Array<{ Code?: string }> }
     return candidate?.name === 'ConditionalCheckFailedException'
         || candidate?.name === 'TransactionCanceledException'
-        && (candidate.CancellationReasons ?? []).some((reason) => reason?.Code === 'ConditionalCheckFailed')
+            && (candidate.CancellationReasons ?? []).some((reason) => reason?.Code === 'ConditionalCheckFailed')
 }
 
 const logStats = ({ operation, operationType, capacityUnits, tableName, origin }) => {
@@ -117,7 +117,6 @@ const logStats = ({ operation, operationType, capacityUnits, tableName, origin }
     console.info(`${logOrigin} ${dynamoDbOperation} ${tableName}, ${capaticyUnitsInfo}, ${chalk.grey('origin:')}${origin}`)
 }
 
-
 export default class DynamoDBService {
     private dynamodbClient: DynamoDBClient
     private dynamodbDocumentClient: DynamoDBDocumentClient
@@ -125,7 +124,7 @@ export default class DynamoDBService {
     constructor({
         region = '',
         ssoProfile = '',
-        endpoint = ''
+        endpoint = '',
     }: {
         region?: string
         ssoProfile?: string
@@ -138,12 +137,12 @@ export default class DynamoDBService {
         this.dynamodbClient = new DynamoDBClient({
             region,
             ...((ssoProfile !== '' && !endpoint) && {
-                credentials: fromSSO({ profile: ssoProfile })
+                credentials: fromSSO({ profile: ssoProfile }),
             }),
             // point to DynamoDB Local when provided
             ...(endpoint && {
                 endpoint,
-                credentials: { accessKeyId: 'test', secretAccessKey: 'test' }    // For Local, supply dummy static credentials. For AWS, use SSO when provided.
+                credentials: { accessKeyId: 'test', secretAccessKey: 'test' }, // For Local, supply dummy static credentials. For AWS, use SSO when provided.
             }),
         })
 
@@ -162,7 +161,7 @@ export default class DynamoDBService {
         tableName = '',
         key = {},
         consistentRead = false,
-        origin = 'unknown'
+        origin = 'unknown',
     }) {
         if (!tableName || Object.keys(key).length === 0) {
             console.error(`Error: Table name and key must be provided!, origin: ${origin}`)
@@ -170,19 +169,21 @@ export default class DynamoDBService {
         }
 
         try {
-            const response = await this.dynamodbDocumentClient.send(new GetCommand({
-                TableName: tableName,
-                Key: key,
-                ConsistentRead: consistentRead,
-                ReturnConsumedCapacity: 'TOTAL'
-            }))
+            const response = await this.dynamodbDocumentClient.send(
+                new GetCommand({
+                    TableName: tableName,
+                    Key: key,
+                    ConsistentRead: consistentRead,
+                    ReturnConsumedCapacity: 'TOTAL',
+                }),
+            )
 
             logStats({
                 operation: 'getItem',
                 operationType: 'read',
                 capacityUnits: toCapacityUnits(response.ConsumedCapacity),
                 tableName,
-                origin
+                origin,
             })
 
             return response.Item
@@ -215,7 +216,7 @@ export default class DynamoDBService {
         sortKeyCondition?: SortKeyCondition
     }) {
         if (Object.keys(keyConditions).length === 0) {
-            console.error("Key conditions must be provided.")
+            console.error('Key conditions must be provided.')
             return
         }
 
@@ -241,7 +242,7 @@ export default class DynamoDBService {
             ScanIndexForward: scanIndexForward,
             ConsistentRead: consistentRead,
             ...(exclusiveStartKey && { ExclusiveStartKey: exclusiveStartKey }),
-            ReturnConsumedCapacity: 'TOTAL'
+            ReturnConsumedCapacity: 'TOTAL',
         }
 
         let items: any[] = []
@@ -271,7 +272,7 @@ export default class DynamoDBService {
             operationType: 'read',
             capacityUnits: toCapacityUnits(consumedCapacities),
             tableName,
-            origin
+            origin,
         })
 
         return { items, consumedCapacities, readIterations, lastEvaluatedKey }
@@ -283,25 +284,25 @@ export default class DynamoDBService {
         fetchAllItems = false,
         consistentRead = false,
         exclusiveStartKey,
-        origin = 'unknown'
+        origin = 'unknown',
     }) {
         if (!tableName) {
             console.error(`Error: Table name must be provided!, origin: ${origin}`)
-            return;
+            return
         }
 
         const params: any = {
             TableName: tableName,
             Limit: limit,
             ConsistentRead: consistentRead,
-            ReturnConsumedCapacity: 'TOTAL'
+            ReturnConsumedCapacity: 'TOTAL',
         }
         if (exclusiveStartKey) params.ExclusiveStartKey = exclusiveStartKey
 
         let items: any[] = []
         const consumedCapacities: any[] = []
         let lastEvaluatedKey: any = exclusiveStartKey ?? null
-        let scanIterations = 0;
+        let scanIterations = 0
 
         do {
             if (lastEvaluatedKey) {
@@ -312,28 +313,28 @@ export default class DynamoDBService {
 
             items.push(...(response.Items ?? []))
             if (response.ConsumedCapacity) consumedCapacities.push(response.ConsumedCapacity)
-            lastEvaluatedKey = response.LastEvaluatedKey;
-            scanIterations++;
+            lastEvaluatedKey = response.LastEvaluatedKey
+            scanIterations++
 
             if (!fetchAllItems) {
-                break;
+                break
             }
-        } while (lastEvaluatedKey);
+        } while (lastEvaluatedKey)
 
         logStats({
             operation: 'scanItems',
             operationType: 'read',
             capacityUnits: toCapacityUnits(consumedCapacities),
             tableName,
-            origin
-        });
+            origin,
+        })
 
         return {
             items,
             consumedCapacities,
             scanIterations,
-            ...(lastEvaluatedKey ? { lastEvaluatedKey } : {})
-        };
+            ...(lastEvaluatedKey ? { lastEvaluatedKey } : {}),
+        }
     }
 
     async batchReadItems({
@@ -341,7 +342,7 @@ export default class DynamoDBService {
         readBatchSize = 100,
         fetchAllItems = false,
         scanIndexForward = false,
-        origin = 'unknown'
+        origin = 'unknown',
     }: {
         queries?: any[]
         readBatchSize?: number
@@ -349,7 +350,7 @@ export default class DynamoDBService {
         scanIndexForward?: boolean
         origin?: string
     }) {
-        if (queries.length === 0) return new Error("Queries array must be provided and not be empty.")
+        if (queries.length === 0) return new Error('Queries array must be provided and not be empty.')
 
         let items = {}
         const consumedCapacities: any[] = []
@@ -359,7 +360,7 @@ export default class DynamoDBService {
         do {
             const params = {
                 RequestItems: {},
-                ReturnConsumedCapacity: 'TOTAL'
+                ReturnConsumedCapacity: 'TOTAL',
             }
 
             // Prepare batch keys for each table query
@@ -399,7 +400,7 @@ export default class DynamoDBService {
             operationType: 'read',
             capacityUnits: totalCapacityUnits,
             tableName: JSON.stringify(queries.map(q => q.tableName)),
-            origin
+            origin,
         })
 
         // If scanIndexForward is false, reverse the order of the items for each table
@@ -415,7 +416,7 @@ export default class DynamoDBService {
     async batchWriteItems({
         tableName = '',
         items = [],
-        origin = 'unknown'
+        origin = 'unknown',
     }) {
         if (!tableName || items.length === 0) {
             console.error(`Error: Table name and at least one item must be provided!, origin: ${origin}`)
@@ -437,10 +438,10 @@ export default class DynamoDBService {
             const params = {
                 RequestItems: {
                     [tableName]: batch.map(item => ({
-                        PutRequest: { Item: item }
-                    }))
+                        PutRequest: { Item: item },
+                    })),
                 },
-                ReturnConsumedCapacity: 'TOTAL'
+                ReturnConsumedCapacity: 'TOTAL',
             }
 
             try {
@@ -471,33 +472,35 @@ export default class DynamoDBService {
             operationType: 'write',
             capacityUnits: totalCapacityUnits,
             tableName,
-            origin
+            origin,
         })
 
         return {
             totalItemsWritten,
-            consumedCapacities
+            consumedCapacities,
         }
     }
 
     async putItem({
         tableName = '',
         item = {},
-        origin = 'unknown'
+        origin = 'unknown',
     }) {
         try {
-            const response = await this.dynamodbDocumentClient.send(new PutCommand({
-                TableName: tableName,
-                Item: item,
-                ReturnConsumedCapacity: 'TOTAL'
-            }))
+            const response = await this.dynamodbDocumentClient.send(
+                new PutCommand({
+                    TableName: tableName,
+                    Item: item,
+                    ReturnConsumedCapacity: 'TOTAL',
+                }),
+            )
 
             logStats({
                 operation: 'putItem',
                 operationType: 'write',
                 capacityUnits: response.ConsumedCapacity.CapacityUnits,
                 tableName,
-                origin
+                origin,
             })
 
             return response
@@ -509,13 +512,13 @@ export default class DynamoDBService {
     async updateItem({
         tableName = '',
         key = {},
-        updates = {},    // Preferred way to update items
-        updateExpression = '',    // Use this if you need to provide a custom update expression
-        expressionAttributeNames = {},    // Use this if you need to provide custom attribute names
-        expressionAttributeValues = {},    // Use this if you need to provide custom attribute values
+        updates = {}, // Preferred way to update items
+        updateExpression = '', // Use this if you need to provide a custom update expression
+        expressionAttributeNames = {}, // Use this if you need to provide custom attribute names
+        expressionAttributeValues = {}, // Use this if you need to provide custom attribute values
         conditionExpression = '',
         logConditionalCheckFailures = true,
-        origin = 'unknown'
+        origin = 'unknown',
     }) {
         if (!tableName || Object.keys(key).length === 0) {
             console.error(`Error: Table name and key must be provided!, origin: ${origin}`)
@@ -526,7 +529,7 @@ export default class DynamoDBService {
             TableName: tableName,
             Key: key,
             ReturnValues: 'UPDATED_NEW',
-            ReturnConsumedCapacity: 'TOTAL'
+            ReturnConsumedCapacity: 'TOTAL',
         }
 
         // Use the simple update method if 'updates' is provided
@@ -563,7 +566,7 @@ export default class DynamoDBService {
                 operationType: 'write',
                 capacityUnits: response.ConsumedCapacity.CapacityUnits,
                 tableName,
-                origin
+                origin,
             })
 
             return response.Attributes
@@ -582,7 +585,7 @@ export default class DynamoDBService {
     async transactWrite({
         operations,
         logConditionalCheckFailures = true,
-        origin = 'unknown'
+        origin = 'unknown',
     }: {
         operations: TransactOperation[]
         logConditionalCheckFailures?: boolean
@@ -644,23 +647,25 @@ export default class DynamoDBService {
                     UpdateExpression: updateExpression,
                     ...(Object.keys(expressionAttributeNames).length > 0 && { ExpressionAttributeNames: expressionAttributeNames }),
                     ...(Object.keys(expressionAttributeValues).length > 0 && { ExpressionAttributeValues: expressionAttributeValues }),
-                    ...(operation.conditionExpression && { ConditionExpression: operation.conditionExpression })
-                }
+                    ...(operation.conditionExpression && { ConditionExpression: operation.conditionExpression }),
+                },
             }
         })
 
         try {
-            const response = await this.dynamodbDocumentClient.send(new TransactWriteCommand({
-                TransactItems: transactItems,
-                ReturnConsumedCapacity: 'TOTAL'
-            }))
+            const response = await this.dynamodbDocumentClient.send(
+                new TransactWriteCommand({
+                    TransactItems: transactItems,
+                    ReturnConsumedCapacity: 'TOTAL',
+                }),
+            )
 
             logStats({
                 operation: 'transactWrite',
                 operationType: 'write',
                 capacityUnits: toCapacityUnits(response.ConsumedCapacity),
                 tableName: operations.map((operation) => operation.tableName).join(','),
-                origin
+                origin,
             })
 
             return response
@@ -676,10 +681,10 @@ export default class DynamoDBService {
         tableName = '',
         key = {},
         deleteRange = false,
-        origin = 'unknown'
+        origin = 'unknown',
     }) {
         if (Object.keys(key).length === 0) {
-            console.error("Key must be provided for delete operation")
+            console.error('Key must be provided for delete operation')
             return
         }
 
@@ -693,7 +698,7 @@ export default class DynamoDBService {
                 keyConditions: key,
                 limit: 25,
                 fetchAllItems: true,
-                origin: 'deleteItems() :: deleteRange operation'
+                origin: 'deleteItems() :: deleteRange operation',
             })
 
             if (readResult && readResult.items) {
@@ -707,7 +712,7 @@ export default class DynamoDBService {
         }
 
         const deleteRequests = itemsToDelete.map(item => ({
-            DeleteRequest: { Key: item }
+            DeleteRequest: { Key: item },
         }))
 
         const deleteChunks: any[] = []
@@ -718,10 +723,12 @@ export default class DynamoDBService {
         const consumedCapacities: any[] = []
 
         for (const chunk of deleteChunks) {
-            const response = await this.dynamodbDocumentClient.send(new BatchWriteCommand({
-                RequestItems: { [tableName]: chunk },
-                ReturnConsumedCapacity: 'TOTAL'
-            }))
+            const response = await this.dynamodbDocumentClient.send(
+                new BatchWriteCommand({
+                    RequestItems: { [tableName]: chunk },
+                    ReturnConsumedCapacity: 'TOTAL',
+                }),
+            )
 
             if (response.ConsumedCapacity) {
                 consumedCapacities.push(...response.ConsumedCapacity)
@@ -733,7 +740,7 @@ export default class DynamoDBService {
             operationType: 'write',
             capacityUnits: toCapacityUnits(consumedCapacities),
             tableName,
-            origin
+            origin,
         })
 
         return consumedCapacities
@@ -744,15 +751,15 @@ export default class DynamoDBService {
         key = {},
         timeToLiveAttributeName = '',
         timeToLiveAttributeValue = null,
-        origin = ''
+        origin = '',
     }) {
         if (Object.keys(key).length === 0 || !timeToLiveAttributeName || timeToLiveAttributeValue === null) {
-            console.error("Key, time-to-live attribute name, and value must be provided.")
+            console.error('Key, time-to-live attribute name, and value must be provided.')
             return
         }
 
         const updates = {
-            [timeToLiveAttributeName]: timeToLiveAttributeValue
+            [timeToLiveAttributeName]: timeToLiveAttributeValue,
         }
 
         try {
@@ -760,7 +767,7 @@ export default class DynamoDBService {
                 tableName,
                 key,
                 updates,
-                origin: `softDeleteItem:${origin}`
+                origin: `softDeleteItem:${origin}`,
             })
 
             return updateResult

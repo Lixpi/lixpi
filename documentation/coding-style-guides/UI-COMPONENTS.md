@@ -304,7 +304,7 @@ Use existing icons from [`@lixpi/ui-kit/svg`](../../packages/lixpi/ui-kit/src/sv
 For HTML, inject icon markup through the existing DOM/template patterns.
 
 For D3 SVG controls, use `appendSvgPathIcon` from
-[`svgIconPaths.ts`](../../packages/lixpi/ui-kit/src/svg/svgIconPaths.ts) to
+[`svgIconPaths.ts`](../../packages/lixpi/ui-primitives/src/svg/svgIconPaths.ts) to
 parse imported SVG markup and append scaled paths into an SVG group:
 
 ```typescript

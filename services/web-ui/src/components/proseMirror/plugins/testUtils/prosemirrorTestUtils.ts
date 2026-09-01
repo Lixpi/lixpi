@@ -1,5 +1,9 @@
 import { builders } from 'prosemirror-test-builder'
-import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
+import {
+    EditorState,
+    NodeSelection,
+    TextSelection,
+} from 'prosemirror-state'
 import type { Node as ProseMirrorNode } from 'prosemirror-model'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 

@@ -4,7 +4,7 @@ import { writable } from '$src/stores/nanoStore.ts'
 
 import {
     LoadingStatus,
-    PaymentProcessingStatus
+    PaymentProcessingStatus,
 } from '@lixpi/constants'
 
 import type { ReadonlyDeep } from 'type-fest'
@@ -39,20 +39,20 @@ const subscription: ReadonlyDeep<SubscriptionStore> = deepFreeze({
     meta: {
         loadingStatus: LoadingStatus.idle,
         paymentProcessingStatus: PaymentProcessingStatus.idle,
-        isPaymentDialogOpen: false
+        isPaymentDialogOpen: false,
     },
     data: {
         paymentMethodSetupIntentSecret: '',
-        paymentMethods: []
+        paymentMethods: [],
     },
     ui: {
         dialogTitle: '',
         dialogDescription: '',
-        hasError: false
-    }
+        hasError: false,
+    },
 })
 
-const store = writable({...subscription})
+const store = writable({ ...subscription })
 
 export const subscriptionStore = {
     ...store,
@@ -77,38 +77,43 @@ export const subscriptionStore = {
         return returnValue
     },
 
-    setMetaValues: (values: Partial<Meta> = {}): any => store.update(state => ({
-        ...state,
-        meta: {
-            ...state.meta,
-            ...values
-        }
-    })),
+    setMetaValues: (values: Partial<Meta> = {}): any =>
+        store.update(state => ({
+            ...state,
+            meta: {
+                ...state.meta,
+                ...values,
+            },
+        })),
 
-    setDataValues: (values: Partial<Subscription> = {}): any => store.update(state => ({
-        ...state,
-        data: {
-            ...state.data,
-            ...values
-        }
-    })),
+    setDataValues: (values: Partial<Subscription> = {}): any =>
+        store.update(state => ({
+            ...state,
+            data: {
+                ...state.data,
+                ...values,
+            },
+        })),
 
-    setUiValues: (values: Partial<PaymentDialogUi> = {}): any => store.update(state => ({
-        ...state,
-        ui: {
-            ...state.ui,
-            ...values
-        }
-    })),
+    setUiValues: (values: Partial<PaymentDialogUi> = {}): any =>
+        store.update(state => ({
+            ...state,
+            ui: {
+                ...state.ui,
+                ...values,
+            },
+        })),
 
-    resetStore: (): any => store.update(state => ({
-        ...subscription
-    })),
+    resetStore: (): any =>
+        store.update(state => ({
+            ...subscription,
+        })),
 
-    resetUiValues: (): any => store.update(state => ({
-        ...state,
-        ui: {
-            ...subscription.ui
-        }
-    }))
+    resetUiValues: (): any =>
+        store.update(state => ({
+            ...state,
+            ui: {
+                ...subscription.ui,
+            },
+        })),
 }

@@ -1,6 +1,11 @@
 'use strict'
 
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
 import {
     ACTION_TIMELINE_FRONTEND_STYLES,

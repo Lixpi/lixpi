@@ -8,12 +8,20 @@ import {
     type MediaGenerationRunMeta,
     type ProviderName,
 } from '@lixpi/constants'
-import type { ChunkPayload, ProseMirrorContentHandler, ProseMirrorSnapshotProvider } from './stream-publisher.ts'
-import { attachGeneratedAssetNode, settleGeneratedAssetOriginal } from '../../services/generated-asset-storage.ts'
+import type {
+    ChunkPayload,
+    ProseMirrorContentHandler,
+    ProseMirrorSnapshotProvider,
+} from './stream-publisher.ts'
+import {
+    attachGeneratedAssetNode,
+    settleGeneratedAssetOriginal,
+} from '../../services/generated-asset-storage.ts'
 import { materializeAssetProvenance } from '../../services/asset-provenance-materializer.ts'
 import { enqueueProvenanceRebuild } from '../../services/asset-maintenance-queue.ts'
 
-const isPng = (buffer: Buffer): boolean => buffer.length >= 8
+const isPng = (buffer: Buffer): boolean =>
+    buffer.length >= 8
     && buffer[0] === 0x89
     && buffer[1] === 0x50
     && buffer[2] === 0x4e

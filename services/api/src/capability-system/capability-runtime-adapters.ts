@@ -162,15 +162,21 @@ async function publishCapabilityChatPayload(args: {
             eventId: args.payload.pipelineEventId,
             payload: args.payload,
         })
-        args.natsService.publish(getAiInteractionCanonicalResponseSubject(
-            args.organizationId ?? args.workspaceId,
-            args.conversationAssetId,
-        ), { ...args.payload, pipelineStreamSeq: durable.streamSequence })
+        args.natsService.publish(
+            getAiInteractionCanonicalResponseSubject(
+                args.organizationId ?? args.workspaceId,
+                args.conversationAssetId,
+            ),
+            { ...args.payload, pipelineStreamSeq: durable.streamSequence },
+        )
     } catch {
-        args.natsService.publish(getAiInteractionCanonicalResponseSubject(
-            args.organizationId ?? args.workspaceId,
-            args.conversationAssetId,
-        ), args.payload)
+        args.natsService.publish(
+            getAiInteractionCanonicalResponseSubject(
+                args.organizationId ?? args.workspaceId,
+                args.conversationAssetId,
+            ),
+            args.payload,
+        )
     }
 }
 

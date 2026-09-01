@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "private": true,
     "type": "module",
+    "license": "MIT",
     "scripts": {
         "test:run": "vitest run"
     },
@@ -12,18 +13,28 @@
         "./shared": "./src/shared/index.ts",
         "./backend": "./src/backend/index.ts",
         "./frontend": "./src/frontend/index.ts",
-        "./frontend/animation": "./src/frontend/animation/index.ts",
         "./frontend/connectors": "./src/frontend/connectors/index.ts",
-        "./frontend/rendering": "./src/frontend/rendering/index.ts"
+        "./frontend/media": "./src/frontend/media/index.ts",
+        "./frontend/viewport": "./src/frontend/viewport/index.ts",
+        "./frontend/runtime": "./src/frontend/runtime/index.ts",
+        "./frontend/rendering": "./src/frontend/rendering/index.ts",
+        "./styles/interaction": {
+            "types": "./src/styles.d.ts",
+            "sass": "./src/frontend/runtime/interaction.scss",
+            "style": "./src/frontend/runtime/interaction.scss",
+            "default": "./src/frontend/runtime/interaction.scss"
+        }
     },
     "devDependencies": {
+        "@types/rbush": "*",
         "happy-dom": "*",
         "vitest": "*"
     },
     "dependencies": {
-        "@lixpi/constants": "file:../constants/ts",
+        "rbush": "*",
         "@xyflow/system": "*",
         "elkjs": "*",
-        "pixi.js": "*"
+        "pixi.js": "*",
+        "@lixpi/ui-primitives": "workspace:*"
     }
 }

@@ -1,5 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PromptReferenceCatalogItem, PromptReferenceCatalogPage } from '@lixpi/constants'
+import {
+    afterEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
+import type {
+    PromptReferenceCatalogItem,
+    PromptReferenceCatalogPage,
+} from '@lixpi/constants'
 import { EditorState } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 
@@ -16,7 +25,9 @@ import {
 const catalog = {
     list: async () => ({ items: [] }),
     listModules: async () => [],
-    getModule: async () => { throw new Error('not used') },
+    getModule: async () => {
+        throw new Error('not used')
+    },
 }
 
 afterEach(() => {
@@ -38,10 +49,12 @@ describe('promptReferencePickerPlugin', () => {
     it('defaults each @ session to Media and retains the query while switching categories', () => {
         const plugin = createAtPromptReferencePickerPlugin(catalog)
         let state = createPromptState(plugin)
-        state = state.apply(state.tr.insertText('@').setMeta(promptReferencePickerPluginKey, {
-            type: 'open',
-            triggerPos: state.selection.from,
-        }))
+        state = state.apply(
+            state.tr.insertText('@').setMeta(promptReferencePickerPluginKey, {
+                type: 'open',
+                triggerPos: state.selection.from,
+            }),
+        )
         state = state.apply(state.tr.insertText('por'))
         state = state.apply(state.tr.setMeta(promptReferencePickerPluginKey, {
             type: 'category',
@@ -102,10 +115,12 @@ describe('promptReferencePickerPlugin', () => {
         view.destroy()
     })
 
-    it.each([
-        ['@', createAtPromptReferencePickerPlugin, promptReferencePickerPluginKey],
-        ['/', createSlashCapabilityModulePickerPlugin, capabilityModulePickerPluginKey],
-    ] as const)('closes the %s picker only when pressing outside it', async (trigger, createPlugin, pluginKey) => {
+    it.each(
+        [
+            ['@', createAtPromptReferencePickerPlugin, promptReferencePickerPluginKey],
+            ['/', createSlashCapabilityModulePickerPlugin, capabilityModulePickerPluginKey],
+        ] as const,
+    )('closes the %s picker only when pressing outside it', async (trigger, createPlugin, pluginKey) => {
         vi.useFakeTimers()
         const plugin = createPlugin(catalog)
         const mount = document.createElement('div')
@@ -113,9 +128,11 @@ describe('promptReferencePickerPlugin', () => {
         document.body.append(mount, outside)
         const view = new EditorView(mount, { state: createPromptState(plugin) })
         const triggerPos = view.state.selection.from
-        view.dispatch(view.state.tr
-            .insertText(trigger)
-            .setMeta(pluginKey, { type: 'open', triggerPos }))
+        view.dispatch(
+            view.state.tr
+                .insertText(trigger)
+                .setMeta(pluginKey, { type: 'open', triggerPos }),
+        )
         await vi.advanceTimersByTimeAsync(150)
 
         const listbox = mount.querySelector<HTMLElement>('[role="listbox"]')
@@ -192,9 +209,11 @@ describe('promptReferencePickerPlugin', () => {
         document.body.appendChild(mount)
         const view = new EditorView(mount, { state: createPromptState(plugin) })
         const triggerPos = view.state.selection.from
-        view.dispatch(view.state.tr
-            .insertText('@')
-            .setMeta(promptReferencePickerPluginKey, { type: 'open', triggerPos }))
+        view.dispatch(
+            view.state.tr
+                .insertText('@')
+                .setMeta(promptReferencePickerPluginKey, { type: 'open', triggerPos }),
+        )
         view.dispatch(view.state.tr.setMeta(promptReferencePickerPluginKey, {
             type: 'category',
             category: 'artifacts',
@@ -224,18 +243,22 @@ describe('promptReferencePickerPlugin', () => {
         }> = []
         const asyncCatalog = {
             ...catalog,
-            list: vi.fn((query: any) => new Promise<any>((resolve) => {
-                pending.push({ query, resolve })
-            })),
+            list: vi.fn((query: any) =>
+                new Promise<any>((resolve) => {
+                    pending.push({ query, resolve })
+                })
+            ),
         }
         const plugin = createSlashCapabilityModulePickerPlugin(asyncCatalog)
         const mount = document.createElement('div')
         document.body.appendChild(mount)
         const view = new EditorView(mount, { state: createPromptState(plugin) })
         const triggerPos = view.state.selection.from
-        view.dispatch(view.state.tr
-            .insertText('/')
-            .setMeta(capabilityModulePickerPluginKey, { type: 'open', triggerPos }))
+        view.dispatch(
+            view.state.tr
+                .insertText('/')
+                .setMeta(capabilityModulePickerPluginKey, { type: 'open', triggerPos }),
+        )
         await vi.advanceTimersByTimeAsync(150)
 
         view.dispatch(view.state.tr.insertText('c'))
@@ -314,9 +337,11 @@ describe('promptReferencePickerPlugin', () => {
         const pending: Array<{ resolve: (page: PromptReferenceCatalogPage) => void }> = []
         const asyncCatalog = {
             ...catalog,
-            list: vi.fn(() => new Promise<PromptReferenceCatalogPage>((resolve) => {
-                pending.push({ resolve })
-            })),
+            list: vi.fn(() =>
+                new Promise<PromptReferenceCatalogPage>((resolve) => {
+                    pending.push({ resolve })
+                })
+            ),
         }
         const characterCreator: PromptReferenceCatalogItem = {
             referenceType: 'capability-module',
@@ -343,9 +368,11 @@ describe('promptReferencePickerPlugin', () => {
         document.body.appendChild(mount)
         const view = new EditorView(mount, { state: createPromptState(plugin) })
         const triggerPos = view.state.selection.from
-        view.dispatch(view.state.tr
-            .insertText('/')
-            .setMeta(capabilityModulePickerPluginKey, { type: 'open', triggerPos }))
+        view.dispatch(
+            view.state.tr
+                .insertText('/')
+                .setMeta(capabilityModulePickerPluginKey, { type: 'open', triggerPos }),
+        )
 
         const listbox = mount.querySelector<HTMLDivElement>('[role="listbox"]')
         if (!listbox) throw new Error('Expected prompt reference listbox')
@@ -410,32 +437,58 @@ describe('promptReferencePickerPlugin', () => {
         view.destroy()
     })
 
-    it.each([
+    it.each(
         [
-            {
-                referenceType: 'media', referenceId: 'asset-1', assetId: 'asset-1', nodeId: 'node-1',
-                mediaKind: 'image', source: 'canvas', title: 'Portrait', scope: 'organization', updatedAt: 1,
-            },
-            { referenceType: 'media', assetId: 'asset-1', nodeId: 'node-1', mediaKind: 'image', displayName: 'Portrait' },
-        ],
-        [
-            {
-                referenceType: 'capability-module', referenceId: 'character-creator', moduleId: 'character-creator',
-                name: 'Character Creator', normalizedName: 'character creator', summary: 'Character sheets.',
-                tags: [], status: 'active',
-            },
-            { referenceType: 'capability-module', moduleId: 'character-creator', displayName: 'Character Creator' },
-        ],
-        [
-            {
-                referenceType: 'tool', referenceId: 'tool-1', capabilityId: 'tool-1', kind: 'tool',
-                scopeAndOwner: 'organization#org-1', scope: 'organization', scopeOwnerId: 'org-1',
-                searchKey: 'tool#style#tool-1', name: 'Style', normalizedName: 'style', summary: 'Style.',
-                tags: [], manifestBlobHash: 'hash', catalogExposure: 'standalone', status: 'active', updatedAt: 1,
-            },
-            { referenceType: 'tool', capabilityId: 'tool-1', displayName: 'Style' },
-        ],
-    ] as const)('maps catalog rows to typed stable atom attributes', (item, expected) => {
+            [
+                {
+                    referenceType: 'media',
+                    referenceId: 'asset-1',
+                    assetId: 'asset-1',
+                    nodeId: 'node-1',
+                    mediaKind: 'image',
+                    source: 'canvas',
+                    title: 'Portrait',
+                    scope: 'organization',
+                    updatedAt: 1,
+                },
+                { referenceType: 'media', assetId: 'asset-1', nodeId: 'node-1', mediaKind: 'image', displayName: 'Portrait' },
+            ],
+            [
+                {
+                    referenceType: 'capability-module',
+                    referenceId: 'character-creator',
+                    moduleId: 'character-creator',
+                    name: 'Character Creator',
+                    normalizedName: 'character creator',
+                    summary: 'Character sheets.',
+                    tags: [],
+                    status: 'active',
+                },
+                { referenceType: 'capability-module', moduleId: 'character-creator', displayName: 'Character Creator' },
+            ],
+            [
+                {
+                    referenceType: 'tool',
+                    referenceId: 'tool-1',
+                    capabilityId: 'tool-1',
+                    kind: 'tool',
+                    scopeAndOwner: 'organization#org-1',
+                    scope: 'organization',
+                    scopeOwnerId: 'org-1',
+                    searchKey: 'tool#style#tool-1',
+                    name: 'Style',
+                    normalizedName: 'style',
+                    summary: 'Style.',
+                    tags: [],
+                    manifestBlobHash: 'hash',
+                    catalogExposure: 'standalone',
+                    status: 'active',
+                    updatedAt: 1,
+                },
+                { referenceType: 'tool', capabilityId: 'tool-1', displayName: 'Style' },
+            ],
+        ] as const,
+    )('maps catalog rows to typed stable atom attributes', (item, expected) => {
         expect(promptReferenceCatalogItemToAtomAttrs(item as any)).toEqual(expected)
     })
 })

@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -58,7 +62,7 @@ describe('ai-chat-thread.scss', () => {
     // they take the same one from the shared partial, so they cannot drift.
     it('takes the dark reference palette from the shared partial, declaring no colors of its own', () => {
         const workspaceScss = readFileSync(
-            resolve(__dirname, '../../../../infographics/workspace/workspace-canvas.scss'),
+            resolve(__dirname, '../../../../canvas-adapters/workspace-theme.scss'),
             'utf-8',
         )
 

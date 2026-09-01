@@ -12,5 +12,5 @@ export type {
     ThreadShapeParams,
     IconShapeParams,
     LabelShapeParams,
-    ShapeFactory
+    ShapeFactory,
 } from '$src/infographics/shapes/types.ts'

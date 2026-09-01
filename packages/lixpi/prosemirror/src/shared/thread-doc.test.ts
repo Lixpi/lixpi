@@ -1,6 +1,10 @@
 'use strict'
 
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     collectProseMirrorText,
@@ -135,30 +139,34 @@ describe('findBranchMarkerResponseSection', () => {
 
 describe('getBranchMarkerConversationPreviewFromThreadContent', () => {
     function previewFor(sectionContent: ProseMirrorJsonNode[]): ReturnType<typeof getBranchMarkerConversationPreviewFromThreadContent> {
-        return getBranchMarkerConversationPreviewFromThreadContent({
-            type: 'doc',
-            content: [{
-                type: 'aiChatThread',
-                attrs: { threadId: 'thread-preview' },
-                content: [
-                    userMessage('create a character design sheet'),
-                    responseMessage(
-                        { generationRequestId: 'request-preview' },
-                        [{
-                            type: 'aiReasoningSection',
-                            attrs: {
-                                generationRequestId: 'request-preview',
-                                reasoningRunId: 'request-preview:reasoning:0',
-                            },
-                            content: sectionContent,
-                        }],
-                    ),
-                ],
-            }],
-        }, 'thread-preview', {
-            generationRequestId: 'request-preview',
-            reasoningRunId: 'request-preview:reasoning:0',
-        })
+        return getBranchMarkerConversationPreviewFromThreadContent(
+            {
+                type: 'doc',
+                content: [{
+                    type: 'aiChatThread',
+                    attrs: { threadId: 'thread-preview' },
+                    content: [
+                        userMessage('create a character design sheet'),
+                        responseMessage(
+                            { generationRequestId: 'request-preview' },
+                            [{
+                                type: 'aiReasoningSection',
+                                attrs: {
+                                    generationRequestId: 'request-preview',
+                                    reasoningRunId: 'request-preview:reasoning:0',
+                                },
+                                content: sectionContent,
+                            }],
+                        ),
+                    ],
+                }],
+            },
+            'thread-preview',
+            {
+                generationRequestId: 'request-preview',
+                reasoningRunId: 'request-preview:reasoning:0',
+            },
+        )
     }
 
     it('keeps a reasoning response when the model emits only a collapsible block', () => {
@@ -241,9 +249,11 @@ describe('getBranchMarkerConversationPreviewFromThreadContent', () => {
         )
 
         expect(preview?.userText).toBe('Create 15 seconds with 2-second segments.')
-        expect(preview?.userMessage.content?.[0]?.content?.map((node) => (
-            node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
-        ))).toEqual(['Action Timeline', ' Create 15 seconds with 2-second segments.'])
+        expect(
+            preview?.userMessage.content?.[0]?.content?.map((node) => (
+                node.type === 'prompt_reference' ? node.attrs?.displayName : node.text
+            )),
+        ).toEqual(['Action Timeline', ' Create 15 seconds with 2-second segments.'])
         expect(preview?.promptReferences).toEqual([{
             referenceType: 'capability-module',
             moduleId: 'action-timeline',

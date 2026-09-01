@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import type { CapabilityManifest, CapabilityResourceRef } from '@lixpi/constants'
+import type {
+    CapabilityManifest,
+    CapabilityResourceRef,
+} from '@lixpi/constants'
 
 import { createInstructionSkillPackage } from './instruction-skill.ts'
 

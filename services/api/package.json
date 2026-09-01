@@ -24,6 +24,7 @@
         "@lixpi/auth-service": "workspace:*",
         "@lixpi/capability-system": "workspace:*",
         "@lixpi/canvas-engine": "workspace:*",
+        "@lixpi/canvas-components-lixpi-specific": "workspace:*",
         "@lixpi/constants": "workspace:*",
         "@lixpi/dynamodb-service": "workspace:*",
         "@lixpi/debug-tools": "workspace:*",

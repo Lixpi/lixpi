@@ -39,7 +39,9 @@ router.get('/:capabilityId/resources/:resourceId', authenticateRequest, async (r
         const message = (error as Error).message
         const status = message === 'NOT_FOUND' || message === 'CAPABILITY_RESOURCE_NOT_FOUND' || message === 'BLOB_NOT_FOUND'
             ? 404
-            : message === 'PERMISSION_DENIED' ? 403 : 422
+            : message === 'PERMISSION_DENIED'
+            ? 403
+            : 422
         return res.status(status).json({ error: message })
     }
 })

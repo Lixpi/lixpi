@@ -19,7 +19,7 @@
     "dependencies": {
         "@lixpi/constants": "file:../constants/ts",
         "@lixpi/debug-tools": "file:../debug-tools/ts",
-        "htm": "*",
+        "@lixpi/ui-primitives": "workspace:*",
         "prosemirror-model": "*",
         "prosemirror-state": "*",
         "prosemirror-view": "*",

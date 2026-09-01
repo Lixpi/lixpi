@@ -48,7 +48,8 @@ Returns the underlying sliding switch instance: `{ render, resize, setValue, get
 - Renders with SVG only.
 - Uses `role="tablist"` on the switch and `role="tab"` on each tab option.
 - Keeps the moving indicator as the only selected-tab surface, with no active-tab border.
-- Applies `activeTabBoxShadow` and `activeTabInsetShadow` to the active tab indicator for elevation.
+- Uses the flat white active indicator owned by `slidingSwitch` when no appearance overrides are supplied.
+- Forwards explicit `activeTabBoxShadow` and `activeTabInsetShadow` customization to the underlying switch for reusable consumers. Lixpi application callsites use the defaults.
 - Renders centered regular-weight tab labels through `tagPill` in content mode so inactive tabs only paint a very light hover background.
 - Shows each tab close control on the left only while that tab is hovered.
 - Passes slide transition timing through to `slidingSwitch`.

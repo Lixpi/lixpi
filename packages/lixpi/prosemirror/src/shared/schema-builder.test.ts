@@ -1,7 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 import { Schema } from 'prosemirror-model'
 
-import { DOCUMENT_TYPE, createProseMirrorSchema, getSupportedNodes, nodesBuilder } from './schema-builder.ts'
+import {
+    DOCUMENT_TYPE,
+    createProseMirrorSchema,
+    getSupportedNodes,
+    nodesBuilder,
+} from './schema-builder.ts'
 import { documentTitleNodeType } from './node-specs.ts'
 
 describe('createProseMirrorSchema', () => {

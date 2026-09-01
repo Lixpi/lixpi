@@ -1,6 +1,9 @@
 'use strict'
 
-import type { MediaReferenceBinding, ProviderSafeMediaIntent } from '@lixpi/constants'
+import type {
+    MediaReferenceBinding,
+    ProviderSafeMediaIntent,
+} from '@lixpi/constants'
 
 import { normalizeMediaReferenceVariant } from './media-reference-matcher.ts'
 
@@ -21,8 +24,10 @@ export const assertNoForbiddenMediaReferenceLeak = ({
     const forbidden = [...new Set(forbiddenNameVariants.map(normalizeMediaReferenceVariant).filter(Boolean))]
     for (const candidate of collectStrings(payload)) {
         const normalized = normalizeMediaReferenceVariant(candidate.value)
-        const leaked = forbidden.find(variant => normalized === variant || normalized.includes(` ${variant} `)
-            || normalized.startsWith(`${variant} `) || normalized.endsWith(` ${variant}`))
+        const leaked = forbidden.find(variant =>
+            normalized === variant || normalized.includes(` ${variant} `)
+            || normalized.startsWith(`${variant} `) || normalized.endsWith(` ${variant}`)
+        )
         if (leaked) throw new Error(`MEDIA_REFERENCE_DISPLAY_NAME_LEAK:${candidate.path}`)
     }
 }
@@ -40,11 +45,13 @@ export const formatProviderSafeReferenceContext = (bindings: MediaReferenceBindi
     if (bindings.length === 0) return ''
     return [
         'Attached media references:',
-        ...bindings.map(binding => [
-            `${binding.alias} — ${binding.semanticDescriptor}`,
-            `medium=${binding.depictionMedium}`,
-            `subjectIdentity=${binding.subjectIdentity.classification}`,
-        ].join('; ')),
+        ...bindings.map(binding =>
+            [
+                `${binding.alias} — ${binding.semanticDescriptor}`,
+                `medium=${binding.depictionMedium}`,
+                `subjectIdentity=${binding.subjectIdentity.classification}`,
+            ].join('; ')
+        ),
     ].join('\n')
 }
 

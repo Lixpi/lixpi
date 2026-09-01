@@ -21,10 +21,20 @@ import {
     PROSEMIRROR_SCHEMA_VERSION,
 } from '@lixpi/prosemirror'
 
-import { buildAssetProjectionOperations, getAssetRecord, publishAssetEvent } from '../models/asset.ts'
-import BlobModel, { buildBlobReferenceOperations, buildBlobReferenceRemovalOperations } from '../models/blob.ts'
+import {
+    buildAssetProjectionOperations,
+    getAssetRecord,
+    publishAssetEvent,
+} from '../models/asset.ts'
+import BlobModel, {
+    buildBlobReferenceOperations,
+    buildBlobReferenceRemovalOperations,
+} from '../models/blob.ts'
 import MediaGenerationRequestModel from '../models/media-generation-request.ts'
-import { enqueueBlobDeletion, enqueueProvenanceRebuild } from './asset-maintenance-queue.ts'
+import {
+    enqueueBlobDeletion,
+    enqueueProvenanceRebuild,
+} from './asset-maintenance-queue.ts'
 import AssetDocumentService from './asset-document-service.ts'
 import { MediaGenerationRequestEventLog } from './media-generation-request-event-log.ts'
 
@@ -65,10 +75,12 @@ export const getReasoningPreambleSummary = (
         const attrs = node.attrs && typeof node.attrs === 'object'
             ? node.attrs as Record<string, unknown>
             : undefined
-        if (node.type === 'aiReasoningSection' && (
-            attrs?.reasoningRunId === generationRun.reasoningRunId
-            || attrs?.generationRequestId === generationRun.generationRequestId
-        )) {
+        if (
+            node.type === 'aiReasoningSection' && (
+                attrs?.reasoningRunId === generationRun.reasoningRunId
+                || attrs?.generationRequestId === generationRun.generationRequestId
+            )
+        ) {
             const content = Array.isArray(node.content) ? node.content : []
             const firstInvocationIndex = content.findIndex(child => (
                 child && typeof child === 'object' && (child as Record<string, unknown>).type === 'aiCollapsibleBlock'
@@ -94,9 +106,11 @@ export const includeLineageProgressInAssetProvenance = (
     reasoningSummary = '',
     generationRun?: MediaGenerationRunMeta,
 ): MediaGenerationProgressState => {
-    const referenceHandles: ExecutionTraceHandle[] = [...new Set(
-        generationRun?.lineageAssignment?.referenceAssetIds ?? [],
-    )].map(assetId => ({
+    const referenceHandles: ExecutionTraceHandle[] = [
+        ...new Set(
+            generationRun?.lineageAssignment?.referenceAssetIds ?? [],
+        ),
+    ].map(assetId => ({
         kind: 'media' as const,
         id: assetId,
         displayName: assetId,
@@ -111,60 +125,68 @@ export const includeLineageProgressInAssetProvenance = (
             ...(reasoningSummary ? { summary: reasoningSummary } : {}),
             // A content-less trace is never sealed: it would give the reader a
             // disclosure that opens onto nothing.
-            ...(reasoningSummary || referenceHandles.length || generationRun ? {
-                trace: {
-                    traceVersion: 'execution-trace-v1' as const,
-                    ...(reasoningSummary ? { reasoning: reasoningSummary } : {}),
-                    ...(referenceHandles.length ? { handles: referenceHandles } : {}),
-                    ...(generationRun ? {
-                        modelCalls: [{
-                            id: `reasoning:${generationRun.reasoningRunId}`,
-                            role: 'reasoning' as const,
-                            provider: String(generationRun.reasoningModelId).split(':')[0] ?? '',
-                            modelId: generationRun.reasoningModelId,
-                            purpose: 'Read the request, choose the Capabilities and references, and drive media generation.',
-                            ...(generationRun.lineageAssignment?.promptText
-                                ? { prompt: generationRun.lineageAssignment.promptText }
-                                : {}),
-                            ...(referenceHandles.length ? { inputHandles: referenceHandles } : {}),
-                        }],
-                    } : {}),
-                },
-            } : {}),
+            ...(reasoningSummary || referenceHandles.length || generationRun
+                ? {
+                    trace: {
+                        traceVersion: 'execution-trace-v1' as const,
+                        ...(reasoningSummary ? { reasoning: reasoningSummary } : {}),
+                        ...(referenceHandles.length ? { handles: referenceHandles } : {}),
+                        ...(generationRun
+                            ? {
+                                modelCalls: [{
+                                    id: `reasoning:${generationRun.reasoningRunId}`,
+                                    role: 'reasoning' as const,
+                                    provider: String(generationRun.reasoningModelId).split(':')[0] ?? '',
+                                    modelId: generationRun.reasoningModelId,
+                                    purpose: 'Read the request, choose the Capabilities and references, and drive media generation.',
+                                    ...(generationRun.lineageAssignment?.promptText
+                                        ? { prompt: generationRun.lineageAssignment.promptText }
+                                        : {}),
+                                    ...(referenceHandles.length ? { inputHandles: referenceHandles } : {}),
+                                }],
+                            }
+                            : {}),
+                    },
+                }
+                : {}),
         },
         {
             id: 'lineage:resolve-capabilities-and-references',
             title: 'Resolve capabilities, tools, and references',
             status: 'completed',
-            ...(referenceHandles.length ? {
-                trace: {
-                    traceVersion: 'execution-trace-v1' as const,
-                    handles: referenceHandles,
-                },
-            } : {}),
+            ...(referenceHandles.length
+                ? {
+                    trace: {
+                        traceVersion: 'execution-trace-v1' as const,
+                        handles: referenceHandles,
+                    },
+                }
+                : {}),
         },
         {
             id: 'lineage:resolve-branch-lineage',
             title: 'Resolve branch lineage and media runs',
             status: 'completed',
-            ...(generationRun ? {
-                trace: {
-                    traceVersion: 'execution-trace-v1' as const,
-                    facts: [
-                        { label: 'Generation request', value: generationRun.generationRequestId },
-                        { label: 'Reasoning run', value: generationRun.reasoningRunId },
-                        ...(generationRun.mediaRunId
-                            ? [{ label: 'Media run', value: generationRun.mediaRunId }]
-                            : []),
-                        ...(generationRun.mediaModelId
-                            ? [{ label: 'Media model', value: generationRun.mediaModelId }]
-                            : []),
-                        ...(generationRun.lineageAssignment?.branchId
-                            ? [{ label: 'Branch', value: generationRun.lineageAssignment.branchId }]
-                            : []),
-                    ],
-                },
-            } : {}),
+            ...(generationRun
+                ? {
+                    trace: {
+                        traceVersion: 'execution-trace-v1' as const,
+                        facts: [
+                            { label: 'Generation request', value: generationRun.generationRequestId },
+                            { label: 'Reasoning run', value: generationRun.reasoningRunId },
+                            ...(generationRun.mediaRunId
+                                ? [{ label: 'Media run', value: generationRun.mediaRunId }]
+                                : []),
+                            ...(generationRun.mediaModelId
+                                ? [{ label: 'Media model', value: generationRun.mediaModelId }]
+                                : []),
+                            ...(generationRun.lineageAssignment?.branchId
+                                ? [{ label: 'Branch', value: generationRun.lineageAssignment.branchId }]
+                                : []),
+                        ],
+                    },
+                }
+                : {}),
         },
     ]
     return {
@@ -289,9 +311,11 @@ const materializeAssetProvenanceAttempt = async ({
     if (asset.states.lifecycle === 'deleting') return
     if (terminalStatus !== 'completed' && asset.media?.renditions.original?.status === 'ready') return
     if (asset.documents.provenance && ['sealed', 'failed', 'cancelled'].includes(asset.states.provenance)) return
-    if (asset.lineage?.sourceConversationAssetId !== conversationAssetId
+    if (
+        asset.lineage?.sourceConversationAssetId !== conversationAssetId
         || asset.lineage?.reasoningRunId !== generationRun.reasoningRunId
-        || asset.lineage?.mediaRunId !== generationRun.mediaRunId) {
+        || asset.lineage?.mediaRunId !== generationRun.mediaRunId
+    ) {
         throw new Error('PROVENANCE_LINEAGE_MISMATCH')
     }
     const conversationAsset = await getAssetRecord(conversationAssetId)
@@ -325,8 +349,8 @@ const materializeAssetProvenanceAttempt = async ({
         ?? (terminalStatus === 'completed'
             ? 'Media generation completed.'
             : terminalStatus === 'cancelled'
-                ? 'Media generation cancelled.'
-                : durableRun?.problem?.detail ?? 'Media generation failed.')
+            ? 'Media generation cancelled.'
+            : durableRun?.problem?.detail ?? 'Media generation failed.')
     const mediaGenerationProgress: MediaGenerationProgressState = {
         generationRequestId: generationRun.generationRequestId,
         status: terminalStatus,
@@ -441,18 +465,18 @@ const materializeAssetProvenanceAttempt = async ({
     const referenceKey = `asset#${assetId}#document#provenance`
     const existingReference = await BlobModel.getReference(blob.blobKey, referenceKey)
     const operations = existingReference ? [] : buildBlobReferenceOperations({
-                blob,
-                reference: {
-                    blobKey: blob.blobKey,
-                    blobHash: blob.blobHash,
-                    organizationId: blob.organizationId,
-                    referenceKey,
-                    ownerType: 'asset',
-                    ownerId: assetId,
-                    createdAt: now,
-                },
-                now,
-            })
+        blob,
+        reference: {
+            blobKey: blob.blobKey,
+            blobHash: blob.blobHash,
+            organizationId: blob.organizationId,
+            referenceKey,
+            ownerType: 'asset',
+            ownerId: assetId,
+            createdAt: now,
+        },
+        now,
+    })
     const previousBlobHash = asset.documents.provenance?.blobHash
     let previousBlobDeletionRequired = false
     if (previousBlobHash && previousBlobHash !== blob.blobHash) {
@@ -510,11 +534,12 @@ export const materializeAssetProvenance = async (payload: {
     generationRun: MediaGenerationRunMeta
     terminalStatus: 'completed' | 'failed' | 'cancelled'
     allowMinimalCompletedProjection?: boolean
-}): Promise<void> => await materializeAssetProvenanceAttempt({
-    ...payload,
-    revisionRetryAttempt: 0,
-    allowMinimalCompletedProjection: payload.allowMinimalCompletedProjection === true,
-})
+}): Promise<void> =>
+    await materializeAssetProvenanceAttempt({
+        ...payload,
+        revisionRetryAttempt: 0,
+        allowMinimalCompletedProjection: payload.allowMinimalCompletedProjection === true,
+    })
 
 export const settleUnfinishedGeneratedAssets = async ({
     plan,

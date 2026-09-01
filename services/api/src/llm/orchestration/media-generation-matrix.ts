@@ -2,7 +2,10 @@
 
 import { v4 as uuid } from 'uuid'
 import type NatsService from '@lixpi/nats-service'
-import { info, warn } from '@lixpi/debug-tools'
+import {
+    info,
+    warn,
+} from '@lixpi/debug-tools'
 import type {
     AiInteractionMediaGenerationRequest,
     AiModel,
@@ -22,7 +25,11 @@ import { settleMediaGenerationRequestOnCanvas } from '../../services/asset-canva
 import { ensurePendingGeneratedAssets } from '../../services/generated-asset-storage.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
 import { resolveMediaBranch } from '../graph/media-branch-resolver.ts'
-import { StreamPublisher, type ProseMirrorContentHandler, type ProseMirrorSnapshotProvider } from '../graph/stream-publisher.ts'
+import {
+    StreamPublisher,
+    type ProseMirrorContentHandler,
+    type ProseMirrorSnapshotProvider,
+} from '../graph/stream-publisher.ts'
 import type { ProviderState } from '../graph/state.ts'
 import { MediaBranchLineagePlanner } from '../lineage/media-branch-lineage-planner.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
@@ -114,11 +121,13 @@ type StopMatrixRequestParams = {
 }
 
 const uniqueModelIds = (modelIds: Array<string | undefined>): AiModelId[] =>
-    Array.from(new Set(
-        modelIds
-            .filter((modelId): modelId is string => typeof modelId === 'string' && modelId.trim().length > 0)
-            .map((modelId) => modelId.trim() as AiModelId)
-    ))
+    Array.from(
+        new Set(
+            modelIds
+                .filter((modelId): modelId is string => typeof modelId === 'string' && modelId.trim().length > 0)
+                .map((modelId) => modelId.trim() as AiModelId),
+        ),
+    )
 
 const normalizeModelIdsForMode = (
     useMultipleForSection: boolean,
@@ -143,7 +152,7 @@ const normalizeConfigGroupsForModels = (
 
         const values = Object.fromEntries(
             Object.entries(group.values ?? {})
-                .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+                .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0),
         ) as MediaGenerationConfigSelectionGroup['values']
 
         return [{
@@ -167,8 +176,7 @@ const parseAiModelId = (modelId: AiModelId): ParsedAiModelId => {
     }
 }
 
-const modelHasGenerationModality = (meta: AiModel, modality: 'image_generation' | 'video_generation'): boolean =>
-    meta.modalities?.some((entry) => entry.modality === modality) ?? false
+const modelHasGenerationModality = (meta: AiModel, modality: 'image_generation' | 'video_generation'): boolean => meta.modalities?.some((entry) => entry.modality === modality) ?? false
 
 const assertReasoningModel = (model: ResolvedAiModel): void => {
     if (modelHasGenerationModality(model.meta, 'image_generation') || modelHasGenerationModality(model.meta, 'video_generation')) {
@@ -242,8 +250,7 @@ export const buildMediaGenerationThreadGroupPrefix = (
     aiChatThreadId: string,
 ): string => `${workspaceId}:${aiChatThreadId}:`
 
-const buildReasoningInstanceKey = (requestGroupKey: string, reasoningIndex: number): string =>
-    `${requestGroupKey}:reasoning:${reasoningIndex}`
+const buildReasoningInstanceKey = (requestGroupKey: string, reasoningIndex: number): string => `${requestGroupKey}:reasoning:${reasoningIndex}`
 
 const COMPLETED_REQUEST_PUBLISHER_RETENTION_MS = 10 * 60 * 1000
 
@@ -410,17 +417,21 @@ export class MediaGenerationMatrixOrchestrator {
                         ...(normalized.videoSourceForExtension ? { videoSourceForExtension: normalized.videoSourceForExtension } : {}),
                         imageConfigGroups: normalized.imageConfigGroups,
                         videoConfigGroups: normalized.videoConfigGroups,
-                        ...(normalized.regeneration?.mode === 'existing-prompt' ? {
-                            replayPrompts: normalized.regeneration.replayPrompts.filter(
-                                replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId
-                            ),
-                        } : {}),
+                        ...(normalized.regeneration?.mode === 'existing-prompt'
+                            ? {
+                                replayPrompts: normalized.regeneration.replayPrompts.filter(
+                                    replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId,
+                                ),
+                            }
+                            : {}),
                     },
-                    ...(normalized.regeneration?.mode === 'existing-prompt' ? {
-                        replayMediaPrompts: normalized.regeneration.replayPrompts.filter(
-                            replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId
-                        ),
-                    } : {}),
+                    ...(normalized.regeneration?.mode === 'existing-prompt'
+                        ? {
+                            replayMediaPrompts: normalized.regeneration.replayPrompts.filter(
+                                replayPrompt => replayPrompt.reasoningModelId === reasoningModel.modelId,
+                            ),
+                        }
+                        : {}),
                     mediaGenerationRequest: {
                         requestVersion: 'media-generation-matrix-v1',
                         generationRequestId: normalized.generationRequestId,
@@ -568,21 +579,21 @@ export class MediaGenerationMatrixOrchestrator {
         const hasExplicitMediaFanout = useMultipleImageModels || useMultipleVideoModels
         const inferredOutputMediaTypes: Array<'image' | 'video'> = [
             ...((hasExplicitMediaFanout
-                ? useMultipleImageModels
-                : (request?.imageModelIds?.length ?? requestData.aiImageModels?.length ?? 0) > 0
-            ) ? ['image' as const] : []),
+                    ? useMultipleImageModels
+                    : (request?.imageModelIds?.length ?? requestData.aiImageModels?.length ?? 0) > 0)
+                ? ['image' as const]
+                : []),
             ...((hasExplicitMediaFanout
-                ? useMultipleVideoModels || hasExplicitVideoSource
-                : (request?.videoModelIds?.length ?? requestData.aiVideoModels?.length ?? 0) > 0 || hasExplicitVideoSource
-            )
+                    ? useMultipleVideoModels || hasExplicitVideoSource
+                    : (request?.videoModelIds?.length ?? requestData.aiVideoModels?.length ?? 0) > 0 || hasExplicitVideoSource)
                 ? ['video' as const]
                 : []),
         ]
         const outputMediaTypes = request?.mediaGenerationMode
             ? [request.mediaGenerationMode]
             : request?.outputMediaTypes?.length
-                ? [request.outputMediaTypes[0]!]
-                : inferredOutputMediaTypes.slice(0, 1)
+            ? [request.outputMediaTypes[0]!]
+            : inferredOutputMediaTypes.slice(0, 1)
         const includeVideoModels = request
             ? outputMediaTypes.includes('video') && ((request.videoModelIds?.length ?? 0) > 0 || hasExplicitVideoSource)
             : (requestData.aiVideoModels?.length ?? 0) > 0
@@ -715,13 +726,14 @@ export class MediaGenerationMatrixOrchestrator {
                 videoModel.modelId,
                 videoModel.meta.videoGenerationControls,
                 normalized.videoConfigGroups,
-                control => control.key === 'aspectRatio'
+                control =>
+                    control.key === 'aspectRatio'
                         ? normalized.videoAspectRatio
                         : control.key === 'resolution'
-                            ? normalized.videoResolution
-                            : control.key === 'duration'
-                                ? normalized.videoDuration
-                                : undefined,
+                        ? normalized.videoResolution
+                        : control.key === 'duration'
+                        ? normalized.videoDuration
+                        : undefined,
             )
         }
         return optionsByModelId
@@ -878,28 +890,32 @@ export class MediaGenerationMatrixOrchestrator {
             }
         }
 
-        applyResolved(await resolveWorkspaceContext(state, {
-            natsService: this.natsService,
-            publisher,
-            abortSignal: abortController.signal,
-        }))
+        applyResolved(
+            await resolveWorkspaceContext(state, {
+                natsService: this.natsService,
+                publisher,
+                abortSignal: abortController.signal,
+            }),
+        )
         applyResolved(await resolveCapabilitiesForState(state, abortController.signal))
-        applyResolved(await executeRequiredCapabilitiesForState(
-            state,
-            getCapabilityDispatcher(),
-            abortController.signal,
-            normalized.reasoningModels.map((model, reasoningIndex) => ({
-                axis: 'reasoning-model',
-                variantKey: `reasoning:${reasoningIndex}:${model.modelId}`,
-                reasoningIndex,
-                reasoningModelId: model.modelId,
-                provider: model.provider,
-                modelVersion: model.meta.modelVersion,
-                contextWindow: model.meta.contextWindow,
-                maxCompletionSize: model.meta.maxCompletionSize,
-                inferenceCapabilities: model.meta.inferenceCapabilities,
-            })),
-        ))
+        applyResolved(
+            await executeRequiredCapabilitiesForState(
+                state,
+                getCapabilityDispatcher(),
+                abortController.signal,
+                normalized.reasoningModels.map((model, reasoningIndex) => ({
+                    axis: 'reasoning-model',
+                    variantKey: `reasoning:${reasoningIndex}:${model.modelId}`,
+                    reasoningIndex,
+                    reasoningModelId: model.modelId,
+                    provider: model.provider,
+                    modelVersion: model.meta.modelVersion,
+                    contextWindow: model.meta.contextWindow,
+                    maxCompletionSize: model.meta.maxCompletionSize,
+                    inferenceCapabilities: model.meta.inferenceCapabilities,
+                })),
+            ),
+        )
         const capabilityOnlyOutput = requiredCapabilityProducedCapabilityOnlyOutput(state)
             || hasPendingModelRequiredCapabilityOnlyOutput(state)
         if (capabilityOnlyOutput) {
@@ -910,11 +926,13 @@ export class MediaGenerationMatrixOrchestrator {
             await publisher.drainPendingWrites()
             return { state: resolved, publisher }
         }
-        applyResolved(await resolveMediaBranch(state, {
-            natsService: this.natsService,
-            publisher,
-            abortSignal: abortController.signal,
-        }))
+        applyResolved(
+            await resolveMediaBranch(state, {
+                natsService: this.natsService,
+                publisher,
+                abortSignal: abortController.signal,
+            }),
+        )
         const capabilityOutputMediaAssetIds = state.capabilityOutputMediaAssetIds
             ?? state.capabilityOutputAssetIds
             ?? []
@@ -938,21 +956,23 @@ export class MediaGenerationMatrixOrchestrator {
             mediaBranchResolution: state.mediaBranchResolution,
             referenceAssetIds: state.promptReferenceAssetIds,
             workspaceContextSnapshot: state.workspaceContextSnapshot,
-            ...(normalized.regeneration?.mode === 'existing-prompt' ? {
-                regenerationTarget: {
-                    branchId: normalized.regeneration.branchId,
-                    lineageParentNodeId: normalized.regeneration.lineageParentNodeId,
-                    lineageParentType: normalized.regeneration.lineageParentType,
-                    ...(normalized.regeneration.sourceNodeId
-                        ? {
-                            sourceMediaNodeId: normalized.regeneration.sourceNodeId,
-                            ...(normalized.regeneration.replayPrompts[0]?.sourceAssetId
-                                ? { sourceMediaAssetId: normalized.regeneration.replayPrompts[0]!.sourceAssetId }
-                                : {}),
-                        }
-                        : {}),
-                },
-            } : {}),
+            ...(normalized.regeneration?.mode === 'existing-prompt'
+                ? {
+                    regenerationTarget: {
+                        branchId: normalized.regeneration.branchId,
+                        lineageParentNodeId: normalized.regeneration.lineageParentNodeId,
+                        lineageParentType: normalized.regeneration.lineageParentType,
+                        ...(normalized.regeneration.sourceNodeId
+                            ? {
+                                sourceMediaNodeId: normalized.regeneration.sourceNodeId,
+                                ...(normalized.regeneration.replayPrompts[0]?.sourceAssetId
+                                    ? { sourceMediaAssetId: normalized.regeneration.replayPrompts[0]!.sourceAssetId }
+                                    : {}),
+                            }
+                            : {}),
+                    },
+                }
+                : {}),
             forceFreshLineage: normalized.regeneration?.mode === 'regenerate-prompt'
                 && normalized.regeneration.forceFreshLineage,
             createdAt: Date.now(),

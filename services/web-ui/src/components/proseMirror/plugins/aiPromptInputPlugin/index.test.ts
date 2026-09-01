@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import {
+    describe,
+    it,
+    expect,
+} from 'vitest'
 import * as aiPromptInputPlugin from '$src/components/proseMirror/plugins/aiPromptInputPlugin/index.ts'
 
 describe('aiPromptInputPlugin exports', () => {

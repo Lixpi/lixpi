@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import {
+    describe,
+    expect,
+    it,
+} from 'vitest'
 
 import {
     type CapabilityResourceRef,
@@ -43,15 +47,19 @@ describe('Style Extraction built-in definition', () => {
             manifest,
             issues: [],
         })
-        expect(manifest.tool?.workflow.steps
-            .filter(step => step.action === 'style.extract-axis')
-            .map(step => step.input.axis)).toEqual(STYLE_EXTRACTION_AXES.map(axis => ({
+        expect(
+            manifest.tool?.workflow.steps
+                .filter(step => step.action === 'style.extract-axis')
+                .map(step => step.input.axis),
+        ).toEqual(STYLE_EXTRACTION_AXES.map(axis => ({
             source: 'literal',
             value: axis,
         })))
-        expect(manifest.tool?.workflow.steps
-            .filter(step => step.action === 'style.extract-axis')
-            .every(step => step.condition?.type === 'compare')).toBe(true)
+        expect(
+            manifest.tool?.workflow.steps
+                .filter(step => step.action === 'style.extract-axis')
+                .every(step => step.condition?.type === 'compare'),
+        ).toBe(true)
     })
 
     it('keeps axis extraction and crop materialization in the same parallel ready set', () => {

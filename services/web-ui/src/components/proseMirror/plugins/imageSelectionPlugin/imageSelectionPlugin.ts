@@ -1,4 +1,7 @@
-import { Plugin, PluginKey } from 'prosemirror-state'
+import {
+    Plugin,
+    PluginKey,
+} from 'prosemirror-state'
 import type { EditorView } from 'prosemirror-view'
 import { ImageNodeView } from '$src/components/proseMirror/plugins/imageSelectionPlugin/imageNodeView.ts'
 
@@ -14,17 +17,17 @@ export function imageSelectionPlugin(): Plugin {
                     return new ImageNodeView({
                         node,
                         view,
-                        getPos: getPos as () => number | undefined
+                        getPos: getPos as () => number | undefined,
                     })
                 },
                 aiGeneratedImage(node, view, getPos) {
                     return new ImageNodeView({
                         node,
                         view,
-                        getPos: getPos as () => number | undefined
+                        getPos: getPos as () => number | undefined,
                     })
-                }
-            }
-        }
+                },
+            },
+        },
     })
 }

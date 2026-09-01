@@ -13,7 +13,7 @@ export function createIconShape(params: IconShapeParams): NodeConfig {
         size,
         icon,
         className = '',
-        disabled = false
+        disabled = false,
     } = params
 
     return {
@@ -27,8 +27,8 @@ export function createIconShape(params: IconShapeParams): NodeConfig {
         content: {
             type: 'icon',
             icon,
-            className: 'icon-content'
+            className: 'icon-content',
         },
-        disabled
+        disabled,
     }
 }

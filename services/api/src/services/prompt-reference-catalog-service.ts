@@ -106,7 +106,7 @@ const toMediaCatalogItemFromAsset = (
         scope: asset.scope,
         updatedAt: asset.updatedAt,
         ...(asset.media?.renditions.thumbnail?.status === 'ready'
-            || (asset.media?.kind === 'video' && asset.media.renditions.representativeFrame?.status === 'ready')
+                || (asset.media?.kind === 'video' && asset.media.renditions.representativeFrame?.status === 'ready')
             ? { thumbnailAvailable: true }
             : {}),
     }
@@ -136,19 +136,23 @@ export class PromptReferenceCatalogService {
     ): Promise<CapabilityModuleMeta[]> {
         if (!requesterHasWorkspaceScope(requester, workspace)) throw new Error('WORKSPACE_ACCESS_DENIED')
         const scopedRequester = scopeAssetRequesterToWorkspace(requester, workspace)
-        const resolved = await Promise.all(this.moduleCatalog.listModules(query).map(async (meta) => {
-            const entry = this.moduleCatalog.resolveEntry(meta.moduleId)
-            if (!entry) return null
-            const record = await CapabilityModel.authorize({
-                capabilityId: entry.capabilityId,
-                requester: toCapabilityRequester(scopedRequester),
-            })
-            if ('error' in record || record.status !== 'active'
-                || record.kind !== entry.kind
-                || record.parentModuleId !== meta.moduleId
-                || record.catalogExposure !== 'module-internal') return null
-            return meta
-        }))
+        const resolved = await Promise.all(
+            this.moduleCatalog.listModules(query).map(async (meta) => {
+                const entry = this.moduleCatalog.resolveEntry(meta.moduleId)
+                if (!entry) return null
+                const record = await CapabilityModel.authorize({
+                    capabilityId: entry.capabilityId,
+                    requester: toCapabilityRequester(scopedRequester),
+                })
+                if (
+                    'error' in record || record.status !== 'active'
+                    || record.kind !== entry.kind
+                    || record.parentModuleId !== meta.moduleId
+                    || record.catalogExposure !== 'module-internal'
+                ) return null
+                return meta
+            }),
+        )
         return resolved.filter((item): item is NonNullable<typeof item> => item !== null)
     }
 
@@ -156,10 +160,12 @@ export class PromptReferenceCatalogService {
         workspace: Workspace,
         requester: PromptReferenceCatalogRequester,
         moduleId: string,
-    ): Promise<{
-        meta: CapabilityModuleMeta
-        entry: { capabilityId: string; kind: 'tool' | 'skill' }
-    } | null> {
+    ): Promise<
+        {
+            meta: CapabilityModuleMeta
+            entry: { capabilityId: string; kind: 'tool' | 'skill' }
+        } | null
+    > {
         const entry = this.moduleCatalog.resolveEntry(moduleId)
         const meta = this.moduleCatalog.getModuleMeta(moduleId)
         if (!entry || !meta) return null
@@ -307,15 +313,17 @@ export class PromptReferenceCatalogService {
         const hasMore = hasMoreCanvas || !assetComplete
         return {
             items,
-            ...(hasMore ? {
-                cursor: this.encodeArtifactCursor({
-                    category: 'artifacts',
-                    query: input.query,
-                    canvasOffset: nextCanvasOffset,
-                    assetComplete,
-                    ...(assetCursor ? { assetCursor } : {}),
-                }),
-            } : {}),
+            ...(hasMore
+                ? {
+                    cursor: this.encodeArtifactCursor({
+                        category: 'artifacts',
+                        query: input.query,
+                        canvasOffset: nextCanvasOffset,
+                        assetComplete,
+                        ...(assetCursor ? { assetCursor } : {}),
+                    }),
+                }
+                : {}),
         }
     }
 
@@ -327,8 +335,7 @@ export class PromptReferenceCatalogService {
         const groups = await Promise.all([...placements].map(async ([assetId, nodeIds]) => {
             const asset = await AssetModel.get({ assetId, requester: input.requester })
             if ('error' in asset || !normalizeAssetTitle(asset.title).startsWith(normalizedQuery)) return []
-            const items = await Promise.all(nodeIds.map(async nodeId =>
-                await this.resolveArtifactCatalogItem(input, assetId, 'canvas', nodeId, asset)))
+            const items = await Promise.all(nodeIds.map(async nodeId => await this.resolveArtifactCatalogItem(input, assetId, 'canvas', nodeId, asset)))
             return items.filter((item): item is CapabilityArtifactPromptReferenceCatalogItem => item !== null)
         }))
         return groups.flat()
@@ -342,9 +349,11 @@ export class PromptReferenceCatalogService {
         resolvedAsset?: Awaited<ReturnType<typeof AssetModel.get>>,
     ): Promise<CapabilityArtifactPromptReferenceCatalogItem | null> {
         const asset = resolvedAsset ?? await AssetModel.get({ assetId, requester: input.requester })
-        if ('error' in asset || !asset.artifact || !asset.documents.capabilityArtifact
+        if (
+            'error' in asset || !asset.artifact || !asset.documents.capabilityArtifact
             || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
-            || asset.states.lifecycle !== 'active') return null
+            || asset.states.lifecycle !== 'active'
+        ) return null
         const registered = capabilityArtifactBackendRegistry.get(asset.artifact.artifactTypeId)
         if (!registered || registered.shared.schemaVersion !== asset.artifact.schemaVersion) return null
         const snapshot = await AssetDocumentService.loadCurrentSnapshot(asset, 'capabilityArtifact')
@@ -355,12 +364,14 @@ export class PromptReferenceCatalogService {
             return null
         }
         const referencedAssetIds = registered.shared.collectReferencedAssetIds(snapshot.doc)
-        const referencedAssets = await Promise.all(referencedAssetIds.map(async referencedAssetId =>
-            await AssetModel.get({ assetId: referencedAssetId, requester: input.requester })))
-        if (referencedAssets.some(referencedAsset =>
-            'error' in referencedAsset
-            || !isAssetAvailableInWorkspaceScope(referencedAsset, input.workspace)
-            || referencedAsset.states.lifecycle !== 'active')) return null
+        const referencedAssets = await Promise.all(referencedAssetIds.map(async referencedAssetId => await AssetModel.get({ assetId: referencedAssetId, requester: input.requester })))
+        if (
+            referencedAssets.some(referencedAsset =>
+                'error' in referencedAsset
+                || !isAssetAvailableInWorkspaceScope(referencedAsset, input.workspace)
+                || referencedAsset.states.lifecycle !== 'active'
+            )
+        ) return null
         return {
             referenceType: 'capability-artifact',
             referenceId: asset.assetId,
@@ -382,8 +393,10 @@ export class PromptReferenceCatalogService {
         const cursor = this.decodeMediaCursor(input.cursor, input.query)
         const placementsByAsset = new Map<string, string[]>()
         for (const node of input.workspace.canvasState?.nodes ?? []) {
-            if (!('assetId' in node) || typeof node.assetId !== 'string'
-                || !['image', 'video', 'audio', 'document', 'mediaDocument'].includes(node.type)) continue
+            if (
+                !('assetId' in node) || typeof node.assetId !== 'string'
+                || !['image', 'video', 'audio', 'document', 'mediaDocument'].includes(node.type)
+            ) continue
             const placements = placementsByAsset.get(node.assetId) ?? []
             placements.push(node.nodeId)
             placementsByAsset.set(node.assetId, placements)
@@ -426,15 +439,17 @@ export class PromptReferenceCatalogService {
         const hasMore = hasMoreCanvas || !assetComplete
         return {
             items,
-            ...(hasMore ? {
-                cursor: this.encodeMediaCursor({
-                    category: 'media',
-                    query: input.query,
-                    canvasOffset: nextCanvasOffset,
-                    assetComplete,
-                    ...(assetCursor ? { assetCursor } : {}),
-                }),
-            } : {}),
+            ...(hasMore
+                ? {
+                    cursor: this.encodeMediaCursor({
+                        category: 'media',
+                        query: input.query,
+                        canvasOffset: nextCanvasOffset,
+                        assetComplete,
+                        ...(assetCursor ? { assetCursor } : {}),
+                    }),
+                }
+                : {}),
         }
     }
 
@@ -443,13 +458,14 @@ export class PromptReferenceCatalogService {
         placementsByAsset: Map<string, string[]>,
     ): Promise<PromptReferenceCatalogItem[]> {
         const normalizedQuery = normalizeAssetTitle(input.query)
-        const assets = await Promise.all([...placementsByAsset.keys()].map(async (assetId) =>
-            await AssetModel.get({ assetId, requester: input.requester })))
+        const assets = await Promise.all([...placementsByAsset.keys()].map(async (assetId) => await AssetModel.get({ assetId, requester: input.requester })))
         return assets.flatMap((asset): PromptReferenceCatalogItem[] => {
-            if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
+            if (
+                'error' in asset || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
                 || asset.states.lifecycle !== 'active'
                 || (asset.media && !['ready', 'degraded'].includes(asset.states.media))
-                || !normalizeAssetTitle(asset.title).startsWith(normalizedQuery)) return []
+                || !normalizeAssetTitle(asset.title).startsWith(normalizedQuery)
+            ) return []
             const placements = placementsByAsset.get(asset.assetId) ?? []
             return placements.flatMap((nodeId) => {
                 const item = toMediaCatalogItemFromAsset(asset, 'canvas', nodeId)
@@ -466,10 +482,12 @@ export class PromptReferenceCatalogService {
         if (!cursor) return { category: 'media', query, canvasOffset: 0, assetComplete: false }
         try {
             const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as MediaCatalogCursor
-            if (!parsed || parsed.category !== 'media' || parsed.query !== query
+            if (
+                !parsed || parsed.category !== 'media' || parsed.query !== query
                 || !Number.isSafeInteger(parsed.canvasOffset) || parsed.canvasOffset < 0
                 || typeof parsed.assetComplete !== 'boolean'
-                || (parsed.assetCursor !== undefined && typeof parsed.assetCursor !== 'string')) {
+                || (parsed.assetCursor !== undefined && typeof parsed.assetCursor !== 'string')
+            ) {
                 throw new Error('INVALID_CURSOR')
             }
             return parsed
@@ -498,20 +516,24 @@ export class PromptReferenceCatalogService {
     ): Promise<PromptReferenceCatalogItem | null> {
         if (recent.referenceType === 'capability-module') {
             const module = await this.getModule(input.workspace, input.requester, recent.referenceId)
-            return module ? {
-                ...module.meta,
-                referenceType: 'capability-module',
-                referenceId: module.meta.moduleId,
-            } : null
+            return module
+                ? {
+                    ...module.meta,
+                    referenceType: 'capability-module',
+                    referenceId: module.meta.moduleId,
+                }
+                : null
         }
         if (recent.referenceType === 'tool' || recent.referenceType === 'skill') {
             const record = await CapabilityModel.authorize({
                 capabilityId: recent.referenceId,
                 requester: toCapabilityRequester(input.requester),
             })
-            if ('error' in record || record.kind !== recent.referenceType
+            if (
+                'error' in record || record.kind !== recent.referenceType
                 || record.catalogExposure !== 'standalone' || record.parentModuleId !== undefined
-                || record.status !== 'active') return null
+                || record.status !== 'active'
+            ) return null
             const manifest = await CapabilityModel.readManifest({
                 capabilityId: record.capabilityId,
                 requester: toCapabilityRequester(input.requester),
@@ -536,14 +558,17 @@ export class PromptReferenceCatalogService {
         }
         if (recent.referenceType === 'capability-artifact') {
             const page = await this.listArtifactCategory({ ...input, category: 'artifacts', query: '', limit: 20 })
-            return page.items.find(item => item.referenceType === 'capability-artifact'
-                && item.assetId === recent.referenceId) ?? null
+            return page.items.find(item =>
+                item.referenceType === 'capability-artifact'
+                && item.assetId === recent.referenceId
+            ) ?? null
         }
         const asset = await AssetModel.get({ assetId: recent.referenceId, requester: input.requester })
-        if ('error' in asset || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
-            || asset.states.lifecycle !== 'active') return null
-        const placement = (input.workspace.canvasState?.nodes ?? []).find((node) =>
-            'assetId' in node && node.assetId === asset.assetId && ['image', 'video', 'audio', 'document', 'mediaDocument'].includes(node.type))
+        if (
+            'error' in asset || !isAssetAvailableInWorkspaceScope(asset, input.workspace)
+            || asset.states.lifecycle !== 'active'
+        ) return null
+        const placement = (input.workspace.canvasState?.nodes ?? []).find((node) => 'assetId' in node && node.assetId === asset.assetId && ['image', 'video', 'audio', 'document', 'mediaDocument'].includes(node.type))
         return toMediaCatalogItemFromAsset(asset, placement ? 'canvas' : 'library', placement?.nodeId)
     }
 
@@ -559,10 +584,12 @@ export class PromptReferenceCatalogService {
         if (!cursor) return { category: 'artifacts', query, canvasOffset: 0, assetComplete: false }
         try {
             const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as ArtifactCatalogCursor
-            if (parsed.category !== 'artifacts' || parsed.query !== query
+            if (
+                parsed.category !== 'artifacts' || parsed.query !== query
                 || !Number.isSafeInteger(parsed.canvasOffset) || parsed.canvasOffset < 0
                 || typeof parsed.assetComplete !== 'boolean'
-                || (parsed.assetCursor !== undefined && typeof parsed.assetCursor !== 'string')) {
+                || (parsed.assetCursor !== undefined && typeof parsed.assetCursor !== 'string')
+            ) {
                 throw new Error('INVALID_CURSOR')
             }
             return parsed
@@ -575,8 +602,10 @@ export class PromptReferenceCatalogService {
         if (!cursor) return 0
         try {
             const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Record<string, unknown>
-            if (parsed.category !== 'capabilities' || parsed.query !== query
-                || !Number.isSafeInteger(parsed.offset) || Number(parsed.offset) < 0) throw new Error('INVALID_CURSOR')
+            if (
+                parsed.category !== 'capabilities' || parsed.query !== query
+                || !Number.isSafeInteger(parsed.offset) || Number(parsed.offset) < 0
+            ) throw new Error('INVALID_CURSOR')
             return Number(parsed.offset)
         } catch {
             throw new Error('INVALID_CURSOR')

@@ -15,7 +15,7 @@ import type {
     CapabilityControlsHost,
     CapabilityControlsView,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
-import { html } from '$src/utils/domTemplates.ts'
+import { html } from '@lixpi/ui-primitives/dom'
 import { orderedListIcon } from '@lixpi/ui-kit/svg'
 
 type InstalledFrontendModule = {

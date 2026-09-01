@@ -1,6 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from 'vitest'
 
-import { STREAM_STATUS, type CapabilityRunEvent } from '@lixpi/constants'
+import {
+    STREAM_STATUS,
+    type CapabilityRunEvent,
+} from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({
     publish: vi.fn(),

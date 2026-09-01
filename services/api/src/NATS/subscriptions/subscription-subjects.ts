@@ -2,7 +2,13 @@
 
 import process from 'process'
 import chalk from 'chalk'
-import { log, info, infoStr, warn, err } from '@lixpi/debug-tools'
+import {
+    log,
+    info,
+    infoStr,
+    warn,
+    err,
+} from '@lixpi/debug-tools'
 
 import SubscriptionService from '../../services/subscription-service.ts'
 import User from '../../models/user.ts'
@@ -20,8 +26,8 @@ export const subscriptionSubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT ] },
-            sub: { allow: [] }
+            pub: { allow: [USER_SUBSCRIPTION_SUBJECTS.GET_PAYMENT_METHOD_SETUP_INTENT] },
+            sub: { allow: [] },
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -32,10 +38,9 @@ export const subscriptionSubjects = [
 
             const {
                 userId,
-                stripeCustomerId
+                stripeCustomerId,
             } = user
-
-        }
+        },
     },
 
     {
@@ -43,8 +48,8 @@ export const subscriptionSubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS ] },
-            sub: { allow: [] }
+            pub: { allow: [USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS] },
+            sub: { allow: [] },
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -55,7 +60,7 @@ export const subscriptionSubjects = [
 
             const {
                 userId,
-                stripeCustomerId
+                stripeCustomerId,
             } = user
 
             infoStr([
@@ -63,15 +68,15 @@ export const subscriptionSubjects = [
                 chalk.green(USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS),
                 ', ',
                 chalk.grey('userId::'),
-                userId
+                userId,
             ])
 
             return await subscriptionService.getPaymentMethods({
                 userId,
                 stripeCustomerId,
-                origin: USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS
+                origin: USER_SUBSCRIPTION_SUBJECTS.GET_USER_PAYMENT_METHODS,
             })
-        }
+        },
     },
 
     {
@@ -79,8 +84,8 @@ export const subscriptionSubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.DELETE_USER_PAYMENT_METHOD ] },
-            sub: { allow: [] }
+            pub: { allow: [USER_SUBSCRIPTION_SUBJECTS.DELETE_USER_PAYMENT_METHOD] },
+            sub: { allow: [] },
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -99,9 +104,9 @@ export const subscriptionSubjects = [
                 // userId,
                 stripeCustomerId,
                 paymentMethodId,
-                origin: USER_SUBSCRIPTION_SUBJECTS.DELETE_CUSTOMER_PAYMENT_METHOD
+                origin: USER_SUBSCRIPTION_SUBJECTS.DELETE_CUSTOMER_PAYMENT_METHOD,
             })
-        }
+        },
     },
 
     {
@@ -109,8 +114,8 @@ export const subscriptionSubjects = [
         type: 'reply',
         payloadType: 'json',
         permissions: {
-            pub: { allow: [ USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE ] },
-            sub: { allow: [] }
+            pub: { allow: [USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE] },
+            sub: { allow: [] },
         },
         handler: async (data, msg) => {
             // If user set and its not an empty object
@@ -121,25 +126,22 @@ export const subscriptionSubjects = [
 
             const {
                 userId,
-                stripeCustomerId
+                stripeCustomerId,
             } = user
             const { amount } = data
 
             const amountInCents = parseInt(amount) * 100
 
-
             const topUpResponse = await subscriptionService.topUpUserBalance({
                 userId,
                 stripeCustomerId,
                 amount: amountInCents,
-                origin: USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE
+                origin: USER_SUBSCRIPTION_SUBJECTS.TOP_UP_USER_BALANCE,
             })
-
 
             // TODO: this was empty, probably was never working
             return {}
-        }
-    }
-
+        },
+    },
     // END Subscription ---------------------------------------------------------------------------------------------------
 ]

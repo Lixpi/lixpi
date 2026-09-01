@@ -1,5 +1,6 @@
 include:
     - docker-compose.typescript-test-runner.yml
+    - docker-compose.typescript-quality-runner.yml
 
 services:
 
