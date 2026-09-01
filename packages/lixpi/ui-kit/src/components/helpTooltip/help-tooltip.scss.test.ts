@@ -12,7 +12,7 @@ function expectSourceToContain(source: string, snippet: string): void {
 }
 
 describe('help-tooltip.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'help-tooltip.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'help-tooltip.scss'), 'utf-8')
 
     it('defines root trigger geometry and interaction states', () => {
         expectSourceToContain(scss, '.help-tooltip')

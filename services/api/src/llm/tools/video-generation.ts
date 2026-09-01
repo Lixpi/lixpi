@@ -1,8 +1,8 @@
-'use strict'
-
 import { warn } from '@lixpi/debug-tools'
 
-import type { ProviderName } from '@lixpi/constants'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
 
 // Mirrors tools/image-generation.ts but for the `generate_video` tool. The text
 // model emits this tool call when the user asks for a video/animation/clip; the

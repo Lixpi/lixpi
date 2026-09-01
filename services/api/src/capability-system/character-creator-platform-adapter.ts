@@ -1,21 +1,25 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
 import {
     NATS_SUBJECTS,
     type CharacterFidelityAssessmentRequest,
     type CharacterFidelityAssessmentResponse,
 } from '@lixpi/constants'
-import type {
-    CapabilityMediaModelMeta,
-    CharacterCreatorRuntimePorts,
-    CharacterImageGenerationResult,
-    CharacterReferenceRendition,
+import {
+    type CapabilityMediaModelMeta,
+    type CharacterCreatorRuntimePorts,
+    type CharacterImageGenerationResult,
+    type CharacterReferenceRendition,
 } from '@lixpi/capability-system/backend'
 
-import type { ProviderRegistry } from '../llm/providers/provider-registry.ts'
-import type { AiModelMetaInfo } from '../llm/graph/state.ts'
-import type { ImageGenerationReference } from '../llm/image-generation-references.ts'
+import {
+    type ProviderRegistry,
+} from '../llm/providers/provider-registry.ts'
+import {
+    type AiModelMetaInfo,
+} from '../llm/graph/state.ts'
+import {
+    type ImageGenerationReference,
+} from '../llm/image-generation-references.ts'
 import { callStructuredVlm } from '../llm/structured-vlm/structured-vlm-client.ts'
 import AssetModel from '../models/asset.ts'
 import { getContentAddressedBlob } from '../services/blob-storage.ts'

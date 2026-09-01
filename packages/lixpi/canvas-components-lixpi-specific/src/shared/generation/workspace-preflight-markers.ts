@@ -1,14 +1,14 @@
-import type {
-    CanvasState,
-    CanvasNode,
-    BranchLineCanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    MediaBranchLineagePlan,
-    MediaBranchCandidateSnapshot,
-    MediaGenerationRunMeta,
-    AiModelId,
-    WorkspaceEdge,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type BranchLineCanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaBranchCandidateSnapshot,
+    type MediaGenerationRunMeta,
+    type AiModelId,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { parseAiModelSelectionAttr } from '@lixpi/prosemirror/shared/model-selection-attrs'
 import {
@@ -17,17 +17,27 @@ import {
     collectProseMirrorText,
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror/shared/thread-doc'
-import type { AiPromptComposerSubmitData } from '../composer/canvas-conversation-content.ts'
+import {
+    type AiPromptComposerSubmitData,
+} from '../composer/canvas-conversation-content.ts'
 import { getBranchMarkerPromptDisplayText } from '../branch-tree-layout/marker-prompt-parts.ts'
 import { estimateBranchMarkerDimensions } from '../branch-tree-layout/marker-dimensions.ts'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
 import {
-    WorkspaceGenerationPlacements,
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type WorkspaceGenerationPlacements,
     type PendingBranchMarkerRecord,
 } from './workspace-generation-placements.ts'
-import { WorkspaceLineageProjection } from '../branch-tree-layout/workspace-lineage-projection.ts'
-import { WorkspaceBranchMarkerHandoff } from './workspace-branch-marker-handoff.ts'
-import { WorkspaceGeometry } from '../branch-tree-layout/workspace-geometry.ts'
+import {
+    type WorkspaceLineageProjection,
+} from '../branch-tree-layout/workspace-lineage-projection.ts'
+import {
+    type WorkspaceBranchMarkerHandoff,
+} from './workspace-branch-marker-handoff.ts'
+import {
+    type WorkspaceGeometry,
+} from '../branch-tree-layout/workspace-geometry.ts'
 import { uniqueAiModelIds } from './model-identity.ts'
 
 type PreflightScope = { workspaceId: string; sceneKey: string }

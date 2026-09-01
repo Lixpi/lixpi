@@ -1,5 +1,3 @@
-'use strict'
-
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 

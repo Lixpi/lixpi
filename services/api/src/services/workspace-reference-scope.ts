@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetRequesterContext,
-    Workspace,
+import {
+    type Asset,
+    type AssetRequesterContext,
+    type Workspace,
 } from '@lixpi/constants'
 
 type WorkspaceScope = Pick<Workspace, 'workspaceId' | 'organizationId'>

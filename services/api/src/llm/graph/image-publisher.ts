@@ -1,5 +1,3 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
 import {
     getAiInteractionCanonicalResponseSubject,
@@ -8,10 +6,10 @@ import {
     type MediaGenerationRunMeta,
     type ProviderName,
 } from '@lixpi/constants'
-import type {
-    ChunkPayload,
-    ProseMirrorContentHandler,
-    ProseMirrorSnapshotProvider,
+import {
+    type ChunkPayload,
+    type ProseMirrorContentHandler,
+    type ProseMirrorSnapshotProvider,
 } from './stream-publisher.ts'
 import {
     attachGeneratedAssetNode,

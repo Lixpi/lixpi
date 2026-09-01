@@ -4,19 +4,21 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasState,
-    CanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
 import { createLixpiCanvasSettings } from '../../frontend/settings/canvas-settings.ts'
 import { WorkspaceGeometry } from '../branch-tree-layout/workspace-geometry.ts'
 import { WorkspaceLineageProjection } from '../branch-tree-layout/workspace-lineage-projection.ts'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
 import { WorkspaceGenerationPlacements } from './workspace-generation-placements.ts'
 import {
     WorkspaceBranchMarkerHandoff,

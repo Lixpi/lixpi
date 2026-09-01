@@ -1,4 +1,3 @@
-'use strict'
 // SidePanel - reusable resizable side panel for a canvas-hosted panel.
 //
 // Renderer: TypeScript `html` DOM. It is meant to be mounted as a

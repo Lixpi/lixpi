@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -7,7 +5,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 
 const assetModelMocks = vi.hoisted(() => ({
     get: vi.fn(),

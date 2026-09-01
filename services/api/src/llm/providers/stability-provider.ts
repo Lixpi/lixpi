@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'process'
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
@@ -19,13 +17,17 @@ import {
     type BaseProviderDeps,
 } from './base-provider.ts'
 import { bedrockInference } from './bedrock-inference.ts'
-import type { ProviderName } from '@lixpi/constants'
-import type {
-    ProviderState,
-    ChatMessage,
+import {
+    type ProviderName,
+} from '@lixpi/constants'
+import {
+    type ProviderState,
+    type ChatMessage,
 } from '../graph/state.ts'
 import { validateImagePrompt } from '../tools/image-generation.ts'
-import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
+import {
+    type ResolvedImageGenerationReference,
+} from '../image-generation-references.ts'
 import { SMITHY_TRANSPORT_FAULT_NAMES } from '../utils/transport-retry.ts'
 import {
     STABILITY_SEED_MAX,
@@ -431,9 +433,7 @@ export class StabilityProvider extends BaseProvider {
             body.image = primaryRef!.bytes.toString('base64')
             body.strength = strength
             warn(
-                `${logPrefix} Bedrock has no equivalent of the Stability control/* endpoints; `
-                    + `${routingMode} degraded to image-to-image strength=${strength}`
-                    + (styleRef ? ' and the separate style reference was dropped' : ''),
+                `${logPrefix} Bedrock has no equivalent of the Stability control/* endpoints; ${routingMode} degraded to image-to-image strength=${strength}${styleRef ? ' and the separate style reference was dropped' : ''}`,
             )
         } else {
             body.mode = 'text-to-image'

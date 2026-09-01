@@ -2,7 +2,9 @@ import {
     Plugin,
     PluginKey,
 } from 'prosemirror-state'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 import {
     createEl,
     applyStyle,

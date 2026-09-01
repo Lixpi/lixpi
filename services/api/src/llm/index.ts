@@ -1,7 +1,7 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
-import type { ProviderName } from '@lixpi/constants'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
 import {
     CapabilityMediaStrategyRegistry,
     type CapabilityModuleCatalog,
@@ -20,7 +20,9 @@ import {
     getCapabilityDispatcher,
 } from '../capability-system/capability-runtime.ts'
 import { createDefaultCapabilityModuleCatalog } from '../installed-capabilities.ts'
-import type { MetricsClient } from '../metrics/metrics-client.ts'
+import {
+    type MetricsClient,
+} from '../metrics/metrics-client.ts'
 import { createCharacterCreatorRuntimePorts } from '../capability-system/character-creator-platform-adapter.ts'
 
 export type LlmModule = {

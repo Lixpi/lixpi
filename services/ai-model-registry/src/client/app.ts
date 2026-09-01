@@ -5,17 +5,17 @@
 
 import './styles.scss'
 
-import type {
-    Catalog,
-    CatalogGroup,
-    CatalogParam,
-    CatalogProvider,
-    CategoryMeta,
-    Decision,
-    SelectionEntry,
-    SelectionMap,
-    Status,
-    Summary,
+import {
+    type Catalog,
+    type CatalogGroup,
+    type CatalogParam,
+    type CatalogProvider,
+    type CategoryMeta,
+    type Decision,
+    type SelectionEntry,
+    type SelectionMap,
+    type Status,
+    type Summary,
 } from './types.ts'
 
 const STATE_LABELS: Record<string, string> = {
@@ -276,8 +276,7 @@ class ParamPicker {
             }
         }
         const select = document.getElementById('model-filter')
-        select.innerHTML = '<option value="all">All models</option>'
-            + [...models].sort().map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(shortModel(m))}</option>`).join('')
+        select.innerHTML = `<option value="all">All models</option>${[...models].sort().map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(shortModel(m))}</option>`).join('')}`
     }
 
     // Reloading in the middle of a long list should not throw away your place.
@@ -741,6 +740,8 @@ class ParamPicker {
 }
 
 const picker = new ParamPicker(document.getElementById('providers') as HTMLElement)
-picker.init().catch((error: Error) => {
+try {
+    await picker.init()
+} catch (error) {
     document.getElementById('providers')!.innerHTML = `<p class="fatal">Could not start: ${escapeHtml(error.message)}</p>`
-})
+}

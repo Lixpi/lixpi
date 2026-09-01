@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    StyleExtractionRuntimePort,
-    StyleExtractionRuntimeState,
+import {
+    type StyleExtractionRuntimePort,
+    type StyleExtractionRuntimeState,
 } from '@lixpi/capability-system/backend'
 
 import { extractStyleReferenceImagesFromMessages } from './pipeline/style-extraction-state.ts'
@@ -16,10 +14,10 @@ import { synthesizeStyle } from './pipeline/stage4-synthesis.ts'
 import { generateSamples } from './pipeline/stage5-samples.ts'
 import { persistStyle } from './pipeline/stage6-persist.ts'
 import { createStageLogger } from './pipeline/trace.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StageLogger,
+import {
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StageLogger,
 } from './pipeline/types.ts'
 import { resolveStyleExtractionInput } from './style-extraction-input-resolver.ts'
 

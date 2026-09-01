@@ -1,5 +1,3 @@
-'use strict'
-
 import NatsService from '@lixpi/nats-service'
 import { configureUiKit } from '@lixpi/ui-kit'
 

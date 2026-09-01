@@ -1,12 +1,16 @@
-import type {
-    WorkspaceCollisionSettings,
-    WorkspacePersistenceSettings,
+import {
+    type WorkspaceCollisionSettings,
+    type WorkspacePersistenceSettings,
 } from '@lixpi/constants'
-import type { BoundedZoomScalingOptions } from '@lixpi/canvas-engine/shared'
-import type { ConnectionSettings } from '@lixpi/canvas-engine/frontend/connectors'
-import type {
-    CircularGlassMaterialStyle,
-    GlassMaterialStyle,
+import {
+    type BoundedZoomScalingOptions,
+} from '@lixpi/canvas-engine/shared'
+import {
+    type ConnectionSettings,
+} from '@lixpi/canvas-engine/frontend/connectors'
+import {
+    type CircularGlassMaterialStyle,
+    type GlassMaterialStyle,
 } from '@lixpi/canvas-components/effects/glass'
 
 export type BoundedZoomScalingSettings = BoundedZoomScalingOptions

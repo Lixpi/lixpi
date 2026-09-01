@@ -9,7 +9,9 @@ import {
     changeNodesConnectorLineCurve,
     infoCircleFilledIcon,
 } from '@lixpi/ui-kit/svg'
-import type { BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
+import {
+    type BubbleMenuItem,
+} from '@lixpi/ui-kit/components/bubble-menu'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 
 export const CANVAS_IMAGE_CONTEXT = 'canvasImage'

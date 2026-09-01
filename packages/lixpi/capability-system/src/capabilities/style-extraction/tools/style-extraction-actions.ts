@@ -1,8 +1,6 @@
-'use strict'
-
 import {
     type CapabilityActionExecutionContext,
-    CapabilityActionRegistry,
+    type CapabilityActionRegistry,
     type CapabilityActionValidationResult,
 } from '../../../backend/capability-action-registry.ts'
 import { CapabilityError } from '../../../shared/capability-errors.ts'

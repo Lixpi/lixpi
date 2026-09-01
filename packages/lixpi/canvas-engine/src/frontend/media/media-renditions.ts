@@ -1,9 +1,9 @@
-'use strict'
-
-import type { CanvasEngineSize } from '../../shared/index.ts'
-import type {
-    MediaDescriptor,
-    MediaRendition,
+import {
+    type CanvasEngineSize,
+} from '../../shared/index.ts'
+import {
+    type MediaDescriptor,
+    type MediaRendition,
 } from './types.ts'
 
 export function renditionSize(rendition: MediaRendition): CanvasEngineSize {

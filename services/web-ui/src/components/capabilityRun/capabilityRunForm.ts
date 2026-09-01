@@ -1,8 +1,10 @@
-import type { CapabilityJsonValue } from '@lixpi/constants'
+import {
+    type CapabilityJsonValue,
+} from '@lixpi/constants'
 
-import type {
-    CapabilityInputSchema,
-    CapabilityInputSchemaProperty,
+import {
+    type CapabilityInputSchema,
+    type CapabilityInputSchemaProperty,
 } from '$src/services/capability-catalog-client.ts'
 import { html } from '@lixpi/ui-primitives/dom'
 

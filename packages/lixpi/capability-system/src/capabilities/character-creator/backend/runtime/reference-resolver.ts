@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import sharp from 'sharp'
@@ -8,8 +6,12 @@ import {
     buildCharacterSheetLayout,
     type CharacterSheetLayout,
 } from '../../shared/character-sheet-layout.ts'
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
-import type { CharacterReferenceAssetPort } from './runtime-ports.ts'
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterReferenceAssetPort,
+} from './runtime-ports.ts'
 
 export type ResolvedCharacterReference = {
     assetId: string

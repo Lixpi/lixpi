@@ -1,5 +1,3 @@
-'use strict'
-
 // Shapes the client receives from /api/catalog and /api/selections. They mirror
 // what src/store.ts writes, narrowed to the fields the page actually reads.
 

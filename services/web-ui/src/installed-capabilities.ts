@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     ACTION_TIMELINE_FRONTEND_STYLES,
     ACTION_TIMELINE_MODULE_ID,
@@ -11,11 +9,14 @@ import {
     type CapabilityPromptControls,
 } from '@lixpi/capability-system/frontend'
 
-import type {
-    CapabilityControlsHost,
-    CapabilityControlsView,
+import {
+    type CapabilityControlsHost,
+    type CapabilityControlsView,
 } from '$src/components/proseMirror/plugins/aiPromptInputPlugin/aiPromptInputNode.ts'
-import { html } from '@lixpi/ui-primitives/dom'
+import {
+    createDocumentHtml,
+    html,
+} from '@lixpi/ui-primitives/dom'
 import { orderedListIcon } from '@lixpi/ui-kit/svg'
 
 type InstalledFrontendModule = {
@@ -100,7 +101,8 @@ export function createInstalledCapabilityControls(host: CapabilityControlsHost):
 
 export function ensureCapabilityStyles(document: Document): void {
     if (styledDocuments.has(document)) return
-    const style = document.createElement('style')
+    const documentHtml = createDocumentHtml(document)
+    const style = documentHtml`<style></style>` as HTMLStyleElement
     style.dataset.capabilityStyles = ACTION_TIMELINE_MODULE_ID
     style.textContent = ACTION_TIMELINE_FRONTEND_STYLES
     document.head.appendChild(style)

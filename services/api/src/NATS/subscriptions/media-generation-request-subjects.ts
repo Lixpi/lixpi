@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     getMediaGenerationUserEventSubject,
     NATS_SUBJECTS,

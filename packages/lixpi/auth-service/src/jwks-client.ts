@@ -1,5 +1,3 @@
-'use strict'
-
 import jwksClientLib from 'jwks-rsa'
 
 export type JwksClientConfig = {

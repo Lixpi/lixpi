@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
     vi,
 } from 'vitest'
-import type { AiModelInferenceCapabilities } from '@lixpi/constants'
+import {
+    type AiModelInferenceCapabilities,
+} from '@lixpi/constants'
 
 import { buildCharacterPanelSpecs } from '../../shared/character-sheet-media-plan.ts'
 

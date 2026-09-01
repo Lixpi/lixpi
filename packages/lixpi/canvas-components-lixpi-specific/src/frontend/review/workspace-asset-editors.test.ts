@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { Asset } from '@lixpi/constants'
+import {
+    type Asset,
+} from '@lixpi/constants'
 import {
     WorkspaceAssetMetadataEditor,
     WorkspaceAssetContentEditor,

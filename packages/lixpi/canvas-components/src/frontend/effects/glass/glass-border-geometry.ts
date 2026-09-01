@@ -1,10 +1,10 @@
-'use strict'
-
 import {
     getRoundedOutlineFrame,
     getRoundedOutlinePerimeter,
 } from '../outline/outline-geometry.ts'
-import type { GlassPixels } from './glass-material.ts'
+import {
+    type GlassPixels,
+} from './glass-material.ts'
 
 export type GlassBorderStyle = {
     enabled: boolean

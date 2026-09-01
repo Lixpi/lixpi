@@ -6,12 +6,16 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 import {
     WorkspacePromptComposer,
     type WorkspacePromptComposerOptions,
 } from './workspace-prompt-composer.ts'
-import type { PromptComposerEditorRequest } from './ai-prompt-composer.ts'
+import {
+    type PromptComposerEditorRequest,
+} from './ai-prompt-composer.ts'
 
 const owners: WorkspacePromptComposer[] = []
 afterEach(() => {

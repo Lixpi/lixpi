@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 import {
     createAiPromptComposer,
     type AiPromptComposerConfig,

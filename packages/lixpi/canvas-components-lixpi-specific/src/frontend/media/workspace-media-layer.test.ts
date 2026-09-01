@@ -7,19 +7,19 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasNode,
-    CanvasState,
+import {
+    type Asset,
+    type CanvasNode,
+    type CanvasState,
 } from '@lixpi/constants'
-import type {
-    EngineMedia,
-    ImageLease,
+import {
+    type EngineMedia,
+    type ImageLease,
 } from '@lixpi/canvas-engine/frontend/media'
-import type {
-    CanvasRendererOptions,
-    ResourceHandle,
-    ResourceKind,
+import {
+    type CanvasRendererOptions,
+    type ResourceHandle,
+    type ResourceKind,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import {
     WorkspaceMediaLayer,

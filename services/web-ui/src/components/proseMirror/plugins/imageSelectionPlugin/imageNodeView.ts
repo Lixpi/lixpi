@@ -1,7 +1,9 @@
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type {
-    EditorView,
-    NodeView,
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type EditorView,
+    type NodeView,
 } from 'prosemirror-view'
 import { NodeSelection } from 'prosemirror-state'
 import {

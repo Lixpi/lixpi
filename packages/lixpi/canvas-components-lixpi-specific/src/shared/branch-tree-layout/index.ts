@@ -1,5 +1,3 @@
-'use strict'
-
 export * from './branch-lineage-state.ts'
 export * from './branch-tree-layout.ts'
 export * from './branch-lineage-spacing.ts'

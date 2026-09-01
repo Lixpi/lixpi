@@ -1,32 +1,25 @@
-'use strict'
-
 import c from 'chalk'
 import {
     wsconnect,
     tokenAuthenticator,
+    type NatsConnection,
+    type Msg,
+    type Subscription,
+    type ConnectionOptions,
 } from '@nats-io/nats-core'
 import { connect } from '@nats-io/transport-node'
 import { fromSeed } from '@nats-io/nkeys'
 import {
     jetstream,
     jetstreamManager,
+    type JetStreamClient,
+    type JetStreamManager,
 } from '@nats-io/jetstream'
-import { Objm } from '@nats-io/obj'
-
-import type {
-    NatsConnection,
-    Msg,
-    Subscription,
-    ConnectionOptions,
-} from '@nats-io/nats-core'
-import type {
-    JetStreamClient,
-    JetStreamManager,
-} from '@nats-io/jetstream'
-import type {
-    ObjectStore,
-    ObjectStoreOptions,
-    ObjectInfo,
+import {
+    Objm,
+    type ObjectStore,
+    type ObjectStoreOptions,
+    type ObjectInfo,
 } from '@nats-io/obj'
 
 // Default JetStream replication factor for all stores we create. The cluster

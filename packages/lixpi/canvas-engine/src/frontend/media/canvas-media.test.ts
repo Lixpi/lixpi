@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -8,9 +6,9 @@ import {
     vi,
 } from 'vitest'
 import { CanvasMedia } from './canvas-media.ts'
-import type {
-    MediaDescriptor,
-    MediaSourceResolver,
+import {
+    type MediaDescriptor,
+    type MediaSourceResolver,
 } from './types.ts'
 
 const decoder = vi.hoisted(() => ({ decode: vi.fn(), destroy: vi.fn() }))

@@ -10,7 +10,9 @@ import {
     imageIcon,
     mediaFoloderIcon,
 } from '@lixpi/ui-kit/svg'
-import type { LixpiCanvasPalette } from '../settings/index.ts'
+import {
+    type LixpiCanvasPalette,
+} from '../settings/index.ts'
 
 export type WorkspaceCanvasChromeSettings = {
     panel: {

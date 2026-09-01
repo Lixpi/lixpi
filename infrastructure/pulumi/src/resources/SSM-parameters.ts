@@ -1,5 +1,3 @@
-'use strict'
-
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 import * as process from 'process'

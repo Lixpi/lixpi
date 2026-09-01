@@ -1,5 +1,3 @@
-'use strict'
-
 // Writable adapter for the domain stores. Each domain store keeps its public
 // surface and delegates subscribe, set, update, and synchronous reads to an atom.
 

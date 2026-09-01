@@ -1,5 +1,3 @@
-'use strict'
-
 import { writable } from '$src/stores/nanoStore.ts'
 import {
     LoadingStatus,

@@ -1,5 +1,3 @@
-'use strict'
-
 // Branch-lineage tree layout — the shared adapter between the canvas graph and
 // the pure tidy-tree algorithm. Runs identically in the API (authoritative
 // generation-driven layout) and the WebUI (local drag/delete rebalance).
@@ -17,24 +15,22 @@
 // closures — it reuses the geometry-agnostic pure helpers (layoutTree,
 // resolveCollisions, computeWorldPosition) so it stays testable and reusable.
 
-import type {
-    CanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    MediaRunLineageAssignment,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type MediaRunLineageAssignment,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     layoutTree,
-    type TreeLayoutNode,
-} from '@lixpi/canvas-engine/shared'
-import { resolveCollisions } from '@lixpi/canvas-engine/shared'
-
-import {
+    resolveCollisions,
     computeWorldPosition,
     buildNodesById,
+    type TreeLayoutNode,
 } from '@lixpi/canvas-engine/shared'
+
 import {
     getBranchLineageAssignment,
     getGeneratedMediaMidpointMarkerId,

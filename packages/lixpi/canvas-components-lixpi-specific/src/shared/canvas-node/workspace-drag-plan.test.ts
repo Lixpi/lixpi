@@ -3,10 +3,10 @@ import {
     it,
     expect,
 } from 'vitest'
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-    DocumentCanvasNode,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
+    type DocumentCanvasNode,
 } from '@lixpi/constants'
 
 import { computeWorkspaceDragPlan } from './workspace-drag-plan.ts'

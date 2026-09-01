@@ -1,6 +1,6 @@
-import type {
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     buildNodesById,
@@ -8,9 +8,9 @@ import {
     type CanvasEngineRect,
     type EngineNode,
 } from '@lixpi/canvas-engine/shared'
-import type {
-    ConnectionEdge,
-    ConnectionSettings,
+import {
+    type ConnectionEdge,
+    type ConnectionSettings,
 } from '@lixpi/canvas-engine/frontend/connectors'
 import {
     computeSpreadTValues,

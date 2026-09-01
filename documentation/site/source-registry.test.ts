@@ -92,10 +92,10 @@ describe('documentation source registry', () => {
         write('documentation/site/README.md')
         write('documentation/site/node_modules/ignored.md')
         for (const name of ['canvas-engine', 'canvas-components', 'canvas-components-lixpi-specific', 'ui-primitives', 'ui-kit']) {
-            write('packages/lixpi/' + name + '/README.md')
-            write('packages/lixpi/' + name + '/docs/GUIDE.md')
-            write('packages/lixpi/' + name + '/src/ignored.md')
-            write('packages/lixpi/' + name + '/examples/ignored.md')
+            write(`packages/lixpi/${name}/README.md`)
+            write(`packages/lixpi/${name}/docs/GUIDE.md`)
+            write(`packages/lixpi/${name}/src/ignored.md`)
+            write(`packages/lixpi/${name}/examples/ignored.md`)
         }
         const registry = new DocumentationSources(root).discover()
         expect([...registry.pages.keys()].some(file => file.endsWith('ignored.md'))).toBe(false)
@@ -120,13 +120,13 @@ describe('repository documentation', () => {
             if (page.route.startsWith('packages/')) {
                 const config = createConfig({ sources: registry, source: page.source })
                 for (const item of Markdoc.validate(ast, config)) {
-                    if (['error', 'critical'].includes(item.error.level)) failures.push(page.route + ': ' + item.error.message)
+                    if (['error', 'critical'].includes(item.error.level)) failures.push(`${page.route}: ${item.error.message}`)
                 }
                 try {
                     const html = Markdoc.renderers.html(Markdoc.transform(ast, config))
-                    expect(html.includes('<h1'), page.route + ' has a rendered title').toBe(true)
+                    expect(html.includes('<h1'), `${page.route} has a rendered title`).toBe(true)
                 } catch (error) {
-                    failures.push(page.route + ': ' + (error as Error).message)
+                    failures.push(`${page.route}: ${(error as Error).message}`)
                 }
             }
             for (const node of ast.walk()) {
@@ -135,7 +135,7 @@ describe('repository documentation', () => {
                 try {
                     registry.resolve(page.source, href)
                 } catch (error) {
-                    failures.push(path.relative('/repository', page.source) + ': ' + href + ': ' + (error as Error).message)
+                    failures.push(`${path.relative('/repository', page.source)}: ${href}: ${(error as Error).message}`)
                 }
             }
         }

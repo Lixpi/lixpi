@@ -1,5 +1,7 @@
 import { select } from 'd3-selection'
-import type { VideoCanvasNode } from '@lixpi/constants'
+import {
+    type VideoCanvasNode,
+} from '@lixpi/constants'
 import {
     applyStyle,
     createDocumentHtml,
@@ -22,9 +24,9 @@ import {
     type CanvasEngineRect,
     type CanvasViewport,
 } from '@lixpi/canvas-engine/shared'
-import type {
-    WorkspaceNodeShellsOptions,
-    WorkspaceResizeCorner,
+import {
+    type WorkspaceNodeShellsOptions,
+    type WorkspaceResizeCorner,
 } from '../nodes/workspace-node-shells.ts'
 
 export type WorkspaceVideoControlsSettings = VideoControlsSettings & {
@@ -144,8 +146,12 @@ class VideoChromeEntry {
             this.surface.appendChild(video)
             this.lifetime.own(() => {
                 if (video.parentNode !== this.surface) return
-                if (originalParent) originalParent.insertBefore(video, originalNextSibling?.parentNode === originalParent ? originalNextSibling : null)
-                else video.remove()
+                if (!originalParent) {
+                    video.remove()
+                    return
+                }
+                if (originalNextSibling?.parentNode === originalParent) originalNextSibling.before(video)
+                else originalParent.appendChild(video)
             })
             this.listen('mousemove', event => {
                 const corner = this.resizeCorner(event)

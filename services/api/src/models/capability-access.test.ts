@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -8,10 +6,10 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    CapabilityCatalogRecord,
-    CapabilityManifest,
-    CapabilityMeta,
+import {
+    type CapabilityCatalogRecord,
+    type CapabilityManifest,
+    type CapabilityMeta,
 } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({

@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
 
 import {
     emptyCharacterEvidenceProfile,
@@ -9,7 +9,9 @@ import {
     type CharacterEvidenceProfile,
     type CharacterRegenerationScope,
 } from './character-evidence.ts'
-import type { ResolvedCharacterReference } from './reference-resolver.ts'
+import {
+    type ResolvedCharacterReference,
+} from './reference-resolver.ts'
 
 export type CharacterEvidenceAnalysis = {
     medium: CharacterEvidenceProfile['medium']

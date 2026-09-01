@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     it,
@@ -26,21 +24,21 @@ import {
 
 function loadScss(): string {
     return readFileSync(
-        resolve(__dirname, 'ai-chat-thread.scss'),
+        resolve(import.meta.dirname, 'ai-chat-thread.scss'),
         'utf-8',
     )
 }
 
 function loadSource(filename: string): string {
     return readFileSync(
-        resolve(__dirname, filename),
+        resolve(import.meta.dirname, filename),
         'utf-8',
     )
 }
 
 function loadAnimationsScss(): string {
     return readFileSync(
-        resolve(__dirname, '../../../../sass/components/_animations.scss'),
+        resolve(import.meta.dirname, '../../../../sass/components/_animations.scss'),
         'utf-8',
     )
 }

@@ -19,7 +19,9 @@ import {
     type WorkspaceCanvasSurfacePorts,
     type WorkspaceCanvasSurfaceSnapshot,
 } from './workspace-canvas-surface.ts'
-import type { WorkspaceCanvasChromeSettings } from './workspace-canvas-chrome.ts'
+import {
+    type WorkspaceCanvasChromeSettings,
+} from './workspace-canvas-chrome.ts'
 
 const settings: WorkspaceCanvasChromeSettings & { insertionWidth: number } = {
     panel: {

@@ -1,11 +1,15 @@
-import type { DocumentCanvasNode } from '@lixpi/constants'
+import {
+    type DocumentCanvasNode,
+} from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
     createErrorPlaceholder,
     createLoadingPlaceholder,
 } from '@lixpi/ui-kit/components/loading-placeholder'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { WorkspaceNodeShells } from './workspace-node-shells.ts'
+import {
+    type WorkspaceNodeShells,
+} from './workspace-node-shells.ts'
 
 export type WorkspaceDocument = {
     documentId: string

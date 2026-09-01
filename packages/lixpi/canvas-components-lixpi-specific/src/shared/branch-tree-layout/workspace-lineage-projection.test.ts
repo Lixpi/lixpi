@@ -4,22 +4,24 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    MediaBranchLineagePlan,
-    MediaRunLineageAssignment,
-    MediaGenerationRunMeta,
-    ImageCanvasNode,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaRunLineageAssignment,
+    type MediaGenerationRunMeta,
+    type ImageCanvasNode,
 } from '@lixpi/constants'
 import { createLixpiCanvasSettings } from '../../frontend/settings/canvas-settings.ts'
 import { WorkspaceGenerationPlacements } from '../generation/workspace-generation-placements.ts'
 import { WorkspaceGeometry } from './workspace-geometry.ts'
 import { WorkspaceLineageProjection } from './workspace-lineage-projection.ts'
-import type { BranchMarkerNode } from './generated-media-rebalance.ts'
+import {
+    type BranchMarkerNode,
+} from './generated-media-rebalance.ts'
 
 function assignment(patch: Partial<MediaRunLineageAssignment> = {}): MediaRunLineageAssignment {
     return { assetId: 'output', generationRequestId: 'request', branchId: 'branch', reasoningRunId: 'reasoning', reasoningModelId: 'provider:reasoning', referenceAssetIds: [], referenceNodeIds: [], sourceContextNodeIds: [], promptText: 'prompt', createdAt: 1, ...patch }

@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     type InstructionSkillStorage,
 } from '@lixpi/capability-system/backend'

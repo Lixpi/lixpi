@@ -1,6 +1,6 @@
-'use strict'
-
-import type { NatsMiddleware } from '@lixpi/nats-service'
+import {
+    type NatsMiddleware,
+} from '@lixpi/nats-service'
 import { authenticateTokenOnRequest } from '../../helpers/auth.ts'
 
 // JWT Authentication Middleware for NATS

@@ -1,4 +1,6 @@
-import type { EditorView } from 'prosemirror-view'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 import {
     type CanvasConversationEditor,
     type CanvasConversationEditorMount,

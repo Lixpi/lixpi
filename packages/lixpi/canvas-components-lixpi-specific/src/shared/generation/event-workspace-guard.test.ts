@@ -3,9 +3,9 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    AiChatThread,
-    CanvasState,
+import {
+    type AiChatThread,
+    type CanvasState,
 } from '@lixpi/constants'
 import {
     hasCurrentWorkspaceThread,

@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    AiInteractionMediaGenerationRequest,
-    CapabilityPromptReference,
+import {
+    type AiInteractionMediaGenerationRequest,
+    type CapabilityPromptReference,
 } from '@lixpi/constants'
 
 export const CHARACTER_CREATOR_TOOL_ID = 'global.character-creator'

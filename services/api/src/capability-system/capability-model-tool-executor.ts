@@ -1,21 +1,21 @@
-'use strict'
-
-import type {
-    CapabilityGenerationTrace,
-    CapabilityGenerationTraceStep,
-    CapabilityJsonValue,
-    CapabilityReasoningModelVariant,
+import {
+    type CapabilityGenerationTrace,
+    type CapabilityGenerationTraceStep,
+    type CapabilityJsonValue,
+    type CapabilityReasoningModelVariant,
 } from '@lixpi/constants'
 import {
     SEARCH_CAPABILITIES_TOOL_NAME,
+    getAttachedCapabilityModelTools,
+    getStandingCapabilityModelTools,
     type CapabilityDispatcher,
     type CapabilityModelToolCall,
     type CapabilityModelToolDefinition,
-    getAttachedCapabilityModelTools,
-    getStandingCapabilityModelTools,
 } from '@lixpi/capability-system/backend'
 
-import type { ProviderState } from '../llm/graph/state.ts'
+import {
+    type ProviderState,
+} from '../llm/graph/state.ts'
 import {
     applyModelCapabilityExecutionToState,
     collectExplicitReferenceAssetIds,

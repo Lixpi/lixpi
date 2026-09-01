@@ -1,5 +1,3 @@
-'use strict'
-
 // Pure media geometry shared by the API projection and the WebUI canvas:
 // aspect-ratio fitting, lineage continuation placement, and the screen-fixed
 // chrome envelope reserved around resolved media in collision boxes.

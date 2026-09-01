@@ -1,5 +1,3 @@
-'use strict'
-
 // nex-entry — the file-conversion responder, supervised on NATS NEX.
 //
 // The native nexlet launches this file as a long-running `service`:

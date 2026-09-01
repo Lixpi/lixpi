@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasDrawingSurface } from '@lixpi/canvas-engine/frontend/rendering'
+import {
+    type CanvasDrawingSurface,
+} from '@lixpi/canvas-engine/frontend/rendering'
 import {
     DomGlassBorder,
     type DomGlassBorderOptions,

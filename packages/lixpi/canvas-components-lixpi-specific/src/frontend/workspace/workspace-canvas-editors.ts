@@ -1,25 +1,29 @@
-import type {
-    CapabilityModuleMeta,
-    CapabilityPromptReference,
-    PromptReferenceCatalogPage,
-    PromptReferenceCategory,
-    CanvasNode,
+import {
+    type CapabilityModuleMeta,
+    type CapabilityPromptReference,
+    type PromptReferenceCatalogPage,
+    type PromptReferenceCategory,
+    type CanvasNode,
 } from '@lixpi/constants'
-import type { AiPromptComposerConfig } from '../composer/index.ts'
-import type {
-    ContextPreviewEnvironment,
-    PromptReferencePreviewRenderer,
+import {
+    type AiPromptComposerConfig,
+} from '../composer/index.ts'
+import {
+    type ContextPreviewEnvironment,
+    type PromptReferencePreviewRenderer,
 } from '../context/index.ts'
-import type {
-    WorkspaceDocumentEditorOptions,
-    WorkspaceCapabilityEditorOptions,
-    WorkspaceCapabilityNodePorts,
+import {
+    type WorkspaceDocumentEditorOptions,
+    type WorkspaceCapabilityEditorOptions,
+    type WorkspaceCapabilityNodePorts,
 } from '../nodes/index.ts'
-import type {
-    WorkspaceAssetDetailsPorts,
-    WorkspaceHistoryEditorRequest,
+import {
+    type WorkspaceAssetDetailsPorts,
+    type WorkspaceHistoryEditorRequest,
 } from '../review/index.ts'
-import type { CanvasConversationRunPorts } from './canvas-conversation-run.ts'
+import {
+    type CanvasConversationRunPorts,
+} from './canvas-conversation-run.ts'
 
 export type WorkspacePromptCatalog = {
     list: (query: { category: PromptReferenceCategory; query?: string; cursor?: string; limit?: number }) => Promise<PromptReferenceCatalogPage>

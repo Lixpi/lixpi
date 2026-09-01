@@ -1,5 +1,3 @@
-'use strict'
-
 import jsonWebToken from 'jsonwebtoken'
 import {
     fromPublic,
@@ -10,7 +8,9 @@ import {
     encodeAuthorizationResponse,
 } from '@nats-io/jwt'
 
-import type { NatsService } from '@lixpi/nats-service'
+import {
+    type NatsService,
+} from '@lixpi/nats-service'
 import { getNatsUserSubjectToken } from '@lixpi/constants'
 import {
     info,

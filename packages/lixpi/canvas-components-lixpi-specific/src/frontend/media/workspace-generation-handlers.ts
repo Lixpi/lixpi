@@ -1,38 +1,58 @@
-import type {
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    WorkspaceEdge,
-    MediaGenerationRunMeta,
-    WorkspaceContextResolution,
-    CapabilityRunEvent,
-} from '@lixpi/constants'
-import { CanvasGenerationEvents } from '../../shared/generation/canvas-generation-events.ts'
-import type { WorkspaceGenerationPlacements } from '../../shared/generation/workspace-generation-placements.ts'
 import {
-    WorkspaceMediaTrackers,
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type WorkspaceEdge,
+    type MediaGenerationRunMeta,
+    type WorkspaceContextResolution,
+    type CapabilityRunEvent,
+} from '@lixpi/constants'
+import {
+    type CanvasGenerationEvents,
+} from '../../shared/generation/canvas-generation-events.ts'
+import {
+    type WorkspaceGenerationPlacements,
+} from '../../shared/generation/workspace-generation-placements.ts'
+import {
     setGeneratedMediaTracker,
     pruneGeneratedMediaTrackerAliases,
+    type WorkspaceMediaTrackers,
     type PendingGeneratedMediaTracker,
 } from '../../shared/generation/workspace-media-trackers.ts'
-import type { WorkspaceGenerationSettlement } from '../../shared/generation/workspace-generation-settlement.ts'
-import type { WorkspaceBranchMarkerHandoff } from '../../shared/generation/workspace-branch-marker-handoff.ts'
-import type { WorkspaceMediaOperationRecovery } from '../../shared/generation/workspace-media-operation-recovery.ts'
-import type { WorkspaceMediaAnalysis } from '../../shared/generation/workspace-media-analysis.ts'
+import {
+    type WorkspaceGenerationSettlement,
+} from '../../shared/generation/workspace-generation-settlement.ts'
+import {
+    type WorkspaceBranchMarkerHandoff,
+} from '../../shared/generation/workspace-branch-marker-handoff.ts'
+import {
+    type WorkspaceMediaOperationRecovery,
+} from '../../shared/generation/workspace-media-operation-recovery.ts'
+import {
+    type WorkspaceMediaAnalysis,
+} from '../../shared/generation/workspace-media-analysis.ts'
 import {
     applyMediaGenerationStreamFailureToOperationNodes,
     type MediaGenerationOperationRecoveryResult,
 } from '../../shared/generation/operation-recovery.ts'
 import { shouldAcceptGeneratedMediaEvent as shouldAcceptGeneratedMediaEventForState } from '../../shared/generation/event-workspace-guard.ts'
-import type { WorkspaceLineageProjection } from '../../shared/branch-tree-layout/workspace-lineage-projection.ts'
-import type { WorkspaceGeometry } from '../../shared/branch-tree-layout/workspace-geometry.ts'
-import type { WorkspaceApiCanvasGeometry } from '../../shared/scene/workspace-api-canvas-geometry.ts'
+import {
+    type WorkspaceLineageProjection,
+} from '../../shared/branch-tree-layout/workspace-lineage-projection.ts'
+import {
+    type WorkspaceGeometry,
+} from '../../shared/branch-tree-layout/workspace-geometry.ts'
+import {
+    type WorkspaceApiCanvasGeometry,
+} from '../../shared/scene/workspace-api-canvas-geometry.ts'
 import { getPendingGeneratedMediaNodeId } from '../../shared/branch-tree-layout/index.ts'
-import type { WorkspaceGenerationVisuals } from './workspace-generation-visuals.ts'
+import {
+    type WorkspaceGenerationVisuals,
+} from './workspace-generation-visuals.ts'
 
 type HandlerScope = { workspaceId: string; sceneKey: string }
 

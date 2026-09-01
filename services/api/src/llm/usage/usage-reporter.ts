@@ -1,13 +1,11 @@
-'use strict'
-
 import { Decimal } from 'decimal.js'
 
 import { warn } from '@lixpi/debug-tools'
 
-import type {
-    AiModelMetaInfo,
-    EventMeta,
-    Usage,
+import {
+    type AiModelMetaInfo,
+    type EventMeta,
+    type Usage,
 } from '../graph/state.ts'
 
 // Match Python `Decimal` behavior (default 28-digit precision, ROUND_HALF_EVEN).

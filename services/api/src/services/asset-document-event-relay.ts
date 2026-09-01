@@ -1,9 +1,9 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import NATS_Service from '@lixpi/nats-service'
-import type { AssetRequesterContext } from '@lixpi/constants'
+import {
+    type AssetRequesterContext,
+} from '@lixpi/constants'
 import {
     getAssetDocumentEventSubject,
     getAssetStepSubject,

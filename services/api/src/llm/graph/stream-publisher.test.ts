@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -204,7 +202,7 @@ describe('TagAwareStream', () => {
 
         const ss = statuses(tagAware.published)
         expect(ss[0]).toBe(STREAM_STATUS.COLLAPSIBLE_START)
-        expect(ss[ss.length - 1]).toBe(STREAM_STATUS.COLLAPSIBLE_END)
+        expect(ss.at(-1)).toBe(STREAM_STATUS.COLLAPSIBLE_END)
     })
 
     it('does not match nested-looking tags like <image_prompt_alt>', () => {

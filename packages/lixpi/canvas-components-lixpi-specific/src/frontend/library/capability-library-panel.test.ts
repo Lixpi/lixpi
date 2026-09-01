@@ -10,9 +10,9 @@ import {
     createCapabilityLibraryPanel,
     mergeCapabilityCatalogPage,
 } from './capability-library-panel.ts'
-import type {
-    CapabilityCatalogItem,
-    CapabilityDetails,
+import {
+    type CapabilityCatalogItem,
+    type CapabilityDetails,
 } from '@lixpi/capability-system/frontend'
 
 function item(

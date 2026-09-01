@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -9,11 +7,11 @@ import {
     vi,
 } from 'vitest'
 
-import { STREAM_STATUS } from '@lixpi/constants'
-import type {
-    Asset,
-    MediaBranchCandidateImage,
-    WorkspaceContextSnapshot,
+import {
+    STREAM_STATUS,
+    type Asset,
+    type MediaBranchCandidateImage,
+    type WorkspaceContextSnapshot,
 } from '@lixpi/constants'
 import { buildActionTimelineDocument } from '@lixpi/capability-system'
 
@@ -46,10 +44,12 @@ vi.mock('../../services/asset-requester-context.ts', () => ({
 }))
 
 import { resolveWorkspaceContext } from './workspace-context-resolver.ts'
-import type { ProviderState } from './state.ts'
-import type {
-    VlmCallArgs,
-    VlmCallResult,
+import {
+    type ProviderState,
+} from './state.ts'
+import {
+    type VlmCallArgs,
+    type VlmCallResult,
 } from '../structured-vlm/structured-vlm-client.ts'
 
 const tinyPngBytes = Buffer.from(

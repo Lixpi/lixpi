@@ -4,11 +4,11 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
-    OperationStatusCanvasNode,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import {
     WorkspaceNodeDeletion,

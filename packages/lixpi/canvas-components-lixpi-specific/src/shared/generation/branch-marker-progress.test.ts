@@ -3,11 +3,11 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    CapabilityRunEvent,
-    ExecutionTraceHandle,
-    ImageCanvasNode,
-    OperationStatusCanvasNode,
+import {
+    type CapabilityRunEvent,
+    type ExecutionTraceHandle,
+    type ImageCanvasNode,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import {
     BranchCapabilityProgress,

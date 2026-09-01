@@ -1,16 +1,16 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import type {
-    Asset,
-    MediaReferenceBinding,
+import {
+    type Asset,
+    type MediaReferenceBinding,
 } from '@lixpi/constants'
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror'
 
 import {
     compileMediaReferenceIntent,

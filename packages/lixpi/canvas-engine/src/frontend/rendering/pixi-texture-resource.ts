@@ -1,11 +1,11 @@
-'use strict'
-
 import {
     BufferImageSource,
     ImageSource,
     Texture,
 } from 'pixi.js'
-import type { TextureInput } from './resources.ts'
+import {
+    type TextureInput,
+} from './resources.ts'
 import { validateTexture } from './resource-validation.ts'
 
 // Buffer uploads do not premultiply alpha in WebGPU. Normalize CPU pixels here

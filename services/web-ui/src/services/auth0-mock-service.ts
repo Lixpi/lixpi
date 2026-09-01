@@ -1,7 +1,5 @@
-'use strict'
-
 import { authStore } from '$src/stores/authStore.ts'
-import { applyStyle } from '@lixpi/ui-primitives/dom'
+import { html } from '@lixpi/ui-primitives/dom'
 
 const AUTH0_DOMAIN = import.meta.env.VITE_MOCK_AUTH0_DOMAIN
 const AUTH0_CLIENT_ID = 'mock-client-id'
@@ -69,14 +67,16 @@ class Auth0MockService {
 
     public async login(): Promise<void> {
         // Redirect to LocalAuth0 authorize endpoint with bypass=true for auto-login
-        const authUrl = `http://${AUTH0_DOMAIN}/authorize?` + new URLSearchParams({
-            client_id: AUTH0_CLIENT_ID,
-            audience: AUTH0_AUDIENCE,
-            redirect_uri: AUTH0_REDIRECT_URI,
-            scope: 'openid profile email',
-            response_type: 'token',
-            bypass: 'true',
-        }).toString()
+        const authUrl = `http://${AUTH0_DOMAIN}/authorize?${
+            new URLSearchParams({
+                client_id: AUTH0_CLIENT_ID,
+                audience: AUTH0_AUDIENCE,
+                redirect_uri: AUTH0_REDIRECT_URI,
+                scope: 'openid profile email',
+                response_type: 'token',
+                bypass: 'true',
+            }).toString()
+        }`
         window.location.href = authUrl
     }
 
@@ -112,8 +112,7 @@ class Auth0MockService {
     // redirects to our callback. We resolve/reject based on load events alone.
     private refreshTokenViaIframe(): Promise<string> {
         return new Promise((resolve, reject) => {
-            const iframe = document.createElement('iframe')
-            applyStyle(iframe, { display: 'none' })
+            const iframe = html`<iframe style=${{ display: 'none' }}></iframe>` as HTMLIFrameElement
 
             const callbackPath = new URL(AUTH0_REDIRECT_URI).pathname
             let loadCount = 0
@@ -166,15 +165,17 @@ class Auth0MockService {
                 reject(new Error('Iframe failed to load'))
             })
 
-            const authUrl = `http://${AUTH0_DOMAIN}/authorize?` + new URLSearchParams({
-                client_id: AUTH0_CLIENT_ID,
-                audience: AUTH0_AUDIENCE,
-                redirect_uri: AUTH0_REDIRECT_URI,
-                scope: 'openid profile email',
-                response_type: 'token',
-                bypass: 'true',
-                prompt: 'none',
-            }).toString()
+            const authUrl = `http://${AUTH0_DOMAIN}/authorize?${
+                new URLSearchParams({
+                    client_id: AUTH0_CLIENT_ID,
+                    audience: AUTH0_AUDIENCE,
+                    redirect_uri: AUTH0_REDIRECT_URI,
+                    scope: 'openid profile email',
+                    response_type: 'token',
+                    bypass: 'true',
+                    prompt: 'none',
+                }).toString()
+            }`
 
             document.body.appendChild(iframe)
             iframe.src = authUrl

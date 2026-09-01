@@ -4,9 +4,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CapabilityRun,
-    CapabilityRunEvent,
+import {
+    type CapabilityRun,
+    type CapabilityRunEvent,
 } from '@lixpi/constants'
 
 import {

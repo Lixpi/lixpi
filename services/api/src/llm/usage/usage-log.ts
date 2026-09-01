@@ -1,16 +1,16 @@
-'use strict'
-
-import type {
-    CheckResponse,
-    ConfirmRequest,
-    ConfirmResponse,
+import {
+    type CheckResponse,
+    type ConfirmRequest,
+    type ConfirmResponse,
 } from '@lixpi/constants'
 import {
     info,
     warn,
 } from '@lixpi/debug-tools'
 
-import type { CheckMeteringBasis } from './usage-estimator.ts'
+import {
+    type CheckMeteringBasis,
+} from './usage-estimator.ts'
 
 // One readable shape for the two halves of metering, so a run's spend reads off
 // `docker logs lixpi-api` in one place. Both lines share the `[Metrics]` tag, lead

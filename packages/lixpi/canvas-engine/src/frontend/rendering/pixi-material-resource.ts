@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     GpuProgram,
     GlProgram,
@@ -8,10 +6,10 @@ import {
     UniformGroup,
     type Texture,
 } from 'pixi.js'
-import type {
-    MaterialBinding,
-    MaterialProgram,
-    ResourceHandle,
+import {
+    type MaterialBinding,
+    type MaterialProgram,
+    type ResourceHandle,
 } from './resources.ts'
 import {
     validateMaterial,

@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    Asset,
-    CanvasState,
-    MediaGenerationRunMeta,
+import {
+    type Asset,
+    type CanvasState,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
 import {
     beforeEach,

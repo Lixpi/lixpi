@@ -1,18 +1,20 @@
 import {
     Plugin,
-    EditorState,
-    Transaction,
     TextSelection,
+    type EditorState,
+    type Transaction,
 } from 'prosemirror-state'
 import {
-    EditorView,
     Decoration,
     DecorationSet,
+    type EditorView,
 } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type {
-    CapabilityJsonValue,
-    MediaGenerationConfigSelectionGroup,
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type CapabilityJsonValue,
+    type MediaGenerationConfigSelectionGroup,
 } from '@lixpi/constants'
 
 import {

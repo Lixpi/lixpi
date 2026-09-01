@@ -1,10 +1,12 @@
-import type { WorkspaceEdge } from '@lixpi/constants'
-import type {
-    CanvasPort,
-    ConnectorPathType,
-    EdgeEndpoint,
-    EngineEdge,
-    EngineNode,
+import {
+    type WorkspaceEdge,
+} from '@lixpi/constants'
+import {
+    type CanvasPort,
+    type ConnectorPathType,
+    type EdgeEndpoint,
+    type EngineEdge,
+    type EngineNode,
 } from '@lixpi/canvas-engine/shared'
 import {
     createWorkspaceConnectionPolicy,

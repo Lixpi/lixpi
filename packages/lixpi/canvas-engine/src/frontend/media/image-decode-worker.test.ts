@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     describe,
@@ -7,7 +5,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { ImageDecodeRequest } from './image-decode-protocol.ts'
+import {
+    type ImageDecodeRequest,
+} from './image-decode-protocol.ts'
 
 async function workerScope() {
     vi.resetModules()

@@ -1,7 +1,9 @@
-'use strict'
-
-import type { CapabilityModuleDefinition } from '../../../backend/capability-module.ts'
-import type { InstructionSkillStorage } from '../../../backend/instruction-skill.ts'
+import {
+    type CapabilityModuleDefinition,
+} from '../../../backend/capability-module.ts'
+import {
+    type InstructionSkillStorage,
+} from '../../../backend/instruction-skill.ts'
 
 import {
     CHARACTER_CREATOR_TOOL_ID,
@@ -13,7 +15,9 @@ import {
     type CharacterCreatorCapabilityStorage,
 } from '../tools/index.ts'
 import { CharacterSheetStrategy } from './runtime/character-sheet-strategy.ts'
-import type { CharacterCreatorRuntimePorts } from './runtime/runtime-ports.ts'
+import {
+    type CharacterCreatorRuntimePorts,
+} from './runtime/runtime-ports.ts'
 
 export type CharacterCreatorModuleDependencies = {
     capabilityStorage: CharacterCreatorCapabilityStorage & InstructionSkillStorage

@@ -1,9 +1,9 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import NATS_Service from '@lixpi/nats-service'
-import type { BlobRecord } from '@lixpi/constants'
+import {
+    type BlobRecord,
+} from '@lixpi/constants'
 
 const BLOB_HASH_PATTERN = /^[a-f0-9]{64}$/
 const BLOB_OBJECT_KEY_PATTERN = /^sha256\/[a-f0-9]{2}\/([a-f0-9]{64})$/

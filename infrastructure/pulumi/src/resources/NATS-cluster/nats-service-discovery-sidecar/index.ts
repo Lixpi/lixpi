@@ -1,6 +1,6 @@
-'use strict'
-
-import { Context } from 'aws-lambda'
+import {
+    type Context,
+} from 'aws-lambda'
 import {
     Route53Client,
     ChangeResourceRecordSetsCommand,

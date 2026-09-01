@@ -1,5 +1,3 @@
-'use strict'
-
 // Intro splash shown on the workspace shell when no workspace route is active.
 // Renderer: TypeScript `html` DOM, so it needs no framework runtime.
 

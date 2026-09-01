@@ -1,9 +1,13 @@
-'use strict'
-
 import { v4 as uuidv4 } from 'uuid'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type { Transaction } from 'prosemirror-state'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type Transaction,
+} from 'prosemirror-state'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 import {
     Mapping,
     Step,
@@ -374,11 +378,13 @@ export class ProseMirrorAuthorityService {
 
     private scheduleSubmit(): void {
         if (this.submitting || this.submitTimer) return
-        this.submitTimer = setTimeout(() => {
+        this.submitTimer = setTimeout(async () => {
             this.submitTimer = null
-            void this.submitPending().catch((error) => {
+            try {
+                await this.submitPending()
+            } catch (error) {
                 console.error('Asset document step submission failed:', error)
-            })
+            }
         }, this.pendingLocalSteps.length >= MAX_BATCH_SIZE ? 0 : BATCH_DELAY_MS)
     }
 

@@ -6,11 +6,11 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
+import {
+    type Asset,
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
 } from '@lixpi/constants'
 import {
     WorkspaceGenerationVisuals,

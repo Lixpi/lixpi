@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 
 import {
@@ -492,6 +490,11 @@ export async function listAuthorizedStandaloneCapabilities(input: Parameters<typ
     return await listAuthorizedCapabilities(input)
 }
 
+async function canEditCapability(item: CapabilityMeta, requester: CapabilityRequesterContext): Promise<boolean> {
+    const result = await authorizeCapability({ capabilityId: item.capabilityId, requester, access: 'edit' })
+    return !('error' in result)
+}
+
 async function isCatalogMetaVisible(
     item: CapabilityMeta,
     requester: CapabilityRequesterContext,
@@ -502,8 +505,7 @@ async function isCatalogMetaVisible(
     if (item.status !== 'disabled') return false
     let canEdit = editVisibilityByCapabilityId.get(item.capabilityId)
     if (!canEdit) {
-        canEdit = authorizeCapability({ capabilityId: item.capabilityId, requester, access: 'edit' })
-            .then(result => !('error' in result))
+        canEdit = canEditCapability(item, requester)
         editVisibilityByCapabilityId.set(item.capabilityId, canEdit)
     }
     return await canEdit

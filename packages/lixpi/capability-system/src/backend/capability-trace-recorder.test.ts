@@ -4,9 +4,9 @@ import {
     it,
 } from 'vitest'
 
-import type {
-    ExecutionTraceHandle,
-    ExecutionTraceModelCall,
+import {
+    type ExecutionTraceHandle,
+    type ExecutionTraceModelCall,
 } from '@lixpi/constants'
 
 import {

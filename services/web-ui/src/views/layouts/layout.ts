@@ -1,5 +1,3 @@
-'use strict'
-
 // Root workspace shell: the navigation side panel plus the main pane that swaps
 // between the workspace canvas and the intro splash based on the active route.
 // Renderer: TypeScript `html` DOM, no framework runtime.

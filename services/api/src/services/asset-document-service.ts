@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 
 import NATS_Service from '@lixpi/nats-service'
@@ -27,12 +25,11 @@ import {
     type SubmitResult,
 } from '@lixpi/prosemirror'
 
-import {
+import AssetModel, {
     buildAssetProjectionOperations,
     getAssetRecord,
     publishAssetEvent,
 } from '../models/asset.ts'
-import AssetModel from '../models/asset.ts'
 import BlobModel, {
     buildBlobReferenceOperations,
     buildBlobReferenceRemovalOperations,
@@ -479,17 +476,19 @@ const settleOnce = async ({
     }
     publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
     if (incorporatedStreamSequence > 0) {
-        const timer = setTimeout(() => {
-            void transport.purgeThrough(
-                { organizationId: asset.organizationId, assetId: asset.assetId, role },
-                incorporatedStreamSequence,
-            ).catch((error) =>
+        const timer = setTimeout(async () => {
+            try {
+                await transport.purgeThrough(
+                    { organizationId: asset.organizationId, assetId: asset.assetId, role },
+                    incorporatedStreamSequence,
+                )
+            } catch (error) {
                 console.error('Settled Asset step purge failed:', {
                     assetId: asset.assetId,
                     role,
                     error,
                 })
-            )
+            }
         }, SETTLED_STEP_REPLAY_GRACE_MS)
         if (typeof timer === 'object' && 'unref' in timer) timer.unref()
     }

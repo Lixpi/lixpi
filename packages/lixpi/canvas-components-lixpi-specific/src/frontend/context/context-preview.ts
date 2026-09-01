@@ -1,16 +1,19 @@
-import type {
-    Asset,
-    CapabilityArtifactCanvasNode,
-    CanvasNode,
-    DocumentCanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
+import {
+    type Asset,
+    type CapabilityArtifactCanvasNode,
+    type CanvasNode,
+    type DocumentCanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
 import {
     documentIcon,
     videoPlayGlyphIcon,
 } from '@lixpi/ui-kit/svg'
-import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
+import {
+    createDocumentHtml,
+    getElementScale,
+} from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     createContextPreviewPopover,
@@ -19,7 +22,6 @@ import {
     type ContextPreviewPopoverInstance,
     type ContextPreviewPortal,
 } from '@lixpi/ui-kit/components/preview'
-import { getElementScale } from '@lixpi/ui-primitives/dom'
 
 export type ContextPreviewDocumentSource = {
     documentId: string

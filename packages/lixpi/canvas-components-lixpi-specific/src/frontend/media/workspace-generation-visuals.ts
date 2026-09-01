@@ -2,16 +2,20 @@ import {
     setGeneratedMediaTracker,
     type PendingGeneratedMediaTracker,
 } from '../../shared/generation/workspace-media-trackers.ts'
-import type {
-    Asset,
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
-    VideoCanvasNode,
+import {
+    type Asset,
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
-import type { Dispose } from '@lixpi/canvas-engine/shared'
-import type { GeneratingMediaOutlineTarget } from './workspace-media-layer.ts'
+import {
+    type Dispose,
+} from '@lixpi/canvas-engine/shared'
+import {
+    type GeneratingMediaOutlineTarget,
+} from './workspace-media-layer.ts'
 
 export type WorkspaceGenerationVisualsPorts = {
     getState: () => CanvasState | null

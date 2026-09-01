@@ -3,16 +3,18 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasNode,
-    BranchForkCanvasNode,
-    ImageCanvasNode,
-    CapabilityArtifactCanvasNode,
-    MediaBranchLineagePlan,
-    MediaRunLineageAssignment,
+import {
+    type Asset,
+    type CanvasNode,
+    type BranchForkCanvasNode,
+    type ImageCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
-import type { GeneratedOutputCanvasNode } from '../canvas-node/generated-media-node.ts'
+import {
+    type GeneratedOutputCanvasNode,
+} from '../canvas-node/generated-media-node.ts'
 import {
     WorkspaceBranchActivity,
     getBranchMarkerPlacementKeys,

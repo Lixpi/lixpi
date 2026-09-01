@@ -1,20 +1,24 @@
-import type {
-    MediaPromptReference,
-    PromptReferenceType,
+import {
+    type MediaPromptReference,
+    type PromptReferenceType,
 } from '@lixpi/constants'
 import {
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,
     normalizePromptReferenceAttrs,
     PROMPT_REFERENCE_NODE_TYPE,
 } from '@lixpi/prosemirror'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import {
     NodeSelection,
     Plugin,
     TextSelection,
     type Selection,
 } from 'prosemirror-state'
-import type { NodeView } from 'prosemirror-view'
+import {
+    type NodeView,
+} from 'prosemirror-view'
 
 import {
     createMediaPromptReferencePreview,

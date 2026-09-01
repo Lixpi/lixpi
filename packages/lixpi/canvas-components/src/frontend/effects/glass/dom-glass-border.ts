@@ -3,7 +3,9 @@ import {
     GlassBorder,
     type GlassBorderOptions,
 } from './glass-border.ts'
-import type { GlassBorderDatum } from './glass-border-geometry.ts'
+import {
+    type GlassBorderDatum,
+} from './glass-border-geometry.ts'
 
 export type DomGlassTarget = { id: string; element: HTMLElement }
 export type DomGlassBorderOptions = GlassBorderOptions & { root: HTMLElement }

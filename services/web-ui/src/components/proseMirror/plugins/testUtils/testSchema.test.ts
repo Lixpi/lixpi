@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     it,
     expect,
     beforeEach,
 } from 'vitest'
-import { type Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import { marks } from '$src/components/proseMirror/components/schema.ts'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'

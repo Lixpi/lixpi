@@ -1,12 +1,8 @@
-'use strict'
-
 import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-import {
-    formatStageResourceName,
-} from '@lixpi/constants'
+import { formatStageResourceName } from '@lixpi/constants'
 
 import { CONTAINER_INSIGHTS_ENABLED } from '../constants/logging.ts'
 

@@ -1,11 +1,9 @@
-'use strict'
-
 import { randomUUID } from 'crypto'
-import type {
-    AiModelId,
-    MediaGenerationRunMeta,
-    MediaRunLineageAssignment,
-    ProviderName,
+import {
+    type AiModelId,
+    type MediaGenerationRunMeta,
+    type MediaRunLineageAssignment,
+    type ProviderName,
 } from '@lixpi/constants'
 
 export type MediaGenerationRunEventMeta = Record<string, unknown>

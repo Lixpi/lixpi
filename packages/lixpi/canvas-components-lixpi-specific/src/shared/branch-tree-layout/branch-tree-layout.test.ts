@@ -1,15 +1,13 @@
-'use strict'
-
 import {
     describe,
     it,
     expect,
 } from 'vitest'
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     buildBranchTrees,

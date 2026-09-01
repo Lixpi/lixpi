@@ -1,9 +1,9 @@
-'use strict'
-
-import type { Dispose } from '../../shared/index.ts'
-import type {
-    ResourceHandle,
-    ResourceKind,
+import {
+    type Dispose,
+} from '../../shared/index.ts'
+import {
+    type ResourceHandle,
+    type ResourceKind,
 } from './resources.ts'
 
 type ResourceEntry = {

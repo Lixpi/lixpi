@@ -1,4 +1,6 @@
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 
 export function createDefaultCanvasState(): CanvasState {
     return { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [] }

@@ -1,5 +1,3 @@
-'use strict'
-
 // ============================================================================
 // CROSS-REPO WIRE CONTRACT — do NOT change without explicit user allowance.
 //

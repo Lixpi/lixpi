@@ -1,19 +1,19 @@
-'use strict'
-
 import NATS_Service from '@lixpi/nats-service'
-import type { SceneAssessment } from './types.ts'
+import {
+    type SceneAssessment,
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StageLogger,
+} from './types.ts'
 
 import {
     callStructuredVlm,
     type VlmJsonSchema,
 } from '../../../llm/structured-vlm/structured-vlm-client.ts'
 import { getExtractors } from './extractors/registry.ts'
-import type { ChatMessage } from '../../../llm/graph/state.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StageLogger,
-} from './types.ts'
+import {
+    type ChatMessage,
+} from '../../../llm/graph/state.ts'
 
 const SYSTEM_PROMPT = `You are a senior visual-analysis router. Inspect the attached reference image(s) and produce a structured scene assessment for downstream specialist extractors.
 

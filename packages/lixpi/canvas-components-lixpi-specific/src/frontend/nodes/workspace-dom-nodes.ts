@@ -1,14 +1,18 @@
-import type {
-    CanvasNode,
-    DocumentCanvasNode,
-    CapabilityArtifactCanvasNode,
-    OperationStatusCanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
+import {
+    type CanvasNode,
+    type DocumentCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type OperationStatusCanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
 } from '@lixpi/constants'
-import type { WorkspaceNodeShells } from './workspace-node-shells.ts'
-import type { WorkspaceDomNodeView } from './workspace-node-registry.ts'
+import {
+    type WorkspaceNodeShells,
+} from './workspace-node-shells.ts'
+import {
+    type WorkspaceDomNodeView,
+} from './workspace-node-registry.ts'
 
 type BranchMarker = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 export type WorkspaceDomNodesOptions = {

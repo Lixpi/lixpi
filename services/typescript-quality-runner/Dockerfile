@@ -4,7 +4,7 @@ FROM node:${NODE_VERSION}-alpine
 
 RUN npm install -g pnpm@11.6.0
 
-WORKDIR /usr/src/repository/services/typescript-quality-runner
+WORKDIR /usr/src/quality-runner
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 

@@ -1,8 +1,8 @@
-import type {
-    Asset,
-    AssetDocumentRole,
-    AssetMeta,
-    AssetPrimaryCategory,
+import {
+    type Asset,
+    type AssetDocumentRole,
+    type AssetMeta,
+    type AssetPrimaryCategory,
 } from '@lixpi/constants'
 
 export type LibraryAssetResult = Asset | { error: string }

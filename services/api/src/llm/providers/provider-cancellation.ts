@@ -1,6 +1,6 @@
-'use strict'
-
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 export function createProviderCancellationError(signal?: AbortSignal): unknown {
     return signal?.reason ?? new DOMException('Generation cancelled by user', 'AbortError')

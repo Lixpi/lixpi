@@ -1,14 +1,12 @@
-'use strict'
-
 import process from 'node:process'
 
 import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
-import type {
-    Asset,
-    AssetDocumentRole,
-    CanvasNode,
-    MediaGenerationRequest,
+import {
+    type Asset,
+    type AssetDocumentRole,
+    type CanvasNode,
+    type MediaGenerationRequest,
 } from '@lixpi/constants'
 
 type JsonRecord = Record<string, unknown>

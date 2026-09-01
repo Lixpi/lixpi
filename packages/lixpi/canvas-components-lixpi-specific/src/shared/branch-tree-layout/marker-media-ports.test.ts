@@ -1,17 +1,15 @@
-'use strict'
-
 import {
     describe,
     it,
     expect,
 } from 'vitest'
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
+import {
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
 import {
     BRANCH_MARKER_MEDIA_MODEL_CIRCLE_GAP,

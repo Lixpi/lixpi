@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
@@ -22,7 +20,7 @@ function expectSourceNotToContain(source: string, snippet: string): void {
     expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
 }
 
-const aiPromptInputNodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
+const aiPromptInputNodeSource = readFileSync(resolve(import.meta.dirname, 'aiPromptInputNode.ts'), 'utf-8')
 
 describe('ai model selection parsing and serialization', () => {
     it('parses string JSON arrays and filters empty entries', () => {
@@ -123,7 +121,7 @@ describe('simple tooltip wiring', () => {
         expectSourceToContain(aiPromptInputNodeSource, 'aria-label="Generation settings"')
         expectSourceToContain(aiPromptInputNodeSource, 'data-help-tooltip="aria-label"')
         expectSourceToContain(aiPromptInputNodeSource, "submitButton.dataset.helpTooltip = 'aria-description'")
-        expectSourceToContain(aiPromptInputNodeSource, "submitButton.setAttribute('aria-description', invalid.message)")
+        expectSourceToContain(aiPromptInputNodeSource, 'submitButton.ariaDescription = invalid?.message ?? null')
         expectSourceNotToContain(aiPromptInputNodeSource, "submitButton.setAttribute('title'")
     })
 })

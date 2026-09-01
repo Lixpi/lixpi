@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     getAiInteractionCanonicalResponseSubject,
     STREAM_STATUS,
@@ -21,10 +19,10 @@ import {
 } from '../models/capability-run.ts'
 import { CapabilityRunEventLog } from '../services/capability-run-event-log.ts'
 import { PipelineEventLog } from '../llm/graph/pipeline-event-log.ts'
-import type {
-    CapabilityRequesterContext,
-    CapabilityResolverStore,
-    CapabilityRunPersistence,
+import {
+    type CapabilityRequesterContext,
+    type CapabilityResolverStore,
+    type CapabilityRunPersistence,
 } from '@lixpi/capability-system/backend'
 
 export class CapabilityModelResolverStore implements CapabilityResolverStore {

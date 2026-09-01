@@ -3,11 +3,11 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    AiChatThreadCanvasNode,
-    CanvasState,
-    ImageCanvasNode,
-    WorkspaceEdge,
+import {
+    type AiChatThreadCanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 
 import {

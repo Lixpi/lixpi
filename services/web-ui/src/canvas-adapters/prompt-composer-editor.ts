@@ -1,10 +1,14 @@
-import type {
-    AiPromptComposerConfig,
-    PromptComposerEditorRequest,
-    PromptComposerEditor,
+import {
+    type AiPromptComposerConfig,
+    type PromptComposerEditorRequest,
+    type PromptComposerEditor,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/composer'
-import type { PromptReferenceCatalogClient } from '$src/services/prompt-reference-catalog-client.ts'
-import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type PromptReferenceCatalogClient,
+} from '$src/services/prompt-reference-catalog-client.ts'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 import {
     createDefaultPromptControlFactories,
     type PromptControlFactories,

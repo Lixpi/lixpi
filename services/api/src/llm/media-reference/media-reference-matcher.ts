@@ -1,10 +1,8 @@
-'use strict'
-
 import { v4 as uuid } from 'uuid'
 
-import type {
-    MediaReferenceBinding,
-    UnresolvedReferenceBinding,
+import {
+    type MediaReferenceBinding,
+    type UnresolvedReferenceBinding,
 } from '@lixpi/constants'
 
 export const MEDIA_REFERENCE_MATCHER_VERSION = 'bounded-local-v3'

@@ -1,10 +1,8 @@
-'use strict'
-
-import type {
-    ExecutionTrace,
-    ExecutionTraceFact,
-    ExecutionTraceHandle,
-    ExecutionTraceModelCall,
+import {
+    type ExecutionTrace,
+    type ExecutionTraceFact,
+    type ExecutionTraceHandle,
+    type ExecutionTraceModelCall,
 } from '@lixpi/constants'
 
 // Steps record what they actually did while they do it, rather than being

@@ -1,7 +1,9 @@
-'use strict'
-
-import type { CapabilityModuleDefinition } from '../../../backend/capability-module.ts'
-import type { InstructionSkillStorage } from '../../../backend/instruction-skill.ts'
+import {
+    type CapabilityModuleDefinition,
+} from '../../../backend/capability-module.ts'
+import {
+    type InstructionSkillStorage,
+} from '../../../backend/instruction-skill.ts'
 
 import { createStyleExtractionSkillPackages } from '../skills/index.ts'
 import {

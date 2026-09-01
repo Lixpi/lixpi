@@ -4,9 +4,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '../../shared/index.ts'
 import {
     NodeRegistry,

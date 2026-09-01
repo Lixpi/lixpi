@@ -1,7 +1,9 @@
-import type { EditorView } from 'prosemirror-view'
-import type {
-    Schema,
-    Node as ProseMirrorNode,
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    type Schema,
+    type Node as ProseMirrorNode,
 } from 'prosemirror-model'
 import {
     toggleMark,
@@ -13,7 +15,9 @@ import {
     createEl,
     applyStyle,
 } from '@lixpi/ui-primitives/dom'
-import type { BubbleMenuItem } from '@lixpi/ui-kit/components/bubble-menu'
+import {
+    type BubbleMenuItem,
+} from '@lixpi/ui-kit/components/bubble-menu'
 import AuthService from '$src/services/auth-service.ts'
 import {
     boldIcon,

@@ -7,15 +7,15 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-    ImageGenerationTraceReference,
-    MediaGenerationProgressState,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
+    type ImageGenerationTraceReference,
+    type MediaGenerationProgressState,
 } from '@lixpi/constants'
-import type {
-    MediaGenerationProgressInstance,
-    MediaGenerationProgressOptions,
+import {
+    type MediaGenerationProgressInstance,
+    type MediaGenerationProgressOptions,
 } from '../progress/index.ts'
 import {
     WorkspaceGenerationHistory,

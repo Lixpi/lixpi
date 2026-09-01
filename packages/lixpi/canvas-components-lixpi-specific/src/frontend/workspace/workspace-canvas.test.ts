@@ -11,20 +11,22 @@ import {
     LoadingStatus,
     type CanvasState,
 } from '@lixpi/constants'
-import type {
-    EngineMedia,
-    ImageLease,
+import {
+    type EngineMedia,
+    type ImageLease,
 } from '@lixpi/canvas-engine/frontend/media'
-import type {
-    CanvasRendererOptions,
-    ResourceHandle,
-    ResourceKind,
+import {
+    type CanvasRendererOptions,
+    type ResourceHandle,
+    type ResourceKind,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import {
     LixpiWorkspaceCanvas,
     type WorkspaceCanvasOptions,
 } from './workspace-canvas.ts'
-import type { WorkspaceCanvasHost } from './workspace-canvas-host.ts'
+import {
+    type WorkspaceCanvasHost,
+} from './workspace-canvas-host.ts'
 import { createLixpiCanvasSettings } from '../settings/index.ts'
 
 const renderers = vi.hoisted(() => [] as any[])

@@ -1,6 +1,10 @@
-import type { ProgressTimelineDetailRender } from '@lixpi/ui-kit/components/progress-timeline'
+import {
+    type ProgressTimelineDetailRender,
+} from '@lixpi/ui-kit/components/progress-timeline'
 
-import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 import {
     createExecutionTraceDetail,

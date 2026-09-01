@@ -1,5 +1,3 @@
-'use strict'
-
 export const sliceTime = ({ precision = 'seconds', modify }) => {
     const currentDate = new Date()
     let modifiedDate = new Date(currentDate)

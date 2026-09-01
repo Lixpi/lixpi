@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     MEDIA_POLICY,
     type AssetMediaKind,

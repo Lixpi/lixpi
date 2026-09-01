@@ -1,17 +1,17 @@
-'use strict'
-
-import type {
-    CapabilityJsonValue,
-    CapabilityReasoningModelVariant,
+import {
+    type CapabilityJsonValue,
+    type CapabilityReasoningModelVariant,
 } from '@lixpi/constants'
 import {
-    type CapabilityDispatcher,
-    type CapabilityRequesterContext,
     isCapabilityMediaExecutionPlan,
     resolveCapabilities,
+    type CapabilityDispatcher,
+    type CapabilityRequesterContext,
 } from '@lixpi/capability-system/backend'
 
-import type { ProviderState } from '../llm/graph/state.ts'
+import {
+    type ProviderState,
+} from '../llm/graph/state.ts'
 import { CapabilityModelResolverStore } from './capability-runtime-adapters.ts'
 import { capabilityActionRegistry } from './capability-runtime.ts'
 

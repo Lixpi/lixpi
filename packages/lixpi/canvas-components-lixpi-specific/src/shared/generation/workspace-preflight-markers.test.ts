@@ -4,11 +4,11 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasState,
-    CanvasNode,
-    MediaBranchLineagePlan,
-    MediaBranchCandidateSnapshot,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaBranchCandidateSnapshot,
 } from '@lixpi/constants'
 import { createLixpiCanvasSettings } from '../../frontend/settings/canvas-settings.ts'
 import {

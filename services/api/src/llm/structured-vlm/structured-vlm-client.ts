@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'process'
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -13,11 +11,13 @@ import {
     err,
 } from '@lixpi/debug-tools'
 
-import type {
-    AiModelInferenceCapabilities,
-    ProviderName,
+import {
+    type AiModelInferenceCapabilities,
+    type ProviderName,
 } from '@lixpi/constants'
-import type { ChatMessage } from '../graph/state.ts'
+import {
+    type ChatMessage,
+} from '../graph/state.ts'
 import { bedrockInference } from '../providers/bedrock-inference.ts'
 import {
     assertMessageInputKindsSupported,

@@ -1,5 +1,3 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
 import { info } from '@lixpi/debug-tools'
 import {
@@ -28,11 +26,13 @@ import {
     deduplicateMediaBranchSnapshotCandidatesByAsset,
     restrictSnapshotToExplicitRefs,
 } from './media-branch-snapshot.ts'
-import type {
-    ChatMessage,
-    ProviderState,
+import {
+    type ChatMessage,
+    type ProviderState,
 } from './state.ts'
-import type { StreamPublisher } from './stream-publisher.ts'
+import {
+    type StreamPublisher,
+} from './stream-publisher.ts'
 
 type ResolveWorkspaceContextDeps = {
     [key: string]: unknown

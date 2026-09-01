@@ -1,5 +1,3 @@
-'use strict'
-
 // Reconciles DynamoDB Local tables against the definitions in
 // resources/db/DynamoDB-tables.ts. Local data persists on the dynamodb-data
 // volume across restarts, so a table created before a schema change keeps its

@@ -1,5 +1,3 @@
-'use strict'
-
 // NATS NEX execution-engine node — internal-only Fargate service.
 //
 // Mirrors NATS-cluster.ts (ECR build, exec/task roles, log group, task def, ECS
@@ -19,7 +17,7 @@ import {
 } from '../../helpers/docker/build-helpers.ts'
 import { LOG_RETENTION_DAYS } from '../../constants/logging.ts'
 
-export interface NexNodeServiceArgs {
+export type NexNodeServiceArgs = {
     ecsCluster: {
         id: pulumi.Output<string>
         arn: pulumi.Output<string>

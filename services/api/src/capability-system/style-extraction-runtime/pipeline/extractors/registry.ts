@@ -1,6 +1,6 @@
-'use strict'
-
-import type { StyleExtractor } from '../types.ts'
+import {
+    type StyleExtractor,
+} from '../types.ts'
 
 // New extractors are added by importing them here and appending to the array.
 // Adding a new axis is a single-file change in this folder plus an import below;

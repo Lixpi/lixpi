@@ -6,12 +6,16 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasRenderer } from '../rendering/canvas-renderer.ts'
-import type { CanvasDrawingScope } from '../rendering/drawing-scope.ts'
-import type {
-    EngineNode,
-    NodeGeometryPolicy,
-    SceneSnapshot,
+import {
+    type CanvasRenderer,
+} from '../rendering/canvas-renderer.ts'
+import {
+    type CanvasDrawingScope,
+} from '../rendering/drawing-scope.ts'
+import {
+    type EngineNode,
+    type NodeGeometryPolicy,
+    type SceneSnapshot,
 } from '../../shared/index.ts'
 import { CanvasScene } from './canvas-scene.ts'
 import {

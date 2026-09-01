@@ -1,21 +1,27 @@
-import type {
-    CanvasState,
-    CanvasNode,
-    WorkspaceEdge,
-    MediaBranchLineagePlan,
-    MediaGenerationRunMeta,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type WorkspaceEdge,
+    type MediaBranchLineagePlan,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
-import type {
-    WorkspaceGenerationPlacements,
-    PendingGeneratedImagePlacement,
+import {
+    type WorkspaceGenerationPlacements,
+    type PendingGeneratedImagePlacement,
 } from './workspace-generation-placements.ts'
-import type {
-    WorkspaceBranchMarkerHandoff,
-    WorkspaceBranchMarkerSettlementOptions as BranchMarkerSettlementOptions,
+import {
+    type WorkspaceBranchMarkerHandoff,
+    type WorkspaceBranchMarkerSettlementOptions as BranchMarkerSettlementOptions,
 } from './workspace-branch-marker-handoff.ts'
-import type { WorkspacePreflightMarkers } from './workspace-preflight-markers.ts'
-import type { WorkspaceLineageProjection } from '../branch-tree-layout/workspace-lineage-projection.ts'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type WorkspacePreflightMarkers,
+} from './workspace-preflight-markers.ts'
+import {
+    type WorkspaceLineageProjection,
+} from '../branch-tree-layout/workspace-lineage-projection.ts'
+import {
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
 import { hasCompletePlannedBranchMarkerGeometry } from '../branch-tree-layout/marker-render-ownership.ts'
 import { removePreflightBranchMarkersForThread } from '../branch-tree-layout/marker-settlement.ts'
 import { getBranchMarkerThreadId } from '../review/workspace-history.ts'

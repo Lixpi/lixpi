@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     it,
@@ -16,7 +14,7 @@ const sourceFileNames = new Map<string, string>()
 
 function readSourceFile(relativePath: string, displayName = relativePath): string {
     const source = readFileSync(
-        resolve(__dirname, relativePath),
+        resolve(import.meta.dirname, relativePath),
         'utf-8',
     )
     sourceFileNames.set(source, displayName)
@@ -101,7 +99,7 @@ function loadOutputChrome(): string {
 }
 
 function loadTs(): string {
-    const source = loadNodeDeletion() + '\n' + loadNodeGestures() + '\n' + loadGenerationHandlers() + '\n' + readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts')
+    const source = `${loadNodeDeletion()}\n${loadNodeGestures()}\n${loadGenerationHandlers()}\n${readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/workspace/workspace-canvas.ts')}`
     sourceFileNames.set(source, 'workspace renderer and generation handlers')
     return source
 }

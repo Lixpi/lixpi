@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'process'
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -15,8 +13,12 @@ import {
     type BaseProviderDeps,
 } from './base-provider.ts'
 import { bedrockInference } from './bedrock-inference.ts'
-import type { ProviderName } from '@lixpi/constants'
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 import {
     getSystemPrompt,
     formatUserMessageWithHack,

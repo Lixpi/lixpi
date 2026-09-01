@@ -1,16 +1,16 @@
-'use strict'
-
-import type {
-    MediaBranchCandidateImage,
-    MediaBranchVlmReferenceDecision,
-    CapabilityMediaReviewTrace,
-    ImageGenerationTrace,
-    ImageGenerationTraceExcludedReference,
-    ImageGenerationTraceReference,
-    ProviderName,
+import {
+    type MediaBranchCandidateImage,
+    type MediaBranchVlmReferenceDecision,
+    type CapabilityMediaReviewTrace,
+    type ImageGenerationTrace,
+    type ImageGenerationTraceExcludedReference,
+    type ImageGenerationTraceReference,
+    type ProviderName,
 } from '@lixpi/constants'
 
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 export const normalizeImageSize = (imageProvider: ProviderName | undefined, imageSize: string | undefined): string => {
     if (!imageSize || imageSize === 'auto') return 'auto'

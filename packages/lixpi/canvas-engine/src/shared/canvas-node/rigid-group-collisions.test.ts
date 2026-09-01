@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CanvasGeometryNode } from '../scene/types.ts'
+import {
+    type CanvasGeometryNode,
+} from '../scene/types.ts'
 import {
     describe,
     expect,

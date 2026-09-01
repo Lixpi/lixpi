@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import type { CapabilityManifest } from '@lixpi/constants'
+import {
+    type CapabilityManifest,
+} from '@lixpi/constants'
 
 import {
     buildCapabilityScopeAndOwner,

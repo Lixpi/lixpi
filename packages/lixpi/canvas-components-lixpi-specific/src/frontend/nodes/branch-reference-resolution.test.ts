@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { OperationStatusCanvasNode } from '@lixpi/constants'
+import {
+    type OperationStatusCanvasNode,
+} from '@lixpi/constants'
 import {
     createBranchReferenceResolution,
     type BranchReferenceResolution,

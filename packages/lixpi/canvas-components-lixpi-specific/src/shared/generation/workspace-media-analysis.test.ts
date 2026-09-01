@@ -5,11 +5,11 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    ImageCanvasNode,
-    MediaDescriptor,
-    VideoCanvasNode,
+import {
+    type Asset,
+    type ImageCanvasNode,
+    type MediaDescriptor,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
 import {
     WorkspaceMediaAnalysis,

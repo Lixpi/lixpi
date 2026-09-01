@@ -1,4 +1,6 @@
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { xCircleIcon } from '@lixpi/ui-kit/svg'

@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-'use strict'
 
 import {
     describe,

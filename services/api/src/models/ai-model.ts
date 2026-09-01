@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 import * as process from 'process'
 
@@ -16,9 +14,9 @@ import {
     type MediaGenerationConfigGroup,
     type MediaGenerationConfigMatrix,
 } from '@lixpi/constants'
-import type {
-    Omit,
-    Pick,
+import {
+    type Omit,
+    type Pick,
 } from 'type-fest'
 
 import { settings } from '../settings.ts'

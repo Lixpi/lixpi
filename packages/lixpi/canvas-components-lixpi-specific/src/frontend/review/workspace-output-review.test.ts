@@ -4,11 +4,11 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    GeneratedOutputReviewResponse,
-    ImageCanvasNode,
-    ImageGenerationTrace,
+import {
+    type CanvasNode,
+    type GeneratedOutputReviewResponse,
+    type ImageCanvasNode,
+    type ImageGenerationTrace,
 } from '@lixpi/constants'
 import {
     WorkspaceOutputReview,

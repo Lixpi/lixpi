@@ -1,15 +1,19 @@
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    ImageGenerationTraceReference,
-    MediaGenerationProgressState,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type ImageGenerationTraceReference,
+    type MediaGenerationProgressState,
 } from '@lixpi/constants'
-import type { AiLineageProjectionScope } from '@lixpi/prosemirror'
+import {
+    type AiLineageProjectionScope,
+} from '@lixpi/prosemirror'
 import { buildGeneratedMediaTurnProjectionFromThreadContent } from '@lixpi/prosemirror/shared/generated-media-turn-projection'
 import { getGeneratedMediaProjectionLocator } from '../../shared/review/workspace-history.ts'
 export { getGeneratedMediaProjectionLocator } from '../../shared/review/workspace-history.ts'
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import { Lifetime } from '@lixpi/canvas-engine/frontend/runtime'
 import { resolveMediaGenerationHistoryProgress } from '../../shared/index.ts'

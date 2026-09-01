@@ -1,4 +1,6 @@
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 
 export type CanvasVersion = {
     updatedAt?: number

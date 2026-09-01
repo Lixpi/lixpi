@@ -1,14 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
     vi,
 } from 'vitest'
-import type {
-    Buffer,
-    WebGPURenderer,
+import {
+    type Buffer,
+    type WebGPURenderer,
 } from 'pixi.js'
 import { PixiGpuRetirement } from './pixi-gpu-retirement.ts'
 

@@ -1,5 +1,3 @@
-'use strict'
-
 import path from 'node:path'
 
 import { MAX_UPLOAD_FILE_SIZE } from '@lixpi/constants'

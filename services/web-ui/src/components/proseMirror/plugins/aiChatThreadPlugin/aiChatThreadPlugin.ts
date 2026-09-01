@@ -8,23 +8,21 @@
 
 import {
     Plugin,
-    PluginKey,
-    EditorState,
-    Transaction,
+    type PluginKey,
+    type EditorState,
+    type Transaction,
 } from 'prosemirror-state'
 import {
     Fragment,
     Slice,
+    type Node as ProseMirrorNode,
+    type Schema as ProseMirrorSchema,
 } from 'prosemirror-model'
 import {
-    EditorView,
     Decoration,
     DecorationSet,
+    type EditorView,
 } from 'prosemirror-view'
-import {
-    Node as ProseMirrorNode,
-    Schema as ProseMirrorSchema,
-} from 'prosemirror-model'
 import {
     aiChatThreadNodeType,
     aiCollapsibleBlockNodeType,
@@ -64,26 +62,30 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiMediaGenerationProgressNode.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import { aiModelsStore } from '$src/stores/aiModelsStore.ts'
-import type {
-    AiInteractionChatSubmitPayload,
-    AiInteractionChatStopMessagePayload,
-    AiModelId,
-    MediaBranchVlmResolution,
-    ImageGenerationTrace,
-    ImageGenerationSize,
-    MediaBranchLineagePlan,
-    MediaGenerationConfigSelectionGroup,
-    MediaGenerationRunMeta,
-    StreamStatus,
-    WorkspaceContextResolution,
-    CapabilityRunEvent,
-    CapabilityGenerationTrace,
+import {
+    type AiInteractionChatSubmitPayload,
+    type AiInteractionChatStopMessagePayload,
+    type AiModelId,
+    type MediaBranchVlmResolution,
+    type ImageGenerationTrace,
+    type ImageGenerationSize,
+    type MediaBranchLineagePlan,
+    type MediaGenerationConfigSelectionGroup,
+    type MediaGenerationRunMeta,
+    type StreamStatus,
+    type WorkspaceContextResolution,
+    type CapabilityRunEvent,
+    type CapabilityGenerationTrace,
 } from '@lixpi/constants'
 
 import { aiGeneratedVideoNodeView } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiGeneratedVideoNode.ts'
-import type { ImageGenerationTraceDetailsOptions } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
+import {
+    type ImageGenerationTraceDetailsOptions,
+} from '$src/components/proseMirror/plugins/aiChatThreadPlugin/imageGenerationTraceDetails.ts'
 import { CapabilityChatRunProgressController } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/capabilityChatRunProgress.ts'
-import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 const IS_RECEIVING_TEMP_DEBUG_STATE = false // For debug purposes only
 
@@ -684,9 +686,9 @@ class ContentExtractor {
 
         items.forEach(item => {
             const role = item.nodeType === aiResponseMessageNodeType ? 'assistant' : 'user'
-            const lastMessage = messages[messages.length - 1]
+            const lastMessage = messages.at(-1)
             if (lastMessage?.role === role) {
-                lastMessage.content += '\n' + item.textContent
+                lastMessage.content += `\n${item.textContent}`
             } else {
                 messages.push({ role, content: item.textContent })
             }

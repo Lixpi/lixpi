@@ -1,4 +1,6 @@
-import type { CapabilityPromptReference } from '@lixpi/constants'
+import {
+    type CapabilityPromptReference,
+} from '@lixpi/constants'
 
 import {
     type CapabilityCatalogClient,

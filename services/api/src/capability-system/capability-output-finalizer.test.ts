@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -18,7 +16,9 @@ vi.mock('./action-timeline-persistence-adapter.ts', () => ({
     discardStagedActionTimelineArtifact: mocks.discardStagedActionTimelineArtifact,
 }))
 
-import type { ProviderState } from '../llm/graph/state.ts'
+import {
+    type ProviderState,
+} from '../llm/graph/state.ts'
 import {
     discardPendingCapabilityOutputsForState,
     finalizePendingCapabilityOutputsForState,

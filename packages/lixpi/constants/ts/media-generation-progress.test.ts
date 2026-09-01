@@ -4,9 +4,7 @@ import {
     it,
 } from 'vitest'
 
-import {
-    mergeMediaGenerationRunProgress,
-} from './media-generation-progress.ts'
+import { mergeMediaGenerationRunProgress } from './media-generation-progress.ts'
 import {
     GOOGLE_VIDEO_CONFIG_OPTION_HELP_TEXT,
     MEDIA_GENERATION_CONFIG_TOGGLE_HELP_TEXT,

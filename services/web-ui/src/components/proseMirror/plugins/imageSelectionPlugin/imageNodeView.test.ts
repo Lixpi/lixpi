@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -9,7 +7,9 @@ import {
     vi,
 } from 'vitest'
 import { EditorState } from 'prosemirror-state'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import { ImageNodeView } from '$src/components/proseMirror/plugins/imageSelectionPlugin/imageNodeView.ts'
 import AuthService from '$src/services/auth-service.ts'

@@ -1,6 +1,6 @@
 import {
     Container,
-    Graphics,
+    type Graphics,
 } from 'pixi.js'
 import {
     describe,

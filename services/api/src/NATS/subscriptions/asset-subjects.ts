@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     v4 as uuid,
     validate as isUuid,
@@ -17,9 +15,7 @@ import {
     PROSEMIRROR_SCHEMA_VERSION,
 } from '@lixpi/prosemirror'
 
-import AssetModel, {
-    buildAssetScopeAndOwnerKey,
-} from '../../models/asset.ts'
+import AssetModel, { buildAssetScopeAndOwnerKey } from '../../models/asset.ts'
 import AssetDocumentService from '../../services/asset-document-service.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import {

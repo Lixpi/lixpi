@@ -1,8 +1,8 @@
-import type {
-    CanvasNode,
-    WorkspaceCollisionSettings,
-    WorkspaceCollisionFlowSettings,
-    WorkspaceCollisionNodeTypeSettings,
+import {
+    type CanvasNode,
+    type WorkspaceCollisionSettings,
+    type WorkspaceCollisionFlowSettings,
+    type WorkspaceCollisionNodeTypeSettings,
 } from '@lixpi/constants'
 import {
     computeViewportCenterInsertionPosition,

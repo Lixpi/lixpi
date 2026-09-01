@@ -1,5 +1,3 @@
-'use strict'
-
 import { randomUUID } from 'node:crypto'
 import type NatsService from '@lixpi/nats-service'
 import {
@@ -386,10 +384,15 @@ export class StreamPublisher {
                     generationRun,
                     terminalStatus: 'failed' as const,
                 }
-                void materializeAssetProvenance(payload).catch(async (error) => {
-                    err('[StreamPublisher] failed provenance materialization; queued retry:', error)
-                    await enqueueProvenanceRebuild(payload)
-                })
+                const materializeProvenance = async (): Promise<void> => {
+                    try {
+                        await materializeAssetProvenance(payload)
+                    } catch (error) {
+                        err('[StreamPublisher] failed provenance materialization; queued retry:', error)
+                        await enqueueProvenanceRebuild(payload)
+                    }
+                }
+                void materializeProvenance()
             }
         }
     }
@@ -510,15 +513,21 @@ export class StreamPublisher {
     }
 
     private enqueueCanvasProjection(write: () => Promise<void>, errorContext: string): void {
-        this.canvasProjectionChain = this.canvasProjectionChain
-            .catch(() => undefined)
-            .then(async () => {
-                try {
-                    await write()
-                } catch (error) {
-                    logCanvasProjectionError(errorContext, error)
-                }
-            })
+        const previousWrite = this.canvasProjectionChain
+        this.canvasProjectionChain = this.runCanvasProjectionAfter(previousWrite, write, errorContext)
+    }
+
+    private async runCanvasProjectionAfter(previousWrite: Promise<void>, write: () => Promise<void>, errorContext: string): Promise<void> {
+        try {
+            await previousWrite
+        } catch {
+            // The previous write logged its own failure.
+        }
+        try {
+            await write()
+        } catch (error) {
+            logCanvasProjectionError(errorContext, error)
+        }
     }
 
     private async drainCanvasProjectionWrites(): Promise<void> {
@@ -758,13 +767,20 @@ export class StreamPublisher {
         const plan = this.mediaLineagePlans.get(generationRequestId)
         const organizationId = this.options.organizationId
         if (plan && organizationId) {
-            void settleUnfinishedGeneratedAssets({
-                plan,
-                organizationId,
-                workspaceId: this.workspaceId,
-                conversationAssetId: this.aiChatThreadId,
-                terminalStatus: requiresCancellationCleanup ? 'cancelled' : 'failed',
-            }).catch((error) => err('[StreamPublisher] failed to settle unfinished generated Assets:', error))
+            const settleUnfinishedAssets = async (): Promise<void> => {
+                try {
+                    await settleUnfinishedGeneratedAssets({
+                        plan,
+                        organizationId,
+                        workspaceId: this.workspaceId,
+                        conversationAssetId: this.aiChatThreadId,
+                        terminalStatus: requiresCancellationCleanup ? 'cancelled' : 'failed',
+                    })
+                } catch (error) {
+                    err('[StreamPublisher] failed to settle unfinished generated Assets:', error)
+                }
+            }
+            void settleUnfinishedAssets()
         }
     }
 

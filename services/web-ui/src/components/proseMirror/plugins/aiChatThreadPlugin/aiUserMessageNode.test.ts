@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     it,
@@ -7,9 +5,7 @@ import {
     vi,
 } from 'vitest'
 import { applyStyle } from '@lixpi/ui-primitives/dom'
-import {
-    schema,
-} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+import { schema } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import {
     aiUserMessageNodeSpec,
     aiUserMessageNodeView,

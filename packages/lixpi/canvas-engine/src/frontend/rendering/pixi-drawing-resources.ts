@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     Container,
     DisplacementFilter,
@@ -10,26 +8,26 @@ import {
     Texture,
     type Renderer,
 } from 'pixi.js'
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
-    CanvasViewport,
-    Dispose,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
+    type CanvasViewport,
+    type Dispose,
 } from '../../shared/index.ts'
-import type {
-    CanvasLayer,
-    CaptureResource,
-    CaptureSpec,
-    DrawingResources,
-    DrawingSpace,
-    GroupTransform,
-    MaterialBinding,
-    MaterialProgram,
-    MeshData,
-    PaintHandle,
-    ResourceHandle,
-    TextureInput,
-    VectorShape,
+import {
+    type CanvasLayer,
+    type CaptureResource,
+    type CaptureSpec,
+    type DrawingResources,
+    type DrawingSpace,
+    type GroupTransform,
+    type MaterialBinding,
+    type MaterialProgram,
+    type MeshData,
+    type PaintHandle,
+    type ResourceHandle,
+    type TextureInput,
+    type VectorShape,
 } from './resources.ts'
 import { PixiMaterialResource } from './pixi-material-resource.ts'
 import { PixiMeshResource } from './pixi-mesh-resource.ts'

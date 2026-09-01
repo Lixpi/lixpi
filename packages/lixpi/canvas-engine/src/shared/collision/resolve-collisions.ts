@@ -1,11 +1,11 @@
-'use strict'
+import {
+    type CanvasEnginePoint,
+} from '../geometry/index.ts'
 
-import type { CanvasEnginePoint } from '../geometry/index.ts'
-
-import type {
-    CollisionBox,
-    CollisionOptions,
-    CollisionResult,
+import {
+    type CollisionBox,
+    type CollisionOptions,
+    type CollisionResult,
 } from './types.ts'
 
 function getFiniteNumber(value: number | undefined, fallback: number): number {

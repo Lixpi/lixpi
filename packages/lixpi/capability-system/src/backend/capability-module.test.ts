@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import type { CapabilityMediaExecutionPlan } from '../shared/capability-media-execution-plan.ts'
+import {
+    type CapabilityMediaExecutionPlan,
+} from '../shared/capability-media-execution-plan.ts'
 
 import { CapabilityActionRegistry } from './capability-action-registry.ts'
 import { CapabilityMediaStrategyRegistry } from './capability-media-strategy-registry.ts'

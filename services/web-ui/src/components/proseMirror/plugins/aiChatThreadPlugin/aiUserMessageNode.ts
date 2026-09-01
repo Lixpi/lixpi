@@ -1,15 +1,19 @@
-import type {
-    EditorView,
-    NodeView,
+import {
+    type EditorView,
+    type NodeView,
 } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import { createAiUserMessageShell } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatMessageShells.ts'
 import {
     createContextPreviewTile,
     type ContextPreviewEnvironment,
     type ContextPreviewTileInstance,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import {
     aiUserMessageNodeSpec,
     aiUserMessageNodeType,

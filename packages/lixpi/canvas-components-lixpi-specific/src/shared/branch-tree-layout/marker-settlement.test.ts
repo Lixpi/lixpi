@@ -1,15 +1,13 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
-import type {
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    CanvasState,
+import {
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type CanvasState,
 } from '@lixpi/constants'
 
 import {

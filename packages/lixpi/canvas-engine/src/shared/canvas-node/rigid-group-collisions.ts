@@ -1,17 +1,19 @@
-'use strict'
-
-import type { CanvasPositionedNode } from '../scene/types.ts'
+import {
+    type CanvasPositionedNode,
+} from '../scene/types.ts'
 
 import {
     resolveCollisions,
     type CollisionBox,
     type CollisionOptions,
 } from '../collision/index.ts'
-import type { CanvasEnginePoint } from '../geometry/index.ts'
+import {
+    type CanvasEnginePoint,
+} from '../geometry/index.ts'
 
-import type {
-    RigidCanvasNodeCollisionResult,
-    RigidCanvasNodeGroup,
+import {
+    type RigidCanvasNodeCollisionResult,
+    type RigidCanvasNodeGroup,
 } from './types.ts'
 
 export function resolveRigidCanvasNodeGroupCollisions<Node extends CanvasPositionedNode>(

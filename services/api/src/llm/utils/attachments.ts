@@ -1,5 +1,3 @@
-'use strict'
-
 import sharp from 'sharp'
 
 import type NatsService from '@lixpi/nats-service'
@@ -7,9 +5,9 @@ import {
     info,
     warn,
 } from '@lixpi/debug-tools'
-import type {
-    AiModelInferenceCapabilities,
-    AiModelInputKind,
+import {
+    type AiModelInferenceCapabilities,
+    type AiModelInputKind,
 } from '@lixpi/constants'
 
 // Anthropic's 5MB limit applies to the base64-encoded string. Base64 inflates

@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     getCapabilityUserEventSubject,
     NATS_SUBJECTS,
@@ -7,8 +5,12 @@ import {
 } from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 
-import CapabilityModel, { type CapabilityRequesterContext } from '../../models/capability.ts'
-import CapabilityRunModel, { type StoredCapabilityRun } from '../../models/capability-run.ts'
+import CapabilityModel, {
+    type CapabilityRequesterContext,
+} from '../../models/capability.ts'
+import CapabilityRunModel, {
+    type StoredCapabilityRun,
+} from '../../models/capability-run.ts'
 import Workspace from '../../models/workspace.ts'
 import { getAssetRequesterContext } from '../../services/asset-requester-context.ts'
 import { CapabilityRunEventLog } from '../../services/capability-run-event-log.ts'

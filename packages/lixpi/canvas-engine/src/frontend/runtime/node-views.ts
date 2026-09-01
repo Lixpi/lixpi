@@ -1,13 +1,13 @@
-import type {
-    CanvasEngineRect,
-    CanvasViewport,
-    Dispose,
-    EngineNode,
+import {
+    type CanvasEngineRect,
+    type CanvasViewport,
+    type Dispose,
+    type EngineNode,
 } from '../../shared/index.ts'
-import type {
-    ComponentContext,
-    NodeRegistry,
-    NodeView,
+import {
+    type ComponentContext,
+    type NodeRegistry,
+    type NodeView,
 } from './node-registry.ts'
 
 export type NodePresentation = {

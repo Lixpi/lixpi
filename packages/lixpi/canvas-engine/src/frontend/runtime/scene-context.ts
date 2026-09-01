@@ -1,13 +1,15 @@
 import { applyStyle } from '@lixpi/ui-primitives/dom'
-import type {
-    Dispose,
-    SceneSnapshot,
+import {
+    type Dispose,
+    type SceneSnapshot,
 } from '../../shared/index.ts'
-import type { CanvasDrawingScope } from '../rendering/drawing-scope.ts'
+import {
+    type CanvasDrawingScope,
+} from '../rendering/drawing-scope.ts'
 import { Lifetime } from './lifetime.ts'
-import type {
-    CanvasView,
-    ComponentContext,
+import {
+    type CanvasView,
+    type ComponentContext,
 } from './node-registry.ts'
 
 export type SceneContextHost = {

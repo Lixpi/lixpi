@@ -1,4 +1,6 @@
-import type { TextureInput } from '@lixpi/canvas-engine/frontend/rendering'
+import {
+    type TextureInput,
+} from '@lixpi/canvas-engine/frontend/rendering'
 
 export type GlassPixels = Extract<TextureInput, { kind: 'pixels' }>
 

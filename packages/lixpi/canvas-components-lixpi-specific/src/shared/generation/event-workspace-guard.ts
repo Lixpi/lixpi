@@ -1,6 +1,6 @@
 import { getPersistedPanelConversationIds } from '../scene/workspace-panel-state.ts'
-import type {
-    CanvasState,
+import {
+    type CanvasState,
 } from '@lixpi/constants'
 
 export type GeneratedMediaEventWorkspaceGuardState = {

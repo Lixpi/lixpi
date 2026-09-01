@@ -1,15 +1,19 @@
-import type {
-    CanvasGeometryNode,
-    BoundedZoomScalingOptions,
-    CanvasPort,
+import {
+    type CanvasGeometryNode,
+    type BoundedZoomScalingOptions,
+    type CanvasPort,
 } from '../../shared/index.ts'
-import type { ConnectorRenderDatum } from './connector-renderer.ts'
-import type {
-    NodeConfig,
-    PathType,
-    MarkerType,
+import {
+    type ConnectorRenderDatum,
+} from './connector-renderer.ts'
+import {
+    type NodeConfig,
+    type PathType,
+    type MarkerType,
 } from './types.ts'
-import type { SpreadEdge } from './connector-spread.ts'
+import {
+    type SpreadEdge,
+} from './connector-spread.ts'
 
 export type ConnectionNode = CanvasGeometryNode & {
     ports?: readonly CanvasPort[]

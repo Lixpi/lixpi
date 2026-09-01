@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    AccessLevel,
-    ContentDescriptor,
-    ProviderName,
+import {
+    type AccessLevel,
+    type ContentDescriptor,
+    type ProviderName,
 } from './types.ts'
 
 export type AssetScope = 'workspace' | 'user' | 'organization'

@@ -1,5 +1,3 @@
-'use strict'
-
 // Typed request/response shapes + a thin REST client for the BytePlus ModelArk
 // Seedance 2.0 video-generation API. The surface is small (create task, poll
 // task, download the resulting MP4), so we use Node `fetch` + `AbortSignal`

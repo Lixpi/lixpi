@@ -1,8 +1,8 @@
-import type {
-    CapabilityModuleMeta,
-    CanvasNode,
-    MediaPromptReference,
-    PromptReferenceType,
+import {
+    type CapabilityModuleMeta,
+    type CanvasNode,
+    type MediaPromptReference,
+    type PromptReferenceType,
 } from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
@@ -18,7 +18,9 @@ import {
     createContextPreviewTile,
     type ContextPreviewEnvironment,
 } from './context-preview.ts'
-import type { CapabilityModulePromiseCache } from './capability-prompt-preview.ts'
+import {
+    type CapabilityModulePromiseCache,
+} from './capability-prompt-preview.ts'
 
 const promptReferenceIcons: Record<Exclude<PromptReferenceType, 'media' | 'capability-artifact'>, string> = {
     'capability-module': atomIcon,

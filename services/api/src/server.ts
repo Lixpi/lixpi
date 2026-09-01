@@ -1,5 +1,3 @@
-'use strict'
-
 import process from 'process'
 import express from 'express'
 import cors from 'cors'
@@ -16,7 +14,9 @@ import {
 import DynamoDBService from '@lixpi/dynamodb-service'
 import NATS_Service from '@lixpi/nats-service'
 import { startNatsAuthCalloutService } from '@lixpi/nats-auth-callout-service'
-import type { ServiceAuthConfig } from '@lixpi/auth-service'
+import {
+    type ServiceAuthConfig,
+} from '@lixpi/auth-service'
 
 import { createServer } from 'http'
 

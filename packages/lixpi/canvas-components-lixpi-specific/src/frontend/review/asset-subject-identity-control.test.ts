@@ -6,9 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    SubjectIdentityClassification,
+import {
+    type Asset,
+    type SubjectIdentityClassification,
 } from '@lixpi/constants'
 
 import {

@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CharacterPanelAssessment } from './panel-assessor.ts'
+import {
+    type CharacterPanelAssessment,
+} from './panel-assessor.ts'
 
 const DEFAULT_PANEL_QUALITY_THRESHOLD = 0.72
 

@@ -1,5 +1,3 @@
-'use strict'
-
 import { Decimal } from 'decimal.js'
 import {
     log,
@@ -9,9 +7,9 @@ import {
     err,
 } from '@lixpi/debug-tools'
 
-import type {
-    TokensUsage,
-    TokensUsageEvent,
+import {
+    type TokensUsage,
+    type TokensUsageEvent,
 } from '@lixpi/constants'
 
 export const reportAiTokensUsage = ({

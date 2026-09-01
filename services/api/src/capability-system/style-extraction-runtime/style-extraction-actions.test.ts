@@ -17,14 +17,12 @@ import {
     CapabilityActionRegistry,
     CapabilityWorkflowRunner,
     registerStyleExtractionActions,
-    type CapabilityRunPersistence,
-    type LoadedCapabilityResource,
     SealedResolvedCapabilityPlan,
-} from '@lixpi/capability-system/backend'
-import {
     STYLE_EXTRACTION_AXES,
     STYLE_EXTRACTION_CAPABILITY_IDS,
     buildStyleExtractionManifest,
+    type CapabilityRunPersistence,
+    type LoadedCapabilityResource,
 } from '@lixpi/capability-system/backend'
 import {
     createStyleExtractionRuntimePort,

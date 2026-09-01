@@ -3,16 +3,14 @@ import {
     it,
     expect,
 } from 'vitest'
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    ImageCanvasNode,
-} from '@lixpi/constants'
 import {
-    getGeneratedMediaPreFrameLayoutRect,
-} from '../canvas-node/generated-media-node.ts'
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type ImageCanvasNode,
+} from '@lixpi/constants'
+import { getGeneratedMediaPreFrameLayoutRect } from '../canvas-node/generated-media-node.ts'
 
 import {
     GeneratedMediaRebalancePipeline,

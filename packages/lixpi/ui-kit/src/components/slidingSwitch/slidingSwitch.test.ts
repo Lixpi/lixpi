@@ -15,7 +15,9 @@ import {
     createSlidingSwitch,
     SLIDING_SWITCH_TRANSITION_DURATION_MS,
 } from './slidingSwitch.ts'
-import type { SlidingSwitchReshuffleItemsOnValueChange } from './index.ts'
+import {
+    type SlidingSwitchReshuffleItemsOnValueChange,
+} from './index.ts'
 
 // The indicator slide uses a d3 transition on the rect's `x`. happy-dom drives d3
 // timers awkwardly, so stub transitions with a chainable no-op: state (value/onChange)

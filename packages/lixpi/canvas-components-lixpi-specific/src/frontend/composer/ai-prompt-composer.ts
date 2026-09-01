@@ -1,5 +1,9 @@
-import type { EditorView } from 'prosemirror-view'
-import type { AiPromptComposerSubmitData } from '../../shared/composer/canvas-conversation-content.ts'
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    type AiPromptComposerSubmitData,
+} from '../../shared/composer/canvas-conversation-content.ts'
 export type { AiPromptComposerSubmitData } from '../../shared/composer/canvas-conversation-content.ts'
 import { createShiftingGradientBackground } from '@lixpi/ui-primitives/gradients'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'

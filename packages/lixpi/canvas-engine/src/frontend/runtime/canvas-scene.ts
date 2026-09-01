@@ -18,19 +18,23 @@ import {
     type NodeGeometryPolicy,
     type SceneSnapshot,
 } from '../../shared/index.ts'
-import type { CanvasRenderer } from '../rendering/canvas-renderer.ts'
-import type { CanvasDrawingScope } from '../rendering/drawing-scope.ts'
+import {
+    type CanvasRenderer,
+} from '../rendering/canvas-renderer.ts'
+import {
+    type CanvasDrawingScope,
+} from '../rendering/drawing-scope.ts'
 import { IdleTask } from './idle-task.ts'
 import {
     NodeViews,
     type NodePresentation,
 } from './node-views.ts'
 import { SceneContext } from './scene-context.ts'
-import type {
-    CanvasView,
-    ComponentContext,
-    NodeRegistry,
-    NodeView,
+import {
+    type CanvasView,
+    type ComponentContext,
+    type NodeRegistry,
+    type NodeView,
 } from './node-registry.ts'
 import {
     GeometryOverrides,

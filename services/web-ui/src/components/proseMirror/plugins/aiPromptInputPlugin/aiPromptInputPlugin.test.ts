@@ -10,13 +10,15 @@ import { resolve } from 'path'
 import { selection } from 'd3-selection'
 import {
     EditorState,
-    Transaction,
+    type Transaction,
 } from 'prosemirror-state'
 import {
-    EditorView,
-    DecorationSet,
+    type EditorView,
+    type DecorationSet,
 } from 'prosemirror-view'
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
 import {
     doc,
     p,
@@ -885,7 +887,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
     })
 
     it('lets CSS variables own model menu layering instead of hard-coded inline z-index', () => {
-        const nodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
+        const nodeSource = readFileSync(resolve(import.meta.dirname, 'aiPromptInputNode.ts'), 'utf-8')
 
         expectSourceNotToContain(nodeSource, 'modelMenu.element.style.zIndex')
         expectSourceNotToContain(nodeSource, 'settings.aiPromptInput.modelMenu.infoBubbleZIndex')
@@ -1054,7 +1056,7 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         })
 
         it('uses a compact nightBlue circle around the Add model plus icon', () => {
-            const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+            const stylesSource = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
             const iconRule = stylesSource.match(/\.ai-model-config-add-icon \{[\s\S]*?\n\}/)?.[0] ?? ''
 
             expectSourceToContain(iconRule, 'flex: 0 0 12px;')
@@ -1159,16 +1161,16 @@ describe('createAiPromptInputNodeView — DOM structure', () => {
         })
 
         it('keeps model-row markup behind one shared renderer entry point', () => {
-            const nodeSource = readFileSync(resolve(__dirname, 'aiPromptInputNode.ts'), 'utf-8')
+            const nodeSource = readFileSync(resolve(import.meta.dirname, 'aiPromptInputNode.ts'), 'utf-8')
             const modelControlsSource = readFileSync(
-                resolve(__dirname, '../../../aiModelControls/aiModelControls.ts'),
+                resolve(import.meta.dirname, '../../../aiModelControls/aiModelControls.ts'),
                 'utf-8',
             )
             const rowRendererSource = readFileSync(
-                resolve(__dirname, '../../../aiModelControls/modelConfigurationRow.ts'),
+                resolve(import.meta.dirname, '../../../aiModelControls/modelConfigurationRow.ts'),
                 'utf-8',
             )
-            const stylesSource = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+            const stylesSource = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
 
             expectSourceToContain(modelControlsSource, 'return createModelConfigurationRow({')
             expectSourceNotToContain(nodeSource, 'className="ai-model-config-remove"')
@@ -1748,7 +1750,7 @@ describe('Visual structure — CSS class expectations from SCSS', () => {
     })
 
     it('SCSS keeps placeholder rendering on contentDOM instead of the decorated wrapper', () => {
-        const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+        const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
 
         expectSourceToContain(scss, '.ai-prompt-input-wrapper.empty-node-placeholder[data-placeholder]::before')
         expectSourceToContain(scss, 'content: none;')
@@ -2484,7 +2486,7 @@ describe('Visual — receiving state CSS expectations', () => {
         // SCSS: &[data-empty="false"] targets controls when text is present
         // $nightBlue is #42494f — used to indicate active state when text is present
         const scss = readFileSync(
-            resolve(__dirname, 'ai-prompt-input.scss'),
+            resolve(import.meta.dirname, 'ai-prompt-input.scss'),
             'utf-8',
         )
         expectSourceToContain(scss, 'data-empty="false"')
@@ -2528,7 +2530,7 @@ describe('Visual — image size dropdown SCSS expectations', () => {
 
 describe('Visual — static-position dropdown SCSS expectations', () => {
     it('anchors static-position info bubbles inside the prompt node instead of the viewport', () => {
-        const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+        const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
 
         expectSourceToContain(scss, '.info-bubble-wrapper.static-position')
         expectSourceToContain(scss, 'position: absolute !important;')
@@ -2538,7 +2540,7 @@ describe('Visual — static-position dropdown SCSS expectations', () => {
     })
 
     it('overrides nested InfoBubble positioning and hides arrows for M3-style dropdown menus', () => {
-        const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+        const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
 
         expectSourceToContain(scss, '.bubble-wrapper')
         expectSourceToContain(scss, 'position: static !important;')

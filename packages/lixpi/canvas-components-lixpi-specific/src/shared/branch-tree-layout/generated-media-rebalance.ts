@@ -1,14 +1,12 @@
-import type {
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    BranchOriginCanvasNode,
-    CanvasNode,
-    ImageCanvasNode,
-    WorkspaceEdge,
-} from '@lixpi/constants'
 import {
-    getGeneratedMediaPreFrameSize,
-} from '../canvas-node/generated-media-node.ts'
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type BranchOriginCanvasNode,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type WorkspaceEdge,
+} from '@lixpi/constants'
+import { getGeneratedMediaPreFrameSize } from '../canvas-node/generated-media-node.ts'
 
 import { getStartedLineageMarkerState } from './branch-lineage-state.ts'
 import { rebalanceBranchTreesAndResolve } from './branch-tree-layout.ts'

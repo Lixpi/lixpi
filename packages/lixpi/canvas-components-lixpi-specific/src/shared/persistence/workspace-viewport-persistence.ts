@@ -1,9 +1,13 @@
-import type { CanvasState } from '@lixpi/constants'
+import {
+    type CanvasState,
+} from '@lixpi/constants'
 import {
     viewportsMatch,
     type ViewportSnapshot,
 } from '@lixpi/canvas-engine/shared'
-import { WorkspaceCanvasSession } from './workspace-canvas-session.ts'
+import {
+    type WorkspaceCanvasSession,
+} from './workspace-canvas-session.ts'
 import {
     encodeStashedViewport,
     getStashedViewportStorageKey,

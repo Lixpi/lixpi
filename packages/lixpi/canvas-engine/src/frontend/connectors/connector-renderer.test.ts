@@ -4,10 +4,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasDrawingSurface } from '../rendering/drawing-scope.ts'
-import type {
-    ResourceHandle,
-    ResourceKind,
+import {
+    type CanvasDrawingSurface,
+} from '../rendering/drawing-scope.ts'
+import {
+    type ResourceHandle,
+    type ResourceKind,
 } from '../rendering/resources.ts'
 import {
     ConnectorRenderer,

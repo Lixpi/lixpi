@@ -1,5 +1,3 @@
-'use strict'
-
 import process from 'process'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
@@ -37,7 +35,9 @@ import {
     type ImageSizeOption,
     type MediaGenerationConfigControl,
 } from '@lixpi/constants'
-import type { PartialDeep } from 'type-fest'
+import {
+    type PartialDeep,
+} from 'type-fest'
 
 // Modality metadata constants
 const MODALITY_METADATA = {

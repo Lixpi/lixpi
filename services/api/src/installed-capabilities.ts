@@ -1,5 +1,3 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
 import {
     CapabilityModuleCatalog,
@@ -9,8 +7,12 @@ import {
     type CharacterCreatorRuntimePorts,
 } from '@lixpi/capability-system/backend'
 
-import type { MetricsClient } from './metrics/metrics-client.ts'
-import type { ImageRouter } from './llm/tools/image-router.ts'
+import {
+    type MetricsClient,
+} from './metrics/metrics-client.ts'
+import {
+    type ImageRouter,
+} from './llm/tools/image-router.ts'
 import {
     seedBuiltInCapability,
     storeCapabilityResource,

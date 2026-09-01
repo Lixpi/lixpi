@@ -6,18 +6,24 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasNode } from '@lixpi/constants'
-import type {
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
+import {
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
-import type { CanvasRenderer } from '@lixpi/canvas-engine/frontend/rendering'
+import {
+    type CanvasRenderer,
+} from '@lixpi/canvas-engine/frontend/rendering'
 import {
     NodeRegistry,
     CanvasScene,
     type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type { WorkspaceMediaNodes } from '../media/workspace-media-nodes.ts'
+import {
+    type WorkspaceMediaNodes,
+} from '../media/workspace-media-nodes.ts'
 import {
     WorkspaceNodeRegistry,
     type WorkspaceDomNodeView,

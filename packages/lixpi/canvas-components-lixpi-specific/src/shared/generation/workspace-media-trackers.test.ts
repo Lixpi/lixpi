@@ -4,12 +4,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasState,
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    MediaGenerationRunMeta,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
 import { WorkspaceGenerationPlacements } from './workspace-generation-placements.ts'
 import {

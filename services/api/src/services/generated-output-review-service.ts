@@ -1,11 +1,9 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetRequesterContext,
-    CanvasGeometryUpdate,
-    GeneratedOutputReviewRequest,
-    GeneratedOutputReviewResponse,
+import {
+    type Asset,
+    type AssetRequesterContext,
+    type CanvasGeometryUpdate,
+    type GeneratedOutputReviewRequest,
+    type GeneratedOutputReviewResponse,
 } from '@lixpi/constants'
 
 import AssetModel from '../models/asset.ts'

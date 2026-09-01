@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'process'
 
 import OpenAI, { toFile } from 'openai'
@@ -8,23 +6,27 @@ import {
     warn,
     err,
 } from '@lixpi/debug-tools'
-import type {
-    ImageReferenceCapabilities,
-    ProviderName,
+import {
+    type ImageReferenceCapabilities,
+    type ProviderName,
 } from '@lixpi/constants'
 
 import {
     BaseProvider,
     type BaseProviderDeps,
 } from './base-provider.ts'
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 import { getSystemPrompt } from '../prompts/load-prompts.ts'
 import {
     assertMessageInputKindsSupported,
     convertAttachmentsForProvider,
     resolveImageUrls,
 } from '../utils/attachments.ts'
-import type { ResolvedImageGenerationReference } from '../image-generation-references.ts'
+import {
+    type ResolvedImageGenerationReference,
+} from '../image-generation-references.ts'
 import {
     TOOL_NAME,
     applyImagePromptLimitToSystemPrompt,
@@ -350,7 +352,7 @@ export class OpenAIProvider extends BaseProvider {
                             count + (Array.isArray(m.content)
                                 ? m.content.filter((b: any) => b?.type === 'input_image' || b?.type === 'image_url').length
                                 : 0), 0),
-                        promptLen: (args.inputMessages[args.inputMessages.length - 1]?.content as any)?.length ?? 0,
+                        promptLen: (args.inputMessages.at(-1)?.content as any)?.length ?? 0,
                     },
                     null,
                     0,

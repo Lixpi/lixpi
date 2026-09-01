@@ -1,5 +1,3 @@
-'use strict'
-
 // Shared workspace persistence timing. The API owns authoritative settled
 // snapshots, while the browser owns local fallback timers; using one exported
 // value keeps those write cadences aligned.

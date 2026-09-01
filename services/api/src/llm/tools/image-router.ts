@@ -1,25 +1,27 @@
-'use strict'
-
 import {
     info,
     warn,
     err,
 } from '@lixpi/debug-tools'
 import type NatsService from '@lixpi/nats-service'
-import type {
-    CapabilityMediaExecutionContext,
-    CapabilityMediaStrategyRegistry,
+import {
+    type CapabilityMediaExecutionContext,
+    type CapabilityMediaStrategyRegistry,
 } from '@lixpi/capability-system/backend'
-import type {
-    CapabilityJsonValue,
-    MediaGenerationProblem,
+import {
+    type CapabilityJsonValue,
+    type MediaGenerationProblem,
 } from '@lixpi/constants'
 
-import type { ProviderRegistry } from '../providers/provider-registry.ts'
-import type { ProviderState } from '../graph/state.ts'
-import type {
-    ProseMirrorContentHandler,
-    ProseMirrorSnapshotProvider,
+import {
+    type ProviderRegistry,
+} from '../providers/provider-registry.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
+import {
+    type ProseMirrorContentHandler,
+    type ProseMirrorSnapshotProvider,
 } from '../graph/stream-publisher.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import {

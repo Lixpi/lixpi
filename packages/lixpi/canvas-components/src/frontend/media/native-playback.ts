@@ -2,11 +2,13 @@ import {
     applyStyle,
     createDocumentHtml,
 } from '@lixpi/ui-primitives/dom'
-import type {
-    EngineMedia,
-    MediaDescriptor,
+import {
+    type EngineMedia,
+    type MediaDescriptor,
 } from '@lixpi/canvas-engine/frontend/media'
-import type { CanvasEngineSize } from '@lixpi/canvas-engine/shared'
+import {
+    type CanvasEngineSize,
+} from '@lixpi/canvas-engine/shared'
 
 type SourceLease = Awaited<ReturnType<EngineMedia['acquirePlayback']>>
 type SourceRequest = { media: MediaDescriptor; renditionId: string }

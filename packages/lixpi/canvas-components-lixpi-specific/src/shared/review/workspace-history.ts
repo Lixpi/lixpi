@@ -1,15 +1,17 @@
-import type {
-    CanvasNode,
-    CanvasGeneratedOutputDetailsTarget,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    CapabilityArtifactCanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    MediaGenerationProgressState,
+import {
+    type CanvasNode,
+    type CanvasGeneratedOutputDetailsTarget,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type MediaGenerationProgressState,
 } from '@lixpi/constants'
-import type { AiLineageProjectionScope } from '@lixpi/prosemirror'
+import {
+    type AiLineageProjectionScope,
+} from '@lixpi/prosemirror'
 import {
     buildBranchMarkerTurnProjectionFromThreadContent,
     buildGeneratedMediaTurnProjectionFromThreadContent,
@@ -24,7 +26,9 @@ import {
     type BranchMarkerTurnDescriptor,
     type ProseMirrorJsonNode,
 } from '@lixpi/prosemirror/shared/thread-doc'
-import type { GeneratedOutputCanvasNode } from '../canvas-node/generated-media-node.ts'
+import {
+    type GeneratedOutputCanvasNode,
+} from '../canvas-node/generated-media-node.ts'
 import {
     getBranchMarkerPromptParts,
     getBranchMarkerPromptDisplayText,

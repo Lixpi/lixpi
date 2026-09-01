@@ -1,12 +1,12 @@
-'use strict'
-
-import type {
-    Asset,
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type Asset,
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { hasActiveGeneratedOutputLineage } from '../branch-tree-layout/branch-lineage-state.ts'
-import type { GeneratedOutputCanvasNode } from '../canvas-node/generated-media-node.ts'
+import {
+    type GeneratedOutputCanvasNode,
+} from '../canvas-node/generated-media-node.ts'
 
 type GeneratedOutputReviewStateInput = {
     node: GeneratedOutputCanvasNode

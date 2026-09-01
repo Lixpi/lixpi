@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { VideoCanvasNode } from '@lixpi/constants'
+import {
+    type VideoCanvasNode,
+} from '@lixpi/constants'
 import { createDefaultVideoControlsSettings } from '@lixpi/ui-kit/components/video-controls'
 import {
     WorkspaceVideoChrome,

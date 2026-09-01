@@ -3,15 +3,17 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-    CapabilityArtifactCanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
 } from '@lixpi/constants'
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import {
     WorkspaceHistory,
     getBranchMarkerTurnDescriptor,

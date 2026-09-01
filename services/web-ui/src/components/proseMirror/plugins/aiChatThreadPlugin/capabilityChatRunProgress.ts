@@ -1,7 +1,13 @@
-import type { CapabilityRunEvent } from '@lixpi/constants'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type CapabilityRunEvent,
+} from '@lixpi/constants'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 
-import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
 import {
     createCapabilityRunProgress,

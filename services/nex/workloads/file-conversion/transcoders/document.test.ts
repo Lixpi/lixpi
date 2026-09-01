@@ -1,5 +1,3 @@
-'use strict'
-
 import { join } from 'node:path'
 import {
     mkdir,

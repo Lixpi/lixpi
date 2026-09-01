@@ -1,15 +1,17 @@
-import type {
-    CanvasEngineRect,
-    CanvasEngineSize,
-    CanvasViewport,
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type CanvasEngineRect,
+    type CanvasEngineSize,
+    type CanvasViewport,
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
-import type { MediaDescriptor } from '@lixpi/canvas-engine/frontend/media'
-import type {
-    ComponentContext,
-    NodeRegistration,
-    NodeView,
+import {
+    type MediaDescriptor,
+} from '@lixpi/canvas-engine/frontend/media'
+import {
+    type ComponentContext,
+    type NodeRegistration,
+    type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
 import {
     ImageSurface,

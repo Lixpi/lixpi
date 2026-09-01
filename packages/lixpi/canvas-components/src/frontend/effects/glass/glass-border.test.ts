@@ -1,17 +1,15 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasDrawingSurface,
-    CaptureSpec,
-    DrawingResources,
-    ResourceHandle,
-    ResourceKind,
+import {
+    type CanvasDrawingSurface,
+    type CaptureSpec,
+    type DrawingResources,
+    type ResourceHandle,
+    type ResourceKind,
 } from '@lixpi/canvas-engine/frontend/rendering'
 import { GlassBorder } from './glass-border.ts'
 import {

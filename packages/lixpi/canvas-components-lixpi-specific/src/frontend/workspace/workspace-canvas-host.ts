@@ -1,42 +1,54 @@
-import type {
-    Asset,
-    AssetDocumentRole,
-    CanvasGeometryUpdate,
-    LoadingStatus,
-    MediaGenerationRequest,
+import {
+    type Asset,
+    type AssetDocumentRole,
+    type CanvasGeometryUpdate,
+    type LoadingStatus,
+    type MediaGenerationRequest,
 } from '@lixpi/constants'
-import type {
-    CapabilityArtifactFrontendRegistry,
-    CapabilityCatalogClient,
+import {
+    type CapabilityArtifactFrontendRegistry,
+    type CapabilityCatalogClient,
 } from '@lixpi/capability-system/frontend'
-import type { CapabilityArtifactSharedRegistry } from '@lixpi/capability-system/shared'
-import type { LixpiCanvasSettings } from '../settings/index.ts'
-import type {
-    WorkspaceCanvasEditors,
-    WorkspacePromptCatalog,
+import {
+    type CapabilityArtifactSharedRegistry,
+} from '@lixpi/capability-system/shared'
+import {
+    type LixpiCanvasSettings,
+} from '../settings/index.ts'
+import {
+    type WorkspaceCanvasEditors,
+    type WorkspacePromptCatalog,
 } from './workspace-canvas-editors.ts'
-import type { WorkspaceRightPanelOptions } from './workspace-right-panel.ts'
-import type { CanvasConversationRunPorts } from './canvas-conversation-run.ts'
-import type { WorkspaceCanvasConversation } from './workspace-canvas-surface.ts'
-import type {
-    WorkspaceMediaSourcePorts,
-    WorkspaceVideoControlsSettings,
+import {
+    type WorkspaceRightPanelOptions,
+} from './workspace-right-panel.ts'
+import {
+    type CanvasConversationRunPorts,
+} from './canvas-conversation-run.ts'
+import {
+    type WorkspaceCanvasConversation,
+} from './workspace-canvas-surface.ts'
+import {
+    type WorkspaceMediaSourcePorts,
+    type WorkspaceVideoControlsSettings,
 } from '../media/index.ts'
-import type {
-    ContextPreviewEnvironment,
-    PromptReferencePreviewRenderer,
+import {
+    type ContextPreviewEnvironment,
+    type PromptReferencePreviewRenderer,
 } from '../context/index.ts'
-import type {
-    WorkspaceAssetDetailsPorts,
-    WorkspaceOutputReviewPorts,
-    WorkspaceGenerationHistoryPorts,
+import {
+    type WorkspaceAssetDetailsPorts,
+    type WorkspaceOutputReviewPorts,
+    type WorkspaceGenerationHistoryPorts,
 } from '../review/index.ts'
-import type { LibraryAssetPorts } from '../library/index.ts'
-import type {
-    WorkspaceConversationProjectionPorts,
-    WorkspaceMediaOperationRecoveryPorts,
-    WorkspaceMediaAnalysisPorts,
-    CanvasGenerationSubmissionPorts,
+import {
+    type LibraryAssetPorts,
+} from '../library/index.ts'
+import {
+    type WorkspaceConversationProjectionPorts,
+    type WorkspaceMediaOperationRecoveryPorts,
+    type WorkspaceMediaAnalysisPorts,
+    type CanvasGenerationSubmissionPorts,
 } from '../../shared/index.ts'
 
 export type WorkspaceCanvasAppearance = LixpiCanvasSettings & {

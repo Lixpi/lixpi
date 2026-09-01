@@ -1,5 +1,3 @@
-'use strict'
-
 // CloudWatch Logging Configuration Constants
 
 const {

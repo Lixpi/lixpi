@@ -1,22 +1,18 @@
-'use strict'
-
 import {
     describe,
     it,
     expect,
     vi,
 } from 'vitest'
-import {
-    schema,
-} from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
+import { schema } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import {
     aiCollapsibleBlockNodeView,
     cacheImageGenerationTrace,
     type AiCollapsibleBlockNodeViewOptions,
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiCollapsibleBlockNode.ts'
-import type {
-    ImageGenerationTrace,
-    VideoGenerationTrace,
+import {
+    type ImageGenerationTrace,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 
 vi.mock('$src/services/auth-service.ts', () => ({

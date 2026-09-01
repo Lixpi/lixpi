@@ -1,7 +1,8 @@
 services:
 
-    # One-shot TypeScript formatter and linter. It mirrors the test runner's
-    # service/package dispatch without sharing its dependencies or mounts.
+    # One-shot TypeScript formatter and linter. Like the TypeScript test runner,
+    # every invocation gets one current repository bind mount while the image
+    # keeps its pinned tool dependencies outside that mount.
     lixpi-typescript-quality-runner:
         profiles: ["dev"]
         image: lixpi/typescript-quality-runner
@@ -11,44 +12,8 @@ services:
         environment:
             DPRINT_CACHE_DIR: /dprint-cache
         volumes:
-            - ./dprint.json:/usr/src/repository/dprint.json:ro,cached
-            - ./.oxlintrc.json:/usr/src/repository/.oxlintrc.json:ro,cached
-            - ./services/typescript-quality-runner/run-quality.sh:/usr/src/repository/services/typescript-quality-runner/run-quality.sh:ro,cached
-            - ./services/typescript-quality-runner/test-quality.sh:/usr/src/repository/services/typescript-quality-runner/test-quality.sh:ro,cached
-            - ./services/typescript-quality-runner/fixtures:/usr/src/repository/services/typescript-quality-runner/fixtures:ro,cached
+            - ./:/usr/src/repository:cached
             - typescript-quality-runner-dprint-cache:/dprint-cache
-
-            # Service domains.
-            - ./services/web-ui/src:/usr/src/repository/services/web-ui/src:cached
-            - ./services/web-ui/vite.config.ts:/usr/src/repository/services/web-ui/vite.config.ts:cached
-            - ./services/web-ui/vitest.config.ts:/usr/src/repository/services/web-ui/vitest.config.ts:cached
-            - ./services/api/src:/usr/src/repository/services/api/src:cached
-            - ./services/api/vitest.config.ts:/usr/src/repository/services/api/vitest.config.ts:cached
-            - ./services/nex/workloads:/usr/src/repository/services/nex/workloads:cached
-            - ./services/nex/vitest.config.ts:/usr/src/repository/services/nex/vitest.config.ts:cached
-            - ./services/ai-model-registry/src:/usr/src/repository/services/ai-model-registry/src:cached
-            - ./services/ai-model-registry/vite.config.ts:/usr/src/repository/services/ai-model-registry/vite.config.ts:cached
-
-            # Documentation and infrastructure domains.
-            - ./documentation/site/source-registry.test.ts:/usr/src/repository/documentation/site/source-registry.test.ts:cached
-            - ./infrastructure/init-script/setup-env.ts:/usr/src/repository/infrastructure/init-script/setup-env.ts:cached
-            - ./infrastructure/pulumi/src:/usr/src/repository/infrastructure/pulumi/src:cached
-            - ./random-useful-things:/usr/src/repository/random-useful-things:cached
-
-            # Shared packages. Each package keeps an independent source mount.
-            - ./packages/lixpi/auth-service:/usr/src/repository/packages/lixpi/auth-service:cached
-            - ./packages/lixpi/capability-system:/usr/src/repository/packages/lixpi/capability-system:cached
-            - ./packages/lixpi/canvas-engine:/usr/src/repository/packages/lixpi/canvas-engine:cached
-            - ./packages/lixpi/canvas-components:/usr/src/repository/packages/lixpi/canvas-components:cached
-            - ./packages/lixpi/canvas-components-lixpi-specific:/usr/src/repository/packages/lixpi/canvas-components-lixpi-specific:cached
-            - ./packages/lixpi/constants/ts:/usr/src/repository/packages/lixpi/constants/ts:cached
-            - ./packages/lixpi/debug-tools/ts:/usr/src/repository/packages/lixpi/debug-tools/ts:cached
-            - ./packages/lixpi/dynamodb-service:/usr/src/repository/packages/lixpi/dynamodb-service:cached
-            - ./packages/lixpi/nats-auth-callout-service:/usr/src/repository/packages/lixpi/nats-auth-callout-service:cached
-            - ./packages/lixpi/nats-service/ts:/usr/src/repository/packages/lixpi/nats-service/ts:cached
-            - ./packages/lixpi/prosemirror:/usr/src/repository/packages/lixpi/prosemirror:cached
-            - ./packages/lixpi/ui-kit:/usr/src/repository/packages/lixpi/ui-kit:cached
-            - ./packages/lixpi/ui-primitives:/usr/src/repository/packages/lixpi/ui-primitives:cached
         working_dir: /usr/src/repository
         entrypoint: ["sh", "/usr/src/repository/services/typescript-quality-runner/run-quality.sh"]
 

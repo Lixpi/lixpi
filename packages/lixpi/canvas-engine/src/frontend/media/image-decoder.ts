@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    ImageDecodeRequest,
-    ImageDecodeResponse,
-    ImageSourceRequest,
+import {
+    type ImageDecodeRequest,
+    type ImageDecodeResponse,
+    type ImageSourceRequest,
 } from './image-decode-protocol.ts'
 
 export type ImageDecoderOptions = {

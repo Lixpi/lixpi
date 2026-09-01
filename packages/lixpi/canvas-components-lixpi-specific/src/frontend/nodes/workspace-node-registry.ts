@@ -1,12 +1,16 @@
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import { applyStyle } from '@lixpi/ui-primitives/dom'
-import type {
-    CanvasEngineRect,
-    CanvasViewport,
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type CanvasEngineRect,
+    type CanvasViewport,
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
-import type { MediaDescriptor } from '@lixpi/canvas-engine/frontend/media'
+import {
+    type MediaDescriptor,
+} from '@lixpi/canvas-engine/frontend/media'
 import {
     Lifetime,
     NodeRegistry,

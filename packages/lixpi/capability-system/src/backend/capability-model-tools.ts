@@ -1,13 +1,13 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
-import type {
-    CapabilityKind,
-    CapabilityJsonValue,
+import {
+    type CapabilityKind,
+    type CapabilityJsonValue,
 } from '@lixpi/constants'
 
-import type { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
+import {
+    type SealedResolvedCapabilityPlan,
+} from './capability-resolver.ts'
 
 export const SEARCH_CAPABILITIES_TOOL_NAME = 'search_capabilities'
 export const USE_CAPABILITY_TOOL_NAME = 'use_capability'

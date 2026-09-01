@@ -1,7 +1,7 @@
-import type {
-    CanvasNode,
-    CanvasState,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 import {
@@ -21,9 +21,9 @@ import {
     Lifetime,
     type CanvasConnectionControls,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type {
-    ConnectorMarker,
-    ConnectionSettings,
+import {
+    type ConnectorMarker,
+    type ConnectionSettings,
 } from '@lixpi/canvas-engine/frontend/connectors'
 import {
     TravelingOutline,

@@ -3,8 +3,12 @@ import {
     expect,
     it,
 } from 'vitest'
-import type { CapabilityRunEvent } from '@lixpi/constants'
-import type { EditorView } from 'prosemirror-view'
+import {
+    type CapabilityRunEvent,
+} from '@lixpi/constants'
+import {
+    type EditorView,
+} from 'prosemirror-view'
 
 import {
     CAPABILITY_CHAT_PROGRESS_MOUNT_CLASS,

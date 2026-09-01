@@ -1,5 +1,3 @@
-'use strict'
-
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 import { Command } from '@pulumi/command/local/index.js'
@@ -11,9 +9,7 @@ import {
     err,
 } from '@lixpi/debug-tools'
 
-import {
-    formatStageResourceName,
-} from '@lixpi/constants'
+import { formatStageResourceName } from '@lixpi/constants'
 
 import {
     buildDockerImage,

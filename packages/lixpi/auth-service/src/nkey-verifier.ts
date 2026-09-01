@@ -1,9 +1,9 @@
-'use strict'
-
 import jwt from 'jsonwebtoken'
 import { fromPublic } from '@nats-io/nkeys'
 
-import type { NKeyVerificationResult } from './types.ts'
+import {
+    type NKeyVerificationResult,
+} from './types.ts'
 
 export const verifyNKeySignedJWT = async ({
     token,

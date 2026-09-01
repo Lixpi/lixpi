@@ -1,10 +1,10 @@
-'use strict'
-
 import {
     CapabilityDagRunner,
     type CapabilityDagNode,
 } from './capability-dag-runner.ts'
-import type { CapabilityMediaDagOutputBinding } from '../shared/capability-media-execution-plan.ts'
+import {
+    type CapabilityMediaDagOutputBinding,
+} from '../shared/capability-media-execution-plan.ts'
 
 export type CapabilityMediaDagEvent = {
     sequence: number

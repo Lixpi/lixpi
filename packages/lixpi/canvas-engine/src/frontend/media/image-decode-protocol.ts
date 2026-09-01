@@ -1,5 +1,3 @@
-'use strict'
-
 export type ImageSourceRequest = {
     url: string
     credentials?: RequestCredentials

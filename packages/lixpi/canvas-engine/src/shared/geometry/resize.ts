@@ -1,7 +1,7 @@
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
-    CanvasEngineSize,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
+    type CanvasEngineSize,
 } from './types.ts'
 import { assertCanvasBounds } from '../scene/validation.ts'
 

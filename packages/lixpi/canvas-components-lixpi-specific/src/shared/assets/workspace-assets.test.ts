@@ -5,9 +5,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    CanvasState,
+import {
+    type Asset,
+    type CanvasState,
 } from '@lixpi/constants'
 import {
     WorkspaceAssetProjection,

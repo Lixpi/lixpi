@@ -1,13 +1,13 @@
-import type {
-    CanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    OperationStatusCanvasNode,
-    CapabilityRunEvent,
-    ExecutionTrace,
-    ExecutionTraceHandle,
-    OperationProgressItem,
-    MediaGenerationProgressState,
+import {
+    type CanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type OperationStatusCanvasNode,
+    type CapabilityRunEvent,
+    type ExecutionTrace,
+    type ExecutionTraceHandle,
+    type OperationProgressItem,
+    type MediaGenerationProgressState,
 } from '@lixpi/constants'
 import {
     resolveBranchMarkerMediaRequestStatuses,

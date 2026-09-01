@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    MediaBranchCandidateImage,
-    MediaBranchCandidateSnapshot,
+import {
+    type MediaBranchCandidateImage,
+    type MediaBranchCandidateSnapshot,
 } from '@lixpi/constants'
 
 // Rebuild a snapshot's transcript from the current candidate list. Whenever the

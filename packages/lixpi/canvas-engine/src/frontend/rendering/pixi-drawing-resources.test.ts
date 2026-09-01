@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     Container,
     type Renderer,
@@ -11,7 +9,9 @@ import {
     vi,
 } from 'vitest'
 import { PixiDrawingResources } from './pixi-drawing-resources.ts'
-import type { MeshData } from './resources.ts'
+import {
+    type MeshData,
+} from './resources.ts'
 
 const triangle: MeshData = { positions: new Float32Array([0, 0, 10, 0, 0, 10]), uvs: new Float32Array([0, 0, 1, 0, 0, 1]), indices: new Uint32Array([0, 1, 2]), version: 1 }
 

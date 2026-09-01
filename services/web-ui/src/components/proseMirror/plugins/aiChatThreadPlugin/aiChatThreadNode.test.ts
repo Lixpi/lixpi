@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -34,7 +32,9 @@ import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/ai
 import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
 import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
-import type { ImageGenerationTrace } from '@lixpi/constants'
+import {
+    type ImageGenerationTrace,
+} from '@lixpi/constants'
 
 const generationEventsForTests: CanvasGenerationEvents[] = []
 afterEach(() => {

@@ -1,4 +1,3 @@
-'use strict'
 export * from './persistence/canvas-persistence-controller.ts'
 export * from './persistence/workspace-canvas-session.ts'
 export * from './persistence/workspace-canvas-state.ts'

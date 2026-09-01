@@ -1,6 +1,6 @@
-'use strict'
-
-import type { CharacterPanelSpec } from './character-sheet-media-plan.ts'
+import {
+    type CharacterPanelSpec,
+} from './character-sheet-media-plan.ts'
 
 export type CharacterSheetLayoutCell = {
     cellId: string

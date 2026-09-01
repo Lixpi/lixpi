@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetRequesterContext,
-    CapabilityReasoningModelVariant,
+import {
+    type Asset,
+    type AssetRequesterContext,
+    type CapabilityReasoningModelVariant,
 } from '@lixpi/constants'
 import {
     CapabilityError,

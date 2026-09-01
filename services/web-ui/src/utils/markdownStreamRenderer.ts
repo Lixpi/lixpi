@@ -1,7 +1,7 @@
-'use strict'
-
 import { MarkdownStreamParser } from '@lixpi/markdown-stream-parser'
-import type { MarkdownStreamToken } from '@lixpi/constants'
+import {
+    type MarkdownStreamToken,
+} from '@lixpi/constants'
 import { html } from '@lixpi/ui-primitives/dom'
 
 // Unified, framework-agnostic renderer that turns a markdown token stream into plain DOM

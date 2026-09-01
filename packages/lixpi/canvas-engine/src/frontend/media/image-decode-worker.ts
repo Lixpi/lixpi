@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    ImageDecodeRequest,
-    ImageDecodeResponse,
+import {
+    type ImageDecodeRequest,
+    type ImageDecodeResponse,
 } from './image-decode-protocol.ts'
 
 type ImageDecodeWorkerScope = {

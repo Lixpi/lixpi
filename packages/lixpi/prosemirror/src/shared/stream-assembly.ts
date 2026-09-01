@@ -1,13 +1,17 @@
-import type { MarkdownParsedSegment } from '@lixpi/constants'
-import type {
-    Mark,
-    Schema,
+import {
+    type MarkdownParsedSegment,
+} from '@lixpi/constants'
+import {
+    type Mark,
+    type Schema,
 } from 'prosemirror-model'
-import type {
-    EditorState,
-    Transaction,
+import {
+    type EditorState,
+    type Transaction,
 } from 'prosemirror-state'
-import type { Step } from 'prosemirror-transform'
+import {
+    type Step,
+} from 'prosemirror-transform'
 
 export type StreamingSegmentTarget = {
     endOfNodePos: number

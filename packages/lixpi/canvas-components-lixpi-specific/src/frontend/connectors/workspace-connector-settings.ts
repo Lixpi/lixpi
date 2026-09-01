@@ -1,4 +1,6 @@
-import type { ConnectionSettings } from '@lixpi/canvas-engine/frontend/connectors'
+import {
+    type ConnectionSettings,
+} from '@lixpi/canvas-engine/frontend/connectors'
 
 export function createWorkspaceConnectorSettings(colors: { lineDefaultColor: string }): ConnectionSettings {
     return {

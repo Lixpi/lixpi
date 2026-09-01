@@ -1,13 +1,13 @@
-'use strict'
-
-import type {
-    MediaBranchVlmReferenceDecision,
-    ImageGenerationTraceExcludedReference,
-    ImageGenerationTraceReference,
-    VideoGenerationTrace,
+import {
+    type MediaBranchVlmReferenceDecision,
+    type ImageGenerationTraceExcludedReference,
+    type ImageGenerationTraceReference,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 
-import type { ProviderState } from '../graph/state.ts'
+import {
+    type ProviderState,
+} from '../graph/state.ts'
 
 export const VEO_NEGATIVE_PROMPT = [
     'warped anatomy',

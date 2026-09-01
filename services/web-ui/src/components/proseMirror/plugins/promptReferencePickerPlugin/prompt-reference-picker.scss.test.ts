@@ -26,7 +26,7 @@ function expectSourceToContain(source: string, snippet: string, label = 'source 
 }
 
 describe('prompt-reference-picker.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'prompt-reference-picker.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'prompt-reference-picker.scss'), 'utf-8')
 
     it('uses the default app and browser scrollbar appearance', () => {
         const pickerRule = extractFlatRule(scss, '.prompt-reference-picker')
@@ -100,7 +100,7 @@ describe('prompt-reference-picker.scss', () => {
         expectSourceToContain(scss, '@include prompt-reference-chip-on-light-surface;')
 
         const partial = readFileSync(
-            resolve(__dirname, '../../../../sass/_prompt-reference-chip.scss'),
+            resolve(import.meta.dirname, '../../../../sass/_prompt-reference-chip.scss'),
             'utf-8',
         )
         for (

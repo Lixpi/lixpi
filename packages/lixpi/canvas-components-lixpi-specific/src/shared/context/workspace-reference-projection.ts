@@ -1,10 +1,12 @@
-import type {
-    Asset,
-    CanvasNode,
-    ExecutionTraceHandle,
-    MediaPromptReference,
+import {
+    type Asset,
+    type CanvasNode,
+    type ExecutionTraceHandle,
+    type MediaPromptReference,
 } from '@lixpi/constants'
-import type { BranchMarkerConversationPreview } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type BranchMarkerConversationPreview,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import {
     resolveBranchMarkerPromptParts,
     type BranchMarkerPromptPart,

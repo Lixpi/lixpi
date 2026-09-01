@@ -1,7 +1,7 @@
-import type {
-    MediaPromptReference,
-    PromptReference,
-    PromptReferenceAtomAttrs,
+import {
+    type MediaPromptReference,
+    type PromptReference,
+    type PromptReferenceAtomAttrs,
 } from '@lixpi/constants'
 
 export const PROMPT_REFERENCE_NODE_TYPE = 'prompt_reference'

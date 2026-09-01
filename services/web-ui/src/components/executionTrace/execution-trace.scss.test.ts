@@ -22,7 +22,7 @@ function expectRuleNotToContain(rule: string, snippet: string, label: string): v
 }
 
 describe('execution-trace.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'execution-trace.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'execution-trace.scss'), 'utf-8')
 
     it('keeps model calls as compact indented typography without cards', () => {
         const call = extractFlatRule(scss, '.execution-trace-model-call')

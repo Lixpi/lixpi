@@ -15,9 +15,9 @@ import {
 
 import { CapabilityError } from '../shared/capability-errors.ts'
 import {
+    resolveCapabilities,
     type CapabilityRequesterContext,
     type CapabilityResolverStore,
-    resolveCapabilities,
 } from './capability-resolver.ts'
 
 const requester: CapabilityRequesterContext = {

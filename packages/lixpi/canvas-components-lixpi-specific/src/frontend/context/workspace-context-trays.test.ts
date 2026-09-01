@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasNode } from '@lixpi/constants'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 import {
     WorkspaceContextTrays,
     type WorkspaceContextTrayPorts,

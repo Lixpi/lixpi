@@ -1,5 +1,7 @@
 import { EditorView } from '@codemirror/view'
-import { Extension } from '@codemirror/state'
+import {
+    type Extension,
+} from '@codemirror/state'
 import {
     HighlightStyle,
     syntaxHighlighting,
@@ -25,7 +27,7 @@ const base00 = '#2E3235',
 
 const invalid = base09,
     darkBackground = '#292d30',
-    highlightBackground = base02 + '30',
+    highlightBackground = `${base02}30`,
     background = base00,
     tooltipBackground = base01,
     selection = '#202325',

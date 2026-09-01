@@ -6,13 +6,17 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    ImageCanvasNode,
+import {
+    type Asset,
+    type ImageCanvasNode,
 } from '@lixpi/constants'
 import { WorkspaceAssetViews } from './workspace-asset-views.ts'
-import type { WorkspaceAssetDetailsPorts } from './workspace-asset-details.ts'
-import type { WorkspaceAssetEditorRequest } from './workspace-asset-editors.ts'
+import {
+    type WorkspaceAssetDetailsPorts,
+} from './workspace-asset-details.ts'
+import {
+    type WorkspaceAssetEditorRequest,
+} from './workspace-asset-editors.ts'
 
 const node: ImageCanvasNode = { nodeId: 'node', type: 'image', assetId: 'asset', position: { x: 0, y: 0 }, dimensions: { width: 100, height: 100 } }
 const owners: WorkspaceAssetViews[] = []

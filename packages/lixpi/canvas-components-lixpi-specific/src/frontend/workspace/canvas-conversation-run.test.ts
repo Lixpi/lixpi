@@ -5,9 +5,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasState,
-    CanvasNode,
+import {
+    type CanvasState,
+    type CanvasNode,
 } from '@lixpi/constants'
 import { WorkspaceGenerationContext } from '../../shared/generation/workspace-generation-context.ts'
 import { CanvasConversationEditors } from './canvas-conversation-editors.ts'

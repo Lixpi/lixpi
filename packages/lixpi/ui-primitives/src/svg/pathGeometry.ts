@@ -156,8 +156,8 @@ export function getPointAtPathLength(points: PathPoint[], targetLength: number):
         walked += length
     }
 
-    const start = points[points.length - 2]
-    const end = points[points.length - 1]
+    const start = points.at(-2)!
+    const end = points.at(-1)!
     return { point: end, tangent: { x: end.x - start.x, y: end.y - start.y } }
 }
 

@@ -1,5 +1,3 @@
-'use strict'
-
 import sharp from 'sharp'
 import {
     warn,
@@ -8,13 +6,15 @@ import {
 import NATS_Service from '@lixpi/nats-service'
 
 import { parseDataUrl } from '../../../llm/utils/attachments.ts'
-import type { ProviderState } from '../../../llm/graph/state.ts'
-import type {
-    StyleExtractionDependencies,
-    StyleExtractionState,
-    StyleRecommendedSampleSubject,
-    StyleSampleRef,
-    StageLogger,
+import {
+    type ProviderState,
+} from '../../../llm/graph/state.ts'
+import {
+    type StyleExtractionDependencies,
+    type StyleExtractionState,
+    type StyleRecommendedSampleSubject,
+    type StyleSampleRef,
+    type StageLogger,
 } from './types.ts'
 import BlobModel from '../../../models/blob.ts'
 

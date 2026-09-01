@@ -1,5 +1,3 @@
-'use strict'
-
 import chalk from 'chalk'
 
 import { fromSSO } from '@aws-sdk/credential-providers'
@@ -112,7 +110,7 @@ const logStats = ({ operation, operationType, capacityUnits, tableName, origin }
     const operationDirection = operationType === 'read' ? '<-' : '->'
     const logOrigin = chalk.white(`DynamoDB ${operationDirection}`)
     const dynamoDbOperation = `${chalk.white(operation)}`
-    const capaticyUnitsInfo = chalk[logColor]('capacityUnits: ' + capacityUnits)
+    const capaticyUnitsInfo = chalk[logColor](`capacityUnits: ${capacityUnits}`)
 
     console.info(`${logOrigin} ${dynamoDbOperation} ${tableName}, ${capaticyUnitsInfo}, ${chalk.grey('origin:')}${origin}`)
 }

@@ -1,7 +1,5 @@
 // DO NOT DELETE ANY OF THE COMMENTED OUT CODE IN THIS FILE
 
-'use strict'
-
 import process from 'process'
 
 import {

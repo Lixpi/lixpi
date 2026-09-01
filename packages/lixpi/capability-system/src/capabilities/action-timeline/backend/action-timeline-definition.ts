@@ -1,15 +1,15 @@
-'use strict'
-
 import { readFile } from 'node:fs/promises'
 
-import type {
-    CapabilityManifest,
-    CapabilityResourceMediaType,
-    CapabilityResourceRef,
-    CapabilityResourceRole,
+import {
+    type CapabilityManifest,
+    type CapabilityResourceMediaType,
+    type CapabilityResourceRef,
+    type CapabilityResourceRole,
 } from '@lixpi/constants'
 
-import type { CapabilityPackageSeedContext } from '../../../backend/capability-module.ts'
+import {
+    type CapabilityPackageSeedContext,
+} from '../../../backend/capability-module.ts'
 import {
     ACTION_TIMELINE_MODULE_ID,
     ACTION_TIMELINE_TOOL_ID,

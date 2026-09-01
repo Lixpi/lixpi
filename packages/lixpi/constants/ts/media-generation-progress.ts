@@ -1,12 +1,12 @@
-import type {
-    ExecutionTrace,
-    ExecutionTraceFact,
-    ExecutionTraceHandle,
-    ExecutionTraceModelCall,
-    ExecutionTraceParam,
-    MediaGenerationRunProgress,
-    MediaGenerationRunStatus,
-    OperationProgressItem,
+import {
+    type ExecutionTrace,
+    type ExecutionTraceFact,
+    type ExecutionTraceHandle,
+    type ExecutionTraceModelCall,
+    type ExecutionTraceParam,
+    type MediaGenerationRunProgress,
+    type MediaGenerationRunStatus,
+    type OperationProgressItem,
 } from './types.ts'
 
 const mediaProgressPhaseOrder: MediaGenerationRunProgress['phase'][] = [

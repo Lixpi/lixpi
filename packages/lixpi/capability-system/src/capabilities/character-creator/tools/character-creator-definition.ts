@@ -6,7 +6,9 @@ import {
     type CapabilityResourceRef,
     type CapabilityResourceRole,
 } from '@lixpi/constants'
-import type { CapabilityPackageSeedContext } from '../../../backend/capability-module.ts'
+import {
+    type CapabilityPackageSeedContext,
+} from '../../../backend/capability-module.ts'
 import {
     CHARACTER_IMAGE_PROMPT_SKILL_ID,
     CHARACTER_SHEET_LAYOUT_SKILL_ID,

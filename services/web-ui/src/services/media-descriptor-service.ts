@@ -1,5 +1,3 @@
-'use strict'
-
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'

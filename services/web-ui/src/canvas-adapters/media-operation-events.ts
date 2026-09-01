@@ -1,4 +1,6 @@
-import type { WorkspaceMediaOperationRecoveryPorts } from '@lixpi/canvas-components-lixpi-specific/shared'
+import {
+    type WorkspaceMediaOperationRecoveryPorts,
+} from '@lixpi/canvas-components-lixpi-specific/shared'
 import { servicesStore } from '$src/stores/servicesStore.ts'
 
 export const subscribeCanvasMediaOperation: WorkspaceMediaOperationRecoveryPorts['subscribe'] = (subject, receive) => {

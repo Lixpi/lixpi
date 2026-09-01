@@ -16,7 +16,9 @@ import {
     type ComponentContext,
     type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type { MediaDescriptor } from '@lixpi/canvas-engine/frontend/media'
+import {
+    type MediaDescriptor,
+} from '@lixpi/canvas-engine/frontend/media'
 import {
     createImageNodeRegistration,
     createPlaybackNodeRegistration,

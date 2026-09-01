@@ -1,8 +1,6 @@
-'use strict'
-
 import {
-    Auth0Client,
     createAuth0Client,
+    type Auth0Client,
 } from '@auth0/auth0-spa-js'
 import { authStore } from '$src/stores/authStore.ts'
 

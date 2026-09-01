@@ -1,5 +1,3 @@
-'use strict'
-
 import { v4 as uuid } from 'uuid'
 
 import {
@@ -18,7 +16,7 @@ import {
 import {
     type CapabilityActionAuthorizationContext,
     type CapabilityActionDefinition,
-    CapabilityActionRegistry,
+    type CapabilityActionRegistry,
 } from './capability-action-registry.ts'
 import { validateCapabilityManifest } from '../shared/capability-validation.ts'
 import {
@@ -26,7 +24,9 @@ import {
     isCapabilityError,
 } from '../shared/capability-errors.ts'
 import { validateJsonSchemaValue } from '../shared/capability-json-schema.ts'
-import { SealedResolvedCapabilityPlan } from './capability-resolver.ts'
+import {
+    type SealedResolvedCapabilityPlan,
+} from './capability-resolver.ts'
 import { CapabilityDagRunner } from './capability-dag-runner.ts'
 import { createCapabilityTraceRecorder } from './capability-trace-recorder.ts'
 

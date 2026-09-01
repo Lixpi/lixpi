@@ -1,10 +1,8 @@
-'use strict'
-
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
-    CanvasEngineSize,
-    Dispose,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
+    type CanvasEngineSize,
+    type Dispose,
 } from '../../shared/index.ts'
 
 export type ResourceKind = 'layer' | 'group' | 'texture' | 'mesh' | 'path' | 'material' | 'capture'

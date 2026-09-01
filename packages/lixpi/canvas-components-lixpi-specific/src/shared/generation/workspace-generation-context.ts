@@ -1,29 +1,23 @@
-'use strict'
-
-import type {
-    Asset,
-    CanvasNode,
-    CapabilityArtifactCanvasNode,
-    DocumentCanvasNode,
-    MediaBranchCandidateImage,
-    MediaBranchCandidateRoleHint,
-    MediaBranchCandidateSnapshot,
-    ImageCanvasNode,
-    VideoCanvasNode,
-    WorkspaceContextNode,
-    WorkspaceContextSnapshot,
-    WorkspaceEdge,
-} from '@lixpi/constants'
 import {
-    collectResponseTextById,
-} from '@lixpi/prosemirror/shared/generated-media-turn-projection'
+    type Asset,
+    type CanvasNode,
+    type CapabilityArtifactCanvasNode,
+    type DocumentCanvasNode,
+    type MediaBranchCandidateImage,
+    type MediaBranchCandidateRoleHint,
+    type MediaBranchCandidateSnapshot,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
+    type WorkspaceContextNode,
+    type WorkspaceContextSnapshot,
+    type WorkspaceEdge,
+} from '@lixpi/constants'
+import { collectResponseTextById } from '@lixpi/prosemirror/shared/generated-media-turn-projection'
 import {
     collectProseMirrorText,
     parseProseMirrorJsonContent,
 } from '@lixpi/prosemirror/shared/thread-doc'
-import {
-    hasActiveGeneratedOutputLineage,
-} from '../branch-tree-layout/branch-lineage-state.ts'
+import { hasActiveGeneratedOutputLineage } from '../branch-tree-layout/branch-lineage-state.ts'
 
 const RESOLVER_VERSION = 'image-branch-vlm-v1'
 

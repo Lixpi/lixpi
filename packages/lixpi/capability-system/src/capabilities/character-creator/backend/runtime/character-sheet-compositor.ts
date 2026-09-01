@@ -1,13 +1,17 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
 
 import { buildCharacterSheetLayout } from '../../shared/character-sheet-layout.ts'
 import { buildCharacterSourceCoverageNote } from './character-sheet-notes.ts'
-import type { CharacterEvidenceProfile } from './character-evidence.ts'
-import type { CharacterPanelAssessment } from './panel-assessor.ts'
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterEvidenceProfile,
+} from './character-evidence.ts'
+import {
+    type CharacterPanelAssessment,
+} from './panel-assessor.ts'
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
 
 export type CharacterPanelImage = {
     panelId: string

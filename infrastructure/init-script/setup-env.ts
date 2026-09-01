@@ -1024,7 +1024,9 @@ async function main(): Promise<void> {
     console.log()
 }
 
-main().catch((error) => {
+try {
+    await main()
+} catch (error) {
     console.error(c.red('Error:'), error.message)
     process.exit(1)
-})
+}

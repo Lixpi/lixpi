@@ -1,5 +1,3 @@
-'use strict'
-
 import { randomUUID } from 'node:crypto'
 
 import { err } from '@lixpi/debug-tools'
@@ -33,8 +31,12 @@ import {
     type AssetDocCoordinate,
 } from '@lixpi/prosemirror'
 
-import type { Node as ProseMirrorNode } from 'prosemirror-model'
-import type { Transaction } from 'prosemirror-state'
+import {
+    type Node as ProseMirrorNode,
+} from 'prosemirror-model'
+import {
+    type Transaction,
+} from 'prosemirror-state'
 
 import { getAssetRecord } from '../models/asset.ts'
 import AssetDocumentService from '../services/asset-document-service.ts'

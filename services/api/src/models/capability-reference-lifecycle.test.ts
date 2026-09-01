@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -9,12 +7,12 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    BlobRecord,
-    BlobReference,
-    CapabilityCatalogRecord,
-    CapabilityManifest,
-    CapabilityRun,
+import {
+    type BlobRecord,
+    type BlobReference,
+    type CapabilityCatalogRecord,
+    type CapabilityManifest,
+    type CapabilityRun,
 } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({

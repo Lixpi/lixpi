@@ -1,16 +1,18 @@
-'use strict'
-
 import { v4 as uuid } from 'uuid'
 
-import type {
-    AiModelId,
-    MediaGenerationProblem,
-    ProviderName,
-    ProviderSafeMediaIntent,
+import {
+    type AiModelId,
+    type MediaGenerationProblem,
+    type ProviderName,
+    type ProviderSafeMediaIntent,
 } from '@lixpi/constants'
 
-import type { ProviderConstructor } from './provider-registry.ts'
-import type { ImageReferenceAdapter } from './image-reference-adapters.ts'
+import {
+    type ProviderConstructor,
+} from './provider-registry.ts'
+import {
+    type ImageReferenceAdapter,
+} from './image-reference-adapters.ts'
 import {
     assertNoForbiddenMediaReferenceLeak,
     buildProviderSafeReferenceContext,

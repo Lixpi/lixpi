@@ -1,5 +1,3 @@
-'use strict'
-
 export type JsonSchemaValidationResult =
     | { valid: true }
     | { valid: false; errors: string[] }

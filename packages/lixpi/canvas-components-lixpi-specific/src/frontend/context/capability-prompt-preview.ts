@@ -1,4 +1,6 @@
-import type { CapabilityModuleMeta } from '@lixpi/constants'
+import {
+    type CapabilityModuleMeta,
+} from '@lixpi/constants'
 import {
     createContextPreviewPopover,
     type ContextPreviewPopoverContent,

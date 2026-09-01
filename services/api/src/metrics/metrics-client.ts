@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     NATS_SUBJECTS,
     type CheckRequest,

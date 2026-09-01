@@ -1,10 +1,12 @@
-'use strict'
-
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
-import type { CharacterEvidenceProfile } from './character-evidence.ts'
-import type {
-    CharacterReferencePack,
-    CharacterReferencePackEntry,
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterEvidenceProfile,
+} from './character-evidence.ts'
+import {
+    type CharacterReferencePack,
+    type CharacterReferencePackEntry,
 } from './reference-pack.ts'
 
 export function selectCharacterPanelReferenceEntries(

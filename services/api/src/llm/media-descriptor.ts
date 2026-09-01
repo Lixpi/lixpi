@@ -1,5 +1,3 @@
-'use strict'
-
 import type NatsService from '@lixpi/nats-service'
 import {
     MEDIA_DESCRIPTOR_SUMMARY_MAX_LENGTH,
@@ -14,7 +12,9 @@ import {
     type VlmCallResult,
     type VlmJsonSchema,
 } from './structured-vlm/structured-vlm-client.ts'
-import type { ChatMessage } from './graph/state.ts'
+import {
+    type ChatMessage,
+} from './graph/state.ts'
 
 // Compact, model-friendly description of a single media still. Generated and
 // uploaded media both use this structured-VLM pass so descriptions describe the

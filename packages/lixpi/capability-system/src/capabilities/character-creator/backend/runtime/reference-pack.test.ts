@@ -1,5 +1,3 @@
-'use strict'
-
 import sharp from 'sharp'
 import {
     describe,
@@ -8,9 +6,13 @@ import {
     vi,
 } from 'vitest'
 
-import type { CharacterEvidenceProfile } from './character-evidence.ts'
+import {
+    type CharacterEvidenceProfile,
+} from './character-evidence.ts'
 import { buildCharacterReferencePack } from './reference-pack.ts'
-import type { CharacterTransientMediaStorePort } from './runtime-ports.ts'
+import {
+    type CharacterTransientMediaStorePort,
+} from './runtime-ports.ts'
 
 const capabilities = {
     maxReferenceImages: 16,

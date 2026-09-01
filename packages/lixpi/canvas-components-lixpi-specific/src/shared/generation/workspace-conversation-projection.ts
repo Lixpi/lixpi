@@ -1,9 +1,9 @@
-import type {
-    CanvasNode,
-    CanvasState,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
 } from '@lixpi/constants'
 import { getBranchMarkerConversationPreviewFromThreadContent } from '@lixpi/prosemirror/shared/thread-doc'
 import {

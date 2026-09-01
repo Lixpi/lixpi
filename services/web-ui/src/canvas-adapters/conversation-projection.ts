@@ -1,7 +1,11 @@
-import type { WorkspaceConversationProjectionPorts } from '@lixpi/canvas-components-lixpi-specific/shared'
-import AssetService from '$src/services/asset-service.ts'
+import {
+    type WorkspaceConversationProjectionPorts,
+} from '@lixpi/canvas-components-lixpi-specific/shared'
+import type AssetService from '$src/services/asset-service.ts'
 import { assetDocumentsStore } from '$src/stores/assetDocumentsStore.ts'
-import type { WorkspaceCanvasConversation } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+import {
+    type WorkspaceCanvasConversation,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 
 export function createConversationProjectionFetch(assetService: AssetService): WorkspaceConversationProjectionPorts<WorkspaceCanvasConversation>['fetchThread'] {
     return async ({ workspaceId, threadId }) => {

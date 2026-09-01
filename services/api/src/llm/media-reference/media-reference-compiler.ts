@@ -1,13 +1,11 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
-import type {
-    Asset,
-    MediaPromptSegment,
-    MediaReferenceBinding,
-    ProviderSafeMediaIntent,
-    UnresolvedReferenceBinding,
+import {
+    type Asset,
+    type MediaPromptSegment,
+    type MediaReferenceBinding,
+    type ProviderSafeMediaIntent,
+    type UnresolvedReferenceBinding,
 } from '@lixpi/constants'
 import {
     LEGACY_CAPABILITY_REFERENCE_NODE_TYPE,

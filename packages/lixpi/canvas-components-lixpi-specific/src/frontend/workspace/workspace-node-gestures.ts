@@ -1,10 +1,10 @@
-import type {
-    CanvasNode,
-    CanvasState,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    WorkspaceCollisionFlowSettings,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type WorkspaceCollisionFlowSettings,
 } from '@lixpi/constants'
 import {
     growParentBounds,
@@ -22,9 +22,13 @@ import {
     type NodeTransformOptions,
     type NodeResizeOptions,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type { WorkspaceGeometry } from '../../shared/branch-tree-layout/workspace-geometry.ts'
+import {
+    type WorkspaceGeometry,
+} from '../../shared/branch-tree-layout/workspace-geometry.ts'
 import { computeWorkspaceDragPlan } from '../../shared/canvas-node/workspace-drag-plan.ts'
-import type { WorkspaceMediaLayer } from '../media/workspace-media-layer.ts'
+import {
+    type WorkspaceMediaLayer,
+} from '../media/workspace-media-layer.ts'
 
 type BranchMarker = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type Scope = { workspaceId: string; sceneKey: string }

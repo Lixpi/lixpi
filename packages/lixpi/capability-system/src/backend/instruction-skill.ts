@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFile } from 'node:fs/promises'
 
 import {
@@ -11,9 +9,9 @@ import {
     type CapabilityResourceRole,
 } from '@lixpi/constants'
 
-import type {
-    CapabilityPackageSeedContext,
-    CapabilitySkillPackageInstaller,
+import {
+    type CapabilityPackageSeedContext,
+    type CapabilitySkillPackageInstaller,
 } from './capability-module.ts'
 export type InstructionSkillDefinition = {
     capabilityId: string

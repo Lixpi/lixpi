@@ -1,22 +1,28 @@
-import type {
-    CanvasState,
-    CanvasNode,
-    BranchOriginCanvasNode,
-    BranchForkCanvasNode,
-    BranchLineCanvasNode,
-    MediaBranchLineagePlan,
-    MediaRunLineageAssignment,
-    MediaGenerationRunMeta,
-    WorkspaceEdge,
-    AiModelId,
+import {
+    type CanvasState,
+    type CanvasNode,
+    type BranchOriginCanvasNode,
+    type BranchForkCanvasNode,
+    type BranchLineCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaRunLineageAssignment,
+    type MediaGenerationRunMeta,
+    type WorkspaceEdge,
+    type AiModelId,
 } from '@lixpi/constants'
 import {
-    WorkspaceGenerationPlacements,
+    type WorkspaceGenerationPlacements,
     type PendingBranchMarkerRecord,
 } from './workspace-generation-placements.ts'
-import { WorkspaceLineageProjection } from '../branch-tree-layout/workspace-lineage-projection.ts'
-import { WorkspaceGeometry } from '../branch-tree-layout/workspace-geometry.ts'
-import type { BranchMarkerNode } from '../branch-tree-layout/generated-media-rebalance.ts'
+import {
+    type WorkspaceLineageProjection,
+} from '../branch-tree-layout/workspace-lineage-projection.ts'
+import {
+    type WorkspaceGeometry,
+} from '../branch-tree-layout/workspace-geometry.ts'
+import {
+    type BranchMarkerNode,
+} from '../branch-tree-layout/generated-media-rebalance.ts'
 import { getSupersededPreflightNodeIdsForPlannedOwner } from '../branch-tree-layout/marker-render-ownership.ts'
 import { getBranchMarkerThreadId } from '../review/workspace-history.ts'
 import { uniqueAiModelIds } from './model-identity.ts'

@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import {
@@ -11,11 +9,11 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    Asset,
-    MediaGenerationRequest,
-    MediaReferenceBinding,
-    ProviderIdentityVerification,
+import {
+    type Asset,
+    type MediaGenerationRequest,
+    type MediaReferenceBinding,
+    type ProviderIdentityVerification,
 } from '@lixpi/constants'
 
 const mocks = vi.hoisted(() => ({

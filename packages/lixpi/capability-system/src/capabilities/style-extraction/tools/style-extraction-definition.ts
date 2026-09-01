@@ -1,5 +1,3 @@
-'use strict'
-
 import { readFile } from 'node:fs/promises'
 
 import {
@@ -9,7 +7,9 @@ import {
     type CapabilityResourceRole,
     type CapabilityValueBinding,
 } from '@lixpi/constants'
-import type { CapabilityPackageSeedContext } from '../../../backend/capability-module.ts'
+import {
+    type CapabilityPackageSeedContext,
+} from '../../../backend/capability-module.ts'
 import {
     STYLE_EXTRACTION_AXES_RESOURCE_ID,
     STYLE_EXTRACTION_AXES_SKILL_ID,

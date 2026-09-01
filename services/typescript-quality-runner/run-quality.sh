@@ -3,9 +3,11 @@
 set -eu
 
 repository_dir="/usr/src/repository"
-tool_dir="$repository_dir/services/typescript-quality-runner"
+tool_dir="/usr/src/quality-runner"
+runner_dir="$repository_dir/services/typescript-quality-runner"
 dprint_bin="$tool_dir/node_modules/.bin/dprint"
 oxlint_bin="$tool_dir/node_modules/.bin/oxlint"
+import_order_checker="$runner_dir/import-specifier-order.mjs"
 dprint_config="$repository_dir/dprint.json"
 oxlint_config="$repository_dir/.oxlintrc.json"
 
@@ -24,22 +26,28 @@ run_action() {
         check)
             "$dprint_bin" check --config "$dprint_config" "$@"
             "$oxlint_bin" --config "$oxlint_config" --deny-warnings "$@"
+            node "$import_order_checker" check "$@"
             ;;
         fix)
             "$dprint_bin" fmt --config "$dprint_config" "$@"
             "$oxlint_bin" --config "$oxlint_config" --fix --deny-warnings "$@"
+            node "$import_order_checker" fix "$@"
             ;;
         lint)
             "$oxlint_bin" --config "$oxlint_config" --deny-warnings "$@"
+            node "$import_order_checker" check "$@"
             ;;
         lint-fix)
             "$oxlint_bin" --config "$oxlint_config" --fix --deny-warnings "$@"
+            node "$import_order_checker" fix "$@"
             ;;
         format)
             "$dprint_bin" fmt --config "$dprint_config" "$@"
+            node "$import_order_checker" fix "$@"
             ;;
         format-check)
             "$dprint_bin" check --config "$dprint_config" "$@"
+            node "$import_order_checker" check "$@"
             ;;
         *)
             echo "Unknown action: $action" >&2
@@ -181,7 +189,7 @@ case "$domain" in
         run_all "${1:-check}"
         ;;
     self-test)
-        sh "$tool_dir/test-quality.sh"
+        sh "$runner_dir/test-quality.sh"
         ;;
     web-ui|api|nex|ai-model-registry|docs-site|infrastructure|random-useful-things)
         run_domain "$domain" "${1:-check}"

@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import NATS_Service from '@lixpi/nats-service'

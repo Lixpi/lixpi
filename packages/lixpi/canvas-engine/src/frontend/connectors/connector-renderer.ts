@@ -4,8 +4,12 @@ import {
     type BoundedZoomScalingOptions,
     type CanvasViewport,
 } from '../../shared/index.ts'
-import type { CanvasDrawingSurface } from '../rendering/drawing-scope.ts'
-import type { ResourceHandle } from '../rendering/resources.ts'
+import {
+    type CanvasDrawingSurface,
+} from '../rendering/drawing-scope.ts'
+import {
+    type ResourceHandle,
+} from '../rendering/resources.ts'
 
 export type ConnectorMarker = { paths: readonly string[]; width: number; reference: { x: number; y: number } }
 export type ConnectorArrow = { x: number; y: number; angle: number; baseScreenSize: number }

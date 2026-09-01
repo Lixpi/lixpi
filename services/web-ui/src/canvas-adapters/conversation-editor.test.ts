@@ -5,8 +5,12 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { EditorView } from 'prosemirror-view'
-import type { CanvasConversationEditorMount } from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
+import {
+    type EditorView,
+} from 'prosemirror-view'
+import {
+    type CanvasConversationEditorMount,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/workspace'
 import {
     doc,
     p,

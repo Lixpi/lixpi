@@ -1,5 +1,3 @@
-'use strict'
-
 import { Easing } from '@lixpi/ui-primitives/animation'
 
 export type TravelingOutlineStyle = {

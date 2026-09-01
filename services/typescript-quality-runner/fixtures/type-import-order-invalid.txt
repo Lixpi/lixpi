@@ -1,0 +1,10 @@
+import {
+    type CanvasEngineRect,
+    applyNodeGeometry,
+    type ViewportSnapshot,
+} from '@lixpi/canvas-engine/shared'
+
+void applyNodeGeometry
+type Rect = CanvasEngineRect
+type Viewport = ViewportSnapshot
+void (null as Rect | Viewport | null)

@@ -1,8 +1,8 @@
-'use strict'
-
 import NATS_Service from '@lixpi/nats-service'
-import { NATS_SUBJECTS } from '@lixpi/constants'
-import type { MediaGenerationRunMeta } from '@lixpi/constants'
+import {
+    NATS_SUBJECTS,
+    type MediaGenerationRunMeta,
+} from '@lixpi/constants'
 
 export const ASSET_MAINTENANCE_STREAM_NAME = 'ASSET_MAINTENANCE'
 export const ASSET_MAINTENANCE_CONSUMER_NAME = 'api-asset-maintenance'

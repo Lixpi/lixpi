@@ -6,12 +6,16 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    Asset,
-    AssetMeta,
+import {
+    type Asset,
+    type AssetMeta,
 } from '@lixpi/constants'
-import type { CapabilityArtifactFrontendDefinition } from '@lixpi/capability-system/frontend'
-import type { CapabilityArtifactSharedDefinition } from '@lixpi/capability-system/shared'
+import {
+    type CapabilityArtifactFrontendDefinition,
+} from '@lixpi/capability-system/frontend'
+import {
+    type CapabilityArtifactSharedDefinition,
+} from '@lixpi/capability-system/shared'
 import {
     createArtifactLibraryPanel,
     type ArtifactLibraryPanelInstance,

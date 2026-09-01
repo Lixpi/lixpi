@@ -6,10 +6,12 @@ import {
     type ConnectionPolicy,
     type NodeConfig,
 } from '@lixpi/canvas-engine/frontend/connectors'
-import type { EngineNode } from '@lixpi/canvas-engine/shared'
-import type {
-    CanvasNode,
-    WorkspaceEdge,
+import {
+    type EngineNode,
+} from '@lixpi/canvas-engine/shared'
+import {
+    type CanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import { isBranchLineageMarkerNode } from '../../shared/branch-tree-layout/branch-lineage-state.ts'
 import {

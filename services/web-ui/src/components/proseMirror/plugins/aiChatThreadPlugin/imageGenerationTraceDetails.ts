@@ -1,9 +1,9 @@
-import type {
-    CapabilityGenerationTrace,
-    ImageGenerationTrace,
-    ImageGenerationTraceExcludedReference,
-    ImageGenerationTraceReference,
-    VideoGenerationTrace,
+import {
+    type CapabilityGenerationTrace,
+    type ImageGenerationTrace,
+    type ImageGenerationTraceExcludedReference,
+    type ImageGenerationTraceReference,
+    type VideoGenerationTrace,
 } from '@lixpi/constants'
 
 import AuthService from '$src/services/auth-service.ts'
@@ -232,7 +232,7 @@ const createReferenceTile = (
         unavailable.hidden = true
         tile.classList.remove('is-unavailable')
     }
-    image.onerror = () => {
+    image.onerror = async () => {
         const retryNextSource = async () => {
             sourceIndex += 1
             const sources = await getResolvedSources()
@@ -243,7 +243,11 @@ const createReferenceTile = (
             }
             showUnavailable()
         }
-        retryNextSource().catch(showUnavailable)
+        try {
+            await retryNextSource()
+        } catch {
+            showUnavailable()
+        }
     }
     const loadImage = async () => {
         try {

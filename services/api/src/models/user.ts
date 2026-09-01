@@ -1,11 +1,11 @@
-'use strict'
-
 import * as process from 'process'
 import {
     getDynamoDbTableStageName,
     type User,
 } from '@lixpi/constants'
-import type { Partial } from 'type-fest'
+import {
+    type Partial,
+} from 'type-fest'
 
 const {
     ORG_NAME,

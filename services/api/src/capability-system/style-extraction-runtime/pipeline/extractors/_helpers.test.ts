@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -25,9 +23,9 @@ import {
     runAxisVlm,
     wrapAxisSchema,
 } from './_helpers.ts'
-import type {
-    SceneAssessment,
-    StyleExtractionState,
+import {
+    type SceneAssessment,
+    type StyleExtractionState,
 } from '../types.ts'
 
 function makeScene(overrides: Partial<SceneAssessment> = {}): SceneAssessment {

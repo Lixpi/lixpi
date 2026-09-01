@@ -1,5 +1,3 @@
-'use strict'
-
 type Node = { type?: string; text?: string; content?: Node[]; attrs?: Record<string, unknown> }
 
 export const extractContentFromProseMirror = (content: string | object): { text: string; imageSrcs: string[] } => {

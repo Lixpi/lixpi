@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import { info } from '@lixpi/debug-tools'
@@ -12,12 +10,16 @@ import {
     type CharacterPanelOutputBinding,
     type CharacterPanelSpec,
 } from '../../shared/character-sheet-media-plan.ts'
-import type { CapabilityMediaExecutionContext } from '../../../../backend/capability-media-strategy.ts'
-import type {
-    CharacterImageGenerationPort,
-    CharacterImageReference,
+import {
+    type CapabilityMediaExecutionContext,
+} from '../../../../backend/capability-media-strategy.ts'
+import {
+    type CharacterImageGenerationPort,
+    type CharacterImageReference,
 } from './runtime-ports.ts'
-import type { CharacterSourceMedium } from './character-evidence.ts'
+import {
+    type CharacterSourceMedium,
+} from './character-evidence.ts'
 import {
     hasCharacterPoseReference,
     loadCharacterPoseReference,

@@ -1,11 +1,9 @@
-'use strict'
-
 import { applyNodeGeometry } from '@lixpi/canvas-engine/shared'
-import type {
-    CanvasGeometryUpdate,
-    CanvasNode,
-    CanvasState,
-    WorkspaceEdge,
+import {
+    type CanvasGeometryUpdate,
+    type CanvasNode,
+    type CanvasState,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     getGeneratedMediaRunIdentity,

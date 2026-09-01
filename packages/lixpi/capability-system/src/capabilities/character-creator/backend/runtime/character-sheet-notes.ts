@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    CharacterEvidenceProfile,
-    CharacterTargetAngle,
+import {
+    type CharacterEvidenceProfile,
+    type CharacterTargetAngle,
 } from './character-evidence.ts'
 
 const ANGLE_LABELS: Readonly<Record<CharacterTargetAngle, string>> = {

@@ -9,7 +9,9 @@ import {
     BranchMarkerPromptParts,
     type BranchPromptReferenceRenderer,
 } from './branch-marker-prompt.ts'
-import type { BranchMarkerPromptPart } from '../../shared/branch-tree-layout/marker-prompt-parts.ts'
+import {
+    type BranchMarkerPromptPart,
+} from '../../shared/branch-tree-layout/marker-prompt-parts.ts'
 
 const reference: BranchMarkerPromptPart = { type: 'media', reference: { referenceType: 'media', assetId: 'asset', mediaKind: 'image', displayName: 'Image' } }
 

@@ -1,5 +1,3 @@
-'use strict'
-
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
@@ -7,7 +5,7 @@ import * as pulumi from '@pulumi/pulumi'
  * Helper functions for working with Caddy-managed certificates
  */
 
-export interface CertificateHelper {
+export type CertificateHelper = {
     /**
      * Gets certificate ARN or path for use in other services
      */

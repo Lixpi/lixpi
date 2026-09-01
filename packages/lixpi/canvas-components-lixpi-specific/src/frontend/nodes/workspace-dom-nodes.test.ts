@@ -6,9 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    OperationStatusCanvasNode,
+import {
+    type CanvasNode,
+    type OperationStatusCanvasNode,
 } from '@lixpi/constants'
 import { WorkspaceDomNodes } from './workspace-dom-nodes.ts'
 import { WorkspaceNodeShells } from './workspace-node-shells.ts'

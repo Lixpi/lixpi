@@ -1,18 +1,18 @@
-'use strict'
-
-import type {
-    CanvasGeometryUpdate,
-    CapabilityJsonValue,
-    CapabilityReasoningModelVariant,
-    CapabilityRunEvent,
-    ExecutionTraceHandle,
+import {
+    type CanvasGeometryUpdate,
+    type CapabilityJsonValue,
+    type CapabilityReasoningModelVariant,
+    type CapabilityRunEvent,
+    type ExecutionTraceHandle,
 } from '@lixpi/constants'
 
 import { CapabilityError } from '../shared/capability-errors.ts'
-import type { CapabilityTraceRecorder } from './capability-trace-recorder.ts'
-import type {
-    LoadedCapabilityResource,
-    SealedResolvedCapabilityPlan,
+import {
+    type CapabilityTraceRecorder,
+} from './capability-trace-recorder.ts'
+import {
+    type LoadedCapabilityResource,
+    type SealedResolvedCapabilityPlan,
 } from './capability-resolver.ts'
 
 export type CapabilityActionAuthorizationContext = {

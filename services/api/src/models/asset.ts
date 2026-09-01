@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 import { v4 as uuid } from 'uuid'
 

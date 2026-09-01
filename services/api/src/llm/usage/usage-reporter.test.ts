@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -7,7 +5,9 @@ import {
 } from 'vitest'
 
 import { UsageReporter } from './usage-reporter.ts'
-import type { AiModelMetaInfo } from '../graph/state.ts'
+import {
+    type AiModelMetaInfo,
+} from '../graph/state.ts'
 
 const reporter = new UsageReporter()
 

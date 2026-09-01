@@ -1,29 +1,33 @@
-import type {
-    AudioCanvasNode,
-    CanvasNode,
-    DocumentMediaCanvasNode,
-    ImageCanvasNode,
-    VideoCanvasNode,
+import {
+    type AudioCanvasNode,
+    type CanvasNode,
+    type DocumentMediaCanvasNode,
+    type ImageCanvasNode,
+    type VideoCanvasNode,
 } from '@lixpi/constants'
-import type {
-    CanvasEngineRect,
-    CanvasViewport,
-    EngineNode,
-    NodeGeometryPolicy,
+import {
+    type CanvasEngineRect,
+    type CanvasViewport,
+    type EngineNode,
+    type NodeGeometryPolicy,
 } from '@lixpi/canvas-engine/shared'
 import {
     NodeRegistry,
     type ComponentContext,
     type NodeView,
 } from '@lixpi/canvas-engine/frontend/runtime'
-import type { MediaDescriptor } from '@lixpi/canvas-engine/frontend/media'
+import {
+    type MediaDescriptor,
+} from '@lixpi/canvas-engine/frontend/media'
 import {
     ImageSurface,
     createImageNodeRegistration,
     createPlaybackNodeRegistration,
     type NativePlayback,
 } from '@lixpi/canvas-components/media'
-import { WorkspaceMediaSources } from './workspace-media-sources.ts'
+import {
+    type WorkspaceMediaSources,
+} from './workspace-media-sources.ts'
 
 export type WorkspaceMediaNode = ImageCanvasNode | VideoCanvasNode | AudioCanvasNode | DocumentMediaCanvasNode
 export type WorkspaceMediaNodeData = { node: WorkspaceMediaNode; media: MediaDescriptor | null; framePending: boolean }

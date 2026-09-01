@@ -1,10 +1,10 @@
-'use strict'
+import {
+    type CanvasNode,
+} from '@lixpi/constants'
 
-import type { CanvasNode } from '@lixpi/constants'
-
-import type {
-    CanvasEnginePoint,
-    CanvasEngineRect,
+import {
+    type CanvasEnginePoint,
+    type CanvasEngineRect,
 } from '@lixpi/canvas-engine/shared'
 
 export type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>

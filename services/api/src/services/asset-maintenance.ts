@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 
 import NATS_Service from '@lixpi/nats-service'
@@ -19,13 +17,12 @@ import {
 } from '@lixpi/constants'
 
 import BlobModel, { buildBlobReferenceBatchOperations } from '../models/blob.ts'
-import {
+import AssetModel, {
     buildAssetSearchRecord,
     buildAssetPrincipalScopeKey,
     buildAssetScopeAndOwnerKey,
     publishAssetEvent,
 } from '../models/asset.ts'
-import AssetModel from '../models/asset.ts'
 import { enqueueBlobDeletion } from './asset-maintenance-queue.ts'
 
 const { ORG_NAME, STAGE } = process.env

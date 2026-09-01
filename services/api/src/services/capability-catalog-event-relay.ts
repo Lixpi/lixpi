@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     getCapabilityUserEventSubject,
     NATS_SUBJECTS,
 } from '@lixpi/constants'
 import NATS_Service from '@lixpi/nats-service'
 
-import type { CapabilityRequesterContext } from '../models/capability.ts'
+import {
+    type CapabilityRequesterContext,
+} from '../models/capability.ts'
 
 export type CapabilityCatalogInvalidation = {
     capabilityId: string

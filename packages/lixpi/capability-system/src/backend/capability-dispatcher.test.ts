@@ -5,12 +5,12 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    CapabilityManifest,
-    CapabilityResourceRef,
-    CapabilityRun,
-    CapabilityRunEvent,
-    ResolvedCapabilityPlan,
+import {
+    type CapabilityManifest,
+    type CapabilityResourceRef,
+    type CapabilityRun,
+    type CapabilityRunEvent,
+    type ResolvedCapabilityPlan,
 } from '@lixpi/constants'
 
 import { CapabilityActionRegistry } from './capability-action-registry.ts'

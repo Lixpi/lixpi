@@ -48,7 +48,7 @@ function getBraceBalancedBlock(source: string, selector: string): string {
 }
 
 describe('ai-chat-thread.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'ai-chat-thread.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'ai-chat-thread.scss'), 'utf-8')
 
     it('defines thread and user message wrapper primitives', () => {
         expectSourceToContain(scss, '.ai-chat-thread-wrapper')
@@ -62,7 +62,7 @@ describe('ai-chat-thread.scss', () => {
     // they take the same one from the shared partial, so they cannot drift.
     it('takes the dark reference palette from the shared partial, declaring no colors of its own', () => {
         const workspaceScss = readFileSync(
-            resolve(__dirname, '../../../../canvas-adapters/workspace-theme.scss'),
+            resolve(import.meta.dirname, '../../../../canvas-adapters/workspace-theme.scss'),
             'utf-8',
         )
 

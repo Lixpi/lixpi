@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     beforeEach,
     describe,
@@ -8,9 +6,9 @@ import {
     vi,
 } from 'vitest'
 
-import type {
-    CapabilityCatalogRecord,
-    CapabilityManifest,
+import {
+    type CapabilityCatalogRecord,
+    type CapabilityManifest,
 } from '@lixpi/constants'
 
 const { getContentAddressedBlobMock } = vi.hoisted(() => ({

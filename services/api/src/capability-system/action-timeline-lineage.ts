@@ -1,10 +1,8 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
-import type {
-    CapabilityReasoningModelVariant,
-    MediaRunLineageAssignment,
+import {
+    type CapabilityReasoningModelVariant,
+    type MediaRunLineageAssignment,
 } from '@lixpi/constants'
 
 export function buildActionTimelineLineageAssignment(args: {

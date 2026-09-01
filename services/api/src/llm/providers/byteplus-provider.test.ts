@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     beforeEach,
@@ -18,7 +16,9 @@ const debugTools = vi.hoisted(() => ({
 vi.mock('@lixpi/debug-tools', () => debugTools)
 
 import { BytePlusProvider } from './byteplus-provider.ts'
-import type { BaseProviderDeps } from './base-provider.ts'
+import {
+    type BaseProviderDeps,
+} from './base-provider.ts'
 import { CURRENT_MEDIA_PROVIDER_DEFINITIONS } from './current-media-provider-definitions.ts'
 
 const byteplusMocks = vi.hoisted(() => ({

@@ -1,8 +1,8 @@
-import type {
-    CapabilityRun,
-    CapabilityRunEvent,
-    CapabilityRunStepStatus,
-    ExecutionTrace,
+import {
+    type CapabilityRun,
+    type CapabilityRunEvent,
+    type CapabilityRunStepStatus,
+    type ExecutionTrace,
 } from '@lixpi/constants'
 import {
     createProgressTimeline,
@@ -11,9 +11,13 @@ import {
 } from '@lixpi/ui-kit/components/progress-timeline'
 
 import { createExecutionTraceTimelineDetailAdapter } from '$src/components/executionTrace/index.ts'
-import { type PromptReferencePreviewRenderer } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
+import {
+    type PromptReferencePreviewRenderer,
+} from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
-import type { CapabilityCatalogClient } from '$src/services/capability-catalog-client.ts'
+import {
+    type CapabilityCatalogClient,
+} from '$src/services/capability-catalog-client.ts'
 import { html } from '@lixpi/ui-primitives/dom'
 
 export type CapabilityProgressStep = {

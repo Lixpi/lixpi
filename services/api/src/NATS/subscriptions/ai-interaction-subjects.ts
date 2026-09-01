@@ -1,5 +1,3 @@
-'use strict'
-
 import { createHash } from 'node:crypto'
 
 import chalk from 'chalk'
@@ -64,7 +62,9 @@ import {
 } from '@lixpi/canvas-components-lixpi-specific/shared'
 
 import AiModel from '../../models/ai-model.ts'
-import type { LlmModule } from '../../llm/index.ts'
+import {
+    type LlmModule,
+} from '../../llm/index.ts'
 import MediaGenerationRequestModel from '../../models/media-generation-request.ts'
 import Workspace from '../../models/workspace.ts'
 import Organization from '../../models/organization.ts'
@@ -104,9 +104,7 @@ import {
     formatProviderSafeReferenceContext,
 } from '../../llm/media-reference/provider-safe-context.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
-import {
-    resolveScalarMediaModelSelection,
-} from '../../llm/orchestration/scalar-media-output-routing.ts'
+import { resolveScalarMediaModelSelection } from '../../llm/orchestration/scalar-media-output-routing.ts'
 
 const { AI_INTERACTION_SUBJECTS } = NATS_SUBJECTS
 type PipelineResumePayload = {

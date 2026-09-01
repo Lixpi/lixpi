@@ -1,6 +1,6 @@
-import type {
-    AiInteractionMediaGenerationRequest,
-    Asset,
+import {
+    type AiInteractionMediaGenerationRequest,
+    type Asset,
 } from '@lixpi/constants'
 import {
     buildCanvasConversationContent,

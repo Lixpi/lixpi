@@ -4,7 +4,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CanvasDrawingSurface } from './drawing-scope.ts'
+import {
+    type CanvasDrawingSurface,
+} from './drawing-scope.ts'
 import { RectangleOverlay } from './rectangle-overlay.ts'
 
 describe('RectangleOverlay', () => {

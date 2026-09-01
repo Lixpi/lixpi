@@ -1,16 +1,20 @@
-'use strict'
-
-import type {
-    CapabilityExpectedInput,
-    CapabilityJsonValue,
-    CapabilityKind,
-    CapabilityModuleDescriptionSheet,
-    CapabilityModuleMeta,
+import {
+    type CapabilityExpectedInput,
+    type CapabilityJsonValue,
+    type CapabilityKind,
+    type CapabilityModuleDescriptionSheet,
+    type CapabilityModuleMeta,
 } from '@lixpi/constants'
 
-import { CapabilityActionRegistry } from './capability-action-registry.ts'
-import type { CapabilityMediaStrategyRegistry } from './capability-media-strategy-registry.ts'
-import type { CapabilityMediaStrategy } from './capability-media-strategy.ts'
+import {
+    type CapabilityActionRegistry,
+} from './capability-action-registry.ts'
+import {
+    type CapabilityMediaStrategyRegistry,
+} from './capability-media-strategy-registry.ts'
+import {
+    type CapabilityMediaStrategy,
+} from './capability-media-strategy.ts'
 
 export type CapabilityPackageSeedContext = {
     allowedActions: ReadonlySet<string>

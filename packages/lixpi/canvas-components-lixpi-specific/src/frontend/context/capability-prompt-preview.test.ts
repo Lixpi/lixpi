@@ -6,7 +6,9 @@ import {
     it,
     vi,
 } from 'vitest'
-import type { CapabilityModuleMeta } from '@lixpi/constants'
+import {
+    type CapabilityModuleMeta,
+} from '@lixpi/constants'
 import {
     CapabilityModulePromiseCache,
     createCapabilityPromptReferencePreview,

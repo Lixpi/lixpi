@@ -1,12 +1,12 @@
-'use strict'
-
 import {
     describe,
     expect,
     it,
 } from 'vitest'
 
-import { CapabilityError } from '@lixpi/capability-system/backend'
+import {
+    type CapabilityError,
+} from '@lixpi/capability-system/backend'
 
 import { assessProviderInputBudget } from './provider-input-budget.ts'
 

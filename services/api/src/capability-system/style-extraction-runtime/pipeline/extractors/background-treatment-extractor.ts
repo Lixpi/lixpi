@@ -1,6 +1,6 @@
-'use strict'
-
-import type { StyleExtractor } from '../types.ts'
+import {
+    type StyleExtractor,
+} from '../types.ts'
 import { runAxisVlm } from './_helpers.ts'
 import { registerExtractor } from './registry.ts'
 

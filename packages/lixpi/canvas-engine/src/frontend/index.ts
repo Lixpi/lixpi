@@ -1,5 +1,3 @@
-'use strict'
-
 export * from '../shared/index.ts'
 export * from './media/index.ts'
 export * from './viewport/index.ts'

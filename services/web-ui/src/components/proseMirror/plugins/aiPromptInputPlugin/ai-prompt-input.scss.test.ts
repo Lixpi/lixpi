@@ -15,7 +15,7 @@ function expectSourceNotToContain(source: string, snippet: string): void {
 }
 
 describe('ai-prompt-input.scss', () => {
-    const scss = readFileSync(resolve(__dirname, 'ai-prompt-input.scss'), 'utf-8')
+    const scss = readFileSync(resolve(import.meta.dirname, 'ai-prompt-input.scss'), 'utf-8')
 
     it('defines floating input host and wrapper states', () => {
         expectSourceToContain(scss, '.ai-prompt-input-floating')

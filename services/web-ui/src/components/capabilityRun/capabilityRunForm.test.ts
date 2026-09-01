@@ -8,7 +8,9 @@ import {
     coerceCapabilityFormValue,
     readCapabilityRunForm,
 } from '$src/components/capabilityRun/capabilityRunForm.ts'
-import type { CapabilityInputSchema } from '$src/services/capability-catalog-client.ts'
+import {
+    type CapabilityInputSchema,
+} from '$src/services/capability-catalog-client.ts'
 
 describe('Capability run form', () => {
     const schema: CapabilityInputSchema = {

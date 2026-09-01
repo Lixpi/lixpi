@@ -1,12 +1,10 @@
-'use strict'
-
 import chalk from 'chalk'
 import ora from 'ora'
 import {
-    Stack,
     LocalWorkspace,
+    type Stack,
+    type Deployment,
 } from '@pulumi/pulumi/automation/index.js'
-import type { Deployment } from '@pulumi/pulumi/automation/index.js'
 // Lightweight local info logger to avoid duplicate verbose diagnostics
 const info = (...args: any[]) => console.log('[info]', ...args)
 import * as aws from '@pulumi/aws'

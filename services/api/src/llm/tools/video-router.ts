@@ -1,5 +1,3 @@
-'use strict'
-
 import * as process from 'node:process'
 
 import {
@@ -8,22 +6,28 @@ import {
     err,
 } from '@lixpi/debug-tools'
 
-import type { ProviderRegistry } from '../providers/provider-registry.ts'
-import type { ProviderState } from '../graph/state.ts'
-import type {
-    ProseMirrorContentHandler,
-    ProseMirrorSnapshotProvider,
+import {
+    type ProviderRegistry,
+} from '../providers/provider-registry.ts'
+import {
+    getVideoMaxReferenceImages,
+    type ProviderState,
+} from '../graph/state.ts'
+import {
+    type ProseMirrorContentHandler,
+    type ProseMirrorSnapshotProvider,
 } from '../graph/stream-publisher.ts'
 import {
     createProviderCancellationError,
     isProviderCancellationError,
     throwIfProviderCancelled,
 } from '../providers/provider-cancellation.ts'
-import { getVideoMaxReferenceImages } from '../graph/state.ts'
 import { MediaGenerationRunPlanner } from '../lineage/media-generation-run-planner.ts'
 import { buildVideoModelPrompt } from './video-generation-trace.ts'
 import { MediaGenerationRequestService } from '../../services/media-generation-request-service.ts'
-import type { MediaGenerationProblem } from '@lixpi/constants'
+import {
+    type MediaGenerationProblem,
+} from '@lixpi/constants'
 
 const fingerprintRef = (url: string): string => {
     if (!url) return '<empty>'

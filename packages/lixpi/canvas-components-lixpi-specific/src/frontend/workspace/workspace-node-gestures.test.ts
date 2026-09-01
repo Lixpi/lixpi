@@ -6,18 +6,18 @@ import {
     it,
     vi,
 } from 'vitest'
-import type {
-    CanvasNode,
-    CanvasState,
-    ImageCanvasNode,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type ImageCanvasNode,
 } from '@lixpi/constants'
 import {
     computeWorldPosition,
     type CanvasEngineRect as Rect,
 } from '@lixpi/canvas-engine/shared'
-import type {
-    NodeTransformOptions,
-    NodeResizeOptions,
+import {
+    type NodeTransformOptions,
+    type NodeResizeOptions,
 } from '@lixpi/canvas-engine/frontend/runtime'
 import { WorkspaceGeometry } from '../../shared/branch-tree-layout/workspace-geometry.ts'
 import { createLixpiCanvasSettings } from '../settings/canvas-settings.ts'

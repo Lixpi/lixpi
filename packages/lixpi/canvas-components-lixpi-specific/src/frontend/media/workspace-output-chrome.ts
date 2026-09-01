@@ -32,7 +32,9 @@ import {
     GeneratedOutputNodeChrome,
     type GeneratedOutputNodeChromeOptions,
 } from './generated-output-node-chrome.ts'
-import type { WorkspaceVideoChrome } from './workspace-video-chrome.ts'
+import {
+    type WorkspaceVideoChrome,
+} from './workspace-video-chrome.ts'
 
 type MediaNode = ImageCanvasNode | VideoCanvasNode
 

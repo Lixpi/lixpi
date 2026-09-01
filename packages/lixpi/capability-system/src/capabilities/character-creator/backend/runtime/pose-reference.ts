@@ -1,9 +1,11 @@
-'use strict'
-
 import { readFile } from 'node:fs/promises'
 
-import type { CharacterPanelSpec } from '../../shared/character-sheet-media-plan.ts'
-import type { CharacterImageReference } from './runtime-ports.ts'
+import {
+    type CharacterPanelSpec,
+} from '../../shared/character-sheet-media-plan.ts'
+import {
+    type CharacterImageReference,
+} from './runtime-ports.ts'
 
 const poseReferenceFileByPanelId: Readonly<Record<string, string>> = {
     'head-front-neutral': 'head-front-neutral.png',

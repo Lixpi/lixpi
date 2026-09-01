@@ -1,6 +1,8 @@
-import type { CanvasState } from '@lixpi/constants'
 import {
-    CanvasPersistenceController,
+    type CanvasState,
+} from '@lixpi/constants'
+import {
+    type CanvasPersistenceController,
     type WorkspaceCanvasSnapshot,
 } from './canvas-persistence-controller.ts'
 

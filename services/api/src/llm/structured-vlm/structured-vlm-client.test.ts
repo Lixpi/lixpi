@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     afterEach,
     describe,
@@ -10,7 +8,9 @@ import {
 } from 'vitest'
 
 import * as debugTools from '@lixpi/debug-tools'
-import type { AiModelInferenceCapabilities } from '@lixpi/constants'
+import {
+    type AiModelInferenceCapabilities,
+} from '@lixpi/constants'
 
 import {
     callStructuredVlm,

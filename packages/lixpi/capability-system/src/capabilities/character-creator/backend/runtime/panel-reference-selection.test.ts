@@ -1,5 +1,3 @@
-'use strict'
-
 import {
     describe,
     expect,
@@ -9,7 +7,9 @@ import {
 import { buildCharacterSheetRenderPlan } from '../../shared/character-sheet-media-plan.ts'
 import { emptyCharacterEvidenceProfile } from './character-evidence.ts'
 import { selectCharacterPanelReferenceEntries } from './panel-reference-selection.ts'
-import type { CharacterReferencePackEntry } from './reference-pack.ts'
+import {
+    type CharacterReferencePackEntry,
+} from './reference-pack.ts'
 
 const coordinate = {
     organizationId: 'org-1',

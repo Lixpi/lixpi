@@ -3,16 +3,14 @@ import {
     NATS_SUBJECTS,
     type CapabilityCatalogRecord,
     type CapabilityManifest,
+    type CapabilityJsonValue,
+    type CapabilityKind,
+    type CapabilityMeta,
+    type CapabilityRun,
+    type CapabilityRunEvent,
+    type CapabilityScope,
 } from '@lixpi/constants'
 import { validateCapabilityManifest } from '../shared/capability-validation.ts'
-import type {
-    CapabilityJsonValue,
-    CapabilityKind,
-    CapabilityMeta,
-    CapabilityRun,
-    CapabilityRunEvent,
-    CapabilityScope,
-} from '@lixpi/constants'
 
 export const CAPABILITY_CATALOG_SUBJECTS = {
     list: NATS_SUBJECTS.CAPABILITY_SUBJECTS.CATALOG.LIST,

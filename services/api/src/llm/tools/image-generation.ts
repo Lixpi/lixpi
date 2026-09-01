@@ -1,12 +1,12 @@
-'use strict'
-
 import { warn } from '@lixpi/debug-tools'
 
-import type {
-    AiModelMetaInfo,
-    ChatMessage,
+import {
+    type AiModelMetaInfo,
+    type ChatMessage,
 } from '../graph/state.ts'
-import type { ProviderName } from '@lixpi/constants'
+import {
+    type ProviderName,
+} from '@lixpi/constants'
 
 export const TOOL_NAME = 'generate_image'
 

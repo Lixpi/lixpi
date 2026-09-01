@@ -1,9 +1,7 @@
-'use strict'
-
-import type {
-    CanvasNode,
-    CanvasState,
-    WorkspaceEdge,
+import {
+    type CanvasNode,
+    type CanvasState,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
 import {
     describe,

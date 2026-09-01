@@ -1,29 +1,23 @@
-'use strict'
-
-import type {
-    CanvasGeometryUpdate,
-    CanvasNode,
-    ImageCanvasNode,
-    MediaBranchLineagePlan,
-    MediaGenerationProblem,
-    MediaGenerationProgressState,
-    MediaGenerationRun,
-    MediaGenerationRunProgress,
-    MediaGenerationRunStatus,
-    MediaReferenceBinding,
-    MediaRunLineageAssignment,
-    OperationStatusCanvasNode,
-    VideoCanvasNode,
-    WorkspaceEdge,
-} from '@lixpi/constants'
 import {
     createDefaultMediaGenerationRunProgress,
     mediaGenerationLayoutSettings,
     settleMediaGenerationRunProgress,
+    type CanvasGeometryUpdate,
+    type CanvasNode,
+    type ImageCanvasNode,
+    type MediaBranchLineagePlan,
+    type MediaGenerationProblem,
+    type MediaGenerationProgressState,
+    type MediaGenerationRun,
+    type MediaGenerationRunProgress,
+    type MediaGenerationRunStatus,
+    type MediaReferenceBinding,
+    type MediaRunLineageAssignment,
+    type OperationStatusCanvasNode,
+    type VideoCanvasNode,
+    type WorkspaceEdge,
 } from '@lixpi/constants'
-import {
-    getGeneratedMediaPreFrameSize,
-} from '@lixpi/canvas-components-lixpi-specific/shared'
+import { getGeneratedMediaPreFrameSize } from '@lixpi/canvas-components-lixpi-specific/shared'
 import { info } from '@lixpi/debug-tools'
 
 import Workspace from '../models/workspace.ts'

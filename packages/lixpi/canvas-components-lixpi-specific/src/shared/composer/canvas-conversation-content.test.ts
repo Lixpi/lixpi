@@ -3,7 +3,9 @@ import {
     expect,
     it,
 } from 'vitest'
-import type { ProseMirrorJsonNode } from '@lixpi/prosemirror/shared/thread-doc'
+import {
+    type ProseMirrorJsonNode,
+} from '@lixpi/prosemirror/shared/thread-doc'
 import {
     buildCanvasConversationContent,
     contentJSONHasPromptReference,

@@ -1,8 +1,6 @@
-'use strict'
-
-import type {
-    CanvasGeometryNode,
-    NodeGeometryChange,
+import {
+    type CanvasGeometryNode,
+    type NodeGeometryChange,
 } from './types.ts'
 
 export function applyNodeGeometry<Node extends CanvasGeometryNode>(

@@ -1,26 +1,28 @@
-'use strict'
-
-import type {
-    Asset,
-    AssetRequesterContext,
-    AssetSearchRecord,
-    CapabilityModuleMeta,
-    CapabilityMeta,
-    CapabilityArtifactPromptReferenceCatalogItem,
-    PromptReferenceCatalogItem,
-    PromptReferenceCatalogPage,
-    PromptReferenceCategory,
-    PromptReferenceRecent,
-    PromptReferenceType,
-    Workspace,
+import {
+    type Asset,
+    type AssetRequesterContext,
+    type AssetSearchRecord,
+    type CapabilityModuleMeta,
+    type CapabilityMeta,
+    type CapabilityArtifactPromptReferenceCatalogItem,
+    type PromptReferenceCatalogItem,
+    type PromptReferenceCatalogPage,
+    type PromptReferenceCategory,
+    type PromptReferenceRecent,
+    type PromptReferenceType,
+    type Workspace,
 } from '@lixpi/constants'
-import type { CapabilityModuleCatalog } from '@lixpi/capability-system/backend'
+import {
+    type CapabilityModuleCatalog,
+} from '@lixpi/capability-system/backend'
 
 import AssetModel, {
     buildAssetScopeAndOwnerKey,
     normalizeAssetTitle,
 } from '../models/asset.ts'
-import CapabilityModel, { type CapabilityRequesterContext } from '../models/capability.ts'
+import CapabilityModel, {
+    type CapabilityRequesterContext,
+} from '../models/capability.ts'
 import PromptReferenceRecentModel from '../models/prompt-reference-recent.ts'
 import AssetDocumentService from './asset-document-service.ts'
 import { capabilityArtifactBackendRegistry } from '../capability-system/capability-artifacts.ts'

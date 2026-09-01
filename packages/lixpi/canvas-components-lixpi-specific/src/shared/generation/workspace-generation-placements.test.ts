@@ -3,10 +3,10 @@ import {
     expect,
     it,
 } from 'vitest'
-import type {
-    BranchLineCanvasNode,
-    CanvasNode,
-    MediaGenerationRunMeta,
+import {
+    type BranchLineCanvasNode,
+    type CanvasNode,
+    type MediaGenerationRunMeta,
 } from '@lixpi/constants'
 import {
     WorkspaceGenerationPlacements,
