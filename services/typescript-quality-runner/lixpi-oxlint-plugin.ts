@@ -259,13 +259,17 @@ const getAstExpressionText = (node, sourceCode): string => {
     return sourceCode.getText(node).trim()
 }
 
-const getLogicalConditionParts = (node, sourceCode): { operands: string[]; operators: string[] } | null => {
-    const operands: string[] = []
+const getLogicalConditionParts = (node): { operands: unknown[]; operators: string[] } | null => {
+    const operands = []
     const operators: string[] = []
     const logicalExpression = unwrapParenthesizedExpression(node)
     if (
         logicalExpression.type !== 'LogicalExpression'
-        || (logicalExpression.operator !== '&&' && logicalExpression.operator !== '||' && logicalExpression.operator !== '??')
+        || (
+            logicalExpression.operator !== '&&'
+            && logicalExpression.operator !== '||'
+            && logicalExpression.operator !== '??'
+        )
     )
         return null
     const rootOperator = logicalExpression.operator
@@ -278,12 +282,51 @@ const getLogicalConditionParts = (node, sourceCode): { operands: string[]; opera
             return
         }
 
-        const operand = getAstExpressionText(current, sourceCode)
-        operands.push(current.type === 'LogicalExpression' ? `(${operand})` : operand)
+        operands.push(current)
     }
 
     visit(logicalExpression)
     return { operands, operators }
+}
+
+const getConditionOperandText = (node, sourceCode, indentation): string | null => {
+    const logicalExpression = unwrapParenthesizedExpression(node)
+    if (logicalExpression.type !== 'LogicalExpression')
+        return getAstExpressionText(node, sourceCode)
+
+    const inlineExpression = getAstExpressionText(logicalExpression, sourceCode)
+    if (countLogicalEvaluations(logicalExpression) <= 2)
+        return `(${inlineExpression})`
+
+    const conditionParts = getLogicalConditionParts(logicalExpression)
+    if (!conditionParts)
+        return null
+    const operandIndentation = `${indentation}    `
+    const lines = conditionParts.operands.map((operand, index) => {
+        const operandText = getConditionOperandText(operand, sourceCode, operandIndentation)
+        const operator = index === 0 ? '' : `${conditionParts.operators[index - 1]} `
+        return operandText == null ? null : `${operandIndentation}${operator}${operandText}`
+    })
+    return lines.some((line) => line == null)
+        ? null
+        : `(\n${lines.join('\n')}\n${indentation})`
+}
+
+const getMultilineIfConditionText = (node, sourceCode, indentation): string | null => {
+    if (node.type === 'ParenthesizedExpression') {
+        const operand = getConditionOperandText(node, sourceCode, indentation)
+        return operand == null ? null : `${indentation}${operand}`
+    }
+
+    const conditionParts = getLogicalConditionParts(node)
+    if (!conditionParts)
+        return null
+    const lines = conditionParts.operands.map((operand, index) => {
+        const operandText = getConditionOperandText(operand, sourceCode, indentation)
+        const operator = index === 0 ? '' : `${conditionParts.operators[index - 1]} `
+        return operandText == null ? null : `${indentation}${operator}${operandText}`
+    })
+    return lines.some((line) => line == null) ? null : lines.join('\n')
 }
 
 const preferMultilineIfCondition = defineRule({
@@ -291,7 +334,7 @@ const preferMultilineIfCondition = defineRule({
         type: 'layout',
         fixable: 'whitespace',
         messages: {
-            preferMultilineCondition: 'Split an if condition with more than two evaluations across lines.',
+            preferMultilineCondition: 'Split an if condition and each parenthesized subgroup with more than two evaluations across lines.',
         },
         schema: [],
     },
@@ -314,11 +357,10 @@ const preferMultilineIfCondition = defineRule({
                 const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const operandIndentation = `${indentation}    `
                 const replacementRange = [openParenthesis.range[0], closeParenthesis.range[1]]
-                const conditionParts = getLogicalConditionParts(node.test, sourceCode)
-                if (!conditionParts)
+                const condition = getMultilineIfConditionText(node.test, sourceCode, operandIndentation)
+                if (!condition)
                     return
-                const replacement = `(\n${conditionParts.operands.map((operand, index) =>
-                    `${operandIndentation}${index === 0 ? '' : `${conditionParts.operators[index - 1]} `}${operand}`).join('\n')}\n${indentation})`
+                const replacement = `(\n${condition}\n${indentation})`
                 if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
                     return
 

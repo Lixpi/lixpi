@@ -426,7 +426,7 @@ const countLogicalEvaluations = (node: AstNode): number => {
 }
 
 type LogicalConditionParts = {
-    operands: string[]
+    operands: AstNode[]
     operators: string[]
 }
 
@@ -459,13 +459,17 @@ const getAstExpressionText = (node: AstNode, source: string): string | null => {
     return expression || null
 }
 
-const getLogicalConditionParts = (node: AstNode, source: string): LogicalConditionParts | null => {
-    const operands: string[] = []
+const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null => {
+    const operands: AstNode[] = []
     const operators: string[] = []
     const logicalExpression = unwrapParenthesizedExpression(node)
     if (
         logicalExpression.type !== 'LogicalExpression'
-        || (logicalExpression.operator !== '&&' && logicalExpression.operator !== '||' && logicalExpression.operator !== '??')
+        || (
+            logicalExpression.operator !== '&&'
+            && logicalExpression.operator !== '||'
+            && logicalExpression.operator !== '??'
+        )
     )
         return null
     const rootOperator = logicalExpression.operator
@@ -483,18 +487,59 @@ const getLogicalConditionParts = (node: AstNode, source: string): LogicalConditi
             return visit(current.right)
         }
 
-        let operand = getAstExpressionText(current, source)
-        if (!operand)
-            return false
-        if (current.type === 'LogicalExpression')
-            operand = `(${operand})`
-        operands.push(operand)
+        operands.push(current)
         return true
     }
 
     if (!visit(logicalExpression) || operators.length === 0)
         return null
     return { operands, operators }
+}
+
+const getConditionOperandText = (node: AstNode, source: string, indentation: string): string | null => {
+    const logicalExpression = unwrapParenthesizedExpression(node)
+    if (logicalExpression.type !== 'LogicalExpression')
+        return getAstExpressionText(node, source)
+
+    const inlineExpression = getAstExpressionText(logicalExpression, source)
+    if (!inlineExpression)
+        return null
+    if (countLogicalEvaluations(logicalExpression) <= 2)
+        return `(${inlineExpression})`
+
+    const conditionParts = getLogicalConditionParts(logicalExpression)
+    if (!conditionParts)
+        return null
+    const operandIndentation = `${indentation}    `
+    const lines: string[] = []
+    for (let index = 0; index < conditionParts.operands.length; index++) {
+        const operand = getConditionOperandText(conditionParts.operands[index]!, source, operandIndentation)
+        if (!operand)
+            return null
+        const operator = index === 0 ? '' : `${conditionParts.operators[index - 1]} `
+        lines.push(`${operandIndentation}${operator}${operand}`)
+    }
+    return `(\n${lines.join('\n')}\n${indentation})`
+}
+
+const getMultilineIfConditionText = (node: AstNode, source: string, indentation: string): string | null => {
+    if (node.type === 'ParenthesizedExpression') {
+        const operand = getConditionOperandText(node, source, indentation)
+        return operand ? `${indentation}${operand}` : null
+    }
+
+    const conditionParts = getLogicalConditionParts(node)
+    if (!conditionParts)
+        return null
+    const lines: string[] = []
+    for (let index = 0; index < conditionParts.operands.length; index++) {
+        const operand = getConditionOperandText(conditionParts.operands[index]!, source, indentation)
+        if (!operand)
+            return null
+        const operator = index === 0 ? '' : `${conditionParts.operators[index - 1]} `
+        lines.push(`${indentation}${operator}${operand}`)
+    }
+    return lines.join('\n')
 }
 
 const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean =>
@@ -541,13 +586,14 @@ const canonicalizeIfStatements = (file: string, source: string): string => {
             ) {
                 const indentation = getLineIndentation(source, nodeRange[0])
                 const bodyIndentation = `${indentation}    `
-                const conditionParts = getLogicalConditionParts(test, source)
                 const conditionIsMultiline = countLogicalEvaluations(test) > 2
-                if (conditionIsMultiline && !conditionParts)
+                const multilineCondition = conditionIsMultiline
+                    ? getMultilineIfConditionText(test, source, bodyIndentation)
+                    : null
+                if (conditionIsMultiline && !multilineCondition)
                     throw new Error(`Could not split the logical if condition in ${file}`)
-                const condition = conditionParts && conditionIsMultiline
-                    ? `\n${conditionParts.operands.map((operand, index) =>
-                        `${bodyIndentation}${index === 0 ? '' : `${conditionParts.operators[index - 1]} `}${operand}`).join('\n')}\n${indentation}`
+                const condition = multilineCondition
+                    ? `\n${multilineCondition}\n${indentation}`
                     : source.slice(testRange[0], testRange[1]).trim()
                 const bodySeparator = consequentIsCompact ? `\n${bodyIndentation}` : ' '
                 const replacement = `if (${condition})${bodySeparator}`
