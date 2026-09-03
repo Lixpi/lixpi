@@ -176,6 +176,17 @@
             }
         },
         {
+            "files": [
+                "**/import-specifier-order.ts",
+                "**/lixpi-oxlint-plugin.ts",
+                "**/source-extension-runner.ts",
+                "**/typescript-format-runner.ts"
+            ],
+            "rules": {
+                "lixpi/require-ast-formatter-rules": "error"
+            }
+        },
+        {
             "files": ["**/*.test.ts", "**/*.spec.ts", "**/testUtils/**/*.ts", "**/test/**/*.ts", "**/tests/**/*.ts", "**/__tests__/**/*.ts", "**/mocks/**/*.ts"],
             "rules": {
                 "arrow-body-style": "off",

@@ -106,8 +106,7 @@ const transitionHelpersRule = (primary: boolean) => (root: Root, result: Postcss
 
         const isValid = isTransitionValue && splitTopLevelCommas(declaration.value).every(isSharedTransition)
         if (
-            !isSplitTransitionProperty
-            && !isTransitionValue
+            (!isSplitTransitionProperty && !isTransitionValue)
             || isValid
         )
             return

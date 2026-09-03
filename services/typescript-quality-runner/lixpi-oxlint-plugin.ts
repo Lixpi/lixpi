@@ -95,16 +95,10 @@ const preferArrowFunctionDeclaration = defineRule({
                 )
                     return
 
-                const functionToken = sourceCode.getTokens(node).find((token) => token.value === 'function')
-                if (!functionToken)
-                    return
-
-                const declarationPrefix = sourceCode.text.slice(node.range[0], functionToken.range[0])
                 if (sourceCode.getCommentsInside(node).some((comment) => comment.range[1] <= node.id.range[1]))
                     return
 
-                const exported = /\bexport\b/.test(declarationPrefix)
-                const replacement = `${exported ? 'export ' : ''}const ${node.id.name} = ${node.async ? 'async ' : ''}`
+                const replacement = `const ${node.id.name} = ${node.async ? 'async ' : ''}`
 
                 context.report({
                     node,
@@ -138,11 +132,110 @@ const debugLoggingMethods = new Map([
     ['log', { importedName: 'log', preferredLocalName: 'debugLog' }],
     ['warn', { importedName: 'warn', preferredLocalName: 'debugWarn' }],
 ])
+const rawSyntaxInspectionMethods = new Set([
+    'match',
+    'matchAll',
+    'replace',
+    'replaceAll',
+    'search',
+])
+const syntaxSourceNames = new Set([
+    'body',
+    'condition',
+    'formatted',
+    'source',
+    'text',
+])
 
 const getLineIndentation = (source: string, offset: number): string => {
     const lineStart = source.lastIndexOf('\n', offset - 1) + 1
-    return source.slice(lineStart).match(/^[\t ]*/)?.[0] ?? ''
+    let cursor = lineStart
+    while (source[cursor] === ' ' || source[cursor] === '\t') cursor++
+    return source.slice(lineStart, cursor)
 }
+
+const getMemberPropertyName = (member): string | null => {
+    if (!member.computed && member.property.type === 'Identifier')
+        return member.property.name
+    if (
+        member.computed
+        && member.property.type === 'Literal'
+        && typeof member.property.value === 'string'
+    )
+        return member.property.value
+    return null
+}
+
+const getRootIdentifierName = (node): string | null => {
+    let current = node
+    while (current?.type === 'CallExpression' || current?.type === 'MemberExpression') {
+        if (current.type === 'CallExpression')
+            current = current.callee
+        else
+            current = current.object
+    }
+    return current?.type === 'Identifier' ? current.name : null
+}
+
+const requireAstFormatterRules = defineRule({
+    meta: {
+        type: 'problem',
+        messages: {
+            requireAst: 'Formatter rules must inspect TypeScript syntax through the parsed AST.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const report = (node): void => context.report({
+            node,
+            messageId: 'requireAst',
+        })
+
+        return {
+            CallExpression(node) {
+                if (node.callee.type === 'Identifier' && node.callee.name === 'RegExp') {
+                    report(node)
+                    return
+                }
+                if (node.callee.type !== 'MemberExpression')
+                    return
+
+                const methodName = getMemberPropertyName(node.callee)
+                if (!methodName)
+                    return
+                if (rawSyntaxInspectionMethods.has(methodName)) {
+                    report(node)
+                    return
+                }
+                if (
+                    methodName !== 'endsWith'
+                    && methodName !== 'startsWith'
+                    && methodName !== 'includes'
+                    && methodName !== 'indexOf'
+                    && methodName !== 'lastIndexOf'
+                    && methodName !== 'split'
+                )
+                    return
+
+                const rootName = getRootIdentifierName(node.callee.object)
+                if (!rootName || !syntaxSourceNames.has(rootName))
+                    return
+                const separator = node.arguments[0]
+                if (separator?.type === 'Literal' && separator.value === '\n')
+                    return
+                report(node)
+            },
+            Literal(node) {
+                if (node.regex)
+                    report(node)
+            },
+            NewExpression(node) {
+                if (node.callee.type === 'Identifier' && node.callee.name === 'RegExp')
+                    report(node)
+            },
+        }
+    },
+})
 
 const countLogicalEvaluations = (node): number => {
     if (node.type === 'ParenthesizedExpression')
@@ -152,58 +245,44 @@ const countLogicalEvaluations = (node): number => {
     return countLogicalEvaluations(node.left) + countLogicalEvaluations(node.right)
 }
 
-const splitTopLevelLogicalCondition = (condition): { operands: string[]; operators: string[] } | null => {
+const unwrapParenthesizedExpression = (node) => {
+    let current = node
+    while (current.type === 'ParenthesizedExpression') current = current.expression
+    return current
+}
+
+const getAstExpressionText = (node, sourceCode): string => {
+    if (node.type === 'ParenthesizedExpression')
+        return `(${getAstExpressionText(node.expression, sourceCode)})`
+    if (node.type === 'LogicalExpression')
+        return `${getAstExpressionText(node.left, sourceCode)} ${node.operator} ${getAstExpressionText(node.right, sourceCode)}`
+    return sourceCode.getText(node).trim()
+}
+
+const getLogicalConditionParts = (node, sourceCode): { operands: string[]; operators: string[] } | null => {
     const operands: string[] = []
     const operators: string[] = []
-    const closingDelimiters: string[] = []
-    let escaped = false
-    let quote = ''
-    let operandStart = 0
+    const logicalExpression = unwrapParenthesizedExpression(node)
+    if (
+        logicalExpression.type !== 'LogicalExpression'
+        || (logicalExpression.operator !== '&&' && logicalExpression.operator !== '||' && logicalExpression.operator !== '??')
+    )
+        return null
+    const rootOperator = logicalExpression.operator
 
-    for (let index = 0; index < condition.length; index++) {
-        const character = condition[index]
-        if (quote) {
-            if (escaped)
-                escaped = false
-            else if (character === '\\')
-                escaped = true
-            else if (character === quote)
-                quote = ''
-            continue
+    const visit = (current): void => {
+        if (current.type === 'LogicalExpression' && current.operator === rootOperator) {
+            visit(current.left)
+            operators.push(rootOperator)
+            visit(current.right)
+            return
         }
 
-        if (character === '`')
-            return null
-        if (character === "'" || character === '"') {
-            quote = character
-            continue
-        }
-        if (character === '(')
-            closingDelimiters.push(')')
-        else if (character === '[')
-            closingDelimiters.push(']')
-        else if (character === '{')
-            closingDelimiters.push('}')
-        else if (character === closingDelimiters.at(-1))
-            closingDelimiters.pop()
-        else if (closingDelimiters.length === 0) {
-            const operator = condition.slice(index, index + 2)
-            if (operator === '&&' || operator === '||') {
-                const operand = condition.slice(operandStart, index).trim()
-                if (!operand)
-                    return null
-                operands.push(operand)
-                operators.push(operator)
-                index++
-                operandStart = index + 1
-            }
-        }
+        const operand = getAstExpressionText(current, sourceCode)
+        operands.push(current.type === 'LogicalExpression' ? `(${operand})` : operand)
     }
 
-    const finalOperand = condition.slice(operandStart).trim()
-    if (!finalOperand || operators.length === 0)
-        return null
-    operands.push(finalOperand)
+    visit(logicalExpression)
     return { operands, operators }
 }
 
@@ -221,7 +300,8 @@ const preferMultilineIfCondition = defineRule({
 
         return {
             IfStatement(node) {
-                if (node.test.type !== 'LogicalExpression' || countLogicalEvaluations(node.test) <= 2)
+                const logicalTest = unwrapParenthesizedExpression(node.test)
+                if (logicalTest.type !== 'LogicalExpression' || countLogicalEvaluations(node.test) <= 2)
                     return
                 if (sourceCode.getCommentsInside(node.test).length > 0)
                     return
@@ -234,8 +314,7 @@ const preferMultilineIfCondition = defineRule({
                 const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const operandIndentation = `${indentation}    `
                 const replacementRange = [openParenthesis.range[0], closeParenthesis.range[1]]
-                const condition = sourceCode.text.slice(openParenthesis.range[1], closeParenthesis.range[0])
-                const conditionParts = splitTopLevelLogicalCondition(condition)
+                const conditionParts = getLogicalConditionParts(node.test, sourceCode)
                 if (!conditionParts)
                     return
                 const replacement = `(\n${conditionParts.operands.map((operand, index) =>
@@ -273,6 +352,7 @@ const noCommaSeparatedStatements = defineRule({
 
                 const parentType = node.parent?.type
                 const canFix = parentType === 'BlockStatement'
+                    || parentType === 'ExportNamedDeclaration'
                     || parentType === 'Program'
                     || parentType === 'StaticBlock'
                     || parentType === 'SwitchCase'
@@ -480,8 +560,7 @@ const preferCompactIf = defineRule({
 
         return {
             IfStatement(node) {
-                const lineStart = sourceCode.text.lastIndexOf('\n', node.range[0] - 1) + 1
-                const indentation = sourceCode.text.slice(lineStart).match(/^[\t ]*/)?.[0] ?? ''
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const bodyIndentation = `${indentation}    `
                 const blocks = [node.consequent, node.alternate].filter(statement => statement?.type === 'BlockStatement')
                 for (const block of blocks) {
@@ -689,5 +768,6 @@ export default definePlugin({
         'prefer-multiline-collection': preferMultilineCollection,
         'prefer-multiline-object-pattern': preferMultilineObjectPattern,
         'prefer-multiline-if-condition': preferMultilineIfCondition,
+        'require-ast-formatter-rules': requireAstFormatterRules,
     },
 })
