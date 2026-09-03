@@ -10,8 +10,9 @@ const parseColorChannels = (color: string): [string, string, string, string | un
 const parseRedChannel = (red: string): number => parseInt(red[3] === 'a' ? red.slice(5) : red.slice(4), 10)
 
 export const RgbLogShade = (percentage: number, color: string): string | undefined => {
-    if (!percentage || !color)
+    if (!percentage || !color) {
         return undefined
+    }
 
     const [red, green, blue, alpha] = parseColorChannels(color)
     const isDarkening = percentage < 0
@@ -23,8 +24,9 @@ export const RgbLogShade = (percentage: number, color: string): string | undefin
 }
 
 export const RgbLinearShade = (percentage: number, color: string): string | undefined => {
-    if (!percentage || !color)
+    if (!percentage || !color) {
         return undefined
+    }
 
     const [red, green, blue, alpha] = parseColorChannels(color)
     const isDarkening = percentage < 0

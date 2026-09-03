@@ -32,7 +32,8 @@ export const orderedListRule = (nodeType: NodeType): InputRule =>
 export const bulletListRule = (nodeType: NodeType): InputRule => wrappingInputRule(/^\s*([-+*])\s$/, nodeType)
 
 // Turns heading markers at the start of a text block into a matching heading level.
-export const headingRule = (nodeType: NodeType, maxLevel: number): InputRule => textblockTypeInputRule(
+export const headingRule = (nodeType: NodeType, maxLevel: number): InputRule =>
+    textblockTypeInputRule(
         new RegExp(`^(#{1,${maxLevel}})\\s$`),
         nodeType,
         (match) => ({ level: match[1].length }),
@@ -45,14 +46,18 @@ export const buildInputRules = (schema: Schema): Plugin => {
     const bulletList = schema.nodes.bullet_list
     const heading = schema.nodes.heading
 
-    if (blockquote)
+    if (blockquote) {
         rules.push(blockQuoteRule(blockquote))
-    if (orderedList)
+    }
+    if (orderedList) {
         rules.push(orderedListRule(orderedList))
-    if (bulletList)
+    }
+    if (bulletList) {
         rules.push(bulletListRule(bulletList))
-    if (heading)
+    }
+    if (heading) {
         rules.push(headingRule(heading, 6))
+    }
 
     return inputRules({ rules })
 }

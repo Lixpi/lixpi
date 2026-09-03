@@ -63,8 +63,9 @@ class PromptView {
     }
 
     private readonly handleMouseOutside = (event: MouseEvent): void => {
-        if (!this.wrapper.contains(event.target as Node))
+        if (!this.wrapper.contains(event.target as Node)) {
             this.close()
+        }
     }
 
     private readonly handleSubmit = (event: SubmitEvent): void => {
@@ -90,16 +91,18 @@ class PromptView {
         }
         if (event.key === 'Tab') {
             window.setTimeout(() => {
-                if (!this.wrapper.contains(document.activeElement))
+                if (!this.wrapper.contains(document.activeElement)) {
                     this.close()
+                }
             }, 500)
         }
     }
 
     private submit(): void {
         const values = this.getValues()
-        if (!values)
+        if (!values) {
             return
+        }
         this.close()
         this.options.callback(values)
     }
@@ -122,8 +125,9 @@ class PromptView {
 
     private reportInvalid(dom: FieldElement, message: string): void {
         const parent = dom.parentElement
-        if (!parent)
+        if (!parent) {
             return
+        }
         const error = html`<div className="ProseMirror-invalid">${message}</div>` as HTMLDivElement
         parent.appendChild(error)
         applyStyle(error, {
@@ -158,8 +162,9 @@ export abstract class Field {
     }
 
     validate(value: string): string | null {
-        if (!value && this.options.required)
+        if (!value && this.options.required) {
             return 'Required field'
+        }
         return this.validateType(value) ?? this.options.validate?.(value) ?? null
     }
 
@@ -179,7 +184,8 @@ export class SelectField extends Field {
         const options = (this.options.options ?? []).map((option) =>
             html`
                 <option value=${option.value} selected=${option.value === this.options.value} label=${option.label}></option>
-            ` as HTMLOptionElement)
+            ` as HTMLOptionElement
+        )
         return html`<select>
             ${options}
         </select>` as HTMLSelectElement

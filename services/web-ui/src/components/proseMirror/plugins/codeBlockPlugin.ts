@@ -102,22 +102,26 @@ class CodeBlockView implements NodeView {
     }
 
     private readonly handleMouseUp = (): void => {
-        if (this.updating || !this.codeMirror.hasFocus)
+        if (this.updating || !this.codeMirror.hasFocus) {
             return
-        if (this.codeMirror.state.selection.ranges.some((range) => !range.empty))
+        }
+        if (this.codeMirror.state.selection.ranges.some((range) => !range.empty)) {
             return
+        }
         this.clearAllCodeMirrorSelections()
         this.syncProseMirrorSelection()
     }
 
     private clearAllCodeMirrorSelections(): void {
         this.view.state.doc.descendants((node, position) => {
-            if (node.type.name !== 'code_block')
+            if (node.type.name !== 'code_block') {
                 return undefined
+            }
             const codeBlockView = getCodeBlockView(this.view.nodeDOM(position))
             const cursor = codeBlockView?.codeMirror.state.selection.main.head
-            if (codeBlockView && cursor !== undefined)
+            if (codeBlockView && cursor !== undefined) {
                 codeBlockView.codeMirror.dispatch({ selection: { anchor: cursor, head: cursor } })
+            }
             return undefined
         })
     }
@@ -125,11 +129,13 @@ class CodeBlockView implements NodeView {
     private clearOtherCodeMirrorSelections(): void {
         const currentPosition = this.getPos()
         this.view.state.doc.descendants((node, position) => {
-            if (node.type.name !== 'code_block' || position === currentPosition)
+            if (node.type.name !== 'code_block' || position === currentPosition) {
                 return undefined
+            }
             const codeBlockView = getCodeBlockView(this.view.nodeDOM(position))
-            if (!codeBlockView || codeBlockView === this)
+            if (!codeBlockView || codeBlockView === this) {
                 return undefined
+            }
             const cursor = codeBlockView.codeMirror.state.selection.main.head
             codeBlockView.codeMirror.dispatch({ selection: { anchor: cursor, head: cursor } })
             return undefined
@@ -138,16 +144,18 @@ class CodeBlockView implements NodeView {
 
     private syncProseMirrorSelection(): void {
         const position = this.getPos()
-        if (position === undefined)
+        if (position === undefined) {
             return
+        }
         const {
             from,
             to,
         } = this.view.state.selection
         const start = position + 1
         const end = position + this.node.nodeSize - 1
-        if (from < start || to > end)
+        if (from < start || to > end) {
             return
+        }
         this.codeMirror.dispatch({
             selection: {
                 anchor: from - start,
@@ -157,11 +165,13 @@ class CodeBlockView implements NodeView {
     }
 
     private readonly forwardUpdate = (update: ViewUpdate): void => {
-        if (this.updating || !this.codeMirror.hasFocus)
+        if (this.updating || !this.codeMirror.hasFocus) {
             return
+        }
         const position = this.getPos()
-        if (position === undefined)
+        if (position === undefined) {
             return
+        }
 
         let offset = position + 1
         const selection = update.state.selection.main
@@ -172,8 +182,9 @@ class CodeBlockView implements NodeView {
             !update.docChanged
             && proseMirrorSelection.from === selectionFrom
             && proseMirrorSelection.to === selectionTo
-        )
+        ) {
             return
+        }
 
         const transaction = this.view.state.tr
         update.changes.iterChanges((fromA, toA, fromB, toB, text) => {
@@ -191,14 +202,17 @@ class CodeBlockView implements NodeView {
     private maybeEscape(unit: 'line' | 'character', direction: -1 | 1): boolean {
         const state = this.codeMirror.state
         const selection = state.selection.main
-        if (!selection.empty)
+        if (!selection.empty) {
             return false
+        }
         const range = unit === 'line' ? state.doc.lineAt(selection.head) : selection
-        if (direction < 0 ? range.from > 0 : range.to < state.doc.length)
+        if (direction < 0 ? range.from > 0 : range.to < state.doc.length) {
             return false
+        }
         const position = this.getPos()
-        if (position === undefined)
+        if (position === undefined) {
             return false
+        }
         const targetPosition = position + (direction < 0 ? 0 : this.node.nodeSize)
         const proseMirrorSelection = Selection.near(this.view.state.doc.resolve(targetPosition), direction)
         this.view.dispatch(this.view.state.tr.setSelection(proseMirrorSelection).scrollIntoView())
@@ -217,8 +231,9 @@ class CodeBlockView implements NodeView {
             {
                 key: 'Mod-Enter',
                 run: () => {
-                    if (!exitCode(this.view.state, this.view.dispatch))
+                    if (!exitCode(this.view.state, this.view.dispatch)) {
                         return false
+                    }
                     this.view.focus()
                     return true
                 },
@@ -254,23 +269,28 @@ class CodeBlockView implements NodeView {
     }
 
     update(node: ProseMirrorNode): boolean {
-        if (node.type !== this.node.type)
+        if (node.type !== this.node.type) {
             return false
-        if (this.updating)
+        }
+        if (this.updating) {
             return true
+        }
         this.node = node
         const nextText = node.textContent
         const currentText = this.codeMirror.state.doc.toString()
-        if (nextText === currentText)
+        if (nextText === currentText) {
             return true
+        }
 
         let start = 0
         let currentEnd = currentText.length
         let nextEnd = nextText.length
         while (start < currentEnd && currentText.charCodeAt(start) === nextText.charCodeAt(start)) start += 1
-        while (currentEnd > start
+        while (
+            currentEnd > start
             && nextEnd > start
-            && currentText.charCodeAt(currentEnd - 1) === nextText.charCodeAt(nextEnd - 1)) {
+            && currentText.charCodeAt(currentEnd - 1) === nextText.charCodeAt(nextEnd - 1)
+        ) {
             currentEnd -= 1
             nextEnd -= 1
         }
@@ -288,8 +308,9 @@ class CodeBlockView implements NodeView {
     }
 
     stopEvent(event: Event): boolean {
-        if (event.type === 'mousedown' && !this.codeMirror.dom.contains(event.target as Node))
+        if (event.type === 'mousedown' && !this.codeMirror.dom.contains(event.target as Node)) {
             this.clearOtherCodeMirrorSelections()
+        }
         return true
     }
 
@@ -305,8 +326,9 @@ const getCodeBlockView = (node: Node | null): CodeBlockView | undefined => (node
 
 const clearAllCodeMirrorSelections = (view: EditorView): void => {
     view.state.doc.descendants((node, position) => {
-        if (node.type.name !== 'code_block')
+        if (node.type.name !== 'code_block') {
             return undefined
+        }
         const codeBlockView = getCodeBlockView(view.nodeDOM(position))
         codeBlockView?.clearSelection()
         return undefined
@@ -319,8 +341,9 @@ const selectAllContentIncludingCodeBlocks = (view: EditorView): void => {
     )
     view.dispatch(transaction)
     transaction.doc.descendants((node, position) => {
-        if (node.type.name !== 'code_block')
+        if (node.type.name !== 'code_block') {
             return undefined
+        }
         getCodeBlockView(view.nodeDOM(position))?.selectAll()
         return undefined
     })
@@ -334,12 +357,14 @@ export const createCodeBlockPlugin = (schema: Schema): Plugin =>
             decorations: (state) => {
                 const decorations: Decoration[] = []
                 state.doc.descendants((node, position) => {
-                    if (node.type.name !== 'code_block')
+                    if (node.type.name !== 'code_block') {
                         return undefined
+                    }
                     const from = position + 1
                     const to = from + node.content.size
-                    if (state.selection.from >= to || state.selection.to <= from)
+                    if (state.selection.from >= to || state.selection.to <= from) {
                         return undefined
+                    }
                     decorations.push(
                         Decoration.inline(
                             Math.max(state.selection.from, from),
@@ -363,8 +388,9 @@ export const createCodeBlockPlugin = (schema: Schema): Plugin =>
                     if (
                         event.key !== 'a'
                         || (!event.ctrlKey && !event.metaKey)
-                    )
+                    ) {
                         return false
+                    }
                     selectAllContentIncludingCodeBlocks(view)
                     event.preventDefault()
                     return true
@@ -375,11 +401,13 @@ export const createCodeBlockPlugin = (schema: Schema): Plugin =>
             let outputTransaction: Transaction | null = null
             for (const transaction of transactions) {
                 const meta = transaction.getMeta(transactionName) as CodeBlockTransactionMeta | undefined
-                if (!meta)
+                if (!meta) {
                     continue
+                }
                 const codeBlock = meta.type.createAndFill({ theme: meta.theme })
-                if (!codeBlock)
+                if (!codeBlock) {
                     continue
+                }
                 outputTransaction = newState.tr.replaceWith(meta.start, meta.end, codeBlock).scrollIntoView()
             }
             return outputTransaction
@@ -390,12 +418,15 @@ export const codeBlockInputRulef = (schema: Schema): Plugin =>
     inputRules({
         rules: [
             new InputRule(/^```$/, (state, _match, start, end) =>
-                state.tr.setMeta(transactionName, {
-                    type: schema.nodes.code_block,
-                    start,
-                    end,
-                    theme: 'gruvboxDark',
-                } satisfies CodeBlockTransactionMeta)),
+                state.tr.setMeta(
+                    transactionName,
+                    {
+                        type: schema.nodes.code_block,
+                        start,
+                        end,
+                        theme: 'gruvboxDark',
+                    } satisfies CodeBlockTransactionMeta,
+                )),
         ],
     })
 
@@ -406,18 +437,22 @@ const ensureEmptyLineAfterNode = (
 ): Transaction => {
     let positionAfterNode: number | undefined
     transaction.doc.descendants((node, position) => {
-        if (node.type.name === nodeType)
+        if (node.type.name === nodeType) {
             positionAfterNode = position + node.nodeSize
+        }
     })
-    if (positionAfterNode === undefined)
+    if (positionAfterNode === undefined) {
         return transaction
+    }
 
     const nextNode = transaction.doc.nodeAt(positionAfterNode)
-    if (nextNode?.type.name === 'paragraph' && nextNode.textContent === '')
+    if (nextNode?.type.name === 'paragraph' && nextNode.textContent === '') {
         return transaction
+    }
     const paragraph = schema.nodes.paragraph.createAndFill()
-    if (paragraph)
+    if (paragraph) {
         transaction.insert(positionAfterNode, paragraph)
+    }
     return transaction
 }
 
@@ -429,8 +464,9 @@ export const codeBlockInputRule = (schema: Schema): Plugin =>
                 const paragraphStart = startPosition.before(startPosition.depth)
                 const paragraphEnd = startPosition.after(startPosition.depth)
                 const codeBlock = state.schema.nodes.code_block.createAndFill({ theme: 'gruvboxDark' })
-                if (!codeBlock)
+                if (!codeBlock) {
                     return null
+                }
                 const transaction = state.tr.replaceWith(paragraphStart, paragraphEnd, codeBlock)
                 return ensureEmptyLineAfterNode(transaction, 'code_block', schema)
             }),

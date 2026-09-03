@@ -21,8 +21,9 @@ export const activeNodePlugin = new Plugin<ActiveNodePluginState>({
             const nodeType = newState.selection.$from.parent.type.name
             const nodeAttrs = newState.selection.$from.parent.attrs
 
-            if (value.nodeType !== nodeType || JSON.stringify(value.nodeAttrs) !== JSON.stringify(nodeAttrs))
+            if (value.nodeType !== nodeType || JSON.stringify(value.nodeAttrs) !== JSON.stringify(nodeAttrs)) {
                 return { nodeType, nodeAttrs }
+            }
 
             return value
         },

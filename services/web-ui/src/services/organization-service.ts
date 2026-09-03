@@ -29,8 +29,9 @@ class OrganizationService {
 
     static getInstance(instanceId: string): OrganizationService {
         const existingInstance = OrganizationService.instances.get(instanceId)
-        if (existingInstance)
+        if (existingInstance) {
             return existingInstance
+        }
 
         const instance = new OrganizationService()
         OrganizationService.instances.set(instanceId, instance)

@@ -42,16 +42,18 @@ export const buildKeymap = (
     const keys: Keymap = {}
     const bind = (key: string, command: Command): void => {
         const mappedKey = mapKeys?.[key]
-        if (mappedKey === false)
+        if (mappedKey === false) {
             return
+        }
         keys[mappedKey ?? key] = command
     }
 
     bind('Mod-z', undo)
     bind('Shift-Mod-z', redo)
     bind('Backspace', undoInputRule)
-    if (!isMac)
+    if (!isMac) {
         bind('Mod-y', redo)
+    }
 
     bind('Alt-ArrowUp', joinUp)
     bind('Alt-ArrowDown', joinDown)
@@ -76,20 +78,24 @@ export const buildKeymap = (
     }
 
     const code = schema.marks.code
-    if (code)
+    if (code) {
         bind('Mod-`', toggleMark(code))
+    }
 
     const bulletList = schema.nodes.bullet_list
-    if (bulletList)
+    if (bulletList) {
         bind('Shift-Ctrl-8', wrapInList(bulletList))
+    }
 
     const orderedList = schema.nodes.ordered_list
-    if (orderedList)
+    if (orderedList) {
         bind('Shift-Ctrl-9', wrapInList(orderedList))
+    }
 
     const blockquote = schema.nodes.blockquote
-    if (blockquote)
+    if (blockquote) {
         bind('Ctrl->', wrapIn(blockquote))
+    }
 
     const hardBreak = schema.nodes.hard_break
     if (hardBreak) {
@@ -99,8 +105,9 @@ export const buildKeymap = (
         })
         bind('Mod-Enter', insertHardBreak)
         bind('Shift-Enter', insertHardBreak)
-        if (isMac)
+        if (isMac) {
             bind('Ctrl-Enter', insertHardBreak)
+        }
     }
 
     const listItem = schema.nodes.list_item
@@ -111,12 +118,14 @@ export const buildKeymap = (
     }
 
     const paragraph = schema.nodes.paragraph
-    if (paragraph)
+    if (paragraph) {
         bind('Shift-Ctrl-0', setBlockType(paragraph))
+    }
 
     const codeBlock = schema.nodes.code_block
-    if (codeBlock)
+    if (codeBlock) {
         bind('Shift-Ctrl-\\', setBlockType(codeBlock))
+    }
 
     const heading = schema.nodes.heading
     if (heading) {
