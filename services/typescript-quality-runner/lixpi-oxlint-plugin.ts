@@ -449,8 +449,10 @@ const preferMultilineObjectPattern = defineRule({
                 if (sourceCode.getCommentsInside(node).length > 0)
                     return
 
-                const openBrace = sourceCode.getTokens(node).find((token) => token.value === '{')
-                const closeBrace = sourceCode.getTokens(node).findLast((token) => token.value === '}')
+                const patternEnd = node.typeAnnotation?.range[0] ?? node.range[1]
+                const patternTokens = sourceCode.getTokens(node).filter((token) => token.range[1] <= patternEnd)
+                const openBrace = patternTokens.find((token) => token.value === '{')
+                const closeBrace = patternTokens.findLast((token) => token.value === '}')
                 if (!openBrace || !closeBrace)
                     return
 
