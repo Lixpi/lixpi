@@ -12,7 +12,7 @@ import {
     response,
 } from '$src/components/proseMirror/plugins/testUtils/prosemirrorTestUtils.ts'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
-import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
+import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.ts'
 
 describe('statePlugin', () => {
     let onUpdateCallback: ReturnType<typeof vi.fn>

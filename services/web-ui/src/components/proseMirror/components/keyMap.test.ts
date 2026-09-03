@@ -8,8 +8,8 @@ import {
 } from 'vitest'
 import { redo } from 'prosemirror-history'
 import { schema as baseSchema } from '$src/components/proseMirror/components/schema.ts'
-import { insertAiChatThread } from '$src/components/proseMirror/components/commands.js'
-import { buildKeymap } from '$src/components/proseMirror/components/keyMap.js'
+import { insertAiChatThread } from '$src/components/proseMirror/components/commands.ts'
+import { buildKeymap } from '$src/components/proseMirror/components/keyMap.ts'
 
 let consoleWarnSpy: { mockRestore: () => void } | null = null
 let consoleErrorSpy: { mockRestore: () => void } | null = null

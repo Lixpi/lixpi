@@ -15,7 +15,7 @@ import {
     defaultAttrs,
     taskRowNodeSpec,
     taskRowNodeType,
-} from '$src/components/proseMirror/customNodes/taskRowNode.js'
+} from '$src/components/proseMirror/customNodes/taskRowNode.ts'
 
 const documentSchema = createProseMirrorSchema(DOCUMENT_TYPE.DOCUMENT)
 const aiChatSchema = createProseMirrorSchema(DOCUMENT_TYPE.AI_CHAT_THREAD)

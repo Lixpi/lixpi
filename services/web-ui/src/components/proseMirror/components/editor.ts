@@ -16,9 +16,8 @@ import { dropCursor } from 'prosemirror-dropcursor'
 import { gapCursor } from 'prosemirror-gapcursor'
 
 // Plugins
-import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
-import focusPlugin from '$src/components/proseMirror/plugins/focusPlugin.js'
-import lockCursorPositionPlugin from '$src/components/proseMirror/plugins/lockCursorPositionPlugin.js'
+import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.ts'
+import focusPlugin from '$src/components/proseMirror/plugins/focusPlugin.ts'
 import {
     createAiChatThreadPlugin,
     type AiChatStreamObserver,
@@ -27,8 +26,8 @@ import { createAiPromptInputPlugin } from '$src/components/proseMirror/plugins/a
 import {
     createCodeBlockPlugin,
     codeBlockInputRule,
-} from '$src/components/proseMirror/plugins/codeBlockPlugin.js'
-import { activeNodePlugin } from '$src/components/proseMirror/plugins/activeNodePlugin'
+} from '$src/components/proseMirror/plugins/codeBlockPlugin.ts'
+import { activeNodePlugin } from '$src/components/proseMirror/plugins/activeNodePlugin.ts'
 
 import { bubbleMenuPlugin } from '$src/components/proseMirror/plugins/bubbleMenuPlugin/index.ts'
 import { linkTooltipPlugin } from '$src/components/proseMirror/plugins/linkTooltipPlugin/linkTooltipPlugin.ts'
@@ -42,8 +41,8 @@ import {
     type PromptReferencePreviewRenderer,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
-import { buildKeymap } from '$src/components/proseMirror/components/keyMap.js'
-import { buildInputRules } from '$src/components/proseMirror/components/inputRules.js'
+import { buildKeymap } from '$src/components/proseMirror/components/keyMap.ts'
+import { buildInputRules } from '$src/components/proseMirror/components/inputRules.ts'
 import { ProseMirrorAuthorityService } from '$src/services/prosemirror-authority-service.ts'
 
 type ProseMirrorEditorConfig = {
