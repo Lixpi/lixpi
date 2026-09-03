@@ -13,7 +13,7 @@ import {
 import {
     codeBlockNodeSpec,
     codeBlockNodeType,
-} from '$src/components/proseMirror/customNodes/codeBlockNode.js'
+} from '$src/components/proseMirror/customNodes/codeBlockNode.ts'
 
 const documentSchema = createProseMirrorSchema(DOCUMENT_TYPE.DOCUMENT)
 const aiChatSchema = createProseMirrorSchema(DOCUMENT_TYPE.AI_CHAT_THREAD)

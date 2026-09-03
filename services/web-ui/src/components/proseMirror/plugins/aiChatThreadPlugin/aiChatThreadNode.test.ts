@@ -30,7 +30,7 @@ import {
 } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
 import { createAiChatThreadPlugin } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPlugin.ts'
 import { AI_CHAT_THREAD_PLUGIN_KEY } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadPluginConstants.ts'
-import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.js'
+import { statePlugin } from '$src/components/proseMirror/plugins/statePlugin.ts'
 import SegmentsReceiver from '$src/services/segmentsReceiver-service.ts'
 import {
     type ImageGenerationTrace,

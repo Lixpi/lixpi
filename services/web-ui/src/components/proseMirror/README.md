@@ -56,7 +56,7 @@ Custom nodes are intentionally split by responsibility:
 - Inline prompt references use the typed `prompt_reference` atom. The shared schema also parses `capability_reference` atoms in stored drafts and conversation snapshots; insertion paths create only `prompt_reference`. One shared prompt-reference preview renderer resolves Asset identity, labels, authenticated media, and hover cards. Canvas hosts select its inline-popover mode so cards remain inside the canvas transform; ordinary app surfaces retain body-portaled placement.
 - The `@` and `/` picker clients always send the active workspace identity. The API limits catalog partitions, recents, and final atom authorization to that workspace's Asset and Capability scope chain; the browser never receives sibling-workspace catalog rows to filter locally.
 
-- Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.js`):
+- Base custom nodes (exported by `@lixpi/prosemirror`, re-exported through `customNodes/index.ts`):
   - `code_block` override (`codeBlockNode`): extends the base `code_block` with attrs (e.g. theme) used by the CodeMirror NodeView.
   - `taskRowNode`: placeholder for future custom NodeView rendering.
 
@@ -182,17 +182,17 @@ graph LR
   BM-- floating menu --> EditorView
 ```
 
-### statePlugin (`plugins/statePlugin.js`)
+### statePlugin (`plugins/statePlugin.ts`)
 - Emits full doc JSON on any doc-changing transaction unless `skipDispatch` is set.
 - Legacy titled schemas may detect first-child title changes. Asset `content`, `conversation`, and `provenance` roles are title-free; global titles update through Asset metadata.
 - Skips persistence callbacks for AI chat thread documents. AI chat final snapshots are written by the API when the authoritative stream ends; the live callback still mirrors in-flight docs for canvas previews.
 - Authority-backed editors call `asset.document.resume` on mount. The NATS reply contains only a small authenticated HTTP reference to the Object-Store snapshot plus a byte-bounded event page; the authority fetches snapshot JSON over HTTP and drains replay pages until its cursor reaches the returned latest sequence. Document freshness is tracked through role versions from step/control payloads. Disconnect is authoritative over in-flight lease acquisition: a late lease is released without notifying or remounting the destroyed editor.
 - The server-authored AI response path purges its conversation step subject immediately after the final snapshot and `END` event are persisted. General mutable-document settlement keeps incorporated client-edit steps replayable for five minutes before purging through that sequence. When local steps are still pending, resume replays and rebases those events instead of replacing the editor with the newer settled snapshot.
 
-### focusPlugin (`plugins/focusPlugin.js`)
+### focusPlugin (`plugins/focusPlugin.ts`)
 - Listens to DOM focus/blur and sets plugin meta. Callback toggles `editable` prop based on `isDisabled`.
 
-### activeNodePlugin (`plugins/activeNodePlugin.js`)
+### activeNodePlugin (`plugins/activeNodePlugin.ts`)
 - Tracks `{ nodeType, nodeAttrs }` of the parent of current selection for UI state, styling, or debugging.
 
 
@@ -232,7 +232,7 @@ graph TD
 ```
 
 
-- `components/keyMap.js` binds:
+- `components/keyMap.ts` binds:
   - Mod-Z/Shift-Mod-Z/Mod-Y for undo/redo, Backspace undoInputRule.
   - Navigation: Alt-ArrowUp/Down join siblings, Mod-[ lift, Escape select parent.
   - Mark toggles: Mod-B/Mod-I/Mod-`.
@@ -240,11 +240,11 @@ graph TD
   - Block type bindings: Shift-Ctrl-0 paragraph, Shift-Ctrl-\\ code_block, Shift-Ctrl-(1..6) headings.
   - Mod-_ to insert horizontal rule.
 
-- `components/inputRules.js` includes smart quotes, ellipsis, em-dash, blockquote, ordered/bullet lists, heading `#` levels.
-- Code fences ``` are handled by `plugins/codeBlockPlugin.js`’s `codeBlockInputRule(schema)` replacing the current paragraph with a `code_block` and ensuring an empty line after.
+- `components/inputRules.ts` includes smart quotes, ellipsis, em-dash, blockquote, ordered/bullet lists, heading `#` levels.
+- Code fences ``` are handled by `plugins/codeBlockPlugin.ts`'s `codeBlockInputRule(schema)` replacing the current paragraph with a `code_block` and ensuring an empty line after.
 
 
-## Code blocks with CodeMirror 6 (`plugins/codeBlockPlugin.js`)
+## Code blocks with CodeMirror 6 (`plugins/codeBlockPlugin.ts`)
 
 - Provides a NodeView `CodeBlockView` wrapping a CM6 editor, supporting:
   - Theme via `node.attrs.theme` (defaults to gruvboxLight/dark mapping inside plugin).
@@ -373,7 +373,7 @@ sequenceDiagram
 
 ## Commands
 
-- `components/commands.js` exports helpers for programmatic document manipulation.
+- `components/commands.ts` exports helpers for programmatic document manipulation.
 
 
 ## Workspace host integration
@@ -425,7 +425,7 @@ flowchart LR
 - Extend the bubble menu:
   - Add a new item in `plugins/bubbleMenuPlugin/bubbleMenuItems.ts` and include it in `buildMenu()`.
 - Add a NodeView:
-  - Provide a function in `customNodes/index.js` and add it in a plugin under `props.nodeViews[<nodeType>]`.
+  - Provide a function in `customNodes/index.ts` and add it in a plugin under `props.nodeViews[<nodeType>]`.
 - React to Mod+Enter differently:
   - Update `buildKeymap` or the `aiChatThreadPlugin` meta handling.
 - Add a new AI streaming style:
@@ -457,9 +457,9 @@ flowchart LR
 - Shared schema package: `packages/lixpi/prosemirror`
 - Schema compatibility export: `components/schema.ts`
 - Bubble menu: `plugins/bubbleMenuPlugin/*`
-- Keymap & rules: `components/keyMap.js`, `components/inputRules.js`, `components/prompt.js`, `components/commands.js`
-- Custom nodes: `customNodes/*` and `customNodes/index.js`
-- Plugins: `plugins/*.js` and `plugins/*.ts` (active), plus `plugins/DEPRECATED_DUMPSTER/*` (inactive)
+- Keymap & rules: `components/keyMap.ts`, `components/inputRules.ts`, `components/prompt.ts`, `components/commands.ts`
+- Custom nodes: `customNodes/*` and `customNodes/index.ts`
+- Plugins: `plugins/*.ts` (active), plus `plugins/DEPRECATED_DUMPSTER/*` (inactive)
 
 
 ## Quick glossary
@@ -472,7 +472,7 @@ flowchart LR
 
 ## Extensibility checklist
 
-- Define your NodeSpec in `customNodes` and export via `customNodes/index.js`.
+- Define your NodeSpec in `customNodes` and export via `customNodes/index.ts`.
 - Ensure the shared schema builder order places the node appropriately (before `paragraph` for blocks that must be early).
 - If needed, add a NodeView via a plugin’s `props.nodeViews`.
 - Define input rules and key bindings if your node needs text-based triggers.
