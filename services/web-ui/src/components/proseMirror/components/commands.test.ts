@@ -7,7 +7,7 @@ import {
 import { EditorState } from 'prosemirror-state'
 import { testSchema } from '$src/components/proseMirror/plugins/testUtils/testSchema.ts'
 import { aiChatThreadNodeType } from '$src/components/proseMirror/plugins/aiChatThreadPlugin/aiChatThreadNode.ts'
-import { insertAiChatThread } from '$src/components/proseMirror/components/commands.js'
+import { insertAiChatThread } from '$src/components/proseMirror/components/commands.ts'
 
 vi.mock('uuid', () => ({
     v4: () => 'thread-uuid-fixed',
