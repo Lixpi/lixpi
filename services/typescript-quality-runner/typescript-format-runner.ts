@@ -989,8 +989,63 @@ const getMultilineIfConditionText = (node: AstNode, source: string, indentation:
     return lines.join('\n')
 }
 
+const getMultilineAssignedLogicalExpressionText = (node: AstNode, source: string, indentation: string): string | null =>
+    getConditionOperandText(node, source, indentation)
+
 const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean =>
     comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
+
+const canonicalizeAssignedLogicalExpressions = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const comments = parseResult.comments as AstComment[]
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode): void => {
+        const value = getAssignmentValue(node)
+        const valueRange = getNodeRange(value)
+        if (
+            value
+            && valueRange
+            && unwrapParenthesizedExpression(value).type === 'LogicalExpression'
+            && countLogicalEvaluations(value) > 2
+            && !hasCommentWithinRange(comments, valueRange)
+        ) {
+            const indentation = getLineIndentation(source, valueRange[0])
+            const replacement = getMultilineAssignedLogicalExpressionText(value, source, indentation)
+            if (!replacement)
+                throw new Error(`Could not split the assigned logical expression in ${file}`)
+            if (source.slice(valueRange[0], valueRange[1]) !== replacement) {
+                replacements.push({
+                    start: valueRange[0],
+                    end: valueRange[1],
+                    text: replacement,
+                })
+                return
+            }
+        }
+
+        for (const [key, childValue] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(childValue)) {
+                for (const child of childValue) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(childValue))
+                visit(childValue)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
 
 const getStatementList = (node: AstNode): AstNode[] | null => {
     if (
@@ -1221,7 +1276,8 @@ const formatSource = async (file: string, source: string, config: FormatConfig):
     const preserved = preserveExpandedTypeScriptLayouts(file, source, formattedIfStatements)
     const canonicalIfStatements = canonicalizeIfStatements(file, preserved)
     const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(file, canonicalIfStatements)
-    const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignmentBoundaries)
+    const canonicalAssignedLogicalExpressions = canonicalizeAssignedLogicalExpressions(file, canonicalAssignmentBoundaries)
+    const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignedLogicalExpressions)
     const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
     const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalIteratorChains)
     const formattedHtmlTemplates = applyHtmlTemplateFormatting(file, canonicalConditionalExpressions, htmlResult.code)
