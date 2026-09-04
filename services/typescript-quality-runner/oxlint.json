@@ -181,6 +181,9 @@
                 "**/import-specifier-order.ts",
                 "**/lixpi-oxlint-plugin.ts",
                 "**/source-extension-runner.ts",
+                "**/stylelint-lixpi-plugin.ts",
+                "**/stylelint-runner.ts",
+                "**/stylelint.config.ts",
                 "**/typescript-format-runner.ts"
             ],
             "rules": {

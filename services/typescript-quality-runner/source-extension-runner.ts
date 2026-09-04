@@ -100,7 +100,10 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
         if (!entry.isDirectory())
             return
 
-        const entries = await readdir(path, { withFileTypes: true })
+        const entries = await readdir(
+            path,
+            { withFileTypes: true },
+        )
 
         for (const child of entries) {
             if (
@@ -109,7 +112,10 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
             )
                 continue
 
-            await visit(resolve(path, child.name))
+            await visit(resolve(
+                path,
+                child.name,
+            ))
         }
     }
 
@@ -122,27 +128,47 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
     }
 }
 
-const getTypeScriptPath = (path: string): string => `${path.slice(0, -extname(path).length)}.ts`
+const getTypeScriptPath = (path: string): string => `${path.slice(
+    0,
+    -extname(path).length,
+)}.ts`
 
-const resolveModuleSpecifier = (importer: string, specifier: string): string | null => {
+const resolveModuleSpecifier = (
+    importer: string,
+    specifier: string,
+): string | null => {
     if (
         specifier.startsWith('./')
         || specifier.startsWith('../')
     )
-        return resolve(dirname(importer), specifier)
+        return resolve(
+            dirname(importer),
+            specifier,
+        )
 
     if (specifier.startsWith('$src/'))
-        return resolve(repositoryDirectory, 'services/web-ui/src', specifier.slice('$src/'.length))
+        return resolve(
+            repositoryDirectory,
+            'services/web-ui/src',
+            specifier.slice('$src/'.length),
+        )
 
     return null
 }
 
-const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
-    const parseResult = parseSync(file, source, {
-        astType: 'ts',
-        preserveParens: true,
-        range: true,
-    })
+const getModuleSpecifierNodes = (
+    file: string,
+    source: string,
+): AstNode[] => {
+    const parseResult = parseSync(
+        file,
+        source,
+        {
+            astType: 'ts',
+            preserveParens: true,
+            range: true,
+        },
+    )
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -152,12 +178,12 @@ const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
     const visit = (node: AstNode): void => {
         const sourceNode = isAstNode(node.source)
             ? node.source
-            : ((
+            : (
                 node.type === 'TSImportType'
                 && isAstNode(node.argument)
             )
                 ? node.argument
-                : null)
+                : null
         const isModuleReference = (
             node.type === 'ImportDeclaration'
             || node.type === 'ExportAllDeclaration'
@@ -198,19 +224,40 @@ const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
     return specifiers
 }
 
-const applySourceReplacements = (source: string, replacements: SourceReplacement[]): string => {
+const applySourceReplacements = (
+    source: string,
+    replacements: SourceReplacement[],
+): string => {
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((
+        left,
+        right,
+    ) => right.start - left.start)) output = `${output.slice(
+        0,
+        replacement.start,
+    )}${replacement.value}${output.slice(replacement.end)}`
 
     return output
 }
 
-const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string, string>): Promise<boolean> => {
-    const source = await readFile(importer, 'utf8')
+const updateModuleSpecifiers = async (
+    importer: string,
+    renamedFiles: Map<
+        string,
+        string,
+    >,
+): Promise<boolean> => {
+    const source = await readFile(
+        importer,
+        'utf8',
+    )
     const replacements: SourceReplacement[] = []
 
-    for (const sourceNode of getModuleSpecifierNodes(importer, source)) {
+    for (const sourceNode of getModuleSpecifierNodes(
+        importer,
+        source,
+    )) {
         const sourceRange = getNodeRange(sourceNode)
         const specifier = sourceNode.value
 
@@ -220,7 +267,10 @@ const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string
         )
             continue
 
-        const resolvedSpecifier = resolveModuleSpecifier(importer, specifier)
+        const resolvedSpecifier = resolveModuleSpecifier(
+            importer,
+            specifier,
+        )
 
         if (!resolvedSpecifier)
             continue
@@ -233,16 +283,25 @@ const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string
         replacements.push({
             end: sourceRange[1],
             start: sourceRange[0],
-            value: JSON.stringify(`${specifier.slice(0, -extname(specifier).length)}.ts`),
+            value: JSON.stringify(`${specifier.slice(
+                0,
+                -extname(specifier).length,
+            )}.ts`),
         })
     }
 
-    const output = applySourceReplacements(source, replacements)
+    const output = applySourceReplacements(
+        source,
+        replacements,
+    )
 
     if (output === source)
         return false
 
-    await writeFile(importer, output)
+    await writeFile(
+        importer,
+        output,
+    )
 
     return true
 }
@@ -294,7 +353,10 @@ for (const target of renamedFiles.values()) {
     }
 }
 
-for (const [source, target] of renamedFiles) await rename(source, target)
+for (const [source, target] of renamedFiles) await rename(
+    source,
+    target,
+)
 
 let updatedImporterCount = 0
 
@@ -302,7 +364,10 @@ for (const originalImporter of importers) {
     const importer = renamedFiles.get(originalImporter)
         ?? originalImporter
 
-    if (await updateModuleSpecifiers(importer, renamedFiles))
+    if (await updateModuleSpecifiers(
+        importer,
+        renamedFiles,
+    ))
         updatedImporterCount++
 }
 

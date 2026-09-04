@@ -13,7 +13,9 @@
         "oxfmt": "*",
         "oxlint": "*",
         "oxc-parser": "*",
+        "parse5": "*",
         "postcss-scss": "*",
+        "postcss-value-parser": "*",
         "stylelint": "*",
         "stylelint-scss": "*"
     }

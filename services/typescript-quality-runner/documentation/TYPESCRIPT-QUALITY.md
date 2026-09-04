@@ -1,11 +1,11 @@
 ---
 title: TypeScript and Stylesheet Linting and Formatting
-description: Docker-only Oxfmt, dprint, Oxlint, and Stylelint commands for checking or fixing one Lixpi service or shared package at a time.
+description: Architecture, enforced syntax rules, and Docker-only commands for the TypeScript quality runner.
 ---
 
 # TypeScript and Stylesheet Linting and Formatting
 
-The `lixpi-typescript-quality-runner` container owns TypeScript, HTML, Sass, and CSS formatting and linting. It uses Oxfmt for production TypeScript, standalone HTML, and tagged HTML templates; dprint with Malva for stylesheet formatting; Oxlint for TypeScript rules and safe fixes; Stylelint for stylesheet rules; and the repository import/export-layout checker for the exact named-specifier matrix. Oxfmt's TypeScript wrapper preserves deliberately expanded parameters, arguments, types, expressions, arrays, objects, destructuring, and call chains while still formatting embedded HTML. The container has its own dependencies and does not reuse service, package, or test-runner dependencies.
+The `lixpi-typescript-quality-runner` container owns TypeScript, HTML, Sass, and CSS formatting and linting. It uses Oxfmt for production TypeScript, standalone HTML, and tagged HTML templates; Oxc for TypeScript syntax; parse5 for HTML syntax; dprint with Malva for stylesheet formatting; PostCSS and postcss-value-parser for stylesheet syntax; Oxlint for TypeScript rules and safe fixes; Stylelint for stylesheet rules; and the repository import/export-layout checker for the exact named-specifier matrix. The container has its own dependencies and does not reuse service, package, or test-runner dependencies.
 
 Never run `node`, `npm`, `npx`, `pnpm`, `pnpx`, `dprint`, Oxlint, Stylelint, TypeScript files, package scripts, linters, or formatters on the host. Run every TypeScript and stylesheet quality command through Docker Compose from the repository root.
 
@@ -51,6 +51,20 @@ The action is optional and defaults to `validate`.
 | `validate-formatting` | Validates Oxfmt, dprint, and named-import/export formatting. It does not modify source. |
 | `lint` | Runs Oxlint and Stylelint. |
 | `lint-fix` | Applies Oxlint and Stylelint fixes, then formats changed production TypeScript and HTML. |
+
+## TypeScript and HTML formatting contracts
+
+The quality runner treats parser nodes as the only authority for syntax boundaries. Oxc identifies TypeScript declarations, expressions, function parameters, call arguments, tagged-template quasis, and `${...}` interpolation bodies. parse5 identifies elements and attribute locations inside standalone HTML and `html` tagged templates. PostCSS supplies stylesheet declarations, and postcss-value-parser supplies the declaration-value tree used by custom Stylelint rules. Formatter and linter rules must not discover language constructs with regular expressions or raw source-text searches.
+
+Oxfmt provides the baseline layout, but repository rules run through AST-addressed replacements after that baseline:
+
+- A function, method, constructor, arrow function, call, or `new` expression with two or more parameters or arguments is multiline. The shared delimited-list formatter puts one item on each line and adds the trailing comma.
+- A nested conditional expression keeps each level visibly nested. Each nested `?` and `:` is indented one level beyond its parent conditional instead of being flattened into the parent branch.
+- TypeScript inside an `html` interpolation follows the same control-flow, conditional, argument, and expression rules as TypeScript outside a template. The HTML merge copies only parsed template quasis, so HTML formatting cannot replace an interpolation body with Oxfmt's uncanonicalized TypeScript output.
+- An HTML start tag with two or more attributes is multiline, with one attribute per line. This applies to standalone `.html` files and `html` tagged templates, including attributes whose values contain TypeScript interpolations.
+- String concatenation is prohibited by Oxlint's `prefer-template` rule. Use template interpolation. `validate` and `lint` reject concatenation even when Oxlint cannot safely fix it; `fix` applies the safe fixes Oxlint provides before the formatter runs.
+
+The formatter preserves deliberately expanded types, arrays, objects, destructuring, expressions, and call chains. Repository canonicalizers may expand a structure when a rule requires it, but Oxfmt must not collapse a structure that the source intentionally expanded.
 
 Run the runner's fixture test after changing its image, scripts, dprint configuration, Oxlint configuration, or Stylelint configuration:
 
@@ -113,7 +127,7 @@ export type {
 
 ## Sass and CSS Rules
 
-dprint's Malva plugin formats first-party `.scss` and `.css` files with four spaces and the repository's shared formatting settings. Stylelint parses both formats through `postcss-scss` and enforces these parts of [`SASS-AND-CSS.md`](../../coding-style-guides/SASS-AND-CSS.md):
+dprint's Malva plugin formats first-party `.scss` and `.css` files with four spaces and the repository's shared formatting settings. Stylelint parses both formats through `postcss-scss` and enforces these parts of [`SASS-AND-CSS.md`](../../../documentation/coding-style-guides/SASS-AND-CSS.md):
 
 - Lixpi-owned classes use flat kebab-case names. BEM `__` and `--` punctuation, underscores, camelCase, and PascalCase are rejected. Explicit external contracts such as ProseMirror classes are exempt without weakening the application-class pattern.
 - CSS custom properties use kebab-case.
@@ -135,9 +149,11 @@ docker compose --profile dev --profile main build lixpi-ai-model-registry
 
 dprint uses the `typescript-quality-runner-dprint-cache` volume for its compiled plugins and incremental file-state cache. pnpm uses `typescript-quality-runner-pnpm-store`, and both the tool workspace and its local debug-tools workspace have dedicated `node_modules` volumes. Oxlint and Stylelint receive only the selected domain paths. The formatter, import/export, Oxlint-plugin, and Stylelint wrappers are erasable TypeScript files executed directly by Node 24's stable type stripping; there is no generated JavaScript copy.
 
-All linter and formatter configuration lives under [`services/typescript-quality-runner`](../../../services/typescript-quality-runner/): [`oxfmt.json`](../../../services/typescript-quality-runner/oxfmt.json), [`dprint.json`](../../../services/typescript-quality-runner/dprint.json), [`oxlint.json`](../../../services/typescript-quality-runner/oxlint.json), and [`stylelint.config.ts`](../../../services/typescript-quality-runner/stylelint.config.ts). The wildcard package manifest is resolved without a lockfile on every invocation. There is no TypeScript build step and the tools do not emit JavaScript.
+All linter and formatter configuration lives beside this documentation: [`oxfmt.json`](../oxfmt.json), [`dprint.json`](../dprint.json), [`oxlint.json`](../oxlint.json), and [`stylelint.config.ts`](../stylelint.config.ts). The wildcard package manifest is resolved without a lockfile on every invocation. There is no TypeScript build step and the tools do not emit JavaScript.
 
-Oxlint starts from an explicit rule baseline so adopting the runner does not silently turn unrelated existing findings into repository-wide failures. The quality runner rejects JavaScript and JSX source files, React imports, `debugger`, top-level `import type`, file imports without their TypeScript extension, duplicate module imports, CommonJS imports, `interface` declarations outside ambient `.d.ts` files, plain function declarations, unnecessary arrow-body blocks, expression-bodied arrows longer than 150 characters whose body remains on the signature line, unnecessary braces around simple `if` bodies, `if` conditions with more than two logical evaluations that remain inline, simple brace-less `if` bodies that are not on the following indented line, comma-separated declarations and sequence expressions, semicolons that are not ASI guards, inline object destructuring with multiple properties, inline multi-value Map/Set-style initializers, inline multi-attribute D3/SVG chains, legacy own-property checks, JSON serialization used as a deep-clone substitute, restricted HTTP client packages, restricted raw DOM construction in web-ui implementation files, and native console logging outside frontend code and the debug-tools implementation. Named exports follow the same one-versus-many layout as named imports. Fix actions migrate JavaScript source files to TypeScript, remove unused imports without deleting unused local variables, and replace native backend console calls with `@lixpi/debug-tools` imports and calls.
+Oxlint starts from an explicit rule baseline so adopting the runner does not silently turn unrelated existing findings into repository-wide failures. The quality runner rejects JavaScript and JSX source files, React imports, `debugger`, top-level `import type`, file imports without their TypeScript extension, duplicate module imports, CommonJS imports, `interface` declarations outside ambient `.d.ts` files, plain function declarations, unnecessary arrow-body blocks, expression-bodied arrows longer than 150 characters whose body remains on the signature line, unnecessary braces around simple `if` bodies, `if` conditions with more than two logical evaluations that remain inline, simple brace-less `if` bodies that are not on the following indented line, comma-separated declarations and sequence expressions, semicolons that are not ASI guards, inline object destructuring with multiple properties, inline multi-value Map/Set-style initializers, inline multi-attribute D3/SVG chains, string concatenation, legacy own-property checks, JSON serialization used as a deep-clone substitute, restricted HTTP client packages, restricted raw DOM construction in web-ui implementation files, and native console logging outside frontend code and the debug-tools implementation. Named exports follow the same one-versus-many layout as named imports. Fix actions migrate JavaScript source files to TypeScript, remove unused imports without deleting unused local variables, and replace native backend console calls with `@lixpi/debug-tools` imports and calls.
+
+The `lixpi/require-ast-formatter-rules` guard runs against every TypeScript implementation file in this service. It rejects regular expressions and raw source-string syntax searches so formatter and linter changes cannot bypass the parser boundary.
 
 ## GitHub Actions
 

@@ -1,6 +1,7 @@
 import stylelint, {
     type PostcssResult,
 } from 'stylelint'
+import valueParser from 'postcss-value-parser'
 
 type Declaration = {
     prop: string
@@ -33,14 +34,30 @@ type RuleContext = {
     fix?: boolean
 }
 
+type CssValueNode = {
+    nodes?: CssValueNode[]
+    type: string
+    value: string
+}
+
+type CssValueRoot = {
+    nodes: CssValueNode[]
+}
+
 const transitionRuleName = 'lixpi/transition-helpers'
-const transitionMessages = stylelint.utils.ruleMessages(transitionRuleName, {
-    expected: value => `Expected "${value}" to use a shared transition helper or custom property`,
-})
+const transitionMessages = stylelint.utils.ruleMessages(
+    transitionRuleName,
+    {
+        expected: value => `Expected "${value}" to use a shared transition helper or custom property`,
+    },
+)
 const blockCommentRuleName = 'lixpi/no-block-comments'
-const blockCommentMessages = stylelint.utils.ruleMessages(blockCommentRuleName, {
-    expected: 'Use // comments instead of block comments',
-})
+const blockCommentMessages = stylelint.utils.ruleMessages(
+    blockCommentRuleName,
+    {
+        expected: 'Use // comments instead of block comments',
+    },
+)
 const transitionHelpers = new Set([
     'hoverTransition',
     'overlayVisibilityTransition',
@@ -57,100 +74,105 @@ const cssWideKeywords = new Set([
     'unset',
 ])
 
-const splitTopLevelCommas = (value: string): string[] => {
-    const parts: string[] = []
-    let depth = 0
-    let start = 0
+const isLowercaseIdentifierCharacter = (character: string | undefined): boolean => Boolean(
+    character
+    && (
+        character === '-'
+        || character >= '0' && character <= '9'
+        || character >= 'a' && character <= 'z'
+    ),
+)
 
-    for (let index = 0; index < value.length; index += 1) {
-        const character = value[index]
+const isTransitionCustomProperty = (property: string): boolean => {
+    if (!property.startsWith('--'))
+        return false
 
+    const suffix = property.endsWith('-transitions')
+        ? '-transitions'
+        : property.endsWith('-transition')
+            ? '-transition'
+            : null
+
+    if (!suffix)
+        return false
+
+    const nameEnd = property.length - suffix.length
+
+    if (nameEnd <= 2)
+        return false
+
+    for (let index = 2; index < nameEnd; index++) if (!isLowercaseIdentifierCharacter(property[index]))
+        return false
+
+    return true
+}
+
+const getUnqualifiedFunctionName = (value: string): string => {
+    const interpolationOffset = value.startsWith('#{') ? 2 : 0
+    let nameStart = interpolationOffset
+
+    for (let index = value.length - 1; index >= interpolationOffset; index--)
+        if (value[index] === '.') {
+            nameStart = index + 1
+
+            break
+        }
+
+    return value.slice(nameStart)
+}
+
+const isSharedTransitionFunction = (node: CssValueNode): boolean => node.type === 'function'
+    && (
+        getUnqualifiedFunctionName(node.value) === 'var'
+        || transitionHelpers.has(getUnqualifiedFunctionName(node.value))
+    )
+
+const getTopLevelValueGroups = (nodes: CssValueNode[]): CssValueNode[][] => {
+    const groups: CssValueNode[][] = [[]]
+
+    for (const node of nodes) {
         if (
-            character === '('
-            || character === '{'
-        )
-            depth += 1
-        else if (
-            character === ')'
-            || character === '}'
-        )
-            depth -= 1
-        else if (
-            character === ','
-            && depth === 0
+            node.type === 'div'
+            && node.value === ','
         ) {
-            parts.push(value.slice(start, index).trim())
-            start = index + 1
-        }
-    }
+            groups.push([])
 
-    parts.push(value.slice(start).trim())
-
-    return parts
-}
-
-const unwrapInterpolation = (value: string): string => {
-    if (
-        value.startsWith('#{')
-        && value.endsWith('}')
-    )
-        return value.slice(2, -1).trim()
-
-    return value
-}
-
-const isCompleteFunctionCall = (value: string, allowedFunctions: Set<string>): boolean => {
-    const openParenthesis = value.indexOf('(')
-
-    if (
-        openParenthesis < 1
-        || !value.endsWith(')')
-    )
-        return false
-
-    const qualifiedName = value.slice(0, openParenthesis).trim()
-    const functionName = qualifiedName.split('.').at(-1)
-
-    if (
-        !functionName
-        || !allowedFunctions.has(functionName)
-    )
-        return false
-
-    let depth = 0
-
-    for (let index = openParenthesis; index < value.length; index += 1) {
-        const character = value[index]
-
-        if (character === '(')
-            depth += 1
-        else if (character === ')') {
-            depth -= 1
-
-            if (
-                depth === 0
-                && index !== value.length - 1
-            )
-                return false
+            continue
         }
 
-        if (depth < 0)
-            return false
+        if (node.type !== 'space')
+            groups.at(-1)!.push(node)
     }
 
-    return depth === 0
+    return groups
 }
 
-const isSharedTransition = (value: string): boolean => {
-    const normalizedValue = unwrapInterpolation(value.trim())
+const isSharedTransitionGroup = (nodes: CssValueNode[]): boolean => {
+    if (nodes.length === 1) {
+        const node = nodes[0]!
 
-    if (cssWideKeywords.has(normalizedValue))
-        return true
+        return node.type === 'word' && cssWideKeywords.has(node.value)
+            || isSharedTransitionFunction(node)
+    }
 
-    return isCompleteFunctionCall(normalizedValue, new Set(['var'])) || isCompleteFunctionCall(normalizedValue, transitionHelpers)
+    return nodes.length === 2
+        && nodes[0]!.type === 'function'
+        && nodes[0]!.value.startsWith('#{')
+        && isSharedTransitionFunction(nodes[0]!)
+        && nodes[1]!.type === 'word'
+        && nodes[1]!.value === '}'
 }
 
-const transitionHelpersRule = (primary: boolean) => (root: Root, result: PostcssResult) => {
+const isSharedTransitionValue = (value: string): boolean => {
+    const parsed = valueParser(value) as CssValueRoot
+
+    return getTopLevelValueGroups(parsed.nodes).every(isSharedTransitionGroup)
+}
+
+const transitionHelpersRule = (primary: boolean) => (
+    root: Root,
+    result: PostcssResult,
+) => {
     if (!primary)
         return
 
@@ -158,7 +180,7 @@ const transitionHelpersRule = (primary: boolean) => (root: Root, result: Postcss
         const property = declaration.prop.toLowerCase()
         const isTransitionValue = (
             property === 'transition'
-            || /^--[a-z0-9-]+-transitions?$/.test(property)
+            || isTransitionCustomProperty(property)
         )
         const isSplitTransitionProperty = (
             property === 'transition-delay'
@@ -168,7 +190,7 @@ const transitionHelpersRule = (primary: boolean) => (root: Root, result: Postcss
 
         const isValid = (
             isTransitionValue
-            && splitTopLevelCommas(declaration.value).every(isSharedTransition)
+            && isSharedTransitionValue(declaration.value)
         )
 
         if (
@@ -221,7 +243,10 @@ const normalizeCommentLine = (line: string): string => {
     )
         end--
 
-    return line.slice(start, end)
+    return line.slice(
+        start,
+        end,
+    )
 }
 
 const getCommentLines = (comment: Comment): string[] => {
@@ -247,13 +272,19 @@ const getCommentIndentation = (comment: Comment): string => {
     )
         end++
 
-    return finalWhitespaceLine.slice(0, end)
+    return finalWhitespaceLine.slice(
+        0,
+        end,
+    )
 }
 
 const convertBlockComment = (comment: Comment): void => {
     const lines = getCommentLines(comment)
     const indentation = getCommentIndentation(comment)
-    const comments = lines.map((line, index) => comment.clone({
+    const comments = lines.map((
+        line,
+        index,
+    ) => comment.clone({
         text: line,
         raws: {
             ...comment.raws,
@@ -266,8 +297,15 @@ const convertBlockComment = (comment: Comment): void => {
     comment.replaceWith(...comments)
 }
 
-const noBlockCommentsRule = (primary: boolean, _secondaryOptions: unknown, context: RuleContext = {}) =>
-    (root: Root, result: PostcssResult) => {
+const noBlockCommentsRule = (
+    primary: boolean,
+    _secondaryOptions: unknown,
+    context: RuleContext = {},
+) =>
+    (
+        root: Root,
+        result: PostcssResult,
+    ) => {
         if (!primary)
             return
 
@@ -298,6 +336,12 @@ noBlockCommentsRule.meta = {
 }
 
 export default [
-    stylelint.createPlugin(transitionRuleName, transitionHelpersRule),
-    stylelint.createPlugin(blockCommentRuleName, noBlockCommentsRule),
+    stylelint.createPlugin(
+        transitionRuleName,
+        transitionHelpersRule,
+    ),
+    stylelint.createPlugin(
+        blockCommentRuleName,
+        noBlockCommentsRule,
+    ),
 ]
