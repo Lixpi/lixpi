@@ -1518,12 +1518,49 @@ const preferSeparatedStatements = defineRule({
         type: 'layout',
         fixable: 'whitespace',
         messages: {
+            joinCases: 'Keep adjacent switch cases together without a blank line.',
             separateStatements: 'Separate grouped statements from adjacent siblings with one blank line.',
         },
         schema: [],
     },
     create(context) {
         const { sourceCode } = context
+        const reportSiblingGap = (
+            previous,
+            current,
+            blankLine: boolean,
+            messageId: string,
+        ): void => {
+            const gap = getStatementGap(
+                sourceCode,
+                previous.range[1],
+                current.range[0],
+            )
+
+            if (!gap)
+                return
+
+            const lineBreaks = blankLine ? '\n\n' : '\n'
+            const replacement = `${lineBreaks}${getLineIndentation(
+                sourceCode.text,
+                gap[1],
+            )}`
+
+            if (sourceCode.text.slice(
+                gap[0],
+                gap[1],
+            ) === replacement)
+                return
+
+            context.report({
+                node: current,
+                messageId,
+                fix: (fixer) => fixer.replaceTextRange(
+                    gap,
+                    replacement,
+                ),
+            })
+        }
         const checkStatementList = (node): void => {
             const statements = getStatementList(node)
 
@@ -1540,35 +1577,21 @@ const preferSeparatedStatements = defineRule({
                 )
                     continue
 
-                const gap = getStatementGap(
-                    sourceCode,
-                    previous.range[1],
-                    current.range[0],
+                reportSiblingGap(
+                    previous,
+                    current,
+                    true,
+                    'separateStatements',
                 )
-
-                if (!gap)
-                    continue
-
-                const replacement = `\n\n${getLineIndentation(
-                    sourceCode.text,
-                    gap[1],
-                )}`
-
-                if (sourceCode.text.slice(
-                    gap[0],
-                    gap[1],
-                ) === replacement)
-                    continue
-
-                context.report({
-                    node: current,
-                    messageId: 'separateStatements',
-                    fix: (fixer) => fixer.replaceTextRange(
-                        gap,
-                        replacement,
-                    ),
-                })
             }
+        }
+        const checkSwitchCases = (node): void => {
+            for (let index = 1; index < node.cases.length; index++) reportSiblingGap(
+                node.cases[index - 1],
+                node.cases[index],
+                false,
+                'joinCases',
+            )
         }
 
         return {
@@ -1576,6 +1599,7 @@ const preferSeparatedStatements = defineRule({
             Program: checkStatementList,
             StaticBlock: checkStatementList,
             SwitchCase: checkStatementList,
+            SwitchStatement: checkSwitchCases,
             TSModuleBlock: checkStatementList,
         }
     },

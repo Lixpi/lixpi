@@ -2537,7 +2537,62 @@ const canonicalizeStatementSpacing = (
         right,
     ) => left.start - right.start)
     const replacements: LayoutSpan[] = []
+    const addSiblingGapReplacement = (
+        previous: AstNode,
+        current: AstNode,
+        blankLine: boolean,
+    ): void => {
+        const previousRange = getNodeRange(previous)
+        const currentRange = getNodeRange(current)
+
+        if (
+            !previousRange
+            || !currentRange
+        )
+            return
+
+        const gap = getStatementGap(
+            source,
+            comments,
+            previousRange[1],
+            currentRange[0],
+        )
+
+        if (!gap)
+            return
+
+        const lineBreaks = blankLine ? '\n\n' : '\n'
+        const replacement = `${lineBreaks}${getLineIndentation(
+            source,
+            gap[1],
+        )}`
+
+        if (source.slice(
+            gap[0],
+            gap[1],
+        ) === replacement)
+            return
+
+        replacements.push({
+            start: gap[0],
+            end: gap[1],
+            text: replacement,
+        })
+    }
     const visit = (node: AstNode): void => {
+        if (
+            node.type === 'SwitchStatement'
+            && Array.isArray(node.cases)
+        ) {
+            const cases = node.cases.filter(isAstNode)
+
+            for (let index = 1; index < cases.length; index++) addSiblingGapReplacement(
+                cases[index - 1]!,
+                cases[index]!,
+                false,
+            )
+        }
+
         const statements = getStatementList(node)
 
         if (statements) {
@@ -2551,41 +2606,11 @@ const canonicalizeStatementSpacing = (
                 )
                     continue
 
-                const previousRange = getNodeRange(previous)
-                const currentRange = getNodeRange(current)
-
-                if (
-                    !previousRange
-                    || !currentRange
+                addSiblingGapReplacement(
+                    previous,
+                    current,
+                    true,
                 )
-                    continue
-
-                const gap = getStatementGap(
-                    source,
-                    comments,
-                    previousRange[1],
-                    currentRange[0],
-                )
-
-                if (!gap)
-                    continue
-
-                const replacement = `\n\n${getLineIndentation(
-                    source,
-                    gap[1],
-                )}`
-
-                if (source.slice(
-                    gap[0],
-                    gap[1],
-                ) === replacement)
-                    continue
-
-                replacements.push({
-                    start: gap[0],
-                    end: gap[1],
-                    text: replacement,
-                })
             }
         }
 
