@@ -695,7 +695,25 @@ const preferMultilineCondition = defineRule({
                 node.range[0],
             )
             const operandIndentation = `${indentation}    `
-            const replacementRange = [openParenthesis.range[0], closeParenthesis.range[1]]
+            let directBody = null
+
+            if (node.type === 'IfStatement')
+                directBody = node.consequent
+            else if (node.type === 'WhileStatement')
+                directBody = node.body
+
+            const ownsCompactBodyBoundary = Boolean(
+                directBody
+                && directBody.type !== 'BlockStatement'
+                && compactIfStatementTypes.has(directBody.type)
+                && !sourceCode.getAllComments().some((comment) =>
+                    comment.range[0] >= closeParenthesis.range[1]
+                    && comment.range[1] <= directBody.range[0]),
+            )
+            const replacementRange = [
+                openParenthesis.range[0],
+                ownsCompactBodyBoundary ? directBody.range[0] : closeParenthesis.range[1],
+            ]
             const condition = getFormattedConditionText(
                 node.test,
                 sourceCode,
@@ -706,7 +724,8 @@ const preferMultilineCondition = defineRule({
             if (!condition)
                 return
 
-            const replacement = `(\n${condition}\n${indentation})`
+            const bodyBoundary = ownsCompactBodyBoundary ? `\n${operandIndentation}` : ''
+            const replacement = `(\n${condition}\n${indentation})${bodyBoundary}`
 
             if (sourceCode.text.slice(
                 replacementRange[0],
@@ -1343,6 +1362,11 @@ const preferCompactIf = defineRule({
                     node.range[0],
                 )
                 const bodyIndentation = `${indentation}    `
+                const conditionRuleOwnsConsequentBoundary = (
+                    unwrapParenthesizedExpression(node.test).type === 'LogicalExpression'
+                    && countLogicalEvaluations(node.test) > 1
+                    && sourceCode.getCommentsInside(node.test).length === 0
+                )
                 const blocks = [node.consequent, node.alternate].filter(statement => statement?.type === 'BlockStatement')
 
                 for (const block of blocks) {
@@ -1382,6 +1406,12 @@ const preferCompactIf = defineRule({
                     statement && statement.type !== 'BlockStatement' && compactIfStatementTypes.has(statement.type))
 
                 for (const statement of directStatements) {
+                    if (
+                        statement === node.consequent
+                        && conditionRuleOwnsConsequentBoundary
+                    )
+                        continue
+
                     const precedingToken = sourceCode.getTokenBefore(statement)
 
                     if (!precedingToken)
