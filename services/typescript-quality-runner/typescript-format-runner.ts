@@ -61,7 +61,28 @@ const separatedControlFlowStatementTypes = new Set([
     'ReturnStatement',
     'ThrowStatement',
 ])
+const iteratorMethodNames = new Set([
+    'drop',
+    'entries',
+    'every',
+    'filter',
+    'find',
+    'findIndex',
+    'findLast',
+    'findLastIndex',
+    'flatMap',
+    'forEach',
+    'keys',
+    'map',
+    'reduce',
+    'reduceRight',
+    'some',
+    'take',
+    'toArray',
+    'values',
+])
 const maximumInlineArrowFunctionLength = 150
+const maximumInlineIteratorChainLength = 150
 
 type FormattingFiles = {
     files: string[]
@@ -94,6 +115,12 @@ type AstNode = {
 type AstComment = {
     end: number
     start: number
+}
+
+type CallChain = {
+    base: AstNode
+    iteratorCount: number
+    segments: string[]
 }
 
 type TypeScriptLayouts = {
@@ -474,6 +501,74 @@ const applyHtmlTemplateFormatting = (file: string, formatted: string, htmlFormat
     return output
 }
 
+const getAssignmentValue = (node: AstNode): AstNode | null => {
+    if (
+        node.type === 'AssignmentExpression'
+        || node.type === 'AssignmentPattern'
+    )
+        return isAstNode(node.right) ? node.right : null
+
+    if (
+        node.type === 'PropertyDefinition'
+        || node.type === 'VariableDeclarator'
+    ) {
+        if (isAstNode(node.value))
+            return node.value
+
+        return isAstNode(node.init) ? node.init : null
+    }
+
+    return null
+}
+
+const canonicalizeAssignmentBoundaries = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const comments = parseResult.comments as AstComment[]
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode): void => {
+        const nodeRange = getNodeRange(node)
+        const value = getAssignmentValue(node)
+        const valueRange = getNodeRange(value)
+        if (
+            nodeRange
+            && valueRange
+            && !hasCommentWithinRange(comments, [nodeRange[0], valueRange[0]])
+        ) {
+            const whitespaceStart = getTrailingWhitespaceStart(source, nodeRange[0], valueRange[0])
+            const whitespace = source.slice(whitespaceStart, valueRange[0])
+            if (whitespace !== ' ' && whitespace.trim().length === 0) {
+                replacements.push({
+                    start: whitespaceStart,
+                    end: valueRange[0],
+                    text: ' ',
+                })
+            }
+        }
+
+        for (const [key, childValue] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(childValue)) {
+                for (const child of childValue) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(childValue))
+                visit(childValue)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
 const canonicalizeExpressionArrowBodies = (file: string, source: string): string => {
     const parseResult = parseSync(file, source, {
         astType: 'ts',
@@ -528,6 +623,118 @@ const canonicalizeExpressionArrowBodies = (file: string, source: string): string
     let output = source
     for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
     return output
+}
+
+const isNestedCallChain = (node: AstNode, parent: AstNode | null, grandparent: AstNode | null): boolean =>
+    parent?.type === 'MemberExpression'
+    && parent.object === node
+    && grandparent?.type === 'CallExpression'
+    && grandparent.callee === parent
+
+const getCallChain = (node: AstNode, source: string): CallChain | null => {
+    const segments: string[] = []
+    let current = node
+    let iteratorCount = 0
+
+    while (
+        current.type === 'CallExpression'
+        && isAstNode(current.callee)
+        && current.callee.type === 'MemberExpression'
+        && current.callee.computed === false
+        && isAstNode(current.callee.object)
+        && isAstNode(current.callee.property)
+        && current.callee.property.type === 'Identifier'
+        && typeof current.callee.property.name === 'string'
+    ) {
+        const currentRange = getNodeRange(current)
+        const objectRange = getNodeRange(current.callee.object)
+        if (!currentRange || !objectRange)
+            return null
+        if (iteratorMethodNames.has(current.callee.property.name))
+            iteratorCount++
+        segments.unshift(source.slice(objectRange[1], currentRange[1]).trim())
+        current = current.callee.object
+    }
+
+    if (segments.length === 0)
+        return null
+    return {
+        base: current,
+        iteratorCount,
+        segments,
+    }
+}
+
+const canonicalizeIteratorChainsOnce = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const comments = parseResult.comments as AstComment[]
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode, parent: AstNode | null = null, grandparent: AstNode | null = null): void => {
+        const nodeRange = getNodeRange(node)
+        if (
+            node.type === 'CallExpression'
+            && nodeRange
+            && !isNestedCallChain(node, parent, grandparent)
+        ) {
+            const chain = getCallChain(node, source)
+            const isLongInlineChain = node.loc?.start.line === node.loc?.end.line
+                && (node.loc?.start.column ?? 0) + nodeRange[1] - nodeRange[0] > maximumInlineIteratorChainLength
+            if (
+                chain
+                && chain.iteratorCount > 0
+                && (chain.iteratorCount > 2 || isLongInlineChain)
+                && !hasCommentWithinRange(comments, nodeRange)
+            ) {
+                const baseRange = getNodeRange(chain.base)
+                if (!baseRange)
+                    throw new Error(`Could not format an iterator chain in ${file}`)
+
+                const indentation = `${getLineIndentation(source, nodeRange[0])}    `
+                const replacement = `${source.slice(baseRange[0], baseRange[1])}\n${chain.segments.map((segment) => `${indentation}${segment}`).join('\n')}`
+                if (source.slice(nodeRange[0], nodeRange[1]) !== replacement) {
+                    replacements.push({
+                        start: nodeRange[0],
+                        end: nodeRange[1],
+                        text: replacement,
+                    })
+                    return
+                }
+            }
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child, node, parent)
+            } else if (isAstNode(value))
+                visit(value, node, parent)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
+const canonicalizeIteratorChains = (file: string, source: string): string => {
+    let output = source
+    for (let pass = 0; pass < 20; pass++) {
+        const formatted = canonicalizeIteratorChainsOnce(file, output)
+        if (formatted === output)
+            return output
+        output = formatted
+    }
+    throw new Error(`Could not stabilize iterator chain formatting in ${file}`)
 }
 
 const canonicalizeHtmlTemplateBoundaries = (file: string, source: string): string => {
@@ -1013,8 +1220,10 @@ const formatSource = async (file: string, source: string, config: FormatConfig):
     const formattedIfStatements = canonicalizeIfStatements(file, result.code)
     const preserved = preserveExpandedTypeScriptLayouts(file, source, formattedIfStatements)
     const canonicalIfStatements = canonicalizeIfStatements(file, preserved)
-    const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalIfStatements)
-    const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalArrowBodies)
+    const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(file, canonicalIfStatements)
+    const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignmentBoundaries)
+    const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
+    const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalIteratorChains)
     const formattedHtmlTemplates = applyHtmlTemplateFormatting(file, canonicalConditionalExpressions, htmlResult.code)
     const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
     const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
