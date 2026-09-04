@@ -1540,15 +1540,32 @@ const preferSeparatedStatements = defineRule({
             if (!gap)
                 return
 
-            const lineBreaks = blankLine ? '\n\n' : '\n'
+            let replacementRange = gap
+            let lineBreaks = blankLine ? '\n\n' : '\n'
+
+            if (
+                blankLine
+                && sourceCode.text[gap[0]] === '\n'
+            ) {
+                replacementRange = [gap[0] + 1, gap[1]]
+                lineBreaks = '\n'
+            } else if (
+                blankLine
+                && sourceCode.text[gap[0]] === '\r'
+                && sourceCode.text[gap[0] + 1] === '\n'
+            ) {
+                replacementRange = [gap[0] + 2, gap[1]]
+                lineBreaks = '\r\n'
+            }
+
             const replacement = `${lineBreaks}${getLineIndentation(
                 sourceCode.text,
                 gap[1],
             )}`
 
             if (sourceCode.text.slice(
-                gap[0],
-                gap[1],
+                replacementRange[0],
+                replacementRange[1],
             ) === replacement)
                 return
 
@@ -1556,7 +1573,7 @@ const preferSeparatedStatements = defineRule({
                 node: current,
                 messageId,
                 fix: (fixer) => fixer.replaceTextRange(
-                    gap,
+                    replacementRange,
                     replacement,
                 ),
             })
