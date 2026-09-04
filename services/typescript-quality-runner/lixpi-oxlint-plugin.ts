@@ -403,7 +403,10 @@ const getAstExpressionText = (node, sourceCode): string => {
     return sourceCode.getText(node).trim()
 }
 
-const getLogicalConditionParts = (node): { operands: unknown[]; operators: string[] } | null => {
+const getLogicalConditionParts = (node): {
+    operands: unknown[]
+    operators: string[]
+} | null => {
     const operands = []
     const operators: string[] = []
     const logicalExpression = unwrapParenthesizedExpression(node)
@@ -700,6 +703,53 @@ const preferMultilineObjectPattern = defineRule({
     },
 })
 
+const preferMultilineTypeLiteral = defineRule({
+    meta: {
+        type: 'layout',
+        fixable: 'whitespace',
+        messages: {
+            preferMultilineTypeLiteral: 'Split type literals with more than one member across lines.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const { sourceCode } = context
+
+        return {
+            TSTypeLiteral(node) {
+                if (node.members.length <= 1)
+                    return
+                if (sourceCode.getCommentsInside(node).length > 0)
+                    return
+
+                const openBrace = sourceCode.getFirstToken(node)
+                const closeBrace = sourceCode.getLastToken(node)
+                if (openBrace?.value !== '{' || closeBrace?.value !== '}')
+                    return
+
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
+                const memberIndentation = `${indentation}    `
+                const replacement = `{\n${node.members.map((member) => {
+                    const lastToken = sourceCode.getLastToken(member)
+                    const memberEnd = lastToken?.value === ';' || lastToken?.value === ','
+                        ? lastToken.range[0]
+                        : member.range[1]
+
+                    return `${memberIndentation}${sourceCode.text.slice(member.range[0], memberEnd)}`
+                }).join('\n')}\n${indentation}}`
+                if (sourceCode.getText(node) === replacement)
+                    return
+
+                context.report({
+                    node,
+                    messageId: 'preferMultilineTypeLiteral',
+                    fix: (fixer) => fixer.replaceText(node, replacement),
+                })
+            },
+        }
+    },
+})
+
 const preferMultilineCollection = defineRule({
     meta: {
         type: 'layout',
@@ -746,7 +796,11 @@ const preferMultilineCollection = defineRule({
 const isNestedCallChain = (node): boolean =>
     node.parent?.type === 'MemberExpression' && node.parent.object === node && node.parent.parent?.type === 'CallExpression' && node.parent.parent.callee === node.parent
 
-const getCallChain = (node, sourceCode): { attrCount: number; base: unknown; segments: string[] } => {
+const getCallChain = (node, sourceCode): {
+    attrCount: number
+    base: unknown
+    segments: string[]
+} => {
     const segments: string[] = []
     let attrCount = 0
     let current = node
@@ -1107,6 +1161,7 @@ export default definePlugin({
         'prefer-multiline-attr-chain': preferMultilineAttrChain,
         'prefer-multiline-collection': preferMultilineCollection,
         'prefer-multiline-object-pattern': preferMultilineObjectPattern,
+        'prefer-multiline-type-literal': preferMultilineTypeLiteral,
         'prefer-multiline-if-condition': preferMultilineIfCondition,
         'require-ast-formatter-rules': requireAstFormatterRules,
     },
