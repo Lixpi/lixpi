@@ -81,7 +81,7 @@
         "lixpi/prefer-multiline-collection": "error",
         "lixpi/prefer-multiline-object-pattern": "error",
         "lixpi/prefer-multiline-type-literal": "error",
-        "lixpi/prefer-multiline-if-condition": "error",
+        "lixpi/prefer-multiline-condition": "error",
         "lixpi/prefer-void-arrow-body": "error",
         "no-restricted-imports": [
             "error",
@@ -202,7 +202,7 @@
                 "lixpi/prefer-multiline-collection": "off",
                 "lixpi/prefer-multiline-object-pattern": "off",
                 "lixpi/prefer-multiline-type-literal": "off",
-                "lixpi/prefer-multiline-if-condition": "off",
+                "lixpi/prefer-multiline-condition": "off",
                 "lixpi/prefer-void-arrow-body": "off",
                 "prefer-arrow-callback": "off"
             }

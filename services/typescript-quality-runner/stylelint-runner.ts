@@ -20,6 +20,7 @@ const supportedExtensions = new Set([
 const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string[]): Promise<void> => {
     const absolutePath = path.resolve(repositoryDirectory, inputPath)
     let pathStats: Stats
+
     try {
         pathStats = await stat(absolutePath)
     } catch (error) {
@@ -49,10 +50,15 @@ const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string
 }
 
 const action = process.argv[2]
-if (action !== 'check' && action !== 'fix')
+
+if (
+    action !== 'check'
+    && action !== 'fix'
+)
     throw new Error(`Unknown Stylelint action: ${action}`)
 
 const stylesheetPaths: string[] = []
+
 for (const inputPath of process.argv.slice(3)) await collectStylesheetPaths(inputPath, stylesheetPaths)
 
 if (stylesheetPaths.length === 0)
@@ -74,7 +80,10 @@ const result = await stylelint.lint({
     maxWarnings: 0,
 })
 
-if (result.errored && result.report)
+if (
+    result.errored
+    && result.report
+)
     process.stdout.write(result.report)
 
 if (result.errored)

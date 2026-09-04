@@ -61,25 +61,37 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
 
     const visit = async (path: string): Promise<void> => {
         const entry = await stat(path)
+
         if (entry.isFile()) {
-            if (path.endsWith('.tsx') || path.endsWith('.jsx'))
+            if (
+                path.endsWith('.tsx')
+                || path.endsWith('.jsx')
+            )
                 prohibitedFiles.push(path)
             else if (path.endsWith('.ts'))
                 files.push(path)
+
             return
         }
+
         if (!entry.isDirectory())
             return
 
         const entries = await readdir(path, { withFileTypes: true })
+
         for (const child of entries) {
-            if (child.isDirectory() && ignoredDirectoryNames.has(child.name))
+            if (
+                child.isDirectory()
+                && ignoredDirectoryNames.has(child.name)
+            )
                 continue
+
             await visit(resolve(path, child.name))
         }
     }
 
     for (const inputPath of inputPaths) await visit(resolve(inputPath))
+
     return {
         files: files.sort(),
         prohibitedFiles: prohibitedFiles.sort(),
@@ -92,11 +104,13 @@ const applyReplacements = (source: string, replacements: Replacement[]): string 
 
     let output = ''
     let cursor = 0
+
     for (const replacement of replacements) {
         output += source.slice(cursor, replacement.start)
         output += replacement.value
         cursor = replacement.end
     }
+
     return output + source.slice(cursor)
 }
 
@@ -108,18 +122,25 @@ const getNamedSpecifierBlock = (specifiers: NamedSpecifier[], singleTypeMustBeMu
         ...specifiers.filter((specifier) => !specifier.isType),
         ...specifiers.filter((specifier) => specifier.isType),
     ]
+
     if (
         ordered.length === 1
-        && (!singleTypeMustBeMultiline || !ordered[0]!.isType)
+        && (
+            !singleTypeMustBeMultiline
+            || !ordered[0]!.isType
+        )
     )
         return `{ ${ordered[0]!.text} }`
+
     return `{\n${ordered.map((specifier) => `    ${specifier.text},`).join('\n')}\n}`
 }
 
 const getNodeText = (node: AstNode, source: string): string => {
     const range = getNodeRange(node)
+
     if (!range)
         throw new Error('Oxc returned a module node without a source range')
+
     return source.slice(range[0], range[1]).trim()
 }
 
@@ -131,7 +152,11 @@ const hasSameIdentifierName = (left: AstNode, right: AstNode): boolean => left.t
 const getImportSpecifierText = (specifier: AstNode, source: string, typeKeywordRequired: boolean): string => {
     const imported = isAstNode(specifier.imported) ? specifier.imported : null
     const local = isAstNode(specifier.local) ? specifier.local : null
-    if (!imported || !local)
+
+    if (
+        !imported
+        || !local
+    )
         throw new Error('Oxc returned an incomplete import specifier')
 
     const importedText = getNodeText(imported, source)
@@ -139,13 +164,18 @@ const getImportSpecifierText = (specifier: AstNode, source: string, typeKeywordR
     const binding = hasSameIdentifierName(imported, local)
         ? importedText
         : `${importedText} as ${localText}`
+
     return typeKeywordRequired ? `type ${binding}` : binding
 }
 
 const getExportSpecifierText = (specifier: AstNode, source: string, typeKeywordRequired: boolean): string => {
     const local = isAstNode(specifier.local) ? specifier.local : null
     const exported = isAstNode(specifier.exported) ? specifier.exported : null
-    if (!local || !exported)
+
+    if (
+        !local
+        || !exported
+    )
         throw new Error('Oxc returned an incomplete export specifier')
 
     const localText = getNodeText(local, source)
@@ -153,6 +183,7 @@ const getExportSpecifierText = (specifier: AstNode, source: string, typeKeywordR
     const binding = hasSameIdentifierName(local, exported)
         ? localText
         : `${localText} as ${exportedText}`
+
     return typeKeywordRequired ? `type ${binding}` : binding
 }
 
@@ -162,6 +193,7 @@ const canonicalizeImportDeclaration = (node: AstNode, source: string): string | 
     const sourceRange = getNodeRange(sourceNode)
     const specifiers = Array.isArray(node.specifiers) ? node.specifiers.filter(isAstNode) : []
     const namedSpecifiers = specifiers.filter((specifier) => specifier.type === 'ImportSpecifier')
+
     if (
         !nodeRange
         || !sourceRange
@@ -171,25 +203,29 @@ const canonicalizeImportDeclaration = (node: AstNode, source: string): string | 
 
     const declarationIsTypeOnly = node.importKind === 'type'
     const named = namedSpecifiers.map((specifier): NamedSpecifier => {
-        const isType = declarationIsTypeOnly || specifier.importKind === 'type'
+        const isType = (
+            declarationIsTypeOnly
+            || specifier.importKind === 'type'
+        )
+
         return {
             isType,
             text: getImportSpecifierText(specifier, source, isType && !declarationIsTypeOnly),
         }
     })
-    const clauseParts = specifiers
-        .filter((specifier) => specifier.type !== 'ImportSpecifier')
-        .map((specifier) => getNodeText(specifier, source))
+    const clauseParts = specifiers.filter((specifier) => specifier.type !== 'ImportSpecifier').map((specifier) => getNodeText(specifier, source))
     clauseParts.push(getNamedSpecifierBlock(named, true))
 
     const sourceText = source.slice(sourceRange[0], sourceRange[1])
     const suffix = source.slice(sourceRange[1], nodeRange[1])
+
     return `import${declarationIsTypeOnly ? ' type' : ''} ${clauseParts.join(', ')} from ${sourceText}${suffix}`
 }
 
 const canonicalizeExportDeclaration = (node: AstNode, source: string): string | null => {
     const nodeRange = getNodeRange(node)
     const specifiers = Array.isArray(node.specifiers) ? node.specifiers.filter(isAstNode) : []
+
     if (
         !nodeRange
         || specifiers.length === 0
@@ -199,7 +235,11 @@ const canonicalizeExportDeclaration = (node: AstNode, source: string): string | 
 
     const declarationIsTypeOnly = node.exportKind === 'type'
     const named = specifiers.map((specifier): NamedSpecifier => {
-        const isType = declarationIsTypeOnly || specifier.exportKind === 'type'
+        const isType = (
+            declarationIsTypeOnly
+            || specifier.exportKind === 'type'
+        )
+
         return {
             isType,
             text: getExportSpecifierText(specifier, source, isType && !declarationIsTypeOnly),
@@ -209,6 +249,7 @@ const canonicalizeExportDeclaration = (node: AstNode, source: string): string | 
     const sourceRange = getNodeRange(sourceNode)
     const sourceClause = sourceRange ? ` from ${source.slice(sourceRange[0], sourceRange[1])}` : ''
     const suffix = sourceRange ? source.slice(sourceRange[1], nodeRange[1]) : ''
+
     return `export${declarationIsTypeOnly ? ' type' : ''} ${getNamedSpecifierBlock(named, false)}${sourceClause}${suffix}`
 }
 
@@ -218,6 +259,7 @@ export const canonicalizeImportLayout = (source: string, fix: boolean, file = 'm
         preserveParens: true,
         range: true,
     })
+
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
@@ -227,19 +269,32 @@ export const canonicalizeImportLayout = (source: string, fix: boolean, file = 'm
     const violations: number[] = []
 
     for (const node of body) {
-        if (node.type !== 'ImportDeclaration' && node.type !== 'ExportNamedDeclaration')
+        if (
+            node.type !== 'ImportDeclaration'
+            && node.type !== 'ExportNamedDeclaration'
+        )
             continue
+
         const range = getNodeRange(node)
-        if (!range || hasComment(range, comments))
+
+        if (
+            !range
+            || hasComment(range, comments)
+        )
             continue
 
         const canonical = node.type === 'ImportDeclaration'
             ? canonicalizeImportDeclaration(node, source)
             : canonicalizeExportDeclaration(node, source)
-        if (canonical == null || canonical === source.slice(range[0], range[1]))
+
+        if (
+            canonical == null
+            || canonical === source.slice(range[0], range[1])
+        )
             continue
 
         violations.push(source.slice(0, range[0]).split('\n').length)
+
         if (fix)
             replacements.push({
                 end: range[1],
@@ -256,8 +311,12 @@ export const canonicalizeImportLayout = (source: string, fix: boolean, file = 'm
 
 const runCli = async (): Promise<void> => {
     const [mode, ...inputPaths] = process.argv.slice(2)
+
     if (
-        (mode !== 'check' && mode !== 'fix')
+        (
+            mode !== 'check'
+            && mode !== 'fix'
+        )
         || inputPaths.length === 0
     ) {
         err('Usage: import-specifier-order.ts {check|fix} <path...>')
@@ -268,8 +327,10 @@ const runCli = async (): Promise<void> => {
         files,
         prohibitedFiles,
     } = await collectTypeScriptFiles(inputPaths)
+
     if (prohibitedFiles.length > 0) {
         for (const file of prohibitedFiles) err(`${file}: JSX source files are prohibited; use a .ts module and the repository DOM APIs`)
+
         process.exit(1)
     }
 
@@ -284,9 +345,13 @@ const runCli = async (): Promise<void> => {
         } = canonicalizeImportLayout(source, mode === 'fix', file)
         violationCount += violations.length
 
-        if (mode === 'fix' && output !== source) {
+        if (
+            mode === 'fix'
+            && output !== source
+        ) {
             await writeFile(file, output)
             fixedFileCount++
+
             continue
         }
 
@@ -296,6 +361,7 @@ const runCli = async (): Promise<void> => {
     if (mode === 'fix') {
         if (fixedFileCount > 0)
             log(`Fixed named import and export layout in ${fixedFileCount} files.`)
+
         return
     }
 
@@ -306,5 +372,9 @@ const runCli = async (): Promise<void> => {
 }
 
 const invokedPath = process.argv[1]
-if (invokedPath && import.meta.url === pathToFileURL(resolve(invokedPath)).href)
+
+if (
+    invokedPath
+    && import.meta.url === pathToFileURL(resolve(invokedPath)).href
+)
     await runCli()
