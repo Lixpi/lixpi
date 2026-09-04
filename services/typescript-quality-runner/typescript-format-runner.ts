@@ -767,6 +767,102 @@ const getMultilineIfConditionText = (node: AstNode, source: string, indentation:
 const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean =>
     comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
 
+const getStatementList = (node: AstNode): AstNode[] | null => {
+    if (
+        node.type !== 'BlockStatement'
+        && node.type !== 'Program'
+        && node.type !== 'StaticBlock'
+        && node.type !== 'TSModuleBlock'
+    ) {
+        if (node.type !== 'SwitchCase' || !Array.isArray(node.consequent))
+            return null
+        return node.consequent.filter(isAstNode)
+    }
+
+    if (!Array.isArray(node.body))
+        return null
+    return node.body.filter(isAstNode)
+}
+
+const getStatementGap = (
+    source: string,
+    comments: AstComment[],
+    previousEnd: number,
+    nextStart: number,
+): [number, number] | null => {
+    let gapStart = previousEnd
+    const commentsInGap = comments.filter((comment) => comment.start >= previousEnd && comment.end <= nextStart)
+    for (const comment of commentsInGap) {
+        if (!source.slice(gapStart, comment.start).includes('\n')) {
+            gapStart = comment.end
+            continue
+        }
+        if (source.slice(gapStart, comment.start).trim().length > 0)
+            return null
+        return [gapStart, comment.start]
+    }
+
+    if (source.slice(gapStart, nextStart).trim().length > 0)
+        return null
+    return [gapStart, nextStart]
+}
+
+const canonicalizeStatementSpacing = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const comments = (parseResult.comments as AstComment[]).toSorted((left, right) => left.start - right.start)
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode): void => {
+        const statements = getStatementList(node)
+        if (statements) {
+            for (let index = 1; index < statements.length; index++) {
+                const previous = statements[index - 1]!
+                const current = statements[index]!
+                if (previous.type !== 'IfStatement' && current.type !== 'ReturnStatement')
+                    continue
+
+                const previousRange = getNodeRange(previous)
+                const currentRange = getNodeRange(current)
+                if (!previousRange || !currentRange)
+                    continue
+                const gap = getStatementGap(source, comments, previousRange[1], currentRange[0])
+                if (!gap)
+                    continue
+
+                const replacement = `\n\n${getLineIndentation(source, gap[1])}`
+                if (source.slice(gap[0], gap[1]) === replacement)
+                    continue
+                replacements.push({
+                    start: gap[0],
+                    end: gap[1],
+                    text: replacement,
+                })
+            }
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(value))
+                visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
 const canonicalizeIfStatements = (file: string, source: string): string => {
     const parseResult = parseSync(file, source, {
         astType: 'ts',
@@ -899,7 +995,8 @@ const formatSource = async (file: string, source: string, config: FormatConfig):
     const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalArrowBodies)
     const formattedHtmlTemplates = applyHtmlTemplateFormatting(file, canonicalConditionalExpressions, htmlResult.code)
     const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
-    return canonicalizeImportLayout(canonicalHtmlTemplates, true, file).output
+    const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
+    return canonicalizeImportLayout(canonicalStatementSpacing, true, file).output
 }
 
 const describeFirstFormattingDifference = (file: string, source: string, formatted: string): void => {
