@@ -43,6 +43,18 @@ const compactIfStatementTypes = new Set([
     'ReturnStatement',
     'ThrowStatement',
 ])
+const separatedBlockStatementTypes = new Set([
+    'BlockStatement',
+    'DoWhileStatement',
+    'ForInStatement',
+    'ForOfStatement',
+    'ForStatement',
+    'IfStatement',
+    'SwitchStatement',
+    'TryStatement',
+    'WhileStatement',
+    'WithStatement',
+])
 const separatedControlFlowStatementTypes = new Set([
     'BreakStatement',
     'ContinueStatement',
@@ -831,8 +843,8 @@ const canonicalizeStatementSpacing = (file: string, source: string): string => {
                 const previous = statements[index - 1]!
                 const current = statements[index]!
                 if (
-                    previous.type !== 'IfStatement'
-                    && current.type !== 'IfStatement'
+                    !separatedBlockStatementTypes.has(previous.type)
+                    && !separatedBlockStatementTypes.has(current.type)
                     && !separatedControlFlowStatementTypes.has(current.type)
                 )
                     continue
