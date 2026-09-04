@@ -65,6 +65,8 @@ const separatedControlFlowStatementTypes = new Set([
     'ReturnStatement',
     'ThrowStatement',
 ])
+const isSeparatedStatementType = (type: string): boolean => separatedBlockStatementTypes.has(type)
+    || separatedControlFlowStatementTypes.has(type)
 const iteratorMethodNames = new Set([
     'drop',
     'entries',
@@ -2544,9 +2546,8 @@ const canonicalizeStatementSpacing = (
                 const current = statements[index]!
 
                 if (
-                    !separatedBlockStatementTypes.has(previous.type)
-                    && !separatedBlockStatementTypes.has(current.type)
-                    && !separatedControlFlowStatementTypes.has(current.type)
+                    !isSeparatedStatementType(previous.type)
+                    && !isSeparatedStatementType(current.type)
                 )
                     continue
 

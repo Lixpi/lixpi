@@ -260,6 +260,26 @@ const compactIfStatementTypes = new Set([
     'ReturnStatement',
     'ThrowStatement',
 ])
+const separatedBlockStatementTypes = new Set([
+    'BlockStatement',
+    'DoWhileStatement',
+    'ForInStatement',
+    'ForOfStatement',
+    'ForStatement',
+    'IfStatement',
+    'SwitchStatement',
+    'TryStatement',
+    'WhileStatement',
+    'WithStatement',
+])
+const separatedControlFlowStatementTypes = new Set([
+    'BreakStatement',
+    'ContinueStatement',
+    'ReturnStatement',
+    'ThrowStatement',
+])
+const isSeparatedStatementType = (type: string): boolean => separatedBlockStatementTypes.has(type)
+    || separatedControlFlowStatementTypes.has(type)
 const collectionConstructorNames = new Set([
     'Map',
     'Set',
@@ -307,6 +327,55 @@ const getLineIndentation = (
         lineStart,
         cursor,
     )
+}
+
+const getStatementList = (node) => {
+    if (
+        node.type !== 'BlockStatement'
+        && node.type !== 'Program'
+        && node.type !== 'StaticBlock'
+        && node.type !== 'TSModuleBlock'
+    )
+        return node.type === 'SwitchCase' ? node.consequent : null
+
+    return node.body
+}
+
+const getStatementGap = (
+    sourceCode,
+    previousEnd: number,
+    nextStart: number,
+): [number, number] | null => {
+    let gapStart = previousEnd
+    const commentsInGap = sourceCode.getAllComments().filter((comment) =>
+        comment.range[0] >= previousEnd
+        && comment.range[1] <= nextStart)
+
+    for (const comment of commentsInGap) {
+        const precedingGap = sourceCode.text.slice(
+            gapStart,
+            comment.range[0],
+        )
+
+        if (!precedingGap.includes('\n')) {
+            gapStart = comment.range[1]
+
+            continue
+        }
+
+        if (precedingGap.trim().length > 0)
+            return null
+
+        return [gapStart, comment.range[0]]
+    }
+
+    if (sourceCode.text.slice(
+        gapStart,
+        nextStart,
+    ).trim().length > 0)
+        return null
+
+    return [gapStart, nextStart]
 }
 
 const isHorizontalWhitespace = (character: string | undefined): boolean => character === ' ' || character === '\t' || character === '\r'
@@ -1444,6 +1513,74 @@ const preferCompactIf = defineRule({
     },
 })
 
+const preferSeparatedStatements = defineRule({
+    meta: {
+        type: 'layout',
+        fixable: 'whitespace',
+        messages: {
+            separateStatements: 'Separate grouped statements from adjacent siblings with one blank line.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const { sourceCode } = context
+        const checkStatementList = (node): void => {
+            const statements = getStatementList(node)
+
+            if (!statements)
+                return
+
+            for (let index = 1; index < statements.length; index++) {
+                const previous = statements[index - 1]
+                const current = statements[index]
+
+                if (
+                    !isSeparatedStatementType(previous.type)
+                    && !isSeparatedStatementType(current.type)
+                )
+                    continue
+
+                const gap = getStatementGap(
+                    sourceCode,
+                    previous.range[1],
+                    current.range[0],
+                )
+
+                if (!gap)
+                    continue
+
+                const replacement = `\n\n${getLineIndentation(
+                    sourceCode.text,
+                    gap[1],
+                )}`
+
+                if (sourceCode.text.slice(
+                    gap[0],
+                    gap[1],
+                ) === replacement)
+                    continue
+
+                context.report({
+                    node: current,
+                    messageId: 'separateStatements',
+                    fix: (fixer) => fixer.replaceTextRange(
+                        gap,
+                        replacement,
+                    ),
+                })
+            }
+        }
+
+        return {
+            BlockStatement: checkStatementList,
+            Program: checkStatementList,
+            StaticBlock: checkStatementList,
+            SwitchCase: checkStatementList,
+            TSModuleBlock: checkStatementList,
+        }
+    },
+})
+
 const directVoidExpressionTypes = new Set([
     'CallExpression',
     'NewExpression',
@@ -1763,6 +1900,7 @@ export default definePlugin({
         'prefer-multiline-attr-chain': preferMultilineAttrChain,
         'prefer-multiline-collection': preferMultilineCollection,
         'prefer-multiline-object-pattern': preferMultilineObjectPattern,
+        'prefer-separated-statements': preferSeparatedStatements,
         'prefer-multiline-type-literal': preferMultilineTypeLiteral,
         'prefer-multiline-condition': preferMultilineCondition,
         'require-ast-formatter-rules': requireAstFormatterRules,
