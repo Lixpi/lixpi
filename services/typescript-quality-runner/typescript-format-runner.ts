@@ -117,10 +117,18 @@ type AstComment = {
     start: number
 }
 
+type CallChainSegment = {
+    boundaryEnd: number
+    boundaryStart: number
+    isIterator: boolean
+    leadingWhitespace: string
+    text: string
+}
+
 type CallChain = {
     base: AstNode
     iteratorCount: number
-    segments: string[]
+    segments: CallChainSegment[]
 }
 
 type TypeScriptLayouts = {
@@ -632,7 +640,7 @@ const isNestedCallChain = (node: AstNode, parent: AstNode | null, grandparent: A
     && grandparent.callee === parent
 
 const getCallChain = (node: AstNode, source: string): CallChain | null => {
-    const segments: string[] = []
+    const segments: CallChainSegment[] = []
     let current = node
     let iteratorCount = 0
 
@@ -650,9 +658,18 @@ const getCallChain = (node: AstNode, source: string): CallChain | null => {
         const objectRange = getNodeRange(current.callee.object)
         if (!currentRange || !objectRange)
             return null
-        if (iteratorMethodNames.has(current.callee.property.name))
+        const isIterator = iteratorMethodNames.has(current.callee.property.name)
+        if (isIterator)
             iteratorCount++
-        segments.unshift(source.slice(objectRange[1], currentRange[1]).trim())
+        let boundaryEnd = objectRange[1]
+        while (boundaryEnd < currentRange[1] && isWhitespaceCharacter(source[boundaryEnd])) boundaryEnd++
+        segments.unshift({
+            boundaryEnd,
+            boundaryStart: objectRange[1],
+            isIterator,
+            leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
+            text: source.slice(boundaryEnd, currentRange[1]),
+        })
         current = current.callee.object
     }
 
@@ -663,6 +680,37 @@ const getCallChain = (node: AstNode, source: string): CallChain | null => {
         iteratorCount,
         segments,
     }
+}
+
+const getLongestIteratorLineLength = (chain: CallChain, source: string, nodeStart: number): number => {
+    const baseRange = getNodeRange(chain.base)
+    if (!baseRange)
+        return 0
+    const parts = [source.slice(baseRange[0], baseRange[1])]
+    const iteratorOffsets: number[] = []
+    let offset = parts[0]!.length
+
+    for (const segment of chain.segments) {
+        const leadingWhitespace = segment.isIterator ? '' : segment.leadingWhitespace
+        parts.push(leadingWhitespace)
+        offset += leadingWhitespace.length
+        if (segment.isIterator)
+            iteratorOffsets.push(offset)
+        parts.push(segment.text)
+        offset += segment.text.length
+    }
+
+    const inlineChain = parts.join('')
+    const nodeColumn = nodeStart - getLineStart(source, nodeStart)
+    let longestLineLength = 0
+    for (const iteratorOffset of iteratorOffsets) {
+        const lineStart = inlineChain.lastIndexOf('\n', iteratorOffset - 1) + 1
+        const nextLineBreak = inlineChain.indexOf('\n', iteratorOffset)
+        const lineEnd = nextLineBreak < 0 ? inlineChain.length : nextLineBreak
+        const lineLength = lineEnd - lineStart + (lineStart === 0 ? nodeColumn : 0)
+        longestLineLength = Math.max(longestLineLength, lineLength)
+    }
+    return longestLineLength
 }
 
 const canonicalizeIteratorChainsOnce = (file: string, source: string): string => {
@@ -684,27 +732,24 @@ const canonicalizeIteratorChainsOnce = (file: string, source: string): string =>
             && !isNestedCallChain(node, parent, grandparent)
         ) {
             const chain = getCallChain(node, source)
-            const isLongInlineChain = node.loc?.start.line === node.loc?.end.line
-                && (node.loc?.start.column ?? 0) + nodeRange[1] - nodeRange[0] > maximumInlineIteratorChainLength
             if (
                 chain
                 && chain.iteratorCount > 0
-                && (chain.iteratorCount > 2 || isLongInlineChain)
                 && !hasCommentWithinRange(comments, nodeRange)
             ) {
-                const baseRange = getNodeRange(chain.base)
-                if (!baseRange)
-                    throw new Error(`Could not format an iterator chain in ${file}`)
-
                 const indentation = `${getLineIndentation(source, nodeRange[0])}    `
-                const replacement = `${source.slice(baseRange[0], baseRange[1])}\n${chain.segments.map((segment) => `${indentation}${segment}`).join('\n')}`
-                if (source.slice(nodeRange[0], nodeRange[1]) !== replacement) {
+                const longestIteratorLineLength = getLongestIteratorLineLength(chain, source, nodeRange[0])
+                const shouldExpand = chain.iteratorCount > 2
+                    || chain.iteratorCount === 1 && longestIteratorLineLength > maximumInlineIteratorChainLength
+                const boundaryWhitespace = shouldExpand ? `\n${indentation}` : ''
+                for (const segment of chain.segments) {
+                    if (!segment.isIterator || segment.leadingWhitespace === boundaryWhitespace)
+                        continue
                     replacements.push({
-                        start: nodeRange[0],
-                        end: nodeRange[1],
-                        text: replacement,
+                        start: segment.boundaryStart,
+                        end: segment.boundaryEnd,
+                        text: boundaryWhitespace,
                     })
-                    return
                 }
             }
         }
@@ -1251,6 +1296,157 @@ const canonicalizeIfStatements = (file: string, source: string): string => {
     return output
 }
 
+const getIndentedContainerChildren = (node: AstNode): AstNode[] | null => {
+    if (node.type === 'Program')
+        return Array.isArray(node.body) ? node.body.filter(isAstNode) : null
+    if (
+        node.type === 'BlockStatement'
+        || node.type === 'ClassBody'
+        || node.type === 'StaticBlock'
+        || node.type === 'TSInterfaceBody'
+        || node.type === 'TSModuleBlock'
+    )
+        return Array.isArray(node.body) ? node.body.filter(isAstNode) : null
+    if (node.type === 'SwitchStatement')
+        return Array.isArray(node.cases) ? node.cases.filter(isAstNode) : null
+    if (node.type === 'SwitchCase')
+        return Array.isArray(node.consequent) ? node.consequent.filter(isAstNode) : null
+    if (
+        node.type === 'ObjectExpression'
+        || node.type === 'ObjectPattern'
+    )
+        return Array.isArray(node.properties) ? node.properties.filter(isAstNode) : null
+    if (
+        node.type === 'ArrayExpression'
+        || node.type === 'ArrayPattern'
+    )
+        return Array.isArray(node.elements) ? node.elements.filter(isAstNode) : null
+    if (node.type === 'TSTypeLiteral')
+        return Array.isArray(node.members) ? node.members.filter(isAstNode) : null
+    return null
+}
+
+const getIndentedContainerClosingOffset = (node: AstNode, source: string): number | null => {
+    if (node.type === 'Program' || node.type === 'SwitchCase')
+        return null
+    const nodeRange = getNodeRange(node)
+    if (!nodeRange)
+        return null
+
+    let end = nodeRange[1]
+    if (
+        node.type === 'ObjectPattern'
+        || node.type === 'ArrayPattern'
+    ) {
+        const typeAnnotationRange = getNodeRange(node.typeAnnotation as AstNode)
+        if (typeAnnotationRange)
+            end = typeAnnotationRange[0]
+    }
+
+    const closingOffset = getTrailingWhitespaceStart(source, nodeRange[0], end) - 1
+    const expectedCharacter = node.type === 'ArrayExpression' || node.type === 'ArrayPattern' ? ']' : '}'
+    return source[closingOffset] === expectedCharacter ? closingOffset : null
+}
+
+const canonicalizeContainerIndentationOnce = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const replacementsByRange = new Map<string, LayoutSpan>()
+    const addIndentationReplacement = (offset: number, indentation: string, containerStart: number): void => {
+        const lineStart = getLineStart(source, offset)
+        if (lineStart === getLineStart(source, containerStart))
+            return
+        const currentIndentation = source.slice(lineStart, offset)
+        if ([...currentIndentation].some((character) => character !== ' ' && character !== '\t'))
+            return
+        if (currentIndentation === indentation)
+            return
+
+        const key = `${lineStart}:${offset}`
+        const existing = replacementsByRange.get(key)
+        if (existing && existing.text !== indentation)
+            throw new Error(`Conflicting indentation rules in ${file}`)
+        replacementsByRange.set(key, {
+            start: lineStart,
+            end: offset,
+            text: indentation,
+        })
+    }
+
+    const visit = (node: AstNode): void => {
+        const nodeRange = getNodeRange(node)
+        const children = getIndentedContainerChildren(node)
+        if (nodeRange && children) {
+            const indentation = node.type === 'Program'
+                ? ''
+                : `${getLineIndentation(source, nodeRange[0])}    `
+            for (const child of children) {
+                const childRange = getNodeRange(child)
+                if (childRange)
+                    addIndentationReplacement(childRange[0], indentation, nodeRange[0])
+            }
+
+            const closingOffset = getIndentedContainerClosingOffset(node, source)
+            if (closingOffset != null)
+                addIndentationReplacement(closingOffset, getLineIndentation(source, nodeRange[0]), nodeRange[0])
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(value))
+                visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
+const canonicalizeContainerIndentation = (file: string, source: string): string => {
+    let output = source
+    for (let pass = 0; pass < 20; pass++) {
+        const formatted = canonicalizeContainerIndentationOnce(file, output)
+        if (formatted === output)
+            return output
+        output = formatted
+    }
+    throw new Error(`Could not stabilize container indentation in ${file}`)
+}
+
+const canonicalizeTypeScriptLayout = (file: string, source: string, htmlFormatted: string): string => {
+    let output = source
+    for (let pass = 0; pass < 20; pass++) {
+        const indented = canonicalizeContainerIndentation(file, output)
+        const canonicalIfStatements = canonicalizeIfStatements(file, indented)
+        const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(file, canonicalIfStatements)
+        const canonicalAssignedLogicalExpressions = canonicalizeAssignedLogicalExpressions(file, canonicalAssignmentBoundaries)
+        const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignedLogicalExpressions)
+        const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
+        const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalIteratorChains)
+        const formattedHtmlTemplates = applyHtmlTemplateFormatting(file, canonicalConditionalExpressions, htmlFormatted)
+        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
+        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
+        const canonicalImports = canonicalizeImportLayout(canonicalStatementSpacing, true, file).output
+        const formatted = canonicalizeContainerIndentation(file, canonicalImports)
+        if (formatted === output)
+            return output
+        output = formatted
+    }
+    throw new Error(`Could not stabilize TypeScript formatting in ${file}`)
+}
+
 const formatSource = async (file: string, source: string, config: FormatConfig): Promise<string> => {
     const result = await format(file, source, config)
     if (result.errors.length > 0) {
@@ -1274,16 +1470,7 @@ const formatSource = async (file: string, source: string, config: FormatConfig):
 
     const formattedIfStatements = canonicalizeIfStatements(file, result.code)
     const preserved = preserveExpandedTypeScriptLayouts(file, source, formattedIfStatements)
-    const canonicalIfStatements = canonicalizeIfStatements(file, preserved)
-    const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(file, canonicalIfStatements)
-    const canonicalAssignedLogicalExpressions = canonicalizeAssignedLogicalExpressions(file, canonicalAssignmentBoundaries)
-    const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignedLogicalExpressions)
-    const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
-    const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalIteratorChains)
-    const formattedHtmlTemplates = applyHtmlTemplateFormatting(file, canonicalConditionalExpressions, htmlResult.code)
-    const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
-    const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
-    return canonicalizeImportLayout(canonicalStatementSpacing, true, file).output
+    return canonicalizeTypeScriptLayout(file, preserved, htmlResult.code)
 }
 
 const describeFirstFormattingDifference = (file: string, source: string, formatted: string): void => {
