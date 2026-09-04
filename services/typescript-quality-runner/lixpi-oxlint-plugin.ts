@@ -1680,8 +1680,6 @@ const preferVoidArrowBody = defineRule({
         schema: [],
     },
     create(context) {
-        const { sourceCode } = context
-
         return {
             ArrowFunctionExpression(node) {
                 if (node.body.type === 'BlockStatement')
@@ -1709,13 +1707,21 @@ const preferVoidArrowBody = defineRule({
                 context.report({
                     node: node.body,
                     messageId: 'discardReturnValue',
-                    fix: (fixer) => fixer.replaceText(
-                        node.body,
-                        getVoidExpressionText(
+                    fix: (fixer) => directVoidExpressionTypes.has(node.body.type)
+                        ? fixer.insertTextBefore(
                             node.body,
-                            sourceCode,
-                        ),
-                    ),
+                            'void ',
+                        )
+                        : [
+                            fixer.insertTextBefore(
+                                node.body,
+                                'void (',
+                            ),
+                            fixer.insertTextAfter(
+                                node.body,
+                                ')',
+                            ),
+                        ],
                 })
             },
         }
