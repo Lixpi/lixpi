@@ -824,7 +824,11 @@ const canonicalizeStatementSpacing = (file: string, source: string): string => {
             for (let index = 1; index < statements.length; index++) {
                 const previous = statements[index - 1]!
                 const current = statements[index]!
-                if (previous.type !== 'IfStatement' && current.type !== 'ReturnStatement')
+                if (
+                    previous.type !== 'IfStatement'
+                    && current.type !== 'IfStatement'
+                    && current.type !== 'ReturnStatement'
+                )
                     continue
 
                 const previousRange = getNodeRange(previous)
