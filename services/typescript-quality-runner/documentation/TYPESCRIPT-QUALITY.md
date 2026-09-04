@@ -59,6 +59,7 @@ The quality runner treats parser nodes as the only authority for syntax boundari
 Oxfmt provides the baseline layout, but repository rules run through AST-addressed replacements after that baseline:
 
 - A function, method, constructor, arrow function, call, or `new` expression with two or more parameters or arguments is multiline. The shared delimited-list formatter puts one item on each line and adds the trailing comma.
+- A compact `if`, `while`, or `for` body is always placed on the following indented line. The AST condition pass owns the final TypeScript formatting boundary so a containing-node rewrite cannot reattach `return`, `throw`, `break`, `continue`, or an expression body to the closing parenthesis.
 - A nested conditional expression keeps each level visibly nested. Each nested `?` and `:` is indented one level beyond its parent conditional instead of being flattened into the parent branch.
 - TypeScript inside an `html` interpolation follows the same control-flow, conditional, argument, and expression rules as TypeScript outside a template. The HTML merge copies only parsed template quasis, so HTML formatting cannot replace an interpolation body with Oxfmt's uncanonicalized TypeScript output.
 - An HTML start tag with two or more attributes is multiline, with one attribute per line. This applies to standalone `.html` files and `html` tagged templates, including attributes whose values contain TypeScript interpolations.

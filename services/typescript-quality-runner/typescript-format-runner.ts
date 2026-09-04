@@ -3253,9 +3253,12 @@ const canonicalizeTypeScriptLayout = (
             true,
             file,
         ).output
-        const formatted = canonicalizeContainerIndentation(
+        const formatted = canonicalizeConditionStatements(
             file,
-            canonicalImports,
+            canonicalizeContainerIndentation(
+                file,
+                canonicalImports,
+            ),
         )
 
         if (formatted === output)
