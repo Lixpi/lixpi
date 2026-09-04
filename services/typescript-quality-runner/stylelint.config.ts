@@ -80,6 +80,14 @@ export default {
     overrides: [
         {
             files: [
+                '**/*.scss',
+            ],
+            rules: {
+                'lixpi/no-block-comments': true,
+            },
+        },
+        {
+            files: [
                 'packages/lixpi/ui-primitives/src/styles/_transitions.scss',
             ],
             rules: {

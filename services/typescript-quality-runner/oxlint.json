@@ -38,10 +38,7 @@
         "**/*.cjs"
     ],
     "rules": {
-        "arrow-body-style": [
-            "error",
-            "as-needed"
-        ],
+        "arrow-body-style": "off",
         "stylistic/semi": [
             "error",
             "never",
@@ -72,9 +69,11 @@
             }
         ],
         "no-debugger": "error",
+        "lixpi/no-block-comments": "error",
         "lixpi/no-native-console-logging": "error",
         "lixpi/no-comma-separated-statements": "error",
         "lixpi/no-unused-imports": "error",
+        "lixpi/prefer-attached-trailing-comma": "error",
         "lixpi/prefer-arrow-function-declaration": "error",
         "lixpi/prefer-compact-if": "error",
         "lixpi/prefer-expression-arrow-body": "error",
@@ -82,6 +81,7 @@
         "lixpi/prefer-multiline-collection": "error",
         "lixpi/prefer-multiline-object-pattern": "error",
         "lixpi/prefer-multiline-if-condition": "error",
+        "lixpi/prefer-void-arrow-body": "error",
         "no-restricted-imports": [
             "error",
             {
@@ -190,8 +190,10 @@
             "files": ["**/*.test.ts", "**/*.spec.ts", "**/testUtils/**/*.ts", "**/test/**/*.ts", "**/tests/**/*.ts", "**/__tests__/**/*.ts", "**/mocks/**/*.ts"],
             "rules": {
                 "arrow-body-style": "off",
+                "lixpi/no-block-comments": "off",
                 "lixpi/no-comma-separated-statements": "off",
                 "lixpi/no-unused-imports": "off",
+                "lixpi/prefer-attached-trailing-comma": "off",
                 "lixpi/prefer-arrow-function-declaration": "off",
                 "lixpi/prefer-compact-if": "off",
                 "lixpi/prefer-expression-arrow-body": "off",
@@ -199,6 +201,7 @@
                 "lixpi/prefer-multiline-collection": "off",
                 "lixpi/prefer-multiline-object-pattern": "off",
                 "lixpi/prefer-multiline-if-condition": "off",
+                "lixpi/prefer-void-arrow-body": "off",
                 "prefer-arrow-callback": "off"
             }
         },

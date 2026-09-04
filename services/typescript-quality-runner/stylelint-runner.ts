@@ -7,7 +7,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
 import stylelint from 'stylelint'
-import lixpiStylelintPlugin from './stylelint-lixpi-plugin.ts'
+import lixpiStylelintPlugins from './stylelint-lixpi-plugin.ts'
 
 const repositoryDirectory = '/usr/src/repository'
 const toolDirectory = '/usr/src/quality-runner'
@@ -64,7 +64,7 @@ const result = await stylelint.lint({
     allowEmptyInput: true,
     config: {
         ...repositoryConfig,
-        plugins: [...repositoryConfig.plugins, lixpiStylelintPlugin],
+        plugins: [...repositoryConfig.plugins, ...lixpiStylelintPlugins],
     },
     configBasedir: toolDirectory,
     cwd: repositoryDirectory,

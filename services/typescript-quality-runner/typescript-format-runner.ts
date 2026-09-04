@@ -52,12 +52,23 @@ type FormattingFiles = {
 
 type LayoutSpan = {
     end: number
+    preserve?: boolean
     start: number
     text: string
 }
 
 type AstNode = {
     [key: string]: unknown
+    loc?: {
+        end: {
+            column: number
+            line: number
+        }
+        start: {
+            column: number
+            line: number
+        }
+    }
     range?: [number, number]
     type: string
 }
@@ -146,8 +157,9 @@ const getTrailingWhitespaceStart = (source: string, start: number, end: number):
     return cursor
 }
 
-const getLayoutSpan = (start: number, end: number, source: string): LayoutSpan => ({
+const getLayoutSpan = (start: number, end: number, source: string, preserve = false): LayoutSpan => ({
     end,
+    preserve,
     start,
     text: source.slice(start, end),
 })
@@ -255,8 +267,12 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             !insideIfCondition
             && node.type === 'ConditionalExpression'
             && nodeRange
-        )
-            layouts.conditionalExpressions.push(getLayoutSpan(nodeRange[0], nodeRange[1], source))
+        ) {
+            const parenthesized = parent?.type === 'ParenthesizedExpression'
+            const expressionRange = parenthesized ? getNodeRange(parent) : nodeRange
+            if (expressionRange)
+                layouts.conditionalExpressions.push(getLayoutSpan(expressionRange[0], expressionRange[1], source, parenthesized))
+        }
 
         if (
             !insideIfCondition
@@ -332,7 +348,7 @@ const preserveExpandedTypeScriptLayouts = (file: string, source: string, formatt
 
         for (let index = 0; index < originalSpans.length; index++) {
             const original = originalSpans[index]!
-            if (key !== 'types' && !original.text.includes('\n'))
+            if (key !== 'types' && !original.preserve && !original.text.includes('\n'))
                 continue
 
             const target = formattedSpans[index]!
@@ -344,6 +360,89 @@ const preserveExpandedTypeScriptLayouts = (file: string, source: string, formatt
         }
     }
 
+    const nonOverlappingReplacements: LayoutSpan[] = []
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+        const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
+            replacement.start < candidate.end && replacement.end > candidate.start)
+        if (!overlapsSelectedReplacement)
+            nonOverlappingReplacements.push(replacement)
+    }
+
+    let output = formatted
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
+const isHtmlTemplateTag = (tag: AstNode | undefined): boolean =>
+    tag?.type === 'Identifier' && tag.name === 'html'
+    || tag?.type === 'MemberExpression'
+        && tag.computed === false
+        && isAstNode(tag.property)
+        && tag.property.type === 'Identifier'
+        && tag.property.name === 'html'
+
+const collectHtmlTemplateLayouts = (file: string, source: string): LayoutSpan[] => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const layouts: LayoutSpan[] = []
+    const visit = (node: AstNode): void => {
+        const tag = node.tag as AstNode | undefined
+        const nodeRange = getNodeRange(node)
+        if (
+            node.type === 'TaggedTemplateExpression'
+            && isHtmlTemplateTag(tag)
+            && nodeRange
+        )
+            layouts.push(getLayoutSpan(nodeRange[0], nodeRange[1], source))
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(value))
+                visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    return layouts
+}
+
+const reindentHtmlTemplate = (source: string, sourceLayout: LayoutSpan, target: string, targetLayout: LayoutSpan): string => {
+    const sourceIndentation = getLineIndentation(source, sourceLayout.start)
+    const targetIndentation = getLineIndentation(target, targetLayout.start)
+    const indentationDifference = targetIndentation.length - sourceIndentation.length
+    const lines = sourceLayout.text.split('\n')
+
+    for (let index = 1; index < lines.length; index++) {
+        const line = lines[index]!
+        if (indentationDifference > 0)
+            lines[index] = `${' '.repeat(indentationDifference)}${line}`
+        else
+            lines[index] = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
+    }
+
+    return lines.join('\n')
+}
+
+const applyHtmlTemplateFormatting = (file: string, formatted: string, htmlFormatted: string): string => {
+    const formattedLayouts = collectHtmlTemplateLayouts(file, formatted)
+    const htmlLayouts = collectHtmlTemplateLayouts(file, htmlFormatted)
+    if (formattedLayouts.length !== htmlLayouts.length)
+        throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
+
+    const replacements = formattedLayouts.map((target, index) => ({
+        ...target,
+        text: reindentHtmlTemplate(htmlFormatted, htmlLayouts[index]!, formatted, target),
+    }))
     const nonOverlappingReplacements: LayoutSpan[] = []
     for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
@@ -404,6 +503,129 @@ const canonicalizeExpressionArrowBodies = (file: string, source: string): string
                     visit(child)
             } else if (isAstNode(value))
                 visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
+const canonicalizeHtmlTemplateBoundaries = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode): void => {
+        const tag = node.tag as AstNode | undefined
+        const template = node.quasi as AstNode | undefined
+        const nodeRange = getNodeRange(node)
+        const templateRange = getNodeRange(template)
+        if (
+            node.type === 'TaggedTemplateExpression'
+            && isHtmlTemplateTag(tag)
+            && template?.type === 'TemplateLiteral'
+            && nodeRange
+            && templateRange
+            && templateRange[1] - templateRange[0] >= 2
+        ) {
+            const contentStart = templateRange[0] + 1
+            const contentEnd = templateRange[1] - 1
+            let leadingWhitespaceEnd = contentStart
+            let trailingWhitespaceStart = contentEnd
+            while (leadingWhitespaceEnd < contentEnd && isWhitespaceCharacter(source[leadingWhitespaceEnd])) leadingWhitespaceEnd++
+            while (trailingWhitespaceStart > leadingWhitespaceEnd && isWhitespaceCharacter(source[trailingWhitespaceStart - 1])) trailingWhitespaceStart--
+
+            const indentation = getLineIndentation(source, nodeRange[0])
+            const isMultiline = node.loc != null && node.loc.start.line !== node.loc.end.line
+            const inlineLength = (node.loc?.start.column ?? 0) + nodeRange[1] - nodeRange[0]
+            const shouldExpand = isMultiline || inlineLength > maximumInlineArrowFunctionLength
+            const leadingWhitespace = shouldExpand ? `\n${indentation}    ` : ''
+            const trailingWhitespace = shouldExpand ? `\n${indentation}` : ''
+
+            if (leadingWhitespaceEnd === contentEnd) {
+                const whitespace = shouldExpand ? `\n${indentation}` : ''
+                if (source.slice(contentStart, contentEnd) !== whitespace) {
+                    replacements.push({
+                        start: contentStart,
+                        end: contentEnd,
+                        text: whitespace,
+                    })
+                }
+                return
+            }
+            if (source.slice(contentStart, leadingWhitespaceEnd) !== leadingWhitespace) {
+                replacements.push({
+                    start: contentStart,
+                    end: leadingWhitespaceEnd,
+                    text: leadingWhitespace,
+                })
+            }
+            if (source.slice(trailingWhitespaceStart, contentEnd) !== trailingWhitespace) {
+                replacements.push({
+                    start: trailingWhitespaceStart,
+                    end: contentEnd,
+                    text: trailingWhitespace,
+                })
+            }
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(value))
+                visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    return output
+}
+
+const canonicalizeNestedConditionalParentheses = (file: string, source: string): string => {
+    const parseResult = parseSync(file, source, {
+        astType: 'ts',
+        preserveParens: true,
+        range: true,
+    })
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode, parent: AstNode | null = null): void => {
+        const nodeRange = getNodeRange(node)
+        if (node.type === 'ConditionalExpression' && parent?.type === 'ConditionalExpression' && nodeRange) {
+            replacements.push({
+                start: nodeRange[1],
+                end: nodeRange[1],
+                text: ')',
+            })
+            replacements.push({
+                start: nodeRange[0],
+                end: nodeRange[0],
+                text: '(',
+            })
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child, node)
+            } else if (isAstNode(value))
+                visit(value, node)
         }
     }
 
@@ -592,9 +814,12 @@ const canonicalizeIfStatements = (file: string, source: string): string => {
                     : null
                 if (conditionIsMultiline && !multilineCondition)
                     throw new Error(`Could not split the logical if condition in ${file}`)
+                const inlineCondition = conditionIsMultiline ? null : getAstExpressionText(test, source)
+                if (!conditionIsMultiline && !inlineCondition)
+                    throw new Error(`Could not format the inline if condition in ${file}`)
                 const condition = multilineCondition
                     ? `\n${multilineCondition}\n${indentation}`
-                    : source.slice(testRange[0], testRange[1]).trim()
+                    : inlineCondition
                 const bodySeparator = consequentIsCompact ? `\n${bodyIndentation}` : ' '
                 const replacement = `if (${condition})${bodySeparator}`
                 if (source.slice(nodeRange[0], consequentRange[0]) !== replacement) {
@@ -660,10 +885,21 @@ const formatSource = async (file: string, source: string, config: FormatConfig):
     if (!file.endsWith('.ts'))
         return result.code
 
+    const htmlResult = await format(file, source, {
+        ...config,
+        printWidth: maximumInlineArrowFunctionLength,
+    })
+    if (htmlResult.errors.length > 0)
+        throw new Error(`Oxfmt could not format embedded HTML in ${file}`)
+
     const formattedIfStatements = canonicalizeIfStatements(file, result.code)
     const preserved = preserveExpandedTypeScriptLayouts(file, source, formattedIfStatements)
     const canonicalIfStatements = canonicalizeIfStatements(file, preserved)
-    return canonicalizeImportLayout(canonicalizeExpressionArrowBodies(file, canonicalIfStatements), true, file).output
+    const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalIfStatements)
+    const canonicalConditionalExpressions = canonicalizeNestedConditionalParentheses(file, canonicalArrowBodies)
+    const formattedHtmlTemplates = applyHtmlTemplateFormatting(file, canonicalConditionalExpressions, htmlResult.code)
+    const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
+    return canonicalizeImportLayout(canonicalHtmlTemplates, true, file).output
 }
 
 const describeFirstFormattingDifference = (file: string, source: string, formatted: string): void => {

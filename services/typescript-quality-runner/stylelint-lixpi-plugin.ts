@@ -7,13 +7,39 @@ type Declaration = {
     value: string
 }
 
+type Comment = {
+    clone: (overrides: {
+        raws: CommentRaws
+        text: string
+    }) => Comment
+    raws: CommentRaws
+    replaceWith: (...comments: Comment[]) => void
+    text: string
+}
+
+type CommentRaws = {
+    before?: string
+    inline?: boolean
+    left?: string
+    right?: string
+}
+
 type Root = {
+    walkComments: (callback: (comment: Comment) => void) => void
     walkDecls: (callback: (declaration: Declaration) => void) => void
 }
 
-const ruleName = 'lixpi/transition-helpers'
-const messages = stylelint.utils.ruleMessages(ruleName, {
+type RuleContext = {
+    fix?: boolean
+}
+
+const transitionRuleName = 'lixpi/transition-helpers'
+const transitionMessages = stylelint.utils.ruleMessages(transitionRuleName, {
     expected: value => `Expected "${value}" to use a shared transition helper or custom property`,
+})
+const blockCommentRuleName = 'lixpi/no-block-comments'
+const blockCommentMessages = stylelint.utils.ruleMessages(blockCommentRuleName, {
+    expected: 'Use // comments instead of block comments',
 })
 const transitionHelpers = new Set([
     'hoverTransition',
@@ -112,19 +138,96 @@ const transitionHelpersRule = (primary: boolean) => (root: Root, result: Postcss
             return
 
         stylelint.utils.report({
-            message: messages.expected(declaration.value),
+            message: transitionMessages.expected(declaration.value),
             node: declaration,
             result,
-            ruleName,
+            ruleName: transitionRuleName,
             word: declaration.value,
         })
     })
 }
 
-transitionHelpersRule.ruleName = ruleName
-transitionHelpersRule.messages = messages
+transitionHelpersRule.ruleName = transitionRuleName
+transitionHelpersRule.messages = transitionMessages
 transitionHelpersRule.meta = {
     url: 'documentation/coding-style-guides/SASS-AND-CSS.md#transitions',
 }
 
-export default stylelint.createPlugin(ruleName, transitionHelpersRule)
+const isHorizontalWhitespace = (character: string | undefined): boolean =>
+    character === ' ' || character === '\t' || character === '\r'
+
+const normalizeCommentLine = (line: string): string => {
+    let start = 0
+    let end = line.length
+    while (start < end && isHorizontalWhitespace(line[start])) start++
+    if (line[start] === '*') {
+        start++
+        if (line[start] === ' ')
+            start++
+    }
+    while (end > start && isHorizontalWhitespace(line[end - 1])) end--
+    return line.slice(start, end)
+}
+
+const getCommentLines = (comment: Comment): string[] => {
+    const lines = comment.text.split('\n').map(normalizeCommentLine)
+    while (lines[0] === '') lines.shift()
+    while (lines.at(-1) === '') lines.pop()
+    return lines.length > 0 ? lines : ['']
+}
+
+const getCommentIndentation = (comment: Comment): string => {
+    const finalWhitespaceLine = (comment.raws.before ?? '').split('\n').at(-1) ?? ''
+    let end = 0
+    while (end < finalWhitespaceLine.length && isHorizontalWhitespace(finalWhitespaceLine[end])) end++
+    return finalWhitespaceLine.slice(0, end)
+}
+
+const convertBlockComment = (comment: Comment): void => {
+    const lines = getCommentLines(comment)
+    const indentation = getCommentIndentation(comment)
+    const comments = lines.map((line, index) => comment.clone({
+        text: line,
+        raws: {
+            ...comment.raws,
+            before: index === 0 ? comment.raws.before : `\n${indentation}`,
+            inline: true,
+            left: line.length > 0 ? ' ' : '',
+            right: '',
+        },
+    }))
+    comment.replaceWith(...comments)
+}
+
+const noBlockCommentsRule = (primary: boolean, _secondaryOptions: unknown, context: RuleContext = {}) => (root: Root, result: PostcssResult) => {
+    if (!primary)
+        return
+
+    root.walkComments((comment) => {
+        if (comment.raws.inline)
+            return
+        if (context.fix) {
+            convertBlockComment(comment)
+            return
+        }
+
+        stylelint.utils.report({
+            message: blockCommentMessages.expected,
+            node: comment,
+            result,
+            ruleName: blockCommentRuleName,
+        })
+    })
+}
+
+noBlockCommentsRule.ruleName = blockCommentRuleName
+noBlockCommentsRule.messages = blockCommentMessages
+noBlockCommentsRule.meta = {
+    fixable: true,
+    url: 'documentation/coding-style-guides/SASS-AND-CSS.md',
+}
+
+export default [
+    stylelint.createPlugin(transitionRuleName, transitionHelpersRule),
+    stylelint.createPlugin(blockCommentRuleName, noBlockCommentsRule),
+]

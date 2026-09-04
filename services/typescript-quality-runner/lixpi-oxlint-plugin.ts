@@ -2,6 +2,77 @@ import {
     definePlugin,
     defineRule,
 } from '@oxlint/plugins'
+import { parseSync } from 'oxc-parser'
+
+const isAstNode = (value: unknown): boolean => Boolean(
+    value
+    && typeof value === 'object'
+    && typeof (value as { type?: unknown }).type === 'string',
+)
+
+const collectIdentifierNames = (node, names: Set<string>): void => {
+    if (node.type === 'Identifier')
+        names.add(node.name)
+
+    for (const [key, value] of Object.entries(node)) {
+        if (key === 'parent')
+            continue
+        if (Array.isArray(value)) {
+            for (const child of value) if (isAstNode(child))
+                collectIdentifierNames(child, names)
+        } else if (isAstNode(value))
+            collectIdentifierNames(value, names)
+    }
+}
+
+const getCommentReferencedIdentifierNames = (sourceCode): Set<string> => {
+    const names = new Set<string>()
+    const commentBlocks: string[] = []
+    let currentLines: string[] = []
+    let previousLineComment = null
+
+    const flushCurrentLines = (): void => {
+        if (currentLines.length > 0)
+            commentBlocks.push(currentLines.join('\n'))
+        currentLines = []
+    }
+
+    for (const comment of sourceCode.getAllComments()) {
+        if (
+            comment.type === 'Line'
+            && (
+                previousLineComment == null
+                || comment.loc.start.line === previousLineComment.loc.end.line + 1
+            )
+        ) {
+            currentLines.push(comment.value)
+            previousLineComment = comment
+            continue
+        }
+
+        flushCurrentLines()
+        previousLineComment = null
+        if (comment.type === 'Block')
+            commentBlocks.push(comment.value)
+        if (comment.type === 'Line') {
+            currentLines.push(comment.value)
+            previousLineComment = comment
+        }
+    }
+    flushCurrentLines()
+
+    for (const commentBlock of commentBlocks)
+        for (const commentSource of [commentBlock, ...commentBlock.split('\n')]) {
+            const parseResult = parseSync('comment-reference.ts', commentSource, {
+                astType: 'ts',
+                preserveParens: true,
+                range: true,
+            })
+            collectIdentifierNames(parseResult.program, names)
+        }
+
+    return names
+}
 
 const noUnusedImports = defineRule({
     meta: {
@@ -17,11 +88,12 @@ const noUnusedImports = defineRule({
 
         return {
             'Program:exit'() {
+                const commentReferencedNames = getCommentReferencedIdentifierNames(sourceCode)
                 const unusedSpecifiersByDeclaration = new Map()
 
                 for (const scope of context.sourceCode.scopeManager.scopes)
                     for (const variable of scope.variables) {
-                        if (variable.references.length > 0)
+                        if (variable.references.length > 0 || commentReferencedNames.has(variable.name))
                             continue
 
                         const importDefinition = variable.defs.find(definition => definition.type === 'ImportBinding')
@@ -74,6 +146,13 @@ const noUnusedImports = defineRule({
     },
 })
 
+const hasReferenceBeforeDeclaration = (context, node): boolean =>
+    context.sourceCode.scopeManager.scopes.some((scope) =>
+        scope.variables.some((variable) =>
+            variable.name === node.id.name
+            && variable.defs.some((definition) => definition.node === node || definition.name === node.id)
+            && variable.references.some((reference) => reference.identifier.range[0] < node.range[0])))
+
 const preferArrowFunctionDeclaration = defineRule({
     meta: {
         type: 'suggestion',
@@ -92,10 +171,13 @@ const preferArrowFunctionDeclaration = defineRule({
                     !node.id
                     || !node.body
                     || node.generator
+                    || node.parent?.type === 'ExportDefaultDeclaration'
                 )
                     return
 
                 if (sourceCode.getCommentsInside(node).some((comment) => comment.range[1] <= node.id.range[1]))
+                    return
+                if (hasReferenceBeforeDeclaration(context, node))
                     return
 
                 const replacement = `const ${node.id.name} = ${node.async ? 'async ' : ''}`
@@ -153,6 +235,68 @@ const getLineIndentation = (source: string, offset: number): string => {
     while (source[cursor] === ' ' || source[cursor] === '\t') cursor++
     return source.slice(lineStart, cursor)
 }
+
+const isHorizontalWhitespace = (character: string | undefined): boolean =>
+    character === ' ' || character === '\t' || character === '\r'
+
+const normalizeCommentLine = (line: string): string => {
+    let start = 0
+    let end = line.length
+    while (start < end && isHorizontalWhitespace(line[start])) start++
+    if (line[start] === '*') {
+        start++
+        if (line[start] === ' ')
+            start++
+    }
+    while (end > start && isHorizontalWhitespace(line[end - 1])) end--
+    return line.slice(start, end)
+}
+
+const getLineCommentReplacement = (comment, sourceCode): string => {
+    const lines = comment.value.split('\n').map(normalizeCommentLine)
+    while (lines[0] === '') lines.shift()
+    while (lines.at(-1) === '') lines.pop()
+    if (lines.length === 0)
+        lines.push('')
+
+    const indentation = getLineIndentation(sourceCode.text, comment.range[0])
+    let replacement = lines
+        .map((line) => line.length > 0 ? `// ${line}` : '//')
+        .join(`\n${indentation}`)
+    const nextToken = sourceCode.getTokenAfter(comment)
+    if (nextToken && nextToken.loc.start.line === comment.loc.end.line)
+        replacement = `${replacement}\n${getLineIndentation(sourceCode.text, nextToken.range[0])}`
+    return replacement
+}
+
+const noBlockComments = defineRule({
+    meta: {
+        type: 'suggestion',
+        fixable: 'code',
+        messages: {
+            useLineComments: 'Use // comments instead of block comments.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const { sourceCode } = context
+
+        return {
+            Program() {
+                for (const comment of sourceCode.getAllComments()) {
+                    if (comment.type !== 'Block')
+                        continue
+
+                    context.report({
+                        node: comment,
+                        messageId: 'useLineComments',
+                        fix: (fixer) => fixer.replaceText(comment, getLineCommentReplacement(comment, sourceCode)),
+                    })
+                }
+            },
+        }
+    },
+})
 
 const getMemberPropertyName = (member): string | null => {
     if (!member.computed && member.property.type === 'Identifier')
@@ -374,6 +518,40 @@ const preferMultilineIfCondition = defineRule({
     },
 })
 
+const getSeparatedVariableDeclarationText = (node, sourceCode): string => {
+    const indentation = getLineIndentation(sourceCode.text, node.range[0])
+    const comments = sourceCode.getCommentsInside(node)
+    const declarationLines: string[] = []
+    const exportPrefix = node.parent?.type === 'ExportNamedDeclaration' ? 'export ' : ''
+    const declarePrefix = node.declare ? 'declare ' : ''
+
+    for (let index = 0; index < node.declarations.length; index++) {
+        const declaration = node.declarations[index]
+        const previousDeclaration = node.declarations[index - 1]
+        const nextDeclaration = node.declarations[index + 1]
+        const leadingBoundary = previousDeclaration?.range[1] ?? node.range[0]
+        const trailingBoundary = nextDeclaration?.range[0] ?? node.range[1]
+        const leadingComments = comments.filter((comment) =>
+            comment.range[0] >= leadingBoundary
+            && comment.range[1] <= declaration.range[0]
+            && comment.loc.start.line !== previousDeclaration?.loc.end.line)
+        const trailingComments = comments.filter((comment) =>
+            comment.range[0] >= declaration.range[1]
+            && comment.range[1] <= trailingBoundary
+            && comment.loc.start.line === declaration.loc.end.line)
+
+        for (const comment of leadingComments)
+            declarationLines.push(sourceCode.getText(comment))
+
+        const trailingText = trailingComments.length > 0
+            ? ` ${trailingComments.map((comment) => sourceCode.getText(comment)).join(' ')}`
+            : ''
+        declarationLines.push(`${exportPrefix}${declarePrefix}${node.kind} ${sourceCode.getText(declaration)}${trailingText}`)
+    }
+
+    return declarationLines.join(`\n${indentation}`)
+}
+
 const noCommaSeparatedStatements = defineRule({
     meta: {
         type: 'suggestion',
@@ -398,14 +576,13 @@ const noCommaSeparatedStatements = defineRule({
                     || parentType === 'Program'
                     || parentType === 'StaticBlock'
                     || parentType === 'SwitchCase'
-                const indentation = getLineIndentation(sourceCode.text, node.range[0])
+                const replacementNode = parentType === 'ExportNamedDeclaration' ? node.parent : node
 
                 context.report({
                     node,
                     messageId: 'separateDeclarations',
-                    fix: canFix && sourceCode.getCommentsInside(node).length === 0
-                        ? (fixer) =>
-                            fixer.replaceText(node, node.declarations.map((declaration) => `${node.kind} ${sourceCode.getText(declaration)}`).join(`\n${indentation}`))
+                    fix: canFix
+                        ? (fixer) => fixer.replaceText(replacementNode, getSeparatedVariableDeclarationText(node, sourceCode))
                         : undefined,
                 })
             },
@@ -426,6 +603,55 @@ const noCommaSeparatedStatements = defineRule({
                         : undefined,
                 })
             },
+        }
+    },
+})
+
+const preferAttachedTrailingComma = defineRule({
+    meta: {
+        type: 'layout',
+        fixable: 'whitespace',
+        messages: {
+            attachTrailingComma: 'Keep a trailing comma on the same line as the preceding syntax node.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const { sourceCode } = context
+
+        const checkLastItem = (container, items): void => {
+            const lastItem = items.at(-1)
+            if (!lastItem)
+                return
+
+            const comma = sourceCode.getTokenAfter(lastItem)
+            const closeToken = sourceCode.getLastToken(container)
+            if (
+                comma?.value !== ','
+                || !closeToken
+                || comma.range[0] >= closeToken.range[0]
+                || comma.loc.start.line === lastItem.loc.end.line
+                || sourceCode.getCommentsInside(container).some((comment) =>
+                    comment.range[0] >= lastItem.range[1]
+                    && comment.range[1] <= comma.range[0])
+            )
+                return
+
+            context.report({
+                node: comma,
+                messageId: 'attachTrailingComma',
+                fix: (fixer) => fixer.replaceTextRange([lastItem.range[1], comma.range[1]], ','),
+            })
+        }
+
+        return {
+            ArrayExpression: (node) => checkLastItem(node, node.elements),
+            ArrayPattern: (node) => checkLastItem(node, node.elements),
+            CallExpression: (node) => checkLastItem(node, node.arguments),
+            ImportExpression: (node) => checkLastItem(node, node.options ? [node.options] : []),
+            NewExpression: (node) => checkLastItem(node, node.arguments),
+            ObjectExpression: (node) => checkLastItem(node, node.properties),
+            ObjectPattern: (node) => checkLastItem(node, node.properties),
         }
     },
 })
@@ -651,6 +877,77 @@ const preferCompactIf = defineRule({
     },
 })
 
+const directVoidExpressionTypes = new Set([
+    'CallExpression',
+    'NewExpression',
+    'TaggedTemplateExpression',
+])
+
+const getVoidExpressionText = (expressionNode, sourceCode): string => {
+    const expression = sourceCode.getText(expressionNode)
+    if (expressionNode.type === 'UnaryExpression' && expressionNode.operator === 'void')
+        return expression
+    return directVoidExpressionTypes.has(expressionNode.type)
+        ? `void ${expression}`
+        : `void (${expression})`
+}
+
+const getConciseArrowBodyText = (statement, sourceCode): string => {
+    const isExpressionStatement = statement.type === 'ExpressionStatement'
+    const expressionNode = isExpressionStatement ? statement.expression : statement.argument
+    const expression = sourceCode.getText(expressionNode)
+
+    if (isExpressionStatement)
+        return getVoidExpressionText(expressionNode, sourceCode)
+
+    return expressionNode.type === 'ObjectExpression' ? `(${expression})` : expression
+}
+
+const isWindowOpenCall = (node): boolean =>
+    node.type === 'CallExpression'
+    && node.callee.type === 'MemberExpression'
+    && !node.callee.computed
+    && node.callee.object.type === 'Identifier'
+    && node.callee.object.name === 'window'
+    && node.callee.property.type === 'Identifier'
+    && node.callee.property.name === 'open'
+
+const preferVoidArrowBody = defineRule({
+    meta: {
+        type: 'problem',
+        fixable: 'code',
+        messages: {
+            discardReturnValue: 'Discard the expression value so this arrow function still returns undefined.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const { sourceCode } = context
+
+        return {
+            ArrowFunctionExpression(node) {
+                if (node.body.type === 'BlockStatement')
+                    return
+                if (node.body.type === 'UnaryExpression' && node.body.operator === 'void')
+                    return
+
+                const hasVoidReturnType = node.returnType?.typeAnnotation?.type === 'TSVoidKeyword'
+                const isEffectOnlyExpression = node.body.type === 'AssignmentExpression'
+                    || node.body.type === 'UpdateExpression'
+                    || isWindowOpenCall(node.body)
+                if (!hasVoidReturnType && !isEffectOnlyExpression)
+                    return
+
+                context.report({
+                    node: node.body,
+                    messageId: 'discardReturnValue',
+                    fix: (fixer) => fixer.replaceText(node.body, getVoidExpressionText(node.body, sourceCode)),
+                })
+            },
+        }
+    },
+})
+
 const preferExpressionArrowBody = defineRule({
     meta: {
         type: 'suggestion',
@@ -669,7 +966,9 @@ const preferExpressionArrowBody = defineRule({
                     return
 
                 const statement = node.body.body[0]
-                if (statement.type !== 'ExpressionStatement' || statement.directive != null)
+                const isExpressionStatement = statement.type === 'ExpressionStatement' && statement.directive == null
+                const isReturningExpression = statement.type === 'ReturnStatement' && statement.argument != null
+                if (!isExpressionStatement && !isReturningExpression)
                     return
                 if (sourceCode.getText(statement).includes('\n'))
                     return
@@ -679,13 +978,7 @@ const preferExpressionArrowBody = defineRule({
                 context.report({
                     node: node.body,
                     messageId: 'preferExpressionBody',
-                    fix: (fixer) => {
-                        const expression = sourceCode.getText(statement.expression)
-                        const replacement = statement.expression.type === 'ObjectExpression'
-                            ? `(${expression})`
-                            : expression
-                        return fixer.replaceText(node.body, replacement)
-                    },
+                    fix: (fixer) => fixer.replaceText(node.body, getConciseArrowBodyText(statement, sourceCode)),
                 })
             },
         }
@@ -802,12 +1095,15 @@ export default definePlugin({
         name: 'lixpi',
     },
     rules: {
+        'no-block-comments': noBlockComments,
         'no-native-console-logging': noNativeConsoleLogging,
         'no-comma-separated-statements': noCommaSeparatedStatements,
         'no-unused-imports': noUnusedImports,
+        'prefer-attached-trailing-comma': preferAttachedTrailingComma,
         'prefer-arrow-function-declaration': preferArrowFunctionDeclaration,
         'prefer-compact-if': preferCompactIf,
         'prefer-expression-arrow-body': preferExpressionArrowBody,
+        'prefer-void-arrow-body': preferVoidArrowBody,
         'prefer-multiline-attr-chain': preferMultilineAttrChain,
         'prefer-multiline-collection': preferMultilineCollection,
         'prefer-multiline-object-pattern': preferMultilineObjectPattern,
