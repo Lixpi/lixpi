@@ -43,6 +43,12 @@ const compactIfStatementTypes = new Set([
     'ReturnStatement',
     'ThrowStatement',
 ])
+const separatedControlFlowStatementTypes = new Set([
+    'BreakStatement',
+    'ContinueStatement',
+    'ReturnStatement',
+    'ThrowStatement',
+])
 const maximumInlineArrowFunctionLength = 150
 
 type FormattingFiles = {
@@ -827,7 +833,7 @@ const canonicalizeStatementSpacing = (file: string, source: string): string => {
                 if (
                     previous.type !== 'IfStatement'
                     && current.type !== 'IfStatement'
-                    && current.type !== 'ReturnStatement'
+                    && !separatedControlFlowStatementTypes.has(current.type)
                 )
                     continue
 
