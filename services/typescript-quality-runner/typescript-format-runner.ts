@@ -817,6 +817,25 @@ const getDelimitedListItems = (node: AstNode): AstNode[] | null => {
     return null
 }
 
+// A call inside a member chain has its own line. Anchoring the argument layout to
+// the start of the whole chain would indent the arguments and the closing
+// parenthesis against a line the call does not sit on, so the anchor is the end of
+// the callee instead.
+const getDelimitedListAnchor = (
+    node: AstNode,
+    nodeRange: [number, number],
+): number => {
+    if (
+        node.type !== 'CallExpression'
+        && node.type !== 'NewExpression'
+    )
+        return nodeRange[0]
+
+    const calleeRange = getNodeRange(node.callee as AstNode | undefined)
+
+    return calleeRange ? calleeRange[1] : nodeRange[0]
+}
+
 const canonicalizeDelimitedListsOnce = (
     file: string,
     source: string,
@@ -875,7 +894,10 @@ const canonicalizeDelimitedListsOnce = (
                 if (!hasInterItemComment) {
                     const indentation = getLineIndentation(
                         source,
-                        nodeRange[0],
+                        getDelimitedListAnchor(
+                            node,
+                            nodeRange,
+                        ),
                     )
                     const itemIndentation = `${indentation}    `
                     const itemTexts = itemRanges.map((range) => reindentNodeText(
