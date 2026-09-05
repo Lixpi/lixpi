@@ -1,7 +1,7 @@
 {
     "$schema": "./node_modules/oxfmt/configuration_schema.json",
     "arrowParens": "avoid",
-    "embeddedLanguageFormatting": "auto",
+    "embeddedLanguageFormatting": "off",
     "endOfLine": "lf",
     "ignorePatterns": [
         "**/*.css",
