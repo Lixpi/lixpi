@@ -83,7 +83,9 @@ const isLowercaseIdentifierCharacter = (character: string | undefined): boolean 
     ),
 )
 
-const isTransitionCustomProperty = (property: string): boolean => {
+const isTransitionCustomProperty = (
+    property: string,
+): boolean => {
     if (!property.startsWith('--'))
         return false
 
@@ -107,7 +109,9 @@ const isTransitionCustomProperty = (property: string): boolean => {
     return true
 }
 
-const getUnqualifiedFunctionName = (value: string): string => {
+const getUnqualifiedFunctionName = (
+    value: string,
+): string => {
     const interpolationOffset = value.startsWith('#{') ? 2 : 0
     let nameStart = interpolationOffset
 
@@ -124,7 +128,11 @@ const getUnqualifiedFunctionName = (value: string): string => {
 const isSharedTransitionFunction = (node: CssValueNode): boolean => node.type === 'function'
     && (
         getUnqualifiedFunctionName(node.value) === 'var'
-        || transitionHelpers.has(getUnqualifiedFunctionName(node.value))
+        || transitionHelpers.has(
+            getUnqualifiedFunctionName(
+                node.value,
+            ),
+        )
     )
 
 const getTopLevelValueGroups = (nodes: CssValueNode[]): CssValueNode[][] => {
@@ -147,7 +155,9 @@ const getTopLevelValueGroups = (nodes: CssValueNode[]): CssValueNode[][] => {
     return groups
 }
 
-const isSharedTransitionGroup = (nodes: CssValueNode[]): boolean => {
+const isSharedTransitionGroup = (
+    nodes: CssValueNode[],
+): boolean => {
     if (nodes.length === 1) {
         const node = nodes[0]!
 
@@ -169,44 +179,55 @@ const isSharedTransitionValue = (value: string): boolean => {
     return getTopLevelValueGroups(parsed.nodes).every(isSharedTransitionGroup)
 }
 
-const transitionHelpersRule = (primary: boolean) => (root: Root, result: PostcssResult) => {
+const transitionHelpersRule = (
+    primary: boolean,
+) => (
+    root: Root,
+    result: PostcssResult,
+) => {
     if (!primary)
         return
 
-    root.walkDecls((declaration: Declaration) => {
-        const property = declaration.prop.toLowerCase()
-        const isTransitionValue = (
-            property === 'transition'
-            || isTransitionCustomProperty(property)
-        )
-        const isSplitTransitionProperty = (
-            property === 'transition-delay'
-            || property === 'transition-duration'
-            || property === 'transition-timing-function'
-        )
-
-        const isValid = (
-            isTransitionValue
-            && isSharedTransitionValue(declaration.value)
-        )
-
-        if (
-            (
-                !isSplitTransitionProperty
-                && !isTransitionValue
+    root.walkDecls(
+        (
+            declaration: Declaration,
+        ) => {
+            const property = declaration.prop.toLowerCase()
+            const isTransitionValue = (
+                property === 'transition'
+                || isTransitionCustomProperty(property)
             )
-            || isValid
-        )
-            return
+            const isSplitTransitionProperty = (
+                property === 'transition-delay'
+                || property === 'transition-duration'
+                || property === 'transition-timing-function'
+            )
+    
+            const isValid = (
+                isTransitionValue
+                && isSharedTransitionValue(declaration.value)
+            )
 
-        stylelint.utils.report({
-            message: transitionMessages.expected(declaration.value),
-            node: declaration,
-            result,
-            ruleName: transitionRuleName,
-            word: declaration.value,
-        })
-    })
+            if (
+                (
+                    !isSplitTransitionProperty
+                    && !isTransitionValue
+                )
+                || isValid
+            )
+                return
+
+            stylelint.utils.report(
+                {
+                    message: transitionMessages.expected(declaration.value),
+                    node: declaration,
+                    result,
+                    ruleName: transitionRuleName,
+                    word: declaration.value,
+                },
+            )
+        },
+    )
 }
 
 transitionHelpersRule.ruleName = transitionRuleName
@@ -217,7 +238,9 @@ transitionHelpersRule.meta = {
 
 const isHorizontalWhitespace = (character: string | undefined): boolean => character === ' ' || character === '\t' || character === '\r'
 
-const normalizeCommentLine = (line: string): string => {
+const normalizeCommentLine = (
+    line: string,
+): string => {
     let start = 0
     let end = line.length
 
@@ -269,19 +292,25 @@ const getCommentIndentation = (comment: Comment): string => {
     return finalWhitespaceLine.slice(0, end)
 }
 
-const convertBlockComment = (comment: Comment): void => {
+const convertBlockComment = (
+    comment: Comment,
+): void => {
     const lines = getCommentLines(comment)
     const indentation = getCommentIndentation(comment)
-    const comments = lines.map((line, index) => comment.clone({
-        text: line,
-        raws: {
-            ...comment.raws,
-            before: index === 0 ? comment.raws.before : `\n${indentation}`,
-            inline: true,
-            left: line.length > 0 ? ' ' : '',
-            right: '',
-        },
-    }))
+    const comments = lines.map(
+        (line, index) => comment.clone(
+            {
+                text: line,
+                raws: {
+                    ...comment.raws,
+                    before: index === 0 ? comment.raws.before : `\n${indentation}`,
+                    inline: true,
+                    left: line.length > 0 ? ' ' : '',
+                    right: '',
+                },
+            },
+        ),
+    )
     comment.replaceWith(...comments)
 }
 
@@ -290,27 +319,32 @@ const noBlockCommentsRule = (
     _secondaryOptions: unknown,
     context: RuleContext = {},
 ) =>
-(root: Root, result: PostcssResult) => {
+(
+    root: Root,
+    result: PostcssResult,
+) => {
     if (!primary)
         return
 
-    root.walkComments((comment) => {
-        if (comment.raws.inline)
-            return
+    root.walkComments(
+        (comment) => {
+            if (comment.raws.inline)
+                return
 
-        if (context.fix) {
-            convertBlockComment(comment)
+            if (context.fix) {
+                convertBlockComment(comment)
 
-            return
-        }
+                return
+            }
 
-        stylelint.utils.report({
-            message: blockCommentMessages.expected,
-            node: comment,
-            result,
-            ruleName: blockCommentRuleName,
-        })
-    })
+            stylelint.utils.report({
+                message: blockCommentMessages.expected,
+                node: comment,
+                result,
+                ruleName: blockCommentRuleName,
+            })
+        },
+    )
 }
 
 noBlockCommentsRule.ruleName = blockCommentRuleName

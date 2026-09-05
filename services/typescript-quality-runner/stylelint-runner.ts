@@ -17,7 +17,10 @@ const supportedExtensions = new Set([
     '.scss',
 ])
 
-const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string[]): Promise<void> => {
+const collectStylesheetPaths = async (
+    inputPath: string,
+    stylesheetPaths: string[],
+): Promise<void> => {
     const absolutePath = path.resolve(repositoryDirectory, inputPath)
     let pathStats: Stats
 
@@ -35,7 +38,9 @@ const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string
     }
 
     if (pathStats.isFile()) {
-        if (supportedExtensions.has(path.extname(absolutePath)))
+        if (supportedExtensions.has(
+            path.extname(absolutePath),
+        ))
             stylesheetPaths.push(absolutePath)
 
         return
@@ -45,8 +50,12 @@ const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string
         return
 
     const relativePath = path.relative(repositoryDirectory, absolutePath)
-    stylesheetPaths.push(path.join(relativePath, '**/*.css'))
-    stylesheetPaths.push(path.join(relativePath, '**/*.scss'))
+    stylesheetPaths.push(
+        path.join(relativePath, '**/*.css'),
+    )
+    stylesheetPaths.push(
+        path.join(relativePath, '**/*.scss'),
+    )
 }
 
 const action = process.argv[2]
@@ -66,19 +75,21 @@ if (stylesheetPaths.length === 0)
 
 const { default: repositoryConfig } = await import(pathToFileURL(configFile).href)
 
-const result = await stylelint.lint({
-    allowEmptyInput: true,
-    config: {
-        ...repositoryConfig,
-        plugins: [...repositoryConfig.plugins, ...lixpiStylelintPlugins],
+const result = await stylelint.lint(
+    {
+        allowEmptyInput: true,
+        config: {
+            ...repositoryConfig,
+            plugins: [...repositoryConfig.plugins, ...lixpiStylelintPlugins],
+        },
+        configBasedir: toolDirectory,
+        cwd: repositoryDirectory,
+        files: stylesheetPaths,
+        fix: action === 'fix',
+        formatter: 'string',
+        maxWarnings: 0,
     },
-    configBasedir: toolDirectory,
-    cwd: repositoryDirectory,
-    files: stylesheetPaths,
-    fix: action === 'fix',
-    formatter: 'string',
-    maxWarnings: 0,
-})
+)
 
 if (
     result.errored

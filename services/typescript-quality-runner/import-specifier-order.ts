@@ -55,11 +55,15 @@ const isAstNode = (value: unknown): value is AstNode => Boolean(value && typeof 
 
 const getNodeRange = (node: AstNode | null | undefined): [number, number] | null => node?.range ?? null
 
-const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTypeScriptFiles> => {
+const collectTypeScriptFiles = async (
+    inputPaths: string[],
+): Promise<CollectedTypeScriptFiles> => {
     const files: string[] = []
     const prohibitedFiles: string[] = []
 
-    const visit = async (path: string): Promise<void> => {
+    const visit = async (
+        path: string,
+    ): Promise<void> => {
         const entry = await stat(path)
 
         if (entry.isFile()) {
@@ -86,11 +90,15 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
             )
                 continue
 
-            await visit(resolve(path, child.name))
+            await visit(
+                resolve(path, child.name),
+            )
         }
     }
 
-    for (const inputPath of inputPaths) await visit(resolve(inputPath))
+    for (const inputPath of inputPaths) await visit(
+        resolve(inputPath),
+    )
 
     return {
         files: files.sort(),
@@ -98,7 +106,10 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
     }
 }
 
-const applyReplacements = (source: string, replacements: Replacement[]): string => {
+const applyReplacements = (
+    source: string,
+    replacements: Replacement[],
+): string => {
     if (replacements.length === 0)
         return source
 
@@ -114,10 +125,14 @@ const applyReplacements = (source: string, replacements: Replacement[]): string 
     return output + source.slice(cursor)
 }
 
-const hasComment = (range: [number, number], comments: AstComment[]): boolean =>
-    comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
+const hasComment = (range: [number, number], comments: AstComment[]): boolean => comments.some(
+    (comment) => comment.start >= range[0] && comment.end <= range[1],
+)
 
-const getNamedSpecifierBlock = (specifiers: NamedSpecifier[], singleTypeMustBeMultiline: boolean): string => {
+const getNamedSpecifierBlock = (
+    specifiers: NamedSpecifier[],
+    singleTypeMustBeMultiline: boolean,
+): string => {
     const ordered = [
         ...specifiers.filter((specifier) => !specifier.isType),
         ...specifiers.filter((specifier) => specifier.isType),
@@ -192,7 +207,10 @@ const getExportSpecifierText = (
     return typeKeywordRequired ? `type ${binding}` : binding
 }
 
-const canonicalizeImportDeclaration = (node: AstNode, source: string): string | null => {
+const canonicalizeImportDeclaration = (
+    node: AstNode,
+    source: string,
+): string | null => {
     const nodeRange = getNodeRange(node)
     const sourceNode = isAstNode(node.source) ? node.source : null
     const sourceRange = getNodeRange(sourceNode)
@@ -207,23 +225,27 @@ const canonicalizeImportDeclaration = (node: AstNode, source: string): string | 
         return null
 
     const declarationIsTypeOnly = node.importKind === 'type'
-    const named = namedSpecifiers.map((specifier): NamedSpecifier => {
-        const isType = (
-            declarationIsTypeOnly
-            || specifier.importKind === 'type'
-        )
+    const named = namedSpecifiers.map(
+        (specifier): NamedSpecifier => {
+            const isType = (
+                declarationIsTypeOnly
+                || specifier.importKind === 'type'
+            )
 
-        return {
-            isType,
-            text: getImportSpecifierText(
-                specifier,
-                source,
-                isType && !declarationIsTypeOnly,
-            ),
-        }
-    })
+            return {
+                isType,
+                text: getImportSpecifierText(
+                    specifier,
+                    source,
+                    isType && !declarationIsTypeOnly,
+                ),
+            }
+        },
+    )
     const clauseParts = specifiers.filter((specifier) => specifier.type !== 'ImportSpecifier').map((specifier) => getNodeText(specifier, source))
-    clauseParts.push(getNamedSpecifierBlock(named, true))
+    clauseParts.push(
+        getNamedSpecifierBlock(named, true),
+    )
 
     const sourceText = source.slice(sourceRange[0], sourceRange[1])
     const suffix = source.slice(sourceRange[1], nodeRange[1])
@@ -231,7 +253,10 @@ const canonicalizeImportDeclaration = (node: AstNode, source: string): string | 
     return `import${declarationIsTypeOnly ? ' type' : ''} ${clauseParts.join(', ')} from ${sourceText}${suffix}`
 }
 
-const canonicalizeExportDeclaration = (node: AstNode, source: string): string | null => {
+const canonicalizeExportDeclaration = (
+    node: AstNode,
+    source: string,
+): string | null => {
     const nodeRange = getNodeRange(node)
     const specifiers = Array.isArray(node.specifiers) ? node.specifiers.filter(isAstNode) : []
 
@@ -243,21 +268,23 @@ const canonicalizeExportDeclaration = (node: AstNode, source: string): string | 
         return null
 
     const declarationIsTypeOnly = node.exportKind === 'type'
-    const named = specifiers.map((specifier): NamedSpecifier => {
-        const isType = (
-            declarationIsTypeOnly
-            || specifier.exportKind === 'type'
-        )
+    const named = specifiers.map(
+        (specifier): NamedSpecifier => {
+            const isType = (
+                declarationIsTypeOnly
+                || specifier.exportKind === 'type'
+            )
 
-        return {
-            isType,
-            text: getExportSpecifierText(
-                specifier,
-                source,
-                isType && !declarationIsTypeOnly,
-            ),
-        }
-    })
+            return {
+                isType,
+                text: getExportSpecifierText(
+                    specifier,
+                    source,
+                    isType && !declarationIsTypeOnly,
+                ),
+            }
+        },
+    )
     const sourceNode = isAstNode(node.source) ? node.source : null
     const sourceRange = getNodeRange(sourceNode)
     const sourceClause = sourceRange ? ` from ${source.slice(sourceRange[0], sourceRange[1])}` : ''
@@ -306,7 +333,10 @@ export const canonicalizeImportLayout = (
 
         const canonical = node.type === 'ImportDeclaration'
             ? canonicalizeImportDeclaration(node, source)
-            : canonicalizeExportDeclaration(node, source)
+            : canonicalizeExportDeclaration(
+                node,
+                source,
+            )
 
         if (
             canonical == null
@@ -397,6 +427,8 @@ const invokedPath = process.argv[1]
 
 if (
     invokedPath
-    && import.meta.url === pathToFileURL(resolve(invokedPath)).href
+    && import.meta.url === pathToFileURL(
+        resolve(invokedPath),
+    ).href
 )
     await runCli()

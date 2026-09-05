@@ -88,6 +88,9 @@ const iteratorMethodNames = new Set([
     'values',
 ])
 const maximumInlineArrowFunctionLength = 150
+
+// A call stays on one line only while its line fits this width.
+const maximumInlineCallLength = 150
 const maximumInlineIteratorChainLength = 150
 
 type FormattingFiles = {
@@ -181,11 +184,15 @@ const isTestFile = (path: string): boolean => {
     return path.split('/').some((segment) => testDirectoryNames.has(segment))
 }
 
-const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingFiles> => {
+const collectFormattingFiles = async (
+    inputPaths: string[],
+): Promise<FormattingFiles> => {
     const files: string[] = []
     const prohibitedFiles: string[] = []
 
-    const visit = async (path: string): Promise<void> => {
+    const visit = async (
+        path: string,
+    ): Promise<void> => {
         const entry = await stat(path)
 
         if (entry.isFile()) {
@@ -217,11 +224,15 @@ const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingF
             )
                 continue
 
-            await visit(resolve(path, child.name))
+            await visit(
+                resolve(path, child.name),
+            )
         }
     }
 
-    for (const inputPath of inputPaths) await visit(resolve(inputPath))
+    for (const inputPath of inputPaths) await visit(
+        resolve(inputPath),
+    )
 
     return {
         files: files.sort(),
@@ -306,7 +317,10 @@ const getLayoutSpan = (
     end,
     preserve,
     start,
-    text: source.slice(start, end),
+    text: source.slice(
+        start,
+        end,
+    ),
 })
 
 const reindentNodeText = (
@@ -324,13 +338,18 @@ const reindentNodeText = (
         if (indentationDifference > 0)
             lines[index] = `${' '.repeat(indentationDifference)}${line}`
         else
-            lines[index] = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
+            lines[index] = line.slice(
+                Math.min(-indentationDifference, line.length - line.trimStart().length),
+            )
     }
 
     return lines.join('\n')
 }
 
-const hasMultilineFunctionParameters = (node: AstNode, source: string): boolean => {
+const hasMultilineFunctionParameters = (
+    node: AstNode,
+    source: string,
+): boolean => {
     if (!Array.isArray(node.params))
         return false
 
@@ -343,11 +362,17 @@ const hasMultilineFunctionParameters = (node: AstNode, source: string): boolean 
     return Boolean(
         firstParameterRange
         && lastParameterRange
-        && getLineStart(source, firstParameterRange[0]) !== getLineStart(source, lastParameterRange[1] - 1)
+        && getLineStart(source, firstParameterRange[0]) !== getLineStart(
+            source,
+            lastParameterRange[1] - 1,
+        ),
     )
 }
 
-const getFunctionParameterSpan = (node: AstNode, source: string): LayoutSpan | null => {
+const getFunctionParameterSpan = (
+    node: AstNode,
+    source: string,
+): LayoutSpan | null => {
     const nodeRange = getNodeRange(node)
     const bodyRange = getNodeRange(node.body as AstNode)
 
@@ -402,7 +427,10 @@ let lastParsedFile: string | null = null
 let lastParsedSource: string | null = null
 let lastParseResult: ReturnType<typeof parseSync> | null = null
 
-const parseTypeScript = (file: string, source: string): ReturnType<typeof parseSync> => {
+const parseTypeScript = (
+    file: string,
+    source: string,
+): ReturnType<typeof parseSync> => {
     if (
         lastParseResult
         && lastParsedFile === file
@@ -426,7 +454,10 @@ const parseTypeScript = (file: string, source: string): ReturnType<typeof parseS
     return parseResult
 }
 
-const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayouts => {
+const collectTypeScriptLayouts = (
+    file: string,
+    source: string,
+): TypeScriptLayouts => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -488,11 +519,13 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
                 && grandparent.callee === parent
 
             if (!isNestedChain)
-                layouts.callChains.push(getLayoutSpan(
-                    nodeRange[0],
-                    nodeRange[1],
-                    source,
-                ))
+                layouts.callChains.push(
+                    getLayoutSpan(
+                        nodeRange[0],
+                        nodeRange[1],
+                        source,
+                    ),
+                )
         }
 
         if (
@@ -500,33 +533,39 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             && node.type === 'ObjectPattern'
             && nodeRange
         )
-            layouts.objectBindings.push(getLayoutSpan(
-                nodeRange[0],
-                nodeRange[1],
-                source,
-            ))
+            layouts.objectBindings.push(
+                getLayoutSpan(
+                    nodeRange[0],
+                    nodeRange[1],
+                    source,
+                ),
+            )
 
         if (
             !insideCondition
             && node.type === 'ArrayExpression'
             && nodeRange
         )
-            layouts.arrays.push(getLayoutSpan(
-                nodeRange[0],
-                nodeRange[1],
-                source,
-            ))
+            layouts.arrays.push(
+                getLayoutSpan(
+                    nodeRange[0],
+                    nodeRange[1],
+                    source,
+                ),
+            )
 
         if (
             !insideCondition
             && (node.type === 'BinaryExpression' || node.type === 'LogicalExpression')
             && nodeRange
         )
-            layouts.binaryExpressions.push(getLayoutSpan(
-                nodeRange[0],
-                nodeRange[1],
-                source,
-            ))
+            layouts.binaryExpressions.push(
+                getLayoutSpan(
+                    nodeRange[0],
+                    nodeRange[1],
+                    source,
+                ),
+            )
 
         if (
             !insideCondition
@@ -537,12 +576,14 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             const expressionRange = parenthesized ? getNodeRange(parent) : nodeRange
 
             if (expressionRange)
-                layouts.conditionalExpressions.push(getLayoutSpan(
-                    expressionRange[0],
-                    expressionRange[1],
-                    source,
-                    parenthesized,
-                ))
+                layouts.conditionalExpressions.push(
+                    getLayoutSpan(
+                        expressionRange[0],
+                        expressionRange[1],
+                        source,
+                        parenthesized,
+                    ),
+                )
         }
 
         if (
@@ -550,11 +591,13 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             && node.type === 'ObjectExpression'
             && nodeRange
         )
-            layouts.objects.push(getLayoutSpan(
-                nodeRange[0],
-                nodeRange[1],
-                source,
-            ))
+            layouts.objects.push(
+                getLayoutSpan(
+                    nodeRange[0],
+                    nodeRange[1],
+                    source,
+                ),
+            )
 
         if (
             !insideCondition
@@ -574,11 +617,13 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             )
                 start--
 
-            layouts.types.push(getLayoutSpan(
-                start,
-                nodeRange[1],
-                source,
-            ))
+            layouts.types.push(
+                getLayoutSpan(
+                    start,
+                    nodeRange[1],
+                    source,
+                ),
+            )
         }
 
         for (const [key, value] of Object.entries(node)) {
@@ -641,7 +686,9 @@ const reindentLayoutText = (
         if (indentationDifference > 0)
             line = `${' '.repeat(indentationDifference)}${line}`
         else
-            line = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
+            line = line.slice(
+                Math.min(-indentationDifference, line.length - line.trimStart().length),
+            )
 
         const trimmed = line.trimStart()
 
@@ -712,8 +759,9 @@ const preserveExpandedTypeScriptLayouts = (
     const nonOverlappingReplacements: LayoutSpan[] = []
 
     for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
-        const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
-            replacement.start < candidate.end && replacement.end > candidate.start)
+        const overlapsSelectedReplacement = nonOverlappingReplacements.some(
+            (candidate) => replacement.start < candidate.end && replacement.end > candidate.start,
+        )
 
         if (!overlapsSelectedReplacement)
             nonOverlappingReplacements.push(replacement)
@@ -779,30 +827,110 @@ const getDelimitedListAnchor = (
 // earlier layout is joined back up. A list is only joined when every item is already a
 // single line and the joined line still fits Oxfmt's print width, because Oxfmt would
 // otherwise break the line again on the next run and the two would never agree.
-const getCollapsedDelimitedListText = (
-    source: string,
-    itemRanges: Array<[number, number]>,
-    start: number,
-    end: number,
-    printWidth: number,
-): string | null => {
-    const current = source.slice(start, end)
+const isCallLikeNode = (node: AstNode | null | undefined): boolean => node?.type === 'CallExpression'
+    || node?.type === 'NewExpression'
 
-    if (!current.includes('\n'))
-        return null
+const collectionConstructorNames = new Set([
+    'Map',
+    'Set',
+    'WeakMap',
+    'WeakSet',
+])
 
+// `new Map([...])` and its siblings are laid out by Oxlint's collection rule, which puts
+// the elements inside the array's own brackets. Splitting the constructor's argument list
+// as well would give the two rules different answers for the same call.
+const isCollectionInitializer = (
+    node: AstNode,
+): boolean => {
+    if (node.type !== 'NewExpression')
+        return false
+
+    const callee = node.callee as AstNode | undefined
+    const args = Array.isArray(node.arguments) ? node.arguments.filter(isAstNode) : []
+
+    return callee?.type === 'Identifier'
+        && typeof callee.name === 'string'
+        && collectionConstructorNames.has(callee.name)
+        && args.length === 1
+        && args[0]?.type === 'ArrayExpression'
+}
+
+// The joined text of a list, or null when an item spans lines and so cannot be joined
+// without flattening a structure its author expanded on purpose.
+const getCollapsedDelimitedListText = (source: string, itemRanges: Array<[number, number]>): string | null => {
     const itemTexts = itemRanges.map((range) => source.slice(range[0], range[1]))
 
-    if (itemTexts.some((text) => text.includes('\n')))
-        return null
-
-    const collapsed = itemTexts.join(', ')
-    const lineEnd = getNextLineStart(source, end)
-    const suffixLength = (lineEnd < 0 ? source.length : lineEnd - 1) - end
-    const prefixLength = start - getLineStart(source, start)
-
-    return prefixLength + collapsed.length + suffixLength > printWidth ? null : collapsed
+    return itemTexts.some((text) => text.includes('\n')) ? null : itemTexts.join(', ')
 }
+
+// A node's text with every line break inside it closed up, which is what the node would
+// measure if nothing within it were split. The width test reads this rather than the
+// text as it currently stands, so a list's own decision never moves when a list nested
+// inside it splits or joins, and the two cannot push each other back and forth forever.
+const getInlineNodeText = (
+    source: string,
+    range: [number, number],
+): string => {
+    let output = ''
+    let index = range[0]
+
+    while (index < range[1]) {
+        const character = source[index]!
+
+        if (character !== '\n') {
+            output += character
+            index++
+
+            continue
+        }
+
+        index++
+
+        while (
+            index < range[1]
+            && isWhitespaceCharacter(source[index])
+        )
+            index++
+
+        const next = source[index]
+        const closesContainer = next === ')'
+            || next === ']'
+            || next === '}'
+
+        if (
+            output.endsWith(',')
+            && closesContainer
+        )
+            output = output.slice(0, -1)
+        else if (
+            output.length > 0
+            && !output.endsWith(' ')
+        )
+            output += ' '
+    }
+
+    return output
+}
+
+const isStatementNode = (node: AstNode): boolean => node.type.endsWith('Statement')
+    || node.type.endsWith('Declaration')
+    || node.type === 'PropertyDefinition'
+    || node.type === 'MethodDefinition'
+
+// The column a list's closing bracket would land on if its statement were written out
+// on one line. Measuring from the statement rather than from the line as it stands keeps
+// the answer the same whether the lists around this one are split or joined, so a list
+// and the lists inside it cannot push each other back and forth forever.
+const getInlineClosingColumn = (
+    source: string,
+    statementStart: number,
+    end: number,
+): number => getLineIndentation(source, statementStart).length
+    + getInlineNodeText(
+        source,
+        [statementStart, end],
+    ).length
 
 const canonicalizeDelimitedListsOnce = (
     file: string,
@@ -816,9 +944,16 @@ const canonicalizeDelimitedListsOnce = (
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+        statementStart: number,
+    ): void => {
         const nodeRange = getNodeRange(node)
         const items = getDelimitedListItems(node)
+        const ownStatementStart = isStatementNode(node)
+            && nodeRange
+            ? nodeRange[0]
+            : statementStart
 
         if (
             nodeRange
@@ -847,14 +982,44 @@ const canonicalizeDelimitedListsOnce = (
                     trailingCommaEnd,
                     nodeRange[1],
                 )
-                const hasInterItemComment = comments.some((comment) =>
-                    comment.start >= start
-                    && comment.end <= end
-                    && !itemRanges.some((range) => range != null && comment.start >= range[0] && comment.end <= range[1]))
+                // A parameter list written without parentheses, such as `async request =>`,
+                // has no brackets to lay out, and rewriting the span would eat the space
+                // that separates the parameter from what comes before it.
+                const isBracketed = source[start - 1] === '(' && source[end] === ')'
+                const hasInterItemComment = isBracketed && comments.some(
+                    (comment) =>
+                        comment.start >= start
+                        && comment.end <= end
+                        && !itemRanges.some(
+                            (range) => range != null && comment.start >= range[0] && comment.end <= range[1],
+                        ),
+                )
+                const isCall = isCallLikeNode(node)
+                const collapsed = getCollapsedDelimitedListText(source, itemRanges as Array<[number, number]>)
+                const lineLimit = isCall ? maximumInlineCallLength : printWidth
+                // A call is split when it carries more than two arguments, when one of its
+                // arguments is itself a call, or when writing its statement out on one
+                // line would carry it past the limit. A call nested inside it is measured
+                // the same way, so a long expression splits from the outside in.
+                const mustSplit = isBracketed
+                    && !isCollectionInitializer(node)
+                    && (items.length > 2
+                    || (isCall && items.some(
+                        (item) => isCallLikeNode(
+                            unwrapParenthesizedExpression(
+                                item,
+                            ),
+                        ),
+                    ))
+                    || getInlineClosingColumn(
+                        source,
+                        ownStatementStart,
+                        nodeRange[1],
+                    ) > lineLimit)
 
                 if (
                     !hasInterItemComment
-                    && items.length > 2
+                    && mustSplit
                 ) {
                     const indentation = getLineIndentation(
                         source,
@@ -881,25 +1046,17 @@ const canonicalizeDelimitedListsOnce = (
                             text: replacement,
                         })
                     }
-                } else if (!hasInterItemComment) {
-                    const collapsed = getCollapsedDelimitedListText(
-                        source,
-                        itemRanges as Array<[number, number]>,
+                } else if (
+                    isBracketed
+                    && !hasInterItemComment
+                    && collapsed != null
+                    && source.slice(start, end) !== collapsed
+                ) {
+                    replacements.push({
                         start,
                         end,
-                        printWidth,
-                    )
-
-                    if (
-                        collapsed != null
-                        && source.slice(start, end) !== collapsed
-                    ) {
-                        replacements.push({
-                            start,
-                            end,
-                            text: collapsed,
-                        })
-                    }
+                        text: collapsed,
+                    })
                 }
             }
         }
@@ -910,18 +1067,21 @@ const canonicalizeDelimitedListsOnce = (
 
             if (Array.isArray(value)) {
                 for (const child of value) if (isAstNode(child))
-                    visit(child)
+                    visit(child, ownStatementStart)
             } else if (isAstNode(value))
-                visit(value)
+                visit(value, ownStatementStart)
         }
     }
 
-    visit(parseResult.program as AstNode)
+    visit(parseResult.program as AstNode, 0)
     const nonOverlappingReplacements: LayoutSpan[] = []
 
-    for (const replacement of replacements.sort((left, right) => left.end - left.start - (right.end - right.start) || right.start - left.start)) {
-        const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
-            replacement.start < candidate.end && replacement.end > candidate.start)
+    // Outermost first. A list's width is measured against the line it sits on, so the
+    // enclosing list has to settle before the lists inside it are measured again.
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+        const overlapsSelectedReplacement = nonOverlappingReplacements.some(
+            (candidate) => replacement.start < candidate.end && replacement.end > candidate.start,
+        )
 
         if (!overlapsSelectedReplacement)
             nonOverlappingReplacements.push(replacement)
@@ -960,18 +1120,25 @@ const canonicalizeDelimitedLists = (
 const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === 'Identifier' && tag.name === 'html'
     || tag?.type === 'MemberExpression'
     && tag.computed === false
-    && isAstNode(tag.property)
+    && isAstNode(
+        tag.property,
+    )
     && tag.property.type === 'Identifier'
     && tag.property.name === 'html'
 
-const collectHtmlTemplateQuasis = (file: string, source: string): LayoutSpan[] => {
+const collectHtmlTemplateQuasis = (
+    file: string,
+    source: string,
+): LayoutSpan[] => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const layouts: LayoutSpan[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
 
@@ -979,7 +1146,9 @@ const collectHtmlTemplateQuasis = (file: string, source: string): LayoutSpan[] =
             node.type === 'TaggedTemplateExpression'
             && isHtmlTemplateTag(tag)
             && template?.type === 'TemplateLiteral'
-            && Array.isArray(template.quasis)
+            && Array.isArray(
+                template.quasis,
+            )
         ) {
             for (const quasi of template.quasis) {
                 if (!isAstNode(quasi))
@@ -988,11 +1157,13 @@ const collectHtmlTemplateQuasis = (file: string, source: string): LayoutSpan[] =
                 const quasiRange = getNodeRange(quasi)
 
                 if (quasiRange)
-                    layouts.push(getLayoutSpan(
-                        quasiRange[0],
-                        quasiRange[1],
-                        source,
-                    ))
+                    layouts.push(
+                        getLayoutSpan(
+                            quasiRange[0],
+                            quasiRange[1],
+                            source,
+                        ),
+                    )
             }
         }
 
@@ -1030,7 +1201,9 @@ const reindentHtmlTemplate = (
         if (indentationDifference > 0)
             lines[index] = `${' '.repeat(indentationDifference)}${line}`
         else
-            lines[index] = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
+            lines[index] = line.slice(
+                Math.min(-indentationDifference, line.length - line.trimStart().length),
+            )
     }
 
     return lines.join('\n')
@@ -1047,15 +1220,17 @@ const applyHtmlTemplateFormatting = (
     if (formattedLayouts.length !== htmlLayouts.length)
         throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
 
-    const replacements = formattedLayouts.map((target, index) => ({
-        ...target,
-        text: reindentHtmlTemplate(
-            htmlFormatted,
-            htmlLayouts[index]!,
-            formatted,
-            target,
-        ),
-    }))
+    const replacements = formattedLayouts.map(
+        (target, index) => ({
+            ...target,
+            text: reindentHtmlTemplate(
+                htmlFormatted,
+                htmlLayouts[index]!,
+                formatted,
+                target,
+            ),
+        }),
+    )
     let output = formatted
 
     for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
@@ -1063,14 +1238,19 @@ const applyHtmlTemplateFormatting = (
     return output
 }
 
-const collectHtmlTemplateContents = (file: string, source: string): HtmlTemplateContent[] => {
+const collectHtmlTemplateContents = (
+    file: string,
+    source: string,
+): HtmlTemplateContent[] => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const contents: HtmlTemplateContent[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
         const templateRange = getNodeRange(template)
@@ -1080,42 +1260,53 @@ const collectHtmlTemplateContents = (file: string, source: string): HtmlTemplate
             && isHtmlTemplateTag(tag)
             && template?.type === 'TemplateLiteral'
             && templateRange
-            && Array.isArray(template.quasis)
+            && Array.isArray(
+                template.quasis,
+            )
         ) {
             const quasis = template.quasis.filter(isAstNode)
-            const rawRanges = quasis.map((quasi): [number, number] | null => {
-                const quasiRange = getNodeRange(quasi)
-                const value = quasi.value
-                const raw = (
-                    value
-                    && typeof value === 'object'
-                    && 'raw' in value
-                )
-                    ? value.raw
-                    : null
+            const rawRanges = quasis.map(
+                (
+                    quasi,
+                ): [number, number] | null => {
+                    const quasiRange = getNodeRange(quasi)
+                    const value = quasi.value
+                    const raw = (
+                        value
+                        && typeof value === 'object'
+                        && 'raw' in value
+                    )
+                        ? value.raw
+                        : null
 
-                if (
-                    !quasiRange
-                    || typeof raw !== 'string'
-                )
-                    return null
+                    if (
+                        !quasiRange
+                        || typeof raw !== 'string'
+                    )
+                        return null
 
-                const start = quasiRange[0] + 1
+                    const start = quasiRange[0] + 1
 
-                return [start, start + raw.length]
-            })
+                    return [start, start + raw.length]
+                },
+            )
 
             if (rawRanges.every((range) => range != null)) {
                 const interpolationRanges: Array<[number, number]> = []
 
                 for (let index = 0; index < rawRanges.length - 1; index++) interpolationRanges.push([rawRanges[index]![1], rawRanges[index + 1]![0]])
 
-                contents.push({
-                    start: templateRange[0] + 1,
-                    end: templateRange[1] - 1,
-                    interpolationRanges,
-                    indentation: getLineIndentation(source, node.range?.[0] ?? templateRange[0]),
-                })
+                contents.push(
+                    {
+                        start: templateRange[0] + 1,
+                        end: templateRange[1] - 1,
+                        interpolationRanges,
+                        indentation: getLineIndentation(
+                            source,
+                            node.range?.[0] ?? templateRange[0],
+                        ),
+                    },
+                )
             }
         }
 
@@ -1136,7 +1327,10 @@ const collectHtmlTemplateContents = (file: string, source: string): HtmlTemplate
     return contents
 }
 
-const maskHtmlInterpolations = (source: string, content: HtmlTemplateContent): string => {
+const maskHtmlInterpolations = (
+    source: string,
+    content: HtmlTemplateContent,
+): string => {
     const characters: string[] = []
 
     for (let offset = content.start; offset < content.end; offset++) characters.push(source[offset]!)
@@ -1172,7 +1366,9 @@ const getExpandedHtmlStartTag = (
     const closing = source[closingOffset] === '/' ? '/>' : '>'
     const attributeIndentation = `${indentation}    `
     const attributeText = attributes.map((attribute) => `${attributeIndentation}${source.slice(attribute.startOffset, attribute.endOffset).trim()}`)
-        .join('\n')
+        .join(
+            '\n',
+        )
 
     return `${source.slice(start, prefixEnd)}\n${attributeText}\n${indentation}${closing}`
 }
@@ -1184,7 +1380,10 @@ const collectExpandedHtmlStartTags = (
     offset = 0,
 ): LayoutSpan[] => {
     const replacements: LayoutSpan[] = []
-    const visit = (node: HtmlNode, depth: number): void => {
+    const visit = (
+        node: HtmlNode,
+        depth: number,
+    ): void => {
         const startTag = node.sourceCodeLocation?.startTag
         const attributes = Object.values(node.sourceCodeLocation?.attrs ?? {})
             .sort((left, right) => left.startOffset - right.startOffset)
@@ -1236,7 +1435,10 @@ const applyHtmlAttributeReplacements = (source: string, replacements: LayoutSpan
     return output
 }
 
-const canonicalizeEmbeddedHtmlAttributes = (file: string, source: string): string => {
+const canonicalizeEmbeddedHtmlAttributes = (
+    file: string,
+    source: string,
+): string => {
     const replacements: LayoutSpan[] = []
 
     for (const content of collectHtmlTemplateContents(file, source)) {
@@ -1266,7 +1468,9 @@ const canonicalizeStandaloneHtmlAttributes = (source: string): string => {
     )
 }
 
-const getAssignmentValue = (node: AstNode): AstNode | null => {
+const getAssignmentValue = (
+    node: AstNode,
+): AstNode | null => {
     if (
         node.type === 'AssignmentExpression'
         || node.type === 'AssignmentPattern'
@@ -1286,7 +1490,10 @@ const getAssignmentValue = (node: AstNode): AstNode | null => {
     return null
 }
 
-const canonicalizeAssignmentBoundaries = (file: string, source: string): string => {
+const canonicalizeAssignmentBoundaries = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -1297,7 +1504,9 @@ const canonicalizeAssignmentBoundaries = (file: string, source: string): string 
     // One entry per line, so a nested assignment cannot dedent a line its enclosing
     // assignment already accounted for.
     const dedentedLineStarts = new Map<number, LayoutSpan>()
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const nodeRange = getNodeRange(node)
         const value = getAssignmentValue(node)
         const valueRange = getNodeRange(value)
@@ -1335,7 +1544,10 @@ const canonicalizeAssignmentBoundaries = (file: string, source: string): string 
                     shift > 0
                     && lineStart > 0
                     && lineStart < valueRange[1];
-                    lineStart = getNextLineStart(source, lineStart)
+                    lineStart = getNextLineStart(
+                        source,
+                        lineStart,
+                    )
                 ) {
                     const removable = Math.min(shift, getLineIndentation(source, lineStart).length)
 
@@ -1376,14 +1588,19 @@ const canonicalizeAssignmentBoundaries = (file: string, source: string): string 
     return output
 }
 
-const canonicalizeExpressionArrowBodies = (file: string, source: string): string => {
+const canonicalizeExpressionArrowBodies = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const replacements: LayoutSpan[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const nodeRange = getNodeRange(node)
         const bodyRange = getNodeRange(node.body as AstNode)
 
@@ -1449,7 +1666,10 @@ const isNestedCallChain = (
     && grandparent?.type === 'CallExpression'
     && grandparent.callee === parent
 
-const getCallChain = (node: AstNode, source: string): CallChain | null => {
+const getCallChain = (
+    node: AstNode,
+    source: string,
+): CallChain | null => {
     const segments: CallChainSegment[] = []
     let current = node
     let iteratorCount = 0
@@ -1459,8 +1679,12 @@ const getCallChain = (node: AstNode, source: string): CallChain | null => {
         && isAstNode(current.callee)
         && current.callee.type === 'MemberExpression'
         && current.callee.computed === false
-        && isAstNode(current.callee.object)
-        && isAstNode(current.callee.property)
+        && isAstNode(
+            current.callee.object,
+        )
+        && isAstNode(
+            current.callee.property,
+        )
         && current.callee.property.type === 'Identifier'
         && typeof current.callee.property.name === 'string'
     ) {
@@ -1486,13 +1710,18 @@ const getCallChain = (node: AstNode, source: string): CallChain | null => {
         )
             boundaryEnd++
 
-        segments.unshift({
-            boundaryEnd,
-            boundaryStart: objectRange[1],
-            isIterator,
-            leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
-            text: source.slice(boundaryEnd, currentRange[1]),
-        })
+        segments.unshift(
+            {
+                boundaryEnd,
+                boundaryStart: objectRange[1],
+                isIterator,
+                leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
+                text: source.slice(
+                    boundaryEnd,
+                    currentRange[1],
+                ),
+            },
+        )
         current = current.callee.object
     }
 
@@ -1547,7 +1776,10 @@ const getLongestIteratorLineLength = (
     return longestLineLength
 }
 
-const canonicalizeIteratorChainsOnce = (file: string, source: string): string => {
+const canonicalizeIteratorChainsOnce = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -1635,7 +1867,10 @@ const canonicalizeIteratorChainsOnce = (file: string, source: string): string =>
     return output
 }
 
-const canonicalizeIteratorChains = (file: string, source: string): string => {
+const canonicalizeIteratorChains = (
+    file: string,
+    source: string,
+): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
@@ -1650,14 +1885,19 @@ const canonicalizeIteratorChains = (file: string, source: string): string => {
     throw new Error(`Could not stabilize iterator chain formatting in ${file}`)
 }
 
-const canonicalizeHtmlTemplateBoundaries = (file: string, source: string): string => {
+const canonicalizeHtmlTemplateBoundaries = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const replacements: LayoutSpan[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
         const nodeRange = getNodeRange(node)
@@ -1762,8 +2002,12 @@ const getConditionalExpression = (node: AstNode | null | undefined): AstNode | n
 
 const hasNestedConditionalExpression = (node: AstNode): boolean => Boolean(
     getConditionalExpression(node.test as AstNode)
-    || getConditionalExpression(node.consequent as AstNode)
-    || getConditionalExpression(node.alternate as AstNode),
+    || getConditionalExpression(
+        node.consequent as AstNode,
+    )
+    || getConditionalExpression(
+        node.alternate as AstNode,
+    ),
 )
 
 const getConditionalLeafText = (node: AstNode, source: string): string | null => {
@@ -1810,14 +2054,20 @@ const getCanonicalConditionalText = (
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(consequent, source)
+        : getConditionalLeafText(
+            consequent,
+            source,
+        )
     const alternateText = nestedAlternate
         ? getCanonicalConditionalText(
             nestedAlternate,
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(alternate, source)
+        : getConditionalLeafText(
+            alternate,
+            source,
+        )
 
     if (
         !testText
@@ -1833,7 +2083,10 @@ const getCanonicalConditionalText = (
     return `${canonicalTest}\n${operatorIndentation}? ${consequentText}\n${operatorIndentation}: ${alternateText}`
 }
 
-const canonicalizeNestedConditionalExpressions = (file: string, source: string): string => {
+const canonicalizeNestedConditionalExpressions = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -1841,7 +2094,9 @@ const canonicalizeNestedConditionalExpressions = (file: string, source: string):
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const nodeRange = getNodeRange(node)
 
         if (
@@ -1889,7 +2144,9 @@ const canonicalizeNestedConditionalExpressions = (file: string, source: string):
     return output
 }
 
-const countLogicalEvaluations = (node: AstNode): number => {
+const countLogicalEvaluations = (
+    node: AstNode,
+): number => {
     if (
         node.type === 'ParenthesizedExpression'
         && isAstNode(node.expression)
@@ -1923,7 +2180,10 @@ const unwrapParenthesizedExpression = (node: AstNode): AstNode => {
     return current
 }
 
-const getAstExpressionText = (node: AstNode, source: string): string | null => {
+const getAstExpressionText = (
+    node: AstNode,
+    source: string,
+): string | null => {
     if (
         node.type === 'ParenthesizedExpression'
         && isAstNode(node.expression)
@@ -1960,7 +2220,9 @@ const getAstExpressionText = (node: AstNode, source: string): string | null => {
     return expression || null
 }
 
-const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null => {
+const getLogicalConditionParts = (
+    node: AstNode,
+): LogicalConditionParts | null => {
     const operands: AstNode[] = []
     const operators: string[] = []
     const logicalExpression = unwrapParenthesizedExpression(node)
@@ -1973,7 +2235,9 @@ const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null =
 
     const rootOperator = logicalExpression.operator
 
-    const visit = (current: AstNode): boolean => {
+    const visit = (
+        current: AstNode,
+    ): boolean => {
         if (
             current.type === 'LogicalExpression'
             && isAstNode(current.left)
@@ -2108,10 +2372,14 @@ const getConditionContainerText = (
         : null
 }
 
-const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean =>
-    comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
+const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean => comments.some(
+    (comment) => comment.start >= range[0] && comment.end <= range[1],
+)
 
-const canonicalizeAssignedLogicalExpressions = (file: string, source: string): string => {
+const canonicalizeAssignedLogicalExpressions = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2119,7 +2387,9 @@ const canonicalizeAssignedLogicalExpressions = (file: string, source: string): s
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const value = getAssignmentValue(node)
         const valueRange = getNodeRange(value)
 
@@ -2128,7 +2398,10 @@ const canonicalizeAssignedLogicalExpressions = (file: string, source: string): s
             && valueRange
             && unwrapParenthesizedExpression(value).type === 'LogicalExpression'
             && countLogicalEvaluations(value) > 2
-            && !hasCommentWithinRange(comments, valueRange)
+            && !hasCommentWithinRange(
+                comments,
+                valueRange,
+            )
         ) {
             const indentation = getLineIndentation(source, valueRange[0])
             const replacement = getMultilineAssignedLogicalExpressionText(
@@ -2171,7 +2444,9 @@ const canonicalizeAssignedLogicalExpressions = (file: string, source: string): s
     return output
 }
 
-const getStatementList = (node: AstNode): AstNode[] | null => {
+const getStatementList = (
+    node: AstNode,
+): AstNode[] | null => {
     if (
         node.type !== 'BlockStatement'
         && node.type !== 'Program'
@@ -2221,7 +2496,10 @@ const getStatementGap = (
     return [gapStart, nextStart]
 }
 
-const canonicalizeStatementSpacing = (file: string, source: string): string => {
+const canonicalizeStatementSpacing = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2265,7 +2543,9 @@ const canonicalizeStatementSpacing = (file: string, source: string): string => {
             text: replacement,
         })
     }
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         if (
             node.type === 'SwitchStatement'
             && Array.isArray(node.cases)
@@ -2320,7 +2600,10 @@ const canonicalizeStatementSpacing = (file: string, source: string): string => {
     return output
 }
 
-const canonicalizeConditionStatements = (file: string, source: string): string => {
+const canonicalizeConditionStatements = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2369,7 +2652,9 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
         })
     }
 
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         if (node.type === 'IfStatement') {
             const nodeRange = getNodeRange(node)
             const consequent = node.consequent as AstNode | undefined
@@ -2386,7 +2671,9 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
                 alternate
                 && alternate.type !== 'BlockStatement'
                 && alternate.type !== 'IfStatement'
-                && compactIfStatementTypes.has(alternate.type),
+                && compactIfStatementTypes.has(
+                    alternate.type,
+                ),
             )
 
             if (
@@ -2407,7 +2694,10 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
                 && alternateRange
                 && consequent
                 && consequentRange
-                && !hasCommentWithinRange(comments, [consequentRange[1], alternateRange[0]])
+                && !hasCommentWithinRange(
+                    comments,
+                    [consequentRange[1], alternateRange[0]],
+                )
                 && (consequentIsCompact || alternateIsCompact)
             ) {
                 const indentation = getLineIndentation(source, nodeRange[0])
@@ -2483,7 +2773,10 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
                 && countLogicalEvaluations(test) > 1
                 && body
                 && bodyRange
-                && !hasCommentWithinRange(comments, [nodeRange[0], bodyRange[0]])
+                && !hasCommentWithinRange(
+                    comments,
+                    [nodeRange[0], bodyRange[0]],
+                )
             ) {
                 const indentation = getLineIndentation(source, nodeRange[0])
                 const clauseIndentation = `${indentation}    `
@@ -2537,7 +2830,10 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
                 && consequentRange
                 && alternateRange
                 && countLogicalEvaluations(test) > 1
-                && !hasCommentWithinRange(comments, [testRange[0], alternateRange[0]])
+                && !hasCommentWithinRange(
+                    comments,
+                    [testRange[0], alternateRange[0]],
+                )
             ) {
                 const indentation = getLineIndentation(source, testRange[0])
                 const branchIndentation = `${indentation}    `
@@ -2588,8 +2884,9 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
     const nonOverlappingReplacements: LayoutSpan[] = []
 
     for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
-        const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
-            replacement.start < candidate.end && replacement.end > candidate.start)
+        const overlapsSelectedReplacement = nonOverlappingReplacements.some(
+            (candidate) => replacement.start < candidate.end && replacement.end > candidate.start,
+        )
 
         if (!overlapsSelectedReplacement)
             nonOverlappingReplacements.push(replacement)
@@ -2602,7 +2899,9 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
     return output
 }
 
-const getIndentedContainerChildren = (node: AstNode): AstNode[] | null => {
+const getIndentedContainerChildren = (
+    node: AstNode,
+): AstNode[] | null => {
     if (node.type === 'Program')
         return Array.isArray(node.body) ? node.body.filter(isAstNode) : null
 
@@ -2655,7 +2954,10 @@ const getIndentedContainerChildren = (node: AstNode): AstNode[] | null => {
     return null
 }
 
-const getIndentedContainerClosingOffset = (node: AstNode, source: string): number | null => {
+const getIndentedContainerClosingOffset = (
+    node: AstNode,
+    source: string,
+): number | null => {
     if (
         node.type === 'Program'
         || node.type === 'SwitchCase'
@@ -2700,7 +3002,10 @@ const getIndentedContainerClosingOffset = (node: AstNode, source: string): numbe
     return source[closingOffset] === expectedCharacter ? closingOffset : null
 }
 
-const canonicalizeContainerIndentationOnce = (file: string, source: string): string => {
+const canonicalizeContainerIndentationOnce = (
+    file: string,
+    source: string,
+): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2744,7 +3049,9 @@ const canonicalizeContainerIndentationOnce = (file: string, source: string): str
         )
     }
 
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const nodeRange = getNodeRange(node)
         const children = getIndentedContainerChildren(node)
 
@@ -2802,7 +3109,10 @@ const canonicalizeContainerIndentationOnce = (file: string, source: string): str
     return output
 }
 
-const canonicalizeContainerIndentation = (file: string, source: string): string => {
+const canonicalizeContainerIndentation = (
+    file: string,
+    source: string,
+): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
@@ -2851,7 +3161,10 @@ const canonicalizeTypeScriptLayout = (
             true,
             file,
         ).output
-        const formatted = canonicalizeConditionStatements(file, canonicalizeContainerIndentation(file, canonicalImports))
+        const formatted = canonicalizeConditionStatements(
+            file,
+            canonicalizeContainerIndentation(file, canonicalImports),
+        )
 
         if (formatted === output)
             return output
@@ -2933,8 +3246,12 @@ const describeFirstFormattingDifference = (
     const sourceContextEnd = source.indexOf('\n', offset)
     const formattedContextEnd = formatted.indexOf('\n', offset)
     err(`${file}:${line}: formatting differs`)
-    err(`current: ${JSON.stringify(source.slice(contextStart, sourceContextEnd < 0 ? source.length : sourceContextEnd))}`)
-    err(`expected: ${JSON.stringify(formatted.slice(contextStart, formattedContextEnd < 0 ? formatted.length : formattedContextEnd))}`)
+    err(`current: ${JSON.stringify(
+        source.slice(contextStart, sourceContextEnd < 0 ? source.length : sourceContextEnd),
+    )}`)
+    err(`expected: ${JSON.stringify(
+        formatted.slice(contextStart, formattedContextEnd < 0 ? formatted.length : formattedContextEnd),
+    )}`)
 }
 
 const [mode, ...inputPaths] = process.argv.slice(2)

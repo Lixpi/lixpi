@@ -72,12 +72,16 @@ const isTestFile = (path: string): boolean => {
     return path.split('/').some((segment) => testDirectoryNames.has(segment))
 }
 
-const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> => {
+const collectSourceFiles = async (
+    inputPaths: string[],
+): Promise<SourceFiles> => {
     const importers: string[] = []
     const javaScriptFiles: string[] = []
     const prohibitedFiles: string[] = []
 
-    const visit = async (path: string): Promise<void> => {
+    const visit = async (
+        path: string,
+    ): Promise<void> => {
         const entry = await stat(path)
 
         if (entry.isFile()) {
@@ -109,11 +113,15 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
             )
                 continue
 
-            await visit(resolve(path, child.name))
+            await visit(
+                resolve(path, child.name),
+            )
         }
     }
 
-    for (const inputPath of inputPaths) await visit(resolve(inputPath))
+    for (const inputPath of inputPaths) await visit(
+        resolve(inputPath),
+    )
 
     return {
         importers: importers.sort(),
@@ -124,12 +132,18 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
 
 const getTypeScriptPath = (path: string): string => `${path.slice(0, -extname(path).length)}.ts`
 
-const resolveModuleSpecifier = (importer: string, specifier: string): string | null => {
+const resolveModuleSpecifier = (
+    importer: string,
+    specifier: string,
+): string | null => {
     if (
         specifier.startsWith('./')
         || specifier.startsWith('../')
     )
-        return resolve(dirname(importer), specifier)
+        return resolve(
+            dirname(importer),
+            specifier,
+        )
 
     if (specifier.startsWith('$src/'))
         return resolve(
@@ -141,7 +155,10 @@ const resolveModuleSpecifier = (importer: string, specifier: string): string | n
     return null
 }
 
-const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
+const getModuleSpecifierNodes = (
+    file: string,
+    source: string,
+): AstNode[] => {
     const parseResult = parseSync(
         file,
         source,
@@ -157,7 +174,9 @@ const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
 
     const specifiers: AstNode[] = []
     const ranges = new Set<string>()
-    const visit = (node: AstNode): void => {
+    const visit = (
+        node: AstNode,
+    ): void => {
         const sourceNode = isAstNode(node.source)
             ? node.source
             : (
@@ -204,7 +223,10 @@ const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
     return specifiers
 }
 
-const applySourceReplacements = (source: string, replacements: SourceReplacement[]): string => {
+const applySourceReplacements = (
+    source: string,
+    replacements: SourceReplacement[],
+): string => {
     let output = source
 
     for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
@@ -212,7 +234,10 @@ const applySourceReplacements = (source: string, replacements: SourceReplacement
     return output
 }
 
-const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string, string>): Promise<boolean> => {
+const updateModuleSpecifiers = async (
+    importer: string,
+    renamedFiles: Map<string, string>,
+): Promise<boolean> => {
     const source = await readFile(importer, 'utf8')
     const replacements: SourceReplacement[] = []
 
@@ -236,11 +261,13 @@ const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string
         if (!target)
             continue
 
-        replacements.push({
-            end: sourceRange[1],
-            start: sourceRange[0],
-            value: JSON.stringify(`${specifier.slice(0, -extname(specifier).length)}.ts`),
-        })
+        replacements.push(
+            {
+                end: sourceRange[1],
+                start: sourceRange[0],
+                value: JSON.stringify(`${specifier.slice(0, -extname(specifier).length)}.ts`),
+            },
+        )
     }
 
     const output = applySourceReplacements(source, replacements)
@@ -284,7 +311,9 @@ if (mode === 'check') {
     process.exit(1)
 }
 
-const renamedFiles = new Map(javaScriptFiles.map((file) => [file, getTypeScriptPath(file)]))
+const renamedFiles = new Map(
+    javaScriptFiles.map((file) => [file, getTypeScriptPath(file)]),
+)
 
 for (const target of renamedFiles.values()) {
     try {
