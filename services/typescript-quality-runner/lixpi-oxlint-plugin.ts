@@ -369,10 +369,7 @@ const getStatementGap = (
         return [gapStart, comment.range[0]]
     }
 
-    if (sourceCode.text.slice(
-        gapStart,
-        nextStart,
-    ).trim().length > 0)
+    if (sourceCode.text.slice(gapStart, nextStart).trim().length > 0)
         return null
 
     return [gapStart, nextStart]

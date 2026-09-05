@@ -374,10 +374,7 @@ export const canonicalizeImportLayout = (
 
         if (
             !range
-            || hasComment(
-                range,
-                comments,
-            )
+            || hasComment(range, comments)
         )
             continue
 
@@ -393,10 +390,7 @@ export const canonicalizeImportLayout = (
 
         if (
             canonical == null
-            || canonical === source.slice(
-                range[0],
-                range[1],
-            )
+            || canonical === source.slice(range[0], range[1])
         )
             continue
 

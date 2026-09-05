@@ -364,10 +364,7 @@ for (const originalImporter of importers) {
     const importer = renamedFiles.get(originalImporter)
         ?? originalImporter
 
-    if (await updateModuleSpecifiers(
-        importer,
-        renamedFiles,
-    ))
+    if (await updateModuleSpecifiers(importer, renamedFiles))
         updatedImporterCount++
 }
 

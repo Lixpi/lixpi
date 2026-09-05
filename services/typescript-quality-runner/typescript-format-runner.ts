@@ -862,7 +862,7 @@ const canonicalizeDelimitedListsOnce = (
         if (
             nodeRange
             && items
-            && items.length > 1
+            && items.length > 2
         ) {
             const itemRanges = items.map(getNodeRange)
             const firstRange = itemRanges[0]
@@ -909,10 +909,7 @@ const canonicalizeDelimitedListsOnce = (
                     const trailingComma = lastItem?.type === 'RestElement' ? '' : ','
                     const replacement = `\n${itemIndentation}${itemTexts.join(`,\n${itemIndentation}`)}${trailingComma}\n${indentation}`
 
-                    if (source.slice(
-                        start,
-                        end,
-                    ) !== replacement) {
+                    if (source.slice(start, end) !== replacement) {
                         replacements.push({
                             start,
                             end,
@@ -1305,10 +1302,7 @@ const collectExpandedHtmlStartTags = (
             )
             const absoluteEnd = offset + startTag.endOffset
 
-            if (source.slice(
-                absoluteStart,
-                absoluteEnd,
-            ) !== replacement) {
+            if (source.slice(absoluteStart, absoluteEnd) !== replacement) {
                 replacements.push({
                     start: absoluteStart,
                     end: absoluteEnd,
@@ -1449,10 +1443,7 @@ const canonicalizeAssignmentBoundaries = (
         if (
             nodeRange
             && valueRange
-            && !hasCommentWithinRange(
-                comments,
-                [nodeRange[0], valueRange[0]],
-            )
+            && !hasCommentWithinRange(comments, [nodeRange[0], valueRange[0]])
         ) {
             const whitespaceStart = getTrailingWhitespaceStart(
                 source,
@@ -1769,10 +1760,7 @@ const canonicalizeIteratorChainsOnce = (
             if (
                 chain
                 && chain.iteratorCount > 0
-                && !hasCommentWithinRange(
-                    comments,
-                    nodeRange,
-                )
+                && !hasCommentWithinRange(comments, nodeRange)
             ) {
                 const indentation = `${getLineIndentation(
                     source,
@@ -1927,10 +1915,7 @@ const canonicalizeHtmlTemplateBoundaries = (
             if (leadingWhitespaceEnd === contentEnd) {
                 const whitespace = shouldExpand ? `\n${indentation}` : ''
 
-                if (source.slice(
-                    contentStart,
-                    contentEnd,
-                ) !== whitespace) {
+                if (source.slice(contentStart, contentEnd) !== whitespace) {
                     replacements.push({
                         start: contentStart,
                         end: contentEnd,
@@ -1941,10 +1926,7 @@ const canonicalizeHtmlTemplateBoundaries = (
                 return
             }
 
-            if (source.slice(
-                contentStart,
-                leadingWhitespaceEnd,
-            ) !== leadingWhitespace) {
+            if (source.slice(contentStart, leadingWhitespaceEnd) !== leadingWhitespace) {
                 replacements.push({
                     start: contentStart,
                     end: leadingWhitespaceEnd,
@@ -1952,10 +1934,7 @@ const canonicalizeHtmlTemplateBoundaries = (
                 })
             }
 
-            if (source.slice(
-                trailingWhitespaceStart,
-                contentEnd,
-            ) !== trailingWhitespace) {
+            if (source.slice(trailingWhitespaceStart, contentEnd) !== trailingWhitespace) {
                 replacements.push({
                     start: trailingWhitespaceStart,
                     end: contentEnd,
@@ -2116,10 +2095,7 @@ const canonicalizeNestedConditionalExpressions = (
             node.type === 'ConditionalExpression'
             && nodeRange
             && hasNestedConditionalExpression(node)
-            && !hasCommentWithinRange(
-                comments,
-                nodeRange,
-            )
+            && !hasCommentWithinRange(comments, nodeRange)
         ) {
             const indentation = `${getLineIndentation(
                 source,
@@ -2423,10 +2399,7 @@ const canonicalizeAssignedLogicalExpressions = (
             && valueRange
             && unwrapParenthesizedExpression(value).type === 'LogicalExpression'
             && countLogicalEvaluations(value) > 2
-            && !hasCommentWithinRange(
-                comments,
-                valueRange,
-            )
+            && !hasCommentWithinRange(comments, valueRange)
         ) {
             const indentation = getLineIndentation(
                 source,
@@ -2441,10 +2414,7 @@ const canonicalizeAssignedLogicalExpressions = (
             if (!replacement)
                 throw new Error(`Could not split the assigned logical expression in ${file}`)
 
-            if (source.slice(
-                valueRange[0],
-                valueRange[1],
-            ) !== replacement) {
+            if (source.slice(valueRange[0], valueRange[1]) !== replacement) {
                 replacements.push({
                     start: valueRange[0],
                     end: valueRange[1],
@@ -2513,28 +2483,19 @@ const getStatementGap = (
     const commentsInGap = comments.filter((comment) => comment.start >= previousEnd && comment.end <= nextStart)
 
     for (const comment of commentsInGap) {
-        if (!source.slice(
-            gapStart,
-            comment.start,
-        ).includes('\n')) {
+        if (!source.slice(gapStart, comment.start).includes('\n')) {
             gapStart = comment.end
 
             continue
         }
 
-        if (source.slice(
-            gapStart,
-            comment.start,
-        ).trim().length > 0)
+        if (source.slice(gapStart, comment.start).trim().length > 0)
             return null
 
         return [gapStart, comment.start]
     }
 
-    if (source.slice(
-        gapStart,
-        nextStart,
-    ).trim().length > 0)
+    if (source.slice(gapStart, nextStart).trim().length > 0)
         return null
 
     return [gapStart, nextStart]
@@ -2592,10 +2553,7 @@ const canonicalizeStatementSpacing = (
             gap[1],
         )}`
 
-        if (source.slice(
-            gap[0],
-            gap[1],
-        ) === replacement)
+        if (source.slice(gap[0], gap[1]) === replacement)
             return
 
         replacements.push({
@@ -2697,10 +2655,7 @@ const canonicalizeConditionStatements = (
         if (
             !nodeRange
             || !bodyRange
-            || hasCommentWithinRange(
-                comments,
-                [nodeRange[0], bodyRange[0]],
-            )
+            || hasCommentWithinRange(comments, [nodeRange[0], bodyRange[0]])
         )
             return
 
@@ -2721,10 +2676,7 @@ const canonicalizeConditionStatements = (
         const bodySeparator = compactBody ? `\n${indentation}    ` : ' '
         const replacement = `${header}${bodySeparator}`
 
-        if (source.slice(
-            nodeRange[0],
-            bodyRange[0],
-        ) === replacement)
+        if (source.slice(nodeRange[0], bodyRange[0]) === replacement)
             return
 
         replacements.push({
@@ -2772,10 +2724,7 @@ const canonicalizeConditionStatements = (
                 && alternateRange
                 && consequent
                 && consequentRange
-                && !hasCommentWithinRange(
-                    comments,
-                    [consequentRange[1], alternateRange[0]],
-                )
+                && !hasCommentWithinRange(comments, [consequentRange[1], alternateRange[0]])
                 && (
                     consequentIsCompact
                     || alternateIsCompact
@@ -2789,10 +2738,7 @@ const canonicalizeConditionStatements = (
                 const afterElse = alternateIsCompact ? `\n${indentation}    ` : ' '
                 const replacement = `${beforeElse}else${afterElse}`
 
-                if (source.slice(
-                    consequentRange[1],
-                    alternateRange[0],
-                ) !== replacement) {
+                if (source.slice(consequentRange[1], alternateRange[0]) !== replacement) {
                     replacements.push({
                         start: consequentRange[1],
                         end: alternateRange[0],
@@ -2825,10 +2771,7 @@ const canonicalizeConditionStatements = (
                 nodeRange
                 && test
                 && bodyRange
-                && !hasCommentWithinRange(
-                    comments,
-                    [bodyRange[1], nodeRange[1]],
-                )
+                && !hasCommentWithinRange(comments, [bodyRange[1], nodeRange[1]])
             ) {
                 const indentation = getLineIndentation(
                     source,
@@ -2846,10 +2789,7 @@ const canonicalizeConditionStatements = (
 
                 const replacement = ` ${condition}`
 
-                if (source.slice(
-                    bodyRange[1],
-                    nodeRange[1],
-                ) !== replacement) {
+                if (source.slice(bodyRange[1], nodeRange[1]) !== replacement) {
                     replacements.push({
                         start: bodyRange[1],
                         end: nodeRange[1],
@@ -2869,10 +2809,7 @@ const canonicalizeConditionStatements = (
                 && countLogicalEvaluations(test) > 1
                 && body
                 && bodyRange
-                && !hasCommentWithinRange(
-                    comments,
-                    [nodeRange[0], bodyRange[0]],
-                )
+                && !hasCommentWithinRange(comments, [nodeRange[0], bodyRange[0]])
             ) {
                 const indentation = getLineIndentation(
                     source,
@@ -2913,10 +2850,7 @@ const canonicalizeConditionStatements = (
                 clauses.push(`${indentation})${body.type === 'BlockStatement' ? ' ' : `\n${clauseIndentation}`}`)
                 const replacement = clauses.join('\n')
 
-                if (source.slice(
-                    nodeRange[0],
-                    bodyRange[0],
-                ) !== replacement) {
+                if (source.slice(nodeRange[0], bodyRange[0]) !== replacement) {
                     replacements.push({
                         start: nodeRange[0],
                         end: bodyRange[0],
@@ -2938,10 +2872,7 @@ const canonicalizeConditionStatements = (
                 && consequentRange
                 && alternateRange
                 && countLogicalEvaluations(test) > 1
-                && !hasCommentWithinRange(
-                    comments,
-                    [testRange[0], alternateRange[0]],
-                )
+                && !hasCommentWithinRange(comments, [testRange[0], alternateRange[0]])
             ) {
                 const indentation = getLineIndentation(
                     source,
@@ -2960,10 +2891,7 @@ const canonicalizeConditionStatements = (
 
                 const conditionReplacement = `${condition}\n${branchIndentation}? `
 
-                if (source.slice(
-                    testRange[0],
-                    consequentRange[0],
-                ) !== conditionReplacement) {
+                if (source.slice(testRange[0], consequentRange[0]) !== conditionReplacement) {
                     replacements.push({
                         start: testRange[0],
                         end: consequentRange[0],
@@ -2973,10 +2901,7 @@ const canonicalizeConditionStatements = (
 
                 const alternateReplacement = `\n${branchIndentation}: `
 
-                if (source.slice(
-                    consequentRange[1],
-                    alternateRange[0],
-                ) !== alternateReplacement) {
+                if (source.slice(consequentRange[1], alternateRange[0]) !== alternateReplacement) {
                     replacements.push({
                         start: consequentRange[1],
                         end: alternateRange[0],
@@ -3135,10 +3060,7 @@ const canonicalizeContainerIndentationOnce = (
             offset,
         )
 
-        if (lineStart === getLineStart(
-            source,
-            containerStart,
-        ))
+        if (lineStart === getLineStart(source, containerStart))
             return
 
         const currentIndentation = source.slice(
