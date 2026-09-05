@@ -97,8 +97,28 @@ const noUnusedImports = defineRule({
     },
     create(context) {
         const { sourceCode } = context
+        // `no-native-console-logging` rewrites `console.log(...)` onto the debug-tools
+        // specifier of the same name in this very fix round. Removing that specifier as
+        // unused in the same round leaves the rewritten call with nothing to bind to, so
+        // a specifier the console rule is about to claim counts as used.
+        const pendingConsoleImportNames = new Set()
 
         return {
+            CallExpression(node) {
+                if (
+                    node.callee.type !== 'MemberExpression'
+                    || node.callee.computed
+                    || node.callee.object.type !== 'Identifier'
+                    || node.callee.object.name !== 'console'
+                    || node.callee.property.type !== 'Identifier'
+                    || !debugLoggingMethods.has(node.callee.property.name)
+                )
+                    return
+
+                pendingConsoleImportNames.add(
+                    debugLoggingMethods.get(node.callee.property.name).importedName,
+                )
+            },
             'Program:exit'() {
                 const commentReferencedNames = getCommentReferencedIdentifierNames(sourceCode)
                 const unusedSpecifiersByDeclaration = new Map()
@@ -122,6 +142,14 @@ const noUnusedImports = defineRule({
                         if (
                             !specifier
                             || declaration?.type !== 'ImportDeclaration'
+                        )
+                            continue
+
+                        if (
+                            declaration.source.value === '@lixpi/debug-tools'
+                            && specifier.type === 'ImportSpecifier'
+                            && specifier.imported.type === 'Identifier'
+                            && pendingConsoleImportNames.has(specifier.imported.name)
                         )
                             continue
 

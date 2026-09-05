@@ -148,6 +148,11 @@ type HtmlTemplateContent = {
     start: number
 }
 
+type HtmlTemplateQuasi = {
+    span: LayoutSpan
+    templateStart: number
+}
+
 type CallChainSegment = {
     boundaryEnd: number
     boundaryStart: number
@@ -1273,13 +1278,13 @@ const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === '
 const collectHtmlTemplateQuasis = (
     file: string,
     source: string,
-): LayoutSpan[] => {
+): HtmlTemplateQuasi[] => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
-    const layouts: LayoutSpan[] = []
+    const layouts: HtmlTemplateQuasi[] = []
     const visit = (node: AstNode): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
@@ -1290,20 +1295,27 @@ const collectHtmlTemplateQuasis = (
             && template?.type === 'TemplateLiteral'
             && Array.isArray(template.quasis)
         ) {
+            const templateRange = getNodeRange(template)
+
             for (const quasi of template.quasis) {
                 if (!isAstNode(quasi))
                     continue
 
                 const quasiRange = getNodeRange(quasi)
 
-                if (quasiRange)
-                    layouts.push(
-                        getLayoutSpan(
+                if (
+                    quasiRange
+                    && templateRange
+                ) {
+                    layouts.push({
+                        span: getLayoutSpan(
                             quasiRange[0],
                             quasiRange[1],
                             source,
                         ),
-                    )
+                        templateStart: templateRange[0],
+                    })
+                }
             }
         }
 
@@ -1325,15 +1337,10 @@ const collectHtmlTemplateQuasis = (
 }
 
 const reindentHtmlTemplate = (
-    source: string,
-    sourceLayout: LayoutSpan,
-    target: string,
-    targetLayout: LayoutSpan,
+    text: string,
+    indentationDifference: number,
 ): string => {
-    const sourceIndentation = getLineIndentation(source, sourceLayout.start)
-    const targetIndentation = getLineIndentation(target, targetLayout.start)
-    const indentationDifference = targetIndentation.length - sourceIndentation.length
-    const lines = sourceLayout.text.split('\n')
+    const lines = text.split('\n')
 
     for (let index = 1; index < lines.length; index++) {
         const line = lines[index]!
@@ -1360,16 +1367,21 @@ const applyHtmlTemplateFormatting = (
     if (formattedLayouts.length !== htmlLayouts.length)
         throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
 
+    // Every quasi of one template shares a single indentation delta, measured at the
+    // template's opening backtick. Measuring per quasi instead reads the indentation of
+    // whatever interpolation that quasi resumes after, which differs between the two
+    // oxfmt passes and shifts the closing tags further right on every run.
     const replacements = formattedLayouts.map(
-        (target, index) => ({
-            ...target,
-            text: reindentHtmlTemplate(
-                htmlFormatted,
-                htmlLayouts[index]!,
-                formatted,
-                target,
-            ),
-        }),
+        (target, index) => {
+            const htmlQuasi = htmlLayouts[index]!
+            const indentationDifference = getLineIndentation(formatted, target.templateStart).length
+                - getLineIndentation(htmlFormatted, htmlQuasi.templateStart).length
+
+            return {
+                ...target.span,
+                text: reindentHtmlTemplate(htmlQuasi.span.text, indentationDifference),
+            }
+        },
     )
     let output = formatted
 
