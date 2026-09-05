@@ -462,12 +462,10 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             && (node.callee as AstNode | undefined)?.type === 'MemberExpression'
             && nodeRange
         ) {
-            const isNestedChain = (
-                parent?.type === 'MemberExpression'
+            const isNestedChain = parent?.type === 'MemberExpression'
                 && parent.object === node
                 && grandparent?.type === 'CallExpression'
                 && grandparent.callee === parent
-            )
 
             if (!isNestedChain)
                 layouts.callChains.push(getLayoutSpan(
@@ -570,8 +568,7 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             if (key === 'range')
                 continue
 
-            const childInsideCondition = (
-                insideCondition
+            const childInsideCondition = insideCondition
                 || (
                     key === 'test'
                     && (
@@ -582,7 +579,6 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
                         || node.type === 'WhileStatement'
                     )
                 )
-            )
 
             if (Array.isArray(value)) {
                 for (const child of value) if (isAstNode(child))
@@ -634,13 +630,11 @@ const reindentLayoutText = (
 
         if (trimmed.length > 0) {
             const firstCharacter = trimmed[0]!
-            const alignsWithLayout = (
-                ')]}>'.includes(firstCharacter)
+            const alignsWithLayout = ')]}>'.includes(firstCharacter)
                 || (
                     layoutType === 'types'
                     && '|&'.includes(firstCharacter)
                 )
-            )
             const minimumIndentation = targetIndentation.length + (alignsWithLayout ? 0 : 4)
             const indentation = line.length - trimmed.length
 
@@ -673,14 +667,12 @@ const preserveExpandedTypeScriptLayouts = (
         for (let index = 0; index < originalSpans.length; index++) {
             const original = originalSpans[index]!
 
-            const shouldPreserve = (
-                key === 'types'
+            const shouldPreserve = key === 'types'
                 || original.preserve
                 || (
                     key !== 'functionParameters'
                     && original.text.includes('\n')
                 )
-            )
 
             if (!shouldPreserve)
                 continue
@@ -1626,13 +1618,11 @@ const canonicalizeIteratorChainsOnce = (file: string, source: string): string =>
                     source,
                     nodeRange[0],
                 )
-                const shouldExpand = (
-                    chain.iteratorCount > 2
+                const shouldExpand = chain.iteratorCount > 2
                     || (
                         chain.iteratorCount === 1
                         && longestIteratorLineLength > maximumInlineIteratorChainLength
                     )
-                )
                 const boundaryWhitespace = shouldExpand ? `\n${indentation}` : ''
 
                 for (const segment of chain.segments) {
@@ -2066,11 +2056,15 @@ const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null =
     return { operands, operators }
 }
 
+// `wrapInParentheses` says the caller owns a parenthesis pair around this expression:
+// the parentheses an `if`, `while` or `for` requires, or a pair the source already
+// wrote. The formatter never introduces one of its own, so a group that is not
+// parenthesized in the source stays on a single line rather than gaining a bracket.
 const getFormattedConditionText = (
     node: AstNode,
     source: string,
     indentation: string,
-    includeParentheses: boolean,
+    wrapInParentheses: boolean,
 ): string | null => {
     const logicalExpression = unwrapParenthesizedExpression(node)
 
@@ -2082,12 +2076,13 @@ const getFormattedConditionText = (
     if (!conditionParts)
         return null
 
-    const operandIndentation = includeParentheses ? `${indentation}    ` : indentation
+    const operandIndentation = wrapInParentheses ? `${indentation}    ` : indentation
     const lines: string[] = []
 
     for (let index = 0; index < conditionParts.operands.length; index++) {
         const operandNode = conditionParts.operands[index]!
-        const operand = unwrapParenthesizedExpression(operandNode).type === 'LogicalExpression'
+        const operand = operandNode.type === 'ParenthesizedExpression'
+            && unwrapParenthesizedExpression(operandNode).type === 'LogicalExpression'
             ? getFormattedConditionText(
                 operandNode,
                 source,
@@ -2105,20 +2100,45 @@ const getFormattedConditionText = (
 
     const condition = lines.join('\n')
 
-    return includeParentheses
+    return wrapInParentheses
         ? `(\n${condition}\n${indentation})`
         : condition
+}
+
+// An assigned value and a ternary test both start part way along a line that is already
+// written, so the first operand stays where it is and the rest are indented under it. A
+// pair of parentheses appears only when the source wrote one.
+const getContinuedConditionText = (
+    node: AstNode,
+    source: string,
+    indentation: string,
+): string | null => {
+    if (node.type === 'ParenthesizedExpression')
+        return getFormattedConditionText(
+            node,
+            source,
+            indentation,
+            true,
+        )
+
+    const condition = getFormattedConditionText(
+        node,
+        source,
+        `${indentation}    `,
+        false,
+    )
+
+    return condition == null ? null : condition.trimStart()
 }
 
 const getMultilineAssignedLogicalExpressionText = (
     node: AstNode,
     source: string,
     indentation: string,
-): string | null => getFormattedConditionText(
+): string | null => getContinuedConditionText(
     node,
     source,
     indentation,
-    true,
 )
 
 const getConditionContainerText = (
@@ -2606,11 +2626,10 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
             ) {
                 const indentation = getLineIndentation(source, testRange[0])
                 const branchIndentation = `${indentation}    `
-                const condition = getFormattedConditionText(
+                const condition = getContinuedConditionText(
                     test,
                     source,
                     indentation,
-                    true,
                 )
 
                 if (!condition)

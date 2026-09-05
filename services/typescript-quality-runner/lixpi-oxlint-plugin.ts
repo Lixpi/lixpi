@@ -597,11 +597,20 @@ const getLogicalConditionParts = (node): {
     return { operands, operators }
 }
 
+// The AST drops grouping parentheses, so a source pair is recognised by the tokens on
+// either side of the operand.
+const isParenthesizedOperand = (node, sourceCode): boolean => sourceCode.getTokenBefore(node)?.value === '('
+    && sourceCode.getTokenAfter(node)?.value === ')'
+
+// `wrapInParentheses` says the caller owns a parenthesis pair around this expression:
+// the parentheses an `if`, `while` or `for` requires, or a pair the source already
+// wrote. The fixer never introduces one of its own, so a group that is not
+// parenthesized in the source stays on a single line rather than gaining a bracket.
 const getFormattedConditionText = (
     node,
     sourceCode,
     indentation,
-    includeParentheses,
+    wrapInParentheses,
 ): string | null => {
     const logicalExpression = unwrapParenthesizedExpression(node)
 
@@ -613,9 +622,10 @@ const getFormattedConditionText = (
     if (!conditionParts)
         return null
 
-    const operandIndentation = includeParentheses ? `${indentation}    ` : indentation
+    const operandIndentation = wrapInParentheses ? `${indentation}    ` : indentation
     const lines = conditionParts.operands.map((operand, index) => {
         const operandText = unwrapParenthesizedExpression(operand).type === 'LogicalExpression'
+            && isParenthesizedOperand(operand, sourceCode)
             ? getFormattedConditionText(
                 operand,
                 sourceCode,
@@ -633,7 +643,7 @@ const getFormattedConditionText = (
 
     const condition = lines.join('\n')
 
-    return includeParentheses
+    return wrapInParentheses
         ? `(\n${condition}\n${indentation})`
         : condition
 }
@@ -754,22 +764,31 @@ const preferMultilineCondition = defineRule({
                     return
 
                 const indentation = getLineIndentation(sourceCode.text, node.range[0])
-                const condition = getFormattedConditionText(
-                    node.test,
-                    sourceCode,
-                    indentation,
-                    true,
-                )
-
-                if (!condition)
-                    return
-
                 const openParenthesis = sourceCode.getTokenBefore(node.test)
                 const ownsOpenParenthesis = Boolean(
                     openParenthesis
                     && openParenthesis.value === '('
                     && openParenthesis.range[0] >= node.range[0],
                 )
+                // Only a test the source parenthesized keeps a bracket. Every other test
+                // leaves its first operand on the line it already sits on.
+                const condition = ownsOpenParenthesis
+                    ? getFormattedConditionText(
+                        node.test,
+                        sourceCode,
+                        indentation,
+                        true,
+                    )
+                    : getFormattedConditionText(
+                        node.test,
+                        sourceCode,
+                        `${indentation}    `,
+                        false,
+                    )?.trimStart()
+
+                if (!condition)
+                    return
+
                 const conditionStart = ownsOpenParenthesis ? openParenthesis.range[0] : node.test.range[0]
                 const questionToken = getBranchPunctuator(
                     sourceCode,

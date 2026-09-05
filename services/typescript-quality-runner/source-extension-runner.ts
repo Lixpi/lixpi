@@ -166,13 +166,11 @@ const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
             )
                 ? node.argument
                 : null
-        const isModuleReference = (
-            node.type === 'ImportDeclaration'
+        const isModuleReference = node.type === 'ImportDeclaration'
             || node.type === 'ExportAllDeclaration'
             || node.type === 'ExportNamedDeclaration'
             || node.type === 'ImportExpression'
             || node.type === 'TSImportType'
-        )
         const sourceRange = getNodeRange(sourceNode)
 
         if (
