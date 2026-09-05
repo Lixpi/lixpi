@@ -672,10 +672,7 @@ const getFormattedConditionText = (
 
     const operandIndentation = wrapInParentheses ? `${indentation}    ` : indentation
     const lines = conditionParts.operands.map(
-        (
-            operand,
-            index,
-        ) => {
+        (operand, index) => {
             // An operand is copied out of the source exactly as it was written, on one line
             // or on several. The rule decides where the operands of a chain go, never how an
             // operand is laid out inside itself.
@@ -1142,15 +1139,11 @@ const preferAttachedTrailingComma = defineRule({
                 node,
                 node.arguments,
             ),
-            ObjectExpression: (
-                node,
-            ) => checkLastItem(
+            ObjectExpression: node => checkLastItem(
                 node,
                 node.properties,
             ),
-            ObjectPattern: (
-                node,
-            ) => checkLastItem(
+            ObjectPattern: node => checkLastItem(
                 node,
                 node.properties,
             ),

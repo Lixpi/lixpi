@@ -223,10 +223,7 @@ const applySourceReplacements = (
 ): string => {
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
 
     return output
 }

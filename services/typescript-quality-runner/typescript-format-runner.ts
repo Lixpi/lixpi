@@ -766,10 +766,7 @@ const preserveExpandedTypeScriptLayouts = (
 
     const nonOverlappingReplacements: LayoutSpan[] = []
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some(
             candidate => replacement.start < candidate.end && replacement.end > candidate.start,
         )
@@ -780,10 +777,7 @@ const preserveExpandedTypeScriptLayouts = (
 
     let output = formatted
 
-    for (const replacement of nonOverlappingReplacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -858,6 +852,15 @@ const collectionConstructorNames = new Set([
 // the call or signature line, so one options bag reads as `f({` and closes on `})` rather
 // than opening two brackets on two separate lines for the same item. A parameter counts by
 // its type literal, since `params: { ... }` is one item however that type is written.
+// `const handle = (a, b) => {}` and a class field written the same way are function
+// definitions with a name, so they lay out like a declaration rather than like an
+// argument.
+const isNamedFunctionDefinition = (
+    node: AstNode,
+    parent: AstNode | null,
+): boolean => (parent?.type === 'VariableDeclarator' && parent.init === node)
+    || (parent?.type === 'PropertyDefinition' && parent.value === node)
+
 const endsWithBlockBodiedFunction = (items: AstNode[]): boolean => {
     const last = items.at(-1)
 
@@ -991,6 +994,7 @@ const canonicalizeDelimitedListsOnce = (
     const visit = (
         node: AstNode,
         statementStart: number,
+        parent: AstNode | null,
     ): void => {
         const nodeRange = getNodeRange(node)
         const items = getDelimitedListItems(node)
@@ -1045,8 +1049,16 @@ const canonicalizeDelimitedListsOnce = (
                 // arguments is itself a call, or when writing its statement out on one
                 // line would carry it past the limit. A call nested inside it is measured
                 // the same way, so a long expression splits from the outside in.
-                // A signature splits at two parameters, a call at three arguments.
-                const inlineItemLimit = isCall ? 2 : 1
+                // A signature splits at two parameters, a call at three arguments. An arrow
+                // written inline, as a callback or a branch of an expression, counts as a
+                // call: splitting `(state, dispatch) =>` across lines buys nothing. An
+                // arrow bound to a name is a function definition and splits like one.
+                const isInlineArrow = node.type === 'ArrowFunctionExpression'
+                    && !isNamedFunctionDefinition(node, parent)
+                const inlineItemLimit = isCall
+                    || isInlineArrow
+                    ? 2
+                    : 1
                 const mustSplit = isBracketed
                     && !isCollectionInitializer(node)
                     && (items.length > inlineItemLimit
@@ -1129,21 +1141,30 @@ const canonicalizeDelimitedListsOnce = (
 
             if (Array.isArray(value)) {
                 for (const child of value) if (isAstNode(child))
-                    visit(child, ownStatementStart)
+                    visit(
+                        child,
+                        ownStatementStart,
+                        node,
+                    )
             } else if (isAstNode(value))
-                visit(value, ownStatementStart)
+                visit(
+                    value,
+                    ownStatementStart,
+                    node,
+                )
         }
     }
 
-    visit(parseResult.program as AstNode, 0)
+    visit(
+        parseResult.program as AstNode,
+        0,
+        null,
+    )
     const nonOverlappingReplacements: LayoutSpan[] = []
 
     // Outermost first. A list's width is measured against the line it sits on, so the
     // enclosing list has to settle before the lists inside it are measured again.
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some(
             candidate => replacement.start < candidate.end && replacement.end > candidate.start,
         )
@@ -1154,10 +1175,7 @@ const canonicalizeDelimitedListsOnce = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1287,10 +1305,7 @@ const applyHtmlTemplateFormatting = (
         throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
 
     const replacements = formattedLayouts.map(
-        (
-            target,
-            index,
-        ) => ({
+        (target, index) => ({
             ...target,
             text: reindentHtmlTemplate(
                 htmlFormatted,
@@ -1302,10 +1317,7 @@ const applyHtmlTemplateFormatting = (
     )
     let output = formatted
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1452,10 +1464,7 @@ const collectExpandedHtmlStartTags = (
     ): void => {
         const startTag = node.sourceCodeLocation?.startTag
         const attributes = Object.values(node.sourceCodeLocation?.attrs ?? {})
-            .sort((
-                left,
-                right,
-            ) => left.startOffset - right.startOffset)
+            .sort((left, right) => left.startOffset - right.startOffset)
 
         if (
             startTag
@@ -1502,10 +1511,7 @@ const applyHtmlAttributeReplacements = (
 ): string => {
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1654,10 +1660,7 @@ const canonicalizeAssignmentBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1708,11 +1711,20 @@ const canonicalizeArrowParameters = (
                 nodeRange[0],
                 parameterRange[0],
             ) - 1
-            const closeParenthesis = getLeadingWhitespaceEnd(
+            const afterParameter = getLeadingWhitespaceEnd(
                 source,
                 parameterRange[1],
                 source.length,
             )
+            // A parameter list an earlier layout split carries a trailing comma, which
+            // comes off with the parentheses.
+            const closeParenthesis = source[afterParameter] === ','
+                ? getLeadingWhitespaceEnd(
+                    source,
+                    afterParameter + 1,
+                    source.length,
+                )
+                : afterParameter
 
             if (
                 openParenthesis >= nodeRange[0]
@@ -1746,10 +1758,7 @@ const canonicalizeArrowParameters = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1816,10 +1825,7 @@ const canonicalizeExpressionArrowBodies = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2027,10 +2033,7 @@ const canonicalizeIteratorChainsOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2149,10 +2152,7 @@ const canonicalizeHtmlTemplateBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2309,10 +2309,7 @@ const canonicalizeNestedConditionalExpressions = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2607,10 +2604,7 @@ const canonicalizeAssignedLogicalExpressions = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2674,10 +2668,7 @@ const canonicalizeStatementSpacing = (
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
-    const comments = (parseResult.comments as AstComment[]).toSorted((
-        left,
-        right,
-    ) => left.start - right.start)
+    const comments = (parseResult.comments as AstComment[]).toSorted((left, right) => left.start - right.start)
     const replacements: LayoutSpan[] = []
     const addSiblingGapReplacement = (
         previous: AstNode,
@@ -2765,10 +2756,7 @@ const canonicalizeStatementSpacing = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -3054,10 +3042,7 @@ const canonicalizeConditionStatements = (
     visit(parseResult.program as AstNode)
     const nonOverlappingReplacements: LayoutSpan[] = []
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some(
             candidate => replacement.start < candidate.end && replacement.end > candidate.start,
         )
@@ -3068,10 +3053,7 @@ const canonicalizeConditionStatements = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -3277,10 +3259,7 @@ const canonicalizeContainerIndentationOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacementsByRange.values()].sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
