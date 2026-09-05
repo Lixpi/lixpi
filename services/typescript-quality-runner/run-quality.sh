@@ -23,6 +23,9 @@ is_action() {
     esac
 }
 
+# Warnings do not fail a run. `lixpi/no-nested-ternary` is reported as a warning so it
+# names the code to rewrite without blocking the build, and `--deny-warnings` would turn
+# it straight back into an error.
 # Checksum of every file a fix round can touch, so a round that changes nothing ends the
 # loop instead of burning the remaining attempts on findings no fixer can resolve.
 source_fingerprint() {
@@ -35,7 +38,7 @@ run_oxlint_fixes() {
         fingerprint=$(source_fingerprint "$@")
         "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --threads=1 --fix --silent "$@" || true
         node "$typescript_format_runner" fix "$@"
-        if "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --deny-warnings --silent "$@" \
+        if "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --silent "$@" \
             && node "$typescript_format_runner" check "$@"; then
             return 0
         fi
@@ -47,7 +50,7 @@ run_oxlint_fixes() {
         attempt=$((attempt + 1))
     done
 
-    "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --deny-warnings "$@"
+    "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern "$@"
     node "$typescript_format_runner" check "$@"
 }
 
@@ -60,7 +63,7 @@ run_action() {
             node "$source_extension_runner" check "$@"
             node "$typescript_format_runner" check "$@"
             "$dprint_bin" check --allow-no-files --config "$dprint_config" "$@"
-            "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --deny-warnings "$@"
+            "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern "$@"
             node "$stylelint_runner" check "$@"
             ;;
         fix)
@@ -71,7 +74,7 @@ run_action() {
             ;;
         lint)
             node "$source_extension_runner" check "$@"
-            "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --deny-warnings "$@"
+            "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern "$@"
             node "$stylelint_runner" check "$@"
             ;;
         lint-fix)

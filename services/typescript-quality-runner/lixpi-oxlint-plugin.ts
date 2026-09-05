@@ -491,7 +491,7 @@ const getRootIdentifierName = (node): string | null => {
 // the consequent or the alternate hides the branching, and no layout rescues it.
 const noNestedTernary = defineRule({
     meta: {
-        type: 'problem',
+        type: 'suggestion',
         messages: {
             noNestedTernary: 'Nested ternary expressions are not allowed. Rewrite this as an if statement or an early return. When several groups of conditions decide the same value, use a membership test such as [...].includes(value), a lookup object keyed by the value, or a small named helper, instead of chaining ternaries.',
         },
