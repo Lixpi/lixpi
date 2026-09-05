@@ -56,7 +56,7 @@ The action is optional and defaults to `validate`.
 
 The quality runner treats parser nodes as the only authority for syntax boundaries. Oxc identifies TypeScript declarations, expressions, function parameters, call arguments, tagged-template quasis, and `${...}` interpolation bodies. parse5 identifies elements and attribute locations inside standalone HTML and `html` tagged templates. PostCSS supplies stylesheet declarations, and postcss-value-parser supplies the declaration-value tree used by custom Stylelint rules. Formatter and linter rules must not discover language constructs with regular expressions or raw source-text searches.
 
-Oxfmt provides the baseline layout, but repository rules run through AST-addressed replacements after that baseline:
+Oxfmt provides the baseline layout, but repository rules run through AST-addressed replacements after that baseline. Every pass parses through one shared entry point that holds the most recent result, so a chain of passes that leave the text alone costs one parse rather than one parse each:
 
 - A function, method, constructor, arrow function, call, or `new` expression with more than two parameters or arguments is multiline. The shared delimited-list formatter puts one item on each line and adds the trailing comma. One or two items stay on the signature or call line.
 - The rule runs both ways. A list of one or two items that an earlier layout left split is joined back onto the call or signature line, as long as every item is already a single line and the joined line fits Oxfmt's print width. A list holding a multiline item, such as an object literal or an arrow body, stays split.

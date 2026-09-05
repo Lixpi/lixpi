@@ -395,7 +395,21 @@ const isPreservedTypeNode = (
     || node.type === 'TSTypeParameterInstantiation'
     || (parent?.type === 'TSTypeAliasDeclaration' && parentKey === 'typeAnnotation')
 
-const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayouts => {
+// Every layout pass parses the same text with the same options, and most passes leave
+// their input untouched, so the chain would otherwise re-parse an unchanged file once
+// per pass. Holding on to the most recent result turns that into a single parse.
+let lastParsedFile: string | null = null
+let lastParsedSource: string | null = null
+let lastParseResult: ReturnType<typeof parseSync> | null = null
+
+const parseTypeScript = (file: string, source: string): ReturnType<typeof parseSync> => {
+    if (
+        lastParseResult
+        && lastParsedFile === file
+        && lastParsedSource === source
+    )
+        return lastParseResult
+
     const parseResult = parseSync(
         file,
         source,
@@ -405,6 +419,15 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
             range: true,
         },
     )
+    lastParsedFile = file
+    lastParsedSource = source
+    lastParseResult = parseResult
+
+    return parseResult
+}
+
+const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayouts => {
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -786,15 +809,7 @@ const canonicalizeDelimitedListsOnce = (
     source: string,
     printWidth: number,
 ): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -950,15 +965,7 @@ const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === '
     && tag.property.name === 'html'
 
 const collectHtmlTemplateQuasis = (file: string, source: string): LayoutSpan[] => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -1057,15 +1064,7 @@ const applyHtmlTemplateFormatting = (
 }
 
 const collectHtmlTemplateContents = (file: string, source: string): HtmlTemplateContent[] => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -1288,15 +1287,7 @@ const getAssignmentValue = (node: AstNode): AstNode | null => {
 }
 
 const canonicalizeAssignmentBoundaries = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -1386,15 +1377,7 @@ const canonicalizeAssignmentBoundaries = (file: string, source: string): string 
 }
 
 const canonicalizeExpressionArrowBodies = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -1565,15 +1548,7 @@ const getLongestIteratorLineLength = (
 }
 
 const canonicalizeIteratorChainsOnce = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -1676,15 +1651,7 @@ const canonicalizeIteratorChains = (file: string, source: string): string => {
 }
 
 const canonicalizeHtmlTemplateBoundaries = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -1867,15 +1834,7 @@ const getCanonicalConditionalText = (
 }
 
 const canonicalizeNestedConditionalExpressions = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -2153,15 +2112,7 @@ const hasCommentWithinRange = (comments: AstComment[], range: [number, number]):
     comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
 
 const canonicalizeAssignedLogicalExpressions = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -2271,15 +2222,7 @@ const getStatementGap = (
 }
 
 const canonicalizeStatementSpacing = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -2378,15 +2321,7 @@ const canonicalizeStatementSpacing = (file: string, source: string): string => {
 }
 
 const canonicalizeConditionStatements = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
@@ -2766,15 +2701,7 @@ const getIndentedContainerClosingOffset = (node: AstNode, source: string): numbe
 }
 
 const canonicalizeContainerIndentationOnce = (file: string, source: string): string => {
-    const parseResult = parseSync(
-        file,
-        source,
-        {
-            astType: 'ts',
-            preserveParens: true,
-            range: true,
-        },
-    )
+    const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
