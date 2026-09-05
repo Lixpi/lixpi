@@ -190,12 +190,8 @@ const hasReferenceBeforeDeclaration = (
             scope.variables.some(
                 variable =>
                     variable.name === node.id.name
-                    && variable.defs.some(
-                        definition => definition.node === node || definition.name === node.id,
-                    )
-                    && variable.references.some(
-                        reference => reference.identifier.range[0] < node.range[0],
-                    ),
+                    && variable.defs.some(definition => definition.node === node || definition.name === node.id)
+                    && variable.references.some(reference => reference.identifier.range[0] < node.range[0]),
             ),
     )
 
@@ -233,14 +229,8 @@ const preferArrowFunctionDeclaration = defineRule({
                     node,
                     messageId: 'preferArrowFunction',
                     fix: fixer => [
-                        fixer.replaceTextRange(
-                            [node.range[0], node.id.range[1]],
-                            replacement,
-                        ),
-                        fixer.insertTextBefore(
-                            node.body,
-                            '=> ',
-                        ),
+                        fixer.replaceTextRange([node.range[0], node.id.range[1]], replacement),
+                        fixer.insertTextBefore(node.body, '=> '),
                     ],
                 })
             },
@@ -455,10 +445,7 @@ const noBlockComments = defineRule({
                         messageId: 'useLineComments',
                         fix: fixer => fixer.replaceText(
                             comment,
-                            getLineCommentReplacement(
-                                comment,
-                                sourceCode,
-                            ),
+                            getLineCommentReplacement(comment, sourceCode),
                         ),
                     })
                 }
@@ -859,10 +846,7 @@ const preferMultilineCondition = defineRule({
             context.report({
                 node: node.test,
                 messageId: 'preferMultilineCondition',
-                fix: fixer => fixer.replaceTextRange(
-                    replacementRange,
-                    replacement,
-                ),
+                fix: fixer => fixer.replaceTextRange(replacementRange, replacement),
             })
         }
 
@@ -940,10 +924,7 @@ const preferMultilineCondition = defineRule({
 
                 if (
                     sourceCode.text.slice(conditionRange[0], conditionRange[1]) === conditionReplacement
-                    && sourceCode.text.slice(
-                        alternateRange[0],
-                        alternateRange[1],
-                    ) === alternateReplacement
+                    && sourceCode.text.slice(alternateRange[0], alternateRange[1]) === alternateReplacement
                 )
                     return
 
@@ -951,14 +932,8 @@ const preferMultilineCondition = defineRule({
                     node: node.test,
                     messageId: 'preferMultilineCondition',
                     fix: fixer => [
-                        fixer.replaceTextRange(
-                            conditionRange,
-                            conditionReplacement,
-                        ),
-                        fixer.replaceTextRange(
-                            alternateRange,
-                            alternateReplacement,
-                        ),
+                        fixer.replaceTextRange(conditionRange, conditionReplacement),
+                        fixer.replaceTextRange(alternateRange, alternateReplacement),
                     ],
                 })
             },
@@ -1006,10 +981,7 @@ const preferMultilineCondition = defineRule({
                 context.report({
                     node: node.test,
                     messageId: 'preferMultilineCondition',
-                    fix: fixer => fixer.replaceTextRange(
-                        replacementRange,
-                        replacement,
-                    ),
+                    fix: fixer => fixer.replaceTextRange(replacementRange, replacement),
                 })
             },
             IfStatement: checkParenthesizedCondition,
@@ -1096,10 +1068,7 @@ const noCommaSeparatedStatements = defineRule({
                     fix: canFix
                         ? fixer => fixer.replaceText(
                             replacementNode,
-                            getSeparatedVariableDeclarationText(
-                                node,
-                                sourceCode,
-                            ),
+                            getSeparatedVariableDeclarationText(node, sourceCode),
                         )
                         : undefined,
                 })
@@ -1122,11 +1091,7 @@ const noCommaSeparatedStatements = defineRule({
                         ? fixer =>
                             fixer.replaceText(
                                 parent,
-                                node.expressions.map(
-                                    expression => sourceCode.getText(expression),
-                                ).join(
-                                    `\n${indentation}`,
-                                ),
+                                node.expressions.map(expression => sourceCode.getText(expression)).join(`\n${indentation}`),
                             )
                         : undefined,
                 })
@@ -1175,36 +1140,18 @@ const preferAttachedTrailingComma = defineRule({
             context.report({
                 node: comma,
                 messageId: 'attachTrailingComma',
-                fix: fixer => fixer.replaceTextRange(
-                    [lastItem.range[1], comma.range[1]],
-                    ',',
-                ),
+                fix: fixer => fixer.replaceTextRange([lastItem.range[1], comma.range[1]], ','),
             })
         }
 
         return {
             ArrayExpression: node => checkLastItem(node, node.elements),
             ArrayPattern: node => checkLastItem(node, node.elements),
-            CallExpression: node => checkLastItem(
-                node,
-                node.arguments,
-            ),
-            ImportExpression: node => checkLastItem(
-                node,
-                node.options ? [node.options] : [],
-            ),
-            NewExpression: node => checkLastItem(
-                node,
-                node.arguments,
-            ),
-            ObjectExpression: node => checkLastItem(
-                node,
-                node.properties,
-            ),
-            ObjectPattern: node => checkLastItem(
-                node,
-                node.properties,
-            ),
+            CallExpression: node => checkLastItem(node, node.arguments),
+            ImportExpression: node => checkLastItem(node, node.options ? [node.options] : []),
+            NewExpression: node => checkLastItem(node, node.arguments),
+            ObjectExpression: node => checkLastItem(node, node.properties),
+            ObjectPattern: node => checkLastItem(node, node.properties),
         }
     },
 })
@@ -1602,10 +1549,7 @@ const preferCompactIf = defineRule({
                     context.report({
                         node: statement,
                         messageId: 'preferCompactBody',
-                        fix: fixer => fixer.replaceTextRange(
-                            whitespaceRange,
-                            replacement,
-                        ),
+                        fix: fixer => fixer.replaceTextRange(whitespaceRange, replacement),
                     })
                 }
             },
@@ -1796,19 +1740,10 @@ const preferVoidArrowBody = defineRule({
                     node: node.body,
                     messageId: 'discardReturnValue',
                     fix: fixer => directVoidExpressionTypes.has(node.body.type)
-                        ? fixer.insertTextBefore(
-                            node.body,
-                            'void ',
-                        )
+                        ? fixer.insertTextBefore(node.body, 'void ')
                         : [
-                            fixer.insertTextBefore(
-                                node.body,
-                                'void (',
-                            ),
-                            fixer.insertTextAfter(
-                                node.body,
-                                ')',
-                            ),
+                            fixer.insertTextBefore(node.body, 'void ('),
+                            fixer.insertTextAfter(node.body, ')'),
                         ],
                 })
             },
@@ -1863,10 +1798,7 @@ const preferExpressionArrowBody = defineRule({
                     messageId: 'preferExpressionBody',
                     fix: fixer => fixer.replaceText(
                         node.body,
-                        getConciseArrowBodyText(
-                            statement,
-                            sourceCode,
-                        ),
+                        getConciseArrowBodyText(statement, sourceCode),
                     ),
                 })
             },
@@ -1984,10 +1916,7 @@ const noNativeConsoleLogging = defineRule({
                                 const importText = sourceCode.getText(debugImport)
                                 const insertion = importText.includes('\n')
                                     ? `${getLineIndentation(sourceCode.text, closeBrace.range[0])}    ${addedSpecifiers.join(
-                                        `,\n${getLineIndentation(
-                                            sourceCode.text,
-                                            closeBrace.range[0],
-                                        )}    `,
+                                        `,\n${getLineIndentation(sourceCode.text, closeBrace.range[0])}    `,
                                     )},\n`
                                     : `, ${addedSpecifiers.join(', ')}`
                                 fixes.push(
@@ -2000,12 +1929,7 @@ const noNativeConsoleLogging = defineRule({
 
                         const declaration = `import { ${addedSpecifiers.join(', ')} } from '@lixpi/debug-tools'\n`
                         const firstStatement = program.body[0]
-                        fixes.push(
-                            firstStatement ? fixer.insertTextBefore(firstStatement, declaration) : fixer.insertTextAfter(
-                                program,
-                                declaration,
-                            ),
-                        )
+                        fixes.push(firstStatement ? fixer.insertTextBefore(firstStatement, declaration) : fixer.insertTextAfter(program, declaration))
 
                         return fixes
                     },

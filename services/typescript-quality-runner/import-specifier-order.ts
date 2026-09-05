@@ -124,9 +124,7 @@ const applyReplacements = (
 const hasComment = (
     range: [number, number],
     comments: AstComment[],
-): boolean => comments.some(
-    comment => comment.start >= range[0] && comment.end <= range[1],
-)
+): boolean => comments.some(comment => comment.start >= range[0] && comment.end <= range[1])
 
 const getNamedSpecifierBlock = (
     specifiers: NamedSpecifier[],
@@ -338,10 +336,7 @@ export const canonicalizeImportLayout = (
 
         const canonical = node.type === 'ImportDeclaration'
             ? canonicalizeImportDeclaration(node, source)
-            : canonicalizeExportDeclaration(
-                node,
-                source,
-            )
+            : canonicalizeExportDeclaration(node, source)
 
         if (
             canonical == null
@@ -412,7 +407,9 @@ const runCli = async (): Promise<void> => {
             continue
         }
 
-        if (mode === 'check') for (const line of violations) err(`${file}:${line}: named imports and exports must use the repository value/type layout`)
+        if (mode === 'check') for (const line of violations) err(
+            `${file}:${line}: named imports and exports must use the repository value/type layout`,
+        )
     }
 
     if (mode === 'fix') {

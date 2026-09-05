@@ -322,10 +322,7 @@ const getLayoutSpan = (
     end,
     preserve,
     start,
-    text: source.slice(
-        start,
-        end,
-    ),
+    text: source.slice(start, end),
 })
 
 const reindentNodeText = (
@@ -367,10 +364,7 @@ const hasMultilineFunctionParameters = (
     return Boolean(
         firstParameterRange
         && lastParameterRange
-        && getLineStart(source, firstParameterRange[0]) !== getLineStart(
-            source,
-            lastParameterRange[1] - 1,
-        ),
+        && getLineStart(source, firstParameterRange[0]) !== getLineStart(source, lastParameterRange[1] - 1),
     )
 }
 
@@ -777,7 +771,10 @@ const preserveExpandedTypeScriptLayouts = (
 
     let output = formatted
 
-    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(
+        0,
+        replacement.start,
+    )}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1010,19 +1007,26 @@ const isStatementNode = (node: AstNode): boolean => node.type.endsWith('Statemen
     || node.type === 'PropertyDefinition'
     || node.type === 'MethodDefinition'
 
-// The column a list's closing bracket would land on if its statement were written out
-// on one line. Measuring from the statement rather than from the line as it stands keeps
-// the answer the same whether the lists around this one are split or joined, so a list
-// and the lists inside it cannot push each other back and forth forever.
-const getInlineClosingColumn = (
+const spansLines = (
     source: string,
-    statementStart: number,
-    end: number,
-): number => getLineIndentation(source, statementStart).length
-    + getInlineNodeText(
-        source,
-        [statementStart, end],
-    ).length
+    node: AstNode,
+): boolean => {
+    const range = getNodeRange(node)
+
+    return range != null && source.slice(range[0], range[1]).includes('\n')
+}
+
+// The column a list's closing bracket would land on with everything inside it closed up.
+// The opening bracket does not move when the list splits, and the items are measured from
+// their own text rather than from the lines they currently occupy, so the answer is the
+// same either way and a list cannot argue with itself from one pass to the next.
+const getInlineListWidth = (
+    source: string,
+    start: number,
+    itemRanges: Array<[number, number]>,
+): number => start - getLineStart(source, start)
+    + itemRanges.map(range => getInlineNodeText(source, range)).join(', ').length
+    + 1
 
 const canonicalizeDelimitedListsOnce = (
     file: string,
@@ -1083,9 +1087,7 @@ const canonicalizeDelimitedListsOnce = (
                     comment =>
                         comment.start >= start
                         && comment.end <= end
-                        && !itemRanges.some(
-                            range => range != null && comment.start >= range[0] && comment.end <= range[1],
-                        ),
+                        && !itemRanges.some(range => range != null && comment.start >= range[0] && comment.end <= range[1]),
                 )
                 const isCall = isCallLikeNode(node)
                 const collapsed = getCollapsedDelimitedListText(source, itemRanges as Array<[number, number]>)
@@ -1111,25 +1113,27 @@ const canonicalizeDelimitedListsOnce = (
                         item => isCallLikeNode(
                             unwrapParenthesizedExpression(item),
                         )
-                            || isMultilineExpressionBodiedFunction(
-                                item,
-                                source,
-                            ),
+                            || isMultilineExpressionBodiedFunction(item, source),
                     ))
                     || (
+                        // A literal the object rule already split cannot come back onto one
+                        // line, so a list holding one alongside another item breaks too.
+                        items.length > 1
+                        && items.some(item => isHuggableItem(item) && spansLines(source, item))
+                    )
+                    || (
                         // A callback with a block body never fits on one line, so its own
-                        // braces are what break the call, not the width rule. A sole
-                        // object or array argument is likewise laid out by the hug rule,
-                        // and letting width decide it too leaves the two disagreeing.
-                        // A call around one plain argument, a name or a literal, has
-                        // nothing to gain from splitting, however long the line it sits on
-                        // happens to be.
+                        // braces are what break the call, not the width rule. A sole object
+                        // or array argument is likewise laid out by the hug rule, and
+                        // letting width decide it too leaves the two disagreeing. A call
+                        // around one plain argument, a name or a literal, has nothing to
+                        // gain from splitting however long its line runs.
                         !(items.length === 1 && isAtomicItem(items[0]))
                         && !endsWithBlockBodiedFunction(items)
-                        && getInlineClosingColumn(
+                        && getInlineListWidth(
                             source,
-                            ownStatementStart,
-                            end + 1,
+                            start,
+                            itemRanges as Array<[number, number]>,
                         ) > lineLimit
                     ))
 
@@ -1228,7 +1232,10 @@ const canonicalizeDelimitedListsOnce = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(
+        0,
+        replacement.start,
+    )}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1427,10 +1434,7 @@ const collectHtmlTemplateContents = (
                     start: templateRange[0] + 1,
                     end: templateRange[1] - 1,
                     interpolationRanges,
-                    indentation: getLineIndentation(
-                        source,
-                        node.range?.[0] ?? templateRange[0],
-                    ),
+                    indentation: getLineIndentation(source, node.range?.[0] ?? templateRange[0]),
                 })
             }
         }
@@ -1666,10 +1670,7 @@ const canonicalizeAssignmentBoundaries = (
                     shift > 0
                     && lineStart > 0
                     && lineStart < valueRange[1];
-                    lineStart = getNextLineStart(
-                        source,
-                        lineStart,
-                    )
+                    lineStart = getNextLineStart(source, lineStart)
                 ) {
                     const removable = Math.min(shift, getLineIndentation(source, lineStart).length)
 
@@ -1705,7 +1706,10 @@ const canonicalizeAssignmentBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(
+        0,
+        replacement.start,
+    )}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1775,10 +1779,7 @@ const canonicalizeArrowParameters = (
                 openParenthesis >= nodeRange[0]
                 && source[openParenthesis] === '('
                 && source[closeParenthesis] === ')'
-                && !hasCommentWithinRange(
-                    comments,
-                    [openParenthesis, closeParenthesis + 1],
-                )
+                && !hasCommentWithinRange(comments, [openParenthesis, closeParenthesis + 1])
             ) {
                 replacements.push({
                     start: openParenthesis,
@@ -1929,10 +1930,7 @@ const getCallChain = (
             boundaryStart: objectRange[1],
             isIterator,
             leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
-            text: source.slice(
-                boundaryEnd,
-                currentRange[1],
-            ),
+            text: source.slice(boundaryEnd, currentRange[1]),
         })
         current = current.callee.object
     }
@@ -2212,12 +2210,8 @@ const getConditionalExpression = (node: AstNode | null | undefined): AstNode | n
 
 const hasNestedConditionalExpression = (node: AstNode): boolean => Boolean(
     getConditionalExpression(node.test as AstNode)
-    || getConditionalExpression(
-        node.consequent as AstNode,
-    )
-    || getConditionalExpression(
-        node.alternate as AstNode,
-    ),
+    || getConditionalExpression(node.consequent as AstNode)
+    || getConditionalExpression(node.alternate as AstNode),
 )
 
 const getConditionalLeafText = (
@@ -2267,20 +2261,14 @@ const getCanonicalConditionalText = (
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(
-            consequent,
-            source,
-        )
+        : getConditionalLeafText(consequent, source)
     const alternateText = nestedAlternate
         ? getCanonicalConditionalText(
             nestedAlternate,
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(
-            alternate,
-            source,
-        )
+        : getConditionalLeafText(alternate, source)
 
     if (
         !testText
@@ -2583,9 +2571,7 @@ const getConditionContainerText = (
 const hasCommentWithinRange = (
     comments: AstComment[],
     range: [number, number],
-): boolean => comments.some(
-    comment => comment.start >= range[0] && comment.end <= range[1],
-)
+): boolean => comments.some(comment => comment.start >= range[0] && comment.end <= range[1])
 
 const canonicalizeAssignedLogicalExpressions = (
     file: string,
@@ -2607,10 +2593,7 @@ const canonicalizeAssignedLogicalExpressions = (
             && valueRange
             && unwrapParenthesizedExpression(value).type === 'LogicalExpression'
             && countLogicalEvaluations(value) > 2
-            && !hasCommentWithinRange(
-                comments,
-                valueRange,
-            )
+            && !hasCommentWithinRange(comments, valueRange)
         ) {
             const indentation = getLineIndentation(source, valueRange[0])
             const replacement = getMultilineAssignedLogicalExpressionText(
@@ -2895,10 +2878,7 @@ const canonicalizeConditionStatements = (
                 && alternateRange
                 && consequent
                 && consequentRange
-                && !hasCommentWithinRange(
-                    comments,
-                    [consequentRange[1], alternateRange[0]],
-                )
+                && !hasCommentWithinRange(comments, [consequentRange[1], alternateRange[0]])
                 && (consequentIsCompact || alternateIsCompact)
             ) {
                 const indentation = getLineIndentation(source, nodeRange[0])
@@ -2974,10 +2954,7 @@ const canonicalizeConditionStatements = (
                 && countLogicalEvaluations(test) > 1
                 && body
                 && bodyRange
-                && !hasCommentWithinRange(
-                    comments,
-                    [nodeRange[0], bodyRange[0]],
-                )
+                && !hasCommentWithinRange(comments, [nodeRange[0], bodyRange[0]])
             ) {
                 const indentation = getLineIndentation(source, nodeRange[0])
                 const clauseIndentation = `${indentation}    `
@@ -3031,10 +3008,7 @@ const canonicalizeConditionStatements = (
                 && consequentRange
                 && alternateRange
                 && countLogicalEvaluations(test) > 1
-                && !hasCommentWithinRange(
-                    comments,
-                    [testRange[0], alternateRange[0]],
-                )
+                && !hasCommentWithinRange(comments, [testRange[0], alternateRange[0]])
             ) {
                 const indentation = getLineIndentation(source, testRange[0])
                 const branchIndentation = `${indentation}    `
@@ -3095,7 +3069,10 @@ const canonicalizeConditionStatements = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(
+        0,
+        replacement.start,
+    )}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -3301,7 +3278,10 @@ const canonicalizeContainerIndentationOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(
+        0,
+        replacement.start,
+    )}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
