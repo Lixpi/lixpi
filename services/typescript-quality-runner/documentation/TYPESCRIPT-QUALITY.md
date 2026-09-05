@@ -91,6 +91,8 @@ docker compose --profile dev --profile main run --rm --no-deps -T lixpi-typescri
 
 The fixture test proves the named-import matrix, native TypeScript execution, Sass four-space formatting, configured Oxlint violations, configured Stylelint violations, shared transition enforcement, React import rejection, and JSX source-file rejection.
 
+An object literal holding more than one property is split one property to a line, the same way a named import list is. `lixpi/prefer-multiline-object` reports an inline one and its fix expands it, nested literals included. A literal with a single property or none stays inline.
+
 ## Named Import And Export Layout
 
 The repository uses Oxfmt plus the quality runner's named-import layout check for production TypeScript. A named import list with two or more items uses one item per line:

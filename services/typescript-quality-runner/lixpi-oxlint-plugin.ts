@@ -129,7 +129,10 @@ const noUnusedImports = defineRule({
                             unusedSpecifiersByDeclaration.get(declaration)
                             ?? []
                         )
-                        unusedSpecifiers.push({ name: variable.name, specifier })
+                        unusedSpecifiers.push({
+                            name: variable.name,
+                            specifier,
+                        })
                         unusedSpecifiersByDeclaration.set(declaration, unusedSpecifiers)
                     }
 
@@ -279,10 +282,22 @@ const collectionConstructorNames = new Set([
     'WeakSet',
 ])
 const debugLoggingMethods = new Map([
-    ['error', { importedName: 'err', preferredLocalName: 'debugError' }],
-    ['info', { importedName: 'info', preferredLocalName: 'debugInfo' }],
-    ['log', { importedName: 'log', preferredLocalName: 'debugLog' }],
-    ['warn', { importedName: 'warn', preferredLocalName: 'debugWarn' }],
+    ['error', {
+        importedName: 'err',
+        preferredLocalName: 'debugError',
+    }],
+    ['info', {
+        importedName: 'info',
+        preferredLocalName: 'debugInfo',
+    }],
+    ['log', {
+        importedName: 'log',
+        preferredLocalName: 'debugLog',
+    }],
+    ['warn', {
+        importedName: 'warn',
+        preferredLocalName: 'debugWarn',
+    }],
 ])
 const rawSyntaxInspectionMethods = new Set([
     'match',
@@ -684,7 +699,10 @@ const getLogicalConditionParts = (node): {
 
     visit(logicalExpression)
 
-    return { operands, operators }
+    return {
+        operands,
+        operators,
+    }
 }
 
 // The AST drops grouping parentheses, so a source pair is recognised by the tokens on
@@ -1191,6 +1209,45 @@ const preferAttachedTrailingComma = defineRule({
     },
 })
 
+// An object literal holding more than one property reads as a list, and a list goes one
+// item to a line, the same way a named import list does.
+const preferMultilineObject = defineRule({
+    meta: {
+        type: 'layout',
+        fixable: 'whitespace',
+        messages: {
+            preferMultilineObject: 'Split object literals with more than one property across lines.',
+        },
+        schema: [],
+    },
+    create(context) {
+        const { sourceCode } = context
+
+        return {
+            ObjectExpression(node) {
+                if (node.properties.length <= 1)
+                    return
+
+                if (sourceCode.getCommentsInside(node).length > 0)
+                    return
+
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
+                const propertyIndentation = `${indentation}    `
+                const replacement = `{\n${node.properties.map(property => `${propertyIndentation}${sourceCode.getText(property)},`).join('\n')}\n${indentation}}`
+
+                if (sourceCode.getText(node) === replacement)
+                    return
+
+                context.report({
+                    node,
+                    messageId: 'preferMultilineObject',
+                    fix: fixer => fixer.replaceText(node, replacement),
+                })
+            },
+        }
+    },
+})
+
 const preferMultilineObjectPattern = defineRule({
     meta: {
         type: 'layout',
@@ -1383,7 +1440,11 @@ const getCallChain = (
         current = current.callee.object
     }
 
-    return { attrCount, base: current, segments }
+    return {
+        attrCount,
+        base: current,
+        segments,
+    }
 }
 
 const preferMultilineAttrChain = defineRule({
@@ -1971,6 +2032,7 @@ export default definePlugin({
         'prefer-multiline-attr-chain': preferMultilineAttrChain,
         'prefer-multiline-collection': preferMultilineCollection,
         'prefer-multiline-object-pattern': preferMultilineObjectPattern,
+        'prefer-multiline-object': preferMultilineObject,
         'prefer-separated-statements': preferSeparatedStatements,
         'prefer-multiline-type-literal': preferMultilineTypeLiteral,
         'prefer-multiline-condition': preferMultilineCondition,

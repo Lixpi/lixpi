@@ -2468,7 +2468,10 @@ const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null =
     )
         return null
 
-    return { operands, operators }
+    return {
+        operands,
+        operators,
+    }
 }
 
 // `wrapInParentheses` says the caller owns a parenthesis pair around this expression:

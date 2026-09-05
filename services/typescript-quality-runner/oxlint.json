@@ -80,6 +80,7 @@
         "lixpi/prefer-multiline-attr-chain": "error",
         "lixpi/prefer-multiline-collection": "error",
         "lixpi/prefer-multiline-object-pattern": "error",
+        "lixpi/prefer-multiline-object": "error",
         "lixpi/prefer-separated-statements": "error",
         "lixpi/prefer-multiline-type-literal": "error",
         "lixpi/prefer-multiline-condition": "error",
