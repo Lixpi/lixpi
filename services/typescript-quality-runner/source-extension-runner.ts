@@ -69,19 +69,15 @@ const isTestFile = (path: string): boolean => {
     )
         return true
 
-    return path.split('/').some((segment) => testDirectoryNames.has(segment))
+    return path.split('/').some(segment => testDirectoryNames.has(segment))
 }
 
-const collectSourceFiles = async (
-    inputPaths: string[],
-): Promise<SourceFiles> => {
+const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> => {
     const importers: string[] = []
     const javaScriptFiles: string[] = []
     const prohibitedFiles: string[] = []
 
-    const visit = async (
-        path: string,
-    ): Promise<void> => {
+    const visit = async (path: string): Promise<void> => {
         const entry = await stat(path)
 
         if (entry.isFile()) {
@@ -132,10 +128,7 @@ const collectSourceFiles = async (
 
 const getTypeScriptPath = (path: string): string => `${path.slice(0, -extname(path).length)}.ts`
 
-const resolveModuleSpecifier = (
-    importer: string,
-    specifier: string,
-): string | null => {
+const resolveModuleSpecifier = (importer: string, specifier: string): string | null => {
     if (
         specifier.startsWith('./')
         || specifier.startsWith('../')
@@ -155,10 +148,7 @@ const resolveModuleSpecifier = (
     return null
 }
 
-const getModuleSpecifierNodes = (
-    file: string,
-    source: string,
-): AstNode[] => {
+const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
     const parseResult = parseSync(
         file,
         source,
@@ -174,9 +164,7 @@ const getModuleSpecifierNodes = (
 
     const specifiers: AstNode[] = []
     const ranges = new Set<string>()
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const sourceNode = isAstNode(node.source)
             ? node.source
             : (
@@ -223,10 +211,7 @@ const getModuleSpecifierNodes = (
     return specifiers
 }
 
-const applySourceReplacements = (
-    source: string,
-    replacements: SourceReplacement[],
-): string => {
+const applySourceReplacements = (source: string, replacements: SourceReplacement[]): string => {
     let output = source
 
     for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
@@ -234,10 +219,7 @@ const applySourceReplacements = (
     return output
 }
 
-const updateModuleSpecifiers = async (
-    importer: string,
-    renamedFiles: Map<string, string>,
-): Promise<boolean> => {
+const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string, string>): Promise<boolean> => {
     const source = await readFile(importer, 'utf8')
     const replacements: SourceReplacement[] = []
 
@@ -310,7 +292,7 @@ if (mode === 'check') {
 }
 
 const renamedFiles = new Map(
-    javaScriptFiles.map((file) => [file, getTypeScriptPath(file)]),
+    javaScriptFiles.map(file => [file, getTypeScriptPath(file)]),
 )
 
 for (const target of renamedFiles.values()) {

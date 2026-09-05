@@ -181,18 +181,14 @@ const isTestFile = (path: string): boolean => {
     )
         return true
 
-    return path.split('/').some((segment) => testDirectoryNames.has(segment))
+    return path.split('/').some(segment => testDirectoryNames.has(segment))
 }
 
-const collectFormattingFiles = async (
-    inputPaths: string[],
-): Promise<FormattingFiles> => {
+const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingFiles> => {
     const files: string[] = []
     const prohibitedFiles: string[] = []
 
-    const visit = async (
-        path: string,
-    ): Promise<void> => {
+    const visit = async (path: string): Promise<void> => {
         const entry = await stat(path)
 
         if (entry.isFile()) {
@@ -346,10 +342,7 @@ const reindentNodeText = (
     return lines.join('\n')
 }
 
-const hasMultilineFunctionParameters = (
-    node: AstNode,
-    source: string,
-): boolean => {
+const hasMultilineFunctionParameters = (node: AstNode, source: string): boolean => {
     if (!Array.isArray(node.params))
         return false
 
@@ -369,10 +362,7 @@ const hasMultilineFunctionParameters = (
     )
 }
 
-const getFunctionParameterSpan = (
-    node: AstNode,
-    source: string,
-): LayoutSpan | null => {
+const getFunctionParameterSpan = (node: AstNode, source: string): LayoutSpan | null => {
     const nodeRange = getNodeRange(node)
     const bodyRange = getNodeRange(node.body as AstNode)
 
@@ -427,10 +417,7 @@ let lastParsedFile: string | null = null
 let lastParsedSource: string | null = null
 let lastParseResult: ReturnType<typeof parseSync> | null = null
 
-const parseTypeScript = (
-    file: string,
-    source: string,
-): ReturnType<typeof parseSync> => {
+const parseTypeScript = (file: string, source: string): ReturnType<typeof parseSync> => {
     if (
         lastParseResult
         && lastParsedFile === file
@@ -454,10 +441,7 @@ const parseTypeScript = (
     return parseResult
 }
 
-const collectTypeScriptLayouts = (
-    file: string,
-    source: string,
-): TypeScriptLayouts => {
+const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayouts => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -760,7 +744,7 @@ const preserveExpandedTypeScriptLayouts = (
 
     for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some(
-            (candidate) => replacement.start < candidate.end && replacement.end > candidate.start,
+            candidate => replacement.start < candidate.end && replacement.end > candidate.start,
         )
 
         if (!overlapsSelectedReplacement)
@@ -844,9 +828,17 @@ const collectionConstructorNames = new Set([
 // the call or signature line, so one options bag reads as `f({` and closes on `})` rather
 // than opening two brackets on two separate lines for the same item. A parameter counts by
 // its type literal, since `params: { ... }` is one item however that type is written.
-const isHuggableItem = (
-    node: AstNode | null | undefined,
-): boolean => {
+const endsWithBlockBodiedFunction = (items: AstNode[]): boolean => {
+    const last = items.at(-1)
+
+    return (
+        last?.type === 'ArrowFunctionExpression'
+        || last?.type === 'FunctionExpression'
+    )
+        && (last.body as AstNode | undefined)?.type === 'BlockStatement'
+}
+
+const isHuggableItem = (node: AstNode | null | undefined): boolean => {
     if (
         node?.type === 'ObjectExpression'
         || node?.type === 'ArrayExpression'
@@ -861,9 +853,7 @@ const isHuggableItem = (
     return annotatedType?.type === 'TSTypeLiteral'
 }
 
-const isCollectionInitializer = (
-    node: AstNode,
-): boolean => {
+const isCollectionInitializer = (node: AstNode): boolean => {
     if (node.type !== 'NewExpression')
         return false
 
@@ -880,19 +870,16 @@ const isCollectionInitializer = (
 // The joined text of a list, or null when an item spans lines and so cannot be joined
 // without flattening a structure its author expanded on purpose.
 const getCollapsedDelimitedListText = (source: string, itemRanges: Array<[number, number]>): string | null => {
-    const itemTexts = itemRanges.map((range) => source.slice(range[0], range[1]))
+    const itemTexts = itemRanges.map(range => source.slice(range[0], range[1]))
 
-    return itemTexts.some((text) => text.includes('\n')) ? null : itemTexts.join(', ')
+    return itemTexts.some(text => text.includes('\n')) ? null : itemTexts.join(', ')
 }
 
 // A node's text with every line break inside it closed up, which is what the node would
 // measure if nothing within it were split. The width test reads this rather than the
 // text as it currently stands, so a list's own decision never moves when a list nested
 // inside it splits or joins, and the two cannot push each other back and forth forever.
-const getInlineNodeText = (
-    source: string,
-    range: [number, number],
-): string => {
+const getInlineNodeText = (source: string, range: [number, number]): string => {
     let output = ''
     let index = range[0]
 
@@ -965,10 +952,7 @@ const canonicalizeDelimitedListsOnce = (
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: AstNode,
-        statementStart: number,
-    ): void => {
+    const visit = (node: AstNode, statementStart: number): void => {
         const nodeRange = getNodeRange(node)
         const items = getDelimitedListItems(node)
         const ownStatementStart = isStatementNode(node)
@@ -988,7 +972,7 @@ const canonicalizeDelimitedListsOnce = (
             if (
                 firstRange
                 && lastRange
-                && itemRanges.every((range) => range != null)
+                && itemRanges.every(range => range != null)
             ) {
                 const start = getTrailingWhitespaceStart(
                     source,
@@ -1008,11 +992,11 @@ const canonicalizeDelimitedListsOnce = (
                 // that separates the parameter from what comes before it.
                 const isBracketed = source[start - 1] === '(' && source[end] === ')'
                 const hasInterItemComment = isBracketed && comments.some(
-                    (comment) =>
+                    comment =>
                         comment.start >= start
                         && comment.end <= end
                         && !itemRanges.some(
-                            (range) => range != null && comment.start >= range[0] && comment.end <= range[1],
+                            range => range != null && comment.start >= range[0] && comment.end <= range[1],
                         ),
                 )
                 const isCall = isCallLikeNode(node)
@@ -1026,17 +1010,24 @@ const canonicalizeDelimitedListsOnce = (
                     && !isCollectionInitializer(node)
                     && (items.length > 2
                     || (isCall && items.some(
-                        (item) => isCallLikeNode(
+                        item => isCallLikeNode(
                             unwrapParenthesizedExpression(
                                 item,
                             ),
                         ),
                     ))
-                    || getInlineClosingColumn(
-                        source,
-                        ownStatementStart,
-                        nodeRange[1],
-                    ) > lineLimit)
+                    || (
+                        // A callback with a block body never fits on one line, so its own
+                        // braces are what break the call, not the width rule.
+                        !endsWithBlockBodiedFunction(
+                            items,
+                        )
+                        && getInlineClosingColumn(
+                            source,
+                            ownStatementStart,
+                            end + 1,
+                        ) > lineLimit
+                    ))
 
                 // Hugging wins over every splitting reason above, because a single item is
                 // never worth a line of its own between two brackets.
@@ -1058,7 +1049,7 @@ const canonicalizeDelimitedListsOnce = (
                         ),
                     )
                     const itemIndentation = `${indentation}    `
-                    const itemTexts = itemRanges.map((range) => reindentNodeText(
+                    const itemTexts = itemRanges.map(range => reindentNodeText(
                         source,
                         range!,
                         hugsSoleArgument ? indentation : itemIndentation,
@@ -1110,7 +1101,7 @@ const canonicalizeDelimitedListsOnce = (
     // enclosing list has to settle before the lists inside it are measured again.
     for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some(
-            (candidate) => replacement.start < candidate.end && replacement.end > candidate.start,
+            candidate => replacement.start < candidate.end && replacement.end > candidate.start,
         )
 
         if (!overlapsSelectedReplacement)
@@ -1156,19 +1147,14 @@ const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === '
     && tag.property.type === 'Identifier'
     && tag.property.name === 'html'
 
-const collectHtmlTemplateQuasis = (
-    file: string,
-    source: string,
-): LayoutSpan[] => {
+const collectHtmlTemplateQuasis = (file: string, source: string): LayoutSpan[] => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const layouts: LayoutSpan[] = []
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
 
@@ -1268,19 +1254,14 @@ const applyHtmlTemplateFormatting = (
     return output
 }
 
-const collectHtmlTemplateContents = (
-    file: string,
-    source: string,
-): HtmlTemplateContent[] => {
+const collectHtmlTemplateContents = (file: string, source: string): HtmlTemplateContent[] => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const contents: HtmlTemplateContent[] = []
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
         const templateRange = getNodeRange(template)
@@ -1296,9 +1277,7 @@ const collectHtmlTemplateContents = (
         ) {
             const quasis = template.quasis.filter(isAstNode)
             const rawRanges = quasis.map(
-                (
-                    quasi,
-                ): [number, number] | null => {
+                (quasi): [number, number] | null => {
                     const quasiRange = getNodeRange(quasi)
                     const value = quasi.value
                     const raw = (
@@ -1321,7 +1300,7 @@ const collectHtmlTemplateContents = (
                 },
             )
 
-            if (rawRanges.every((range) => range != null)) {
+            if (rawRanges.every(range => range != null)) {
                 const interpolationRanges: Array<[number, number]> = []
 
                 for (let index = 0; index < rawRanges.length - 1; index++) interpolationRanges.push([rawRanges[index]![1], rawRanges[index + 1]![0]])
@@ -1355,10 +1334,7 @@ const collectHtmlTemplateContents = (
     return contents
 }
 
-const maskHtmlInterpolations = (
-    source: string,
-    content: HtmlTemplateContent,
-): string => {
+const maskHtmlInterpolations = (source: string, content: HtmlTemplateContent): string => {
     const characters: string[] = []
 
     for (let offset = content.start; offset < content.end; offset++) characters.push(source[offset]!)
@@ -1393,7 +1369,7 @@ const getExpandedHtmlStartTag = (
 
     const closing = source[closingOffset] === '/' ? '/>' : '>'
     const attributeIndentation = `${indentation}    `
-    const attributeText = attributes.map((attribute) => `${attributeIndentation}${source.slice(attribute.startOffset, attribute.endOffset).trim()}`)
+    const attributeText = attributes.map(attribute => `${attributeIndentation}${source.slice(attribute.startOffset, attribute.endOffset).trim()}`)
         .join(
             '\n',
         )
@@ -1408,10 +1384,7 @@ const collectExpandedHtmlStartTags = (
     offset = 0,
 ): LayoutSpan[] => {
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: HtmlNode,
-        depth: number,
-    ): void => {
+    const visit = (node: HtmlNode, depth: number): void => {
         const startTag = node.sourceCodeLocation?.startTag
         const attributes = Object.values(node.sourceCodeLocation?.attrs ?? {})
             .sort((left, right) => left.startOffset - right.startOffset)
@@ -1463,10 +1436,7 @@ const applyHtmlAttributeReplacements = (source: string, replacements: LayoutSpan
     return output
 }
 
-const canonicalizeEmbeddedHtmlAttributes = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeEmbeddedHtmlAttributes = (file: string, source: string): string => {
     const replacements: LayoutSpan[] = []
 
     for (const content of collectHtmlTemplateContents(file, source)) {
@@ -1496,9 +1466,7 @@ const canonicalizeStandaloneHtmlAttributes = (source: string): string => {
     )
 }
 
-const getAssignmentValue = (
-    node: AstNode,
-): AstNode | null => {
+const getAssignmentValue = (node: AstNode): AstNode | null => {
     if (
         node.type === 'AssignmentExpression'
         || node.type === 'AssignmentPattern'
@@ -1518,10 +1486,7 @@ const getAssignmentValue = (
     return null
 }
 
-const canonicalizeAssignmentBoundaries = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeAssignmentBoundaries = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -1532,9 +1497,7 @@ const canonicalizeAssignmentBoundaries = (
     // One entry per line, so a nested assignment cannot dedent a line its enclosing
     // assignment already accounted for.
     const dedentedLineStarts = new Map<number, LayoutSpan>()
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const nodeRange = getNodeRange(node)
         const value = getAssignmentValue(node)
         const valueRange = getNodeRange(value)
@@ -1616,19 +1579,100 @@ const canonicalizeAssignmentBoundaries = (
     return output
 }
 
-const canonicalizeExpressionArrowBodies = (
-    file: string,
-    source: string,
-): string => {
+// A sole arrow parameter that is a plain name carries no information in its parentheses,
+// so they come off. A parameter with a type, a default, a rest element or a destructuring
+// pattern keeps them, because the syntax requires them there.
+const hasBareArrowParameter = (node: AstNode): boolean => {
+    if (node.type !== 'ArrowFunctionExpression')
+        return false
+
+    const parameters = Array.isArray(node.params) ? node.params.filter(isAstNode) : []
+    const parameter = parameters[0]
+
+    // A return type or a type parameter list keeps the parentheses too: `modelId: T[] =>`
+    // and `<T>modelId =>` are not valid syntax.
+    return parameters.length === 1
+        && parameter?.type === 'Identifier'
+        && !parameter.typeAnnotation
+        && !parameter.optional
+        && !node.returnType
+        && !node.typeParameters
+}
+
+const canonicalizeArrowParameters = (file: string, source: string): string => {
+    const parseResult = parseTypeScript(file, source)
+
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const comments = parseResult.comments as AstComment[]
+    const replacements: LayoutSpan[] = []
+    const visit = (node: AstNode): void => {
+        const nodeRange = getNodeRange(node)
+        const parameterRange = hasBareArrowParameter(node)
+            ? getNodeRange((node.params as AstNode[])[0])
+            : null
+
+        if (
+            nodeRange
+            && parameterRange
+        ) {
+            const openParenthesis = getTrailingWhitespaceStart(
+                source,
+                nodeRange[0],
+                parameterRange[0],
+            ) - 1
+            const closeParenthesis = getLeadingWhitespaceEnd(
+                source,
+                parameterRange[1],
+                source.length,
+            )
+
+            if (
+                openParenthesis >= nodeRange[0]
+                && source[openParenthesis] === '('
+                && source[closeParenthesis] === ')'
+                && !hasCommentWithinRange(
+                    comments,
+                    [openParenthesis, closeParenthesis + 1],
+                )
+            ) {
+                replacements.push({
+                    start: openParenthesis,
+                    end: closeParenthesis + 1,
+                    text: source.slice(parameterRange[0], parameterRange[1]),
+                })
+            }
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(value))
+                visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+    let output = source
+
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+
+    return output
+}
+
+const canonicalizeExpressionArrowBodies = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const nodeRange = getNodeRange(node)
         const bodyRange = getNodeRange(node.body as AstNode)
 
@@ -1694,10 +1738,7 @@ const isNestedCallChain = (
     && grandparent?.type === 'CallExpression'
     && grandparent.callee === parent
 
-const getCallChain = (
-    node: AstNode,
-    source: string,
-): CallChain | null => {
+const getCallChain = (node: AstNode, source: string): CallChain | null => {
     const segments: CallChainSegment[] = []
     let current = node
     let iteratorCount = 0
@@ -1802,10 +1843,7 @@ const getLongestIteratorLineLength = (
     return longestLineLength
 }
 
-const canonicalizeIteratorChainsOnce = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeIteratorChainsOnce = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -1893,10 +1931,7 @@ const canonicalizeIteratorChainsOnce = (
     return output
 }
 
-const canonicalizeIteratorChains = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeIteratorChains = (file: string, source: string): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
@@ -1911,19 +1946,14 @@ const canonicalizeIteratorChains = (
     throw new Error(`Could not stabilize iterator chain formatting in ${file}`)
 }
 
-const canonicalizeHtmlTemplateBoundaries = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeHtmlTemplateBoundaries = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const tag = node.tag as AstNode | undefined
         const template = node.quasi as AstNode | undefined
         const nodeRange = getNodeRange(node)
@@ -2109,10 +2139,7 @@ const getCanonicalConditionalText = (
     return `${canonicalTest}\n${operatorIndentation}? ${consequentText}\n${operatorIndentation}: ${alternateText}`
 }
 
-const canonicalizeNestedConditionalExpressions = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeNestedConditionalExpressions = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2120,9 +2147,7 @@ const canonicalizeNestedConditionalExpressions = (
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const nodeRange = getNodeRange(node)
 
         if (
@@ -2170,9 +2195,7 @@ const canonicalizeNestedConditionalExpressions = (
     return output
 }
 
-const countLogicalEvaluations = (
-    node: AstNode,
-): number => {
+const countLogicalEvaluations = (node: AstNode): number => {
     if (
         node.type === 'ParenthesizedExpression'
         && isAstNode(node.expression)
@@ -2206,10 +2229,7 @@ const unwrapParenthesizedExpression = (node: AstNode): AstNode => {
     return current
 }
 
-const getAstExpressionText = (
-    node: AstNode,
-    source: string,
-): string | null => {
+const getAstExpressionText = (node: AstNode, source: string): string | null => {
     if (
         node.type === 'ParenthesizedExpression'
         && isAstNode(node.expression)
@@ -2246,9 +2266,7 @@ const getAstExpressionText = (
     return expression || null
 }
 
-const getLogicalConditionParts = (
-    node: AstNode,
-): LogicalConditionParts | null => {
+const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null => {
     const operands: AstNode[] = []
     const operators: string[] = []
     const logicalExpression = unwrapParenthesizedExpression(node)
@@ -2261,9 +2279,7 @@ const getLogicalConditionParts = (
 
     const rootOperator = logicalExpression.operator
 
-    const visit = (
-        current: AstNode,
-    ): boolean => {
+    const visit = (current: AstNode): boolean => {
         if (
             current.type === 'LogicalExpression'
             && isAstNode(current.left)
@@ -2399,13 +2415,10 @@ const getConditionContainerText = (
 }
 
 const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean => comments.some(
-    (comment) => comment.start >= range[0] && comment.end <= range[1],
+    comment => comment.start >= range[0] && comment.end <= range[1],
 )
 
-const canonicalizeAssignedLogicalExpressions = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeAssignedLogicalExpressions = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2413,9 +2426,7 @@ const canonicalizeAssignedLogicalExpressions = (
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const value = getAssignmentValue(node)
         const valueRange = getNodeRange(value)
 
@@ -2470,9 +2481,7 @@ const canonicalizeAssignedLogicalExpressions = (
     return output
 }
 
-const getStatementList = (
-    node: AstNode,
-): AstNode[] | null => {
+const getStatementList = (node: AstNode): AstNode[] | null => {
     if (
         node.type !== 'BlockStatement'
         && node.type !== 'Program'
@@ -2501,7 +2510,7 @@ const getStatementGap = (
     nextStart: number,
 ): [number, number] | null => {
     let gapStart = previousEnd
-    const commentsInGap = comments.filter((comment) => comment.start >= previousEnd && comment.end <= nextStart)
+    const commentsInGap = comments.filter(comment => comment.start >= previousEnd && comment.end <= nextStart)
 
     for (const comment of commentsInGap) {
         if (!source.slice(gapStart, comment.start).includes('\n')) {
@@ -2522,10 +2531,7 @@ const getStatementGap = (
     return [gapStart, nextStart]
 }
 
-const canonicalizeStatementSpacing = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeStatementSpacing = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2569,9 +2575,7 @@ const canonicalizeStatementSpacing = (
             text: replacement,
         })
     }
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         if (
             node.type === 'SwitchStatement'
             && Array.isArray(node.cases)
@@ -2626,10 +2630,7 @@ const canonicalizeStatementSpacing = (
     return output
 }
 
-const canonicalizeConditionStatements = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeConditionStatements = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -2678,9 +2679,7 @@ const canonicalizeConditionStatements = (
         })
     }
 
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         if (node.type === 'IfStatement') {
             const nodeRange = getNodeRange(node)
             const consequent = node.consequent as AstNode | undefined
@@ -2911,7 +2910,7 @@ const canonicalizeConditionStatements = (
 
     for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some(
-            (candidate) => replacement.start < candidate.end && replacement.end > candidate.start,
+            candidate => replacement.start < candidate.end && replacement.end > candidate.start,
         )
 
         if (!overlapsSelectedReplacement)
@@ -2925,9 +2924,7 @@ const canonicalizeConditionStatements = (
     return output
 }
 
-const getIndentedContainerChildren = (
-    node: AstNode,
-): AstNode[] | null => {
+const getIndentedContainerChildren = (node: AstNode): AstNode[] | null => {
     if (node.type === 'Program')
         return Array.isArray(node.body) ? node.body.filter(isAstNode) : null
 
@@ -2980,10 +2977,7 @@ const getIndentedContainerChildren = (
     return null
 }
 
-const getIndentedContainerClosingOffset = (
-    node: AstNode,
-    source: string,
-): number | null => {
+const getIndentedContainerClosingOffset = (node: AstNode, source: string): number | null => {
     if (
         node.type === 'Program'
         || node.type === 'SwitchCase'
@@ -3028,10 +3022,7 @@ const getIndentedContainerClosingOffset = (
     return source[closingOffset] === expectedCharacter ? closingOffset : null
 }
 
-const canonicalizeContainerIndentationOnce = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeContainerIndentationOnce = (file: string, source: string): string => {
     const parseResult = parseTypeScript(file, source)
 
     if (parseResult.errors.length > 0)
@@ -3050,7 +3041,7 @@ const canonicalizeContainerIndentationOnce = (
 
         const currentIndentation = source.slice(lineStart, offset)
 
-        if ([...currentIndentation].some((character) => character !== ' ' && character !== '\t'))
+        if ([...currentIndentation].some(character => character !== ' ' && character !== '\t'))
             return
 
         if (currentIndentation === indentation)
@@ -3075,9 +3066,7 @@ const canonicalizeContainerIndentationOnce = (
         )
     }
 
-    const visit = (
-        node: AstNode,
-    ): void => {
+    const visit = (node: AstNode): void => {
         const nodeRange = getNodeRange(node)
         const children = getIndentedContainerChildren(node)
 
@@ -3135,10 +3124,7 @@ const canonicalizeContainerIndentationOnce = (
     return output
 }
 
-const canonicalizeContainerIndentation = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeContainerIndentation = (file: string, source: string): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
@@ -3171,7 +3157,8 @@ const canonicalizeTypeScriptLayout = (
         const canonicalConditionStatements = canonicalizeConditionStatements(file, canonicalDelimitedLists)
         const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(file, canonicalConditionStatements)
         const canonicalAssignedLogicalExpressions = canonicalizeAssignedLogicalExpressions(file, canonicalAssignmentBoundaries)
-        const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignedLogicalExpressions)
+        const canonicalArrowParameters = canonicalizeArrowParameters(file, canonicalAssignedLogicalExpressions)
+        const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalArrowParameters)
         const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
         const canonicalConditionalExpressions = canonicalizeNestedConditionalExpressions(file, canonicalIteratorChains)
         const formattedHtmlTemplates = applyHtmlTemplateFormatting(

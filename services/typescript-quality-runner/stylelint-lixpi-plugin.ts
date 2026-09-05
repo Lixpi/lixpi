@@ -83,9 +83,7 @@ const isLowercaseIdentifierCharacter = (character: string | undefined): boolean 
     ),
 )
 
-const isTransitionCustomProperty = (
-    property: string,
-): boolean => {
+const isTransitionCustomProperty = (property: string): boolean => {
     if (!property.startsWith('--'))
         return false
 
@@ -109,9 +107,7 @@ const isTransitionCustomProperty = (
     return true
 }
 
-const getUnqualifiedFunctionName = (
-    value: string,
-): string => {
+const getUnqualifiedFunctionName = (value: string): string => {
     const interpolationOffset = value.startsWith('#{') ? 2 : 0
     let nameStart = interpolationOffset
 
@@ -155,9 +151,7 @@ const getTopLevelValueGroups = (nodes: CssValueNode[]): CssValueNode[][] => {
     return groups
 }
 
-const isSharedTransitionGroup = (
-    nodes: CssValueNode[],
-): boolean => {
+const isSharedTransitionGroup = (nodes: CssValueNode[]): boolean => {
     if (nodes.length === 1) {
         const node = nodes[0]!
 
@@ -179,19 +173,12 @@ const isSharedTransitionValue = (value: string): boolean => {
     return getTopLevelValueGroups(parsed.nodes).every(isSharedTransitionGroup)
 }
 
-const transitionHelpersRule = (
-    primary: boolean,
-) => (
-    root: Root,
-    result: PostcssResult,
-) => {
+const transitionHelpersRule = (primary: boolean) => (root: Root, result: PostcssResult) => {
     if (!primary)
         return
 
     root.walkDecls(
-        (
-            declaration: Declaration,
-        ) => {
+        (declaration: Declaration) => {
             const property = declaration.prop.toLowerCase()
             const isTransitionValue = (
                 property === 'transition'
@@ -236,9 +223,7 @@ transitionHelpersRule.meta = {
 
 const isHorizontalWhitespace = (character: string | undefined): boolean => character === ' ' || character === '\t' || character === '\r'
 
-const normalizeCommentLine = (
-    line: string,
-): string => {
+const normalizeCommentLine = (line: string): string => {
     let start = 0
     let end = line.length
 
@@ -290,9 +275,7 @@ const getCommentIndentation = (comment: Comment): string => {
     return finalWhitespaceLine.slice(0, end)
 }
 
-const convertBlockComment = (
-    comment: Comment,
-): void => {
+const convertBlockComment = (comment: Comment): void => {
     const lines = getCommentLines(comment)
     const indentation = getCommentIndentation(comment)
     const comments = lines.map(
@@ -315,15 +298,12 @@ const noBlockCommentsRule = (
     _secondaryOptions: unknown,
     context: RuleContext = {},
 ) =>
-(
-    root: Root,
-    result: PostcssResult,
-) => {
+(root: Root, result: PostcssResult) => {
     if (!primary)
         return
 
     root.walkComments(
-        (comment) => {
+        comment => {
             if (comment.raws.inline)
                 return
 

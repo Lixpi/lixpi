@@ -1,6 +1,6 @@
 {
     "$schema": "./node_modules/oxfmt/configuration_schema.json",
-    "arrowParens": "always",
+    "arrowParens": "avoid",
     "embeddedLanguageFormatting": "auto",
     "endOfLine": "lf",
     "ignorePatterns": [
