@@ -125,10 +125,7 @@ const getNamedSpecifierBlock = (specifiers: NamedSpecifier[], singleTypeMustBeMu
 
     if (
         ordered.length === 1
-        && (
-            !singleTypeMustBeMultiline
-            || !ordered[0]!.isType
-        )
+        && (!singleTypeMustBeMultiline || !ordered[0]!.isType)
     )
         return `{ ${ordered[0]!.text} }`
 
@@ -337,10 +334,7 @@ const runCli = async (): Promise<void> => {
     const [mode, ...inputPaths] = process.argv.slice(2)
 
     if (
-        (
-            mode !== 'check'
-            && mode !== 'fix'
-        )
+        (mode !== 'check' && mode !== 'fix')
         || inputPaths.length === 0
     ) {
         err('Usage: import-specifier-order.ts {check|fix} <path...>')

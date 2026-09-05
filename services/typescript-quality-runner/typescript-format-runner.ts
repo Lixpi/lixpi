@@ -445,10 +445,7 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
 
         if (
             !insideCondition
-            && (
-                node.type === 'CallExpression'
-                || node.type === 'NewExpression'
-            )
+            && (node.type === 'CallExpression' || node.type === 'NewExpression')
         ) {
             const span = getCallArgumentSpan(node, source)
 
@@ -499,10 +496,7 @@ const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayou
 
         if (
             !insideCondition
-            && (
-                node.type === 'BinaryExpression'
-                || node.type === 'LogicalExpression'
-            )
+            && (node.type === 'BinaryExpression' || node.type === 'LogicalExpression')
             && nodeRange
         )
             layouts.binaryExpressions.push(getLayoutSpan(
@@ -714,10 +708,7 @@ const getDelimitedListItems = (node: AstNode): AstNode[] | null => {
         return node.params.filter(isAstNode)
 
     if (
-        (
-            node.type === 'CallExpression'
-            || node.type === 'NewExpression'
-        )
+        (node.type === 'CallExpression' || node.type === 'NewExpression')
         && Array.isArray(node.arguments)
     )
         return node.arguments.filter(isAstNode)
@@ -2017,11 +2008,7 @@ const getLogicalConditionParts = (node: AstNode): LogicalConditionParts | null =
 
     if (
         logicalExpression.type !== 'LogicalExpression'
-        || (
-            logicalExpression.operator !== '&&'
-            && logicalExpression.operator !== '||'
-            && logicalExpression.operator !== '??'
-        )
+        || (logicalExpression.operator !== '&&' && logicalExpression.operator !== '||' && logicalExpression.operator !== '??')
     )
         return null
 
@@ -2081,15 +2068,11 @@ const getFormattedConditionText = (
 
     for (let index = 0; index < conditionParts.operands.length; index++) {
         const operandNode = conditionParts.operands[index]!
-        const operand = operandNode.type === 'ParenthesizedExpression'
-            && unwrapParenthesizedExpression(operandNode).type === 'LogicalExpression'
-            ? getFormattedConditionText(
-                operandNode,
-                source,
-                operandIndentation,
-                true,
-            )
-            : getAstExpressionText(operandNode, source)
+        const operandRange = getNodeRange(operandNode)
+        // An operand is copied out of the source exactly as it was written, on one line
+        // or on several. The rule decides where the operands of a chain go, never how an
+        // operand is laid out inside itself.
+        const operand = operandRange && source.slice(operandRange[0], operandRange[1])
 
         if (!operand)
             return null
@@ -2490,10 +2473,7 @@ const canonicalizeConditionStatements = (file: string, source: string): string =
                 && consequent
                 && consequentRange
                 && !hasCommentWithinRange(comments, [consequentRange[1], alternateRange[0]])
-                && (
-                    consequentIsCompact
-                    || alternateIsCompact
-                )
+                && (consequentIsCompact || alternateIsCompact)
             ) {
                 const indentation = getLineIndentation(source, nodeRange[0])
                 const beforeElse = consequentIsCompact ? `\n${indentation}` : ' '
@@ -3033,10 +3013,7 @@ const describeFirstFormattingDifference = (
 const [mode, ...inputPaths] = process.argv.slice(2)
 
 if (
-    (
-        mode !== 'check'
-        && mode !== 'fix'
-    )
+    (mode !== 'check' && mode !== 'fix')
     || inputPaths.length === 0
 ) {
     err('Usage: typescript-format-runner.ts {check|fix} <path...>')

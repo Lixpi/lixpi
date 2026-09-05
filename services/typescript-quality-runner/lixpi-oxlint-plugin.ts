@@ -42,10 +42,7 @@ const getCommentReferencedIdentifierNames = (sourceCode): Set<string> => {
     for (const comment of sourceCode.getAllComments()) {
         if (
             comment.type === 'Line'
-            && (
-                previousLineComment == null
-                || comment.loc.start.line === previousLineComment.loc.end.line + 1
-            )
+            && (previousLineComment == null || comment.loc.start.line === previousLineComment.loc.end.line + 1)
         ) {
             currentLines.push(comment.value)
             previousLineComment = comment
@@ -567,11 +564,7 @@ const getLogicalConditionParts = (node): {
 
     if (
         logicalExpression.type !== 'LogicalExpression'
-        || (
-            logicalExpression.operator !== '&&'
-            && logicalExpression.operator !== '||'
-            && logicalExpression.operator !== '??'
-        )
+        || (logicalExpression.operator !== '&&' && logicalExpression.operator !== '||' && logicalExpression.operator !== '??')
     )
         return null
 
@@ -598,9 +591,14 @@ const getLogicalConditionParts = (node): {
 }
 
 // The AST drops grouping parentheses, so a source pair is recognised by the tokens on
-// either side of the operand.
-const isParenthesizedOperand = (node, sourceCode): boolean => sourceCode.getTokenBefore(node)?.value === '('
-    && sourceCode.getTokenAfter(node)?.value === ')'
+// either side of the operand and folded back into the operand's own text.
+const getOperandSourceText = (node, sourceCode): string | null => {
+    const before = sourceCode.getTokenBefore(node)
+    const after = sourceCode.getTokenAfter(node)
+    const parenthesized = before?.value === '(' && after?.value === ')'
+
+    return sourceCode.text.slice(parenthesized ? before.range[0] : node.range[0], parenthesized ? after.range[1] : node.range[1]) || null
+}
 
 // `wrapInParentheses` says the caller owns a parenthesis pair around this expression:
 // the parentheses an `if`, `while` or `for` requires, or a pair the source already
@@ -624,15 +622,10 @@ const getFormattedConditionText = (
 
     const operandIndentation = wrapInParentheses ? `${indentation}    ` : indentation
     const lines = conditionParts.operands.map((operand, index) => {
-        const operandText = unwrapParenthesizedExpression(operand).type === 'LogicalExpression'
-            && isParenthesizedOperand(operand, sourceCode)
-            ? getFormattedConditionText(
-                operand,
-                sourceCode,
-                operandIndentation,
-                true,
-            )
-            : getAstExpressionText(operand, sourceCode)
+        // An operand is copied out of the source exactly as it was written, on one line
+        // or on several. The rule decides where the operands of a chain go, never how an
+        // operand is laid out inside itself.
+        const operandText = getOperandSourceText(operand, sourceCode)
         const operator = index === 0 ? '' : `${conditionParts.operators[index - 1]} `
 
         return operandText == null ? null : `${operandIndentation}${operator}${operandText}`

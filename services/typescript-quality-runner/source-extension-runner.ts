@@ -256,10 +256,7 @@ const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string
 const [mode, ...inputPaths] = process.argv.slice(2)
 
 if (
-    (
-        mode !== 'check'
-        && mode !== 'fix'
-    )
+    (mode !== 'check' && mode !== 'fix')
     || inputPaths.length === 0
 ) {
     err('Usage: source-extension-runner.ts {check|fix} <path...>')
