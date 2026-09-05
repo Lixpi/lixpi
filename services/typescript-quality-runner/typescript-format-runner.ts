@@ -840,11 +840,26 @@ const collectionConstructorNames = new Set([
 // `new Map([...])` and its siblings are laid out by Oxlint's collection rule, which puts
 // the elements inside the array's own brackets. Splitting the constructor's argument list
 // as well would give the two rules different answers for the same call.
-// A lone object or array argument keeps its own bracket on the call's line, so a call
-// written around one options bag reads as `f({` rather than opening two brackets on two
-// separate lines for the same argument.
-const isHuggableArgument = (node: AstNode | null | undefined): boolean => node?.type === 'ObjectExpression'
-    || node?.type === 'ArrayExpression'
+// A lone argument or parameter whose own braces carry the content keeps those braces on
+// the call or signature line, so one options bag reads as `f({` and closes on `})` rather
+// than opening two brackets on two separate lines for the same item. A parameter counts by
+// its type literal, since `params: { ... }` is one item however that type is written.
+const isHuggableItem = (
+    node: AstNode | null | undefined,
+): boolean => {
+    if (
+        node?.type === 'ObjectExpression'
+        || node?.type === 'ArrayExpression'
+        || node?.type === 'ObjectPattern'
+        || node?.type === 'ArrayPattern'
+    )
+        return true
+
+    const annotation = node?.typeAnnotation as AstNode | undefined
+    const annotatedType = annotation?.typeAnnotation as AstNode | undefined
+
+    return annotatedType?.type === 'TSTypeLiteral'
+}
 
 const isCollectionInitializer = (
     node: AstNode,
@@ -1023,14 +1038,12 @@ const canonicalizeDelimitedListsOnce = (
                         nodeRange[1],
                     ) > lineLimit)
 
-                // A call around a single object or array keeps that bracket on its own
-                // line, whether the split was asked for by a rule above or was already
-                // written that way.
+                // Hugging wins over every splitting reason above, because a single item is
+                // never worth a line of its own between two brackets.
                 const hugsSoleArgument = isBracketed
-                    && isCall
                     && items.length === 1
-                    && isHuggableArgument(items[0])
                     && collapsed == null
+                    && isHuggableItem(items[0])
 
                 if (
                     !hasInterItemComment
