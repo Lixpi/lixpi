@@ -299,43 +299,66 @@ export default class NatsService {
     private monitorStatus(): void {
         if (!this.nc || this.isMonitoring) return
         this.isMonitoring = true
+        // Bind the loop to the connection it was started for. connect() installs a
+        // fresh `this.nc` on every reconnect, so reading it inside the loop would
+        // eventually iterate one connection's status while holding another.
+        const monitored = this.nc
         ;(async () => {
-            for await (const status of this.nc.status()) {
-                switch (status.type) {
-                    case 'disconnect':
-                        err('NATS -> disconnected:', status)
-                        break
-                    case 'reconnecting':
-                        warn('NATS -> reconnecting:', status)
-                        break
-                    case 'reconnect':
-                        info('NATS -> reconnected:', status)
-                        // Check if subscriptions need to be initialized after reconnect
-                        if (!this.subscriptionsInitialized) {
-                            await this.initSubscriptions()
-                        }
-                        break
-                    case 'error':
-                        err('NATS -> connection error:', status)
-                        // The client keeps retrying internally (maxReconnectAttempts: -1),
-                        // but with the credentials captured at connect time. If the server
-                        // rejected our token (expired or signing key rotated), refresh it so
-                        // the next internal reconnect presents valid credentials.
-                        if (this.isAuthError((status as any).error ?? status)) {
-                            await this.handleAuthError((status as any).error ?? status)
-                            await this.refreshToken()
-                        }
-                        break
-                    case 'close':
-                        warn('NATS -> connection closed:', status)
-                        // Reset the initialized flag on close so we can reconnect properly
-                        this.subscriptionsInitialized = false
-                        // Reconnect unless we intentionally closed the connection.
-                        if (!this.intentionalClose) {
-                            this.scheduleReconnect()
-                        }
-                        break
+            try {
+                for await (const status of monitored.status()) {
+                    switch (status.type) {
+                        case 'disconnect':
+                            err('NATS -> disconnected:', status)
+                            break
+                        case 'reconnecting':
+                            warn('NATS -> reconnecting:', status)
+                            break
+                        case 'reconnect':
+                            info('NATS -> reconnected:', status)
+                            // Check if subscriptions need to be initialized after reconnect
+                            if (!this.subscriptionsInitialized) {
+                                await this.initSubscriptions()
+                            }
+                            break
+                        case 'error':
+                            err('NATS -> connection error:', status)
+                            // The client keeps retrying internally (maxReconnectAttempts: -1),
+                            // but with the credentials captured at connect time. If the server
+                            // rejected our token (expired or signing key rotated), refresh it so
+                            // the next internal reconnect presents valid credentials.
+                            if (this.isAuthError((status as any).error ?? status)) {
+                                await this.handleAuthError((status as any).error ?? status)
+                                await this.refreshToken()
+                            }
+                            break
+                        case 'close':
+                            warn('NATS -> connection closed:', status)
+                            // Reset the initialized flag on close so we can reconnect properly
+                            this.subscriptionsInitialized = false
+                            // Reconnect unless we intentionally closed the connection.
+                            if (!this.intentionalClose) {
+                                this.scheduleReconnect()
+                            }
+                            break
+                    }
                 }
+            } catch (error) {
+                // The status iterator itself failed. No 'close' status reached the
+                // handler above, so nothing has reset the subscription flag or
+                // scheduled the reconnect, and the connection is finished either way.
+                // Left uncaught this rejects out of the IIFE, and the API runs under
+                // --abort-on-uncaught-exception, which turns a monitoring failure
+                // into a process abort.
+                err('NATS -> status monitor failed', error)
+                this.subscriptionsInitialized = false
+                if (!this.intentionalClose)
+                    this.scheduleReconnect()
+            } finally {
+                // The flag means "this loop is running", nothing more. The iterator
+                // ends whenever the connection closes, so leaving it set turned
+                // monitorStatus() into a no-op for every connection after the first:
+                // the second close was then observed by nobody and never reconnected.
+                this.isMonitoring = false
             }
         })()
     }
