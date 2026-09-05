@@ -169,10 +169,7 @@ const isSharedTransitionValue = (value: string): boolean => {
     return getTopLevelValueGroups(parsed.nodes).every(isSharedTransitionGroup)
 }
 
-const transitionHelpersRule = (primary: boolean) => (
-    root: Root,
-    result: PostcssResult,
-) => {
+const transitionHelpersRule = (primary: boolean) => (root: Root, result: PostcssResult) => {
     if (!primary)
         return
 
@@ -243,10 +240,7 @@ const normalizeCommentLine = (line: string): string => {
     )
         end--
 
-    return line.slice(
-        start,
-        end,
-    )
+    return line.slice(start, end)
 }
 
 const getCommentLines = (comment: Comment): string[] => {
@@ -272,19 +266,13 @@ const getCommentIndentation = (comment: Comment): string => {
     )
         end++
 
-    return finalWhitespaceLine.slice(
-        0,
-        end,
-    )
+    return finalWhitespaceLine.slice(0, end)
 }
 
 const convertBlockComment = (comment: Comment): void => {
     const lines = getCommentLines(comment)
     const indentation = getCommentIndentation(comment)
-    const comments = lines.map((
-        line,
-        index,
-    ) => comment.clone({
+    const comments = lines.map((line, index) => comment.clone({
         text: line,
         raws: {
             ...comment.raws,
@@ -302,10 +290,7 @@ const noBlockCommentsRule = (
     _secondaryOptions: unknown,
     context: RuleContext = {},
 ) =>
-(
-    root: Root,
-    result: PostcssResult,
-) => {
+(root: Root, result: PostcssResult) => {
     if (!primary)
         return
 
@@ -336,12 +321,6 @@ noBlockCommentsRule.meta = {
 }
 
 export default [
-    stylelint.createPlugin(
-        transitionRuleName,
-        transitionHelpersRule,
-    ),
-    stylelint.createPlugin(
-        blockCommentRuleName,
-        noBlockCommentsRule,
-    ),
+    stylelint.createPlugin(transitionRuleName, transitionHelpersRule),
+    stylelint.createPlugin(blockCommentRuleName, noBlockCommentsRule),
 ]

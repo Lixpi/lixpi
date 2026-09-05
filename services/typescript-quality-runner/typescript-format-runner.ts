@@ -133,10 +133,7 @@ type HtmlNode = {
     childNodes?: HtmlNode[]
     content?: HtmlNode
     sourceCodeLocation?: {
-        attrs?: Record<
-            string,
-            HtmlAttributeLocation,
-        >
+        attrs?: Record<string, HtmlAttributeLocation>
         startTag?: HtmlAttributeLocation
     }
 }
@@ -211,10 +208,7 @@ const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingF
         if (!entry.isDirectory())
             return
 
-        const entries = await readdir(
-            path,
-            { withFileTypes: true },
-        )
+        const entries = await readdir(path, { withFileTypes: true })
 
         for (const child of entries) {
             if (
@@ -223,10 +217,7 @@ const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingF
             )
                 continue
 
-            await visit(resolve(
-                path,
-                child.name,
-            ))
+            await visit(resolve(path, child.name))
         }
     }
 
@@ -239,10 +230,7 @@ const collectFormattingFiles = async (inputPaths: string[]): Promise<FormattingF
 }
 
 const readFormatConfig = async (): Promise<FormatConfig> => {
-    const config = JSON.parse(await readFile(
-        '/usr/src/quality-runner/oxfmt.json',
-        'utf8',
-    )) as FormatConfig
+    const config = JSON.parse(await readFile('/usr/src/quality-runner/oxfmt.json', 'utf8')) as FormatConfig
     delete config.$schema
     delete config.ignorePatterns
 
@@ -251,34 +239,16 @@ const readFormatConfig = async (): Promise<FormatConfig> => {
 
 const getNodeRange = (node: AstNode | null | undefined): [number, number] | null => node?.range ?? null
 
-const getLineStart = (
-    source: string,
-    offset: number,
-): number => source.lastIndexOf(
-    '\n',
-    offset - 1,
-) + 1
+const getLineStart = (source: string, offset: number): number => source.lastIndexOf('\n', offset - 1) + 1
 
-const getNextLineStart = (
-    source: string,
-    offset: number,
-): number => {
-    const lineBreak = source.indexOf(
-        '\n',
-        offset,
-    )
+const getNextLineStart = (source: string, offset: number): number => {
+    const lineBreak = source.indexOf('\n', offset)
 
     return lineBreak < 0 ? -1 : lineBreak + 1
 }
 
-const getLineIndentation = (
-    source: string,
-    offset: number,
-): string => {
-    const lineStart = getLineStart(
-        source,
-        offset,
-    )
+const getLineIndentation = (source: string, offset: number): string => {
+    const lineStart = getLineStart(source, offset)
     let cursor = lineStart
 
     while (
@@ -287,10 +257,7 @@ const getLineIndentation = (
     )
         cursor++
 
-    return source.slice(
-        lineStart,
-        cursor,
-    )
+    return source.slice(lineStart, cursor)
 }
 
 const isWhitespaceCharacter = (character: string | undefined): boolean => character === ' '
@@ -339,10 +306,7 @@ const getLayoutSpan = (
     end,
     preserve,
     start,
-    text: source.slice(
-        start,
-        end,
-    ),
+    text: source.slice(start, end),
 })
 
 const reindentNodeText = (
@@ -350,15 +314,9 @@ const reindentNodeText = (
     nodeRange: [number, number],
     indentation: string,
 ): string => {
-    const originalIndentation = getLineIndentation(
-        source,
-        nodeRange[0],
-    )
+    const originalIndentation = getLineIndentation(source, nodeRange[0])
     const indentationDifference = indentation.length - originalIndentation.length
-    const lines = source.slice(
-        nodeRange[0],
-        nodeRange[1],
-    ).split('\n')
+    const lines = source.slice(nodeRange[0], nodeRange[1]).split('\n')
 
     for (let index = 1; index < lines.length; index++) {
         const line = lines[index]!
@@ -366,19 +324,13 @@ const reindentNodeText = (
         if (indentationDifference > 0)
             lines[index] = `${' '.repeat(indentationDifference)}${line}`
         else
-            lines[index] = line.slice(Math.min(
-                -indentationDifference,
-                line.length - line.trimStart().length,
-            ))
+            lines[index] = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
     }
 
     return lines.join('\n')
 }
 
-const hasMultilineFunctionParameters = (
-    node: AstNode,
-    source: string,
-): boolean => {
+const hasMultilineFunctionParameters = (node: AstNode, source: string): boolean => {
     if (!Array.isArray(node.params))
         return false
 
@@ -391,20 +343,11 @@ const hasMultilineFunctionParameters = (
     return Boolean(
         firstParameterRange
         && lastParameterRange
-        && getLineStart(
-            source,
-            firstParameterRange[0],
-        ) !== getLineStart(
-            source,
-            lastParameterRange[1] - 1,
-        )
+        && getLineStart(source, firstParameterRange[0]) !== getLineStart(source, lastParameterRange[1] - 1)
     )
 }
 
-const getFunctionParameterSpan = (
-    node: AstNode,
-    source: string,
-): LayoutSpan | null => {
+const getFunctionParameterSpan = (node: AstNode, source: string): LayoutSpan | null => {
     const nodeRange = getNodeRange(node)
     const bodyRange = getNodeRange(node.body as AstNode)
 
@@ -424,17 +367,11 @@ const getFunctionParameterSpan = (
         nodeRange[0],
         signatureEnd,
         source,
-        hasMultilineFunctionParameters(
-            node,
-            source,
-        ),
+        hasMultilineFunctionParameters(node, source),
     )
 }
 
-const getCallArgumentSpan = (
-    node: AstNode,
-    source: string,
-): LayoutSpan | null => {
+const getCallArgumentSpan = (node: AstNode, source: string): LayoutSpan | null => {
     const nodeRange = getNodeRange(node)
 
     if (!nodeRange)
@@ -458,10 +395,7 @@ const isPreservedTypeNode = (
     || node.type === 'TSTypeParameterInstantiation'
     || (parent?.type === 'TSTypeAliasDeclaration' && parentKey === 'typeAnnotation')
 
-const collectTypeScriptLayouts = (
-    file: string,
-    source: string,
-): TypeScriptLayouts => {
+const collectTypeScriptLayouts = (file: string, source: string): TypeScriptLayouts => {
     const parseResult = parseSync(
         file,
         source,
@@ -503,10 +437,7 @@ const collectTypeScriptLayouts = (
             && Array.isArray(node.params)
             && bodyRange
         ) {
-            const span = getFunctionParameterSpan(
-                node,
-                source,
-            )
+            const span = getFunctionParameterSpan(node, source)
 
             if (span)
                 layouts.functionParameters.push(span)
@@ -519,10 +450,7 @@ const collectTypeScriptLayouts = (
                 || node.type === 'NewExpression'
             )
         ) {
-            const span = getCallArgumentSpan(
-                node,
-                source,
-            )
+            const span = getCallArgumentSpan(node, source)
 
             if (span)
                 layouts.callArguments.push(span)
@@ -688,14 +616,8 @@ const reindentLayoutText = (
     target: LayoutSpan,
     layoutType: keyof TypeScriptLayouts,
 ): string => {
-    const originalIndentation = getLineIndentation(
-        originalSource,
-        original.start,
-    )
-    const targetIndentation = getLineIndentation(
-        formattedSource,
-        target.start,
-    )
+    const originalIndentation = getLineIndentation(originalSource, original.start)
+    const targetIndentation = getLineIndentation(formattedSource, target.start)
     const indentationDifference = targetIndentation.length - originalIndentation.length
 
     const lines = original.text.split('\n')
@@ -706,10 +628,7 @@ const reindentLayoutText = (
         if (indentationDifference > 0)
             line = `${' '.repeat(indentationDifference)}${line}`
         else
-            line = line.slice(Math.min(
-                -indentationDifference,
-                line.length - line.trimStart().length,
-            ))
+            line = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
 
         const trimmed = line.trimStart()
 
@@ -740,14 +659,8 @@ const preserveExpandedTypeScriptLayouts = (
     source: string,
     formatted: string,
 ): string => {
-    const originalLayouts = collectTypeScriptLayouts(
-        file,
-        source,
-    )
-    const formattedLayouts = collectTypeScriptLayouts(
-        file,
-        formatted,
-    )
+    const originalLayouts = collectTypeScriptLayouts(file, source)
+    const formattedLayouts = collectTypeScriptLayouts(file, formatted)
     const replacements: LayoutSpan[] = []
 
     for (const key of Object.keys(originalLayouts) as Array<keyof TypeScriptLayouts>) {
@@ -789,10 +702,7 @@ const preserveExpandedTypeScriptLayouts = (
 
     const nonOverlappingReplacements: LayoutSpan[] = []
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
             replacement.start < candidate.end && replacement.end > candidate.start)
 
@@ -802,13 +712,7 @@ const preserveExpandedTypeScriptLayouts = (
 
     let output = formatted
 
-    for (const replacement of nonOverlappingReplacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -860,20 +764,44 @@ const getDelimitedListAnchor = (
     )
         return nodeRange[0]
 
-    return getLineStart(
-        source,
-        objectRange[1],
-    ) === getLineStart(
-        source,
-        propertyRange[0],
-    )
+    return getLineStart(source, objectRange[1]) === getLineStart(source, propertyRange[0])
         ? nodeRange[0]
         : propertyRange[0]
+}
+
+// One or two items belong on the call or signature line, so a list left expanded by an
+// earlier layout is joined back up. A list is only joined when every item is already a
+// single line and the joined line still fits Oxfmt's print width, because Oxfmt would
+// otherwise break the line again on the next run and the two would never agree.
+const getCollapsedDelimitedListText = (
+    source: string,
+    itemRanges: Array<[number, number]>,
+    start: number,
+    end: number,
+    printWidth: number,
+): string | null => {
+    const current = source.slice(start, end)
+
+    if (!current.includes('\n'))
+        return null
+
+    const itemTexts = itemRanges.map((range) => source.slice(range[0], range[1]))
+
+    if (itemTexts.some((text) => text.includes('\n')))
+        return null
+
+    const collapsed = itemTexts.join(', ')
+    const lineEnd = getNextLineStart(source, end)
+    const suffixLength = (lineEnd < 0 ? source.length : lineEnd - 1) - end
+    const prefixLength = start - getLineStart(source, start)
+
+    return prefixLength + collapsed.length + suffixLength > printWidth ? null : collapsed
 }
 
 const canonicalizeDelimitedListsOnce = (
     file: string,
     source: string,
+    printWidth: number,
 ): string => {
     const parseResult = parseSync(
         file,
@@ -897,7 +825,7 @@ const canonicalizeDelimitedListsOnce = (
         if (
             nodeRange
             && items
-            && items.length > 2
+            && items.length > 0
         ) {
             const itemRanges = items.map(getNodeRange)
             const firstRange = itemRanges[0]
@@ -926,7 +854,10 @@ const canonicalizeDelimitedListsOnce = (
                     && comment.end <= end
                     && !itemRanges.some((range) => range != null && comment.start >= range[0] && comment.end <= range[1]))
 
-                if (!hasInterItemComment) {
+                if (
+                    !hasInterItemComment
+                    && items.length > 2
+                ) {
                     const indentation = getLineIndentation(
                         source,
                         getDelimitedListAnchor(
@@ -952,6 +883,25 @@ const canonicalizeDelimitedListsOnce = (
                             text: replacement,
                         })
                     }
+                } else if (!hasInterItemComment) {
+                    const collapsed = getCollapsedDelimitedListText(
+                        source,
+                        itemRanges as Array<[number, number]>,
+                        start,
+                        end,
+                        printWidth,
+                    )
+
+                    if (
+                        collapsed != null
+                        && source.slice(start, end) !== collapsed
+                    ) {
+                        replacements.push({
+                            start,
+                            end,
+                            text: collapsed,
+                        })
+                    }
                 }
             }
         }
@@ -971,10 +921,7 @@ const canonicalizeDelimitedListsOnce = (
     visit(parseResult.program as AstNode)
     const nonOverlappingReplacements: LayoutSpan[] = []
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => left.end - left.start - (right.end - right.start) || right.start - left.start)) {
+    for (const replacement of replacements.sort((left, right) => left.end - left.start - (right.end - right.start) || right.start - left.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
             replacement.start < candidate.end && replacement.end > candidate.start)
 
@@ -984,13 +931,7 @@ const canonicalizeDelimitedListsOnce = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -998,6 +939,7 @@ const canonicalizeDelimitedListsOnce = (
 const canonicalizeDelimitedLists = (
     file: string,
     source: string,
+    printWidth: number,
 ): string => {
     let output = source
 
@@ -1005,6 +947,7 @@ const canonicalizeDelimitedLists = (
         const formatted = canonicalizeDelimitedListsOnce(
             file,
             output,
+            printWidth,
         )
 
         if (formatted === output)
@@ -1023,10 +966,7 @@ const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === '
     && tag.property.type === 'Identifier'
     && tag.property.name === 'html'
 
-const collectHtmlTemplateQuasis = (
-    file: string,
-    source: string,
-): LayoutSpan[] => {
+const collectHtmlTemplateQuasis = (file: string, source: string): LayoutSpan[] => {
     const parseResult = parseSync(
         file,
         source,
@@ -1089,14 +1029,8 @@ const reindentHtmlTemplate = (
     target: string,
     targetLayout: LayoutSpan,
 ): string => {
-    const sourceIndentation = getLineIndentation(
-        source,
-        sourceLayout.start,
-    )
-    const targetIndentation = getLineIndentation(
-        target,
-        targetLayout.start,
-    )
+    const sourceIndentation = getLineIndentation(source, sourceLayout.start)
+    const targetIndentation = getLineIndentation(target, targetLayout.start)
     const indentationDifference = targetIndentation.length - sourceIndentation.length
     const lines = sourceLayout.text.split('\n')
 
@@ -1106,10 +1040,7 @@ const reindentHtmlTemplate = (
         if (indentationDifference > 0)
             lines[index] = `${' '.repeat(indentationDifference)}${line}`
         else
-            lines[index] = line.slice(Math.min(
-                -indentationDifference,
-                line.length - line.trimStart().length,
-            ))
+            lines[index] = line.slice(Math.min(-indentationDifference, line.length - line.trimStart().length))
     }
 
     return lines.join('\n')
@@ -1120,22 +1051,13 @@ const applyHtmlTemplateFormatting = (
     formatted: string,
     htmlFormatted: string,
 ): string => {
-    const formattedLayouts = collectHtmlTemplateQuasis(
-        file,
-        formatted,
-    )
-    const htmlLayouts = collectHtmlTemplateQuasis(
-        file,
-        htmlFormatted,
-    )
+    const formattedLayouts = collectHtmlTemplateQuasis(file, formatted)
+    const htmlLayouts = collectHtmlTemplateQuasis(file, htmlFormatted)
 
     if (formattedLayouts.length !== htmlLayouts.length)
         throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
 
-    const replacements = formattedLayouts.map((
-        target,
-        index,
-    ) => ({
+    const replacements = formattedLayouts.map((target, index) => ({
         ...target,
         text: reindentHtmlTemplate(
             htmlFormatted,
@@ -1146,21 +1068,12 @@ const applyHtmlTemplateFormatting = (
     }))
     let output = formatted
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
 
-const collectHtmlTemplateContents = (
-    file: string,
-    source: string,
-): HtmlTemplateContent[] => {
+const collectHtmlTemplateContents = (file: string, source: string): HtmlTemplateContent[] => {
     const parseResult = parseSync(
         file,
         source,
@@ -1219,10 +1132,7 @@ const collectHtmlTemplateContents = (
                     start: templateRange[0] + 1,
                     end: templateRange[1] - 1,
                     interpolationRanges,
-                    indentation: getLineIndentation(
-                        source,
-                        node.range?.[0] ?? templateRange[0],
-                    ),
+                    indentation: getLineIndentation(source, node.range?.[0] ?? templateRange[0]),
                 })
             }
         }
@@ -1244,10 +1154,7 @@ const collectHtmlTemplateContents = (
     return contents
 }
 
-const maskHtmlInterpolations = (
-    source: string,
-    content: HtmlTemplateContent,
-): string => {
+const maskHtmlInterpolations = (source: string, content: HtmlTemplateContent): string => {
     const characters: string[] = []
 
     for (let offset = content.start; offset < content.end; offset++) characters.push(source[offset]!)
@@ -1282,17 +1189,10 @@ const getExpandedHtmlStartTag = (
 
     const closing = source[closingOffset] === '/' ? '/>' : '>'
     const attributeIndentation = `${indentation}    `
-    const attributeText = attributes.map((attribute) =>
-        `${attributeIndentation}${source.slice(
-            attribute.startOffset,
-            attribute.endOffset,
-        ).trim()}`)
+    const attributeText = attributes.map((attribute) => `${attributeIndentation}${source.slice(attribute.startOffset, attribute.endOffset).trim()}`)
         .join('\n')
 
-    return `${source.slice(
-        start,
-        prefixEnd,
-    )}\n${attributeText}\n${indentation}${closing}`
+    return `${source.slice(start, prefixEnd)}\n${attributeText}\n${indentation}${closing}`
 }
 
 const collectExpandedHtmlStartTags = (
@@ -1302,30 +1202,18 @@ const collectExpandedHtmlStartTags = (
     offset = 0,
 ): LayoutSpan[] => {
     const replacements: LayoutSpan[] = []
-    const visit = (
-        node: HtmlNode,
-        depth: number,
-    ): void => {
+    const visit = (node: HtmlNode, depth: number): void => {
         const startTag = node.sourceCodeLocation?.startTag
         const attributes = Object.values(node.sourceCodeLocation?.attrs ?? {})
-            .sort((
-                left,
-                right,
-            ) => left.startOffset - right.startOffset)
+            .sort((left, right) => left.startOffset - right.startOffset)
 
         if (
             startTag
             && attributes.length > 1
         ) {
             const absoluteStart = offset + startTag.startOffset
-            const lineStart = getLineStart(
-                source,
-                absoluteStart,
-            )
-            const linePrefix = source.slice(
-                lineStart,
-                absoluteStart,
-            )
+            const lineStart = getLineStart(source, absoluteStart)
+            const linePrefix = source.slice(lineStart, absoluteStart)
             const indentation = linePrefix.trim().length === 0
                 ? linePrefix
                 : `${baseIndentation}${' '.repeat((depth + 1) * 4)}`
@@ -1347,61 +1235,31 @@ const collectExpandedHtmlStartTags = (
             }
         }
 
-        for (const child of node.childNodes ?? []) visit(
-            child,
-            depth + 1,
-        )
+        for (const child of node.childNodes ?? []) visit(child, depth + 1)
 
         if (node.content)
-            visit(
-                node.content,
-                depth + 1,
-            )
+            visit(node.content, depth + 1)
     }
 
-    for (const child of root.childNodes ?? []) visit(
-        child,
-        0,
-    )
+    for (const child of root.childNodes ?? []) visit(child, 0)
 
     return replacements
 }
 
-const applyHtmlAttributeReplacements = (
-    source: string,
-    replacements: LayoutSpan[],
-): string => {
+const applyHtmlAttributeReplacements = (source: string, replacements: LayoutSpan[]): string => {
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
 
-const canonicalizeEmbeddedHtmlAttributes = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeEmbeddedHtmlAttributes = (file: string, source: string): string => {
     const replacements: LayoutSpan[] = []
 
-    for (const content of collectHtmlTemplateContents(
-        file,
-        source,
-    )) {
-        const maskedContent = maskHtmlInterpolations(
-            source,
-            content,
-        )
-        const fragment = parseFragment(
-            maskedContent,
-            { sourceCodeLocationInfo: true },
-        ) as HtmlNode
+    for (const content of collectHtmlTemplateContents(file, source)) {
+        const maskedContent = maskHtmlInterpolations(source, content)
+        const fragment = parseFragment(maskedContent, { sourceCodeLocationInfo: true }) as HtmlNode
         replacements.push(...collectExpandedHtmlStartTags(
             source,
             fragment,
@@ -1410,17 +1268,11 @@ const canonicalizeEmbeddedHtmlAttributes = (
         ))
     }
 
-    return applyHtmlAttributeReplacements(
-        source,
-        replacements,
-    )
+    return applyHtmlAttributeReplacements(source, replacements)
 }
 
 const canonicalizeStandaloneHtmlAttributes = (source: string): string => {
-    const document = parse(
-        source,
-        { sourceCodeLocationInfo: true },
-    ) as HtmlNode
+    const document = parse(source, { sourceCodeLocationInfo: true }) as HtmlNode
 
     return applyHtmlAttributeReplacements(
         source,
@@ -1452,10 +1304,7 @@ const getAssignmentValue = (node: AstNode): AstNode | null => {
     return null
 }
 
-const canonicalizeAssignmentBoundaries = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeAssignmentBoundaries = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -1473,10 +1322,7 @@ const canonicalizeAssignmentBoundaries = (
     const replacements: LayoutSpan[] = []
     // One entry per line, so a nested assignment cannot dedent a line its enclosing
     // assignment already accounted for.
-    const dedentedLineStarts = new Map<
-        number,
-        LayoutSpan
-    >()
+    const dedentedLineStarts = new Map<number, LayoutSpan>()
     const visit = (node: AstNode): void => {
         const nodeRange = getNodeRange(node)
         const value = getAssignmentValue(node)
@@ -1492,10 +1338,7 @@ const canonicalizeAssignmentBoundaries = (
                 nodeRange[0],
                 valueRange[0],
             )
-            const whitespace = source.slice(
-                whitespaceStart,
-                valueRange[0],
-            )
+            const whitespace = source.slice(whitespaceStart, valueRange[0])
 
             if (
                 whitespace !== ' '
@@ -1511,13 +1354,7 @@ const canonicalizeAssignmentBoundaries = (
                 // assignment. Pulling that value back onto the assignment line has to
                 // take the same level off every line the value spans, otherwise each
                 // run leaves the value one level deeper than the run before it.
-                const shift = getLineIndentation(
-                    source,
-                    valueRange[0],
-                ).length - getLineIndentation(
-                    source,
-                    nodeRange[0],
-                ).length
+                const shift = getLineIndentation(source, valueRange[0]).length - getLineIndentation(source, nodeRange[0]).length
 
                 for (
                     let lineStart = getNextLineStart(source, valueRange[0]);
@@ -1526,13 +1363,7 @@ const canonicalizeAssignmentBoundaries = (
                     && lineStart < valueRange[1];
                     lineStart = getNextLineStart(source, lineStart)
                 ) {
-                    const removable = Math.min(
-                        shift,
-                        getLineIndentation(
-                            source,
-                            lineStart,
-                        ).length,
-                    )
+                    const removable = Math.min(shift, getLineIndentation(source, lineStart).length)
 
                     if (
                         removable > 0
@@ -1566,21 +1397,12 @@ const canonicalizeAssignmentBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
 
-const canonicalizeExpressionArrowBodies = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeExpressionArrowBodies = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -1605,10 +1427,7 @@ const canonicalizeExpressionArrowBodies = (
             && nodeRange
             && bodyRange
         ) {
-            const bodyText = source.slice(
-                bodyRange[0],
-                bodyRange[1],
-            )
+            const bodyText = source.slice(bodyRange[0], bodyRange[1])
 
             if (!bodyText.includes('\n')) {
                 const whitespaceStart = getTrailingWhitespaceStart(
@@ -1616,21 +1435,12 @@ const canonicalizeExpressionArrowBodies = (
                     nodeRange[0],
                     bodyRange[0],
                 )
-                const currentWhitespace = source.slice(
-                    whitespaceStart,
-                    bodyRange[0],
-                )
+                const currentWhitespace = source.slice(whitespaceStart, bodyRange[0])
 
                 if (currentWhitespace.trim().length === 0) {
-                    const arrowLineStart = getLineStart(
-                        source,
-                        whitespaceStart,
-                    )
+                    const arrowLineStart = getLineStart(source, whitespaceStart)
                     const singleLineLength = whitespaceStart + 1 + bodyText.length - arrowLineStart
-                    const indentation = `${getLineIndentation(
-                        source,
-                        whitespaceStart,
-                    )}    `
+                    const indentation = `${getLineIndentation(source, whitespaceStart)}    `
                     const replacement = singleLineLength > maximumInlineArrowFunctionLength ? `\n${indentation}` : ' '
 
                     if (currentWhitespace !== replacement) {
@@ -1659,13 +1469,7 @@ const canonicalizeExpressionArrowBodies = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -1679,10 +1483,7 @@ const isNestedCallChain = (
     && grandparent?.type === 'CallExpression'
     && grandparent.callee === parent
 
-const getCallChain = (
-    node: AstNode,
-    source: string,
-): CallChain | null => {
+const getCallChain = (node: AstNode, source: string): CallChain | null => {
     const segments: CallChainSegment[] = []
     let current = node
     let iteratorCount = 0
@@ -1723,14 +1524,8 @@ const getCallChain = (
             boundaryEnd,
             boundaryStart: objectRange[1],
             isIterator,
-            leadingWhitespace: source.slice(
-                objectRange[1],
-                boundaryEnd,
-            ),
-            text: source.slice(
-                boundaryEnd,
-                currentRange[1],
-            ),
+            leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
+            text: source.slice(boundaryEnd, currentRange[1]),
         })
         current = current.callee.object
     }
@@ -1755,10 +1550,7 @@ const getLongestIteratorLineLength = (
     if (!baseRange)
         return 0
 
-    const parts = [source.slice(
-        baseRange[0],
-        baseRange[1],
-    )]
+    const parts = [source.slice(baseRange[0], baseRange[1])]
     const iteratorOffsets: number[] = []
     let offset = parts[0]!.length
 
@@ -1775,36 +1567,21 @@ const getLongestIteratorLineLength = (
     }
 
     const inlineChain = parts.join('')
-    const nodeColumn = nodeStart - getLineStart(
-        source,
-        nodeStart,
-    )
+    const nodeColumn = nodeStart - getLineStart(source, nodeStart)
     let longestLineLength = 0
 
     for (const iteratorOffset of iteratorOffsets) {
-        const lineStart = inlineChain.lastIndexOf(
-            '\n',
-            iteratorOffset - 1,
-        ) + 1
-        const nextLineBreak = inlineChain.indexOf(
-            '\n',
-            iteratorOffset,
-        )
+        const lineStart = inlineChain.lastIndexOf('\n', iteratorOffset - 1) + 1
+        const nextLineBreak = inlineChain.indexOf('\n', iteratorOffset)
         const lineEnd = nextLineBreak < 0 ? inlineChain.length : nextLineBreak
         const lineLength = lineEnd - lineStart + (lineStart === 0 ? nodeColumn : 0)
-        longestLineLength = Math.max(
-            longestLineLength,
-            lineLength,
-        )
+        longestLineLength = Math.max(longestLineLength, lineLength)
     }
 
     return longestLineLength
 }
 
-const canonicalizeIteratorChainsOnce = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeIteratorChainsOnce = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -1836,20 +1613,14 @@ const canonicalizeIteratorChainsOnce = (
                 grandparent,
             )
         ) {
-            const chain = getCallChain(
-                node,
-                source,
-            )
+            const chain = getCallChain(node, source)
 
             if (
                 chain
                 && chain.iteratorCount > 0
                 && !hasCommentWithinRange(comments, nodeRange)
             ) {
-                const indentation = `${getLineIndentation(
-                    source,
-                    nodeRange[0],
-                )}    `
+                const indentation = `${getLineIndentation(source, nodeRange[0])}    `
                 const longestIteratorLineLength = getLongestIteratorLineLength(
                     chain,
                     source,
@@ -1903,28 +1674,16 @@ const canonicalizeIteratorChainsOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
 
-const canonicalizeIteratorChains = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeIteratorChains = (file: string, source: string): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
-        const formatted = canonicalizeIteratorChainsOnce(
-            file,
-            output,
-        )
+        const formatted = canonicalizeIteratorChainsOnce(file, output)
 
         if (formatted === output)
             return output
@@ -1935,10 +1694,7 @@ const canonicalizeIteratorChains = (
     throw new Error(`Could not stabilize iterator chain formatting in ${file}`)
 }
 
-const canonicalizeHtmlTemplateBoundaries = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeHtmlTemplateBoundaries = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -1984,10 +1740,7 @@ const canonicalizeHtmlTemplateBoundaries = (
             )
                 trailingWhitespaceStart--
 
-            const indentation = getLineIndentation(
-                source,
-                nodeRange[0],
-            )
+            const indentation = getLineIndentation(source, nodeRange[0])
             const isMultiline = node.loc != null
                 && node.loc.start.line !== node.loc.end.line
             const inlineLength = (node.loc?.start.column ?? 0) + nodeRange[1] - nodeRange[0]
@@ -2042,13 +1795,7 @@ const canonicalizeHtmlTemplateBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2071,19 +1818,13 @@ const hasNestedConditionalExpression = (node: AstNode): boolean => Boolean(
     || getConditionalExpression(node.alternate as AstNode),
 )
 
-const getConditionalLeafText = (
-    node: AstNode,
-    source: string,
-): string | null => {
+const getConditionalLeafText = (node: AstNode, source: string): string | null => {
     const range = getNodeRange(node)
 
     if (!range)
         return null
 
-    const text = source.slice(
-        range[0],
-        range[1],
-    ).trim()
+    const text = source.slice(range[0], range[1]).trim()
 
     return text || null
 }
@@ -2114,30 +1855,21 @@ const getCanonicalConditionalText = (
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(
-            test,
-            source,
-        )
+        : getConditionalLeafText(test, source)
     const consequentText = nestedConsequent
         ? getCanonicalConditionalText(
             nestedConsequent,
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(
-            consequent,
-            source,
-        )
+        : getConditionalLeafText(consequent, source)
     const alternateText = nestedAlternate
         ? getCanonicalConditionalText(
             nestedAlternate,
             source,
             nestedOperatorIndentation,
         )
-        : getConditionalLeafText(
-            alternate,
-            source,
-        )
+        : getConditionalLeafText(alternate, source)
 
     if (
         !testText
@@ -2153,10 +1885,7 @@ const getCanonicalConditionalText = (
     return `${canonicalTest}\n${operatorIndentation}? ${consequentText}\n${operatorIndentation}: ${alternateText}`
 }
 
-const canonicalizeNestedConditionalExpressions = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeNestedConditionalExpressions = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -2181,10 +1910,7 @@ const canonicalizeNestedConditionalExpressions = (
             && hasNestedConditionalExpression(node)
             && !hasCommentWithinRange(comments, nodeRange)
         ) {
-            const indentation = `${getLineIndentation(
-                source,
-                nodeRange[0],
-            )}    `
+            const indentation = `${getLineIndentation(source, nodeRange[0])}    `
             const replacement = getCanonicalConditionalText(
                 node,
                 source,
@@ -2218,13 +1944,7 @@ const canonicalizeNestedConditionalExpressions = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2263,18 +1983,12 @@ const unwrapParenthesizedExpression = (node: AstNode): AstNode => {
     return current
 }
 
-const getAstExpressionText = (
-    node: AstNode,
-    source: string,
-): string | null => {
+const getAstExpressionText = (node: AstNode, source: string): string | null => {
     if (
         node.type === 'ParenthesizedExpression'
         && isAstNode(node.expression)
     ) {
-        const expression = getAstExpressionText(
-            node.expression,
-            source,
-        )
+        const expression = getAstExpressionText(node.expression, source)
 
         return expression == null ? null : `(${expression})`
     }
@@ -2285,14 +1999,8 @@ const getAstExpressionText = (
         && isAstNode(node.right)
         && typeof node.operator === 'string'
     ) {
-        const left = getAstExpressionText(
-            node.left,
-            source,
-        )
-        const right = getAstExpressionText(
-            node.right,
-            source,
-        )
+        const left = getAstExpressionText(node.left, source)
+        const right = getAstExpressionText(node.right, source)
 
         return (
             left == null
@@ -2307,10 +2015,7 @@ const getAstExpressionText = (
     if (!range)
         return null
 
-    const expression = source.slice(
-        range[0],
-        range[1],
-    ).trim()
+    const expression = source.slice(range[0], range[1]).trim()
 
     return expression || null
 }
@@ -2370,10 +2075,7 @@ const getFormattedConditionText = (
     const logicalExpression = unwrapParenthesizedExpression(node)
 
     if (logicalExpression.type !== 'LogicalExpression')
-        return getAstExpressionText(
-            node,
-            source,
-        )
+        return getAstExpressionText(node, source)
 
     const conditionParts = getLogicalConditionParts(logicalExpression)
 
@@ -2392,10 +2094,7 @@ const getFormattedConditionText = (
                 operandIndentation,
                 true,
             )
-            : getAstExpressionText(
-                operandNode,
-                source,
-            )
+            : getAstExpressionText(operandNode, source)
 
         if (!operand)
             return null
@@ -2429,10 +2128,7 @@ const getConditionContainerText = (
     indentation: string,
 ): string | null => {
     if (countLogicalEvaluations(node) === 1) {
-        const condition = getAstExpressionText(
-            node,
-            source,
-        )
+        const condition = getAstExpressionText(node, source)
 
         return condition ? `${keyword} (${condition})` : null
     }
@@ -2450,15 +2146,10 @@ const getConditionContainerText = (
         : null
 }
 
-const hasCommentWithinRange = (
-    comments: AstComment[],
-    range: [number, number],
-): boolean => comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
+const hasCommentWithinRange = (comments: AstComment[], range: [number, number]): boolean =>
+    comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
 
-const canonicalizeAssignedLogicalExpressions = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeAssignedLogicalExpressions = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -2485,10 +2176,7 @@ const canonicalizeAssignedLogicalExpressions = (
             && countLogicalEvaluations(value) > 2
             && !hasCommentWithinRange(comments, valueRange)
         ) {
-            const indentation = getLineIndentation(
-                source,
-                valueRange[0],
-            )
+            const indentation = getLineIndentation(source, valueRange[0])
             const replacement = getMultilineAssignedLogicalExpressionText(
                 value,
                 source,
@@ -2524,13 +2212,7 @@ const canonicalizeAssignedLogicalExpressions = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -2585,10 +2267,7 @@ const getStatementGap = (
     return [gapStart, nextStart]
 }
 
-const canonicalizeStatementSpacing = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeStatementSpacing = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -2602,10 +2281,7 @@ const canonicalizeStatementSpacing = (
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
-    const comments = (parseResult.comments as AstComment[]).toSorted((
-        left,
-        right,
-    ) => left.start - right.start)
+    const comments = (parseResult.comments as AstComment[]).toSorted((left, right) => left.start - right.start)
     const replacements: LayoutSpan[] = []
     const addSiblingGapReplacement = (
         previous: AstNode,
@@ -2632,10 +2308,7 @@ const canonicalizeStatementSpacing = (
             return
 
         const lineBreaks = blankLine ? '\n\n' : '\n'
-        const replacement = `${lineBreaks}${getLineIndentation(
-            source,
-            gap[1],
-        )}`
+        const replacement = `${lineBreaks}${getLineIndentation(source, gap[1])}`
 
         if (source.slice(gap[0], gap[1]) === replacement)
             return
@@ -2696,21 +2369,12 @@ const canonicalizeStatementSpacing = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
 
-const canonicalizeConditionStatements = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeConditionStatements = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -2743,10 +2407,7 @@ const canonicalizeConditionStatements = (
         )
             return
 
-        const indentation = getLineIndentation(
-            source,
-            nodeRange[0],
-        )
+        const indentation = getLineIndentation(source, nodeRange[0])
         const header = getConditionContainerText(
             keyword,
             test,
@@ -2814,10 +2475,7 @@ const canonicalizeConditionStatements = (
                     || alternateIsCompact
                 )
             ) {
-                const indentation = getLineIndentation(
-                    source,
-                    nodeRange[0],
-                )
+                const indentation = getLineIndentation(source, nodeRange[0])
                 const beforeElse = consequentIsCompact ? `\n${indentation}` : ' '
                 const afterElse = alternateIsCompact ? `\n${indentation}    ` : ' '
                 const replacement = `${beforeElse}else${afterElse}`
@@ -2857,10 +2515,7 @@ const canonicalizeConditionStatements = (
                 && bodyRange
                 && !hasCommentWithinRange(comments, [bodyRange[1], nodeRange[1]])
             ) {
-                const indentation = getLineIndentation(
-                    source,
-                    nodeRange[0],
-                )
+                const indentation = getLineIndentation(source, nodeRange[0])
                 const condition = getConditionContainerText(
                     'while',
                     test,
@@ -2895,10 +2550,7 @@ const canonicalizeConditionStatements = (
                 && bodyRange
                 && !hasCommentWithinRange(comments, [nodeRange[0], bodyRange[0]])
             ) {
-                const indentation = getLineIndentation(
-                    source,
-                    nodeRange[0],
-                )
+                const indentation = getLineIndentation(source, nodeRange[0])
                 const clauseIndentation = `${indentation}    `
                 const condition = getFormattedConditionText(
                     test,
@@ -2906,14 +2558,8 @@ const canonicalizeConditionStatements = (
                     clauseIndentation,
                     false,
                 )
-                const initializer = isAstNode(node.init) ? getAstExpressionText(
-                    node.init,
-                    source,
-                ) : ''
-                const update = isAstNode(node.update) ? getAstExpressionText(
-                    node.update,
-                    source,
-                ) : ''
+                const initializer = isAstNode(node.init) ? getAstExpressionText(node.init, source) : ''
+                const update = isAstNode(node.update) ? getAstExpressionText(node.update, source) : ''
 
                 if (
                     !condition
@@ -2958,10 +2604,7 @@ const canonicalizeConditionStatements = (
                 && countLogicalEvaluations(test) > 1
                 && !hasCommentWithinRange(comments, [testRange[0], alternateRange[0]])
             ) {
-                const indentation = getLineIndentation(
-                    source,
-                    testRange[0],
-                )
+                const indentation = getLineIndentation(source, testRange[0])
                 const branchIndentation = `${indentation}    `
                 const condition = getFormattedConditionText(
                     test,
@@ -3010,10 +2653,7 @@ const canonicalizeConditionStatements = (
     visit(parseResult.program as AstNode)
     const nonOverlappingReplacements: LayoutSpan[] = []
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
+    for (const replacement of replacements.sort((left, right) => right.end - right.start - (left.end - left.start) || left.start - right.start)) {
         const overlapsSelectedReplacement = nonOverlappingReplacements.some((candidate) =>
             replacement.start < candidate.end && replacement.end > candidate.start)
 
@@ -3023,13 +2663,7 @@ const canonicalizeConditionStatements = (
 
     let output = source
 
-    for (const replacement of nonOverlappingReplacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of nonOverlappingReplacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
@@ -3087,10 +2721,7 @@ const getIndentedContainerChildren = (node: AstNode): AstNode[] | null => {
     return null
 }
 
-const getIndentedContainerClosingOffset = (
-    node: AstNode,
-    source: string,
-): number | null => {
+const getIndentedContainerClosingOffset = (node: AstNode, source: string): number | null => {
     if (
         node.type === 'Program'
         || node.type === 'SwitchCase'
@@ -3135,10 +2766,7 @@ const getIndentedContainerClosingOffset = (
     return source[closingOffset] === expectedCharacter ? closingOffset : null
 }
 
-const canonicalizeContainerIndentationOnce = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeContainerIndentationOnce = (file: string, source: string): string => {
     const parseResult = parseSync(
         file,
         source,
@@ -3152,27 +2780,18 @@ const canonicalizeContainerIndentationOnce = (
     if (parseResult.errors.length > 0)
         throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
 
-    const replacementsByRange = new Map<
-        string,
-        LayoutSpan,
-    >()
+    const replacementsByRange = new Map<string, LayoutSpan>()
     const addIndentationReplacement = (
         offset: number,
         indentation: string,
         containerStart: number,
     ): void => {
-        const lineStart = getLineStart(
-            source,
-            offset,
-        )
+        const lineStart = getLineStart(source, offset)
 
         if (lineStart === getLineStart(source, containerStart))
             return
 
-        const currentIndentation = source.slice(
-            lineStart,
-            offset,
-        )
+        const currentIndentation = source.slice(lineStart, offset)
 
         if ([...currentIndentation].some((character) => character !== ' ' && character !== '\t'))
             return
@@ -3214,10 +2833,7 @@ const canonicalizeContainerIndentationOnce = (
             )
             const indentation = node.type === 'Program'
                 ? ''
-                : `${getLineIndentation(
-                    source,
-                    anchor,
-                )}    `
+                : `${getLineIndentation(source, anchor)}    `
 
             for (const child of children) {
                 const childRange = getNodeRange(child)
@@ -3230,18 +2846,12 @@ const canonicalizeContainerIndentationOnce = (
                     )
             }
 
-            const closingOffset = getIndentedContainerClosingOffset(
-                node,
-                source,
-            )
+            const closingOffset = getIndentedContainerClosingOffset(node, source)
 
             if (closingOffset != null)
                 addIndentationReplacement(
                     closingOffset,
-                    getLineIndentation(
-                        source,
-                        anchor,
-                    ),
+                    getLineIndentation(source, anchor),
                     anchor,
                 )
         }
@@ -3261,28 +2871,16 @@ const canonicalizeContainerIndentationOnce = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of [...replacementsByRange.values()].sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.text}${output.slice(replacement.end)}`
+    for (const replacement of [...replacementsByRange.values()].sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
 
     return output
 }
 
-const canonicalizeContainerIndentation = (
-    file: string,
-    source: string,
-): string => {
+const canonicalizeContainerIndentation = (file: string, source: string): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
-        const formatted = canonicalizeContainerIndentationOnce(
-            file,
-            output,
-        )
+        const formatted = canonicalizeContainerIndentationOnce(file, output)
 
         if (formatted === output)
             return output
@@ -3297,71 +2895,37 @@ const canonicalizeTypeScriptLayout = (
     file: string,
     source: string,
     htmlFormatted: string,
+    printWidth: number,
 ): string => {
     let output = source
 
     for (let pass = 0; pass < 20; pass++) {
-        const indented = canonicalizeContainerIndentation(
-            file,
-            output,
-        )
+        const indented = canonicalizeContainerIndentation(file, output)
         const canonicalDelimitedLists = canonicalizeDelimitedLists(
             file,
             indented,
+            printWidth,
         )
-        const canonicalConditionStatements = canonicalizeConditionStatements(
-            file,
-            canonicalDelimitedLists,
-        )
-        const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(
-            file,
-            canonicalConditionStatements,
-        )
-        const canonicalAssignedLogicalExpressions = canonicalizeAssignedLogicalExpressions(
-            file,
-            canonicalAssignmentBoundaries,
-        )
-        const canonicalArrowBodies = canonicalizeExpressionArrowBodies(
-            file,
-            canonicalAssignedLogicalExpressions,
-        )
-        const canonicalIteratorChains = canonicalizeIteratorChains(
-            file,
-            canonicalArrowBodies,
-        )
-        const canonicalConditionalExpressions = canonicalizeNestedConditionalExpressions(
-            file,
-            canonicalIteratorChains,
-        )
+        const canonicalConditionStatements = canonicalizeConditionStatements(file, canonicalDelimitedLists)
+        const canonicalAssignmentBoundaries = canonicalizeAssignmentBoundaries(file, canonicalConditionStatements)
+        const canonicalAssignedLogicalExpressions = canonicalizeAssignedLogicalExpressions(file, canonicalAssignmentBoundaries)
+        const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalAssignedLogicalExpressions)
+        const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
+        const canonicalConditionalExpressions = canonicalizeNestedConditionalExpressions(file, canonicalIteratorChains)
         const formattedHtmlTemplates = applyHtmlTemplateFormatting(
             file,
             canonicalConditionalExpressions,
             htmlFormatted,
         )
-        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(
-            file,
-            formattedHtmlTemplates,
-        )
-        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(
-            file,
-            canonicalHtmlAttributes,
-        )
-        const canonicalStatementSpacing = canonicalizeStatementSpacing(
-            file,
-            canonicalHtmlTemplates,
-        )
+        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, formattedHtmlTemplates)
+        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, canonicalHtmlAttributes)
+        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
         const canonicalImports = canonicalizeImportLayout(
             canonicalStatementSpacing,
             true,
             file,
         ).output
-        const formatted = canonicalizeConditionStatements(
-            file,
-            canonicalizeContainerIndentation(
-                file,
-                canonicalImports,
-            ),
-        )
+        const formatted = canonicalizeConditionStatements(file, canonicalizeContainerIndentation(file, canonicalImports))
 
         if (formatted === output)
             return output
@@ -3409,10 +2973,7 @@ const formatSource = async (
     if (htmlResult.errors.length > 0)
         throw new Error(`Oxfmt could not format embedded HTML in ${file}`)
 
-    const formattedConditionStatements = canonicalizeConditionStatements(
-        file,
-        result.code,
-    )
+    const formattedConditionStatements = canonicalizeConditionStatements(file, result.code)
     const preserved = preserveExpandedTypeScriptLayouts(
         file,
         source,
@@ -3423,6 +2984,7 @@ const formatSource = async (
         file,
         preserved,
         htmlResult.code,
+        config.printWidth ?? maximumInlineArrowFunctionLength,
     )
 }
 
@@ -3440,34 +3002,13 @@ const describeFirstFormattingDifference = (
     )
         offset++
 
-    const line = source.slice(
-        0,
-        offset,
-    ).split('\n').length
-    const contextStart = Math.max(
-        0,
-        source.lastIndexOf(
-            '\n',
-            offset - 1,
-        ) + 1,
-    )
-    const sourceContextEnd = source.indexOf(
-        '\n',
-        offset,
-    )
-    const formattedContextEnd = formatted.indexOf(
-        '\n',
-        offset,
-    )
+    const line = source.slice(0, offset).split('\n').length
+    const contextStart = Math.max(0, source.lastIndexOf('\n', offset - 1) + 1)
+    const sourceContextEnd = source.indexOf('\n', offset)
+    const formattedContextEnd = formatted.indexOf('\n', offset)
     err(`${file}:${line}: formatting differs`)
-    err(`current: ${JSON.stringify(source.slice(
-        contextStart,
-        sourceContextEnd < 0 ? source.length : sourceContextEnd,
-    ))}`)
-    err(`expected: ${JSON.stringify(formatted.slice(
-        contextStart,
-        formattedContextEnd < 0 ? formatted.length : formattedContextEnd,
-    ))}`)
+    err(`current: ${JSON.stringify(source.slice(contextStart, sourceContextEnd < 0 ? source.length : sourceContextEnd))}`)
+    err(`expected: ${JSON.stringify(formatted.slice(contextStart, formattedContextEnd < 0 ? formatted.length : formattedContextEnd))}`)
 }
 
 const [mode, ...inputPaths] = process.argv.slice(2)
@@ -3498,10 +3039,7 @@ const formatConfig = await readFormatConfig()
 let changedFileCount = 0
 
 for (const file of files) {
-    const source = await readFile(
-        file,
-        'utf8',
-    )
+    const source = await readFile(file, 'utf8')
     const formatted = await formatSource(
         file,
         source,
@@ -3514,10 +3052,7 @@ for (const file of files) {
     changedFileCount++
 
     if (mode === 'fix')
-        await writeFile(
-            file,
-            formatted,
-        )
+        await writeFile(file, formatted)
     else
         describeFirstFormattingDifference(
             file,

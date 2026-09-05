@@ -100,10 +100,7 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
         if (!entry.isDirectory())
             return
 
-        const entries = await readdir(
-            path,
-            { withFileTypes: true },
-        )
+        const entries = await readdir(path, { withFileTypes: true })
 
         for (const child of entries) {
             if (
@@ -112,10 +109,7 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
             )
                 continue
 
-            await visit(resolve(
-                path,
-                child.name,
-            ))
+            await visit(resolve(path, child.name))
         }
     }
 
@@ -128,23 +122,14 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
     }
 }
 
-const getTypeScriptPath = (path: string): string => `${path.slice(
-    0,
-    -extname(path).length,
-)}.ts`
+const getTypeScriptPath = (path: string): string => `${path.slice(0, -extname(path).length)}.ts`
 
-const resolveModuleSpecifier = (
-    importer: string,
-    specifier: string,
-): string | null => {
+const resolveModuleSpecifier = (importer: string, specifier: string): string | null => {
     if (
         specifier.startsWith('./')
         || specifier.startsWith('../')
     )
-        return resolve(
-            dirname(importer),
-            specifier,
-        )
+        return resolve(dirname(importer), specifier)
 
     if (specifier.startsWith('$src/'))
         return resolve(
@@ -156,10 +141,7 @@ const resolveModuleSpecifier = (
     return null
 }
 
-const getModuleSpecifierNodes = (
-    file: string,
-    source: string,
-): AstNode[] => {
+const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
     const parseResult = parseSync(
         file,
         source,
@@ -224,40 +206,19 @@ const getModuleSpecifierNodes = (
     return specifiers
 }
 
-const applySourceReplacements = (
-    source: string,
-    replacements: SourceReplacement[],
-): string => {
+const applySourceReplacements = (source: string, replacements: SourceReplacement[]): string => {
     let output = source
 
-    for (const replacement of replacements.sort((
-        left,
-        right,
-    ) => right.start - left.start)) output = `${output.slice(
-        0,
-        replacement.start,
-    )}${replacement.value}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
 
     return output
 }
 
-const updateModuleSpecifiers = async (
-    importer: string,
-    renamedFiles: Map<
-        string,
-        string,
-    >,
-): Promise<boolean> => {
-    const source = await readFile(
-        importer,
-        'utf8',
-    )
+const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string, string>): Promise<boolean> => {
+    const source = await readFile(importer, 'utf8')
     const replacements: SourceReplacement[] = []
 
-    for (const sourceNode of getModuleSpecifierNodes(
-        importer,
-        source,
-    )) {
+    for (const sourceNode of getModuleSpecifierNodes(importer, source)) {
         const sourceRange = getNodeRange(sourceNode)
         const specifier = sourceNode.value
 
@@ -267,10 +228,7 @@ const updateModuleSpecifiers = async (
         )
             continue
 
-        const resolvedSpecifier = resolveModuleSpecifier(
-            importer,
-            specifier,
-        )
+        const resolvedSpecifier = resolveModuleSpecifier(importer, specifier)
 
         if (!resolvedSpecifier)
             continue
@@ -283,25 +241,16 @@ const updateModuleSpecifiers = async (
         replacements.push({
             end: sourceRange[1],
             start: sourceRange[0],
-            value: JSON.stringify(`${specifier.slice(
-                0,
-                -extname(specifier).length,
-            )}.ts`),
+            value: JSON.stringify(`${specifier.slice(0, -extname(specifier).length)}.ts`),
         })
     }
 
-    const output = applySourceReplacements(
-        source,
-        replacements,
-    )
+    const output = applySourceReplacements(source, replacements)
 
     if (output === source)
         return false
 
-    await writeFile(
-        importer,
-        output,
-    )
+    await writeFile(importer, output)
 
     return true
 }
@@ -353,10 +302,7 @@ for (const target of renamedFiles.values()) {
     }
 }
 
-for (const [source, target] of renamedFiles) await rename(
-    source,
-    target,
-)
+for (const [source, target] of renamedFiles) await rename(source, target)
 
 let updatedImporterCount = 0
 

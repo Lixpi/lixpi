@@ -11,23 +11,14 @@ import lixpiStylelintPlugins from './stylelint-lixpi-plugin.ts'
 
 const repositoryDirectory = '/usr/src/repository'
 const toolDirectory = '/usr/src/quality-runner'
-const configFile = path.join(
-    toolDirectory,
-    'stylelint.config.ts',
-)
+const configFile = path.join(toolDirectory, 'stylelint.config.ts')
 const supportedExtensions = new Set([
     '.css',
     '.scss',
 ])
 
-const collectStylesheetPaths = async (
-    inputPath: string,
-    stylesheetPaths: string[],
-): Promise<void> => {
-    const absolutePath = path.resolve(
-        repositoryDirectory,
-        inputPath,
-    )
+const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string[]): Promise<void> => {
+    const absolutePath = path.resolve(repositoryDirectory, inputPath)
     let pathStats: Stats
 
     try {
@@ -53,18 +44,9 @@ const collectStylesheetPaths = async (
     if (!pathStats.isDirectory())
         return
 
-    const relativePath = path.relative(
-        repositoryDirectory,
-        absolutePath,
-    )
-    stylesheetPaths.push(path.join(
-        relativePath,
-        '**/*.css',
-    ))
-    stylesheetPaths.push(path.join(
-        relativePath,
-        '**/*.scss',
-    ))
+    const relativePath = path.relative(repositoryDirectory, absolutePath)
+    stylesheetPaths.push(path.join(relativePath, '**/*.css'))
+    stylesheetPaths.push(path.join(relativePath, '**/*.scss'))
 }
 
 const action = process.argv[2]
@@ -77,10 +59,7 @@ if (
 
 const stylesheetPaths: string[] = []
 
-for (const inputPath of process.argv.slice(3)) await collectStylesheetPaths(
-    inputPath,
-    stylesheetPaths,
-)
+for (const inputPath of process.argv.slice(3)) await collectStylesheetPaths(inputPath, stylesheetPaths)
 
 if (stylesheetPaths.length === 0)
     process.exit(0)

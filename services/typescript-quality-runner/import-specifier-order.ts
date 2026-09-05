@@ -77,10 +77,7 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
         if (!entry.isDirectory())
             return
 
-        const entries = await readdir(
-            path,
-            { withFileTypes: true },
-        )
+        const entries = await readdir(path, { withFileTypes: true })
 
         for (const child of entries) {
             if (
@@ -89,10 +86,7 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
             )
                 continue
 
-            await visit(resolve(
-                path,
-                child.name,
-            ))
+            await visit(resolve(path, child.name))
         }
     }
 
@@ -104,10 +98,7 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
     }
 }
 
-const applyReplacements = (
-    source: string,
-    replacements: Replacement[],
-): string => {
+const applyReplacements = (source: string, replacements: Replacement[]): string => {
     if (replacements.length === 0)
         return source
 
@@ -115,10 +106,7 @@ const applyReplacements = (
     let cursor = 0
 
     for (const replacement of replacements) {
-        output += source.slice(
-            cursor,
-            replacement.start,
-        )
+        output += source.slice(cursor, replacement.start)
         output += replacement.value
         cursor = replacement.end
     }
@@ -126,15 +114,10 @@ const applyReplacements = (
     return output + source.slice(cursor)
 }
 
-const hasComment = (
-    range: [number, number],
-    comments: AstComment[],
-): boolean => comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
+const hasComment = (range: [number, number], comments: AstComment[]): boolean =>
+    comments.some((comment) => comment.start >= range[0] && comment.end <= range[1])
 
-const getNamedSpecifierBlock = (
-    specifiers: NamedSpecifier[],
-    singleTypeMustBeMultiline: boolean,
-): string => {
+const getNamedSpecifierBlock = (specifiers: NamedSpecifier[], singleTypeMustBeMultiline: boolean): string => {
     const ordered = [
         ...specifiers.filter((specifier) => !specifier.isType),
         ...specifiers.filter((specifier) => specifier.isType),
@@ -152,25 +135,16 @@ const getNamedSpecifierBlock = (
     return `{\n${ordered.map((specifier) => `    ${specifier.text},`).join('\n')}\n}`
 }
 
-const getNodeText = (
-    node: AstNode,
-    source: string,
-): string => {
+const getNodeText = (node: AstNode, source: string): string => {
     const range = getNodeRange(node)
 
     if (!range)
         throw new Error('Oxc returned a module node without a source range')
 
-    return source.slice(
-        range[0],
-        range[1],
-    ).trim()
+    return source.slice(range[0], range[1]).trim()
 }
 
-const hasSameIdentifierName = (
-    left: AstNode,
-    right: AstNode,
-): boolean => left.type === 'Identifier'
+const hasSameIdentifierName = (left: AstNode, right: AstNode): boolean => left.type === 'Identifier'
     && right.type === 'Identifier'
     && typeof left.name === 'string'
     && left.name === right.name
@@ -189,18 +163,9 @@ const getImportSpecifierText = (
     )
         throw new Error('Oxc returned an incomplete import specifier')
 
-    const importedText = getNodeText(
-        imported,
-        source,
-    )
-    const localText = getNodeText(
-        local,
-        source,
-    )
-    const binding = hasSameIdentifierName(
-        imported,
-        local,
-    )
+    const importedText = getNodeText(imported, source)
+    const localText = getNodeText(local, source)
+    const binding = hasSameIdentifierName(imported, local)
         ? importedText
         : `${importedText} as ${localText}`
 
@@ -221,28 +186,16 @@ const getExportSpecifierText = (
     )
         throw new Error('Oxc returned an incomplete export specifier')
 
-    const localText = getNodeText(
-        local,
-        source,
-    )
-    const exportedText = getNodeText(
-        exported,
-        source,
-    )
-    const binding = hasSameIdentifierName(
-        local,
-        exported,
-    )
+    const localText = getNodeText(local, source)
+    const exportedText = getNodeText(exported, source)
+    const binding = hasSameIdentifierName(local, exported)
         ? localText
         : `${localText} as ${exportedText}`
 
     return typeKeywordRequired ? `type ${binding}` : binding
 }
 
-const canonicalizeImportDeclaration = (
-    node: AstNode,
-    source: string,
-): string | null => {
+const canonicalizeImportDeclaration = (node: AstNode, source: string): string | null => {
     const nodeRange = getNodeRange(node)
     const sourceNode = isAstNode(node.source) ? node.source : null
     const sourceRange = getNodeRange(sourceNode)
@@ -272,31 +225,16 @@ const canonicalizeImportDeclaration = (
             ),
         }
     })
-    const clauseParts = specifiers.filter((specifier) => specifier.type !== 'ImportSpecifier').map((specifier) => getNodeText(
-        specifier,
-        source,
-    ))
-    clauseParts.push(getNamedSpecifierBlock(
-        named,
-        true,
-    ))
+    const clauseParts = specifiers.filter((specifier) => specifier.type !== 'ImportSpecifier').map((specifier) => getNodeText(specifier, source))
+    clauseParts.push(getNamedSpecifierBlock(named, true))
 
-    const sourceText = source.slice(
-        sourceRange[0],
-        sourceRange[1],
-    )
-    const suffix = source.slice(
-        sourceRange[1],
-        nodeRange[1],
-    )
+    const sourceText = source.slice(sourceRange[0], sourceRange[1])
+    const suffix = source.slice(sourceRange[1], nodeRange[1])
 
     return `import${declarationIsTypeOnly ? ' type' : ''} ${clauseParts.join(', ')} from ${sourceText}${suffix}`
 }
 
-const canonicalizeExportDeclaration = (
-    node: AstNode,
-    source: string,
-): string | null => {
+const canonicalizeExportDeclaration = (node: AstNode, source: string): string | null => {
     const nodeRange = getNodeRange(node)
     const specifiers = Array.isArray(node.specifiers) ? node.specifiers.filter(isAstNode) : []
 
@@ -325,19 +263,10 @@ const canonicalizeExportDeclaration = (
     })
     const sourceNode = isAstNode(node.source) ? node.source : null
     const sourceRange = getNodeRange(sourceNode)
-    const sourceClause = sourceRange ? ` from ${source.slice(
-        sourceRange[0],
-        sourceRange[1],
-    )}` : ''
-    const suffix = sourceRange ? source.slice(
-        sourceRange[1],
-        nodeRange[1],
-    ) : ''
+    const sourceClause = sourceRange ? ` from ${source.slice(sourceRange[0], sourceRange[1])}` : ''
+    const suffix = sourceRange ? source.slice(sourceRange[1], nodeRange[1]) : ''
 
-    return `export${declarationIsTypeOnly ? ' type' : ''} ${getNamedSpecifierBlock(
-        named,
-        false,
-    )}${sourceClause}${suffix}`
+    return `export${declarationIsTypeOnly ? ' type' : ''} ${getNamedSpecifierBlock(named, false)}${sourceClause}${suffix}`
 }
 
 export const canonicalizeImportLayout = (
@@ -379,14 +308,8 @@ export const canonicalizeImportLayout = (
             continue
 
         const canonical = node.type === 'ImportDeclaration'
-            ? canonicalizeImportDeclaration(
-                node,
-                source,
-            )
-            : canonicalizeExportDeclaration(
-                node,
-                source,
-            )
+            ? canonicalizeImportDeclaration(node, source)
+            : canonicalizeExportDeclaration(node, source)
 
         if (
             canonical == null
@@ -394,10 +317,7 @@ export const canonicalizeImportLayout = (
         )
             continue
 
-        violations.push(source.slice(
-            0,
-            range[0],
-        ).split('\n').length)
+        violations.push(source.slice(0, range[0]).split('\n').length)
 
         if (fix)
             replacements.push({
@@ -408,10 +328,7 @@ export const canonicalizeImportLayout = (
     }
 
     return {
-        output: fix ? applyReplacements(
-            source,
-            replacements,
-        ) : source,
+        output: fix ? applyReplacements(source, replacements) : source,
         violations,
     }
 }
@@ -445,10 +362,7 @@ const runCli = async (): Promise<void> => {
     let fixedFileCount = 0
 
     for (const file of files) {
-        const source = await readFile(
-            file,
-            'utf8',
-        )
+        const source = await readFile(file, 'utf8')
         const {
             output,
             violations,
@@ -463,10 +377,7 @@ const runCli = async (): Promise<void> => {
             mode === 'fix'
             && output !== source
         ) {
-            await writeFile(
-                file,
-                output,
-            )
+            await writeFile(file, output)
             fixedFileCount++
 
             continue

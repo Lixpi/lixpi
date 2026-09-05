@@ -10,10 +10,7 @@ const isAstNode = (value: unknown): boolean => Boolean(
     && typeof (value as { type?: unknown }).type === 'string',
 )
 
-const collectIdentifierNames = (
-    node,
-    names: Set<string>,
-): void => {
+const collectIdentifierNames = (node, names: Set<string>): void => {
     if (node.type === 'Identifier')
         names.add(node.name)
 
@@ -23,15 +20,9 @@ const collectIdentifierNames = (
 
         if (Array.isArray(value)) {
             for (const child of value) if (isAstNode(child))
-                collectIdentifierNames(
-                    child,
-                    names,
-                )
+                collectIdentifierNames(child, names)
         } else if (isAstNode(value))
-            collectIdentifierNames(
-                value,
-                names,
-            )
+            collectIdentifierNames(value, names)
     }
 }
 
@@ -87,10 +78,7 @@ const getCommentReferencedIdentifierNames = (sourceCode): Set<string> => {
                     range: true,
                 },
             )
-            collectIdentifierNames(
-                parseResult.program,
-                names,
-            )
+            collectIdentifierNames(parseResult.program, names)
         }
 
     return names
@@ -140,10 +128,7 @@ const noUnusedImports = defineRule({
                             ?? []
                         )
                         unusedSpecifiers.push({ name: variable.name, specifier })
-                        unusedSpecifiersByDeclaration.set(
-                            declaration,
-                            unusedSpecifiers,
-                        )
+                        unusedSpecifiersByDeclaration.set(declaration, unusedSpecifiers)
                     }
 
                 for (const [declaration, unusedSpecifiers] of unusedSpecifiersByDeclaration) {
@@ -174,15 +159,9 @@ const noUnusedImports = defineRule({
                                 clauseParts.push(`{ ${namedSpecifiers.map((specifier) => sourceCode.getText(specifier)).join(', ')} }`)
 
                             const sourceText = sourceCode.getText(declaration.source)
-                            const suffix = sourceCode.text.slice(
-                                declaration.source.range[1],
-                                declaration.range[1],
-                            )
+                            const suffix = sourceCode.text.slice(declaration.source.range[1], declaration.range[1])
 
-                            return fixer.replaceText(
-                                declaration,
-                                `import ${clauseParts.join(', ')} from ${sourceText}${suffix}`,
-                            )
+                            return fixer.replaceText(declaration, `import ${clauseParts.join(', ')} from ${sourceText}${suffix}`)
                         },
                     })
                 }
@@ -191,10 +170,7 @@ const noUnusedImports = defineRule({
     },
 })
 
-const hasReferenceBeforeDeclaration = (
-    context,
-    node,
-): boolean =>
+const hasReferenceBeforeDeclaration = (context, node): boolean =>
     context.sourceCode.scopeManager.scopes.some((scope) =>
         scope.variables.some((variable) =>
             variable.name === node.id.name
@@ -226,10 +202,7 @@ const preferArrowFunctionDeclaration = defineRule({
                 if (sourceCode.getCommentsInside(node).some((comment) => comment.range[1] <= node.id.range[1]))
                     return
 
-                if (hasReferenceBeforeDeclaration(
-                    context,
-                    node,
-                ))
+                if (hasReferenceBeforeDeclaration(context, node))
                     return
 
                 const replacement = `const ${node.id.name} = ${node.async ? 'async ' : ''}`
@@ -238,14 +211,8 @@ const preferArrowFunctionDeclaration = defineRule({
                     node,
                     messageId: 'preferArrowFunction',
                     fix: (fixer) => [
-                        fixer.replaceTextRange(
-                            [node.range[0], node.id.range[1]],
-                            replacement,
-                        ),
-                        fixer.insertTextBefore(
-                            node.body,
-                            '=> ',
-                        ),
+                        fixer.replaceTextRange([node.range[0], node.id.range[1]], replacement),
+                        fixer.insertTextBefore(node.body, '=> '),
                     ],
                 })
             },
@@ -307,14 +274,8 @@ const syntaxSourceNames = new Set([
     'text',
 ])
 
-const getLineIndentation = (
-    source: string,
-    offset: number,
-): string => {
-    const lineStart = source.lastIndexOf(
-        '\n',
-        offset - 1,
-    ) + 1
+const getLineIndentation = (source: string, offset: number): string => {
+    const lineStart = source.lastIndexOf('\n', offset - 1) + 1
     let cursor = lineStart
 
     while (
@@ -323,10 +284,7 @@ const getLineIndentation = (
     )
         cursor++
 
-    return source.slice(
-        lineStart,
-        cursor,
-    )
+    return source.slice(lineStart, cursor)
 }
 
 const getStatementList = (node) => {
@@ -352,10 +310,7 @@ const getStatementGap = (
         && comment.range[1] <= nextStart)
 
     for (const comment of commentsInGap) {
-        const precedingGap = sourceCode.text.slice(
-            gapStart,
-            comment.range[0],
-        )
+        const precedingGap = sourceCode.text.slice(gapStart, comment.range[0])
 
         if (!precedingGap.includes('\n')) {
             gapStart = comment.range[1]
@@ -400,16 +355,10 @@ const normalizeCommentLine = (line: string): string => {
     )
         end--
 
-    return line.slice(
-        start,
-        end,
-    )
+    return line.slice(start, end)
 }
 
-const getLineCommentReplacement = (
-    comment,
-    sourceCode,
-): string => {
+const getLineCommentReplacement = (comment, sourceCode): string => {
     const lines = comment.value.split('\n').map(normalizeCommentLine)
 
     while (lines[0] === '')
@@ -421,10 +370,7 @@ const getLineCommentReplacement = (
     if (lines.length === 0)
         lines.push('')
 
-    const indentation = getLineIndentation(
-        sourceCode.text,
-        comment.range[0],
-    )
+    const indentation = getLineIndentation(sourceCode.text, comment.range[0])
     let replacement = lines.map((line) => line.length > 0 ? `// ${line}` : '//')
         .join(`\n${indentation}`)
     const nextToken = sourceCode.getTokenAfter(comment)
@@ -433,10 +379,7 @@ const getLineCommentReplacement = (
         nextToken
         && nextToken.loc.start.line === comment.loc.end.line
     )
-        replacement = `${replacement}\n${getLineIndentation(
-            sourceCode.text,
-            nextToken.range[0],
-        )}`
+        replacement = `${replacement}\n${getLineIndentation(sourceCode.text, nextToken.range[0])}`
 
     return replacement
 }
@@ -462,13 +405,7 @@ const noBlockComments = defineRule({
                     context.report({
                         node: comment,
                         messageId: 'useLineComments',
-                        fix: (fixer) => fixer.replaceText(
-                            comment,
-                            getLineCommentReplacement(
-                                comment,
-                                sourceCode,
-                            ),
-                        ),
+                        fix: (fixer) => fixer.replaceText(comment, getLineCommentReplacement(comment, sourceCode)),
                     })
                 }
             },
@@ -610,31 +547,17 @@ const unwrapParenthesizedExpression = (node) => {
     return current
 }
 
-const getAstExpressionText = (
-    node,
-    sourceCode,
-): string => {
+const getAstExpressionText = (node, sourceCode): string => {
     if (node.type === 'ParenthesizedExpression')
-        return `(${getAstExpressionText(
-            node.expression,
-            sourceCode,
-        )})`
+        return `(${getAstExpressionText(node.expression, sourceCode)})`
 
     if (node.type === 'LogicalExpression')
-        return `${getAstExpressionText(
-            node.left,
-            sourceCode,
-        )} ${node.operator} ${getAstExpressionText(
-            node.right,
-            sourceCode,
-        )}`
+        return `${getAstExpressionText(node.left, sourceCode)} ${node.operator} ${getAstExpressionText(node.right, sourceCode)}`
 
     return sourceCode.getText(node).trim()
 }
 
-const getLogicalConditionParts = (
-    node,
-): {
+const getLogicalConditionParts = (node): {
     operands: unknown[]
     operators: string[]
 } | null => {
@@ -683,10 +606,7 @@ const getFormattedConditionText = (
     const logicalExpression = unwrapParenthesizedExpression(node)
 
     if (logicalExpression.type !== 'LogicalExpression')
-        return getAstExpressionText(
-            node,
-            sourceCode,
-        )
+        return getAstExpressionText(node, sourceCode)
 
     const conditionParts = getLogicalConditionParts(logicalExpression)
 
@@ -694,10 +614,7 @@ const getFormattedConditionText = (
         return null
 
     const operandIndentation = includeParentheses ? `${indentation}    ` : indentation
-    const lines = conditionParts.operands.map((
-        operand,
-        index,
-    ) => {
+    const lines = conditionParts.operands.map((operand, index) => {
         const operandText = unwrapParenthesizedExpression(operand).type === 'LogicalExpression'
             ? getFormattedConditionText(
                 operand,
@@ -705,10 +622,7 @@ const getFormattedConditionText = (
                 operandIndentation,
                 true,
             )
-            : getAstExpressionText(
-                operand,
-                sourceCode,
-            )
+            : getAstExpressionText(operand, sourceCode)
         const operator = index === 0 ? '' : `${conditionParts.operators[index - 1]} `
 
         return operandText == null ? null : `${operandIndentation}${operator}${operandText}`
@@ -780,10 +694,7 @@ const preferMultilineCondition = defineRule({
             )
                 return
 
-            const indentation = getLineIndentation(
-                sourceCode.text,
-                node.range[0],
-            )
+            const indentation = getLineIndentation(sourceCode.text, node.range[0])
             const operandIndentation = `${indentation}    `
             let directBody = null
 
@@ -817,19 +728,13 @@ const preferMultilineCondition = defineRule({
             const bodyBoundary = ownsCompactBodyBoundary ? `\n${operandIndentation}` : ''
             const replacement = `(\n${condition}\n${indentation})${bodyBoundary}`
 
-            if (sourceCode.text.slice(
-                replacementRange[0],
-                replacementRange[1],
-            ) === replacement)
+            if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
                 return
 
             context.report({
                 node: node.test,
                 messageId: 'preferMultilineCondition',
-                fix: (fixer) => fixer.replaceTextRange(
-                    replacementRange,
-                    replacement,
-                ),
+                fix: (fixer) => fixer.replaceTextRange(replacementRange, replacement),
             })
         }
 
@@ -848,10 +753,7 @@ const preferMultilineCondition = defineRule({
                     && comment.range[1] <= node.alternate.range[0]))
                     return
 
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const condition = getFormattedConditionText(
                     node.test,
                     sourceCode,
@@ -898,14 +800,8 @@ const preferMultilineCondition = defineRule({
                 const alternateReplacement = `\n${branchIndentation}: `
 
                 if (
-                    sourceCode.text.slice(
-                        conditionRange[0],
-                        conditionRange[1],
-                    ) === conditionReplacement
-                    && sourceCode.text.slice(
-                        alternateRange[0],
-                        alternateRange[1],
-                    ) === alternateReplacement
+                    sourceCode.text.slice(conditionRange[0], conditionRange[1]) === conditionReplacement
+                    && sourceCode.text.slice(alternateRange[0], alternateRange[1]) === alternateReplacement
                 )
                     return
 
@@ -913,14 +809,8 @@ const preferMultilineCondition = defineRule({
                     node: node.test,
                     messageId: 'preferMultilineCondition',
                     fix: (fixer) => [
-                        fixer.replaceTextRange(
-                            conditionRange,
-                            conditionReplacement,
-                        ),
-                        fixer.replaceTextRange(
-                            alternateRange,
-                            alternateReplacement,
-                        ),
+                        fixer.replaceTextRange(conditionRange, conditionReplacement),
+                        fixer.replaceTextRange(alternateRange, alternateReplacement),
                     ],
                 })
             },
@@ -935,10 +825,7 @@ const preferMultilineCondition = defineRule({
                 if (sourceCode.getCommentsInside(node).length > 0)
                     return
 
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const clauseIndentation = `${indentation}    `
                 const condition = getFormattedConditionText(
                     node.test,
@@ -965,19 +852,13 @@ const preferMultilineCondition = defineRule({
                 const replacement = clauses.join('\n')
                 const replacementRange = [node.range[0], node.body.range[0]]
 
-                if (sourceCode.text.slice(
-                    replacementRange[0],
-                    replacementRange[1],
-                ) === replacement)
+                if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
                     return
 
                 context.report({
                     node: node.test,
                     messageId: 'preferMultilineCondition',
-                    fix: (fixer) => fixer.replaceTextRange(
-                        replacementRange,
-                        replacement,
-                    ),
+                    fix: (fixer) => fixer.replaceTextRange(replacementRange, replacement),
                 })
             },
             IfStatement: checkParenthesizedCondition,
@@ -986,14 +867,8 @@ const preferMultilineCondition = defineRule({
     },
 })
 
-const getSeparatedVariableDeclarationText = (
-    node,
-    sourceCode,
-): string => {
-    const indentation = getLineIndentation(
-        sourceCode.text,
-        node.range[0],
-    )
+const getSeparatedVariableDeclarationText = (node, sourceCode): string => {
+    const indentation = getLineIndentation(sourceCode.text, node.range[0])
     const comments = sourceCode.getCommentsInside(node)
     const declarationLines: string[] = []
     const exportPrefix = node.parent?.type === 'ExportNamedDeclaration' ? 'export ' : ''
@@ -1059,13 +934,7 @@ const noCommaSeparatedStatements = defineRule({
                     node,
                     messageId: 'separateDeclarations',
                     fix: canFix
-                        ? (fixer) => fixer.replaceText(
-                            replacementNode,
-                            getSeparatedVariableDeclarationText(
-                                node,
-                                sourceCode,
-                            ),
-                        )
+                        ? (fixer) => fixer.replaceText(replacementNode, getSeparatedVariableDeclarationText(node, sourceCode))
                         : undefined,
                 })
             },
@@ -1078,20 +947,14 @@ const noCommaSeparatedStatements = defineRule({
                     parent?.type === 'ExpressionStatement'
                     && sourceCode.getCommentsInside(node).length === 0
                 )
-                const indentation = canFix ? getLineIndentation(
-                    sourceCode.text,
-                    parent.range[0],
-                ) : ''
+                const indentation = canFix ? getLineIndentation(sourceCode.text, parent.range[0]) : ''
 
                 context.report({
                     node,
                     messageId: 'separateExpressions',
                     fix: canFix
                         ? (fixer) =>
-                            fixer.replaceText(
-                                parent,
-                                node.expressions.map((expression) => sourceCode.getText(expression)).join(`\n${indentation}`),
-                            )
+                            fixer.replaceText(parent, node.expressions.map((expression) => sourceCode.getText(expression)).join(`\n${indentation}`))
                         : undefined,
                 })
             },
@@ -1111,10 +974,7 @@ const preferAttachedTrailingComma = defineRule({
     create(context) {
         const { sourceCode } = context
 
-        const checkLastItem = (
-            container,
-            items,
-        ): void => {
+        const checkLastItem = (container, items): void => {
             const lastItem = items.at(-1)
 
             if (!lastItem)
@@ -1137,42 +997,18 @@ const preferAttachedTrailingComma = defineRule({
             context.report({
                 node: comma,
                 messageId: 'attachTrailingComma',
-                fix: (fixer) => fixer.replaceTextRange(
-                    [lastItem.range[1], comma.range[1]],
-                    ',',
-                ),
+                fix: (fixer) => fixer.replaceTextRange([lastItem.range[1], comma.range[1]], ','),
             })
         }
 
         return {
-            ArrayExpression: (node) => checkLastItem(
-                node,
-                node.elements,
-            ),
-            ArrayPattern: (node) => checkLastItem(
-                node,
-                node.elements,
-            ),
-            CallExpression: (node) => checkLastItem(
-                node,
-                node.arguments,
-            ),
-            ImportExpression: (node) => checkLastItem(
-                node,
-                node.options ? [node.options] : [],
-            ),
-            NewExpression: (node) => checkLastItem(
-                node,
-                node.arguments,
-            ),
-            ObjectExpression: (node) => checkLastItem(
-                node,
-                node.properties,
-            ),
-            ObjectPattern: (node) => checkLastItem(
-                node,
-                node.properties,
-            ),
+            ArrayExpression: (node) => checkLastItem(node, node.elements),
+            ArrayPattern: (node) => checkLastItem(node, node.elements),
+            CallExpression: (node) => checkLastItem(node, node.arguments),
+            ImportExpression: (node) => checkLastItem(node, node.options ? [node.options] : []),
+            NewExpression: (node) => checkLastItem(node, node.arguments),
+            ObjectExpression: (node) => checkLastItem(node, node.properties),
+            ObjectPattern: (node) => checkLastItem(node, node.properties),
         }
     },
 })
@@ -1211,28 +1047,19 @@ const preferMultilineObjectPattern = defineRule({
                 )
                     return
 
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const propertyIndentation = `${indentation}    `
                 const replacement = `{\n${node.properties.map((property) =>
                     `${propertyIndentation}${sourceCode.getText(property)}${property.type === 'RestElement' ? '' : ','}`).join('\n')}\n${indentation}}`
                 const replacementRange = [openBrace.range[0], closeBrace.range[1]]
 
-                if (sourceCode.text.slice(
-                    replacementRange[0],
-                    replacementRange[1],
-                ) === replacement)
+                if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
                     return
 
                 context.report({
                     node,
                     messageId: 'preferMultilinePattern',
-                    fix: (fixer) => fixer.replaceTextRange(
-                        replacementRange,
-                        replacement,
-                    ),
+                    fix: (fixer) => fixer.replaceTextRange(replacementRange, replacement),
                 })
             },
         }
@@ -1268,10 +1095,7 @@ const preferMultilineTypeLiteral = defineRule({
                 )
                     return
 
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const memberIndentation = `${indentation}    `
                 const replacement = `{\n${node.members.map((member) => {
                     const lastToken = sourceCode.getLastToken(member)
@@ -1282,10 +1106,7 @@ const preferMultilineTypeLiteral = defineRule({
                         ? lastToken.range[0]
                         : member.range[1]
 
-                    return `${memberIndentation}${sourceCode.text.slice(
-                        member.range[0],
-                        memberEnd,
-                    )}`
+                    return `${memberIndentation}${sourceCode.text.slice(member.range[0], memberEnd)}`
                 }).join('\n')}\n${indentation}}`
 
                 if (sourceCode.getText(node) === replacement)
@@ -1294,10 +1115,7 @@ const preferMultilineTypeLiteral = defineRule({
                 context.report({
                     node,
                     messageId: 'preferMultilineTypeLiteral',
-                    fix: (fixer) => fixer.replaceText(
-                        node,
-                        replacement,
-                    ),
+                    fix: (fixer) => fixer.replaceText(node, replacement),
                 })
             },
         }
@@ -1337,10 +1155,7 @@ const preferMultilineCollection = defineRule({
                 if (sourceCode.getCommentsInside(values).length > 0)
                     return
 
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const valueIndentation = `${indentation}    `
                 const replacement = `[\n${values.elements.map((element) => `${valueIndentation}${sourceCode.getText(element)},`).join('\n')}\n${indentation}]`
 
@@ -1350,10 +1165,7 @@ const preferMultilineCollection = defineRule({
                 context.report({
                     node: values,
                     messageId: 'preferMultilineCollection',
-                    fix: (fixer) => fixer.replaceText(
-                        values,
-                        replacement,
-                    ),
+                    fix: (fixer) => fixer.replaceText(values, replacement),
                 })
             },
         }
@@ -1363,10 +1175,7 @@ const preferMultilineCollection = defineRule({
 const isNestedCallChain = (node): boolean =>
     node.parent?.type === 'MemberExpression' && node.parent.object === node && node.parent.parent?.type === 'CallExpression' && node.parent.parent.callee === node.parent
 
-const getCallChain = (
-    node,
-    sourceCode,
-): {
+const getCallChain = (node, sourceCode): {
     attrCount: number
     base: unknown
     segments: string[]
@@ -1384,10 +1193,7 @@ const getCallChain = (
         if (current.callee.property.name === 'attr')
             attrCount++
 
-        segments.unshift(sourceCode.text.slice(
-            current.callee.object.range[1],
-            current.range[1],
-        ).trim())
+        segments.unshift(sourceCode.text.slice(current.callee.object.range[1], current.range[1]).trim())
         current = current.callee.object
     }
 
@@ -1411,10 +1217,7 @@ const preferMultilineAttrChain = defineRule({
                 if (isNestedCallChain(node))
                     return
 
-                const chain = getCallChain(
-                    node,
-                    sourceCode,
-                )
+                const chain = getCallChain(node, sourceCode)
 
                 if (
                     chain.attrCount <= 1
@@ -1431,10 +1234,7 @@ const preferMultilineAttrChain = defineRule({
                     && parent.arguments.length === 1
                     && parent.arguments[0] === node
                 )
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    isOnlyCallArgument ? parent.range[0] : node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, isOnlyCallArgument ? parent.range[0] : node.range[0])
                 const baseText = sourceCode.getText(chain.base)
                 const chainIndentation = `${indentation}${isOnlyCallArgument ? '        ' : '    '}`
                 const canonicalChain = `${baseText}\n${chain.segments.map((segment) => `${chainIndentation}${segment}`).join('\n')}`
@@ -1456,19 +1256,13 @@ const preferMultilineAttrChain = defineRule({
                     replacementRange = [openParenthesis.range[1], closeParenthesis.range[0]]
                 }
 
-                if (sourceCode.text.slice(
-                    replacementRange[0],
-                    replacementRange[1],
-                ) === replacement)
+                if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
                     return
 
                 context.report({
                     node,
                     messageId: 'preferMultilineChain',
-                    fix: (fixer) => fixer.replaceTextRange(
-                        replacementRange,
-                        replacement,
-                    ),
+                    fix: (fixer) => fixer.replaceTextRange(replacementRange, replacement),
                 })
             },
         }
@@ -1489,10 +1283,7 @@ const preferCompactIf = defineRule({
 
         return {
             IfStatement(node) {
-                const indentation = getLineIndentation(
-                    sourceCode.text,
-                    node.range[0],
-                )
+                const indentation = getLineIndentation(sourceCode.text, node.range[0])
                 const bodyIndentation = `${indentation}    `
                 const conditionRuleOwnsConsequentBoundary = (
                     unwrapParenthesizedExpression(node.test).type === 'LogicalExpression'
@@ -1551,10 +1342,7 @@ const preferCompactIf = defineRule({
                         continue
 
                     const whitespaceRange = [precedingToken.range[1], statement.range[0]]
-                    const whitespace = sourceCode.text.slice(
-                        whitespaceRange[0],
-                        whitespaceRange[1],
-                    )
+                    const whitespace = sourceCode.text.slice(whitespaceRange[0], whitespaceRange[1])
                     const replacement = `\n${bodyIndentation}`
 
                     if (
@@ -1566,10 +1354,7 @@ const preferCompactIf = defineRule({
                     context.report({
                         node: statement,
                         messageId: 'preferCompactBody',
-                        fix: (fixer) => fixer.replaceTextRange(
-                            whitespaceRange,
-                            replacement,
-                        ),
+                        fix: (fixer) => fixer.replaceTextRange(whitespaceRange, replacement),
                     })
                 }
             },
@@ -1622,24 +1407,15 @@ const preferSeparatedStatements = defineRule({
                 lineBreaks = '\r\n'
             }
 
-            const replacement = `${lineBreaks}${getLineIndentation(
-                sourceCode.text,
-                gap[1],
-            )}`
+            const replacement = `${lineBreaks}${getLineIndentation(sourceCode.text, gap[1])}`
 
-            if (sourceCode.text.slice(
-                replacementRange[0],
-                replacementRange[1],
-            ) === replacement)
+            if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
                 return
 
             context.report({
                 node: current,
                 messageId,
-                fix: (fixer) => fixer.replaceTextRange(
-                    replacementRange,
-                    replacement,
-                ),
+                fix: (fixer) => fixer.replaceTextRange(replacementRange, replacement),
             })
         }
         const checkStatementList = (node): void => {
@@ -1692,10 +1468,7 @@ const directVoidExpressionTypes = new Set([
     'TaggedTemplateExpression',
 ])
 
-const getVoidExpressionText = (
-    expressionNode,
-    sourceCode,
-): string => {
+const getVoidExpressionText = (expressionNode, sourceCode): string => {
     const expression = sourceCode.getText(expressionNode)
 
     if (
@@ -1709,19 +1482,13 @@ const getVoidExpressionText = (
         : `void (${expression})`
 }
 
-const getConciseArrowBodyText = (
-    statement,
-    sourceCode,
-): string => {
+const getConciseArrowBodyText = (statement, sourceCode): string => {
     const isExpressionStatement = statement.type === 'ExpressionStatement'
     const expressionNode = isExpressionStatement ? statement.expression : statement.argument
     const expression = sourceCode.getText(expressionNode)
 
     if (isExpressionStatement)
-        return getVoidExpressionText(
-            expressionNode,
-            sourceCode,
-        )
+        return getVoidExpressionText(expressionNode, sourceCode)
 
     return expressionNode.type === 'ObjectExpression' ? `(${expression})` : expression
 }
@@ -1772,19 +1539,10 @@ const preferVoidArrowBody = defineRule({
                     node: node.body,
                     messageId: 'discardReturnValue',
                     fix: (fixer) => directVoidExpressionTypes.has(node.body.type)
-                        ? fixer.insertTextBefore(
-                            node.body,
-                            'void ',
-                        )
+                        ? fixer.insertTextBefore(node.body, 'void ')
                         : [
-                            fixer.insertTextBefore(
-                                node.body,
-                                'void (',
-                            ),
-                            fixer.insertTextAfter(
-                                node.body,
-                                ')',
-                            ),
+                            fixer.insertTextBefore(node.body, 'void ('),
+                            fixer.insertTextAfter(node.body, ')'),
                         ],
                 })
             },
@@ -1837,13 +1595,7 @@ const preferExpressionArrowBody = defineRule({
                 context.report({
                     node: node.body,
                     messageId: 'preferExpressionBody',
-                    fix: (fixer) => fixer.replaceText(
-                        node.body,
-                        getConciseArrowBodyText(
-                            statement,
-                            sourceCode,
-                        ),
-                    ),
+                    fix: (fixer) => fixer.replaceText(node.body, getConciseArrowBodyText(statement, sourceCode)),
                 })
             },
         }
@@ -1899,10 +1651,7 @@ const noNativeConsoleLogging = defineRule({
                         if (!debugLoggingMethods.has(specifier.imported.name))
                             continue
 
-                        methodLocalNames.set(
-                            specifier.imported.name,
-                            specifier.local.name,
-                        )
+                        methodLocalNames.set(specifier.imported.name, specifier.local.name)
                     }
                 }
 
@@ -1924,10 +1673,7 @@ const noNativeConsoleLogging = defineRule({
                     }
 
                     localNames.add(localName)
-                    methodLocalNames.set(
-                        config.importedName,
-                        localName,
-                    )
+                    methodLocalNames.set(config.importedName, localName)
                     addedSpecifiers.push(`${config.importedName} as ${localName}`)
                 }
 
@@ -1941,10 +1687,7 @@ const noNativeConsoleLogging = defineRule({
                         }) => {
                             const importedName = debugLoggingMethods.get(methodName).importedName
 
-                            return fixer.replaceText(
-                                member,
-                                methodLocalNames.get(importedName),
-                            )
+                            return fixer.replaceText(member, methodLocalNames.get(importedName))
                         })
 
                         if (addedSpecifiers.length === 0)
@@ -1959,18 +1702,9 @@ const noNativeConsoleLogging = defineRule({
                             if (closeBrace) {
                                 const importText = sourceCode.getText(debugImport)
                                 const insertion = importText.includes('\n')
-                                    ? `${getLineIndentation(
-                                        sourceCode.text,
-                                        closeBrace.range[0],
-                                    )}    ${addedSpecifiers.join(`,\n${getLineIndentation(
-                                        sourceCode.text,
-                                        closeBrace.range[0],
-                                    )}    `)},\n`
+                                    ? `${getLineIndentation(sourceCode.text, closeBrace.range[0])}    ${addedSpecifiers.join(`,\n${getLineIndentation(sourceCode.text, closeBrace.range[0])}    `)},\n`
                                     : `, ${addedSpecifiers.join(', ')}`
-                                fixes.push(fixer.insertTextBefore(
-                                    closeBrace,
-                                    insertion,
-                                ))
+                                fixes.push(fixer.insertTextBefore(closeBrace, insertion))
 
                                 return fixes
                             }
@@ -1978,13 +1712,7 @@ const noNativeConsoleLogging = defineRule({
 
                         const declaration = `import { ${addedSpecifiers.join(', ')} } from '@lixpi/debug-tools'\n`
                         const firstStatement = program.body[0]
-                        fixes.push(firstStatement ? fixer.insertTextBefore(
-                            firstStatement,
-                            declaration,
-                        ) : fixer.insertTextAfter(
-                            program,
-                            declaration,
-                        ))
+                        fixes.push(firstStatement ? fixer.insertTextBefore(firstStatement, declaration) : fixer.insertTextAfter(program, declaration))
 
                         return fixes
                     },
