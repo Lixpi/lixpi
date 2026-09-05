@@ -10,6 +10,7 @@ packages:
   - "packages/lixpi/nats-auth-callout-service"
   - "packages/lixpi/nats-service/ts"
   - "packages/lixpi/prosemirror"
+  - "packages/lixpi/test-utils"
   - "packages/lixpi/ui-primitives"
   - "packages/lixpi/ui-kit"
 

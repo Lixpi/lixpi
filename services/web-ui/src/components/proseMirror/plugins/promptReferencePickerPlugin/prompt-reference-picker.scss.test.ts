@@ -5,6 +5,7 @@ import {
     expect,
     it,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 function extractFlatRule(source: string, selector: string): string {
     const start = source.indexOf(`${selector} {`)
@@ -20,14 +21,6 @@ function expectRuleToContain(rule: string, declaration: string): void {
 function expectRuleNotToContain(rule: string, declaration: string): void {
     expect(withoutLayout(rule).includes(withoutLayout(declaration)), `rule should not contain: ${declaration}`).toBe(false)
 }
-
-// These assertions pin down what the source does, not how the formatter lays it out.
-// Line breaks and trailing commas are the formatter's choice and change nothing about
-// the behavior, so both sides are compared on tokens alone.
-const withoutLayout = (value: string): string => value
-    .replace(/\s+/g, '')
-    .replace(/,(?=[)\]}])/g, '')
-    .replace(/,$/, '')
 
 function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
     expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)

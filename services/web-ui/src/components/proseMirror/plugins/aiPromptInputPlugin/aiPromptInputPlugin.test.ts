@@ -44,6 +44,7 @@ import {
     geminiIcon,
     plusIcon,
 } from '@lixpi/ui-kit/svg'
+import { withoutLayout } from '@lixpi/test-utils'
 
 // The model setup block contains SVG toggle switches. happy-dom does not
 // implement the full SVG transform API d3-transition expects, so keep
@@ -60,14 +61,6 @@ const makeChain = (): any => {
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-// These assertions pin down what the source does, not how the formatter lays it out.
-// Line breaks and trailing commas are the formatter's choice and change nothing about
-// the behavior, so both sides are compared on tokens alone.
-const withoutLayout = (value: string): string => value
-    .replace(/\s+/g, '')
-    .replace(/,(?=[)\]}])/g, '')
-    .replace(/,$/, '')
 
 function expectSourceToContain(source: string, snippet: string): void {
     expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)

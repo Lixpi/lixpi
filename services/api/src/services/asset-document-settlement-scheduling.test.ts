@@ -5,14 +5,7 @@ import {
     expect,
     it,
 } from 'vitest'
-
-// These assertions pin down what the source does, not how the formatter lays it out.
-// Line breaks and trailing commas are the formatter's choice and change nothing about
-// the behavior, so both sides are compared on tokens alone.
-const withoutLayout = (value: string): string => value
-    .replace(/\s+/g, '')
-    .replace(/,(?=[)\]}])/g, '')
-    .replace(/,$/, '')
+import { withoutLayout } from '@lixpi/test-utils'
 
 const expectSourceToContain = (source: string, snippet: string, label: string): void => {
     expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)

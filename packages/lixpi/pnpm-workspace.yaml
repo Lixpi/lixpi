@@ -10,5 +10,6 @@ packages:
   - "nats-auth-callout-service"
   - "nats-service/ts"
   - "prosemirror"
+  - "test-utils"
   - "ui-kit"
   - "ui-primitives"
