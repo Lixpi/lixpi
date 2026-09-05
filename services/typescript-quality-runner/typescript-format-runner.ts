@@ -148,6 +148,11 @@ type HtmlTemplateContent = {
     start: number
 }
 
+type HtmlTemplateQuasi = {
+    span: LayoutSpan
+    templateStart: number
+}
+
 type CallChainSegment = {
     boundaryEnd: number
     boundaryStart: number
@@ -1270,6 +1275,121 @@ const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === '
     && tag.property.type === 'Identifier'
     && tag.property.name === 'html'
 
+const collectHtmlTemplateQuasis = (
+    file: string,
+    source: string,
+): HtmlTemplateQuasi[] => {
+    const parseResult = parseTypeScript(file, source)
+
+    if (parseResult.errors.length > 0)
+        throw new Error(`Oxc parser could not parse ${file}: ${JSON.stringify(parseResult.errors[0])}`)
+
+    const layouts: HtmlTemplateQuasi[] = []
+    const visit = (node: AstNode): void => {
+        const tag = node.tag as AstNode | undefined
+        const template = node.quasi as AstNode | undefined
+
+        if (
+            node.type === 'TaggedTemplateExpression'
+            && isHtmlTemplateTag(tag)
+            && template?.type === 'TemplateLiteral'
+            && Array.isArray(template.quasis)
+        ) {
+            const templateRange = getNodeRange(template)
+
+            for (const quasi of template.quasis) {
+                if (!isAstNode(quasi))
+                    continue
+
+                const quasiRange = getNodeRange(quasi)
+
+                if (
+                    quasiRange
+                    && templateRange
+                ) {
+                    layouts.push({
+                        span: getLayoutSpan(
+                            quasiRange[0],
+                            quasiRange[1],
+                            source,
+                        ),
+                        templateStart: templateRange[0],
+                    })
+                }
+            }
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (key === 'range')
+                continue
+
+            if (Array.isArray(value)) {
+                for (const child of value) if (isAstNode(child))
+                    visit(child)
+            } else if (isAstNode(value))
+                visit(value)
+        }
+    }
+
+    visit(parseResult.program as AstNode)
+
+    return layouts
+}
+
+const reindentHtmlTemplate = (
+    text: string,
+    indentationDifference: number,
+): string => {
+    const lines = text.split('\n')
+
+    for (let index = 1; index < lines.length; index++) {
+        const line = lines[index]!
+
+        if (indentationDifference > 0)
+            lines[index] = `${' '.repeat(indentationDifference)}${line}`
+        else
+            lines[index] = line.slice(
+                Math.min(-indentationDifference, line.length - line.trimStart().length),
+            )
+    }
+
+    return lines.join('\n')
+}
+
+const applyHtmlTemplateFormatting = (
+    file: string,
+    formatted: string,
+    htmlFormatted: string,
+): string => {
+    const formattedLayouts = collectHtmlTemplateQuasis(file, formatted)
+    const htmlLayouts = collectHtmlTemplateQuasis(file, htmlFormatted)
+
+    if (formattedLayouts.length !== htmlLayouts.length)
+        throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
+
+    // Every quasi of one template shares a single indentation delta, measured at the
+    // template's opening backtick. Measuring per quasi instead reads the indentation of
+    // whatever interpolation that quasi resumes after, which differs between the two
+    // oxfmt passes and shifts the closing tags further right on every run.
+    const replacements = formattedLayouts.map(
+        (target, index) => {
+            const htmlQuasi = htmlLayouts[index]!
+            const indentationDifference = getLineIndentation(formatted, target.templateStart).length
+                - getLineIndentation(htmlFormatted, htmlQuasi.templateStart).length
+
+            return {
+                ...target.span,
+                text: reindentHtmlTemplate(htmlQuasi.span.text, indentationDifference),
+            }
+        },
+    )
+    let output = formatted
+
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.text}${output.slice(replacement.end)}`
+
+    return output
+}
+
 const collectHtmlTemplateContents = (
     file: string,
     source: string,
@@ -1414,14 +1534,9 @@ const collectExpandedHtmlStartTags = (
             const absoluteStart = offset + startTag.startOffset
             const lineStart = getLineStart(source, absoluteStart)
             const linePrefix = source.slice(lineStart, absoluteStart)
-            // Indent the attributes against the line the tag actually sits on. Deriving
-            // this from the template's own indentation plus nesting depth made the result
-            // depend on the surrounding TypeScript layout, which this loop is still
-            // moving, so each pass expanded the tag against a different baseline and the
-            // body crept four spaces to the right every run.
             const indentation = linePrefix.trim().length === 0
                 ? linePrefix
-                : linePrefix.slice(0, linePrefix.length - linePrefix.trimStart().length)
+                : `${baseIndentation}${' '.repeat((depth + 1) * 4)}`
             const relativeSource = source.slice(offset)
             const replacement = getExpandedHtmlStartTag(
                 relativeSource,
@@ -3204,6 +3319,7 @@ const canonicalizeContainerIndentation = (
 const canonicalizeTypeScriptLayout = (
     file: string,
     source: string,
+    htmlFormatted: string,
     printWidth: number,
 ): string => {
     let output = source
@@ -3222,7 +3338,12 @@ const canonicalizeTypeScriptLayout = (
         const canonicalArrowBodies = canonicalizeExpressionArrowBodies(file, canonicalArrowParameters)
         const canonicalIteratorChains = canonicalizeIteratorChains(file, canonicalArrowBodies)
         const canonicalConditionalExpressions = canonicalizeNestedConditionalExpressions(file, canonicalIteratorChains)
-        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, canonicalConditionalExpressions)
+        const formattedHtmlTemplates = applyHtmlTemplateFormatting(
+            file,
+            canonicalConditionalExpressions,
+            htmlFormatted,
+        )
+        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, formattedHtmlTemplates)
         const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, canonicalHtmlAttributes)
         const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
         const canonicalImports = canonicalizeImportLayout(
@@ -3269,6 +3390,18 @@ const formatSource = async (
     if (!file.endsWith('.ts'))
         return canonicalizeStandaloneHtmlAttributes(result.code)
 
+    const htmlResult = await format(
+        file,
+        source,
+        {
+            ...config,
+            printWidth: maximumInlineArrowFunctionLength,
+        },
+    )
+
+    if (htmlResult.errors.length > 0)
+        throw new Error(`Oxfmt could not format embedded HTML in ${file}`)
+
     const formattedConditionStatements = canonicalizeConditionStatements(file, result.code)
     const preserved = preserveExpandedTypeScriptLayouts(
         file,
@@ -3279,6 +3412,7 @@ const formatSource = async (
     return canonicalizeTypeScriptLayout(
         file,
         preserved,
+        htmlResult.code,
         config.printWidth ?? maximumInlineArrowFunctionLength,
     )
 }
