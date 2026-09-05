@@ -14,11 +14,11 @@ import {
 import { getNatsUserSubjectToken } from '@lixpi/constants'
 import {
     info,
-    err as logError,
+    err,
 } from '@lixpi/debug-tools'
 import {
     createJwtVerifier,
-    verifyNKeySignedJWT as verifyNKeyJwt,
+    verifyNKeySignedJWT,
     type ServiceAuthConfig,
 } from '@lixpi/auth-service'
 
@@ -190,13 +190,13 @@ const authenticateRegisteredServiceFromSelfIssuedJwt = async (
 ): Promise<AuthenticatedNatsClient> => {
     info(`Auth callout: Verifying self-issued JWT from service (issuer: ${serviceConfig.publicKey.substring(0, 10)}...)`)
 
-    const serviceJwtVerification = await verifyNKeyJwt({
+    const serviceJwtVerification = await verifyNKeySignedJWT({
         token,
         publicKey: serviceConfig.publicKey,
     })
 
     if (serviceJwtVerification.error) {
-        logError('Self-issued JWT verification failed:', serviceJwtVerification.error)
+        err('Self-issued JWT verification failed:', serviceJwtVerification.error)
         throw new Error(`Self-issued JWT verification failed: ${serviceJwtVerification.error}`)
     }
 
@@ -245,7 +245,7 @@ const authenticateRegularUserFromAuth0Jwt = async (
         const auth0JwtVerification = await auth0JwtVerifier.verify(token)
 
         if (auth0JwtVerification.error) {
-            logError('Auth0 token verification failed:', auth0JwtVerification.error)
+            err('Auth0 token verification failed:', auth0JwtVerification.error)
             throw new Error(`Token verification failed: ${auth0JwtVerification.error}`)
         }
 
@@ -263,7 +263,7 @@ const authenticateRegularUserFromAuth0Jwt = async (
 
         return { userId, targetNatsAccount: defaultNatsAccount }
     } catch (caughtError: any) {
-        logError('Auth0 token verification failed:', caughtError)
+        err('Auth0 token verification failed:', caughtError)
         throw new Error(`Token verification failed: ${caughtError.error || caughtError.message}`)
     }
 }
@@ -677,7 +677,7 @@ export const startNatsAuthCalloutService = async ({
                     authorizationIssuerKeyPair,
                 })
             } catch (caughtError: any) {
-                logError(`Auth Callout Error: ${caughtError.message}`, caughtError)
+                err(`Auth Callout Error: ${caughtError.message}`, caughtError)
 
                 return '' // Return an empty JWT which will be treated as an auth failure
             }

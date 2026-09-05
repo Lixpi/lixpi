@@ -5,9 +5,8 @@ import {
     type Stack,
     type Deployment,
 } from '@pulumi/pulumi/automation/index.js'
-// Lightweight local info logger to avoid duplicate verbose diagnostics
-const info = (...args: any[]) => console.log('[info]', ...args)
 import * as aws from '@pulumi/aws'
+import { info } from '@lixpi/debug-tools'
 import {
     startOutputSession,
     printPulumiLine,
