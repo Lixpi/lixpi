@@ -9,12 +9,20 @@ import {
 
 import { AssetDocumentEventAuthorizationCache } from './asset-document-event-relay.ts'
 
+// These assertions pin down what the source does, not how the formatter lays it out.
+// Line breaks and trailing commas are the formatter's choice and change nothing about
+// the behavior, so both sides are compared on tokens alone.
+const withoutLayout = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/,(?=[)\]}])/g, '')
+    .replace(/,$/, '')
+
 const expectSourceToContain = (source: string, snippet: string, label: string): void => {
-    expect(source.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 }
 
 const expectSourceNotToContain = (source: string, snippet: string, label: string): void => {
-    expect(source.includes(snippet), `${label} should not contain:\n${snippet}`).toBe(false)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should not contain:\n${snippet}`).toBe(false)
 }
 
 describe('AssetDocumentEventAuthorizationCache', () => {

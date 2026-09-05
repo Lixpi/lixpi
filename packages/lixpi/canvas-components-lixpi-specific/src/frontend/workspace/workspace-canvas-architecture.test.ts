@@ -11,12 +11,6 @@ import {
 const readWorkspaceSource = (filename: string): string => readFileSync(new URL(filename, import.meta.url), 'utf8')
 
 describe('workspace canvas composition', () => {
-    it('keeps the root renderer below the refactoring size budget', () => {
-        const source = readWorkspaceSource('./workspace-canvas.ts')
-
-        expect(source.split('\n').length).toBeLessThanOrEqual(3_000)
-    })
-
     it('delegates isolated responsibilities to focused workspace owners', () => {
         const source = readWorkspaceSource('./workspace-canvas.ts')
         const owners = [

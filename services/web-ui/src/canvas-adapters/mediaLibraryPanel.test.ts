@@ -11,12 +11,20 @@ import {
     stripMediaFileExtension,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/library'
 
+// These assertions pin down what the source does, not how the formatter lays it out.
+// Line breaks and trailing commas are the formatter's choice and change nothing about
+// the behavior, so both sides are compared on tokens alone.
+const withoutLayout = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/,(?=[)\]}])/g, '')
+    .replace(/,$/, '')
+
 function expectSourceToContain(source: string, snippet: string): void {
-    expect(source.includes(snippet), `source should contain: ${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should contain: ${snippet}`).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string): void {
-    expect(source.includes(snippet), `source should not contain: ${snippet}`).toBe(false)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `source should not contain: ${snippet}`).toBe(false)
 }
 
 const panelSource = readFileSync(resolve(import.meta.dirname, '../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/library/media-library-panel.ts'), 'utf-8')

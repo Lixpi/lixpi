@@ -115,9 +115,7 @@ const noUnusedImports = defineRule({
                 )
                     return
 
-                pendingConsoleImportNames.add(
-                    debugLoggingMethods.get(node.callee.property.name).importedName,
-                )
+                pendingConsoleImportNames.add(debugLoggingMethods.get(node.callee.property.name).importedName)
             },
             'Program:exit'() {
                 const commentReferencedNames = getCommentReferencedIdentifierNames(sourceCode)
