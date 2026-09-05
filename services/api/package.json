@@ -57,6 +57,7 @@
         "sharp": "*"
     },
     "devDependencies": {
+        "@lixpi/test-utils": "workspace:*",
         "vitest": "latest",
         "nodemon": "latest",
         "@types/adm-zip": "*",
