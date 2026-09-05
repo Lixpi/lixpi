@@ -2501,6 +2501,15 @@ const getContinuedConditionText = (
     return condition == null ? null : condition.trimStart()
 }
 
+// A value such as `a || (b && c ? d : e)` breaks before its operator even with only two
+// operands, so the parenthesized group and everything the rules put inside it line up one
+// level in from the assignment rather than trailing off the end of it.
+const hasParenthesizedOperand = (node: AstNode): boolean => {
+    const conditionParts = getLogicalConditionParts(node)
+
+    return Boolean(conditionParts?.operands.some(operand => operand.type === 'ParenthesizedExpression'))
+}
+
 const getMultilineAssignedLogicalExpressionText = (
     node: AstNode,
     source: string,
@@ -2562,7 +2571,9 @@ const canonicalizeAssignedLogicalExpressions = (
             value
             && valueRange
             && unwrapParenthesizedExpression(value).type === 'LogicalExpression'
-            && countLogicalEvaluations(value) > 2
+            && (countLogicalEvaluations(value) > 2 || hasParenthesizedOperand(
+                value,
+            ))
             && !hasCommentWithinRange(
                 comments,
                 valueRange,
