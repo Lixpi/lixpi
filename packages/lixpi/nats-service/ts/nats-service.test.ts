@@ -221,6 +221,10 @@ describe('NatsService', () => {
 
             expect(onAuthError).toHaveBeenCalledWith(authError)
             expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+
+            // The scheduled reconnect runs on a real timer. Left pending it fires
+            // during a later test and adds a stray connect attempt there.
+            clearTimeout(service['reconnectTimer'])
         })
 
         it('only connects once through static init and reuses existing instance', async () => {
@@ -230,6 +234,44 @@ describe('NatsService', () => {
 
             expect(service).toBe(secondCall)
             expect(connectMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('retries the first connect through a DNS soft failure and resolves once the server answers', async () => {
+            connectMock.mockRejectedValueOnce(new Error('getaddrinfo EAI_AGAIN lixpi-nats-3'))
+
+            const service = await NatsService.init({ initialConnectMaxAttempts: 3 })
+
+            expect(connectMock).toHaveBeenCalledTimes(2)
+            expect(service.isConnected()).toBe(true)
+            expect(NatsService.getInstance()).toBe(service)
+        })
+
+        it('rejects init when the first connect never succeeds and clears the singleton', async () => {
+            connectMock.mockRejectedValue(new Error('getaddrinfo EAI_AGAIN lixpi-nats-3'))
+
+            await expect(NatsService.init({ initialConnectMaxAttempts: 2 }))
+                .rejects
+                .toThrow('first connect failed after 2 attempts')
+
+            expect(connectMock).toHaveBeenCalledTimes(2)
+            expect(NatsService.getInstance()).toBeNull()
+        })
+
+        it('keeps a failed reconnect silent and scheduled after the connection was already established', async () => {
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+            const service = new (NatsService as any)({})
+
+            await service.connect()
+            expect(service.isConnected()).toBe(true)
+
+            // Simulate the connection dropping, then a reconnect attempt that also fails.
+            service['nc'] = { isClosed: vi.fn().mockReturnValue(true) } as any
+            connectMock.mockRejectedValueOnce(new Error('still down'))
+
+            await expect(service.connect()).resolves.toBeUndefined()
+            expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+
+            clearTimeout(service['reconnectTimer'])
         })
 
         it('uses wsconnect when webSocket config is enabled', async () => {

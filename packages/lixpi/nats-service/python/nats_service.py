@@ -24,6 +24,16 @@ from lixpi_debug_tools import log, info, info_str, warn, err
 
 DEFAULT_STREAM_REPLICAS = 3
 
+# How many attempts init()'s first connect makes before it gives up and raises.
+# The waits between attempts use the same exponential backoff as reconnect
+# (0.5s, 1s, 2s, 4s, 8s, then 16s), so nine attempts spend ~63s waiting and, with
+# each attempt's own 2s connect timeout, cover roughly 80s of wall clock. That
+# window is sized for a Docker Desktop cold boot, where a service can start
+# before Docker DNS can resolve the NATS hostnames and every attempt fails with
+# EAI_AGAIN. Only the first connect is bounded: once a connection has been
+# established, reconnects retry forever.
+DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS = 9
+
 
 def encode(value: Any, payload_type: str) -> bytes:
     """Encode value based on payload type."""
@@ -145,6 +155,7 @@ class NatsServiceConfig:
         get_token: Optional[Callable[[], Any]] = None,
         on_auth_error: Optional[Callable[[Exception], Any]] = None,
         stream_replicas: int = DEFAULT_STREAM_REPLICAS,
+        initial_connect_max_attempts: int = DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS,
     ):
         """
         Initialize NATS service configuration.
@@ -169,6 +180,10 @@ class NatsServiceConfig:
                 credentials so the caller can invalidate any cached token before
                 `get_token` is called again.
             stream_replicas: Replication factor for created JetStream stores.
+            initial_connect_max_attempts: How many attempts init()'s first
+                connect makes before raising. Raise it for a caller that starts
+                alongside a slow cluster, lower it for one that would rather fail
+                quickly. It does not affect reconnects, which retry forever.
         """
         self.servers = servers or ["nats://localhost:4222"]
         self.name = name or "default"
@@ -186,6 +201,7 @@ class NatsServiceConfig:
         self.get_token = get_token
         self.on_auth_error = on_auth_error
         self.stream_replicas = stream_replicas
+        self.initial_connect_max_attempts = initial_connect_max_attempts
 
 
 class NatsService:
@@ -231,16 +247,48 @@ class NatsService:
         """
         Initialize singleton instance and connect.
 
+        Returns only once the connection is real, and raises when the first
+        connect never succeeds. Returning a service whose `nc` is still None used
+        to look like success and then blew up much later, in whatever startup
+        code made the first JetStream call.
+
         Args:
             config: NATS service configuration
 
         Returns:
             NatsService instance
         """
-        if not cls._instance:
-            cls._instance = cls(config)
-            await cls._instance.connect()
-        return cls._instance
+        if cls._instance:
+            return cls._instance
+
+        instance = cls(config)
+        # Published before connecting so subscription handlers that run while the
+        # connection is being established can still reach it through get_instance().
+        cls._instance = instance
+
+        try:
+            await instance._connect_or_raise()
+        except Exception:
+            # Drop the dead singleton so a caller that catches this and calls
+            # init() again builds a fresh instance instead of reusing the failed one.
+            cls._instance = None
+            raise
+
+        return instance
+
+    def _next_backoff_delay(self, delay: Optional[float] = None) -> float:
+        """
+        Delay in seconds before the next connect attempt.
+
+        Exponential backoff: 0.5s, 1s, 2s, 4s, 8s, max 16s. Both the reconnect
+        timer and the first-connect retry loop take their delay from here so the
+        two paths cannot drift apart.
+        """
+        if delay is None:
+            delay = min(0.5 * (2 ** self._reconnect_attempts), 16.0)
+            self._reconnect_attempts += 1
+
+        return delay
 
     def _schedule_reconnect(self, delay: Optional[float] = None) -> None:
         """
@@ -252,13 +300,10 @@ class NatsService:
         if self._reconnect_timer:
             self._reconnect_timer.cancel()
 
-        # Exponential backoff: 0.5s, 1s, 2s, 4s, 8s, max 16s
-        if delay is None:
-            delay = min(0.5 * (2 ** self._reconnect_attempts), 16.0)
-            self._reconnect_attempts += 1
+        backoff = self._next_backoff_delay(delay)
 
         async def reconnect_task():
-            await asyncio.sleep(delay)
+            await asyncio.sleep(backoff)
             await self.connect()
 
         self._reconnect_timer = asyncio.create_task(reconnect_task())
@@ -423,12 +468,73 @@ class NatsService:
         message = str(error) if error is not None else ''
         return 'Authorization' in name or 'authoriz' in message.lower() or 'authentic' in message.lower()
 
+    async def _attempt_connect(self, initial_connect_timeout: int = 2) -> None:
+        """
+        A single connect attempt. Raises on failure so the caller chooses between
+        retrying forever (reconnect) and giving up (first connect).
+        """
+        # Fetch a fresh token before every attempt so a reconnect after a token
+        # expiry or signing-key rotation does not keep replaying stale creds.
+        await self._refresh_token()
+
+        # Options are rebuilt for every attempt and the client resolves the server
+        # hostnames when it opens the socket, so a DNS soft failure (EAI_AGAIN,
+        # which is what a Docker cold boot produces) is re-resolved on the next
+        # attempt instead of replaying a cached failed lookup.
+        options = self._build_connection_options()
+
+        # Handle TLS if CA cert provided
+        if self.config.tls_ca_cert:
+            import ssl
+            tls_ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+            tls_ctx.load_verify_locations(cafile=self.config.tls_ca_cert)
+            options["tls"] = tls_ctx
+            info("TLS context configured with custom CA cert")
+
+        # Connect to NATS with timeout
+        self.nc = await asyncio.wait_for(
+            nats.connect(**options),
+            timeout=initial_connect_timeout
+        )
+
+        info_str([Fore.GREEN, "NATS -> listening on: ", Style.RESET_ALL, Fore.BLUE, f"nats://{self.nc.connected_url.netloc}", Style.RESET_ALL])
+
+        # Reset reconnect attempts on successful connection
+        self._reconnect_attempts = 0
+
+        # Initialize JetStream context
+        self.js = self.nc.jetstream()
+
+        # Monitor status changes
+        self._monitor_status()
+
+        # Initialize subscriptions from config
+        await self._init_subscriptions()
+
+    async def _report_connect_error(self, error: BaseException) -> None:
+        """Log a failed connect attempt and let the caller refresh credentials."""
+        if isinstance(error, asyncio.TimeoutError):
+            err("NATS -> connection error or timeout")
+            return
+
+        if self._is_auth_error(error):
+            # Server rejected our credentials. Let the caller invalidate its
+            # cached token so the next _refresh_token() obtains a valid one
+            # instead of looping forever on the same rejected token.
+            err(f"NATS -> authorization failed, refreshing credentials: {error}")
+            await self._handle_auth_error(error)
+            return
+
+        err(f"NATS -> connection error or timeout: {error}")
+
     async def connect(self, initial_connect_timeout: int = 2) -> None:
         """
-        Connect to NATS server. Does not crash on failure, schedules reconnection.
+        The reconnect path. It never raises: a NATS blip after startup must not
+        take the process down, so a failed attempt schedules the next one and
+        returns.
 
         Args:
-            initial_connect_timeout: Timeout for initial connection in seconds
+            initial_connect_timeout: Timeout for each connection attempt in seconds
         """
         if self._is_connecting or self.is_connected():
             return
@@ -437,53 +543,43 @@ class NatsService:
         self._intentional_close = False
 
         try:
-            # Fetch a fresh token before every attempt so a reconnect after a token
-            # expiry or signing-key rotation does not keep replaying stale creds.
-            await self._refresh_token()
-
-            options = self._build_connection_options()
-
-            # Handle TLS if CA cert provided
-            if self.config.tls_ca_cert:
-                import ssl
-                tls_ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-                tls_ctx.load_verify_locations(cafile=self.config.tls_ca_cert)
-                options["tls"] = tls_ctx
-                info("TLS context configured with custom CA cert")
-
-            # Connect to NATS with timeout
-            self.nc = await asyncio.wait_for(
-                nats.connect(**options),
-                timeout=initial_connect_timeout
-            )
-
-            info_str([Fore.GREEN, "NATS -> listening on: ", Style.RESET_ALL, Fore.BLUE, f"nats://{self.nc.connected_url.netloc}", Style.RESET_ALL])
-
-            # Reset reconnect attempts on successful connection
-            self._reconnect_attempts = 0
-
-            # Initialize JetStream context
-            self.js = self.nc.jetstream()
-
-            # Monitor status changes
-            self._monitor_status()
-
-            # Initialize subscriptions from config
-            await self._init_subscriptions()
-
-        except asyncio.TimeoutError:
-            err("NATS -> connection error or timeout")
-            self._schedule_reconnect()
+            await self._attempt_connect(initial_connect_timeout)
         except Exception as error:
-            if self._is_auth_error(error):
-                # Server rejected our credentials. Let the caller invalidate its
-                # cached token so the next _refresh_token() obtains a valid one
-                # instead of looping forever on the same rejected token.
-                err(f"NATS -> authorization failed, refreshing credentials: {error}")
-                await self._handle_auth_error(error)
-            else:
-                err(f"NATS -> connection error or timeout: {error}")
+            await self._report_connect_error(error)
             self._schedule_reconnect()
+        finally:
+            self._is_connecting = False
+
+    async def _connect_or_raise(self, initial_connect_timeout: int = 2) -> None:
+        """
+        The first-connect path. It retries on the same backoff as reconnect and
+        then raises, so init() fails instead of handing back a service that never
+        connected. Once this returns, every later failure goes through connect().
+
+        Args:
+            initial_connect_timeout: Timeout for each connection attempt in seconds
+        """
+        if self.is_connected():
+            return
+
+        self._is_connecting = True
+        self._intentional_close = False
+        max_attempts = self.config.initial_connect_max_attempts
+
+        try:
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    await self._attempt_connect(initial_connect_timeout)
+                    return
+                except Exception as error:
+                    await self._report_connect_error(error)
+
+                    if attempt == max_attempts:
+                        raise ConnectionError(
+                            f"NATS -> first connect failed after {max_attempts} attempts"
+                        ) from error
+
+                    await asyncio.sleep(self._next_backoff_delay())
         finally:
             self._is_connecting = False
 

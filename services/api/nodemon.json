@@ -10,5 +10,6 @@
         "**/node_modules/**"
     ],
     "legacyWatch": true,
-    "exec": "node ./src/server.ts"
+    "exitcrash": true,
+    "exec": "sh ./scripts/nodemon-exec.sh"
 }
