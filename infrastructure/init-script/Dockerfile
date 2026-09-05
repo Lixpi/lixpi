@@ -6,12 +6,13 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 # Copy package files and install dependencies
-COPY package.json ./
+COPY packages/lixpi/debug-tools/ts /packages/lixpi/debug-tools/ts
+COPY infrastructure/init-script/package.json ./
 RUN pnpm install
 
 # Copy source files
-COPY setup-env.ts ./
-COPY templates ./templates
+COPY infrastructure/init-script/setup-env.ts ./
+COPY infrastructure/init-script/templates ./templates
 
 # Set environment for colored output
 ENV FORCE_COLOR=1

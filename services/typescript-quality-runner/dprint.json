@@ -1,0 +1,19 @@
+{
+    "$schema": "https://dprint.dev/schemas/v0.json",
+    "includes": ["**/*.css", "**/*.scss"],
+    "excludes": [
+        "**/node_modules",
+        "**/dist",
+        "**/coverage",
+        "packages-vendor"
+    ],
+    "incremental": true,
+    "indentWidth": 4,
+    "lineWidth": 1000,
+    "newLineKind": "lf",
+    "useTabs": false,
+    "malva": {},
+    "plugins": [
+        "/usr/src/quality-runner/node_modules/dprint-plugin-malva/plugin.wasm"
+    ]
+}

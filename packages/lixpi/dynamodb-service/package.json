@@ -15,6 +15,7 @@
         "@aws-sdk/lib-dynamodb": "*",
         "@aws-sdk/util-dynamodb": "*",
         "@aws-sdk/credential-providers": "*",
+        "@lixpi/debug-tools": "workspace:*",
         "chalk": "*"
     }
 }

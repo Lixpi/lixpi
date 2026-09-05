@@ -2,12 +2,13 @@
 
 This guide applies to every TypeScript file in the repository — `services/api`, `services/nex`, `services/web-ui`, `packages/lixpi`, `infrastructure/pulumi`, and scripts. The [DOM Templating](#dom-templating-web-ui) section is the only web-ui-specific part.
 
-Use `.ts` files only. TSX, JSX, and React are prohibited in this repository. The TypeScript quality runner rejects `.tsx` and `.jsx` files and React imports.
+Use `.ts` files only. JavaScript source files, TSX, JSX, and React are prohibited in this repository. The TypeScript quality runner migrates `.js`, `.mjs`, and `.cjs` source files to `.ts` during a fix pass and rejects them during validation. It rejects `.tsx` and `.jsx` files and React imports.
 
-## Imports
+## Imports And Exports
 
-- Always use `.ts` extension when importing files — never `.js`. Oxlint enforces file import extensions through the Dockerized [TypeScript quality runner](../testing/TypeScript/TYPESCRIPT-QUALITY.md).
-- A named import list with two or more items must be multiline, with one imported item per line. A single value import stays inline. A single inline `type` import remains multiline. dprint and the TypeScript quality runner enforce this layout.
+- Always use `.ts` extension when importing files — never `.js`. Oxlint enforces file import extensions through the Dockerized [TypeScript quality runner](../../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md).
+- A named import list with two or more items must be multiline, with one imported item per line. A single value import stays inline. A single inline `type` import remains multiline. Oxfmt and the TypeScript quality runner enforce this layout.
+- Named exports use the same layout: two or more exported items are multiline with one item per line, while a single exported item stays inline. This applies to both value exports and `export type` declarations.
 - Always use inline `type` specifiers. Do not use top-level `import type`. This keeps type-only imports ready to accept value imports without rewriting the whole declaration. Oxlint enforces `import/consistent-type-specifier-style: "prefer-inline"`.
 - Within a named import list, place every value import first and every inline `type` import last. Do not interleave the two groups. The TypeScript quality runner enforces and fixes this order.
 - Combine type and value imports in a single import block:
@@ -31,6 +32,22 @@ A single value import, including an aliased import, stays inline:
 
 ```typescript
 import { v4 as uuidv4 } from 'uuid'
+```
+
+Named exports follow the same one-versus-many layout:
+
+```typescript
+export { createCertificateHelper } from './certificate-helper.ts'
+
+export {
+    createLambdaCertificateHelper,
+    createLambdaCertificateManager,
+} from './lambda-certificate-manager.ts'
+
+export type {
+    LambdaCertificateManagerArgs,
+    LambdaCertificateManagerResult,
+} from './lambda-certificate-manager.ts'
 ```
 
 ## Type Definitions
@@ -84,14 +101,65 @@ interface UserProfile {
       }
   }
 
-  export function createExampleWidget(config: ExampleWidgetConfig): ExampleWidgetInstance {
-      return new ExampleWidget(config)
-  }
+  export const createExampleWidget = (config: ExampleWidgetConfig): ExampleWidgetInstance =>
+      new ExampleWidget(config)
   ```
 - Plain functions are only appropriate for pure utilities, tiny adapters, simple callbacks, small mappers, and glue code where a class would clearly add ceremony without improving ownership. If the code needs private state, cleanup, lifecycle, callbacks retained across calls, DOM references, or an imperative instance API, it is no longer a tiny function.
 - Reusable UI components, controllers, services, managers, menu primitives, tooltip/popover primitives, canvas controls, SVG controls, editor plugins/views, and other imperative instances must use a class-backed implementation. Do not implement these as closure-backed factories.
 - Prefer composition over inheritance. Do not build inheritance chains deeper than 3 levels; inheritance deeper than 3 levels is a deal breaker and must be redesigned.
 - Keep config, event payloads, and other object shapes as `type` definitions, not `interface`.
+
+## Functions And Control Flow
+
+- Use arrow functions instead of plain function declarations. Export a `const` when the function is part of a module's public API.
+- Remove braces and `return` from an arrow function whose body is one expression. The same rule applies to arrow-function class fields.
+- When an expression-bodied arrow function would exceed 150 characters on one line, keep the signature and `=>` on the first line and move the intact body expression to the following indented line. Do not split the expression itself.
+- Keep blocks around multi-statement, branching, or otherwise complex function bodies.
+- A function, method, constructor, arrow function, call, or `new` expression with two or more parameters or arguments is multiline, with one item per line and a trailing comma. The same formatter entry point owns declarations and invocations so these layouts cannot drift.
+- Keep an `if` condition with no more than two logical evaluations on the `if` line. Split a condition with more than two logical evaluations across lines, with each top-level operand on its own indented line. Remove braces from an `if` body when it contains one simple single-line statement and place that statement on the following indented line. `else` begins on the following line when both branches are compact.
+- Keep each level of a nested conditional expression visibly nested. Indent a nested `?` and `:` one level beyond its parent conditional. Do not flatten multiple conditional levels into one operator column or add parentheses that erase the indentation hierarchy.
+- Declare or assign each value in a separate statement. Comma-separated variable declarations and comma sequence expressions are prohibited.
+- Preserve deliberately expanded function parameters, function arguments, types, arrays, objects, logical expressions, conditional expressions, and method chains. Formatting must not flatten those structures just because they fit under the print width.
+- Object destructuring with more than one property is multiline, with one property per line.
+- `Map`, `Set`, `WeakMap`, and `WeakSet` initializers with more than one value are multiline, with one value per line. Any other collection that is already expanded stays expanded.
+- A D3 or SVG chain with more than one `.attr()` call is multiline, with one chained call per line.
+- Do not use semicolons. A leading semicolon is required before an IIFE or another statement-continuation expression when automatic semicolon insertion would attach it to the previous statement.
+- Remove unused imports. The TypeScript quality runner's fix actions remove them automatically without deleting unused local variables.
+- Outside frontend code, use `log`, `info`, `infoStr`, `warn`, and `err` from `@lixpi/debug-tools` instead of native `console.log`, `console.info`, `console.warn`, or `console.error`. The quality runner rewrites native backend logging calls and adds the required imports automatically.
+
+```typescript
+const isMediaNode = (node: CanvasNode | undefined): boolean =>
+    node?.type === 'image' || node?.type === 'video'
+
+private releasePanZoomForNodePointer = (): void =>
+    this.nodeGestures.releasePanLock()
+
+if (!currentState)
+    return
+
+if (
+    !input
+    || typeof input !== 'object'
+    || Array.isArray(input)
+)
+    return null
+
+const source = byId.get(edge.sourceNodeId)
+const target = byId.get(edge.targetNodeId)
+
+const {
+    repository,
+    image,
+} = buildDockerImage(options)
+
+const transitionHelpers = new Set([
+    'hoverTransition',
+    'standardTransition',
+])
+
+const value = resolveValue()
+;(() => initialize(value))()
+```
 
 ## Comments
 
@@ -131,6 +199,12 @@ fetchData().then((data) => { ... })
 ### DOM Templating (web-ui)
 
 **This rule is mandatory. No exceptions outside of test files.**
+
+Oxfmt formats HTML files and HTML inside tagged TypeScript templates. Nested interpolations stay indented relative to their surrounding HTML instead of being aligned as ordinary TypeScript expressions.
+
+TypeScript inside `${...}` follows every normal TypeScript rule, including control-flow, function argument, logical-expression, and conditional-expression layout. HTML formatting must not replace or bypass the formatted TypeScript interpolation body.
+
+An HTML start tag with two or more attributes is multiline, with one attribute per line. This applies to standalone HTML and `html` tagged templates, including attributes with interpolated values.
 
 In all `services/web-ui` `.ts` files that create DOM elements — ProseMirror plugins and NodeViews, shared components, canvas code (`WorkspaceCanvas.ts`, utilities, etc.), and any other file that builds UI — always use the `html` tagged template from `@lixpi/ui-primitives/dom`:
 
@@ -200,4 +274,6 @@ The only exception is test files (`*.test.ts`) where minimal DOM setup for mocki
 | `using` / `await using` | Manual resource cleanup (when supported) |
 | Native `fetch` API | `axios` or any HTTP client library |
 
-Oxlint enforces `structuredClone()` and `Object.hasOwn()` through the Dockerized [TypeScript quality runner](../testing/TypeScript/TYPESCRIPT-QUALITY.md).
+String concatenation is prohibited. Use template interpolation even when the concatenation spans multiple lines.
+
+Oxlint enforces template interpolation, `structuredClone()`, and `Object.hasOwn()` through the Dockerized [TypeScript quality runner](../../services/typescript-quality-runner/documentation/TYPESCRIPT-QUALITY.md).

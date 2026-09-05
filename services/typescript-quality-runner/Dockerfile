@@ -2,14 +2,10 @@ ARG NODE_VERSION=24
 
 FROM node:${NODE_VERSION}-alpine
 
-RUN npm install -g pnpm@11.6.0
+RUN npm install -g pnpm@*
 
 WORKDIR /usr/src/quality-runner
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN mkdir -p /usr/src/quality-runner/packages/debug-tools /usr/src/repository
 
-RUN pnpm install --frozen-lockfile
-
-COPY stylelint-lixpi-plugin.ts stylelint-runner.ts ./
-
-WORKDIR /usr/src/repository
+ENTRYPOINT ["sh", "/usr/src/quality-runner/run-quality.sh"]

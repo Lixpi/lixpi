@@ -1,8 +1,8 @@
 services:
 
-    # One-shot TypeScript formatter and linter. Like the TypeScript test runner,
-    # every invocation gets one current repository bind mount while the image
-    # keeps its pinned tool dependencies outside that mount.
+    # One-shot TypeScript formatter and linter. Tool dependencies live only in
+    # named Docker volumes. Repository paths are mounted separately so pnpm
+    # cannot create a lockfile, store, or node_modules on the host.
     lixpi-typescript-quality-runner:
         profiles: ["dev"]
         image: lixpi/typescript-quality-runner
@@ -10,12 +10,83 @@ services:
             context: ./services/typescript-quality-runner
             dockerfile: Dockerfile
         environment:
+            CI: "true"
             DPRINT_CACHE_DIR: /dprint-cache
+            npm_config_store_dir: /pnpm-store
         volumes:
-            - ./:/usr/src/repository:cached
+            # Tool workspace. No host directory is mounted over this path.
+            - ./services/typescript-quality-runner/package.json:/usr/src/quality-runner/package.json:ro,cached
+            - ./services/typescript-quality-runner/pnpm-workspace.yaml:/usr/src/quality-runner/pnpm-workspace.yaml:ro,cached
+            - ./services/typescript-quality-runner/run-quality.sh:/usr/src/quality-runner/run-quality.sh:ro,cached
+            - ./services/typescript-quality-runner/test-quality.sh:/usr/src/quality-runner/test-quality.sh:ro,cached
+            - ./services/typescript-quality-runner/fixtures:/usr/src/quality-runner/fixtures:ro,cached
+            - ./services/typescript-quality-runner/import-specifier-order.ts:/usr/src/quality-runner/import-specifier-order.ts:cached
+            - ./services/typescript-quality-runner/lixpi-oxlint-plugin.ts:/usr/src/quality-runner/lixpi-oxlint-plugin.ts:cached
+            - ./services/typescript-quality-runner/source-extension-runner.ts:/usr/src/quality-runner/source-extension-runner.ts:cached
+            - ./services/typescript-quality-runner/stylelint-lixpi-plugin.ts:/usr/src/quality-runner/stylelint-lixpi-plugin.ts:cached
+            - ./services/typescript-quality-runner/stylelint-runner.ts:/usr/src/quality-runner/stylelint-runner.ts:cached
+            - ./services/typescript-quality-runner/typescript-format-runner.ts:/usr/src/quality-runner/typescript-format-runner.ts:cached
+            - ./services/typescript-quality-runner/dprint.json:/usr/src/quality-runner/dprint.json:ro,cached
+            - ./services/typescript-quality-runner/oxfmt.json:/usr/src/quality-runner/oxfmt.json:ro,cached
+            - ./services/typescript-quality-runner/oxlint.json:/usr/src/quality-runner/oxlint.json:ro,cached
+            - ./services/typescript-quality-runner/stylelint.config.ts:/usr/src/quality-runner/stylelint.config.ts:cached
+            - ./packages/lixpi/debug-tools/ts/package.json:/usr/src/quality-runner/packages/debug-tools/package.json:ro,cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/quality-runner/packages/debug-tools/debug-tools.ts:ro,cached
+            - typescript-quality-runner-node-modules:/usr/src/quality-runner/node_modules
+            - typescript-quality-runner-debug-tools-node-modules:/usr/src/quality-runner/packages/debug-tools/node_modules
+            - typescript-quality-runner-pnpm-store:/pnpm-store
             - typescript-quality-runner-dprint-cache:/dprint-cache
+
+            # Compatibility paths used by the existing fixture self-test. The
+            # source configuration still lives only in the runner directory.
+            - ./services/typescript-quality-runner/dprint.json:/usr/src/repository/dprint.json:ro,cached
+            - ./services/typescript-quality-runner/oxlint.json:/usr/src/repository/.oxlintrc.json:ro,cached
+            - ./services/typescript-quality-runner/fixtures:/usr/src/repository/services/typescript-quality-runner/fixtures:ro,cached
+            - ./services/typescript-quality-runner/import-specifier-order.ts:/usr/src/repository/services/typescript-quality-runner/import-specifier-order.ts:ro,cached
+
+            # Application and library source. Package manifests are not mounted
+            # into this writable tree, so dependency artifacts cannot leak.
+            - ./services/web-ui/index.html:/usr/src/repository/services/web-ui/index.html:cached
+            - ./services/web-ui/src:/usr/src/repository/services/web-ui/src:cached
+            - ./services/web-ui/vite.config.ts:/usr/src/repository/services/web-ui/vite.config.ts:cached
+            - ./services/web-ui/vitest.config.ts:/usr/src/repository/services/web-ui/vitest.config.ts:cached
+            - ./services/api/src:/usr/src/repository/services/api/src:cached
+            - ./services/api/vitest.config.ts:/usr/src/repository/services/api/vitest.config.ts:cached
+            - ./services/nex/workloads:/usr/src/repository/services/nex/workloads:cached
+            - ./services/nex/vitest.config.ts:/usr/src/repository/services/nex/vitest.config.ts:cached
+            - ./services/ai-model-registry/src:/usr/src/repository/services/ai-model-registry/src:cached
+            - ./services/ai-model-registry/vite.config.ts:/usr/src/repository/services/ai-model-registry/vite.config.ts:cached
+            - ./documentation/site/assets:/usr/src/repository/documentation/site/assets:cached
+            - ./infrastructure/init-script/setup-env.ts:/usr/src/repository/infrastructure/init-script/setup-env.ts:cached
+            - ./infrastructure/pulumi/src:/usr/src/repository/infrastructure/pulumi/src:cached
+            - ./random-useful-things:/usr/src/repository/random-useful-things:cached
+            - ./packages/lixpi/auth-service/src:/usr/src/repository/packages/lixpi/auth-service/src:cached
+            - ./packages/lixpi/capability-system/src:/usr/src/repository/packages/lixpi/capability-system/src:cached
+            - ./packages/lixpi/canvas-engine/src:/usr/src/repository/packages/lixpi/canvas-engine/src:cached
+            - ./packages/lixpi/canvas-engine/examples:/usr/src/repository/packages/lixpi/canvas-engine/examples:cached
+            - ./packages/lixpi/canvas-components/src:/usr/src/repository/packages/lixpi/canvas-components/src:cached
+            - ./packages/lixpi/canvas-components/examples:/usr/src/repository/packages/lixpi/canvas-components/examples:cached
+            - ./packages/lixpi/canvas-components-lixpi-specific/src:/usr/src/repository/packages/lixpi/canvas-components-lixpi-specific/src:cached
+            - ./packages/lixpi/constants/ts/asset-types.ts:/usr/src/repository/packages/lixpi/constants/ts/asset-types.ts:cached
+            - ./packages/lixpi/constants/ts/aws-resources.ts:/usr/src/repository/packages/lixpi/constants/ts/aws-resources.ts:cached
+            - ./packages/lixpi/constants/ts/index.ts:/usr/src/repository/packages/lixpi/constants/ts/index.ts:cached
+            - ./packages/lixpi/constants/ts/media-generation-layout-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-layout-settings.ts:cached
+            - ./packages/lixpi/constants/ts/media-generation-progress.ts:/usr/src/repository/packages/lixpi/constants/ts/media-generation-progress.ts:cached
+            - ./packages/lixpi/constants/ts/metrics-contracts.ts:/usr/src/repository/packages/lixpi/constants/ts/metrics-contracts.ts:cached
+            - ./packages/lixpi/constants/ts/types.ts:/usr/src/repository/packages/lixpi/constants/ts/types.ts:cached
+            - ./packages/lixpi/constants/ts/workspace-persistence-settings.ts:/usr/src/repository/packages/lixpi/constants/ts/workspace-persistence-settings.ts:cached
+            - ./packages/lixpi/debug-tools/ts/debug-tools.ts:/usr/src/repository/packages/lixpi/debug-tools/ts/debug-tools.ts:cached
+            - ./packages/lixpi/dynamodb-service/src:/usr/src/repository/packages/lixpi/dynamodb-service/src:cached
+            - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/repository/packages/lixpi/nats-auth-callout-service/src:cached
+            - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/repository/packages/lixpi/nats-service/ts/nats-service.ts:cached
+            - ./packages/lixpi/prosemirror/src:/usr/src/repository/packages/lixpi/prosemirror/src:cached
+            - ./packages/lixpi/ui-kit/src:/usr/src/repository/packages/lixpi/ui-kit/src:cached
+            - ./packages/lixpi/ui-kit/styles:/usr/src/repository/packages/lixpi/ui-kit/styles:cached
+            - ./packages/lixpi/ui-primitives/src:/usr/src/repository/packages/lixpi/ui-primitives/src:cached
         working_dir: /usr/src/repository
-        entrypoint: ["sh", "/usr/src/repository/services/typescript-quality-runner/run-quality.sh"]
 
 volumes:
+    typescript-quality-runner-node-modules:
+    typescript-quality-runner-debug-tools-node-modules:
+    typescript-quality-runner-pnpm-store:
     typescript-quality-runner-dprint-cache:

@@ -1,6 +1,8 @@
 packages:
   - "."
+  - "packages/*"
+
+linkWorkspacePackages: true
 
 allowBuilds:
   dprint: true
-

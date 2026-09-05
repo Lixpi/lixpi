@@ -7,57 +7,71 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
 import stylelint from 'stylelint'
-import lixpiStylelintPlugin from './stylelint-lixpi-plugin.ts'
+import lixpiStylelintPlugins from './stylelint-lixpi-plugin.ts'
 
 const repositoryDirectory = '/usr/src/repository'
 const toolDirectory = '/usr/src/quality-runner'
-const configFile = path.join(repositoryDirectory, 'stylelint.config.mjs')
+const configFile = path.join(toolDirectory, 'stylelint.config.ts')
 const supportedExtensions = new Set([
     '.css',
     '.scss',
 ])
 
-async function collectStylesheetPaths(inputPath: string, stylesheetPaths: string[]): Promise<void> {
+const collectStylesheetPaths = async (
+    inputPath: string,
+    stylesheetPaths: string[],
+): Promise<void> => {
     const absolutePath = path.resolve(repositoryDirectory, inputPath)
     let pathStats: Stats
+
     try {
         pathStats = await stat(absolutePath)
     } catch (error) {
-        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        if (
+            error instanceof Error
+            && 'code' in error
+            && error.code === 'ENOENT'
+        )
             return
-        }
+
         throw error
     }
 
     if (pathStats.isFile()) {
-        if (supportedExtensions.has(path.extname(absolutePath))) {
+        if (supportedExtensions.has(
+            path.extname(absolutePath),
+        ))
             stylesheetPaths.push(absolutePath)
-        }
+
         return
     }
 
-    if (!pathStats.isDirectory()) {
+    if (!pathStats.isDirectory())
         return
-    }
 
     const relativePath = path.relative(repositoryDirectory, absolutePath)
-    stylesheetPaths.push(path.join(relativePath, '**/*.css'))
-    stylesheetPaths.push(path.join(relativePath, '**/*.scss'))
+    stylesheetPaths.push(
+        path.join(relativePath, '**/*.css'),
+    )
+    stylesheetPaths.push(
+        path.join(relativePath, '**/*.scss'),
+    )
 }
 
 const action = process.argv[2]
-if (action !== 'check' && action !== 'fix') {
+
+if (
+    action !== 'check'
+    && action !== 'fix'
+)
     throw new Error(`Unknown Stylelint action: ${action}`)
-}
 
 const stylesheetPaths: string[] = []
-for (const inputPath of process.argv.slice(3)) {
-    await collectStylesheetPaths(inputPath, stylesheetPaths)
-}
 
-if (stylesheetPaths.length === 0) {
+for (const inputPath of process.argv.slice(3)) await collectStylesheetPaths(inputPath, stylesheetPaths)
+
+if (stylesheetPaths.length === 0)
     process.exit(0)
-}
 
 const { default: repositoryConfig } = await import(pathToFileURL(configFile).href)
 
@@ -65,10 +79,7 @@ const result = await stylelint.lint({
     allowEmptyInput: true,
     config: {
         ...repositoryConfig,
-        plugins: [
-            ...repositoryConfig.plugins,
-            lixpiStylelintPlugin,
-        ],
+        plugins: [...repositoryConfig.plugins, ...lixpiStylelintPlugins],
     },
     configBasedir: toolDirectory,
     cwd: repositoryDirectory,
@@ -78,10 +89,11 @@ const result = await stylelint.lint({
     maxWarnings: 0,
 })
 
-if (result.errored && result.report) {
+if (
+    result.errored
+    && result.report
+)
     process.stdout.write(result.report)
-}
 
-if (result.errored) {
+if (result.errored)
     process.exitCode = 1
-}

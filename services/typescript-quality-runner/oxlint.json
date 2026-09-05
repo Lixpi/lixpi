@@ -1,5 +1,5 @@
 {
-    "$schema": "./services/typescript-quality-runner/node_modules/oxlint/configuration_schema.json",
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
     "categories": {
         "correctness": "off"
     },
@@ -10,10 +10,27 @@
         "typescript",
         "unicorn"
     ],
+    "jsPlugins": [
+        {
+            "name": "stylistic",
+            "specifier": "/usr/src/quality-runner/node_modules/@stylistic/eslint-plugin/dist/index.js"
+        },
+        {
+            "name": "lixpi",
+            "specifier": "/usr/src/quality-runner/lixpi-oxlint-plugin.ts"
+        }
+    ],
     "ignorePatterns": [
         "**/node_modules/**",
         "**/dist/**",
         "**/coverage/**",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "**/testUtils/**/*.ts",
+        "**/test/**/*.ts",
+        "**/tests/**/*.ts",
+        "**/__tests__/**/*.ts",
+        "**/mocks/**/*.ts",
         "packages-vendor/**",
         "**/*.js",
         "**/*.jsx",
@@ -21,6 +38,14 @@
         "**/*.cjs"
     ],
     "rules": {
+        "arrow-body-style": "off",
+        "stylistic/semi": [
+            "error",
+            "never",
+            {
+                "beforeStatementContinuationChars": "always"
+            }
+        ],
         "import/consistent-type-specifier-style": [
             "error",
             "prefer-inline"
@@ -44,6 +69,23 @@
             }
         ],
         "no-debugger": "error",
+        "lixpi/no-block-comments": "error",
+        "lixpi/no-native-console-logging": "error",
+        "lixpi/no-comma-separated-statements": "error",
+        "lixpi/no-unused-imports": "error",
+        "lixpi/prefer-attached-trailing-comma": "error",
+        "lixpi/prefer-arrow-function-declaration": "error",
+        "lixpi/prefer-compact-if": "error",
+        "lixpi/prefer-expression-arrow-body": "error",
+        "lixpi/prefer-multiline-attr-chain": "error",
+        "lixpi/prefer-multiline-collection": "error",
+        "lixpi/prefer-multiline-object-pattern": "error",
+        "lixpi/prefer-multiline-object": "error",
+        "lixpi/prefer-separated-statements": "error",
+        "lixpi/prefer-multiline-type-literal": "error",
+        "lixpi/prefer-multiline-condition": "error",
+        "lixpi/no-nested-ternary": "off",
+        "lixpi/prefer-void-arrow-body": "error",
         "no-restricted-imports": [
             "error",
             {
@@ -109,6 +151,7 @@
             }
         ],
         "prefer-object-has-own": "error",
+        "prefer-arrow-callback": "error",
         "prefer-template": "error",
         "promise/prefer-await-to-then": "error",
         "typescript/consistent-type-definitions": [
@@ -137,6 +180,41 @@
             }
         },
         {
+            "files": [
+                "**/import-specifier-order.ts",
+                "**/lixpi-oxlint-plugin.ts",
+                "**/source-extension-runner.ts",
+                "**/stylelint-lixpi-plugin.ts",
+                "**/stylelint-runner.ts",
+                "**/stylelint.config.ts",
+                "**/typescript-format-runner.ts"
+            ],
+            "rules": {
+                "lixpi/require-ast-formatter-rules": "error"
+            }
+        },
+        {
+            "files": ["**/*.test.ts", "**/*.spec.ts", "**/testUtils/**/*.ts", "**/test/**/*.ts", "**/tests/**/*.ts", "**/__tests__/**/*.ts", "**/mocks/**/*.ts"],
+            "rules": {
+                "arrow-body-style": "off",
+                "lixpi/no-block-comments": "off",
+                "lixpi/no-comma-separated-statements": "off",
+                "lixpi/no-unused-imports": "off",
+                "lixpi/prefer-attached-trailing-comma": "off",
+                "lixpi/prefer-arrow-function-declaration": "off",
+                "lixpi/prefer-compact-if": "off",
+                "lixpi/prefer-expression-arrow-body": "off",
+                "lixpi/prefer-multiline-attr-chain": "off",
+                "lixpi/prefer-multiline-collection": "off",
+                "lixpi/prefer-multiline-object-pattern": "off",
+                "lixpi/prefer-separated-statements": "off",
+                "lixpi/prefer-multiline-type-literal": "off",
+                "lixpi/prefer-multiline-condition": "off",
+                "lixpi/prefer-void-arrow-body": "off",
+                "prefer-arrow-callback": "off"
+            }
+        },
+        {
             "files": ["services/web-ui/src/**/*.ts"],
             "excludeFiles": [
                 "**/*.test.ts",
@@ -160,6 +238,22 @@
                         "message": "Use the html template, dataset, ARIA reflection, or direct DOM properties."
                     }
                 ]
+            }
+        },
+        {
+            "files": [
+                "services/web-ui/**/*.ts",
+                "services/ai-model-registry/src/client/**/*.ts",
+                "packages/lixpi/**/src/frontend/**/*.ts",
+                "packages/lixpi/canvas-engine/examples/**/*.ts",
+                "packages/lixpi/canvas-components/examples/**/*.ts",
+                "packages/lixpi/debug-tools/**/*.ts",
+                "packages/lixpi/prosemirror/**/*.ts",
+                "packages/lixpi/ui-kit/**/*.ts",
+                "packages/lixpi/ui-primitives/**/*.ts"
+            ],
+            "rules": {
+                "lixpi/no-native-console-logging": "off"
             }
         }
     ]

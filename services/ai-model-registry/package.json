@@ -6,6 +6,9 @@
         "dev": "vite --host 0.0.0.0",
         "build": "vite build"
     },
+    "dependencies": {
+        "@lixpi/debug-tools": "file:../../packages/lixpi/debug-tools/ts"
+    },
     "devDependencies": {
         "sass": "*",
         "vite": "^6"

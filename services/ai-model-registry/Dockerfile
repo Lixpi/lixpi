@@ -13,6 +13,7 @@ RUN apk add --no-cache curl jq
 # Vite builds the client; sass compiles its stylesheet. The server needs no
 # dependencies at all, because Node runs its TypeScript directly through native
 # type stripping.
+COPY ./packages/lixpi/debug-tools/ts /usr/packages/lixpi/debug-tools/ts
 COPY ./services/ai-model-registry/package.json ./package.json
 RUN npm install --no-audit --no-fund
 

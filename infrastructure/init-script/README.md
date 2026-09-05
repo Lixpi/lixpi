@@ -35,7 +35,7 @@ This script runs inside a Docker container and:
 Open Terminal in the project folder and run:
 
 ```bash
-docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
+docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup . && docker run -it --rm -v "$(pwd):/workspace" lixpi/setup
 ```
 
 #### Windows CMD
@@ -43,7 +43,7 @@ docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v
 Open Command Prompt in the project folder and run:
 
 ```cmd
-docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v "%cd%:/workspace" lixpi/setup
+docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup . && docker run -it --rm -v "%cd%:/workspace" lixpi/setup
 ```
 
 #### Windows PowerShell
@@ -51,7 +51,7 @@ docker build -t lixpi/setup infrastructure/init-script && docker run -it --rm -v
 Open PowerShell in the project folder and run:
 
 ```powershell
-docker build -t lixpi/setup infrastructure/init-script; docker run -it --rm -v "${PWD}:/workspace" lixpi/setup
+docker build -f infrastructure/init-script/Dockerfile -t lixpi/setup .; docker run -it --rm -v "${PWD}:/workspace" lixpi/setup
 ```
 
 ### Non-Interactive Mode (CI/Automation)
