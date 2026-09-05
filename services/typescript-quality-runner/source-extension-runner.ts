@@ -261,13 +261,11 @@ const updateModuleSpecifiers = async (
         if (!target)
             continue
 
-        replacements.push(
-            {
-                end: sourceRange[1],
-                start: sourceRange[0],
-                value: JSON.stringify(`${specifier.slice(0, -extname(specifier).length)}.ts`),
-            },
-        )
+        replacements.push({
+            end: sourceRange[1],
+            start: sourceRange[0],
+            value: JSON.stringify(`${specifier.slice(0, -extname(specifier).length)}.ts`),
+        })
     }
 
     const output = applySourceReplacements(source, replacements)

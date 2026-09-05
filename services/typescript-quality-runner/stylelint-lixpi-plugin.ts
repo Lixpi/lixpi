@@ -217,15 +217,13 @@ const transitionHelpersRule = (
             )
                 return
 
-            stylelint.utils.report(
-                {
-                    message: transitionMessages.expected(declaration.value),
-                    node: declaration,
-                    result,
-                    ruleName: transitionRuleName,
-                    word: declaration.value,
-                },
-            )
+            stylelint.utils.report({
+                message: transitionMessages.expected(declaration.value),
+                node: declaration,
+                result,
+                ruleName: transitionRuleName,
+                word: declaration.value,
+            })
         },
     )
 }
@@ -298,18 +296,16 @@ const convertBlockComment = (
     const lines = getCommentLines(comment)
     const indentation = getCommentIndentation(comment)
     const comments = lines.map(
-        (line, index) => comment.clone(
-            {
-                text: line,
-                raws: {
-                    ...comment.raws,
-                    before: index === 0 ? comment.raws.before : `\n${indentation}`,
-                    inline: true,
-                    left: line.length > 0 ? ' ' : '',
-                    right: '',
-                },
+        (line, index) => comment.clone({
+            text: line,
+            raws: {
+                ...comment.raws,
+                before: index === 0 ? comment.raws.before : `\n${indentation}`,
+                inline: true,
+                left: line.length > 0 ? ' ' : '',
+                right: '',
             },
-        ),
+        }),
     )
     comment.replaceWith(...comments)
 }

@@ -75,21 +75,19 @@ if (stylesheetPaths.length === 0)
 
 const { default: repositoryConfig } = await import(pathToFileURL(configFile).href)
 
-const result = await stylelint.lint(
-    {
-        allowEmptyInput: true,
-        config: {
-            ...repositoryConfig,
-            plugins: [...repositoryConfig.plugins, ...lixpiStylelintPlugins],
-        },
-        configBasedir: toolDirectory,
-        cwd: repositoryDirectory,
-        files: stylesheetPaths,
-        fix: action === 'fix',
-        formatter: 'string',
-        maxWarnings: 0,
+const result = await stylelint.lint({
+    allowEmptyInput: true,
+    config: {
+        ...repositoryConfig,
+        plugins: [...repositoryConfig.plugins, ...lixpiStylelintPlugins],
     },
-)
+    configBasedir: toolDirectory,
+    cwd: repositoryDirectory,
+    files: stylesheetPaths,
+    fix: action === 'fix',
+    formatter: 'string',
+    maxWarnings: 0,
+})
 
 if (
     result.errored

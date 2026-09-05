@@ -840,6 +840,12 @@ const collectionConstructorNames = new Set([
 // `new Map([...])` and its siblings are laid out by Oxlint's collection rule, which puts
 // the elements inside the array's own brackets. Splitting the constructor's argument list
 // as well would give the two rules different answers for the same call.
+// A lone object or array argument keeps its own bracket on the call's line, so a call
+// written around one options bag reads as `f({` rather than opening two brackets on two
+// separate lines for the same argument.
+const isHuggableArgument = (node: AstNode | null | undefined): boolean => node?.type === 'ObjectExpression'
+    || node?.type === 'ArrayExpression'
+
 const isCollectionInitializer = (
     node: AstNode,
 ): boolean => {
@@ -1017,9 +1023,18 @@ const canonicalizeDelimitedListsOnce = (
                         nodeRange[1],
                     ) > lineLimit)
 
+                // A call around a single object or array keeps that bracket on its own
+                // line, whether the split was asked for by a rule above or was already
+                // written that way.
+                const hugsSoleArgument = isBracketed
+                    && isCall
+                    && items.length === 1
+                    && isHuggableArgument(items[0])
+                    && collapsed == null
+
                 if (
                     !hasInterItemComment
-                    && mustSplit
+                    && (mustSplit || hugsSoleArgument)
                 ) {
                     const indentation = getLineIndentation(
                         source,
@@ -1033,11 +1048,13 @@ const canonicalizeDelimitedListsOnce = (
                     const itemTexts = itemRanges.map((range) => reindentNodeText(
                         source,
                         range!,
-                        itemIndentation,
+                        hugsSoleArgument ? indentation : itemIndentation,
                     ))
                     const lastItem = items.at(-1)
                     const trailingComma = lastItem?.type === 'RestElement' ? '' : ','
-                    const replacement = `\n${itemIndentation}${itemTexts.join(`,\n${itemIndentation}`)}${trailingComma}\n${indentation}`
+                    const replacement = hugsSoleArgument
+                        ? itemTexts[0]!
+                        : `\n${itemIndentation}${itemTexts.join(`,\n${itemIndentation}`)}${trailingComma}\n${indentation}`
 
                     if (source.slice(start, end) !== replacement) {
                         replacements.push({
@@ -1296,17 +1313,15 @@ const collectHtmlTemplateContents = (
 
                 for (let index = 0; index < rawRanges.length - 1; index++) interpolationRanges.push([rawRanges[index]![1], rawRanges[index + 1]![0]])
 
-                contents.push(
-                    {
-                        start: templateRange[0] + 1,
-                        end: templateRange[1] - 1,
-                        interpolationRanges,
-                        indentation: getLineIndentation(
-                            source,
-                            node.range?.[0] ?? templateRange[0],
-                        ),
-                    },
-                )
+                contents.push({
+                    start: templateRange[0] + 1,
+                    end: templateRange[1] - 1,
+                    interpolationRanges,
+                    indentation: getLineIndentation(
+                        source,
+                        node.range?.[0] ?? templateRange[0],
+                    ),
+                })
             }
         }
 
@@ -1710,18 +1725,16 @@ const getCallChain = (
         )
             boundaryEnd++
 
-        segments.unshift(
-            {
+        segments.unshift({
+            boundaryEnd,
+            boundaryStart: objectRange[1],
+            isIterator,
+            leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
+            text: source.slice(
                 boundaryEnd,
-                boundaryStart: objectRange[1],
-                isIterator,
-                leadingWhitespace: source.slice(objectRange[1], boundaryEnd),
-                text: source.slice(
-                    boundaryEnd,
-                    currentRange[1],
-                ),
-            },
-        )
+                currentRange[1],
+            ),
+        })
         current = current.callee.object
     }
 
