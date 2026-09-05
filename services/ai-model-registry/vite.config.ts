@@ -9,7 +9,9 @@ export default defineConfig({
     publicDir: false,
     resolve: {
         alias: {
-            '@lixpi/ui-primitives/styles/transitions': fileURLToPath(new URL('../../packages/lixpi/ui-primitives/src/styles/_transitions.scss', import.meta.url)),
+            '@lixpi/ui-primitives/styles/transitions': fileURLToPath(
+                new URL('../../packages/lixpi/ui-primitives/src/styles/_transitions.scss', import.meta.url),
+            ),
         },
     },
     build: {

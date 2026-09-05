@@ -15,9 +15,16 @@ export const generateMediaGenerationSeed = (maxValue: number): number => randomI
 
 export const readReportedSeed = (reported: unknown): number | undefined => {
     const value = typeof reported === 'number' ? reported : Number(reported)
-    return Number.isSafeInteger(value) && value > 0 ? value : undefined
+
+    return Number.isSafeInteger(value)
+        && value > 0
+        ? value
+        : undefined
 }
 
 // Providers echo the seed they used with different shapes and sentinel values.
 // Anything that is not a usable positive integer falls back to the seed we sent.
-export const resolveReportedSeed = (reported: unknown, requestedSeed: number): number => readReportedSeed(reported) ?? requestedSeed
+export const resolveReportedSeed = (
+    reported: unknown,
+    requestedSeed: number,
+): number => readReportedSeed(reported) ?? requestedSeed

@@ -43,12 +43,15 @@ export type MediaModelBadgeMeta = {
     label: string
 }
 
-function normalize(value: string | null | undefined): string {
-    return String(value ?? '').trim().toLowerCase()
+const normalize = (value: string | null | undefined): string => {
+    return String(value ?? '')
+        .trim()
+        .toLowerCase()
 }
 
-function splitMediaModelId(modelId: string): MediaModelParts {
+const splitMediaModelId = (modelId: string): MediaModelParts => {
     const colonIndex = modelId.indexOf(':')
+
     if (colonIndex > 0) {
         return {
             provider: modelId.slice(0, colonIndex),
@@ -57,6 +60,7 @@ function splitMediaModelId(modelId: string): MediaModelParts {
     }
 
     const slashIndex = modelId.indexOf('/')
+
     if (slashIndex > 0) {
         return {
             provider: modelId.slice(0, slashIndex),
@@ -64,48 +68,75 @@ function splitMediaModelId(modelId: string): MediaModelParts {
         }
     }
 
-    return { provider: '', model: modelId }
+    return {
+        provider: '',
+        model: modelId,
+    }
 }
 
-function normalizeScale(scale: number | null | undefined): number {
-    return Number.isFinite(Number(scale)) && Number(scale) > 0 ? Number(scale) : 1
+const normalizeScale = (scale: number | null | undefined): number => {
+    return Number.isFinite(
+        Number(scale),
+    )
+        && Number(scale) > 0
+        ? Number(scale)
+        : 1
 }
 
-function scaleCssLength(value: string, scale: number): string {
-    const match = String(value).trim().match(/^(-?\d+(?:\.\d+)?)([a-z%]+)$/i)
-    if (!match) return value
+const scaleCssLength = (
+    value: string,
+    scale: number,
+): string => {
+    const match = String(value)
+        .trim()
+        .match(/^(-?\d+(?:\.\d+)?)([a-z%]+)$/i)
+
+    if (!match)
+        return value
+
     return `${Number(match[1]) * scale}${match[2]}`
 }
 
-function findMediaModelMeta(modelId: string, modelProvider: string): MediaModelCatalogEntry | null {
-    const { provider, model } = splitMediaModelId(modelId)
+const findMediaModelMeta = (
+    modelId: string,
+    modelProvider: string,
+): MediaModelCatalogEntry | null => {
+    const {
+        provider,
+        model,
+    } = splitMediaModelId(modelId)
     const normalizedProvider = normalize(provider || modelProvider)
     const normalizedModel = normalize(model)
     const normalizedModelId = normalize(modelId)
     const models = (aiModelsStore.getData() ?? []) as MediaModelCatalogEntry[]
 
-    return models.find((candidate) => {
-        const candidateProvider = normalize(candidate.provider)
-        const candidateModel = normalize(candidate.model)
-        const candidateModelId = normalize(`${candidate.provider ?? ''}:${candidate.model ?? ''}`)
+    return (
+        models.find(candidate => {
+            const candidateProvider = normalize(candidate.provider)
+            const candidateModel = normalize(candidate.model)
+            const candidateModelId = normalize(`${candidate.provider ?? ''}:${candidate.model ?? ''}`)
 
-        if (normalizedProvider) {
-            return candidateProvider === normalizedProvider && candidateModel === normalizedModel
-        }
+            if (normalizedProvider)
+                return candidateProvider === normalizedProvider && candidateModel === normalizedModel
 
-        return candidateModel === normalizedModel || candidateModelId === normalizedModelId
-    }) ?? null
+            return candidateModel === normalizedModel || candidateModelId === normalizedModelId
+        }) ?? null
+    )
 }
 
-export function getMediaModelBadgeMeta(config: MediaModelBadgeConfig): MediaModelBadgeMeta {
+export const getMediaModelBadgeMeta = (config: MediaModelBadgeConfig): MediaModelBadgeMeta => {
     const modelId = String(config.modelId ?? '')
     const modelProvider = String(config.modelProvider ?? '')
-    const { provider, model } = splitMediaModelId(modelId)
+    const {
+        provider,
+        model,
+    } = splitMediaModelId(modelId)
     const providerKey = provider || modelProvider
     const modelMeta = findMediaModelMeta(modelId, providerKey)
     const providerTitle = modelMeta?.providerTitle ?? providerKey
     const modelTitle = modelMeta?.title ?? model
-    const label = providerTitle && modelTitle
+    const label = providerTitle
+        && modelTitle
         ? `${providerTitle}${settings.mediaNode.generatedMediaChrome.modelBadgeSeparator}${modelTitle}`
         : providerTitle || modelTitle
     const icon = config.monochromeIcon
@@ -124,8 +155,14 @@ export function getMediaModelBadgeMeta(config: MediaModelBadgeConfig): MediaMode
     }
 }
 
-export function resolveMediaModelBadgeConfig(config: MediaModelBadgeConfig): SharedMediaModelBadgeConfig {
-    const { providerTitle, modelTitle, icon, label } = getMediaModelBadgeMeta(config)
+export const resolveMediaModelBadgeConfig = (config: MediaModelBadgeConfig): SharedMediaModelBadgeConfig => {
+    const {
+        providerTitle,
+        modelTitle,
+        icon,
+        label,
+    } = getMediaModelBadgeMeta(config)
+
     return {
         providerTitle,
         modelTitle,
@@ -136,19 +173,25 @@ export function resolveMediaModelBadgeConfig(config: MediaModelBadgeConfig): Sha
     }
 }
 
-export function applyMediaModelBadgeStyleProperties(host: HTMLElement, options: MediaModelBadgeStyleOptions = {}): void {
+export const applyMediaModelBadgeStyleProperties = (
+    host: HTMLElement,
+    options: MediaModelBadgeStyleOptions = {},
+): void => {
     const generatedMediaChromeStyles = settings.mediaNode.generatedMediaChrome.styles
     const scale = normalizeScale(options.scale)
-    applySharedMediaModelBadgeStyleProperties(host, {
-        iconSize: `${settings.mediaNode.generatedMediaChrome.iconSize * scale}px`,
-        topGap: `${settings.mediaNode.generatedMediaChrome.gap * scale}px`,
-        iconGap: scaleCssLength(generatedMediaChromeStyles.modelBadgeIconGap, scale),
-        providerColor: generatedMediaChromeStyles.modelBadgeProviderColor,
-        modelColor: generatedMediaChromeStyles.modelBadgeModelColor,
-        nameFontSize: scaleCssLength(generatedMediaChromeStyles.modelBadgeNameFontSize, scale),
-        nameFontWeight: String(generatedMediaChromeStyles.modelBadgeNameFontWeight),
-        nameLineHeight: String(generatedMediaChromeStyles.modelBadgeNameLineHeight),
-    })
+    applySharedMediaModelBadgeStyleProperties(
+        host,
+        {
+            iconSize: `${settings.mediaNode.generatedMediaChrome.iconSize * scale}px`,
+            topGap: `${settings.mediaNode.generatedMediaChrome.gap * scale}px`,
+            iconGap: scaleCssLength(generatedMediaChromeStyles.modelBadgeIconGap, scale),
+            providerColor: generatedMediaChromeStyles.modelBadgeProviderColor,
+            modelColor: generatedMediaChromeStyles.modelBadgeModelColor,
+            nameFontSize: scaleCssLength(generatedMediaChromeStyles.modelBadgeNameFontSize, scale),
+            nameFontWeight: String(generatedMediaChromeStyles.modelBadgeNameFontWeight),
+            nameLineHeight: String(generatedMediaChromeStyles.modelBadgeNameLineHeight),
+        },
+    )
     host.style.setProperty('--canvas-node-footer-color', generatedMediaChromeStyles.infoButtonColor)
     host.style.setProperty('--canvas-node-footer-hover-color', generatedMediaChromeStyles.infoButtonHoverColor)
 }

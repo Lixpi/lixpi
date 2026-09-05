@@ -26,61 +26,111 @@ type CanvasStateUpdateResponse = {
     currentCanvasStateUpdatedAt?: number
 }
 
-function version(updatedAt?: number, canvasStateUpdatedAt?: number): CanvasVersion {
+const version = (
+    updatedAt?: number,
+    canvasStateUpdatedAt?: number,
+): CanvasVersion => {
     return {
         ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
         ...(Number.isFinite(canvasStateUpdatedAt) ? { canvasStateUpdatedAt } : {}),
     }
 }
 
-function ownsActiveStore(workspaceId: string): boolean {
+const ownsActiveStore = (workspaceId: string): boolean => {
     return workspaceStore.getData('workspaceId') === workspaceId
         && RouterService.getRouteParams().workspaceId === workspaceId
 }
 
-export function createWorkspacePersistencePorts(): CanvasPersistencePorts {
+export const createWorkspacePersistencePorts = (): CanvasPersistencePorts => {
     return {
         read: workspaceId => {
-            if (!ownsActiveStore(workspaceId)) return null
+            if (!ownsActiveStore(workspaceId))
+                return null
+
             return {
-                canvasState: normalizeWorkspaceCanvasState(workspaceStore.getData('canvasState')),
-                version: version(workspaceStore.getData('updatedAt'), workspaceStore.getData('canvasStateUpdatedAt')),
+                canvasState: normalizeWorkspaceCanvasState(
+                    workspaceStore.getData('canvasState'),
+                ),
+                version: version(
+                    workspaceStore.getData('updatedAt'),
+                    workspaceStore.getData('canvasStateUpdatedAt'),
+                ),
             }
         },
         save: async request => {
-            const result: CanvasStateUpdateResponse = await servicesStore.getData('nats')!.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId: request.workspaceId,
-                canvasState: request.canvasState,
-                ...(request.persistViewport ? { persistViewport: true } : {}),
-                ...(Number.isFinite(request.expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt: request.expectedCanvasStateUpdatedAt } : {}),
-            })
+            const result: CanvasStateUpdateResponse = await servicesStore.getData('nats')!.request(
+                NATS_SUBJECTS.WORKSPACE_SUBJECTS.UPDATE_CANVAS_STATE,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId: request.workspaceId,
+                    canvasState: request.canvasState,
+                    ...(request.persistViewport ? { persistViewport: true } : {}),
+                    ...(Number.isFinite(request.expectedCanvasStateUpdatedAt) ? { expectedCanvasStateUpdatedAt: request.expectedCanvasStateUpdatedAt } : {}),
+                },
+            )
             const workspaceId = result.workspaceId ?? request.workspaceId
-            if (result.error === 'STALE_CANVAS_STATE') return { status: 'stale', workspaceId, current: version(result.currentUpdatedAt, result.currentCanvasStateUpdatedAt) }
-            if (result.error) return { status: 'error', workspaceId, error: new Error(result.error) }
-            return { status: 'saved', workspaceId, version: version(result.updatedAt, result.canvasStateUpdatedAt) }
+
+            if (result.error === 'STALE_CANVAS_STATE')
+                return {
+                    status: 'stale',
+                    workspaceId,
+                    current: version(result.currentUpdatedAt, result.currentCanvasStateUpdatedAt),
+                }
+
+            if (result.error)
+                return {
+                    status: 'error',
+                    workspaceId,
+                    error: new Error(result.error),
+                }
+
+            return {
+                status: 'saved',
+                workspaceId,
+                version: version(result.updatedAt, result.canvasStateUpdatedAt),
+            }
         },
         fetch: async workspaceId => {
-            const result: Workspace & { error?: string } = await servicesStore.getData('nats')!.request(NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-            }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
-            if (result.error) throw new Error(result.error)
-            if (result.workspaceId !== workspaceId) throw new Error('Workspace snapshot belongs to another workspace')
+            const result: Workspace & { error?: string } = await servicesStore.getData('nats')!.request(
+                NATS_SUBJECTS.WORKSPACE_SUBJECTS.GET_WORKSPACE,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                },
+                WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS,
+            )
+
+            if (result.error)
+                throw new Error(result.error)
+
+            if (result.workspaceId !== workspaceId)
+                throw new Error('Workspace snapshot belongs to another workspace')
+
             const canvasState: CanvasState = normalizeWorkspaceCanvasState(result.canvasState)
-            return { canvasState, version: version(result.updatedAt, result.canvasStateUpdatedAt ?? result.updatedAt) } satisfies WorkspaceCanvasSnapshot
+
+            return {
+                canvasState,
+                version: version(result.updatedAt, result.canvasStateUpdatedAt ?? result.updatedAt),
+            } satisfies WorkspaceCanvasSnapshot
         },
         publish: publication => {
-            if (typeof publication.version?.updatedAt === 'number') {
+            if (typeof publication.version?.updatedAt === 'number')
                 workspacesStore.updateWorkspace(publication.workspaceId, { updatedAt: publication.version.updatedAt })
-            }
-            if (!ownsActiveStore(publication.workspaceId)) return
-            if (publication.canvasState) workspaceStore.setDataValues({ canvasState: publication.canvasState })
-            if (typeof publication.version?.updatedAt === 'number') workspaceStore.setDataValues({ updatedAt: publication.version.updatedAt })
-            if (typeof publication.version?.canvasStateUpdatedAt === 'number') workspaceStore.setDataValues({ canvasStateUpdatedAt: publication.version.canvasStateUpdatedAt })
-            if (workspaceStore.getMeta('requiresSave') !== publication.requiresSave) {
+
+            if (!ownsActiveStore(publication.workspaceId))
+                return
+
+            if (publication.canvasState)
+                workspaceStore.setDataValues({ canvasState: publication.canvasState })
+
+            if (typeof publication.version?.updatedAt === 'number')
+                workspaceStore.setDataValues({ updatedAt: publication.version.updatedAt })
+
+            if (typeof publication.version?.canvasStateUpdatedAt === 'number')
+                workspaceStore.setDataValues({ canvasStateUpdatedAt: publication.version.canvasStateUpdatedAt })
+
+            if (workspaceStore.getMeta('requiresSave') !== publication.requiresSave)
                 workspaceStore.setMetaValues({ requiresSave: publication.requiresSave })
-            }
         },
         reportError: error => console.error('Failed to update canvas state:', error),
     }

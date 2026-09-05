@@ -24,8 +24,10 @@ const SHEET_HEIGHT = 2560
 const SHEET_MARGIN = 32
 const CELL_GAP = 24
 
-export function buildCharacterSheetLayout(panels: readonly CharacterPanelSpec[]): CharacterSheetLayout {
-    if (panels.length < 1) throw new Error('CHARACTER_SHEET_LAYOUT_PANELS_REQUIRED')
+export const buildCharacterSheetLayout = (panels: readonly CharacterPanelSpec[]): CharacterSheetLayout => {
+    if (panels.length < 1)
+        throw new Error('CHARACTER_SHEET_LAYOUT_PANELS_REQUIRED')
+
     const columns = panels.length <= 6 ? 3 : 5
     const rows = Math.ceil(panels.length / columns)
     const width = Math.floor((SHEET_WIDTH - SHEET_MARGIN * 2 - CELL_GAP * (columns - 1)) / columns)
@@ -33,6 +35,7 @@ export function buildCharacterSheetLayout(panels: readonly CharacterPanelSpec[])
     const cells = panels.map((panel, index): CharacterSheetLayoutCell => {
         const column = index % columns
         const row = Math.floor(index / columns)
+
         return {
             cellId: `shot-${index + 1}`,
             sourcePanelId: panel.panelId,
@@ -43,6 +46,7 @@ export function buildCharacterSheetLayout(panels: readonly CharacterPanelSpec[])
             fit: 'contain',
         }
     })
+
     return {
         layoutId: 'character-sheet-3840x2560',
         width: SHEET_WIDTH,

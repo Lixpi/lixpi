@@ -1,8 +1,19 @@
 import { computeCenteredPositionToRightOfRect } from '@lixpi/canvas-engine/shared'
 
-type RectLike = { x: number; y: number; width: number; height: number }
-type Dimensions = { width: number; height: number }
-type Point = { x: number; y: number }
+type RectLike = {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+type Dimensions = {
+    width: number
+    height: number
+}
+type Point = {
+    x: number
+    y: number
+}
 
 export type ReferenceBranchRootMarkerPlacementOptions = {
     referenceGroupRect: RectLike
@@ -17,7 +28,7 @@ export type ReferenceBranchRootMarkerPlacementOptions = {
 // generations. The marker is allowed to preserve the configured first-media slot
 // when there is enough room, but it is clamped after the reference group so a
 // long marker label can never slide back under the source media.
-export function computeReferenceBranchRootMarkerPosition(options: ReferenceBranchRootMarkerPlacementOptions): Point {
+export const computeReferenceBranchRootMarkerPosition = (options: ReferenceBranchRootMarkerPlacementOptions): Point => {
     const desiredMediaPosition = computeCenteredPositionToRightOfRect(
         options.referenceGroupRect,
         options.mediaHeight,

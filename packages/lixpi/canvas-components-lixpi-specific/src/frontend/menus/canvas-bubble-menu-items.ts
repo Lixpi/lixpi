@@ -47,55 +47,140 @@ export class CanvasBubbleMenuItems {
     private activeNodeId: string | null = null
     private activeEdgeId: string | null = null
 
-    constructor(private readonly callbacks: CanvasBubbleMenuCallbacks, private readonly document: Document) {
+    constructor(
+        private readonly callbacks: CanvasBubbleMenuCallbacks,
+        private readonly document: Document,
+    ) {
         const mediaContexts = [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT, CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT]
+
         try {
             this.items = [
-                this.item({ title: 'Replace media', icon: downloadIcon, context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT], action: callbacks.onReplaceMedia, rotate: true }),
-                this.item({ title: 'Download media', icon: downloadIcon, context: mediaContexts, action: callbacks.onDownloadMedia }),
-                this.item({ title: 'Open Asset details', icon: infoCircleFilledIcon, context: mediaContexts, action: callbacks.onOpenAsset }),
-                this.item({ title: 'Connect to node', icon: triggerNodesConnectionIcon, context: mediaContexts, action: callbacks.onTriggerConnection, hideFirst: true }),
-                this.item({ title: 'Delete image', icon: trashBinIcon, context: [CANVAS_IMAGE_CONTEXT], action: callbacks.onDeleteNode }),
-                this.item({ title: 'Delete video', icon: trashBinIcon, context: [CANVAS_VIDEO_CONTEXT], action: callbacks.onDeleteNode }),
-                this.item({ title: 'Delete file', icon: trashBinIcon, context: [CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT], action: callbacks.onDeleteNode }),
-                this.item({ title: 'Change connector curve', icon: changeNodesConnectorLineCurve, context: [CANVAS_EDGE_CONTEXT], action: callbacks.onChangeConnectorCurve, edge: true }),
-                this.item({ title: 'Delete connection', icon: trashBinIcon, context: [CANVAS_EDGE_CONTEXT], action: callbacks.onDeleteEdge, edge: true }),
+                this.item({
+                    title: 'Replace media',
+                    icon: downloadIcon,
+                    context: [CANVAS_IMAGE_CONTEXT, CANVAS_VIDEO_CONTEXT],
+                    action: callbacks.onReplaceMedia,
+                    rotate: true,
+                }),
+                this.item({
+                    title: 'Download media',
+                    icon: downloadIcon,
+                    context: mediaContexts,
+                    action: callbacks.onDownloadMedia,
+                }),
+                this.item({
+                    title: 'Open Asset details',
+                    icon: infoCircleFilledIcon,
+                    context: mediaContexts,
+                    action: callbacks.onOpenAsset,
+                }),
+                this.item({
+                    title: 'Connect to node',
+                    icon: triggerNodesConnectionIcon,
+                    context: mediaContexts,
+                    action: callbacks.onTriggerConnection,
+                    hideFirst: true,
+                }),
+                this.item({
+                    title: 'Delete image',
+                    icon: trashBinIcon,
+                    context: [CANVAS_IMAGE_CONTEXT],
+                    action: callbacks.onDeleteNode,
+                }),
+                this.item({
+                    title: 'Delete video',
+                    icon: trashBinIcon,
+                    context: [CANVAS_VIDEO_CONTEXT],
+                    action: callbacks.onDeleteNode,
+                }),
+                this.item({
+                    title: 'Delete file',
+                    icon: trashBinIcon,
+                    context: [CANVAS_DOCUMENT_CONTEXT, CANVAS_AUDIO_CONTEXT],
+                    action: callbacks.onDeleteNode,
+                }),
+                this.item({
+                    title: 'Change connector curve',
+                    icon: changeNodesConnectorLineCurve,
+                    context: [CANVAS_EDGE_CONTEXT],
+                    action: callbacks.onChangeConnectorCurve,
+                    edge: true,
+                }),
+                this.item({
+                    title: 'Delete connection',
+                    icon: trashBinIcon,
+                    context: [CANVAS_EDGE_CONTEXT],
+                    action: callbacks.onDeleteEdge,
+                    edge: true,
+                }),
             ]
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
 
     private item(options: ItemOptions): BubbleMenuItem {
         const html = createDocumentHtml(this.document)
-        const element = html`<button className="bubble-menu-button" type="button" aria-label=${options.title} data-help-tooltip="aria-label" innerHTML=${options.icon}></button>` as HTMLButtonElement
+        const element = html`
+            <button
+                className="bubble-menu-button"
+                type="button"
+                aria-label=${options.title}
+                data-help-tooltip="aria-label"
+                innerHTML=${options.icon}
+            ></button>
+        ` as HTMLButtonElement
         const svg = element.querySelector('svg')
-        if (svg) applyStyle(svg, { width: '16px', height: '16px', ...(options.rotate ? { transform: 'rotate(180deg)' } : {}) })
+
+        if (svg)
+            applyStyle(
+                svg,
+                {
+                    width: '16px',
+                    height: '16px',
+                    ...(options.rotate ? { transform: 'rotate(180deg)' } : {}),
+                },
+            )
+
         const click = (event: MouseEvent) => {
             event.preventDefault()
             event.stopPropagation()
             const id = options.edge ? this.activeEdgeId : this.activeNodeId
-            if (!id) return
-            if (options.hideFirst) this.callbacks.onHide()
+
+            if (!id)
+                return
+
+            if (options.hideFirst)
+                this.callbacks.onHide()
+
             options.action(id)
-            if (!options.hideFirst) this.callbacks.onHide()
+
+            if (!options.hideFirst)
+                this.callbacks.onHide()
         }
         element.addEventListener('click', click)
         this.lifetime.own(() => {
             element.removeEventListener('click', click)
             element.remove()
         })
-        return { element, context: [...options.context] }
+
+        return {
+            element,
+            context: [...options.context],
+        }
     }
 
     getActiveNodeId = (): string | null => this.activeNodeId
     getActiveEdgeId = (): string | null => this.activeEdgeId
     setActiveNodeId = (id: string | null): void => {
-        if (!this.lifetime.signal.aborted) this.activeNodeId = id
+        if (!this.lifetime.signal.aborted)
+            this.activeNodeId = id
     }
     setActiveEdgeId = (id: string | null): void => {
-        if (!this.lifetime.signal.aborted) this.activeEdgeId = id
+        if (!this.lifetime.signal.aborted)
+            this.activeEdgeId = id
     }
 
     destroy(): void {
@@ -105,6 +190,7 @@ export class CanvasBubbleMenuItems {
     }
 }
 
-export function buildCanvasBubbleMenuItems(callbacks: CanvasBubbleMenuCallbacks, document: Document = globalThis.document): CanvasBubbleMenuItems {
-    return new CanvasBubbleMenuItems(callbacks, document)
-}
+export const buildCanvasBubbleMenuItems = (
+    callbacks: CanvasBubbleMenuCallbacks,
+    document: Document = globalThis.document,
+): CanvasBubbleMenuItems => new CanvasBubbleMenuItems(callbacks, document)

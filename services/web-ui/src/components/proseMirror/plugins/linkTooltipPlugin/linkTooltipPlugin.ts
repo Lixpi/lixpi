@@ -26,14 +26,17 @@ class LinkTooltipView {
     constructor({ view }: LinkTooltipViewOptions) {
         this.view = view
 
-        this.tooltip = createEl('div', {
-            className: 'link-tooltip',
-            style: {
-                position: 'absolute',
-                visibility: 'hidden',
-                zIndex: '100',
+        this.tooltip = createEl(
+            'div',
+            {
+                className: 'link-tooltip',
+                style: {
+                    position: 'absolute',
+                    visibility: 'hidden',
+                    zIndex: '100',
+                },
             },
-        })
+        )
 
         this.buildTooltip()
 
@@ -46,13 +49,16 @@ class LinkTooltipView {
     }
 
     private buildTooltip(): void {
-        const urlText = createEl('a', {
-            className: 'link-tooltip-url',
-            target: '_blank',
-            rel: 'noopener noreferrer',
-        })
+        const urlText = createEl(
+            'a',
+            {
+                className: 'link-tooltip-url',
+                target: '_blank',
+                rel: 'noopener noreferrer',
+            },
+        )
 
-        urlText.addEventListener('click', (e) => {
+        urlText.addEventListener('click', e => {
             e.stopPropagation()
             this.hide()
         })
@@ -64,7 +70,10 @@ class LinkTooltipView {
         const target = e.target as HTMLElement
         const linkEl = target.closest('a')
 
-        if (linkEl && this.view.dom.contains(linkEl)) {
+        if (
+            linkEl
+            && this.view.dom.contains(linkEl)
+        ) {
             e.preventDefault()
             this.linkElement = linkEl
             this.currentHref = linkEl.getAttribute('href') || ''
@@ -73,31 +82,54 @@ class LinkTooltipView {
     }
 
     private handleDocumentClick = (e: MouseEvent): void => {
-        if (!this.tooltip.contains(e.target as Node) && !this.linkElement?.contains(e.target as Node)) {
+        if (
+            !this.tooltip.contains(e.target as Node)
+            && !this.linkElement?.contains(e.target as Node)
+        )
             this.hide()
-        }
     }
 
-    private findTransformedAncestor(): { element: HTMLElement; scale: number } | null {
+    private findTransformedAncestor(): {
+        element: HTMLElement
+        scale: number
+    } | null {
         let current: HTMLElement | null = this.tooltipParent
+
         while (current) {
             const style = getComputedStyle(current)
             const transform = style.transform
-            if (transform && transform !== 'none') {
+
+            if (
+                transform
+                && transform !== 'none'
+            ) {
                 const match = transform.match(/matrix\(([^,]+),/)
-                if (match) {
-                    return { element: current, scale: parseFloat(match[1]) }
-                }
+
+                if (match)
+                    return {
+                        element: current,
+                        scale: parseFloat(match[1]),
+                    }
             }
+
             current = current.parentElement
         }
+
         return null
     }
 
-    private screenToLocal(screenX: number, screenY: number): { x: number; y: number } {
-        if (!this.tooltipParent) {
-            return { x: screenX, y: screenY }
-        }
+    private screenToLocal(
+        screenX: number,
+        screenY: number,
+    ): {
+        x: number
+        y: number
+    } {
+        if (!this.tooltipParent)
+            return {
+                x: screenX,
+                y: screenY,
+            }
 
         const parentRect = this.tooltipParent.getBoundingClientRect()
         const transformInfo = this.findTransformedAncestor()
@@ -106,22 +138,33 @@ class LinkTooltipView {
         const localX = (screenX - parentRect.left) / scale
         const localY = (screenY - parentRect.top) / scale
 
-        return { x: localX, y: localY }
+        return {
+            x: localX,
+            y: localY,
+        }
     }
 
     private getScale(): number {
         const transformInfo = this.findTransformedAncestor()
+
         return transformInfo?.scale ?? 1
     }
 
     private show(anchor: HTMLElement): void {
         const urlEl = this.tooltip.querySelector('.link-tooltip-url') as HTMLAnchorElement
+
         if (urlEl) {
             urlEl.href = this.currentHref
             urlEl.textContent = this.currentHref
         }
 
-        applyStyle(this.tooltip, { visibility: 'hidden', display: 'block' })
+        applyStyle(
+            this.tooltip,
+            {
+                visibility: 'hidden',
+                display: 'block',
+            },
+        )
         this.tooltip.classList.add('is-visible')
 
         const scale = this.getScale()
@@ -140,13 +183,19 @@ class LinkTooltipView {
         const parentRect = this.tooltipParent?.getBoundingClientRect()
         const parentWidthLocal = parentRect ? parentRect.width / scale : window.innerWidth
         const maxLeft = parentWidthLocal - tooltipWidthLocal - 8
-        const clampedLeft = Math.max(8, Math.min(local.x, maxLeft))
+        const clampedLeft = Math.max(
+            8,
+            Math.min(local.x, maxLeft),
+        )
 
-        applyStyle(this.tooltip, {
-            left: `${clampedLeft}px`,
-            top: `${local.y}px`,
-            visibility: 'visible',
-        })
+        applyStyle(
+            this.tooltip,
+            {
+                left: `${clampedLeft}px`,
+                top: `${local.y}px`,
+                visibility: 'visible',
+            },
+        )
     }
 
     private hide(): void {
@@ -158,9 +207,11 @@ class LinkTooltipView {
 
     update(): void {
         // Close tooltip on any editor update if the link element is gone
-        if (this.linkElement && !this.view.dom.contains(this.linkElement)) {
+        if (
+            this.linkElement
+            && !this.view.dom.contains(this.linkElement)
+        )
             this.hide()
-        }
     }
 
     destroy(): void {
@@ -170,7 +221,7 @@ class LinkTooltipView {
     }
 }
 
-export function linkTooltipPlugin(): Plugin {
+export const linkTooltipPlugin = (): Plugin => {
     return new Plugin({
         key: linkTooltipPluginKey,
         view(editorView: EditorView) {

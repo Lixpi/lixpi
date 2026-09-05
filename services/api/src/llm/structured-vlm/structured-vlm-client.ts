@@ -108,7 +108,10 @@ type OutputBudgetRequest = {
     maxOutputTokensCeiling?: number
 }
 
-const resolveOutputBudget = (args: OutputBudgetRequest, caps: AiModelInferenceCapabilities): OutputBudget => {
+const resolveOutputBudget = (
+    args: OutputBudgetRequest,
+    caps: AiModelInferenceCapabilities,
+): OutputBudget => {
     const requestedAnswer = Math.max(256, args.maxTokens ?? DEFAULT_ANSWER_TOKENS)
     const thinks = args.enableThinking === true && caps.thinkingMode !== 'none'
     // Reasoning scales with task size, so the reserve never drops below the
@@ -118,16 +121,33 @@ const resolveOutputBudget = (args: OutputBudgetRequest, caps: AiModelInferenceCa
         : 0
 
     const ceiling = args.maxOutputTokensCeiling
-    const hasCeiling = typeof ceiling === 'number' && Number.isFinite(ceiling) && ceiling > 0
+    const hasCeiling = typeof ceiling === 'number'
+        && Number.isFinite(ceiling)
+        && ceiling > 0
     const requestedWire = requestedAnswer + requestedThinking
-    if (!hasCeiling || requestedWire <= ceiling) {
-        return { answerTokens: requestedAnswer, thinkingTokens: requestedThinking, wireMaxTokens: requestedWire }
-    }
+
+    if (
+        !hasCeiling
+        || requestedWire <= ceiling
+    )
+        return {
+            answerTokens: requestedAnswer,
+            thinkingTokens: requestedThinking,
+            wireMaxTokens: requestedWire,
+        }
 
     // The model's ceiling binds. Split it so the answer always keeps at least
     // half, and thinking takes the rest up to what it asked for.
-    const thinkingTokens = Math.min(requestedThinking, Math.floor(ceiling / 2))
-    return { answerTokens: ceiling - thinkingTokens, thinkingTokens, wireMaxTokens: ceiling }
+    const thinkingTokens = Math.min(
+        requestedThinking,
+        Math.floor(ceiling / 2),
+    )
+
+    return {
+        answerTokens: ceiling - thinkingTokens,
+        thinkingTokens,
+        wireMaxTokens: ceiling,
+    }
 }
 
 // The completion tokens a caller must reserve in the context window for an answer
@@ -140,16 +160,22 @@ export const reservedCompletionTokensForStructuredCall = (request: {
     thinkingBudgetTokens?: number
     enableThinking?: boolean
     maxOutputTokensCeiling?: number
-}): number => {
-    return resolveOutputBudget(request, request.inferenceCapabilities).wireMaxTokens
-}
+}): number => resolveOutputBudget(request, request.inferenceCapabilities).wireMaxTokens
 
 // Raised when the model hit the output cap before closing its structured output.
 // Retried by the dispatcher with an escalated budget rather than surfaced as a
 // bogus "non-JSON output" parse error.
 class VlmOutputTruncatedError extends Error {
-    constructor(provider: ProviderName, modelVersion: string, schemaName: string, budget: OutputBudget, detail: string) {
-        super(`${provider}/${modelVersion} truncated structured output for schema=${schemaName} at answerTokens=${budget.answerTokens} thinkingTokens=${budget.thinkingTokens} (wire cap ${budget.wireMaxTokens}). ${detail}`)
+    constructor(
+        provider: ProviderName,
+        modelVersion: string,
+        schemaName: string,
+        budget: OutputBudget,
+        detail: string,
+    ) {
+        super(
+            `${provider}/${modelVersion} truncated structured output for schema=${schemaName} at answerTokens=${budget.answerTokens} thinkingTokens=${budget.thinkingTokens} (wire cap ${budget.wireMaxTokens}). ${detail}`,
+        )
         this.name = 'VlmOutputTruncatedError'
     }
 }
@@ -165,30 +191,44 @@ const getAnthropic = (): Anthropic | AnthropicBedrock => {
         if (bedrockInference.isEnabledFor('anthropic')) {
             bedrockInference.logRouting('anthropic', 'vlm')
             _anthropic = new AnthropicBedrock({ awsRegion: bedrockInference.region })
+
             return _anthropic
         }
+
         const apiKey = process.env.ANTHROPIC_API_KEY
-        if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is required')
+
+        if (!apiKey)
+            throw new Error('ANTHROPIC_API_KEY environment variable is required')
+
         _anthropic = new Anthropic({ apiKey })
     }
+
     return _anthropic
 }
 
 const getOpenAi = (): OpenAI => {
     if (!_openai) {
         const apiKey = process.env.OPENAI_API_KEY
-        if (!apiKey) throw new Error('OPENAI_API_KEY environment variable is required')
+
+        if (!apiKey)
+            throw new Error('OPENAI_API_KEY environment variable is required')
+
         _openai = new OpenAI({ apiKey })
     }
+
     return _openai
 }
 
 const getGoogle = (): GoogleGenAI => {
     if (!_google) {
         const apiKey = process.env.GOOGLE_API_KEY
-        if (!apiKey) throw new Error('GOOGLE_API_KEY environment variable is required')
+
+        if (!apiKey)
+            throw new Error('GOOGLE_API_KEY environment variable is required')
+
         _google = new GoogleGenAI({ apiKey })
     }
+
     return _google
 }
 
@@ -196,20 +236,40 @@ const resolveAndConvert = async (
     messages: ChatMessage[],
     natsService: NatsService,
     format: AttachmentFormat,
-): Promise<Array<{ role: string; content: any }>> => {
-    const out: Array<{ role: string; content: any }> = []
+): Promise<Array<{
+    role: string
+    content: any
+}>> => {
+    const out: Array<{
+        role: string
+        content: any
+    }> = []
+
     for (const msg of messages) {
         let content: any = msg.content ?? ''
         content = await resolveImageUrls(content, natsService)
         content = convertAttachmentsForProvider(content, format)
-        out.push({ role: msg.role, content })
+        out.push({
+            role: msg.role,
+            content,
+        })
     }
+
     return out
 }
 
 // ─── Anthropic ────────────────────────────────────────────────────────────────
 
-const buildAnthropicRequest = (args: VlmCallArgs, caps: AiModelInferenceCapabilities, budget: OutputBudget, formattedMessages: Array<{ role: string; content: any }>, useThinking: boolean): Record<string, any> => {
+const buildAnthropicRequest = (
+    args: VlmCallArgs,
+    caps: AiModelInferenceCapabilities,
+    budget: OutputBudget,
+    formattedMessages: Array<{
+        role: string
+        content: any
+    }>,
+    useThinking: boolean,
+): Record<string, any> => {
     // max_tokens covers thinking + answer, so it is always the wire cap; the
     // thinking budget is the reserve carved out of it.
     const thinkingBudget = Math.max(1024, budget.thinkingTokens)
@@ -224,41 +284,77 @@ const buildAnthropicRequest = (args: VlmCallArgs, caps: AiModelInferenceCapabili
             input_schema: args.schema.schema,
         }],
     }
-    if (caps.supportsSystemPrompt) request.system = args.systemPrompt
+
+    if (caps.supportsSystemPrompt)
+        request.system = args.systemPrompt
 
     if (useThinking) {
         if (caps.thinkingMode === 'anthropic-adaptive') {
             // Opus 4.7 / Sonnet 4.6 / Opus 4.6 / Mythos. Adaptive auto-enables
             // interleaved thinking and lets Claude decide how much to think.
-            request.thinking = { type: 'adaptive', display: 'summarized' }
+            request.thinking = {
+                type: 'adaptive',
+                display: 'summarized',
+            }
         } else if (caps.thinkingMode === 'anthropic-manual') {
             // Older Claude 4 models — manual budget required.
-            request.thinking = { type: 'enabled', budget_tokens: thinkingBudget }
+            request.thinking = {
+                type: 'enabled',
+                budget_tokens: thinkingBudget,
+            }
         }
+
         // With thinking enabled, the only legal tool_choice values are 'auto'
         // and 'none'. We use 'auto' and rely on the strong system prompt to
         // make the model call the structured-output tool reliably.
         request.tool_choice = caps.requiresAutoToolChoiceWithThinking
             ? { type: 'auto' }
-            : { type: 'tool', name: args.schema.name }
+            : {
+                type: 'tool',
+                name: args.schema.name,
+            }
     } else {
         // No thinking: we can force the tool call for guaranteed structured output.
-        request.tool_choice = { type: 'tool', name: args.schema.name }
-        if (args.temperature !== undefined && caps.supportsTemperature) {
-            request.temperature = args.temperature
+        request.tool_choice = {
+            type: 'tool',
+            name: args.schema.name,
         }
+
+        if (
+            args.temperature !== undefined
+            && caps.supportsTemperature
+        )
+            request.temperature = args.temperature
     }
 
     return request
 }
 
-const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: AiModelInferenceCapabilities, budget: OutputBudget, useThinking: boolean): Promise<VlmCallResult<T> | { needsRetry: true; rawText: string }> => {
+const callAnthropicOnce = async <T>(
+    args: VlmCallArgs,
+    caps: AiModelInferenceCapabilities,
+    budget: OutputBudget,
+    useThinking: boolean,
+): Promise<VlmCallResult<T> | {
+    needsRetry: true
+    rawText: string
+}> => {
     const client = getAnthropic()
-    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'ANTHROPIC')
-    const request = buildAnthropicRequest(args, caps, budget, formatted, useThinking)
-    if (bedrockInference.isEnabledFor('anthropic')) {
+    const formatted = await resolveAndConvert(
+        args.userMessages,
+        args.natsService,
+        'ANTHROPIC',
+    )
+    const request = buildAnthropicRequest(
+        args,
+        caps,
+        budget,
+        formatted,
+        useThinking,
+    )
+
+    if (bedrockInference.isEnabledFor('anthropic'))
         request.model = await bedrockInference.resolveModelId('anthropic', args.modelVersion)
-    }
 
     const stream = client.messages.stream(request as any, { signal: args.abortSignal })
 
@@ -266,12 +362,23 @@ const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: AiModelInferenceCap
         if (event.type === 'content_block_delta') {
             const delta = event.delta as any
             const deltaType = delta?.type
+
             if (deltaType === 'text_delta') {
                 const text = delta.text ?? ''
-                if (text && args.onTextChunk) args.onTextChunk(text)
+
+                if (
+                    text
+                    && args.onTextChunk
+                )
+                    args.onTextChunk(text)
             } else if (deltaType === 'thinking_delta') {
                 const text = delta.thinking ?? ''
-                if (text && args.onTextChunk) args.onTextChunk(text)
+
+                if (
+                    text
+                    && args.onTextChunk
+                )
+                    args.onTextChunk(text)
             }
         }
     }
@@ -280,27 +387,51 @@ const callAnthropicOnce = async <T>(args: VlmCallArgs, caps: AiModelInferenceCap
 
     let parsed: T | undefined
     let rawText = ''
+
     for (const block of finalMessage.content ?? []) {
         const blockType = (block as any).type
-        if (blockType === 'tool_use' && (block as any).name === args.schema.name) {
+
+        if (
+            blockType === 'tool_use'
+            && (block as any).name === args.schema.name
+        ) {
             parsed = (block as any).input as T
             rawText = JSON.stringify(parsed)
+
             break
         }
-        if (blockType === 'text') rawText += (block as any).text ?? ''
+
+        if (blockType === 'text')
+            rawText += (block as any).text ?? ''
     }
 
     if (parsed === undefined) {
         // A tool call cut off by the output cap arrives as an unusable partial, so
         // escalate the budget instead of blaming the model for skipping the tool.
-        if (finalMessage.stop_reason === 'max_tokens') {
-            throw new VlmOutputTruncatedError(args.provider, args.modelVersion, args.schema.name, budget, 'stop_reason=max_tokens')
-        }
+        if (finalMessage.stop_reason === 'max_tokens')
+            throw new VlmOutputTruncatedError(
+                args.provider,
+                args.modelVersion,
+                args.schema.name,
+                budget,
+                'stop_reason=max_tokens',
+            )
+
         // Model didn't call the tool. If thinking was enabled (which forces
         // tool_choice='auto'), we can retry without thinking to force the call.
         // Otherwise this is a hard failure.
-        if (useThinking) return { needsRetry: true, rawText }
-        throw new Error(`Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" even with forced tool_choice. rawText preview=${rawText.slice(0, 200)}`)
+        if (useThinking)
+            return {
+                needsRetry: true,
+                rawText,
+            }
+
+        throw new Error(
+            `Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" even with forced tool_choice. rawText preview=${rawText.slice(
+                0,
+                200,
+            )}`,
+        )
     }
 
     return {
@@ -320,26 +451,57 @@ const callAnthropic = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> =>
     // First attempt: with thinking if requested and supported. tool_choice is
     // 'auto' in that case so the model COULD skip the tool — we handle that.
     if (wantsThinking) {
-        const result = await callAnthropicOnce<T>(args, caps, budget, true)
-        if (!('needsRetry' in result)) return result
-        if (args.singleAttempt) {
-            throw new Error(`Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" on the single allowed attempt. rawText preview=${result.rawText.slice(0, 200)}`)
-        }
-        warn(`Anthropic ${args.modelVersion} returned text instead of tool call with thinking on; retrying with forced tool_choice (thinking disabled). rawText preview=${result.rawText.slice(0, 200)}`)
+        const result = await callAnthropicOnce<T>(
+            args,
+            caps,
+            budget,
+            true,
+        )
+
+        if (!('needsRetry' in result))
+            return result
+
+        if (args.singleAttempt)
+            throw new Error(
+                `Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" on the single allowed attempt. rawText preview=${result.rawText.slice(
+                    0,
+                    200,
+                )}`,
+            )
+
+        warn(
+            `Anthropic ${args.modelVersion} returned text instead of tool call with thinking on; retrying with forced tool_choice (thinking disabled). rawText preview=${result.rawText.slice(
+                0,
+                200,
+            )}`,
+        )
     }
 
     // Forced tool call (no thinking) — guaranteed structured output.
-    const result = await callAnthropicOnce<T>(args, caps, budget, false)
-    if ('needsRetry' in result) {
-        throw new Error(`Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" even with forced tool_choice. rawText preview=${result.rawText.slice(0, 200)}`)
-    }
+    const result = await callAnthropicOnce<T>(
+        args,
+        caps,
+        budget,
+        false,
+    )
+
+    if ('needsRetry' in result)
+        throw new Error(
+            `Anthropic ${args.modelVersion} did not call tool "${args.schema.name}" even with forced tool_choice. rawText preview=${result.rawText.slice(
+                0,
+                200,
+            )}`,
+        )
+
     return result
 }
 
 // ─── OpenAI ───────────────────────────────────────────────────────────────────
 
 const asTypeArray = (type: unknown): string[] => {
-    if (Array.isArray(type)) return type.filter((entry): entry is string => typeof entry === 'string')
+    if (Array.isArray(type))
+        return type.filter((entry): entry is string => typeof entry === 'string')
+
     return typeof type === 'string' ? [type] : []
 }
 
@@ -357,35 +519,55 @@ const OPENAI_UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
 ])
 
 const schemaNeedsOpenAIAdapter = (schema: unknown): boolean => {
-    if (!schema || typeof schema !== 'object') return false
-    const node = schema as Record<string, any>
-    if (Object.keys(node).some(key => OPENAI_UNSUPPORTED_SCHEMA_KEYWORDS.has(key))) return true
-    if (asTypeArray(node.type).includes('object') && node.additionalProperties !== false) {
-        return true
-    }
+    if (
+        !schema
+        || typeof schema !== 'object'
+    )
+        return false
 
-    if (node.properties && typeof node.properties === 'object') {
+    const node = schema as Record<string, any>
+
+    if (Object.keys(node).some(key => OPENAI_UNSUPPORTED_SCHEMA_KEYWORDS.has(key)))
+        return true
+
+    if (
+        asTypeArray(node.type).includes('object')
+        && node.additionalProperties !== false
+    )
+        return true
+
+    if (
+        node.properties
+        && typeof node.properties === 'object'
+    ) {
         const required = new Set(Array.isArray(node.required) ? node.required : [])
+
         for (const key of Object.keys(node.properties)) {
-            if (!required.has(key)) return true
+            if (!required.has(key))
+                return true
         }
+
         for (const child of Object.values(node.properties)) {
-            if (schemaNeedsOpenAIAdapter(child)) return true
+            if (schemaNeedsOpenAIAdapter(child))
+                return true
         }
     }
 
     const itemSchemas = Array.isArray(node.items)
         ? node.items
         : node.items
-        ? [node.items]
-        : []
+            ? [node.items]
+            : []
+
     for (const child of itemSchemas) {
-        if (schemaNeedsOpenAIAdapter(child)) return true
+        if (schemaNeedsOpenAIAdapter(child))
+            return true
     }
 
     if (Array.isArray(node.anyOf)) {
         for (const child of node.anyOf) {
-            if (schemaNeedsOpenAIAdapter(child)) return true
+            if (schemaNeedsOpenAIAdapter(child))
+                return true
         }
     }
 
@@ -408,7 +590,10 @@ const buildClosedSchemaPayloadEnvelope = (schema: VlmJsonSchema): VlmJsonSchema 
     },
 })
 
-const buildClosedSchemaPayloadInstructions = (systemPrompt: string, schema: VlmJsonSchema): string =>
+const buildClosedSchemaPayloadInstructions = (
+    systemPrompt: string,
+    schema: VlmJsonSchema,
+): string =>
     [
         systemPrompt,
         '',
@@ -418,14 +603,27 @@ const buildClosedSchemaPayloadInstructions = (systemPrompt: string, schema: VlmJ
         `The payload JSON string must conform to this original schema: ${JSON.stringify(schema.schema)}`,
     ].join('\n')
 
-const parseClosedSchemaPayloadEnvelope = <T>(outer: unknown, provider: ProviderName, schemaName: string): { parsed: T; payloadText: string } => {
+const parseClosedSchemaPayloadEnvelope = <T>(
+    outer: unknown,
+    provider: ProviderName,
+    schemaName: string,
+): {
+    parsed: T
+    payloadText: string
+} => {
     const payload = (outer as any)?.payload
-    if (typeof payload !== 'string' || payload.trim() === '') {
+
+    if (
+        typeof payload !== 'string'
+        || payload.trim() === ''
+    )
         throw new Error(`${provider} returned invalid JSON payload envelope for schema=${schemaName}`)
-    }
 
     try {
-        return { parsed: JSON.parse(payload) as T, payloadText: payload }
+        return {
+            parsed: JSON.parse(payload) as T,
+            payloadText: payload,
+        }
     } catch (e: any) {
         throw new Error(`${provider} returned non-JSON payload for schema=${schemaName}: ${e?.message}`)
     }
@@ -438,7 +636,11 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     // 'OPENAI' format yields the Responses-API content shape (input_text /
     // input_image). The system prompt rides on `instructions`, the modern
     // top-level field, rather than a synthetic system message in the input.
-    const input = await resolveAndConvert(args.userMessages, args.natsService, 'OPENAI')
+    const input = await resolveAndConvert(
+        args.userMessages,
+        args.natsService,
+        'OPENAI',
+    )
     const usesClosedSchemaEnvelope = caps.requiresClosedJsonSchema && schemaNeedsOpenAIAdapter(args.schema.schema)
     const requestSchema = usesClosedSchemaEnvelope ? buildClosedSchemaPayloadEnvelope(args.schema) : args.schema
     const instructions = usesClosedSchemaEnvelope ? buildClosedSchemaPayloadInstructions(args.systemPrompt, args.schema) : args.systemPrompt
@@ -461,8 +663,16 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
             },
         },
     }
-    if (caps.supportsSystemPrompt) requestArgs.instructions = instructions
-    if (args.temperature !== undefined && caps.supportsTemperature) requestArgs.temperature = args.temperature
+
+    if (caps.supportsSystemPrompt)
+        requestArgs.instructions = instructions
+
+    if (
+        args.temperature !== undefined
+        && caps.supportsTemperature
+    )
+        requestArgs.temperature = args.temperature
+
     // Reasoning items are billed against max_output_tokens on the Responses API,
     // so the wire cap carries the same answer+thinking headroom as elsewhere.
     requestArgs.max_output_tokens = budget.wireMaxTokens
@@ -480,50 +690,95 @@ const callOpenAi = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
         switch (event?.type) {
             case 'response.output_text.delta': {
                 const delta: string = event.delta ?? ''
+
                 if (delta) {
                     rawText += delta
-                    if (args.onTextChunk && !usesClosedSchemaEnvelope) args.onTextChunk(delta)
+
+                    if (
+                        args.onTextChunk
+                        && !usesClosedSchemaEnvelope
+                    )
+                        args.onTextChunk(delta)
                 }
+
                 break
             }
             case 'response.completed':
             case 'response.incomplete': {
                 const response = event.response
-                if (response?.model) modelName = response.model
-                if (response?.incomplete_details?.reason === 'max_output_tokens') incompleteByCap = true
-                if (typeof response?.output_text === 'string' && response.output_text) {
+
+                if (response?.model)
+                    modelName = response.model
+
+                if (response?.incomplete_details?.reason === 'max_output_tokens')
+                    incompleteByCap = true
+
+                if (
+                    typeof response?.output_text === 'string'
+                    && response.output_text
+                )
                     finalText = response.output_text
-                }
+
                 if (response?.usage) {
                     promptTokens = response.usage.input_tokens ?? promptTokens
                     completionTokens = response.usage.output_tokens ?? completionTokens
                 }
+
                 break
             }
             case 'response.failed': {
                 const message = event.response?.error?.message ?? 'unknown error'
+
                 throw new Error(`OpenAI ${args.modelVersion} response failed: ${message}`)
             }
         }
     }
 
     const outputText = finalText || rawText
-    if (incompleteByCap) {
-        throw new VlmOutputTruncatedError(args.provider, args.modelVersion, args.schema.name, budget, 'incomplete_details.reason=max_output_tokens')
-    }
-    if (!outputText) throw new Error(`OpenAI ${args.modelVersion} returned empty structured output for schema=${args.schema.name}`)
+
+    if (incompleteByCap)
+        throw new VlmOutputTruncatedError(
+            args.provider,
+            args.modelVersion,
+            args.schema.name,
+            budget,
+            'incomplete_details.reason=max_output_tokens',
+        )
+
+    if (!outputText)
+        throw new Error(`OpenAI ${args.modelVersion} returned empty structured output for schema=${args.schema.name}`)
+
     let parsedOuter: unknown
+
     try {
         parsedOuter = JSON.parse(outputText)
     } catch (e: any) {
         throw new Error(`OpenAI returned non-JSON structured output: ${e?.message}`)
     }
+
     if (usesClosedSchemaEnvelope) {
-        const payload = parseClosedSchemaPayloadEnvelope<T>(parsedOuter, args.provider, args.schema.name)
-        return { parsed: payload.parsed, rawText: payload.payloadText, modelName, promptTokens, completionTokens }
+        const payload = parseClosedSchemaPayloadEnvelope<T>(
+            parsedOuter,
+            args.provider,
+            args.schema.name,
+        )
+
+        return {
+            parsed: payload.parsed,
+            rawText: payload.payloadText,
+            modelName,
+            promptTokens,
+            completionTokens,
+        }
     }
 
-    return { parsed: parsedOuter as T, rawText: outputText, modelName, promptTokens, completionTokens }
+    return {
+        parsed: parsedOuter as T,
+        rawText: outputText,
+        modelName,
+        promptTokens,
+        completionTokens,
+    }
 }
 
 // ─── Google ───────────────────────────────────────────────────────────────────
@@ -532,18 +787,32 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = args.inferenceCapabilities
     const budget = resolveOutputBudget(args, caps)
     const client = getGoogle()
-    const formatted = await resolveAndConvert(args.userMessages, args.natsService, 'GOOGLE')
-    const contents: Array<Record<string, any>> = formatted.map((msg) => ({
-        role: msg.role === 'assistant' ? 'model' : msg.role,
-        parts: Array.isArray(msg.content) ? msg.content : [{ text: String(msg.content) }],
-    }))
+    const formatted = await resolveAndConvert(
+        args.userMessages,
+        args.natsService,
+        'GOOGLE',
+    )
+    const contents: Array<Record<string, any>> = formatted.map(
+        msg => ({
+            role: msg.role === 'assistant' ? 'model' : msg.role,
+            parts: Array.isArray(msg.content) ? msg.content : [{ text: String(msg.content) }],
+        }),
+    )
 
     const config: Record<string, any> = {
         responseMimeType: 'application/json',
         responseSchema: args.schema.schema,
     }
-    if (caps.supportsSystemPrompt) config.systemInstruction = args.systemPrompt
-    if (args.temperature !== undefined && caps.supportsTemperature) config.temperature = args.temperature
+
+    if (caps.supportsSystemPrompt)
+        config.systemInstruction = args.systemPrompt
+
+    if (
+        args.temperature !== undefined
+        && caps.supportsTemperature
+    )
+        config.temperature = args.temperature
+
     // Gemini counts thinking parts against maxOutputTokens, so the wire cap
     // carries the thinking reserve on top of the answer budget.
     config.maxOutputTokens = budget.wireMaxTokens
@@ -551,12 +820,21 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     // Enable thinking for visible reasoning when the model supports it. Gemini
     // 3.x uses thinkingLevel; Gemini 2.5 uses thinkingBudget. We include
     // includeThoughts so summaries arrive as thought parts.
-    if (args.enableThinking === true && caps.thinkingMode !== 'none') {
+    if (
+        args.enableThinking === true
+        && caps.thinkingMode !== 'none'
+    ) {
         config.thinkingConfig = caps.thinkingMode === 'google-level'
-            ? { thinkingLevel: 'medium', includeThoughts: true }
+            ? {
+                thinkingLevel: 'medium',
+                includeThoughts: true,
+            }
             // An unbounded (-1) budget would let thinking eat the whole cap and
             // starve the answer; pin it to the reserve we sized for it.
-            : { thinkingBudget: budget.thinkingTokens, includeThoughts: true }
+            : {
+                thinkingBudget: budget.thinkingTokens,
+                includeThoughts: true,
+            }
     }
 
     let rawText = ''
@@ -565,32 +843,51 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     let finishReason = ''
 
     const collectUsage = (usageMetadata: any): void => {
-        if (!usageMetadata) return
+        if (!usageMetadata)
+            return
+
         promptTokens = usageMetadata.promptTokenCount ?? promptTokens
         completionTokens = usageMetadata.candidatesTokenCount ?? completionTokens
     }
 
     const collectResponseText = (response: any): void => {
         collectUsage(response?.usageMetadata)
+
         if (!finishReason) {
             const finishedCandidate = response?.candidates?.find((candidate: any) => candidate?.finishReason || candidate?.finish_reason)
-            finishReason = finishedCandidate?.finishReason ?? finishedCandidate?.finish_reason ?? ''
+            finishReason = finishedCandidate?.finishReason
+                ?? finishedCandidate?.finish_reason
+                ?? ''
         }
-        const directText = !args.onTextChunk && typeof response?.text === 'string' ? response.text : ''
+
+        const directText = !args.onTextChunk
+            && typeof response?.text === 'string'
+            ? response.text
+            : ''
+
         if (directText) {
             rawText += directText
+
             return
         }
+
         for (const candidate of response?.candidates ?? []) {
             const parts = candidate?.content?.parts ?? []
+
             for (const part of parts) {
                 const text = part?.text ?? ''
-                if (!text) continue
+
+                if (!text)
+                    continue
+
                 if (part.thought === true) {
-                    if (args.onTextChunk) args.onTextChunk(text)
+                    if (args.onTextChunk)
+                        args.onTextChunk(text)
                 } else {
                     rawText += text
-                    if (args.onTextChunk) args.onTextChunk(text)
+
+                    if (args.onTextChunk)
+                        args.onTextChunk(text)
                 }
             }
         }
@@ -616,24 +913,44 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     }
 
     const truncated = /MAX_TOKENS/i.test(finishReason)
-    if (truncated) {
-        throw new VlmOutputTruncatedError(args.provider, args.modelVersion, args.schema.name, budget, `finishReason=${finishReason}`)
-    }
-    if (!rawText) throw new Error(`Google ${args.modelVersion} returned empty response for schema=${args.schema.name}`)
+
+    if (truncated)
+        throw new VlmOutputTruncatedError(
+            args.provider,
+            args.modelVersion,
+            args.schema.name,
+            budget,
+            `finishReason=${finishReason}`,
+        )
+
+    if (!rawText)
+        throw new Error(`Google ${args.modelVersion} returned empty response for schema=${args.schema.name}`)
 
     // Gemini's responseSchema occasionally returns the JSON wrapped in
     // markdown code fences. Strip them defensively.
-    const cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+    const cleaned = rawText
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/, '')
+        .trim()
 
     let parsed: T
+
     try {
         parsed = JSON.parse(cleaned) as T
     } catch (e: any) {
         const finish = finishReason ? ` finishReason=${finishReason}.` : ''
+
         throw new Error(`Google returned non-JSON output:${finish} ${e?.message}. Preview: ${cleaned.slice(0, 200)}`)
     }
 
-    return { parsed, rawText: cleaned, modelName: args.modelVersion, promptTokens, completionTokens }
+    return {
+        parsed,
+        rawText: cleaned,
+        modelName: args.modelVersion,
+        promptTokens,
+        completionTokens,
+    }
 }
 
 // ─── Public dispatcher ────────────────────────────────────────────────────────
@@ -643,30 +960,55 @@ const callGoogle = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
 // fetch failed, timeout) on `.cause`; rate limits arrive as status=429 with a
 // retry-after header. This unwraps all of that into one readable line.
 const describeProviderError = (error: any): string => {
-    if (!error) return 'unknown error'
+    if (!error)
+        return 'unknown error'
+
     const parts: string[] = [error.name || 'Error']
-    if (error.status !== undefined) parts.push(`status=${error.status}`)
-    if (error.code !== undefined) parts.push(`code=${error.code}`)
+
+    if (error.status !== undefined)
+        parts.push(`status=${error.status}`)
+
+    if (error.code !== undefined)
+        parts.push(`code=${error.code}`)
+
     const headers = error.headers
-    const getHeader = (key: string): string | undefined => typeof headers?.get === 'function' ? headers.get(key) : headers?.[key]
+    const getHeader = (key: string): string | undefined => (typeof headers?.get === 'function' ? headers.get(key) : headers?.[key])
     const retryAfter = getHeader('retry-after')
-    if (retryAfter) parts.push(`retry-after=${retryAfter}`)
-    const requestId = error.request_id ?? error.requestID ?? getHeader('request-id') ?? getHeader('x-request-id')
-    if (requestId) parts.push(`requestId=${requestId}`)
+
+    if (retryAfter)
+        parts.push(`retry-after=${retryAfter}`)
+
+    const requestId = error.request_id
+        ?? error.requestID
+        ?? getHeader('request-id')
+        ?? getHeader('x-request-id')
+
+    if (requestId)
+        parts.push(`requestId=${requestId}`)
+
     parts.push(`message="${error.message ?? String(error)}"`)
     // Walk the cause chain — the connection error wraps the underlying network error.
     const causes: string[] = []
     let cause = error.cause
-    for (let depth = 0; cause && depth < 5; depth++) {
+
+    for (
+        let depth = 0;
+        cause
+        && depth < 5;
+        depth++
+    ) {
         const code = cause.code ? ` (code=${cause.code})` : ''
         causes.push(`${cause.name ?? 'cause'}: ${cause.message ?? String(cause)}${code}`)
         cause = cause.cause
     }
-    if (causes.length) parts.push(`cause=[${causes.join(' <- ')}]`)
+
+    if (causes.length)
+        parts.push(`cause=[${causes.join(' <- ')}]`)
+
     return parts.join(' ')
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 // Transient = worth retrying: rate limits (429), server errors (5xx), and the
 // connection/timeout family the SDK surfaces as APIConnectionError + a network cause.
@@ -685,15 +1027,40 @@ const TRANSIENT_CAUSE_CODES = new Set([
 
 const isTransientError = (error: any): boolean => {
     const status = error?.status
-    if (status === 429 || (typeof status === 'number' && status >= 500)) return true
-    if (/APIConnection(Timeout)?Error|APITimeoutError|APIConnectionError/.test(error?.name ?? '')) return true
+
+    if (
+        status === 429
+        || (typeof status === 'number' && status >= 500)
+    )
+        return true
+
+    if (/APIConnection(Timeout)?Error|APITimeoutError|APIConnectionError/.test(error?.name ?? ''))
+        return true
+
     let cause = error?.cause
-    for (let depth = 0; cause && depth < 5; depth++) {
-        if (cause.code && TRANSIENT_CAUSE_CODES.has(cause.code)) return true
+
+    for (
+        let depth = 0;
+        cause
+        && depth < 5;
+        depth++
+    ) {
+        if (
+            cause.code
+            && TRANSIENT_CAUSE_CODES.has(cause.code)
+        )
+            return true
+
         cause = cause.cause
     }
+
     // Anthropic's APIConnectionError carries no status and a bland message.
-    if (status === undefined && /connection error|socket hang up|fetch failed|\bterminated\b/i.test(error?.message ?? '')) return true
+    if (
+        status === undefined
+        && /connection error|socket hang up|fetch failed|\bterminated\b/i.test(error?.message ?? '')
+    )
+        return true
+
     return false
 }
 
@@ -701,11 +1068,23 @@ const isTransientError = (error: any): boolean => {
 const parseRetryAfterMs = (error: any): number | undefined => {
     const headers = error?.headers
     const raw = typeof headers?.get === 'function' ? headers.get('retry-after') : headers?.['retry-after']
-    if (!raw) return undefined
+
+    if (!raw)
+        return undefined
+
     const seconds = Number(raw)
-    if (!Number.isNaN(seconds)) return Math.min(seconds * 1000, 30000)
+
+    if (!Number.isNaN(seconds))
+        return Math.min(seconds * 1000, 30000)
+
     const dateMs = Date.parse(raw)
-    if (!Number.isNaN(dateMs)) return Math.max(0, Math.min(dateMs - Date.now(), 30000))
+
+    if (!Number.isNaN(dateMs))
+        return Math.max(
+            0,
+            Math.min(dateMs - Date.now(), 30000),
+        )
+
     return undefined
 }
 
@@ -716,22 +1095,38 @@ const MAX_ESCALATED_ANSWER_TOKENS = 32768
 
 export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallResult<T>> => {
     const caps = args.inferenceCapabilities
-    assertMessageInputKindsSupported(args.provider, args.modelVersion, caps, args.userMessages)
-    info(`[vlm] call provider=${args.provider} model=${args.modelVersion} thinkingMode=${caps.thinkingMode} requestThinking=${args.enableThinking === true}`)
+    assertMessageInputKindsSupported(
+        args.provider,
+        args.modelVersion,
+        caps,
+        args.userMessages,
+    )
+    info(
+        `[vlm] call provider=${args.provider} model=${args.modelVersion} thinkingMode=${caps.thinkingMode} requestThinking=${args.enableThinking === true}`,
+    )
 
     const dispatch = (attemptArgs: VlmCallArgs): Promise<VlmCallResult<T>> => {
-        if (attemptArgs.provider === 'Anthropic') return callAnthropic<T>(attemptArgs)
-        if (attemptArgs.provider === 'OpenAI') return callOpenAi<T>(attemptArgs)
-        if (attemptArgs.provider === 'Google') return callGoogle<T>(attemptArgs)
+        if (attemptArgs.provider === 'Anthropic')
+            return callAnthropic<T>(attemptArgs)
+
+        if (attemptArgs.provider === 'OpenAI')
+            return callOpenAi<T>(attemptArgs)
+
+        if (attemptArgs.provider === 'Google')
+            return callGoogle<T>(attemptArgs)
+
         throw new Error(`Unsupported analysis provider for structured VLM call: ${attemptArgs.provider}`)
     }
 
     // Answer budget for the current attempt; doubled on truncation.
     let answerTokens = resolveOutputBudget(args, caps).answerTokens
 
-    for (let attempt = 0;; attempt++) {
+    for (let attempt = 0; ; attempt++) {
         try {
-            return await dispatch({ ...args, maxTokens: answerTokens })
+            return await dispatch({
+                ...args,
+                maxTokens: answerTokens,
+            })
         } catch (error: any) {
             // Truncation means the answer did not fit, not that the model failed.
             // Retry with a doubled answer budget, which doubles the thinking
@@ -740,15 +1135,25 @@ export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallRe
             const grown = Math.min(answerTokens * 2, escalationCap)
             // A request already at the model's output ceiling cannot grow, and
             // repeating it identically would only burn tokens.
-            const atCeiling = resolveOutputBudget({ ...args, maxTokens: grown }, caps).answerTokens <= answerTokens
+            const atCeiling = resolveOutputBudget(
+                {
+                    ...args,
+                    maxTokens: grown,
+                },
+                caps,
+            ).answerTokens <= answerTokens
             const canGrow = error instanceof VlmOutputTruncatedError
                 && grown > answerTokens
                 && !atCeiling
                 && !args.singleAttempt
                 && !args.abortSignal?.aborted
+
             if (canGrow) {
-                warn(`[vlm] output truncated provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying with answerTokens ${answerTokens} -> ${grown} :: ${error.message}`)
+                warn(
+                    `[vlm] output truncated provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying with answerTokens ${answerTokens} -> ${grown} :: ${error.message}`,
+                )
                 answerTokens = grown
+
                 continue
             }
 
@@ -757,15 +1162,23 @@ export const callStructuredVlm = async <T>(args: VlmCallArgs): Promise<VlmCallRe
                 && attempt < MAX_VLM_RETRIES
                 && isTransientError(error)
                 && !args.abortSignal?.aborted
+
             if (canRetry) {
                 // Jittered exponential backoff, or the server's retry-after when given.
                 const backoff = Math.min(1000 * 2 ** attempt, 8000) + Math.floor(Math.random() * 400)
                 const waitMs = parseRetryAfterMs(error) ?? backoff
-                warn(`[vlm] transient failure (attempt ${attempt + 1}/${MAX_VLM_RETRIES + 1}) provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying in ${waitMs}ms :: ${detail}`)
+                warn(
+                    `[vlm] transient failure (attempt ${attempt + 1}/${MAX_VLM_RETRIES + 1}) provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name}; retrying in ${waitMs}ms :: ${detail}`,
+                )
                 await sleep(waitMs)
+
                 continue
             }
-            err(`[vlm] FAILED provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name} after ${attempt + 1} attempt(s): ${detail}`)
+
+            err(
+                `[vlm] FAILED provider=${args.provider} model=${args.modelVersion} schema=${args.schema.name} after ${attempt + 1} attempt(s): ${detail}`,
+            )
+
             // Re-throw with the enriched detail so the stage trace + UI substep show the real cause.
             throw new Error(`${args.provider}/${args.modelVersion} (${args.schema.name}): ${detail}`, { cause: error })
         }

@@ -51,13 +51,24 @@ export type SlidingDropdownConfig<Value extends string = string> = {
     indicatorInsetShadow?: SlidingDropdownIndicatorInsetShadow
     transition?: Partial<SlidingDropdownTransitionConfig>
     renderOption?: SlidingDropdownOptionRenderer<Value>
-    onChange?: (value: Value, id: string) => void
-    onOpenChange?: (open: boolean, id: string) => void
+    onChange?: (
+        value: Value,
+        id: string,
+    ) => void
+    onOpenChange?: (
+        open: boolean,
+        id: string,
+    ) => void
 }
 
 export type SlidingDropdownInstance<Value extends string = string> = {
     render: () => void
-    resize: (x: number, y: number, width: number, height?: number) => void
+    resize: (
+        x: number,
+        y: number,
+        width: number,
+        height?: number,
+    ) => void
     setValue: (value: Value) => void
     getValue: () => Value
     setOpen: (open: boolean) => void
@@ -145,8 +156,14 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private readonly openShadowFilterId: string
     private readonly transitionConfig: SlidingDropdownTransitionConfig
     private readonly renderOption?: SlidingDropdownOptionRenderer<Value>
-    private readonly onChange?: (value: Value, id: string) => void
-    private readonly onOpenChange?: (open: boolean, id: string) => void
+    private readonly onChange?: (
+        value: Value,
+        id: string,
+    ) => void
+    private readonly onOpenChange?: (
+        open: boolean,
+        id: string,
+    ) => void
 
     private x: number
     private y: number
@@ -209,10 +226,12 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private tapeSnapAnimating = false
     private portaled = false
 
-    constructor(parent: any, config: SlidingDropdownConfig<Value>) {
-        if (config.options.length === 0) {
+    constructor(
+        parent: any,
+        config: SlidingDropdownConfig<Value>,
+    ) {
+        if (config.options.length === 0)
             throw new Error('Sliding dropdown requires at least one option')
-        }
 
         this.parent = parent
         this.id = config.id
@@ -220,10 +239,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.className = config.className ?? ''
         this.ariaLabel = config.ariaLabel ?? config.id
         this.observeParentResize = config.observeParentResize ?? true
-        this.optionHorizontalPadding = Math.max(
-            0,
-            config.optionHorizontalPadding ?? DEFAULT_OPTION_HORIZONTAL_PADDING,
-        )
+        this.optionHorizontalPadding = Math.max(0, config.optionHorizontalPadding ?? DEFAULT_OPTION_HORIZONTAL_PADDING)
         this.styles = uiKitSettings.slidingDropdown.styles
         this.indicatorBoxShadow = config.indicatorBoxShadow ?? this.styles.indicator.boxShadow
         this.indicatorInsetShadow = config.indicatorInsetShadow ?? this.styles.indicator.insetShadow
@@ -237,10 +253,13 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.requestedWidth = config.width ?? DEFAULT_WIDTH
         this.width = this.requestedWidth
         this.height = config.height ?? DEFAULT_HEIGHT
-        this.currentValue = config.selectedValue !== undefined && this.indexOf(config.selectedValue) >= 0
+        this.currentValue = config.selectedValue !== undefined
+            && this.indexOf(config.selectedValue) >= 0
             ? config.selectedValue
             : this.options[0]!.value
-        this.tapeOffset = this.optionsOffset(this.selectedIndex())
+        this.tapeOffset = this.optionsOffset(
+            this.selectedIndex(),
+        )
         this.openViewportHeight = this.height
 
         const parentNode = parent.node?.()
@@ -260,7 +279,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.openShadowFilterId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingDropdownInstanceCounter}-open-shadow`
         this.viewportClipId = `${this.id.replace(/[^a-zA-Z0-9_-]/g, '-')}-${slidingDropdownInstanceCounter}-viewport-clip`
 
-        this.group = parent.append('g')
+        this.group = parent
+            .append('g')
             .attr('class', `sliding-dropdown-group ${this.className}`)
             .attr('data-sliding-dropdown-id', this.id)
             .attr('role', 'combobox')
@@ -269,14 +289,16 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .style('touch-action', 'manipulation')
 
         const defs = this.group.append('defs')
-        this.indicatorInsetGradient = defs.append('linearGradient')
+        this.indicatorInsetGradient = defs
+            .append('linearGradient')
             .attr('id', this.indicatorInsetGradientId)
             .attr('x1', '0%')
             .attr('y1', '0%')
             .attr('x2', '0%')
             .attr('y2', '100%')
 
-        const openShadowFilter = defs.append('filter')
+        const openShadowFilter = defs
+            .append('filter')
             .attr('id', this.openShadowFilterId)
             .attr('class', 'sliding-dropdown-open-shadow-filter')
             .attr('x', '-50%')
@@ -284,25 +306,30 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('width', '200%')
             .attr('height', '200%')
             .attr('color-interpolation-filters', 'sRGB')
-        openShadowFilter.append('feMorphology')
+        openShadowFilter
+            .append('feMorphology')
             .attr('in', 'SourceAlpha')
             .attr('operator', 'dilate')
             .attr('radius', this.styles.openShadow.spreadRadius)
             .attr('result', 'spread')
-        openShadowFilter.append('feGaussianBlur')
+        openShadowFilter
+            .append('feGaussianBlur')
             .attr('in', 'spread')
             .attr('stdDeviation', this.styles.openShadow.blurRadius / 2)
             .attr('result', 'blur')
-        openShadowFilter.append('feOffset')
+        openShadowFilter
+            .append('feOffset')
             .attr('in', 'blur')
             .attr('dx', this.styles.openShadow.offsetX)
             .attr('dy', this.styles.openShadow.offsetY)
             .attr('result', 'offset')
-        openShadowFilter.append('feFlood')
+        openShadowFilter
+            .append('feFlood')
             .attr('flood-color', this.styles.openShadow.color)
             .attr('flood-opacity', this.styles.openShadow.opacity)
             .attr('result', 'color')
-        openShadowFilter.append('feComposite')
+        openShadowFilter
+            .append('feComposite')
             .attr('in', 'color')
             .attr('in2', 'offset')
             .attr('operator', 'in')
@@ -311,16 +338,19 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .append('feMergeNode')
             .attr('in', 'shadow')
 
-        this.viewportClip = defs.append('clipPath')
+        this.viewportClip = defs
+            .append('clipPath')
             .attr('id', this.viewportClipId)
             .attr('clipPathUnits', 'userSpaceOnUse')
             .append('rect')
 
-        this.viewportHit = this.group.append('rect')
+        this.viewportHit = this.group
+            .append('rect')
             .attr('class', 'sliding-dropdown-viewport-hit')
             .attr('fill', 'transparent')
 
-        this.openShadow = this.group.append('rect')
+        this.openShadow = this.group
+            .append('rect')
             .attr('class', 'sliding-dropdown-open-shadow')
             .attr('pointer-events', 'none')
 
@@ -332,23 +362,27 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.indicator = this.group.append('rect')
             .attr('class', 'sliding-dropdown-indicator')
 
-        this.indicatorInset = this.group.append('rect')
+        this.indicatorInset = this.group
+            .append('rect')
             .attr('class', 'sliding-dropdown-indicator-inset-shadow')
             .attr('pointer-events', 'none')
 
         const optionsViewport = this.group.append('g')
             .attr('clip-path', `url(#${this.viewportClipId})`)
-        this.optionsGroup = optionsViewport.append('g')
+        this.optionsGroup = optionsViewport
+            .append('g')
             .attr('class', 'sliding-dropdown-options')
             .attr('role', 'listbox')
 
-        this.chevronControl = this.group.append('g')
+        this.chevronControl = this.group
+            .append('g')
             .attr('class', 'sliding-dropdown-chevron-control')
             .attr('aria-hidden', 'true')
             .style('cursor', 'pointer')
             .on('pointerdown', (event: PointerEvent) => event.stopPropagation())
             .on('click', this.handleChevronClick)
-        this.chevronControl.append('rect')
+        this.chevronControl
+            .append('rect')
             .attr('class', 'sliding-dropdown-chevron-hit')
             .attr('x', -CHEVRON_SIZE / 2)
             .attr('y', -CHEVRON_SIZE / 2)
@@ -356,15 +390,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('height', CHEVRON_SIZE)
             .attr('fill', 'transparent')
             .attr('pointer-events', 'all')
-        this.chevronIcon = this.chevronControl.append('g')
+        this.chevronIcon = this.chevronControl
+            .append('g')
             .attr('class', 'sliding-dropdown-chevron-icon')
             .attr('pointer-events', 'none')
-        appendSvgPathIcon(this.chevronIcon, chevronDownIcon, {
-            x: -CHEVRON_SIZE / 2,
-            y: -CHEVRON_SIZE / 2,
-            size: CHEVRON_SIZE,
-            fill: this.styles.option.activeTextColor,
-        })
+        appendSvgPathIcon(
+            this.chevronIcon,
+            chevronDownIcon,
+            {
+                x: -CHEVRON_SIZE / 2,
+                y: -CHEVRON_SIZE / 2,
+                size: CHEVRON_SIZE,
+                fill: this.styles.option.activeTextColor,
+            },
+        )
 
         this.group
             .on('wheel', this.handleWheel)
@@ -374,8 +413,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .on('pointercancel', this.handleTapePointerEnd)
 
         for (const [sourceIndex, option] of this.options.entries()) {
-            this.optionViews.push(this.createOptionView(option, sourceIndex))
+            this.optionViews.push(
+                this.createOptionView(option, sourceIndex),
+            )
         }
+
         this.renderOptionViews()
         this.measureOptionContentRightEdges()
 
@@ -386,7 +428,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private captureHostStyleSnapshot(): SlidingDropdownHostStyleSnapshot | null {
-        if (!this.hostNode) return null
+        if (!this.hostNode)
+            return null
+
         return {
             position: this.hostNode.style.position,
             alignSelf: this.hostNode.style.alignSelf,
@@ -401,7 +445,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private captureSvgStyleSnapshot(): SlidingDropdownSvgStyleSnapshot | null {
-        if (!this.svgNode) return null
+        if (!this.svgNode)
+            return null
+
         return {
             display: this.svgNode.style.display,
             position: this.svgNode.style.position,
@@ -418,7 +464,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private captureSvgAttributeSnapshot(): SlidingDropdownSvgAttributeSnapshot | null {
-        if (!this.svgNode) return null
+        if (!this.svgNode)
+            return null
+
         return {
             width: this.parent.attr('width'),
             height: this.parent.attr('height'),
@@ -429,7 +477,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private restoreOwnedLayout(): void {
-        if (this.hostSelection && this.hostStyleSnapshot) {
+        if (
+            this.hostSelection
+            && this.hostStyleSnapshot
+        ) {
             this.hostSelection
                 .style('position', this.hostStyleSnapshot.position || null)
                 .style('align-self', this.hostStyleSnapshot.alignSelf || null)
@@ -441,6 +492,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
                 .style('z-index', this.hostStyleSnapshot.zIndex || null)
                 .style('box-sizing', this.hostStyleSnapshot.boxSizing || null)
         }
+
         if (this.svgStyleSnapshot) {
             this.parent
                 .style('display', this.svgStyleSnapshot.display || null)
@@ -455,6 +507,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
                 .style('pointer-events', this.svgStyleSnapshot.pointerEvents || null)
                 .style('z-index', this.svgStyleSnapshot.zIndex || null)
         }
+
         if (this.svgAttributeSnapshot) {
             this.parent
                 .attr('width', this.svgAttributeSnapshot.width)
@@ -465,9 +518,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         }
     }
 
-    private createTransitionConfig(
-        config: Partial<SlidingDropdownTransitionConfig> | undefined,
-    ): SlidingDropdownTransitionConfig {
+    private createTransitionConfig(config: Partial<SlidingDropdownTransitionConfig> | undefined): SlidingDropdownTransitionConfig {
         return {
             durationMs: Math.max(0, config?.durationMs ?? DEFAULT_OPEN_TRANSITION_DURATION_MS),
             minDurationMs: Math.max(0, config?.minDurationMs ?? DEFAULT_CLOSE_TRANSITION_DURATION_MS),
@@ -476,10 +527,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         }
     }
 
-    private createVisualOverflowPadding(
-        padding: Partial<SlidingDropdownVisualOverflowPadding> | undefined,
-    ): SlidingDropdownVisualOverflowPadding {
+    private createVisualOverflowPadding(padding: Partial<SlidingDropdownVisualOverflowPadding> | undefined): SlidingDropdownVisualOverflowPadding {
         const hasOuterShadow = this.indicatorBoxShadow !== 'none'
+
         return {
             top: padding?.top ?? (hasOuterShadow ? SHADOW_PADDING_TOP : 0),
             right: padding?.right ?? (hasOuterShadow ? SHADOW_PADDING_RIGHT : 0),
@@ -488,9 +538,16 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         }
     }
 
-    private transitionDuration(fromIndex: number, toIndex: number): number {
-        const travelDistance = Math.max(1, Math.abs(toIndex - fromIndex))
+    private transitionDuration(
+        fromIndex: number,
+        toIndex: number,
+    ): number {
+        const travelDistance = Math.max(
+            1,
+            Math.abs(toIndex - fromIndex),
+        )
         const speedup = 1 + (travelDistance - 1) * this.transitionConfig.distanceSpeedupFactor
+
         return Math.max(
             this.transitionConfig.minDurationMs,
             Math.round(this.transitionConfig.durationMs / speedup),
@@ -498,7 +555,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private clearAnimationTimer(): void {
-        if (this.animationTimer === null) return
+        if (this.animationTimer === null)
+            return
+
         clearTimeout(this.animationTimer)
         this.animationTimer = null
     }
@@ -508,19 +567,28 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             clearTimeout(this.tapeSnapAnimationTimer)
             this.tapeSnapAnimationTimer = null
         }
-        if (this.scrollPortalNode) select(this.scrollPortalNode).interrupt()
+
+        if (this.scrollPortalNode)
+            select(this.scrollPortalNode).interrupt()
+
         this.tapeSnapAnimating = false
     }
 
     private releaseTapePointer(): void {
-        if (this.tapePointerId !== null && this.tapePointerCaptured) {
+        if (
+            this.tapePointerId !== null
+            && this.tapePointerCaptured
+        ) {
             const pointerId = this.tapePointerId
             const node = this.group.node() as Element & {
                 hasPointerCapture?: (candidatePointerId: number) => boolean
                 releasePointerCapture?: (candidatePointerId: number) => void
             }
-            if (node.hasPointerCapture?.(pointerId)) node.releasePointerCapture?.(pointerId)
+
+            if (node.hasPointerCapture?.(pointerId))
+                node.releasePointerCapture?.(pointerId)
         }
+
         this.tapePointerId = null
         this.tapePointerCaptured = false
     }
@@ -543,14 +611,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.optionsGroup.attr('transform', `translate(0, ${offset})`)
     }
 
-    private animateTapePosition(offset: number, duration: number, fill?: string): void {
+    private animateTapePosition(
+        offset: number,
+        duration: number,
+        fill?: string,
+    ): void {
         const trackTransition = this.track
             .interrupt()
             .transition()
             .duration(duration)
             .ease(easePupOut)
             .attr('y', offset)
-        if (fill !== undefined) trackTransition.attr('fill', fill)
+
+        if (fill !== undefined)
+            trackTransition.attr('fill', fill)
 
         this.optionsGroup
             .interrupt()
@@ -565,12 +639,15 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private openShadowOverflowPadding(): number {
-        if (!this.hasOpenShadow()) return 0
+        if (!this.hasOpenShadow())
+            return 0
+
         const blurOverflow = this.styles.openShadow.blurRadius * 1.5
         const offsetOverflow = Math.max(
             Math.abs(this.styles.openShadow.offsetX),
             Math.abs(this.styles.openShadow.offsetY),
         )
+
         return Math.ceil(this.styles.openShadow.spreadRadius + blurOverflow + offsetOverflow)
     }
 
@@ -579,10 +656,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private maximumIndicatorBorderWidth(): number {
-        return Math.max(
-            this.styles.indicator.closedBorderWidth,
-            this.styles.indicator.openBorderWidth,
-        )
+        return Math.max(this.styles.indicator.closedBorderWidth, this.styles.indicator.openBorderWidth)
     }
 
     private chevronOuterWidth(): number {
@@ -618,17 +692,26 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .style('overflow', 'visible')
             .style('z-index', this.hostStyleSnapshot?.zIndex || null)
             .style('box-sizing', 'border-box')
-        if (!this.portaled) this.hostSelection?.style('width', `${outerWidth}px`)
+
+        if (!this.portaled)
+            this.hostSelection?.style('width', `${outerWidth}px`)
     }
 
     private portalSvg(): void {
-        if (this.portaled || !this.svgNode || typeof document === 'undefined') return
+        if (
+            this.portaled
+            || !this.svgNode
+            || typeof document === 'undefined'
+        )
+            return
 
         const hostRect = this.hostNode?.getBoundingClientRect()
-        this.portalScaleX = hostRect && hostRect.width > 0
+        this.portalScaleX = hostRect
+            && hostRect.width > 0
             ? hostRect.width / this.outerWidth()
             : 1
-        this.portalScaleY = hostRect && hostRect.height > 0
+        this.portalScaleY = hostRect
+            && hostRect.height > 0
             ? hostRect.height / this.closedOuterHeight()
             : 1
 
@@ -645,17 +728,18 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             width: '1px',
             pointerEvents: 'none',
         }
-        this.scrollPortalSpacerNode = html`
-            <div className="sliding-dropdown-scroll-spacer" style=${spacerStyle}></div>
-        ` as HTMLDivElement
+        this.scrollPortalSpacerNode = html`<div
+                className="sliding-dropdown-scroll-spacer"
+                style=${spacerStyle}
+            ></div>` as HTMLDivElement
         this.scrollPortalNode = html`
             <div
                 className="sliding-dropdown-scroll-portal"
                 data=${{ slidingDropdownScrollPortal: 'true' }}
                 style=${portalStyle}
             >
-                ${this.scrollPortalSpacerNode}
-            </div>
+                    ${this.scrollPortalSpacerNode}
+                </div>
         ` as HTMLDivElement
         this.scrollPortalNode.addEventListener('scroll', this.handleScrollPortalScroll)
         this.scrollPortalNode.addEventListener('scrollend', this.handleScrollPortalEnd)
@@ -668,31 +752,50 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private portalChevron(): void {
-        if (this.chevronPortalSvg || typeof document === 'undefined') return
-        const chevronControlNode = this.chevronControl.node?.()
-        if (!chevronControlNode) return
+        if (
+            this.chevronPortalSvg
+            || typeof document === 'undefined'
+        )
+            return
 
-        this.chevronPortalSvg = select(document.body).append('svg')
+        const chevronControlNode = this.chevronControl.node?.()
+
+        if (!chevronControlNode)
+            return
+
+        this.chevronPortalSvg = select(document.body)
+            .append('svg')
             .attr('class', 'sliding-dropdown-chevron-portal')
             .attr('data-sliding-dropdown-open', 'true')
             .attr('aria-hidden', 'true')
             .attr('viewBox', `0 0 ${CHEVRON_SIZE} ${CHEVRON_SIZE}`)
             .attr('preserveAspectRatio', 'xMidYMid meet')
         const portalNode = this.chevronPortalSvg.node() as SVGSVGElement
-        applyStyle(portalNode, {
-            position: 'fixed',
-            overflow: 'visible',
-            pointerEvents: 'auto',
-            zIndex: String(OPEN_Z_INDEX),
-        })
+        applyStyle(
+            portalNode,
+            {
+                position: 'fixed',
+                overflow: 'visible',
+                pointerEvents: 'auto',
+                zIndex: String(OPEN_Z_INDEX),
+            },
+        )
         portalNode.append(chevronControlNode)
         this.updateChevronPortalGeometry()
     }
 
     private updateChevronPortalGeometry(): void {
-        if (!this.chevronPortalSvg) return
+        if (!this.chevronPortalSvg)
+            return
+
         const hostRect = this.hostNode?.getBoundingClientRect()
-        if (!hostRect || hostRect.width <= 0 || hostRect.height <= 0) return
+
+        if (
+            !hostRect
+            || hostRect.width <= 0
+            || hostRect.height <= 0
+        )
+            return
 
         const scaleX = this.portalScaleX
         const scaleY = this.portalScaleY
@@ -705,32 +808,46 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const portalWidth = CHEVRON_SIZE * scaleX
         const portalHeight = CHEVRON_SIZE * scaleY
         const portalNode = this.chevronPortalSvg.node() as SVGSVGElement
-        applyStyle(portalNode, {
-            left: `${centerX - portalWidth / 2}px`,
-            top: `${centerY - portalHeight / 2}px`,
-            width: `${portalWidth}px`,
-            height: `${portalHeight}px`,
-        })
+        applyStyle(
+            portalNode,
+            {
+                left: `${centerX - portalWidth / 2}px`,
+                top: `${centerY - portalHeight / 2}px`,
+                width: `${portalWidth}px`,
+                height: `${portalHeight}px`,
+            },
+        )
         this.chevronPortalSvg
             .attr('width', portalWidth)
             .attr('height', portalHeight)
-        this.chevronControl.attr(
-            'transform',
-            `translate(${CHEVRON_SIZE / 2}, ${CHEVRON_SIZE / 2})`,
-        )
+        this.chevronControl.attr('transform', `translate(${CHEVRON_SIZE / 2}, ${CHEVRON_SIZE / 2})`)
     }
 
     private restoreChevronPortal(): void {
-        if (!this.chevronPortalSvg) return
+        if (!this.chevronPortalSvg)
+            return
+
         const groupNode = this.group.node?.()
         const chevronControlNode = this.chevronControl.node?.()
-        if (groupNode && chevronControlNode) groupNode.append(chevronControlNode)
+
+        if (
+            groupNode
+            && chevronControlNode
+        )
+            groupNode.append(chevronControlNode)
+
         this.chevronPortalSvg.remove()
         this.chevronPortalSvg = null
     }
 
     private restoreSvgPortal(): void {
-        if (!this.portaled || !this.svgNode || !this.svgParentNode) return
+        if (
+            !this.portaled
+            || !this.svgNode
+            || !this.svgParentNode
+        )
+            return
+
         this.interruptTapeSnapAnimation()
         this.scrollPortalNode?.removeEventListener('scroll', this.handleScrollPortalScroll)
         this.scrollPortalNode?.removeEventListener('scrollend', this.handleScrollPortalEnd)
@@ -750,9 +867,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private updateScrollPortalGeometry(): void {
-        if (!this.scrollPortalNode || !this.scrollPortalSpacerNode) return
+        if (
+            !this.scrollPortalNode
+            || !this.scrollPortalSpacerNode
+        )
+            return
+
         const hostRect = this.hostNode?.getBoundingClientRect()
-        if (!hostRect || hostRect.width <= 0 || hostRect.height <= 0) return
+
+        if (
+            !hostRect
+            || hostRect.width <= 0
+            || hostRect.height <= 0
+        )
+            return
 
         const scaleX = this.portalScaleX
         const scaleY = this.portalScaleY
@@ -764,21 +892,32 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const portalHeight = fullTapeHeight + maximumScrollTop + shadowPaddingY * 2
         this.scrollScaleY = scaleY
         this.scrollMaximumTop = maximumScrollTop
-        applyStyle(this.scrollPortalNode, {
-            top: `${hostRect.top - this.visualOverflowPadding.top * scaleY - maximumScrollTop - shadowPaddingY}px`,
-            left: `${hostRect.left - shadowPaddingX}px`,
-            width: `${this.outerWidth() * scaleX + shadowPaddingX * 2}px`,
-            height: `${portalHeight}px`,
-        })
-        applyStyle(this.scrollPortalSpacerNode, {
-            height: `${portalHeight + maximumScrollTop}px`,
-        })
+        applyStyle(
+            this.scrollPortalNode,
+            {
+                top: `${hostRect.top - this.visualOverflowPadding.top * scaleY - maximumScrollTop - shadowPaddingY}px`,
+                left: `${hostRect.left - shadowPaddingX}px`,
+                width: `${this.outerWidth() * scaleX + shadowPaddingX * 2}px`,
+                height: `${portalHeight}px`,
+            },
+        )
+        applyStyle(
+            this.scrollPortalSpacerNode,
+            {
+                height: `${portalHeight + maximumScrollTop}px`,
+            },
+        )
     }
 
     private syncScrollPortalToTape(): void {
-        if (!this.scrollPortalNode) return
+        if (!this.scrollPortalNode)
+            return
+
         const targetScrollTop = -this.tapeOffset * this.scrollScaleY
-        if (Math.abs(this.scrollPortalNode.scrollTop - targetScrollTop) < 0.5) return
+
+        if (Math.abs(this.scrollPortalNode.scrollTop - targetScrollTop) < 0.5)
+            return
+
         this.syncingScrollPosition = true
         this.scrollPortalNode.scrollTop = targetScrollTop
         this.syncingScrollPosition = false
@@ -788,7 +927,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         contentHeight: number,
         top: number,
     ): void {
-        if (!this.svgNode) return
+        if (!this.svgNode)
+            return
+
         const outerWidth = this.outerWidth()
         const outerHeight = this.outerHeight(contentHeight)
         const topOffset = top - this.visualOverflowPadding.top
@@ -805,14 +946,18 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             : 0
         const position = 'absolute'
         const left = shadowPaddingX
-        const positionedTop = this.portaled && this.scrollPortalNode
+        const positionedTop = this.portaled
+            && this.scrollPortalNode
             ? top * scaleY + this.scrollMaximumTop + this.scrollPortalNode.scrollTop + shadowPaddingY
             : topOffset
         const screenWidth = outerWidth * scaleX
         const screenHeight = outerHeight * scaleY
         this.parent
             .interrupt()
-            .attr('data-sliding-dropdown-open', String(overlayOpen))
+            .attr(
+                'data-sliding-dropdown-open',
+                String(overlayOpen),
+            )
             .style('display', 'block')
             .style('position', position)
             .style('left', `${left}px`)
@@ -831,7 +976,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private bindResizeObserver(): void {
-        if (!this.observeParentResize || typeof ResizeObserver === 'undefined') return
+        if (
+            !this.observeParentResize
+            || typeof ResizeObserver === 'undefined'
+        )
+            return
 
         this.resizeObserver = new ResizeObserver(() => this.scheduleObservedResize())
         this.updateResizeObserverTargets()
@@ -845,36 +994,55 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private getResizeObserverTargets(): Element[] {
         const targets: Element[] = []
         let target = this.getResizeMeasureElement()
-        while (target && targets.length < 3) {
+
+        while (
+            target
+            && targets.length < 3
+        ) {
             targets.push(target)
             target = target.parentElement
         }
+
         return targets
     }
 
     private updateResizeObserverTargets(): void {
-        if (!this.resizeObserver) return
+        if (!this.resizeObserver)
+            return
 
-        const nextTargets = new Set(this.getResizeObserverTargets())
+        const nextTargets = new Set(
+            this.getResizeObserverTargets(),
+        )
+
         for (const target of this.observedResizeTargets) {
-            if (nextTargets.has(target)) continue
+            if (nextTargets.has(target))
+                continue
+
             this.resizeObserver.unobserve(target)
             this.observedResizeTargets.delete(target)
         }
+
         for (const target of nextTargets) {
-            if (this.observedResizeTargets.has(target)) continue
+            if (this.observedResizeTargets.has(target))
+                continue
+
             this.resizeObserver.observe(target)
             this.observedResizeTargets.add(target)
         }
     }
 
     private scheduleObservedResize(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         if (typeof requestAnimationFrame === 'undefined') {
             this.resizeToObservedWidth()
+
             return
         }
-        if (this.resizeAnimationFrame !== null) return
+
+        if (this.resizeAnimationFrame !== null)
+            return
 
         this.resizeAnimationFrame = requestAnimationFrame(() => {
             this.resizeAnimationFrame = null
@@ -883,22 +1051,34 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private resizeToObservedWidth(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
 
         this.updateResizeObserverTargets()
         const measureElement = this.getResizeMeasureElement()
-        const clientWidth = measureElement && 'clientWidth' in measureElement
+        const clientWidth = measureElement
+            && 'clientWidth' in measureElement
             ? Number(measureElement.clientWidth)
             : 0
         const containerWidth = clientWidth > 0
             ? clientWidth
             : measureElement?.getBoundingClientRect().width ?? 0
-        if (!Number.isFinite(containerWidth) || containerWidth <= 0) return
+
+        if (
+            !Number.isFinite(containerWidth)
+            || containerWidth <= 0
+        )
+            return
+
         const horizontalPadding = this.visualOverflowPadding.left + this.visualOverflowPadding.right
         const chevronWidth = this.chevronOuterWidth()
         const nextAvailableWidth = Math.max(1, containerWidth - horizontalPadding - chevronWidth)
-        if (Math.abs(nextAvailableWidth - this.availableWidth) < 0.5) return
+
+        if (Math.abs(nextAvailableWidth - this.availableWidth) < 0.5)
+            return
+
         this.availableWidth = nextAvailableWidth
+
         if (!this.animating) {
             this.measureOptionContentRightEdges()
             this.renderInternal()
@@ -919,9 +1099,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const disabled = option.disabled ?? false
         const color = disabled
             ? this.styles.option.disabledTextColor
-            : selected || hovered
-            ? this.styles.option.activeTextColor
-            : this.styles.option.textColor
+            : selected
+                || hovered
+                ? this.styles.option.activeTextColor
+                : this.styles.option.textColor
+
         return {
             id: `${this.id}:${option.value}`,
             option,
@@ -943,15 +1125,18 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         option: SlidingDropdownOption<Value>,
         sourceIndex: number,
     ): SlidingDropdownOptionView<Value> {
-        const group = this.optionsGroup.append('g')
+        const group = this.optionsGroup
+            .append('g')
             .attr('class', 'sliding-dropdown-option-group')
             .attr('data-value', option.value)
 
-        const hit = group.append('rect')
+        const hit = group
+            .append('rect')
             .attr('class', 'sliding-dropdown-hit')
             .attr('fill', 'transparent')
             .attr('pointer-events', 'all')
-        const content = group.append('g')
+        const content = group
+            .append('g')
             .attr('class', 'sliding-dropdown-option-content')
             .attr('pointer-events', 'none')
 
@@ -968,7 +1153,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         }
 
         if (!customRenderer) {
-            view.label = content.append('text')
+            view.label = content
+                .append('text')
                 .attr('class', 'sliding-dropdown-option')
                 .attr('text-anchor', 'start')
                 .attr('dominant-baseline', 'central')
@@ -986,7 +1172,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
                 this.renderOptionViews()
             })
             .on('mouseleave', () => {
-                if (this.hoveredValue === option.value) this.hoveredValue = null
+                if (this.hoveredValue === option.value)
+                    this.hoveredValue = null
+
                 this.renderOptionViews()
             })
 
@@ -1006,20 +1194,35 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
 
     private measureOptionContentRightEdge(view: SlidingDropdownOptionView<Value>): number {
         const contentNode = view.content.node?.() as SVGGElement | undefined
+
         try {
             const bounds = contentNode?.getBBox?.()
-            const rightEdge = bounds && bounds.width > 0 ? bounds.x + bounds.width : 0
-            if (Number.isFinite(rightEdge) && rightEdge > 0) return rightEdge
+            const rightEdge = bounds
+                && bounds.width > 0
+                ? bounds.x + bounds.width
+                : 0
+
+            if (
+                Number.isFinite(rightEdge)
+                && rightEdge > 0
+            )
+                return rightEdge
         } catch {
             // Detached and non-rendering SVG environments cannot expose geometry.
         }
 
         const labelNode = view.label?.node?.() as SVGTextElement | undefined
+
         try {
             const width = labelNode?.getComputedTextLength?.() ?? 0
             const x = Number(view.label?.attr('x'))
             const rightEdge = width > 0 ? x + width : 0
-            if (Number.isFinite(rightEdge) && rightEdge > 0) return rightEdge
+
+            if (
+                Number.isFinite(rightEdge)
+                && rightEdge > 0
+            )
+                return rightEdge
         } catch {
             // Text metrics are optional in lightweight DOM environments.
         }
@@ -1041,6 +1244,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const option = this.options[this.indexOf(value)] ?? this.options[0]!
         const contentRightEdge = this.optionContentRightEdges.get(value)
             ?? this.fallbackOptionContentRightEdge(option)
+
         return Math.ceil(
             contentRightEdge
                 + this.optionHorizontalPadding
@@ -1049,11 +1253,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         )
     }
 
-    private createOptionLayoutState(
-        state: SlidingDropdownOptionRenderState<Value>,
-    ): SlidingDropdownOptionRenderState<Value> {
+    private createOptionLayoutState(state: SlidingDropdownOptionRenderState<Value>): SlidingDropdownOptionRenderState<Value> {
         const borderWidth = this.maximumIndicatorBorderWidth()
         const surfaceWidth = this.preferredSurfaceWidth(state.option.value)
+
         return {
             ...state,
             x: PADDING + borderWidth / 2,
@@ -1062,20 +1265,26 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private clampSurfaceWidth(width: number): number {
-        return Math.max(PADDING * 2 + 1, Math.min(width, this.availableWidth))
+        return Math.max(
+            PADDING * 2 + 1,
+            Math.min(width, this.availableWidth),
+        )
     }
 
     private closedSurfaceWidth(value: Value): number {
-        return this.clampSurfaceWidth(this.preferredSurfaceWidth(value))
+        return this.clampSurfaceWidth(
+            this.preferredSurfaceWidth(value),
+        )
     }
 
     private openSurfaceWidth(): number {
-        const longestOptionWidth = Math.max(
-            ...this.options.map(option => this.preferredSurfaceWidth(option.value)),
+        const longestOptionWidth = Math.max(...this.options.map(option => this.preferredSurfaceWidth(option.value)))
+        const hasMeasuredEveryOption = this.options.every(
+            option => (
+                this.optionContentRightEdges.has(option.value)
+            ),
         )
-        const hasMeasuredEveryOption = this.options.every(option => (
-            this.optionContentRightEdges.has(option.value)
-        ))
+
         return this.clampSurfaceWidth(
             hasMeasuredEveryOption
                 ? longestOptionWidth
@@ -1086,16 +1295,30 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private renderOptionView(view: SlidingDropdownOptionView<Value>): void {
         const state = this.createOptionState(view.option, view.sourceIndex)
         const layoutState = this.createOptionLayoutState(state)
-        const visible = this.open || this.animating || state.selected
+        const visible = this.open
+            || this.animating
+            || state.selected
 
         view.group
             .attr('display', visible ? null : 'none')
             .attr('role', 'option')
-            .attr('tabindex', visible && !state.disabled ? 0 : null)
+            .attr('tabindex', visible
+                && !state.disabled
+                ? 0
+                : null)
             .attr('aria-label', state.option.ariaLabel ?? state.option.label)
-            .attr('aria-disabled', String(state.disabled))
-            .attr('aria-selected', String(state.selected))
-            .attr('aria-hidden', String(!visible))
+            .attr(
+                'aria-disabled',
+                String(state.disabled),
+            )
+            .attr(
+                'aria-selected',
+                String(state.selected),
+            )
+            .attr(
+                'aria-hidden',
+                String(!visible),
+            )
             .style('cursor', state.disabled ? 'not-allowed' : 'pointer')
 
         view.hit
@@ -1114,6 +1337,7 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
                 layoutState.height,
             )
             view.customRenderer.render?.(layoutState)
+
             return
         }
 
@@ -1121,15 +1345,14 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             ?.attr('x', layoutState.x + this.optionHorizontalPadding)
             .attr('y', layoutState.y + layoutState.height / 2)
             .attr('fill', state.color)
-            .attr(
-                'font-weight',
-                state.selected ? this.styles.option.selectedFontWeight : this.styles.option.fontWeight,
-            )
+            .attr('font-weight', state.selected ? this.styles.option.selectedFontWeight : this.styles.option.fontWeight)
             .text(state.option.label)
     }
 
     private renderOptionViews(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         for (const view of this.optionViews) this.renderOptionView(view)
     }
 
@@ -1157,16 +1380,20 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
 
         if (this.indicatorInsetShadow) {
             this.indicatorInsetGradient.selectAll('*').remove()
-            this.indicatorInsetGradient.append('stop')
+            this.indicatorInsetGradient
+                .append('stop')
                 .attr('offset', '0%')
                 .attr('stop-color', this.indicatorInsetShadow.topColor)
-            this.indicatorInsetGradient.append('stop')
+            this.indicatorInsetGradient
+                .append('stop')
                 .attr('offset', '38%')
                 .attr('stop-color', 'rgba(255, 255, 255, 0)')
-            this.indicatorInsetGradient.append('stop')
+            this.indicatorInsetGradient
+                .append('stop')
                 .attr('offset', '72%')
                 .attr('stop-color', 'rgba(0, 0, 0, 0)')
-            this.indicatorInsetGradient.append('stop')
+            this.indicatorInsetGradient
+                .append('stop')
                 .attr('offset', '100%')
                 .attr('stop-color', this.indicatorInsetShadow.bottomColor)
         }
@@ -1196,27 +1423,41 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private positionChevron(indicatorY: number): void {
-        if (this.chevronPortalSvg) return
+        if (this.chevronPortalSvg)
+            return
+
         const centerY = indicatorY + (this.height - PADDING * 2) / 2
         this.chevronControl.attr('transform', `translate(${this.chevronCenterX()}, ${centerY})`)
     }
 
-    private renderChevron(indicatorY: number, rotationDegrees: number): void {
+    private renderChevron(
+        indicatorY: number,
+        rotationDegrees: number,
+    ): void {
         this.positionChevron(indicatorY)
         this.chevronRotationDegrees = rotationDegrees
         this.chevronIcon
             .interrupt()
-            .attr('transform', this.chevronTransform())
+            .attr(
+                'transform',
+                this.chevronTransform(),
+            )
     }
 
-    private animateChevronRotation(rotationDegrees: number, duration: number): void {
+    private animateChevronRotation(
+        rotationDegrees: number,
+        duration: number,
+    ): void {
         this.chevronRotationDegrees = rotationDegrees
         this.chevronIcon
             .interrupt()
             .transition()
             .duration(duration)
             .ease(easePupOut)
-            .attr('transform', this.chevronTransform())
+            .attr(
+                'transform',
+                this.chevronTransform(),
+            )
     }
 
     private applySurfaceWidth(
@@ -1235,11 +1476,14 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.indicatorInset.attr('width', indicatorWidth)
         this.renderOptionViews()
         this.updateHostSvgGeometry(contentHeight, top)
+
         if (this.portaled) {
             this.updateScrollPortalGeometry()
             this.updateChevronPortalGeometry()
+
             return
         }
+
         this.positionChevron(indicatorY)
     }
 
@@ -1251,8 +1495,18 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         duration: number,
     ): void {
         const startWidth = this.width
-        if (Math.abs(targetWidth - startWidth) < 0.5 || duration === 0) {
-            this.applySurfaceWidth(targetWidth, contentHeight, top, indicatorY)
+
+        if (
+            Math.abs(targetWidth - startWidth) < 0.5
+            || duration === 0
+        ) {
+            this.applySurfaceWidth(
+                targetWidth,
+                contentHeight,
+                top,
+                indicatorY,
+            )
+
             return
         }
 
@@ -1260,14 +1514,25 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .transition()
             .duration(duration)
             .ease(easePupOut)
-            .tween('sliding-dropdown-width', () => (progress: number) => {
-                const width = startWidth + (targetWidth - startWidth) * progress
-                this.applySurfaceWidth(width, contentHeight, top, indicatorY)
-            })
+            .tween(
+                'sliding-dropdown-width',
+                () => (progress: number) => {
+                    const width = startWidth + (targetWidth - startWidth) * progress
+                    this.applySurfaceWidth(
+                        width,
+                        contentHeight,
+                        top,
+                        indicatorY,
+                    )
+                },
+            )
     }
 
     private selectedIndex(): number {
-        return Math.max(0, this.indexOf(this.currentValue))
+        return Math.max(
+            0,
+            this.indexOf(this.currentValue),
+        )
     }
 
     private optionsOffset(index: number): number {
@@ -1275,22 +1540,43 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private clampTapeOffset(offset: number): number {
-        return Math.max(this.optionsOffset(this.options.length - 1), Math.min(0, offset))
+        return Math.max(
+            this.optionsOffset(this.options.length - 1),
+            Math.min(0, offset),
+        )
     }
 
     private nearestTapeIndex(): number {
         const index = Math.round(-this.tapeOffset / this.height)
-        return Math.max(0, Math.min(this.options.length - 1, index))
+
+        return Math.max(
+            0,
+            Math.min(this.options.length - 1, index),
+        )
     }
 
     private nearestEnabledIndex(index: number): number {
-        if (!this.options[index]?.disabled) return index
+        if (!this.options[index]?.disabled)
+            return index
+
         for (let distance = 1; distance < this.options.length; distance += 1) {
             const before = index - distance
-            if (before >= 0 && !this.options[before]?.disabled) return before
+
+            if (
+                before >= 0
+                && !this.options[before]?.disabled
+            )
+                return before
+
             const after = index + distance
-            if (after < this.options.length && !this.options[after]?.disabled) return after
+
+            if (
+                after < this.options.length
+                && !this.options[after]?.disabled
+            )
+                return after
         }
+
         return this.selectedIndex()
     }
 
@@ -1308,20 +1594,38 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private updateTapePreview(): void {
-        const index = this.nearestEnabledIndex(this.nearestTapeIndex())
+        const index = this.nearestEnabledIndex(
+            this.nearestTapeIndex(),
+        )
         this.pendingValue = this.options[index]!.value
         this.renderOptionViews()
     }
 
-    private moveTapeFromInput(offset: number, syncScrollPortal = true): void {
+    private moveTapeFromInput(
+        offset: number,
+        syncScrollPortal = true,
+    ): void {
         this.interruptTransitions()
         this.tapeOffset = this.clampTapeOffset(offset)
         this.refreshOpenViewport()
-        this.setTapePosition(this.renderedTapeOffset())
-        this.indicator.attr('y', this.openIndicatorY())
-        this.indicatorInset.attr('y', this.openIndicatorY())
-        this.positionChevron(this.openIndicatorY())
-        if (syncScrollPortal) this.syncScrollPortalToTape()
+        this.setTapePosition(
+            this.renderedTapeOffset(),
+        )
+        this.indicator.attr(
+            'y',
+            this.openIndicatorY(),
+        )
+        this.indicatorInset.attr(
+            'y',
+            this.openIndicatorY(),
+        )
+        this.positionChevron(
+            this.openIndicatorY(),
+        )
+
+        if (syncScrollPortal)
+            this.syncScrollPortalToTape()
+
         this.updateHostSvgGeometry(this.openViewportHeight, this.openViewportTop)
         this.updateTapePreview()
     }
@@ -1332,7 +1636,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             || this.syncingScrollPosition
             || !this.open
             || this.animating
-        ) return
+        )
+            return
 
         this.moveTapeFromInput(-this.scrollPortalNode.scrollTop / this.scrollScaleY, false)
     }
@@ -1343,23 +1648,31 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             || this.animating
             || this.tapeSnapAnimating
             || this.tapePointerId !== null
-        ) return
+        )
+            return
 
         this.snapTapeToPreview()
     }
 
-    private animateScrollPortalToOffset(offset: number, duration: number): void {
+    private animateScrollPortalToOffset(
+        offset: number,
+        duration: number,
+    ): void {
         const portal = this.scrollPortalNode
+
         if (!portal) {
             this.moveTapeFromInput(offset)
+
             return
         }
 
         this.interruptTapeSnapAnimation()
         const startScrollTop = portal.scrollTop
         const targetScrollTop = -offset * this.scrollScaleY
+
         if (Math.abs(startScrollTop - targetScrollTop) < 0.5) {
             this.moveTapeFromInput(offset, false)
+
             return
         }
 
@@ -1368,27 +1681,49 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .transition()
             .duration(duration)
             .ease(easePupOut)
-            .tween('sliding-dropdown-scroll', () => (progress: number) => {
-                const scrollTop = startScrollTop + (targetScrollTop - startScrollTop) * progress
-                portal.scrollTop = scrollTop
-                this.moveTapeFromInput(-scrollTop / this.scrollScaleY, false)
-            })
-        this.tapeSnapAnimationTimer = setTimeout(() => {
-            this.tapeSnapAnimationTimer = null
-            if (this.destroyed || !this.open) return
-            portal.scrollTop = targetScrollTop
-            this.moveTapeFromInput(offset, false)
-            this.tapeSnapAnimating = false
-        }, duration)
+            .tween(
+                'sliding-dropdown-scroll',
+                () => (progress: number) => {
+                    const scrollTop = startScrollTop + (targetScrollTop - startScrollTop) * progress
+                    portal.scrollTop = scrollTop
+                    this.moveTapeFromInput(-scrollTop / this.scrollScaleY, false)
+                },
+            )
+        this.tapeSnapAnimationTimer = setTimeout(
+            () => {
+                this.tapeSnapAnimationTimer = null
+
+                if (
+                    this.destroyed
+                    || !this.open
+                )
+                    return
+
+                portal.scrollTop = targetScrollTop
+                this.moveTapeFromInput(offset, false)
+                this.tapeSnapAnimating = false
+            },
+            duration,
+        )
     }
 
     private snapTapeToPreview(): void {
-        if (this.destroyed || !this.open || this.animating) return
-        const targetIndex = this.nearestEnabledIndex(this.nearestTapeIndex())
+        if (
+            this.destroyed
+            || !this.open
+            || this.animating
+        )
+            return
+
+        const targetIndex = this.nearestEnabledIndex(
+            this.nearestTapeIndex(),
+        )
         const targetOffset = this.optionsOffset(targetIndex)
         this.pendingValue = this.options[targetIndex]!.value
+
         if (targetOffset === this.tapeOffset) {
             this.renderOptionViews()
+
             return
         }
 
@@ -1397,17 +1732,29 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private readonly handleWheel = (event: WheelEvent): void => {
-        if (!this.open) return
+        if (!this.open)
+            return
+
         event.stopPropagation()
+
         if (this.animating) {
             event.preventDefault()
+
             return
         }
-        if (event.deltaY !== 0) this.interruptTapeSnapAnimation()
+
+        if (event.deltaY !== 0)
+            this.interruptTapeSnapAnimation()
     }
 
     private readonly handleTapePointerDown = (event: PointerEvent): void => {
-        if (!this.open || this.animating || event.button !== 0) return
+        if (
+            !this.open
+            || this.animating
+            || event.button !== 0
+        )
+            return
+
         event.stopPropagation()
         this.interruptTapeSnapAnimation()
         this.interruptTransitions()
@@ -1418,48 +1765,73 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     private readonly handleTapePointerMove = (event: PointerEvent): void => {
-        if (event.pointerId !== this.tapePointerId) return
+        if (event.pointerId !== this.tapePointerId)
+            return
+
         const distance = event.clientY - this.tapePointerStartY
-        if (!this.tapePointerCaptured && Math.abs(distance) > POINTER_DRAG_THRESHOLD_PX) {
+
+        if (
+            !this.tapePointerCaptured
+            && Math.abs(distance) > POINTER_DRAG_THRESHOLD_PX
+        ) {
             const node = this.group.node() as Element & {
                 setPointerCapture?: (pointerId: number) => void
             }
             node.setPointerCapture?.(event.pointerId)
             this.tapePointerCaptured = true
         }
-        if (!this.tapePointerCaptured) return
+
+        if (!this.tapePointerCaptured)
+            return
+
         event.preventDefault()
         event.stopPropagation()
         this.moveTapeFromInput(this.tapePointerStartOffset + distance)
     }
 
     private readonly handleTapePointerEnd = (event: PointerEvent): void => {
-        if (event.pointerId !== this.tapePointerId) return
+        if (event.pointerId !== this.tapePointerId)
+            return
+
         const dragged = this.tapePointerCaptured
+
         if (dragged) {
             event.preventDefault()
             event.stopPropagation()
             this.suppressClickUntil = Date.now() + this.transitionConfig.durationMs
         }
+
         this.releaseTapePointer()
-        if (dragged) this.snapTapeToPreview()
+
+        if (dragged)
+            this.snapTapeToPreview()
     }
 
     private renderInternal(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
 
-        if (!this.open && !this.animating) this.restoreSvgPortal()
+        if (
+            !this.open
+            && !this.animating
+        )
+            this.restoreSvgPortal()
+
         this.interruptTransitions()
         this.clearAnimationTimer()
         this.animating = false
-        if (this.open) {
+
+        if (this.open)
             this.refreshOpenViewport()
-        } else {
+        else {
             this.pendingValue = null
-            this.tapeOffset = this.optionsOffset(this.selectedIndex())
+            this.tapeOffset = this.optionsOffset(
+                this.selectedIndex(),
+            )
             this.openViewportTop = 0
             this.openViewportHeight = this.height
         }
+
         this.width = this.open
             ? this.openSurfaceWidth()
             : this.closedSurfaceWidth(this.currentValue)
@@ -1469,11 +1841,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         const indicatorY = this.open ? this.openIndicatorY() : PADDING
 
         this.group
+            .attr('transform', `translate(${this.x + this.visualOverflowPadding.left}, ${this.y + this.visualOverflowPadding.top})`)
             .attr(
-                'transform',
-                `translate(${this.x + this.visualOverflowPadding.left}, ${this.y + this.visualOverflowPadding.top})`,
+                'aria-expanded',
+                String(this.open),
             )
-            .attr('aria-expanded', String(this.open))
             .style('touch-action', this.open ? 'none' : 'manipulation')
         this.viewportHit
             .attr('x', 0)
@@ -1503,21 +1875,34 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('rx', this.height / 2)
             .attr('ry', this.height / 2)
             .attr('fill', '#000000')
-            .attr('display', this.open && this.hasOpenShadow() ? null : 'none')
+            .attr('display', this.open
+                && this.hasOpenShadow()
+                ? null
+                : 'none')
             .attr('filter', this.hasOpenShadow() ? `url(#${this.openShadowFilterId})` : null)
         this.renderIndicator(indicatorY)
         this.renderChevron(indicatorY, this.open ? 90 : 0)
         this.renderOptionViews()
         this.updateHostSvgGeometry(contentHeight, top)
-        if (this.open && this.portaled) {
+
+        if (
+            this.open
+            && this.portaled
+        ) {
             this.updateScrollPortalGeometry()
             this.syncScrollPortalToTape()
         }
-        if (this.portaled) this.updateChevronPortalGeometry()
+
+        if (this.portaled)
+            this.updateChevronPortalGeometry()
+
         this.syncDocumentListener()
     }
 
-    private setViewportGeometry(y: number, height: number): void {
+    private setViewportGeometry(
+        y: number,
+        height: number,
+    ): void {
         this.viewportClip
             .attr('y', y)
             .attr('height', height)
@@ -1550,7 +1935,11 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .ease(easePupOut)
             .attr('y', viewportY)
             .attr('height', viewportHeight)
-        if (this.open && this.hasOpenShadow()) {
+
+        if (
+            this.open
+            && this.hasOpenShadow()
+        ) {
             this.openShadow
                 .interrupt()
                 .transition()
@@ -1559,11 +1948,23 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
                 .attr('y', viewportY)
                 .attr('height', viewportHeight)
         }
-        this.animateTapePosition(tapePosition, duration, trackFill)
+
+        this.animateTapePosition(
+            tapePosition,
+            duration,
+            trackFill,
+        )
     }
 
     private openDropdown(): void {
-        if (this.destroyed || this.open || this.animating || this.options.length < 2) return
+        if (
+            this.destroyed
+            || this.open
+            || this.animating
+            || this.options.length < 2
+        )
+            return
+
         const selectedIndex = this.selectedIndex()
         const duration = this.transitionConfig.durationMs
         this.measureOptionContentRightEdges()
@@ -1584,7 +1985,9 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.renderOptionViews()
         const selectedFrameY = -this.openViewportTop
         this.setViewportGeometry(selectedFrameY, this.height)
-        this.setTapePosition(this.renderedTapeOffset())
+        this.setTapePosition(
+            this.renderedTapeOffset(),
+        )
         this.renderIndicator(selectedFrameY + PADDING)
         this.renderChevron(selectedFrameY + PADDING, 0)
         this.animateChevronRotation(90, duration)
@@ -1606,26 +2009,52 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             selectedFrameY + PADDING,
             duration,
         )
-        this.animationTimer = setTimeout(() => {
-            this.animationTimer = null
-            if (this.destroyed || !this.open) return
-            this.animating = false
-            this.renderInternal()
-        }, duration)
+        this.animationTimer = setTimeout(
+            () => {
+                this.animationTimer = null
+
+                if (
+                    this.destroyed
+                    || !this.open
+                )
+                    return
+
+                this.animating = false
+                this.renderInternal()
+            },
+            duration,
+        )
     }
 
     private closeDropdown(notify: boolean): void {
-        if (this.destroyed || !this.open) return
-        const targetIndex = this.nearestEnabledIndex(this.nearestTapeIndex())
+        if (
+            this.destroyed
+            || !this.open
+        )
+            return
+
+        const targetIndex = this.nearestEnabledIndex(
+            this.nearestTapeIndex(),
+        )
         this.selectOption(this.options[targetIndex]!, notify)
     }
 
-    private selectOption(option: SlidingDropdownOption<Value>, notify = true): void {
-        if (option.disabled || !this.open) return
+    private selectOption(
+        option: SlidingDropdownOption<Value>,
+        notify = true,
+    ): void {
+        if (
+            option.disabled
+            || !this.open
+        )
+            return
 
         const currentIndex = this.nearestTapeIndex()
         const targetIndex = this.indexOf(option.value)
-        if (targetIndex < 0) return
+
+        if (targetIndex < 0)
+            return
+
         const startOffset = this.tapeOffset
         const targetOffset = this.optionsOffset(targetIndex)
         const closeDuration = this.transitionConfig.minDurationMs
@@ -1650,7 +2079,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             .attr('display', 'none')
         this.group.attr('aria-expanded', 'false')
         this.syncDocumentListener()
-        if (notify) this.onOpenChange?.(false, this.id)
+
+        if (notify)
+            this.onOpenChange?.(false, this.id)
+
         const selectedFrameY = -startOffset
         this.renderIndicator(selectedFrameY + PADDING)
         this.renderChevron(selectedFrameY + PADDING, 90)
@@ -1671,62 +2103,104 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             duration,
         )
 
-        this.animationTimer = setTimeout(() => {
-            this.animationTimer = null
-            if (this.destroyed) return
-            this.currentValue = option.value
-            this.pendingValue = null
-            this.animating = false
-            this.renderInternal()
-            if (valueChanged) this.onChange?.(option.value, this.id)
-        }, duration)
+        this.animationTimer = setTimeout(
+            () => {
+                this.animationTimer = null
+
+                if (this.destroyed)
+                    return
+
+                this.currentValue = option.value
+                this.pendingValue = null
+                this.animating = false
+                this.renderInternal()
+
+                if (valueChanged)
+                    this.onChange?.(option.value, this.id)
+            },
+            duration,
+        )
     }
 
-    private activateOption(option: SlidingDropdownOption<Value>, event: Event): void {
-        if (event.defaultPrevented || option.disabled) return
+    private activateOption(
+        option: SlidingDropdownOption<Value>,
+        event: Event,
+    ): void {
+        if (
+            event.defaultPrevented
+            || option.disabled
+        )
+            return
+
         event.preventDefault()
         event.stopPropagation()
-        if (Date.now() < this.suppressClickUntil) return
+
+        if (Date.now() < this.suppressClickUntil)
+            return
 
         if (!this.open) {
-            if (option.value === this.currentValue) this.openDropdown()
+            if (option.value === this.currentValue)
+                this.openDropdown()
+
             return
         }
+
         this.selectOption(option, true)
     }
 
     private readonly handleChevronClick = (event: Event): void => {
         event.preventDefault()
         event.stopPropagation()
-        if (this.animating) return
+
+        if (this.animating)
+            return
+
         if (this.open) {
             this.closeDropdown(true)
+
             return
         }
+
         this.openDropdown()
     }
 
     private focusTapeOption(option: SlidingDropdownOption<Value>): void {
         const targetIndex = this.indexOf(option.value)
-        if (targetIndex < 0 || option.disabled) return
-        const duration = this.transitionDuration(this.nearestTapeIndex(), targetIndex)
+
+        if (
+            targetIndex < 0
+            || option.disabled
+        )
+            return
+
+        const duration = this.transitionDuration(
+            this.nearestTapeIndex(),
+            targetIndex,
+        )
         const targetOffset = this.optionsOffset(targetIndex)
         this.pendingValue = option.value
         this.renderOptionViews()
         this.animateScrollPortalToOffset(targetOffset, duration)
-        this.optionViews
-            .find(view => view.option.value === option.value)
+        this.optionViews.find(view => view.option.value === option.value)
             ?.group.node()
             ?.focus({ preventScroll: true })
     }
 
-    private focusOptionByOffset(option: SlidingDropdownOption<Value>, offset: number): void {
+    private focusOptionByOffset(
+        option: SlidingDropdownOption<Value>,
+        offset: number,
+    ): void {
         const startIndex = this.indexOf(option.value)
+
         for (let step = 1; step <= this.options.length; step += 1) {
             const index = (startIndex + offset * step + this.options.length) % this.options.length
             const candidate = this.options[index]!
-            if (candidate.disabled) continue
+
+            if (candidate.disabled)
+                continue
+
             this.focusTapeOption(candidate)
+
             return
         }
     }
@@ -1734,75 +2208,153 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     private focusBoundaryOption(position: 'first' | 'last'): void {
         const enabledOptions = this.options.filter(option => !option.disabled)
         const option = position === 'first' ? enabledOptions[0] : enabledOptions.at(-1)
-        if (!option) return
+
+        if (!option)
+            return
+
         this.focusTapeOption(option)
     }
 
-    private handleOptionKeydown(option: SlidingDropdownOption<Value>, event: KeyboardEvent): void {
-        if (event.key === 'Escape' && (this.open || this.animating)) {
+    private handleOptionKeydown(
+        option: SlidingDropdownOption<Value>,
+        event: KeyboardEvent,
+    ): void {
+        if (
+            event.key === 'Escape'
+            && (this.open || this.animating)
+        ) {
             event.preventDefault()
             event.stopPropagation()
             this.closeDropdown(true)
+
             return
         }
-        if (event.key === 'Enter' || event.key === ' ') {
+
+        if (
+            event.key === 'Enter'
+            || event.key === ' '
+        ) {
             const previewOption = this.pendingValue === null
                 ? option
                 : this.options.find(candidate => candidate.value === this.pendingValue) ?? option
             this.activateOption(previewOption, event)
+
             return
         }
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+
+        if (
+            event.key === 'ArrowDown'
+            || event.key === 'ArrowUp'
+        ) {
             event.preventDefault()
             event.stopPropagation()
+
             if (!this.open) {
                 this.openDropdown()
+
                 return
             }
-            if (this.animating) return
+
+            if (this.animating)
+                return
+
             this.focusOptionByOffset(option, event.key === 'ArrowDown' ? 1 : -1)
+
             return
         }
-        if (!this.open) return
-        if (event.key === 'Home' || event.key === 'End') {
+
+        if (!this.open)
+            return
+
+        if (
+            event.key === 'Home'
+            || event.key === 'End'
+        ) {
             event.preventDefault()
             event.stopPropagation()
-            if (this.animating) return
+
+            if (this.animating)
+                return
+
             this.focusBoundaryOption(event.key === 'Home' ? 'first' : 'last')
         }
     }
 
     private readonly handleDocumentMouseDown = (event: MouseEvent): void => {
         const groupNode = this.group.node?.()
-        if (groupNode?.contains(event.target as Node)) return
+
+        if (groupNode?.contains(event.target as Node))
+            return
+
         const chevronPortalNode = this.chevronPortalSvg?.node?.()
-        if (chevronPortalNode?.contains(event.target as Node)) return
+
+        if (chevronPortalNode?.contains(event.target as Node))
+            return
+
         this.closeDropdown(true)
     }
 
     private readonly handleViewportChange = (event?: Event): void => {
-        if (event?.target === this.scrollPortalNode) return
-        if (!this.open || this.animating) return
+        if (event?.target === this.scrollPortalNode)
+            return
+
+        if (
+            !this.open
+            || this.animating
+        )
+            return
+
         this.renderInternal()
     }
 
     private syncDocumentListener(): void {
-        if (typeof document === 'undefined') return
-        document.removeEventListener('mousedown', this.handleDocumentMouseDown, true)
+        if (typeof document === 'undefined')
+            return
+
+        document.removeEventListener(
+            'mousedown',
+            this.handleDocumentMouseDown,
+            true,
+        )
         window.removeEventListener('resize', this.handleViewportChange)
-        window.removeEventListener('scroll', this.handleViewportChange, true)
-        if (this.open) document.addEventListener('mousedown', this.handleDocumentMouseDown, true)
-        if (this.open) window.addEventListener('resize', this.handleViewportChange)
-        if (this.open) window.addEventListener('scroll', this.handleViewportChange, true)
+        window.removeEventListener(
+            'scroll',
+            this.handleViewportChange,
+            true,
+        )
+
+        if (this.open)
+            document.addEventListener(
+                'mousedown',
+                this.handleDocumentMouseDown,
+                true,
+            )
+
+        if (this.open)
+            window.addEventListener('resize', this.handleViewportChange)
+
+        if (this.open)
+            window.addEventListener(
+                'scroll',
+                this.handleViewportChange,
+                true,
+            )
     }
 
     render = (): void => {
-        if (this.animating) return
+        if (this.animating)
+            return
+
         this.measureOptionContentRightEdges()
         this.renderInternal()
     }
 
-    resize(x: number, y: number, width: number, height: number = this.height): void {
+    resize(
+        x: number,
+        y: number,
+        width: number,
+        height: number = this.height,
+    ): void {
         const tapePosition = this.height > 0
             ? -this.tapeOffset / this.height
             : this.selectedIndex()
@@ -1812,21 +2364,34 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         this.height = height
         this.tapeOffset = this.open
             ? this.clampTapeOffset(-tapePosition * this.height)
-            : this.optionsOffset(this.selectedIndex())
-        if (this.animating) return
+            : this.optionsOffset(
+                this.selectedIndex(),
+            )
+
+        if (this.animating)
+            return
+
         this.renderInternal()
     }
 
     setValue(value: Value): void {
         const index = this.indexOf(value)
-        if (index < 0 || this.options[index]?.disabled) return
+
+        if (
+            index < 0
+            || this.options[index]?.disabled
+        )
+            return
+
         if (value === this.currentValue) {
             if (!this.animating) {
                 this.measureOptionContentRightEdges()
                 this.renderInternal()
             }
+
             return
         }
+
         this.interruptTapeSnapAnimation()
         this.clearAnimationTimer()
         this.releaseTapePointer()
@@ -1848,8 +2413,10 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     setOpen(open: boolean): void {
         if (open) {
             this.openDropdown()
+
             return
         }
+
         this.closeDropdown(true)
     }
 
@@ -1862,33 +2429,49 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.clearAnimationTimer()
         this.releaseTapePointer()
         this.interruptTransitions()
-        if (this.resizeAnimationFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
+
+        if (
+            this.resizeAnimationFrame !== null
+            && typeof cancelAnimationFrame !== 'undefined'
+        ) {
             cancelAnimationFrame(this.resizeAnimationFrame)
             this.resizeAnimationFrame = null
         }
+
         this.resizeObserver?.disconnect()
         this.observedResizeTargets.clear()
         this.interruptTapeSnapAnimation()
+
         if (typeof document !== 'undefined') {
-            document.removeEventListener('mousedown', this.handleDocumentMouseDown, true)
+            document.removeEventListener(
+                'mousedown',
+                this.handleDocumentMouseDown,
+                true,
+            )
             window.removeEventListener('resize', this.handleViewportChange)
-            window.removeEventListener('scroll', this.handleViewportChange, true)
+            window.removeEventListener(
+                'scroll',
+                this.handleViewportChange,
+                true,
+            )
         }
+
         for (const view of this.optionViews) view.customRenderer?.destroy?.()
+
         this.restoreSvgPortal()
         this.group.remove()
         this.restoreOwnedLayout()
     }
 }
 
-export function createSlidingDropdown<Value extends string = string>(
+export const createSlidingDropdown = <Value extends string = string>(
     parent: any,
     config: SlidingDropdownConfig<Value>,
-): SlidingDropdownInstance<Value> {
-    return new SlidingDropdown(parent, config)
-}
+): SlidingDropdownInstance<Value> => new SlidingDropdown(parent, config)

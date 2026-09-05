@@ -308,31 +308,18 @@ export type ContentDescriptorSettings = {
 
 export type Settings = LixpiCanvasSettings & {
     modelSelectorDropdown: ModelSelectorDropdownSettings
-
     dropdown: DropdownSettings
-
     slidingDropdown: SlidingDropdownSettings
-
     aiModelControls: AiModelControlsSettings
-
     gradient: GradientSettings
-
     helpTooltip: HelpTooltipSettings
-
     hover: HoverSettings
-
     rightSidePanel: RightSidePanelSettings
-
     navigationSidePanel: NavigationSidePanelSettings
-
     aiChatThread: AiChatThreadSettings
-
     aiPromptInput: AiPromptInputSettings
-
     videoControls: VideoControlsSettings
-
     mediaLibrary: MediaLibrarySettings
-
     contentDescriptor: ContentDescriptorSettings
 }
 

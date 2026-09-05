@@ -67,8 +67,9 @@ const modelMenuCssVariables: Array<[string, keyof AiPromptInputModelMenuStyleSet
     ['--help-tooltip-color', 'helpTooltipColor'],
 ]
 
-export function applyAiModelMenuStyleSettings(element: HTMLElement): void {
+export const applyAiModelMenuStyleSettings = (element: HTMLElement): void => {
     const modelMenuStyleSettings = settings.aiPromptInput.modelMenu.styles
+
     for (const [propertyName, settingKey] of modelMenuCssVariables) {
         element.style.setProperty(propertyName, modelMenuStyleSettings[settingKey])
     }
@@ -104,9 +105,7 @@ class AiModelMenuSection implements AiModelMenuSectionView {
                     </div>
                     <div className="ai-prompt-model-menu-section-heading-action">${section.headingControl ?? null}</div>
                 </div>
-                <div className="ai-prompt-model-menu-section-controls">
-                    ${this.controlViews.map(controlView => controlView.dom)}
-                </div>
+                <div className="ai-prompt-model-menu-section-controls">${this.controlViews.map(controlView => controlView.dom)}</div>
                 ${section.selectedModelTags ?? null}
             </section>
         ` as HTMLElement
@@ -115,6 +114,7 @@ class AiModelMenuSection implements AiModelMenuSectionView {
 
     update(): void {
         this.dom.dataset.visible = String(this.section.getVisible?.() ?? true)
+
         for (const controlView of this.controlViews) {
             controlView.update()
         }
@@ -128,8 +128,8 @@ class AiModelMenuSection implements AiModelMenuSectionView {
         const label = item.label === ''
             ? null
             : typeof item.label === 'string'
-            ? html`<span className="ai-prompt-model-menu-control-label">${item.label}</span>` as HTMLElement
-            : item.label
+                ? html`<span className="ai-prompt-model-menu-control-label">${item.label}</span>` as HTMLElement
+                : item.label
 
         const dom = html`
             <div className="ai-prompt-model-menu-control">
@@ -139,12 +139,18 @@ class AiModelMenuSection implements AiModelMenuSectionView {
         ` as HTMLElement
         const update = (): void => {
             const nextVisible = String(item.getVisible?.() ?? true)
-            if (dom.dataset.visible === nextVisible) return
+
+            if (dom.dataset.visible === nextVisible)
+                return
+
             dom.dataset.visible = nextVisible
         }
         update()
 
-        return { dom, update }
+        return {
+            dom,
+            update,
+        }
     }
 }
 
@@ -156,9 +162,10 @@ class AiModelMenuContent implements AiModelMenuContentView {
     constructor(sections: AiModelMenuSectionConfig[]) {
         this.sectionViews = sections.map(section => new AiModelMenuSection(section))
         this.dom = html`
-            <div className="ai-prompt-model-menu-content" contenteditable="false">
-                ${this.sectionViews.map(sectionView => sectionView.dom)}
-            </div>
+            <div
+                className="ai-prompt-model-menu-content"
+                contenteditable="false"
+            >${this.sectionViews.map(sectionView => sectionView.dom)}</div>
         ` as HTMLElement
     }
 
@@ -175,6 +182,4 @@ class AiModelMenuContent implements AiModelMenuContentView {
     }
 }
 
-export function createAiModelMenuContent(sections: AiModelMenuSectionConfig[]): AiModelMenuContentView {
-    return new AiModelMenuContent(sections)
-}
+export const createAiModelMenuContent = (sections: AiModelMenuSectionConfig[]): AiModelMenuContentView => new AiModelMenuContent(sections)

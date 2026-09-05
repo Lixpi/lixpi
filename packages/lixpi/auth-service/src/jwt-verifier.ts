@@ -13,13 +13,20 @@ export const verifyJwt = async ({
     issuer,
     algorithms = ['RS256'],
 }: {
-    getKey: (header: any, callback: (err: Error | null, key?: string) => void) => void
+    getKey: (
+        header: any,
+        callback: (
+            err: Error | null,
+            key?: string,
+        ) => void,
+    ) => void
     token: string
     audience: string
     issuer: string
     algorithms?: string[]
 }): Promise<JwtVerificationResult> => {
-    if (!token) return { error: 'No token provided' }
+    if (!token)
+        return { error: 'No token provided' }
 
     return new Promise((resolve, reject) => {
         jwt.verify(
@@ -33,12 +40,12 @@ export const verifyJwt = async ({
             (error, decoded) => {
                 if (error) {
                     reject({ error: error.message })
+
                     return
                 }
 
-                if (decoded) {
+                if (decoded)
                     resolve({ decoded })
-                }
             },
         )
     })
@@ -57,7 +64,6 @@ export const createJwtVerifier = (config: JwtVerifierConfig) => {
                 algorithms: config.algorithms ?? ['RS256'],
             })
         },
-
         getKey,
     }
 }

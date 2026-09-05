@@ -6,10 +6,18 @@ export type SceneTransitionInput = {
     failed: boolean
 }
 
-export function planSceneTransition(input: SceneTransitionInput) {
+export const planSceneTransition = (input: SceneTransitionInput) => {
     const sceneKey = input.nextSceneKey || input.currentSceneKey
     const routeChanged = Boolean(input.nextSceneKey && input.nextSceneKey !== input.currentSceneKey)
     const loadedChanged = Boolean(input.hasSnapshot && sceneKey && sceneKey !== input.renderedSceneKey)
     const clearContent = Boolean(sceneKey && !input.hasSnapshot && sceneKey !== input.renderedSceneKey)
-    return { sceneKey, routeChanged, loadedChanged, sceneChanged: routeChanged || loadedChanged, clearContent, showLoading: clearContent && !input.failed }
+
+    return {
+        sceneKey,
+        routeChanged,
+        loadedChanged,
+        sceneChanged: routeChanged || loadedChanged,
+        clearContent,
+        showLoading: clearContent && !input.failed,
+    }
 }

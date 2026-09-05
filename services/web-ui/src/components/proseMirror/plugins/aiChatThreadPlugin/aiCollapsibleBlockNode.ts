@@ -43,19 +43,20 @@ export const aiCollapsibleBlockNodeView = (
         contentDOM: contentDom,
         ignoreMutation(mutation: MutationRecord) {
             const target = mutation.target as Node
+
             return target !== contentDom && !contentDom.contains(target)
         },
         update(updatedNode: any) {
-            if (updatedNode.type.name !== aiCollapsibleBlockNodeType) return false
+            if (updatedNode.type.name !== aiCollapsibleBlockNodeType)
+                return false
 
             node = updatedNode
             renderTrace(updatedNode)
 
-            if (updatedNode.attrs.isStreaming) {
+            if (updatedNode.attrs.isStreaming)
                 wrapper.classList.add('is-streaming')
-            } else {
+            else
                 wrapper.classList.remove('is-streaming')
-            }
 
             return true
         },

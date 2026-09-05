@@ -1,3 +1,7 @@
+import {
+    err as debugError,
+    info as debugInfo,
+} from '@lixpi/debug-tools'
 import { createHash } from 'node:crypto'
 
 import NATS_Service from '@lixpi/nats-service'
@@ -56,14 +60,24 @@ export class AssetDocumentEventAuthorizationCache {
     }: {
         now: number
         refresh: () => Promise<boolean>
-    }): Promise<{ authorized: boolean; refreshed: boolean }> {
-        if (now - this.refreshedAt < REQUESTER_REFRESH_INTERVAL_MS) {
-            return { authorized: this.authorized, refreshed: false }
-        }
+    }): Promise<{
+        authorized: boolean
+        refreshed: boolean
+    }> {
+        if (now - this.refreshedAt < REQUESTER_REFRESH_INTERVAL_MS)
+            return {
+                authorized: this.authorized,
+                refreshed: false,
+            }
+
         this.authorized = false
         this.refreshedAt = now
         this.authorized = await refresh()
-        return { authorized: this.authorized, refreshed: true }
+
+        return {
+            authorized: this.authorized,
+            refreshed: true,
+        }
     }
 }
 
@@ -79,21 +93,38 @@ const refreshRelayAuthorization = async ({
     const startedAt = Date.now()
     relay.authorizationRefreshCount += 1
     let outcome = 'refresh-failed'
+
     try {
-        const workspace = await Workspace.getWorkspace({ workspaceId: relay.workspaceId, userId })
-        if ('error' in workspace || workspace.deletingAt) {
+        const workspace = await Workspace.getWorkspace({
+            workspaceId: relay.workspaceId,
+            userId,
+        })
+
+        if (
+            'error' in workspace
+            || workspace.deletingAt
+        ) {
             outcome = 'workspace-denied'
+
             return false
         }
+
         const organization = await Organization.getOrganization({
             organizationId: workspace.organizationId,
             userId,
         })
+
         if ('error' in organization) {
             outcome = 'organization-denied'
+
             return false
         }
-        relay.requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+
+        relay.requester = createAssetRequesterForWorkspaceUser(
+            workspace,
+            userId,
+            true,
+        )
         const authorized = await AssetModel.get({
             assetId: coordinate.assetId,
             requester: relay.requester,
@@ -101,31 +132,39 @@ const refreshRelayAuthorization = async ({
         })
         const allowed = !('error' in authorized) && Boolean(authorized.documents[coordinate.role])
         outcome = allowed ? 'authorized' : 'asset-denied'
+
         return allowed
     } catch (error) {
-        console.error('[AssetDocumentEventRelay] authorization refresh failed', {
-            userId,
-            workspaceId: relay.workspaceId,
-            assetId: coordinate.assetId,
-            role: coordinate.role,
-            refreshCount: relay.authorizationRefreshCount,
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-            errorMessage: error instanceof Error ? error.message : String(error),
-        })
+        debugError(
+            '[AssetDocumentEventRelay] authorization refresh failed',
+            {
+                userId,
+                workspaceId: relay.workspaceId,
+                assetId: coordinate.assetId,
+                role: coordinate.role,
+                refreshCount: relay.authorizationRefreshCount,
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+                errorMessage: error instanceof Error ? error.message : String(error),
+            },
+        )
+
         return false
     } finally {
-        console.info('[AssetDocumentEventRelay] authorization refreshed', {
-            userId,
-            workspaceId: relay.workspaceId,
-            assetId: coordinate.assetId,
-            role: coordinate.role,
-            outcome,
-            refreshCount: relay.authorizationRefreshCount,
-            receivedEventCount: relay.receivedEventCount,
-            forwardedEventCount: relay.forwardedEventCount,
-            droppedEventCount: relay.droppedEventCount,
-            durationMs: Date.now() - startedAt,
-        })
+        debugInfo(
+            '[AssetDocumentEventRelay] authorization refreshed',
+            {
+                userId,
+                workspaceId: relay.workspaceId,
+                assetId: coordinate.assetId,
+                role: coordinate.role,
+                outcome,
+                refreshCount: relay.authorizationRefreshCount,
+                receivedEventCount: relay.receivedEventCount,
+                forwardedEventCount: relay.forwardedEventCount,
+                droppedEventCount: relay.droppedEventCount,
+                durationMs: Date.now() - startedAt,
+            },
+        )
     }
 }
 
@@ -141,16 +180,22 @@ export const ensureAssetDocumentEventRelay = ({
     const { userId } = requester
     const natsService = NATS_Service.getInstance()
     const connection = natsService?.getConnection()
-    if (!connection) throw new Error('NATS service unavailable')
+
+    if (!connection)
+        throw new Error('NATS service unavailable')
 
     const sourceSubject = getAssetStepSubject(coordinate)
     const targetSubject = getAssetDocumentEventSubject(userId, coordinate)
     const relayKey = `${userId}#${sourceSubject}`
     const existing = activeRelays.get(relayKey)
+
     if (existing) {
         existing.requester = requester
         existing.workspaceId = workspaceId
-        existing.authorization.confirmAuthorized(Date.now())
+        existing.authorization.confirmAuthorized(
+            Date.now(),
+        )
+
         return targetSubject
     }
 
@@ -172,14 +217,17 @@ export const ensureAssetDocumentEventRelay = ({
         workspaceId,
     }
     activeRelays.set(relayKey, relay)
-    console.info('[AssetDocumentEventRelay] opened', {
-        userId,
-        workspaceId,
-        assetId: coordinate.assetId,
-        role: coordinate.role,
-        sourceSubject,
-        targetSubject,
-    })
+    debugInfo(
+        '[AssetDocumentEventRelay] opened',
+        {
+            userId,
+            workspaceId,
+            assetId: coordinate.assetId,
+            role: coordinate.role,
+            sourceSubject,
+            targetSubject,
+        },
+    )
     void (async () => {
         try {
             for await (const message of subscription) {
@@ -187,36 +235,52 @@ export const ensureAssetDocumentEventRelay = ({
                     relay.receivedEventCount += 1
                     const decision = await relay.authorization.authorize({
                         now: Date.now(),
-                        refresh: async () => await refreshRelayAuthorization({ relay, coordinate, userId }),
+                        refresh: async () => await refreshRelayAuthorization({
+                            relay,
+                            coordinate,
+                            userId,
+                        }),
                     })
+
                     if (!decision.authorized) {
                         relay.droppedEventCount += 1
+
                         continue
                     }
+
                     connection.publish(targetSubject, message.data)
                     relay.forwardedEventCount += 1
                 } catch (error) {
-                    console.error('Asset document event authorization failed:', {
-                        assetId: coordinate.assetId,
-                        role: coordinate.role,
-                        error,
-                    })
+                    debugError(
+                        'Asset document event authorization failed:',
+                        {
+                            assetId: coordinate.assetId,
+                            role: coordinate.role,
+                            error,
+                        },
+                    )
                 }
             }
         } finally {
-            if (activeRelays.get(relayKey) === relay) activeRelays.delete(relayKey)
-            console.info('[AssetDocumentEventRelay] closed', {
-                userId,
-                workspaceId: relay.workspaceId,
-                assetId: coordinate.assetId,
-                role: coordinate.role,
-                authorizationRefreshCount: relay.authorizationRefreshCount,
-                receivedEventCount: relay.receivedEventCount,
-                forwardedEventCount: relay.forwardedEventCount,
-                droppedEventCount: relay.droppedEventCount,
-                durationMs: Date.now() - relay.openedAt,
-            })
+            if (activeRelays.get(relayKey) === relay)
+                activeRelays.delete(relayKey)
+
+            debugInfo(
+                '[AssetDocumentEventRelay] closed',
+                {
+                    userId,
+                    workspaceId: relay.workspaceId,
+                    assetId: coordinate.assetId,
+                    role: coordinate.role,
+                    authorizationRefreshCount: relay.authorizationRefreshCount,
+                    receivedEventCount: relay.receivedEventCount,
+                    forwardedEventCount: relay.forwardedEventCount,
+                    droppedEventCount: relay.droppedEventCount,
+                    durationMs: Date.now() - relay.openedAt,
+                },
+            )
         }
     })()
+
     return targetSubject
 }

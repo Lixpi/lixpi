@@ -129,7 +129,10 @@ export type StyleExtractionState = {
     references: ReferenceImage[]
     sceneAssessment?: SceneAssessment
     axisExtractions: Record<string, AxisExtraction>
-    failedAxes: Array<{ axis: string; error: string }>
+    failedAxes: Array<{
+        axis: string
+        error: string
+    }>
     sourceCrops: StyleSampleRef[]
     samples: StyleSampleRef[]
     draft?: StyleDraft
@@ -151,11 +154,16 @@ export type StageLogger = {
     // Forward a token chunk to an optional workflow progress sink. Use only
     // from sequential stages (router, synthesis); parallel stages interleave.
     chunk: (text: string) => void
-    span: <T>(stage: string, modelName: string | undefined, body: () => Promise<T>, opts?: {
-        inputSummary?: string
-        outputSummarizer?: (result: T) => string | undefined
-        promptPreview?: string
-    }) => Promise<T>
+    span: <T>(
+        stage: string,
+        modelName: string | undefined,
+        body: () => Promise<T>,
+        opts?: {
+            inputSummary?: string
+            outputSummarizer?: (result: T) => string | undefined
+            promptPreview?: string
+        },
+    ) => Promise<T>
 }
 
 export type StyleExtractionDependencies = {
@@ -168,7 +176,10 @@ export type StyleExtractor = {
     readonly displayName: string
     readonly description: string
     readonly minDominance: number
-    applicableTo: (scene: SceneAssessment, intent?: string) => boolean
+    applicableTo: (
+        scene: SceneAssessment,
+        intent?: string,
+    ) => boolean
     extract: (args: {
         scene: SceneAssessment
         state: StyleExtractionState

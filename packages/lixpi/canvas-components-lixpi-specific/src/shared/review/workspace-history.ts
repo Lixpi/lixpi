@@ -38,8 +38,15 @@ import { settleReadyMediaGenerationProgress } from '../generation/progress-state
 
 type BranchMarkerNode = BranchOriginCanvasNode | BranchForkCanvasNode | BranchLineCanvasNode
 type MediaNode = ImageCanvasNode | VideoCanvasNode
-export type WorkspaceMediaHistoryTarget = { node: MediaNode; lineageProjectionScope: AiLineageProjectionScope; limitProjectionToSelectedMedia: boolean }
-export type WorkspaceBranchHistoryTarget = { marker: BranchMarkerNode; lineageProjectionScope: AiLineageProjectionScope }
+export type WorkspaceMediaHistoryTarget = {
+    node: MediaNode
+    lineageProjectionScope: AiLineageProjectionScope
+    limitProjectionToSelectedMedia: boolean
+}
+export type WorkspaceBranchHistoryTarget = {
+    marker: BranchMarkerNode
+    lineageProjectionScope: AiLineageProjectionScope
+}
 type GeneratedMediaProjectionTarget = WorkspaceMediaHistoryTarget
 type BranchMarkerProjectionTarget = WorkspaceBranchHistoryTarget
 export type WorkspaceHistoryPorts = {
@@ -51,13 +58,15 @@ export type WorkspaceHistoryPorts = {
     isBranchCancelled: (node: BranchMarkerNode) => boolean
 }
 
-function isBranchMarkerNode(node: CanvasNode): node is BranchMarkerNode {
-    return node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
-}
+const isBranchMarkerNode = (node: CanvasNode): node is BranchMarkerNode =>
+    node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 
-export function getGeneratedMediaProjectionLocator(node: MediaNode): GeneratedMediaTurnLocator | null {
+export const getGeneratedMediaProjectionLocator = (node: MediaNode): GeneratedMediaTurnLocator | null => {
     const generatedBy = node.generatedBy
-    if (!generatedBy) return null
+
+    if (!generatedBy)
+        return null
+
     return {
         responseMessageId: generatedBy.responseMessageId,
         reasoningRunId: generatedBy.reasoningRunId,
@@ -69,24 +78,43 @@ export function getGeneratedMediaProjectionLocator(node: MediaNode): GeneratedMe
     }
 }
 
-export function compareGeneratedMediaByGenerationOrder(
+export const compareGeneratedMediaByGenerationOrder = (
     a: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode,
     b: ImageCanvasNode | VideoCanvasNode | CapabilityArtifactCanvasNode,
-): number {
+): number => {
     const aVariant = a.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
     const bVariant = b.generatedBy?.variantIndex ?? Number.MAX_SAFE_INTEGER
-    if (aVariant !== bVariant) return aVariant - bVariant
+
+    if (aVariant !== bVariant)
+        return aVariant - bVariant
+
     return ((a.generatedBy as { createdAt?: number } | undefined)?.createdAt ?? 0) - ((b.generatedBy as { createdAt?: number } | undefined)?.createdAt ?? 0)
 }
 
-export function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<string>): number {
-    if (!value || typeof value !== 'object') return 0
+export const countProseMirrorNodesByType = (
+    value: unknown,
+    nodeTypes: Set<string>,
+): number => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return 0
 
-    const candidate = value as { type?: unknown; content?: unknown }
-    const ownCount = typeof candidate.type === 'string' && nodeTypes.has(candidate.type) ? 1 : 0
-    if (!Array.isArray(candidate.content)) return ownCount
+    const candidate = value as {
+        type?: unknown
+        content?: unknown
+    }
+    const ownCount = typeof candidate.type === 'string'
+        && nodeTypes.has(candidate.type)
+        ? 1
+        : 0
+
+    if (!Array.isArray(candidate.content))
+        return ownCount
 
     let childCount = 0
+
     for (const child of candidate.content) {
         childCount += countProseMirrorNodesByType(child, nodeTypes)
     }
@@ -94,42 +122,54 @@ export function countProseMirrorNodesByType(value: unknown, nodeTypes: Set<strin
     return ownCount + childCount
 }
 
-export function getBranchMarkerThreadId(node: BranchMarkerNode): string {
-    return node.conversationAssetId ?? ''
-}
+export const getBranchMarkerThreadId = (node: BranchMarkerNode): string => node.conversationAssetId ?? ''
 
-export function parseBranchMarkerReasoningIndex(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null
+export const parseBranchMarkerReasoningIndex = (value: unknown): number | null => {
+    if (
+        value === null
+        || value === undefined
+        || value === ''
+    )
+        return null
+
     const parsed = Number(value)
+
     return Number.isFinite(parsed) ? parsed : null
 }
 
-export function getBranchMarkerReasoningModelId(node: BranchMarkerNode): string {
-    if (node.type === 'branchOrigin') return node.pendingState?.reasoningModelId ?? ''
+export const getBranchMarkerReasoningModelId = (node: BranchMarkerNode): string => {
+    if (node.type === 'branchOrigin')
+        return node.pendingState?.reasoningModelId ?? ''
+
     const runNode = node as BranchForkCanvasNode | BranchLineCanvasNode
+
     return node.pendingState?.reasoningModelId
         ?? runNode.reasoningModelId
         ?? runNode.provenance?.reasoningModelId
         ?? ''
 }
 
-export function getBranchMarkerReasoningIndex(node: BranchMarkerNode): number | null {
-    if (node.type === 'branchOrigin') return parseBranchMarkerReasoningIndex(node.pendingState?.reasoningIndex)
+export const getBranchMarkerReasoningIndex = (node: BranchMarkerNode): number | null => {
+    if (node.type === 'branchOrigin')
+        return parseBranchMarkerReasoningIndex(node.pendingState?.reasoningIndex)
+
     const runNode = node as BranchForkCanvasNode | BranchLineCanvasNode
+
     return parseBranchMarkerReasoningIndex(node.pendingState?.reasoningIndex ?? runNode.reasoningIndex)
 }
 
-export function getBranchMarkerTurnDescriptor(node: BranchMarkerNode): BranchMarkerTurnDescriptor {
+export const getBranchMarkerTurnDescriptor = (node: BranchMarkerNode): BranchMarkerTurnDescriptor => {
     const reasoningRunId = node.type === 'branchOrigin'
         ? ''
         : (node as BranchForkCanvasNode | BranchLineCanvasNode).reasoningRunId ?? ''
     const markerNodeAttr = node.type === 'branchOrigin'
         ? 'branchOriginNodeId' as const
         : node.type === 'branchFork'
-        ? 'branchForkNodeId' as const
-        : 'branchLineNodeId' as const
+            ? 'branchForkNodeId' as const
+            : 'branchLineNodeId' as const
     // 'canvas-' ids are synthetic client placeholders, never present in the doc.
-    const generationRequestId = node.generationRequestId && !node.generationRequestId.startsWith('canvas-')
+    const generationRequestId = node.generationRequestId
+        && !node.generationRequestId.startsWith('canvas-')
         ? node.generationRequestId
         : undefined
 
@@ -143,23 +183,39 @@ export function getBranchMarkerTurnDescriptor(node: BranchMarkerNode): BranchMar
     }
 }
 
-export function getCapabilityArtifactTurnProjectionLocator(node: CapabilityArtifactCanvasNode): {
+export const getCapabilityArtifactTurnProjectionLocator = (node: CapabilityArtifactCanvasNode): {
     threadId: string
     descriptor: BranchMarkerTurnDescriptor
     lineageProjectionScope: AiLineageProjectionScope
-} | null {
+} | null => {
     const generatedBy = node.generatedBy
-    if (!generatedBy?.conversationAssetId) return null
+
+    if (!generatedBy?.conversationAssetId)
+        return null
+
     const candidates: Array<{
         nodeId: string | undefined
         markerNodeAttr: NonNullable<BranchMarkerTurnDescriptor['markerNodeAttr']>
         lineageProjectionScope: AiLineageProjectionScope
     }> = [
-        { nodeId: generatedBy.branchLineNodeId, markerNodeAttr: 'branchLineNodeId', lineageProjectionScope: 'media-run' },
-        { nodeId: generatedBy.branchForkNodeId, markerNodeAttr: 'branchForkNodeId', lineageProjectionScope: 'branch-fork' },
-        { nodeId: generatedBy.branchOriginNodeId, markerNodeAttr: 'branchOriginNodeId', lineageProjectionScope: 'branch-origin' },
+        {
+            nodeId: generatedBy.branchLineNodeId,
+            markerNodeAttr: 'branchLineNodeId',
+            lineageProjectionScope: 'media-run',
+        },
+        {
+            nodeId: generatedBy.branchForkNodeId,
+            markerNodeAttr: 'branchForkNodeId',
+            lineageProjectionScope: 'branch-fork',
+        },
+        {
+            nodeId: generatedBy.branchOriginNodeId,
+            markerNodeAttr: 'branchOriginNodeId',
+            lineageProjectionScope: 'branch-origin',
+        },
     ]
     const marker = candidates.find(candidate => candidate.nodeId)
+
     return {
         threadId: generatedBy.conversationAssetId,
         descriptor: {
@@ -182,17 +238,19 @@ export function getCapabilityArtifactTurnProjectionLocator(node: CapabilityArtif
 export class WorkspaceHistory {
     constructor(private readonly ports: WorkspaceHistoryPorts) {}
 
-    getMediaGenerationTraceState(
-        node: ImageCanvasNode | VideoCanvasNode,
-    ): MediaGenerationProgressState | null {
+    getMediaGenerationTraceState(node: ImageCanvasNode | VideoCanvasNode): MediaGenerationProgressState | null {
         const persistedState = node.generationProgress ?? (() => {
             const locator = getGeneratedMediaProjectionLocator(node)
-            if (!locator) return null
+
+            if (!locator)
+                return null
+
             return getGeneratedMediaProgressFromThreadContent(
                 this.getGeneratedMediaHistoryContent(node),
                 locator,
             )
         })()
+
         return persistedState
             ? settleReadyMediaGenerationProgress(persistedState, node.mediaGenerationPhase)
             : null
@@ -201,9 +259,14 @@ export class WorkspaceHistory {
     buildBranchMarkerTurnProjectionContent(
         marker: BranchMarkerNode,
         lineageProjectionScope: AiLineageProjectionScope,
-    ): { threadId: string; content: ProseMirrorJsonNode } | null {
+    ): {
+        threadId: string
+        content: ProseMirrorJsonNode
+    } | null {
         const threadId = getBranchMarkerThreadId(marker)
-        if (!threadId) return null
+
+        if (!threadId)
+            return null
 
         const projection = buildBranchMarkerTurnProjectionFromThreadContent(
             this.getAiChatThreadContentForBranchMarker(threadId),
@@ -215,7 +278,9 @@ export class WorkspaceHistory {
                 allowLatestTurnFallback: this.canUseLatestBranchMarkerTurnFallback(marker),
             },
         )
-        if (!projection) return null
+
+        if (!projection)
+            return null
 
         return {
             threadId: projection.threadId,
@@ -224,29 +289,29 @@ export class WorkspaceHistory {
     }
 
     getBranchOriginGeneratedMediaNodes(branchOriginNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
-        return this.ports.getNodes()
-            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
-                (node.type === 'image' || node.type === 'video')
-                && node.generatedBy?.branchOriginNodeId === branchOriginNodeId
-            )
+        return this.ports.getNodes().filter(
+            (node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                    (node.type === 'image' || node.type === 'video')
+                    && node.generatedBy?.branchOriginNodeId === branchOriginNodeId,
+        )
             .sort(compareGeneratedMediaByGenerationOrder)
     }
 
     getBranchForkGeneratedMediaNodes(branchForkNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
-        return this.ports.getNodes()
-            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
-                (node.type === 'image' || node.type === 'video')
-                && node.generatedBy?.branchForkNodeId === branchForkNodeId
-            )
+        return this.ports.getNodes().filter(
+            (node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                    (node.type === 'image' || node.type === 'video')
+                    && node.generatedBy?.branchForkNodeId === branchForkNodeId,
+        )
             .sort(compareGeneratedMediaByGenerationOrder)
     }
 
     getBranchLineGeneratedMediaNodes(branchLineNodeId: string): Array<ImageCanvasNode | VideoCanvasNode> {
-        return this.ports.getNodes()
-            .filter((node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
-                (node.type === 'image' || node.type === 'video')
-                && node.generatedBy?.branchLineNodeId === branchLineNodeId
-            )
+        return this.ports.getNodes().filter(
+            (node: CanvasNode): node is ImageCanvasNode | VideoCanvasNode =>
+                    (node.type === 'image' || node.type === 'video')
+                    && node.generatedBy?.branchLineNodeId === branchLineNodeId,
+        )
             .sort(compareGeneratedMediaByGenerationOrder)
     }
 
@@ -254,17 +319,20 @@ export class WorkspaceHistory {
         field: 'branchOriginNodeId' | 'branchForkNodeId' | 'branchLineNodeId',
         nodeId: string,
     ): CapabilityArtifactCanvasNode[] {
-        return this.ports.getNodes()
-            .filter((node: CanvasNode): node is CapabilityArtifactCanvasNode => (
-                node.type === 'capabilityArtifact' && node.generatedBy?.[field] === nodeId
-            ))
+        return this.ports.getNodes().filter(
+            (node: CanvasNode): node is CapabilityArtifactCanvasNode => (
+                    node.type === 'capabilityArtifact' && node.generatedBy?.[field] === nodeId
+                ),
+        )
             .sort(compareGeneratedMediaByGenerationOrder)
     }
 
     getGeneratedOutputUserMessageParts(node: GeneratedOutputCanvasNode): BranchMarkerPromptPart[] {
         if (node.type === 'capabilityArtifact') {
             const generatedBy = node.generatedBy
-            if (!generatedBy) return []
+
+            if (!generatedBy)
+                return []
 
             const projection = this.buildCapabilityArtifactTurnProjectionContent(node)
             const root = parseProseMirrorJsonContent(projection?.content)
@@ -273,14 +341,14 @@ export class WorkspaceHistory {
             const inputPrompt = typeof generatedBy.input.prompt === 'string'
                 ? generatedBy.input.prompt.trim()
                 : ''
-            return getBranchMarkerPromptParts(
-                userMessage,
-                generatedBy.promptText?.trim() || inputPrompt,
-            )
+
+            return getBranchMarkerPromptParts(userMessage, generatedBy.promptText?.trim() || inputPrompt)
         }
 
         const generatedBy = node.generatedBy
-        if (!generatedBy) return []
+
+        if (!generatedBy)
+            return []
 
         const locator = getGeneratedMediaProjectionLocator(node)
         const projection = locator
@@ -296,22 +364,27 @@ export class WorkspaceHistory {
             : null
         const root = parseProseMirrorJsonContent(projection?.content)
         const thread = root ? findAiChatThreadContentNode(root, generatedBy.conversationAssetId) : null
-        const userMessage = thread?.content?.find((child) => child.type === 'aiUserMessage')
-        return getBranchMarkerPromptParts(
-            userMessage,
-            generatedBy.promptText?.trim() || '',
-        )
+        const userMessage = thread?.content?.find(child => child.type === 'aiUserMessage')
+
+        return getBranchMarkerPromptParts(userMessage, generatedBy.promptText?.trim() || '')
     }
 
     getGeneratedOutputUserMessageText(node: GeneratedOutputCanvasNode): string {
-        return getBranchMarkerPromptDisplayText(this.getGeneratedOutputUserMessageParts(node)).trim()
+        return getBranchMarkerPromptDisplayText(
+            this.getGeneratedOutputUserMessageParts(node),
+        ).trim()
     }
 
-    buildCapabilityArtifactTurnProjectionContent(
-        node: CapabilityArtifactCanvasNode,
-    ): { threadId: string; content: ProseMirrorJsonNode; lineageProjectionScope: AiLineageProjectionScope } | null {
+    buildCapabilityArtifactTurnProjectionContent(node: CapabilityArtifactCanvasNode): {
+        threadId: string
+        content: ProseMirrorJsonNode
+        lineageProjectionScope: AiLineageProjectionScope
+    } | null {
         const locator = getCapabilityArtifactTurnProjectionLocator(node)
-        if (!locator) return null
+
+        if (!locator)
+            return null
+
         const projection = buildBranchMarkerTurnProjectionFromThreadContent(
             this.ports.getThreadContent(locator.threadId),
             locator.descriptor,
@@ -322,33 +395,55 @@ export class WorkspaceHistory {
                 allowLatestTurnFallback: false,
             },
         )
-        return projection ? { ...projection, lineageProjectionScope: locator.lineageProjectionScope } : null
+
+        return projection ? {
+            ...projection,
+            lineageProjectionScope: locator.lineageProjectionScope,
+        } : null
     }
 
     getBranchMarkerMediaProjectionTarget(marker: BranchMarkerNode): GeneratedMediaProjectionTarget | null {
         if (marker.type === 'branchOrigin') {
             const node = this.getBranchOriginGeneratedMediaNodes(marker.nodeId)[0]
+
             return node
-                ? { node, lineageProjectionScope: 'branch-origin', limitProjectionToSelectedMedia: false }
+                ? {
+                    node,
+                    lineageProjectionScope: 'branch-origin',
+                    limitProjectionToSelectedMedia: false,
+                }
                 : null
         }
+
         if (marker.type === 'branchFork') {
             const node = this.getBranchForkGeneratedMediaNodes(marker.nodeId)[0]
+
             return node
-                ? { node, lineageProjectionScope: 'branch-fork', limitProjectionToSelectedMedia: false }
+                ? {
+                    node,
+                    lineageProjectionScope: 'branch-fork',
+                    limitProjectionToSelectedMedia: false,
+                }
                 : null
         }
+
         const node = this.getBranchLineGeneratedMediaNodes(marker.nodeId)[0]
+
         return node
-            ? { node, lineageProjectionScope: 'media-run', limitProjectionToSelectedMedia: true }
+            ? {
+                node,
+                lineageProjectionScope: 'media-run',
+                limitProjectionToSelectedMedia: true,
+            }
             : null
     }
 
-    getMediaNodeBranchMarkerProjectionTarget(
-        node: ImageCanvasNode | VideoCanvasNode,
-    ): BranchMarkerProjectionTarget | null {
+    getMediaNodeBranchMarkerProjectionTarget(node: ImageCanvasNode | VideoCanvasNode): BranchMarkerProjectionTarget | null {
         const lineage = node.generatedBy ?? node.generationProgress?.lineageAssignment
-        if (!lineage) return null
+
+        if (!lineage)
+            return null
+
         const candidates: Array<{
             nodeId: string | undefined
             type: BranchMarkerNode['type']
@@ -370,23 +465,44 @@ export class WorkspaceHistory {
                 lineageProjectionScope: 'branch-origin',
             },
         ]
+
         for (const candidate of candidates) {
-            if (!candidate.nodeId) continue
+            if (!candidate.nodeId)
+                continue
+
             const marker = this.ports.getNodes().find(canvasNode => canvasNode.nodeId === candidate.nodeId)
-            if (!marker || !isBranchMarkerNode(marker) || marker.type !== candidate.type) continue
-            return { marker, lineageProjectionScope: candidate.lineageProjectionScope }
+
+            if (
+                !marker
+                || !isBranchMarkerNode(marker)
+                || marker.type !== candidate.type
+            )
+                continue
+
+            return {
+                marker,
+                lineageProjectionScope: candidate.lineageProjectionScope,
+            }
         }
+
         return null
     }
 
-    resolveGeneratedOutputDetailsNode(
-        target: CanvasGeneratedOutputDetailsTarget | undefined,
-    ): GeneratedOutputCanvasNode | BranchMarkerNode | null {
-        if (!target) return null
+    resolveGeneratedOutputDetailsNode(target: CanvasGeneratedOutputDetailsTarget | undefined): GeneratedOutputCanvasNode | BranchMarkerNode | null {
+        if (!target)
+            return null
+
         const node = this.ports.getNodes().find(candidate => candidate.nodeId === target.nodeId)
-        if (!node) return null
-        if (target.kind === 'branch-marker') return isBranchMarkerNode(node) ? node : null
-        return node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact'
+
+        if (!node)
+            return null
+
+        if (target.kind === 'branch-marker')
+            return isBranchMarkerNode(node) ? node : null
+
+        return node.type === 'image'
+            || node.type === 'video'
+            || node.type === 'capabilityArtifact'
             ? node
             : null
     }
@@ -396,7 +512,10 @@ export class WorkspaceHistory {
         // accepted outputs. Replay controls are enabled only after it exists, so
         // reading it here keeps the UI descriptor identical to the API source.
         const provenanceDocument = this.ports.getProvenanceContent(node.assetId)
-        if (provenanceDocument) return provenanceDocument
+
+        if (provenanceDocument)
+            return provenanceDocument
+
         return this.ports.getThreadContent(node.generatedBy?.conversationAssetId ?? '')
     }
 
@@ -408,8 +527,15 @@ export class WorkspaceHistory {
         node: BranchMarkerNode,
         content: unknown = this.getAiChatThreadContentForBranchMarker(getBranchMarkerThreadId(node) ?? ''),
     ): boolean {
-        const userMessageCount = countProseMirrorNodesByType(content, new Set(['aiUserMessage']))
-        const responseMessageCount = countProseMirrorNodesByType(content, new Set(['aiResponseMessage']))
+        const userMessageCount = countProseMirrorNodesByType(
+            content,
+            new Set(['aiUserMessage']),
+        )
+        const responseMessageCount = countProseMirrorNodesByType(
+            content,
+            new Set(['aiResponseMessage']),
+        )
+
         return this.ports.isBranchActive(node)
             || this.ports.isBranchGroupActive(node)
             || Boolean(node.pendingState)
@@ -419,7 +545,9 @@ export class WorkspaceHistory {
 
     getBranchMarkerConversationPreview(node: BranchMarkerNode): BranchMarkerConversationPreview | null {
         const threadId = getBranchMarkerThreadId(node)
-        if (!threadId) return null
+
+        if (!threadId)
+            return null
 
         const preview = getBranchMarkerConversationPreviewFromThreadContent(
             this.getAiChatThreadContentForBranchMarker(threadId),
@@ -430,7 +558,13 @@ export class WorkspaceHistory {
                 allowLatestTurnFallback: this.canUseLatestBranchMarkerTurnFallback(node),
             },
         )
-        if (!preview || !this.ports.isBranchCancelled(node)) return preview
+
+        if (
+            !preview
+            || !this.ports.isBranchCancelled(node)
+        )
+            return preview
+
         return {
             ...preview,
             phase: 'done',
@@ -440,14 +574,22 @@ export class WorkspaceHistory {
     }
 
     getBranchMarkerGeneratedMediaNodes(node: BranchMarkerNode): Array<ImageCanvasNode | VideoCanvasNode> {
-        if (node.type === 'branchOrigin') return this.getBranchOriginGeneratedMediaNodes(node.nodeId)
-        if (node.type === 'branchFork') return this.getBranchForkGeneratedMediaNodes(node.nodeId)
+        if (node.type === 'branchOrigin')
+            return this.getBranchOriginGeneratedMediaNodes(node.nodeId)
+
+        if (node.type === 'branchFork')
+            return this.getBranchForkGeneratedMediaNodes(node.nodeId)
+
         return this.getBranchLineGeneratedMediaNodes(node.nodeId)
     }
 
     getBranchMarkerGeneratedArtifactNodes(node: BranchMarkerNode): CapabilityArtifactCanvasNode[] {
-        if (node.type === 'branchOrigin') return this.getBranchGeneratedArtifactNodes('branchOriginNodeId', node.nodeId)
-        if (node.type === 'branchFork') return this.getBranchGeneratedArtifactNodes('branchForkNodeId', node.nodeId)
+        if (node.type === 'branchOrigin')
+            return this.getBranchGeneratedArtifactNodes('branchOriginNodeId', node.nodeId)
+
+        if (node.type === 'branchFork')
+            return this.getBranchGeneratedArtifactNodes('branchForkNodeId', node.nodeId)
+
         return this.getBranchGeneratedArtifactNodes('branchLineNodeId', node.nodeId)
     }
 

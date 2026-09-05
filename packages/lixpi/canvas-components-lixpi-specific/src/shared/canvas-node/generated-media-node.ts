@@ -10,22 +10,31 @@ import {
 export type GeneratedMediaCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' }>
 export type GeneratedOutputCanvasNode = Extract<CanvasNode, { type: 'image' | 'video' | 'capabilityArtifact' }>
 
-export function getGeneratedMediaPreFrameSize(
-    dimensions: { width: number; height: number },
+export const getGeneratedMediaPreFrameSize = (
+    dimensions: {
+        width: number
+        height: number
+    },
     configuredScale: number,
-): number {
-    const scale = Number.isFinite(configuredScale) && configuredScale > 0
+): number => {
+    const scale = Number.isFinite(configuredScale)
+        && configuredScale > 0
         ? Math.min(1, configuredScale)
         : 1 / 3
+
     return Math.max(1, Math.min(dimensions.width, dimensions.height) * scale)
 }
 
-export function getGeneratedMediaPreFrameRect(
+export const getGeneratedMediaPreFrameRect = (
     position: CanvasEnginePoint,
-    dimensions: { width: number; height: number },
+    dimensions: {
+        width: number
+        height: number
+    },
     configuredScale: number,
-): CanvasEngineRect {
+): CanvasEngineRect => {
     const size = getGeneratedMediaPreFrameSize(dimensions, configuredScale)
+
     return {
         x: position.x + (dimensions.width - size) / 2,
         y: position.y + (dimensions.height - size) / 2,
@@ -34,12 +43,20 @@ export function getGeneratedMediaPreFrameRect(
     }
 }
 
-export function getGeneratedMediaPreFrameLayoutRect(
+export const getGeneratedMediaPreFrameLayoutRect = (
     position: CanvasEnginePoint,
-    dimensions: { width: number; height: number },
+    dimensions: {
+        width: number
+        height: number
+    },
     configuredScale: number,
-): CanvasEngineRect {
-    const visualRect = getGeneratedMediaPreFrameRect(position, dimensions, configuredScale)
+): CanvasEngineRect => {
+    const visualRect = getGeneratedMediaPreFrameRect(
+        position,
+        dimensions,
+        configuredScale,
+    )
+
     return {
         x: position.x,
         y: visualRect.y,
@@ -48,22 +65,26 @@ export function getGeneratedMediaPreFrameLayoutRect(
     }
 }
 
-export function isGeneratedOutputCanvasNode(node: CanvasNode): node is GeneratedOutputCanvasNode {
+export const isGeneratedOutputCanvasNode = (node: CanvasNode): node is GeneratedOutputCanvasNode => {
     return (node.type === 'image' || node.type === 'video' || node.type === 'capabilityArtifact')
         && Boolean(node.generatedBy)
 }
 
-export function isGeneratedMediaCanvasNode(node: CanvasNode): node is GeneratedMediaCanvasNode {
-    return (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
-}
+export const isGeneratedMediaCanvasNode = (node: CanvasNode): node is GeneratedMediaCanvasNode =>
+    (node.type === 'image' || node.type === 'video') && Boolean(node.generatedBy)
 
-export function isPendingGeneratedMediaCanvasNode(node: CanvasNode): boolean {
-    if (!isGeneratedMediaCanvasNode(node)) return false
+export const isPendingGeneratedMediaCanvasNode = (node: CanvasNode): boolean => {
+    if (!isGeneratedMediaCanvasNode(node))
+        return false
+
     if (
         node.generationProgress
         && ['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)
-    ) return false
-    if (node.mediaGenerationPhase) return node.mediaGenerationPhase === 'pending-before-first-frame'
+    )
+        return false
+
+    if (node.mediaGenerationPhase)
+        return node.mediaGenerationPhase === 'pending-before-first-frame'
 
     // Compatibility for transient pre-Asset client snapshots. Revision-2 API
     // snapshots use mediaGenerationPhase; old client snapshots carried media
@@ -79,24 +100,36 @@ export function isPendingGeneratedMediaCanvasNode(node: CanvasNode): boolean {
         || 'src' in legacyNode
         || 'posterFileId' in legacyNode
         || 'posterSrc' in legacyNode
-    if (!hasLegacyReadinessFields) return false
+
+    if (!hasLegacyReadinessFields)
+        return false
+
     return !legacyNode.fileId?.trim()
         && !legacyNode.src?.trim()
         && !legacyNode.posterFileId?.trim()
         && !legacyNode.posterSrc?.trim()
 }
 
-export function isCompletedGeneratedMediaCanvasNode(node: CanvasNode): boolean {
-    return isGeneratedMediaCanvasNode(node) && !isPendingGeneratedMediaCanvasNode(node)
-}
+export const isCompletedGeneratedMediaCanvasNode = (node: CanvasNode): boolean =>
+    isGeneratedMediaCanvasNode(node) && !isPendingGeneratedMediaCanvasNode(node)
 
-export function getGeneratedMediaRunIdentity(node: CanvasNode): string {
-    if (!isGeneratedMediaCanvasNode(node)) return ''
+export const getGeneratedMediaRunIdentity = (node: CanvasNode): string => {
+    if (!isGeneratedMediaCanvasNode(node))
+        return ''
+
     const generatedBy = node.generatedBy
-    if (!generatedBy) return ''
-    if (generatedBy.mediaRunId) return `${node.type}:media-run:${generatedBy.mediaRunId}`
+
+    if (!generatedBy)
+        return ''
+
+    if (generatedBy.mediaRunId)
+        return `${node.type}:media-run:${generatedBy.mediaRunId}`
+
     const requestId = generatedBy.generationRequestId
-    if (!requestId) return ''
+
+    if (!requestId)
+        return ''
+
     return [
         node.type,
         requestId,
@@ -109,11 +142,18 @@ export function getGeneratedMediaRunIdentity(node: CanvasNode): string {
     ].join(':')
 }
 
-export function getGeneratedOutputRunIdentity(node: CanvasNode): string {
-    if (!isGeneratedOutputCanvasNode(node)) return ''
-    if (node.type !== 'capabilityArtifact') return getGeneratedMediaRunIdentity(node)
+export const getGeneratedOutputRunIdentity = (node: CanvasNode): string => {
+    if (!isGeneratedOutputCanvasNode(node))
+        return ''
+
+    if (node.type !== 'capabilityArtifact')
+        return getGeneratedMediaRunIdentity(node)
+
     const generatedBy = node.generatedBy
-    if (!generatedBy) return ''
+
+    if (!generatedBy)
+        return ''
+
     return [
         node.type,
         generatedBy.generationRequestId,

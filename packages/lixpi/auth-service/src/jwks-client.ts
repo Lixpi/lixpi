@@ -19,21 +19,28 @@ export const createJwksClient = (config: JwksClientConfig) => {
 export const createGetKeyFunction = (jwksUri: string) => {
     const client = createJwksClient({ jwksUri })
 
-    return (header: any, callback: (err: Error | null, key?: string) => void) => {
+    return (header: any, callback: (
+        err: Error | null,
+        key?: string,
+    ) => void) => {
         try {
             client.getSigningKey(header.kid, (error, key) => {
-                if (error) {
+                if (error)
                     return callback(error, undefined)
-                }
 
-                if (!key) {
-                    return callback(new Error('No signing key found'), undefined)
-                }
+                if (!key)
+                    return callback(
+                        new Error('No signing key found'),
+                        undefined,
+                    )
 
                 const publicKey = key.publicKey || key.rsaPublicKey
-                if (!publicKey) {
-                    return callback(new Error('No public key found in signing key'), undefined)
-                }
+
+                if (!publicKey)
+                    return callback(
+                        new Error('No public key found in signing key'),
+                        undefined,
+                    )
 
                 callback(null, publicKey)
             })

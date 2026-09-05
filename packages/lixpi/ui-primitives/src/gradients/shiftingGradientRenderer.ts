@@ -42,10 +42,14 @@ const BITMAP_HEIGHT = FreeformGradientRenderer.bitmapSize.height
 const ANIMATION_DURATION_MS = 500
 export const DEFAULT_SHIFTING_GRADIENT_COLORS: ShiftingGradientColorSet = ['#FFF5FA', '#F5EFF9', '#E6E9F6', '#F3E4F2']
 
-function createCanvasElement(width: number, height: number): HTMLCanvasElement {
+const createCanvasElement = (
+    width: number,
+    height: number,
+): HTMLCanvasElement => {
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
+
     return canvas
 }
 
@@ -63,7 +67,10 @@ export class ShiftingGradientRenderer {
     private animationStartTime: number = 0
     private animationFrameId: number | null = null
     private isAnimating: boolean = false
-    private pattern: { image: HTMLImageElement; options: Required<PatternOptions> } | null = null
+    private pattern: {
+        image: HTMLImageElement
+        options: Required<PatternOptions>
+    } | null = null
     private phaseFrom: number = FreeformGradientRenderer.initialPhase
     private phaseTo: number = FreeformGradientRenderer.initialPhase
 
@@ -72,7 +79,10 @@ export class ShiftingGradientRenderer {
         this.phaseTo = this.currentPhase
         this.phaseFrom = (this.phaseTo + 1) % FreeformGradientRenderer.phasePositions.length
 
-        const { canvas, ctx } = ShiftingGradientRenderer.createOffscreenGradientCanvas()
+        const {
+            canvas,
+            ctx,
+        } = ShiftingGradientRenderer.createOffscreenGradientCanvas()
         this.offscreenCanvas = canvas
         this.offscreenCtx = ctx
         this.imageData = this.offscreenCtx.createImageData(BITMAP_WIDTH, BITMAP_HEIGHT)
@@ -85,56 +95,88 @@ export class ShiftingGradientRenderer {
     } {
         if (typeof OffscreenCanvas !== 'undefined') {
             const canvas = new OffscreenCanvas(BITMAP_WIDTH, BITMAP_HEIGHT)
-            return { canvas, ctx: canvas.getContext('2d')! }
+
+            return {
+                canvas,
+                ctx: canvas.getContext('2d')!,
+            }
         }
 
         const canvas = createCanvasElement(BITMAP_WIDTH, BITMAP_HEIGHT)
-        return { canvas, ctx: canvas.getContext('2d')! }
+
+        return {
+            canvas,
+            ctx: canvas.getContext('2d')!,
+        }
     }
 
     subscribe(canvas: HTMLCanvasElement): void {
-        if (this.destroyed || this.subscribedCanvases.has(canvas)) return
+        if (
+            this.destroyed
+            || this.subscribedCanvases.has(canvas)
+        )
+            return
 
         const ctx = canvas.getContext('2d', { willReadFrequently: false })
+
         if (!ctx) {
             console.error('Failed to get 2D context for canvas')
+
             return
         }
 
         ctx.imageSmoothingEnabled = true
         ctx.imageSmoothingQuality = 'high'
 
-        this.subscribedCanvases.set(canvas, {
+        this.subscribedCanvases.set(
             canvas,
-            ctx,
-            visible: true,
-        })
+            {
+                canvas,
+                ctx,
+                visible: true,
+            },
+        )
 
         this.drawToCanvas(canvas, ctx)
 
-        if (!this.isAnimating && this.subscribedCanvases.size === 1) {
+        if (
+            !this.isAnimating
+            && this.subscribedCanvases.size === 1
+        )
             this.startAnimationLoop()
-        }
     }
 
     unsubscribe(canvas: HTMLCanvasElement): void {
         this.subscribedCanvases.delete(canvas)
 
-        if (this.subscribedCanvases.size === 0 && this.animationFrameId !== null) {
+        if (
+            this.subscribedCanvases.size === 0
+            && this.animationFrameId !== null
+        ) {
             cancelAnimationFrame(this.animationFrameId)
             this.animationFrameId = null
             this.isAnimating = false
         }
     }
 
-    setVisibility(canvas: HTMLCanvasElement, visible: boolean): void {
+    setVisibility(
+        canvas: HTMLCanvasElement,
+        visible: boolean,
+    ): void {
         const entry = this.subscribedCanvases.get(canvas)
-        if (entry) entry.visible = visible
+
+        if (entry)
+            entry.visible = visible
     }
 
     redrawCanvas(canvas: HTMLCanvasElement): void {
         const entry = this.subscribedCanvases.get(canvas)
-        if (!entry || !entry.visible) return
+
+        if (
+            !entry
+            || !entry.visible
+        )
+            return
 
         entry.ctx.imageSmoothingEnabled = true
         entry.ctx.imageSmoothingQuality = 'high'
@@ -142,7 +184,9 @@ export class ShiftingGradientRenderer {
     }
 
     nextPhase(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.phaseTo = FreeformGradientRenderer.getPreviousPhase(this.currentPhase)
         this.phaseFrom = (this.phaseTo + 1) % FreeformGradientRenderer.phasePositions.length
         this.currentPhase = this.phaseTo
@@ -155,11 +199,14 @@ export class ShiftingGradientRenderer {
     }
 
     private startAnimationLoop(): void {
-        if (this.isAnimating) return
+        if (this.isAnimating)
+            return
+
         this.isAnimating = true
 
         const animate = () => {
-            if (!this.isAnimating) return
+            if (!this.isAnimating)
+                return
 
             if (this.animationProgress < 1) {
                 const elapsed = performance.now() - this.animationStartTime
@@ -179,24 +226,38 @@ export class ShiftingGradientRenderer {
         const previous = FreeformGradientRenderer.getPhasePositions(this.phaseFrom)
         const current = FreeformGradientRenderer.getPhasePositions(this.currentPhase)
 
-        return previous.map((start, index) => ({
-            x: start.x + (current[index].x - start.x) * this.animationProgress,
-            y: start.y + (current[index].y - start.y) * this.animationProgress,
-        }))
+        return previous.map(
+            (start, index) => ({
+                x: start.x + (current[index].x - start.x) * this.animationProgress,
+                y: start.y + (current[index].y - start.y) * this.animationProgress,
+            }),
+        )
     }
 
     private renderGradient(): void {
-        FreeformGradientRenderer.paintImageData(this.imageData, this.colors, this.getInterpolatedPositions())
-        this.offscreenCtx.putImageData(this.imageData, 0, 0)
+        FreeformGradientRenderer.paintImageData(
+            this.imageData,
+            this.colors,
+            this.getInterpolatedPositions(),
+        )
+        this.offscreenCtx.putImageData(
+            this.imageData,
+            0,
+            0,
+        )
     }
 
     private updateSubscribedCanvases(): void {
         for (const [canvas, entry] of this.subscribedCanvases) {
-            if (entry.visible) this.drawToCanvas(canvas, entry.ctx)
+            if (entry.visible)
+                this.drawToCanvas(canvas, entry.ctx)
         }
     }
 
-    private drawToCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): void {
+    private drawToCanvas(
+        canvas: HTMLCanvasElement,
+        ctx: CanvasRenderingContext2D,
+    ): void {
         ctx.drawImage(
             this.offscreenCanvas as CanvasImageSource,
             0,
@@ -209,14 +270,33 @@ export class ShiftingGradientRenderer {
             canvas.height,
         )
 
-        if (this.pattern) this.drawPatternOverlay(ctx, canvas.width, canvas.height)
+        if (this.pattern)
+            this.drawPatternOverlay(
+                ctx,
+                canvas.width,
+                canvas.height,
+            )
     }
 
-    private drawPatternOverlay(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-        if (!this.pattern) return
+    private drawPatternOverlay(
+        ctx: CanvasRenderingContext2D,
+        width: number,
+        height: number,
+    ): void {
+        if (!this.pattern)
+            return
 
-        const { image, options } = this.pattern
-        if (!image.complete || image.naturalWidth === 0 || image.naturalHeight === 0) return
+        const {
+            image,
+            options,
+        } = this.pattern
+
+        if (
+            !image.complete
+            || image.naturalWidth === 0
+            || image.naturalHeight === 0
+        )
+            return
 
         ctx.save()
 
@@ -225,21 +305,42 @@ export class ShiftingGradientRenderer {
         } catch {
             ctx.globalCompositeOperation = 'overlay'
         }
+
         ctx.globalAlpha = options.alpha
 
         const tileW = image.naturalWidth
         const tileH = image.naturalHeight
-        if (tileW > 0 && tileH > 0) {
+
+        if (
+            tileW > 0
+            && tileH > 0
+        ) {
             let tileSource: CanvasImageSource = image
+
             if (options.tintColor) {
                 const tintCanvas = createCanvasElement(tileW, tileH)
                 const tintCtx = tintCanvas.getContext('2d')
+
                 if (tintCtx) {
-                    tintCtx.clearRect(0, 0, tileW, tileH)
-                    tintCtx.drawImage(image, 0, 0)
+                    tintCtx.clearRect(
+                        0,
+                        0,
+                        tileW,
+                        tileH,
+                    )
+                    tintCtx.drawImage(
+                        image,
+                        0,
+                        0,
+                    )
                     tintCtx.globalCompositeOperation = 'source-in'
                     tintCtx.fillStyle = options.tintColor
-                    tintCtx.fillRect(0, 0, tileW, tileH)
+                    tintCtx.fillRect(
+                        0,
+                        0,
+                        tileW,
+                        tileH,
+                    )
                     tileSource = tintCanvas
                 }
             }
@@ -250,7 +351,13 @@ export class ShiftingGradientRenderer {
 
             for (let y = 0; y < height; y += stepH) {
                 for (let x = 0; x < width; x += stepW) {
-                    ctx.drawImage(tileSource, x, y, stepW, stepH)
+                    ctx.drawImage(
+                        tileSource,
+                        x,
+                        y,
+                        stepW,
+                        stepH,
+                    )
                 }
             }
         }
@@ -262,9 +369,13 @@ export class ShiftingGradientRenderer {
         const revision = ++this.patternRevision
         this.cancelPatternLoad?.()
         this.cancelPatternLoad = null
-        if (this.destroyed) return
+
+        if (this.destroyed)
+            return
+
         if (!options) {
             this.pattern = null
+
             return
         }
 
@@ -283,7 +394,9 @@ export class ShiftingGradientRenderer {
             const clear = () => {
                 img.onload = null
                 img.onerror = null
-                if (revision === this.patternRevision) this.cancelPatternLoad = null
+
+                if (revision === this.patternRevision)
+                    this.cancelPatternLoad = null
             }
             this.cancelPatternLoad = () => {
                 clear()
@@ -296,26 +409,39 @@ export class ShiftingGradientRenderer {
             }
             img.onerror = () => {
                 clear()
-                reject(new Error('Failed to load pattern image'))
+                reject(
+                    new Error('Failed to load pattern image'),
+                )
             }
             img.src = resolved.url
         })
-        if (loaded && !this.destroyed && revision === this.patternRevision) {
-            this.pattern = { image: img, options: resolved }
-        }
+
+        if (
+            loaded
+            && !this.destroyed
+            && revision === this.patternRevision
+        )
+            this.pattern = {
+                image: img,
+                options: resolved,
+            }
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.patternRevision++
         this.cancelPatternLoad?.()
         this.cancelPatternLoad = null
         this.pattern = null
+
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId)
             this.animationFrameId = null
         }
+
         this.isAnimating = false
         this.subscribedCanvases.clear()
     }
@@ -329,7 +455,10 @@ export class ShiftingGradientBackground {
     private readonly resizeObserver: ResizeObserver
     private destroyed = false
 
-    constructor(private readonly container: HTMLElement, options: ShiftingGradientBackgroundOptions = {}) {
+    constructor(
+        private readonly container: HTMLElement,
+        options: ShiftingGradientBackgroundOptions = {},
+    ) {
         this.canvas = createCanvasElement(1, 1)
         this.canvas.className = 'shifting-gradient-canvas'
         this.canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;border-radius:inherit'
@@ -340,14 +469,23 @@ export class ShiftingGradientBackground {
         this.renderer.subscribe(this.canvas)
         void this.loadPattern()
 
-        this.observer = new IntersectionObserver((entries) => {
-            if (this.destroyed) return
-            for (const entry of entries) this.renderer.setVisibility(this.canvas, entry.isIntersecting)
-        }, { threshold: 0 })
+        this.observer = new IntersectionObserver(
+            entries => {
+                if (this.destroyed)
+                    return
+
+                for (const entry of entries) this.renderer.setVisibility(this.canvas, entry.isIntersecting)
+            },
+            { threshold: 0 },
+        )
         this.observer.observe(this.canvas)
 
         this.resizeObserver = new ResizeObserver(() => {
-            if (!this.destroyed && this.updateCanvasSize()) this.renderer.redrawCanvas(this.canvas)
+            if (
+                !this.destroyed
+                && this.updateCanvasSize()
+            )
+                this.renderer.redrawCanvas(this.canvas)
         })
         this.resizeObserver.observe(container)
     }
@@ -355,11 +493,24 @@ export class ShiftingGradientBackground {
     private updateCanvasSize(): boolean {
         const rect = this.container.getBoundingClientRect()
         const dpr = Math.min(window.devicePixelRatio || 1, 2)
-        const width = Math.max(1, Math.floor(rect.width * dpr))
-        const height = Math.max(1, Math.floor(rect.height * dpr))
-        if (this.canvas.width === width && this.canvas.height === height) return false
+        const width = Math.max(
+            1,
+            Math.floor(rect.width * dpr),
+        )
+        const height = Math.max(
+            1,
+            Math.floor(rect.height * dpr),
+        )
+
+        if (
+            this.canvas.width === width
+            && this.canvas.height === height
+        )
+            return false
+
         this.canvas.width = width
         this.canvas.height = height
+
         return true
     }
 
@@ -367,10 +518,17 @@ export class ShiftingGradientBackground {
         try {
             const style = getComputedStyle(this.container)
             const rawUrl = style.getPropertyValue('--gradient-pattern-url').trim()
-            if (!rawUrl) return
+
+            if (!rawUrl)
+                return
+
             const match = rawUrl.match(/^url\((['"]?)(.*?)\1\)$/)
-            const alpha = Number.parseFloat(style.getPropertyValue('--gradient-pattern-alpha'))
-            const scale = Number.parseFloat(style.getPropertyValue('--gradient-pattern-scale'))
+            const alpha = Number.parseFloat(
+                style.getPropertyValue('--gradient-pattern-alpha'),
+            )
+            const scale = Number.parseFloat(
+                style.getPropertyValue('--gradient-pattern-scale'),
+            )
             await this.renderer.setPattern({
                 url: match ? match[2] : rawUrl,
                 alpha: Number.isFinite(alpha) ? alpha : undefined,
@@ -378,26 +536,34 @@ export class ShiftingGradientBackground {
                 scale: Number.isFinite(scale) ? scale : undefined,
             })
         } catch (error) {
-            if (!this.destroyed) console.warn('[ShiftingGradientRenderer] Failed to load pattern:', error)
+            if (!this.destroyed)
+                console.warn('[ShiftingGradientRenderer] Failed to load pattern:', error)
         }
     }
 
     // Callers can pass this callback directly to controls.
     triggerAnimation = (): void => {
-        if (!this.destroyed) this.renderer.nextPhase()
+        if (!this.destroyed)
+            this.renderer.nextPhase()
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.observer.disconnect()
         this.resizeObserver.disconnect()
         this.renderer.unsubscribe(this.canvas)
-        if (this.ownsRenderer) this.renderer.destroy()
+
+        if (this.ownsRenderer)
+            this.renderer.destroy()
+
         this.canvas.remove()
     }
 }
 
-export function createShiftingGradientBackground(container: HTMLElement, options: ShiftingGradientBackgroundOptions = {}): ShiftingGradientBackground {
-    return new ShiftingGradientBackground(container, options)
-}
+export const createShiftingGradientBackground = (
+    container: HTMLElement,
+    options: ShiftingGradientBackgroundOptions = {},
+): ShiftingGradientBackground => new ShiftingGradientBackground(container, options)

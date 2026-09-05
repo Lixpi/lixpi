@@ -41,15 +41,24 @@ class BlockCardTile implements BlockCardTileInstance {
         this.item = options.item
         this.element = html`
             <div className="block-card-tile">
-                <button type="button" className="block-card-tile-open">
-                    <span className="block-card-tile-marker" aria-hidden="true"></span>
+                <button
+                    type="button"
+                    className="block-card-tile-open"
+                >
+                    <span
+                        className="block-card-tile-marker"
+                        aria-hidden="true"
+                    ></span>
                     <span className="block-card-tile-content">
                         <span className="block-card-tile-title"></span>
                         <span className="block-card-tile-primary-meta"></span>
                         <span className="block-card-tile-secondary-meta"></span>
                     </span>
                 </button>
-                <button type="button" className="block-card-tile-action"></button>
+                <button
+                    type="button"
+                    className="block-card-tile-action"
+                ></button>
             </div>
         ` as HTMLDivElement
         this.openButton = this.element.querySelector<HTMLButtonElement>('.block-card-tile-open')!
@@ -63,15 +72,21 @@ class BlockCardTile implements BlockCardTileInstance {
         this.render()
     }
 
-    private readonly handleSelect = (): void => this.options.onSelect?.(this.item)
-    private readonly handleAction = (): void => this.options.onAction?.(this.item)
+    private readonly handleSelect = (): void => void this.options.onSelect?.(this.item)
+    private readonly handleAction = (): void => void this.options.onAction?.(this.item)
 
     private render(): void {
         this.element.dataset.itemId = this.item.id
         this.element.classList.toggle('block-card-tile-selected', this.item.selected === true)
-        this.openButton.setAttribute('aria-pressed', String(this.item.selected === true))
+        this.openButton.setAttribute(
+            'aria-pressed',
+            String(this.item.selected === true),
+        )
         this.marker.setAttribute('aria-label', this.item.markerAriaLabel ?? '')
-        this.marker.setAttribute('aria-hidden', String(!this.item.markerAriaLabel))
+        this.marker.setAttribute(
+            'aria-hidden',
+            String(!this.item.markerAriaLabel),
+        )
         this.title.textContent = this.item.title
         this.primaryMeta.textContent = this.item.primaryMeta
         this.secondaryMeta.textContent = this.item.secondaryMeta
@@ -92,6 +107,4 @@ class BlockCardTile implements BlockCardTileInstance {
     }
 }
 
-export function createBlockCardTile(options: BlockCardTileOptions): BlockCardTileInstance {
-    return new BlockCardTile(options)
-}
+export const createBlockCardTile = (options: BlockCardTileOptions): BlockCardTileInstance => new BlockCardTile(options)

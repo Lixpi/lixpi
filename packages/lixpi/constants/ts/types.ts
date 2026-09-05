@@ -71,34 +71,146 @@ export type MediaPolicyEntry = {
 // MIME strings (authoritative); `canonicalMime` records the transcode target so
 // the decision lives in data, not branching code.
 export const MEDIA_POLICY: Readonly<Record<string, MediaPolicyEntry>> = {
-    'image/png': { kind: 'image', modelSafe: true, canonicalMime: 'image/png' },
-    'image/jpeg': { kind: 'image', modelSafe: true, canonicalMime: 'image/jpeg' },
-    'image/webp': { kind: 'image', modelSafe: true, canonicalMime: 'image/webp' },
-    'image/gif': { kind: 'image', modelSafe: true, canonicalMime: 'image/gif' },
-    'image/svg+xml': { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
-    'image/avif': { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
-    'image/heic': { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
-    'image/heif': { kind: 'image', modelSafe: false, canonicalMime: 'image/jpeg' },
-    'image/tiff': { kind: 'image', modelSafe: false, canonicalMime: 'image/png' },
-    'video/mp4': { kind: 'video', modelSafe: true, canonicalMime: 'video/mp4' },
-    'video/quicktime': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
-    'video/webm': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
-    'video/x-matroska': { kind: 'video', modelSafe: false, canonicalMime: 'video/mp4' },
-    'audio/mpeg': { kind: 'audio', modelSafe: true, canonicalMime: 'audio/mpeg' },
-    'audio/wav': { kind: 'audio', modelSafe: true, canonicalMime: 'audio/wav' },
-    'audio/mp4': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/x-m4a': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/aac': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/ogg': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'audio/flac': { kind: 'audio', modelSafe: false, canonicalMime: 'audio/mpeg' },
-    'application/pdf': { kind: 'document', modelSafe: true, canonicalMime: 'application/pdf' },
-    'text/plain': { kind: 'document', modelSafe: true, canonicalMime: 'text/plain' },
-    'text/markdown': { kind: 'document', modelSafe: true, canonicalMime: 'text/markdown' },
-    'application/msword': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
-    'application/vnd.oasis.opendocument.text': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
-    'application/rtf': { kind: 'document', modelSafe: false, canonicalMime: 'application/pdf' },
+    'image/png': {
+        kind: 'image',
+        modelSafe: true,
+        canonicalMime: 'image/png',
+    },
+    'image/jpeg': {
+        kind: 'image',
+        modelSafe: true,
+        canonicalMime: 'image/jpeg',
+    },
+    'image/webp': {
+        kind: 'image',
+        modelSafe: true,
+        canonicalMime: 'image/webp',
+    },
+    'image/gif': {
+        kind: 'image',
+        modelSafe: true,
+        canonicalMime: 'image/gif',
+    },
+    'image/svg+xml': {
+        kind: 'image',
+        modelSafe: false,
+        canonicalMime: 'image/png',
+    },
+    'image/avif': {
+        kind: 'image',
+        modelSafe: false,
+        canonicalMime: 'image/png',
+    },
+    'image/heic': {
+        kind: 'image',
+        modelSafe: false,
+        canonicalMime: 'image/jpeg',
+    },
+    'image/heif': {
+        kind: 'image',
+        modelSafe: false,
+        canonicalMime: 'image/jpeg',
+    },
+    'image/tiff': {
+        kind: 'image',
+        modelSafe: false,
+        canonicalMime: 'image/png',
+    },
+    'video/mp4': {
+        kind: 'video',
+        modelSafe: true,
+        canonicalMime: 'video/mp4',
+    },
+    'video/quicktime': {
+        kind: 'video',
+        modelSafe: false,
+        canonicalMime: 'video/mp4',
+    },
+    'video/webm': {
+        kind: 'video',
+        modelSafe: false,
+        canonicalMime: 'video/mp4',
+    },
+    'video/x-matroska': {
+        kind: 'video',
+        modelSafe: false,
+        canonicalMime: 'video/mp4',
+    },
+    'audio/mpeg': {
+        kind: 'audio',
+        modelSafe: true,
+        canonicalMime: 'audio/mpeg',
+    },
+    'audio/wav': {
+        kind: 'audio',
+        modelSafe: true,
+        canonicalMime: 'audio/wav',
+    },
+    'audio/mp4': {
+        kind: 'audio',
+        modelSafe: false,
+        canonicalMime: 'audio/mpeg',
+    },
+    'audio/x-m4a': {
+        kind: 'audio',
+        modelSafe: false,
+        canonicalMime: 'audio/mpeg',
+    },
+    'audio/aac': {
+        kind: 'audio',
+        modelSafe: false,
+        canonicalMime: 'audio/mpeg',
+    },
+    'audio/ogg': {
+        kind: 'audio',
+        modelSafe: false,
+        canonicalMime: 'audio/mpeg',
+    },
+    'audio/flac': {
+        kind: 'audio',
+        modelSafe: false,
+        canonicalMime: 'audio/mpeg',
+    },
+    'application/pdf': {
+        kind: 'document',
+        modelSafe: true,
+        canonicalMime: 'application/pdf',
+    },
+    'text/plain': {
+        kind: 'document',
+        modelSafe: true,
+        canonicalMime: 'text/plain',
+    },
+    'text/markdown': {
+        kind: 'document',
+        modelSafe: true,
+        canonicalMime: 'text/markdown',
+    },
+    'application/msword': {
+        kind: 'document',
+        modelSafe: false,
+        canonicalMime: 'application/pdf',
+    },
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+        kind: 'document',
+        modelSafe: false,
+        canonicalMime: 'application/pdf',
+    },
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
+        kind: 'document',
+        modelSafe: false,
+        canonicalMime: 'application/pdf',
+    },
+    'application/vnd.oasis.opendocument.text': {
+        kind: 'document',
+        modelSafe: false,
+        canonicalMime: 'application/pdf',
+    },
+    'application/rtf': {
+        kind: 'document',
+        modelSafe: false,
+        canonicalMime: 'application/pdf',
+    },
 }
 
 // Deny-list: matched BEFORE the allow-list so these produce a specific
@@ -252,9 +364,18 @@ export type CharacterFidelityAssessmentResponse = {
     }
     sourceDetections: CharacterFaceDetection[]
     candidateDetections: CharacterFaceDetection[]
-    detector: { artifactId: string; sha256: string }
-    recognizer: { artifactId: string; sha256: string }
-    error?: { code: string; message: string }
+    detector: {
+        artifactId: string
+        sha256: string
+    }
+    recognizer: {
+        artifactId: string
+        sha256: string
+    }
+    error?: {
+        code: string
+        message: string
+    }
 }
 
 export type MediaGenerationConfigControlKey =
@@ -674,7 +795,12 @@ export type MediaGenerationRequestCompletePayload = {
 }
 
 export type MediaPromptSegment =
-    | { kind: 'text'; text: string; from: number; to: number }
+    | {
+        kind: 'text'
+        text: string
+        from: number
+        to: number
+    }
     | {
         kind: 'non-media-reference'
         referenceType: 'capability-artifact' | 'capability-module' | 'tool' | 'skill'
@@ -708,7 +834,10 @@ export type MediaReferenceBinding = {
 
 export type UnresolvedReferenceBinding = {
     bindingId: string
-    promptRange: { from: number; to: number }
+    promptRange: {
+        from: number
+        to: number
+    }
     originalText: string
     matcherVersion: string
     candidates: Array<{
@@ -971,8 +1100,14 @@ export type MediaGenerationRequestEvent = {
 // top-level nodes; parentNodeId is present for parent-relative positions.
 export type CanvasNodeGeometry = {
     nodeId: string
-    position: { x: number; y: number }
-    dimensions: { width: number; height: number }
+    position: {
+        x: number
+        y: number
+    }
+    dimensions: {
+        width: number
+        height: number
+    }
     parentNodeId?: string
 }
 
@@ -1425,10 +1560,8 @@ export type OperationStatusCanvasNode = CanvasNodeParentingFields & {
     mediaRunId?: string
     outputNodeId?: string
     plannedMediaType?: 'image' | 'video'
-    /**
-     * Preserves the failed output's branch identity after its provisional media
-     * reservation is replaced by this visible error leaf.
-     */
+    // Preserves the failed output's branch identity after its provisional media
+    // reservation is replaced by this visible error leaf.
     lineageAssignment?: MediaRunLineageAssignment
     problem?: MediaGenerationProblem
     candidateAssetIds?: string[]
@@ -1745,10 +1878,24 @@ export type CapabilityExports = {
 }
 
 export type CapabilityValueBinding =
-    | { source: 'input'; path: string[] }
-    | { source: 'step'; stepId: string; path: string[] }
-    | { source: 'resource'; capabilityId?: string; resourceId: string }
-    | { source: 'literal'; value: CapabilityJsonValue }
+    | {
+        source: 'input'
+        path: string[]
+    }
+    | {
+        source: 'step'
+        stepId: string
+        path: string[]
+    }
+    | {
+        source: 'resource'
+        capabilityId?: string
+        resourceId: string
+    }
+    | {
+        source: 'literal'
+        value: CapabilityJsonValue
+    }
 
 export type CapabilityComparisonOperator =
     | 'equals'
@@ -1766,9 +1913,18 @@ export type CapabilityCondition =
         operator: CapabilityComparisonOperator
         right: CapabilityValueBinding
     }
-    | { type: 'exists'; value: CapabilityValueBinding }
-    | { type: 'all' | 'any'; conditions: CapabilityCondition[] }
-    | { type: 'not'; condition: CapabilityCondition }
+    | {
+        type: 'exists'
+        value: CapabilityValueBinding
+    }
+    | {
+        type: 'all' | 'any'
+        conditions: CapabilityCondition[]
+    }
+    | {
+        type: 'not'
+        condition: CapabilityCondition
+    }
 
 export type CapabilityWorkflowStep = {
     stepId: string
@@ -1865,7 +2021,10 @@ export type CapabilityRun = {
     workspaceId: string
     conversationAssetId?: string
     origin: CapabilityRunOrigin
-    variant?: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
+    variant?: {
+        axis: 'request'
+        variantKey: 'request'
+    } | CapabilityReasoningModelVariant
     status: CapabilityRunStatus
     currentStepIds: string[]
     outputAssetIds: string[]
@@ -2006,8 +2165,15 @@ export type SubscriptionBalanceUpdateEvent = {
 }
 
 // AI Chat message types - multimodal support (OpenAI Responses API format)
-export type TextContentBlock = { type: 'input_text'; text: string }
-export type ImageContentBlock = { type: 'input_image'; image_url: string; detail?: 'auto' | 'low' | 'high' }
+export type TextContentBlock = {
+    type: 'input_text'
+    text: string
+}
+export type ImageContentBlock = {
+    type: 'input_image'
+    image_url: string
+    detail?: 'auto' | 'low' | 'high'
+}
 export type MessageContentBlock = TextContentBlock | ImageContentBlock
 export type MessageContent = string | MessageContentBlock[]
 
@@ -2034,7 +2200,10 @@ export type AiInteractionChatSendMessagePayload = {
 // the persisted conversation document, but does not publish them to NATS; the
 // API reconstructs the authoritative messages from that document instead.
 export type AiInteractionChatSubmitPayload = AiInteractionChatSendMessagePayload & {
-    messages: Array<{ role: string; content: MessageContent }>
+    messages: Array<{
+        role: string
+        content: MessageContent
+    }>
 }
 
 export type AiInteractionMediaGenerationRequest = {
@@ -2138,7 +2307,11 @@ export type AiModel = {
     // no colored variant, so synced models always carry a usable value here.
     colorIconName?: string
     sortingPosition: number
-    modalities: Array<{ modality: string; title: string; shortTitle: string }>
+    modalities: Array<{
+        modality: string
+        title: string
+        shortTitle: string
+    }>
     // Describes what imageSizes values mean for this image-generation model.
     imageSizeMode?: ImageSizeMode
     imageSizes?: ImageSizeOption[]
@@ -2228,11 +2401,9 @@ export type TokensUsage = {
         promptTokens: number
         promptAudioTokens: number
         promptCachedTokens: number
-
         completionTokens: number
         completionAudioTokens: number
         completionReasoningTokens: number
-
         totalTokens: number
     }
     aiRequestReceivedAt: number

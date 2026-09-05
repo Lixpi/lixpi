@@ -38,7 +38,10 @@ const { BLOB_PROCESSING_SUBJECTS } = NATS_SUBJECTS
 const servers = process.env.NATS_SERVERS
 const pass = process.env.NATS_REGULAR_USER_PASSWORD
 
-if (!servers || !pass) {
+if (
+    !servers
+    || !pass
+) {
     err('file-conversion: NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required; exiting')
     process.exit(1)
 }
@@ -50,12 +53,19 @@ const fileConvertSubjects = [
         payloadType: 'json',
         handler: async (data: GenerateRenditionsRequest) => {
             const service = NatsService.getInstance()
-            if (!service) throw new Error('Conversion service storage unavailable.')
+
+            if (!service)
+                throw new Error('Conversion service storage unavailable.')
+
             let result: GenerateRenditionsResponse
+
             try {
                 result = await generateAssetRenditions(data, service)
             } catch (error) {
-                const candidate = error as { code?: string; message?: string }
+                const candidate = error as {
+                    code?: string
+                    message?: string
+                }
                 const errorCode = (candidate.code ?? candidate.message ?? 'RENDITION_JOB_FAILED')
                     .toUpperCase()
                     .replaceAll(/[^A-Z0-9]+/g, '_')
@@ -66,13 +76,16 @@ const fileConvertSubjects = [
                     organizationId: data.organizationId,
                     assetId: data.assetId,
                     sourceBlobHash: data.sourceBlobHash,
-                    renditions: data.requestedRenditions.map((name) => ({
-                        name,
-                        status: 'failed' as const,
-                        errorCode,
-                    })),
+                    renditions: data.requestedRenditions.map(
+                        name => ({
+                            name,
+                            status: 'failed' as const,
+                            errorCode,
+                        }),
+                    ),
                 }
             }
+
             return result
         },
     },
@@ -90,15 +103,15 @@ info(`nex-entry file-conversion up; listening on ${BLOB_PROCESSING_SUBJECTS.GENE
 
 const shutdown = async (signal: string): Promise<void> => {
     warn(`nex-entry received ${signal}; shutting down file-conversion`)
+
     try {
         await service.close?.()
-    } catch { /* best-effort */ }
+    } catch {
+        // best-effort
+    }
+
     process.exit(0)
 }
 
-process.on('SIGTERM', () => {
-    void shutdown('SIGTERM')
-})
-process.on('SIGINT', () => {
-    void shutdown('SIGINT')
-})
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))

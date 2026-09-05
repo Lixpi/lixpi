@@ -5,9 +5,14 @@ import {
     resolve,
 } from 'node:path'
 
-const here = dirname(fileURLToPath(import.meta.url))
+const here = dirname(
+    fileURLToPath(import.meta.url),
+)
 
-const read = (name: string): string => readFileSync(resolve(here, name), 'utf-8')
+const read = (name: string): string => readFileSync(
+    resolve(here, name),
+    'utf-8',
+)
 
 export const SYSTEM_PROMPT = read('./system.txt')
 export const IMAGE_GENERATION_INSTRUCTIONS = read('./image_generation_instructions.txt')
@@ -23,13 +28,23 @@ export const getSystemPrompt = (
     includeVideoGeneration: boolean = false,
 ): string => {
     let prompt = SYSTEM_PROMPT
-    if (includeImageGeneration) prompt += `\n\n${IMAGE_GENERATION_INSTRUCTIONS}`
-    if (includeVideoGeneration) prompt += `\n\n${VIDEO_GENERATION_INSTRUCTIONS}`
+
+    if (includeImageGeneration)
+        prompt += `\n\n${IMAGE_GENERATION_INSTRUCTIONS}`
+
+    if (includeVideoGeneration)
+        prompt += `\n\n${VIDEO_GENERATION_INSTRUCTIONS}`
+
     return prompt
 }
 
 // Anthropic-specific: coerces triple-backtick code fences instead of XML-tagged code blocks
-export const formatUserMessageWithHack = (content: string, provider: string): string => {
-    if (provider !== 'Anthropic') return content
+export const formatUserMessageWithHack = (
+    content: string,
+    provider: string,
+): string => {
+    if (provider !== 'Anthropic')
+        return content
+
     return `${content}${ANTHROPIC_CODE_BLOCK_HACK}`
 }

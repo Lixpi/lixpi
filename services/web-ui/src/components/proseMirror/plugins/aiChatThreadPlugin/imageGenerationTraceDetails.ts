@@ -53,18 +53,22 @@ export type ImageGenerationTraceDetails = {
 
 const imageGenerationTraceCache = new Map<string, ImageGenerationTrace>()
 
-export const cacheImageGenerationTrace = (traceId: string, trace: ImageGenerationTrace): void => {
-    imageGenerationTraceCache.set(traceId, trace)
-}
+export const cacheImageGenerationTrace = (
+    traceId: string,
+    trace: ImageGenerationTrace,
+): void => void imageGenerationTraceCache.set(traceId, trace)
 
 export const getImageGenerationTrace = (attrs: ImageGenerationTraceDetailsAttrs): GenerationTrace | null => {
-    if (attrs.imageGenerationTraceId) return imageGenerationTraceCache.get(attrs.imageGenerationTraceId) ?? null
+    if (attrs.imageGenerationTraceId)
+        return imageGenerationTraceCache.get(attrs.imageGenerationTraceId) ?? null
+
     return attrs.imageGenerationTrace ?? attrs.videoGenerationTrace ?? null
 }
 
-export const formatImageGenerationTraceRole = (role: string): string => {
-    return role.split(/[-_]/).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
-}
+export const formatImageGenerationTraceRole = (role: string): string =>
+    role
+        .split(/[-_]/).map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+        .join(' ')
 
 // Human-readable provenance for a reference image. The raw `label` is the prompt
 // that produced the source image, which reads like a stray user prompt — so the
@@ -81,35 +85,51 @@ export const formatImageGenerationTraceReferenceSource = (source: string): strin
 }
 
 export const formatTraceModelLabel = (modelId?: string | null): string => {
-    if (!modelId) return ''
+    if (!modelId)
+        return ''
+
     const parts = String(modelId).split(':')
+
     return parts[1] || parts[0] || ''
 }
 
 const getReferenceWorkspaceImagePath = (reference: ImageGenerationTraceReference): string | null => {
-    if (reference.assetId) {
+    if (reference.assetId)
         return `/api/assets/${encodeURIComponent(reference.assetId)}/renditions/preview`
-    }
+
     return null
 }
 
 const uniqueImageSources = (sources: string[]): string[] => {
     const seen = new Set<string>()
-    return sources.filter((source) => {
-        if (!source || seen.has(source)) return false
+
+    return sources.filter(source => {
+        if (
+            !source
+            || seen.has(source)
+        )
+            return false
+
         seen.add(source)
+
         return true
     })
 }
 
-function getReferenceIdentity(reference: ImageGenerationTraceReference): string {
-    if (reference.assetId) return `asset:${reference.assetId}`
-    if (reference.nodeId) return `node:${reference.nodeId}`
-    if (reference.imageUrl) return `image:${reference.imageUrl}`
+const getReferenceIdentity = (reference: ImageGenerationTraceReference): string => {
+    if (reference.assetId)
+        return `asset:${reference.assetId}`
+
+    if (reference.nodeId)
+        return `node:${reference.nodeId}`
+
+    if (reference.imageUrl)
+        return `image:${reference.imageUrl}`
+
     return `reference:${reference.id}`
 }
 
-function getReferenceRolePriority(reference: ImageGenerationTraceReference): number {
+const getReferenceRolePriority = (reference: ImageGenerationTraceReference): number => {
     switch (reference.role) {
         case 'target':
             return 5
@@ -127,23 +147,23 @@ function getReferenceRolePriority(reference: ImageGenerationTraceReference): num
 // Historical traces may contain the same Asset twice when browser branch
 // context and workspace context assigned different candidate IDs. Rendering is
 // Asset-identity based and keeps the strongest role at the original position.
-export function deduplicateImageGenerationTraceReferences(
-    references: ImageGenerationTraceReference[],
-): ImageGenerationTraceReference[] {
+export const deduplicateImageGenerationTraceReferences = (references: ImageGenerationTraceReference[]): ImageGenerationTraceReference[] => {
     const distinctReferences: ImageGenerationTraceReference[] = []
     const referenceIndexByIdentity = new Map<string, number>()
 
     for (const reference of references) {
         const identity = getReferenceIdentity(reference)
         const existingIndex = referenceIndexByIdentity.get(identity)
+
         if (existingIndex === undefined) {
             referenceIndexByIdentity.set(identity, distinctReferences.length)
             distinctReferences.push(reference)
+
             continue
         }
-        if (getReferenceRolePriority(reference) > getReferenceRolePriority(distinctReferences[existingIndex]!)) {
+
+        if (getReferenceRolePriority(reference) > getReferenceRolePriority(distinctReferences[existingIndex]!))
             distinctReferences[existingIndex] = reference
-        }
     }
 
     return distinctReferences
@@ -163,10 +183,13 @@ const getReferenceImageSources = (
 const resolveReferenceImageSrc = async (imageUrl: string): Promise<string> => {
     const source = imageUrl.startsWith('nats-obj://') ? '' : imageUrl
 
-    return resolveAuthenticatedMediaUrl(source, {
-        apiBaseUrl: import.meta.env.VITE_API_URL || '',
-        getAuthToken: () => AuthService.getTokenSilently(),
-    })
+    return resolveAuthenticatedMediaUrl(
+        source,
+        {
+            apiBaseUrl: import.meta.env.VITE_API_URL || '',
+            getAuthToken: () => AuthService.getTokenSilently(),
+        },
+    )
 }
 
 const resolveReferenceImageSources = async (
@@ -174,10 +197,14 @@ const resolveReferenceImageSources = async (
     options: ImageGenerationTraceDetailsOptions,
 ): Promise<string[]> => {
     const resolvedSources: string[] = []
+
     for (const source of getReferenceImageSources(reference, options)) {
         const resolvedSource = await resolveReferenceImageSrc(source)
-        if (resolvedSource) resolvedSources.push(resolvedSource)
+
+        if (resolvedSource)
+            resolvedSources.push(resolvedSource)
     }
+
     return uniqueImageSources(resolvedSources)
 }
 
@@ -192,18 +219,22 @@ const createReferenceTile = (
     // here: a hidden image is `display:none`, never intersects the viewport, so a
     // lazy image would never load — `onload` would never fire and the tile would
     // stay blank. Eager loading loads regardless of visibility.
-    const image = html`<img className="ai-image-generation-reference-image" alt=${reference.label} />` as HTMLImageElement
+    const image = html`<img
+            className="ai-image-generation-reference-image"
+            alt=${reference.label}
+        />` as HTMLImageElement
     const unavailable = html`<span className="ai-image-generation-reference-unavailable">Unavailable</span>` as HTMLSpanElement
     const tile = html`
         <figure
             className="ai-image-generation-reference"
             aria-label=${reference.label}
-            data=${{ helpTooltip: 'aria-label', source: reference.source, role: reference.role }}
+            data=${{
+                helpTooltip: 'aria-label',
+                source: reference.source,
+                role: reference.role,
+            }}
         >
-            <div className="ai-image-generation-reference-thumb">
-                ${image}
-                ${unavailable}
-            </div>
+            <div className="ai-image-generation-reference-thumb">${image} ${unavailable}</div>
             <figcaption>
                 <span className="ai-image-generation-reference-label">${sourceLabel}</span>
                 <span className="ai-image-generation-reference-role">${role}</span>
@@ -218,6 +249,7 @@ const createReferenceTile = (
 
     const getResolvedSources = (): Promise<string[]> => {
         resolvedSourcesPromise ??= resolveReferenceImageSources(reference, options)
+
         return resolvedSourcesPromise
     }
 
@@ -237,12 +269,16 @@ const createReferenceTile = (
             sourceIndex += 1
             const sources = await getResolvedSources()
             const nextSource = sources[sourceIndex]
+
             if (nextSource) {
                 image.src = nextSource
+
                 return
             }
+
             showUnavailable()
         }
+
         try {
             await retryNextSource()
         } catch {
@@ -253,10 +289,13 @@ const createReferenceTile = (
         try {
             const sources = await getResolvedSources()
             const src = sources[sourceIndex]
+
             if (!src) {
                 showUnavailable()
+
                 return
             }
+
             image.src = src
         } catch {
             showUnavailable()
@@ -286,7 +325,7 @@ const createExcludedItem = (reference: ImageGenerationTraceExcludedReference): H
     ` as HTMLElement
 }
 
-export function createImageGenerationTraceDetails(options: ImageGenerationTraceDetailsOptions = {}): ImageGenerationTraceDetails {
+export const createImageGenerationTraceDetails = (options: ImageGenerationTraceDetailsOptions = {}): ImageGenerationTraceDetails => {
     const className = ['ai-generation-trace-block', options.className].filter(Boolean).join(' ')
     const wrapper = html`
         <div className=${className}>
@@ -350,16 +389,18 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
     let renderedReferenceTrace: GenerationTrace | null = null
 
     const renderReferenceGrid = (trace: GenerationTrace) => {
-        if (renderedReferenceTrace === trace) return
+        if (renderedReferenceTrace === trace)
+            return
+
         const referenceImages = deduplicateImageGenerationTraceReferences(trace.referenceImages)
 
-        if (referenceImages.length > 0) {
-            referenceGrid.replaceChildren(...referenceImages.map((reference) => options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)))
-        } else {
-            referenceGrid.replaceChildren(html`
-                <div className="ai-image-generation-empty-references">No reference images were sent.</div>
-            `)
-        }
+        if (referenceImages.length > 0)
+            referenceGrid.replaceChildren(
+                ...referenceImages.map(reference => options.renderReferenceTile?.(reference) ?? createReferenceTile(reference, options)),
+            )
+        else
+            referenceGrid.replaceChildren(html`<div className="ai-image-generation-empty-references">No reference images were sent.</div>`)
+
         renderedReferenceTrace = trace
     }
 
@@ -375,7 +416,9 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             : undefined
         const capabilityTrace = attrs.capabilityGenerationTrace ?? null
         const hasTrace = Boolean(trace)
-        const fallbackText = toolPromptFallbackText ?? trace?.toolPrompt ?? ''
+        const fallbackText = toolPromptFallbackText
+            ?? trace?.toolPrompt
+            ?? ''
         const signature = [
             attrs.title,
             attrs.isStreaming ? 'streaming' : 'done',
@@ -388,8 +431,13 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
             capabilityReview?.summary ?? '',
         ].join('|')
 
-        if (signature === renderedSignature && trace === renderedTrace) {
-            if (trace) renderReferenceGrid(trace)
+        if (
+            signature === renderedSignature
+            && trace === renderedTrace
+        ) {
+            if (trace)
+                renderReferenceGrid(trace)
+
             return
         }
 
@@ -397,11 +445,18 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         renderedTrace = trace
 
         wrapper.classList.toggle('has-image-generation-trace', hasTrace)
-        wrapper.classList.toggle('has-capability-generation-trace', Boolean(capabilityTrace))
-        wrapper.classList.toggle('has-capability-media-review', Boolean(capabilityReview))
+        wrapper.classList.toggle(
+            'has-capability-generation-trace',
+            Boolean(capabilityTrace),
+        )
+        wrapper.classList.toggle(
+            'has-capability-media-review',
+            Boolean(capabilityReview),
+        )
         wrapper.classList.toggle('is-streaming', attrs.isStreaming)
 
         capabilitySection.hidden = !capabilityTrace
+
         if (capabilityTrace) {
             const metadata = [
                 ['Capability', capabilityTrace.capabilityName],
@@ -409,43 +464,60 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
                 ['Tool run', capabilityTrace.capabilityRunId],
                 ['Output Assets', String(capabilityTrace.outputAssetIds.length)],
             ]
-            capabilityMetadata.replaceChildren(...metadata.flatMap(([label, value]) => [
-                html`<dt>${label}</dt>`,
-                html`<dd>${value}</dd>`,
-            ]))
-            capabilitySteps.replaceChildren(...capabilityTrace.steps.map(step =>
-                html`
-                <li className="ai-capability-generation-step" data=${{ status: step.status }}>
-                    <span className="ai-capability-generation-step-title">${step.title}</span>
-                    <span className="ai-capability-generation-step-status">${formatImageGenerationTraceRole(step.status)}</span>
-                    ${step.outputSummary ? html`<span className="ai-capability-generation-step-summary">${step.outputSummary}</span>` : null}
-                    ${step.errorMessage ? html`<span className="ai-capability-generation-step-error">${step.errorMessage}</span>` : null}
-                </li>
-            `
+            capabilityMetadata.replaceChildren(...metadata.flatMap(
+                ([label, value]) => [
+                    html`<dt>${label}</dt>`,
+                    html`<dd>${value}</dd>`,
+                ],
             ))
+            capabilitySteps.replaceChildren(
+                ...capabilityTrace.steps.map(
+                    step =>
+                        html`
+                            <li
+                                className="ai-capability-generation-step"
+                                data=${{ status: step.status }}
+                            >
+                                    <span className="ai-capability-generation-step-title">${step.title}</span>
+                                    <span className="ai-capability-generation-step-status">${formatImageGenerationTraceRole(step.status)}</span>
+                                    ${step.outputSummary ? html`<span className="ai-capability-generation-step-summary">${step.outputSummary}</span>` : null}
+                                    ${step.errorMessage ? html`<span className="ai-capability-generation-step-error">${step.errorMessage}</span>` : null}
+                                </li>
+                        `,
+                ),
+            )
         } else {
             capabilityMetadata.replaceChildren()
             capabilitySteps.replaceChildren()
         }
 
         capabilityReviewSection.hidden = !capabilityReview
+
         if (capabilityReview) {
             capabilityReviewSummary.textContent = `${capabilityReview.summary} Automatic retries: ${capabilityReview.automaticRetries}.`
-            capabilityReviewSteps.replaceChildren(...capabilityReview.steps.map(step =>
-                html`
-                <li className="ai-capability-media-review-step" data=${{ status: step.status }}>
-                    <span className="ai-capability-media-review-step-title">${step.title}</span>
-                    <span className="ai-capability-media-review-step-status">
-                        ${formatImageGenerationTraceRole(step.status)}${step.score === undefined ? '' : ` · ${Math.round(step.score * 100)}%`}
-                    </span>
-                    ${
-                    step.issues.length > 0
-                        ? html`<span className="ai-capability-media-review-step-issues">${step.issues.join(', ')}</span>`
-                        : null
-                }
-                </li>
-            `
-            ))
+            capabilityReviewSteps.replaceChildren(
+                ...capabilityReview.steps.map(
+                    step =>
+                        html`
+                            <li
+                                className="ai-capability-media-review-step"
+                                data=${{ status: step.status }}
+                            >
+                                    <span className="ai-capability-media-review-step-title">${step.title}</span>
+                                    <span className="ai-capability-media-review-step-status">
+                                        ${formatImageGenerationTraceRole(step.status)}${step.score === undefined ? '' : ` · ${Math.round(
+                                            step.score * 100,
+                                        )}%`}
+                                    </span>
+                                    ${
+                            step.issues.length > 0
+                                ? html`<span className="ai-capability-media-review-step-issues">${step.issues.join(', ')}</span>`
+                                : null
+                        }
+                    </li>
+                        `,
+                ),
+            )
             capabilityReviewRecommendation.textContent = capabilityReview.recommendation ?? ''
         } else {
             capabilityReviewSummary.textContent = ''
@@ -464,18 +536,20 @@ export function createImageGenerationTraceDetails(options: ImageGenerationTraceD
         finalPrompt.textContent = shouldShowFinalPrompt ? trace!.finalPrompt : ''
 
         referenceSection.hidden = !hasTrace
+
         if (!trace) {
             referenceGrid.replaceChildren()
             renderedReferenceTrace = null
-        } else {
+        } else
             renderReferenceGrid(trace)
-        }
 
         const resolver = trace?.resolver
         const hasExcluded = Boolean(trace?.excludedReferences.length)
         resolverSection.hidden = !resolver && !hasExcluded
         resolverSummary.textContent = resolver
-            ? `${formatImageGenerationTraceRole(resolver.operationKind)} | ${formatImageGenerationTraceRole(resolver.mode)} | confidence ${Math.round(resolver.confidence * 100)}%`
+            ? `${formatImageGenerationTraceRole(resolver.operationKind)} | ${formatImageGenerationTraceRole(resolver.mode)} | confidence ${Math.round(
+                resolver.confidence * 100,
+            )}%`
             : ''
         resolverRationale.textContent = resolver?.rationale ?? ''
         excludedList.replaceChildren(...(trace?.excludedReferences ?? []).map(createExcludedItem))

@@ -21,13 +21,22 @@ export type BranchMarkerDimensionOptions = {
 // vertical center across that resize; fork/line markers also preserve their
 // horizontal center because they sit at the midpoint of a connector. A root
 // branchOrigin keeps its left anchor stable while its output side expands.
-export function resizeBranchMarkerToDimensions<T extends BranchMarkerNode>(
+export const resizeBranchMarkerToDimensions = <T extends BranchMarkerNode>(
     node: T,
-    dimensions: { width: number; height: number },
-): T {
-    if (node.dimensions.width === dimensions.width && node.dimensions.height === dimensions.height) return node
+    dimensions: {
+        width: number
+        height: number
+    },
+): T => {
+    if (
+        node.dimensions.width === dimensions.width
+        && node.dimensions.height === dimensions.height
+    )
+        return node
+
     const widthDelta = dimensions.width - node.dimensions.width
     const heightDelta = dimensions.height - node.dimensions.height
+
     return {
         ...node,
         position: {
@@ -42,39 +51,46 @@ export function resizeBranchMarkerToDimensions<T extends BranchMarkerNode>(
 
 const marker = mediaGenerationLayoutSettings.marker
 
-export function getBranchMarkerPromptPreview(promptText: string): string {
-    if (!promptText) return ''
-    if (promptText.length <= marker.promptPreviewMaxChars) return promptText
+export const getBranchMarkerPromptPreview = (promptText: string): string => {
+    if (!promptText)
+        return ''
+
+    if (promptText.length <= marker.promptPreviewMaxChars)
+        return promptText
+
     return `${promptText.slice(0, marker.promptPreviewMaxChars)}...`
 }
 
 // Streaming reasoning text scrolls past the marker as a tail while receiving.
-export function getBranchMarkerResponsePreview(responseText: string, options: { isReceiving?: boolean } = {}): string {
+export const getBranchMarkerResponsePreview = (
+    responseText: string,
+    options: { isReceiving?: boolean } = {},
+): string => {
     const normalized = responseText.replace(/\s+/g, ' ').trim()
-    if (normalized.length <= marker.responsePreviewMaxChars) return normalized
-    if (options.isReceiving) return `…${normalized.slice(-marker.responsePreviewMaxChars)}`
+
+    if (normalized.length <= marker.responsePreviewMaxChars)
+        return normalized
+
+    if (options.isReceiving)
+        return `…${normalized.slice(-marker.responsePreviewMaxChars)}`
+
     return `${normalized.slice(0, marker.responsePreviewMaxChars)}...`
 }
 
-function getMessageLineHeight(): number {
-    return Math.ceil(marker.text.messageFontSize * marker.text.messageLineHeight)
-}
+const getMessageLineHeight = (): number => Math.ceil(marker.text.messageFontSize * marker.text.messageLineHeight)
 
-function getResponseLineHeight(): number {
-    return Math.ceil(marker.text.responseFontSize * marker.text.responseLineHeight)
-}
+const getResponseLineHeight = (): number => Math.ceil(marker.text.responseFontSize * marker.text.responseLineHeight)
 
-export function getBranchMarkerMinWidth(): number {
-    return Math.round(marker.baseSize * marker.minWidthMultiplier)
-}
+export const getBranchMarkerMinWidth = (): number => Math.round(marker.baseSize * marker.minWidthMultiplier)
 
 // Match the natural single-line height (vertical padding + one message line) so
 // a one-line marker isn't inflated relative to a wrapped two-line one.
-function getMarkerMinHeight(): number {
-    return marker.verticalPadding + getMessageLineHeight()
-}
+const getMarkerMinHeight = (): number => marker.verticalPadding + getMessageLineHeight()
 
-function getMarkerWidthForText(promptText: string, responseText = ''): number {
+const getMarkerWidthForText = (
+    promptText: string,
+    responseText = '',
+): number => {
     const minWidth = getBranchMarkerMinWidth()
     const maxWidth = minWidth * marker.maxWidthGrowth
     const promptPreview = getBranchMarkerPromptPreview(promptText)
@@ -83,26 +99,43 @@ function getMarkerWidthForText(promptText: string, responseText = ''): number {
     // Target a single line; longer messages keep growing until they hit the
     // ceiling, then wrap to (and truncate at) two lines.
     const desiredWidth = marker.horizontalPadding + previewCharCount * marker.approxCharWidth
-    return Math.round(Math.max(minWidth, Math.min(maxWidth, desiredWidth)))
+
+    return Math.round(
+        Math.max(
+            minWidth,
+            Math.min(maxWidth, desiredWidth),
+        ),
+    )
 }
 
-function getMarkerPromptLineCount(promptText: string, width: number): number {
+const getMarkerPromptLineCount = (
+    promptText: string,
+    width: number,
+): number => {
     const promptPreview = getBranchMarkerPromptPreview(promptText)
-    const charsPerLine = Math.max(1, Math.floor((width - marker.horizontalPadding) / marker.lineWrapCharWidth))
+    const charsPerLine = Math.max(
+        1,
+        Math.floor((width - marker.horizontalPadding) / marker.lineWrapCharWidth),
+    )
+
     return promptPreview.length > charsPerLine ? 2 : 1
 }
 
 // The API and browser use this single on-canvas estimator for every marker
 // phase, including preflight.
-export function estimateBranchMarkerDimensions(
+export const estimateBranchMarkerDimensions = (
     promptText: string,
     options: BranchMarkerDimensionOptions = {},
-): { width: number; height: number } {
+): {
+    width: number
+    height: number
+} => {
     const width = getMarkerWidthForText(promptText, options.responseText)
     const promptLineCount = getMarkerPromptLineCount(promptText, width)
     const responseHeight = options.responseLine
         ? marker.separatorHeight + getResponseLineHeight()
         : 0
+
     return {
         width,
         height: Math.max(

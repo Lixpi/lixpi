@@ -16,24 +16,27 @@ export type CharacterCreatorRouting = {
     capabilityReferences: CapabilityPromptReference[] | undefined
 }
 
-export function isCharacterCreatorCapabilitySelected(
-    capabilityReferences: CapabilityPromptReference[] | undefined,
-): boolean {
-    return capabilityReferences?.some(reference => (
-        reference.kind === 'tool' && reference.capabilityId === CHARACTER_CREATOR_TOOL_ID
-    )) ?? false
+export const isCharacterCreatorCapabilitySelected = (capabilityReferences: CapabilityPromptReference[] | undefined): boolean => {
+    return capabilityReferences?.some(
+        reference => (
+            reference.kind === 'tool' && reference.capabilityId === CHARACTER_CREATOR_TOOL_ID
+        ),
+    ) ?? false
 }
 
-export function resolveCharacterCreatorRouting(
+export const resolveCharacterCreatorRouting = (
     prompt: string,
     capabilityReferences: CapabilityPromptReference[] | undefined,
-): CharacterCreatorRouting {
+): CharacterCreatorRouting => {
     const references = capabilityReferences ?? []
     const explicitlySelected = isCharacterCreatorCapabilitySelected(references)
     const isCharacterCreator = explicitlySelected
         || CHARACTER_CREATION_PATTERNS.some(pattern => pattern.test(prompt))
 
-    if (!isCharacterCreator || explicitlySelected) {
+    if (
+        !isCharacterCreator
+        || explicitlySelected
+    ) {
         return {
             isCharacterCreator,
             capabilityReferences,
@@ -44,16 +47,18 @@ export function resolveCharacterCreatorRouting(
         isCharacterCreator: true,
         capabilityReferences: [
             ...references,
-            { capabilityId: CHARACTER_CREATOR_TOOL_ID, kind: 'tool' },
+            {
+                capabilityId: CHARACTER_CREATOR_TOOL_ID,
+                kind: 'tool',
+            },
         ],
     }
 }
 
-export function restrictMediaRequestToCharacterImages(
-    request: AiInteractionMediaGenerationRequest,
-): AiInteractionMediaGenerationRequest {
+export const restrictMediaRequestToCharacterImages = (request: AiInteractionMediaGenerationRequest): AiInteractionMediaGenerationRequest => {
     const imageOnlyRequest = { ...request }
     delete imageOnlyRequest.videoOptions
+
     return {
         ...imageOnlyRequest,
         outputMediaTypes: ['image'],

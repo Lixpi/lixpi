@@ -36,15 +36,24 @@ export type AiUserMessageNodeViewOptions = {
     contextPreview?: AiUserMessageContextPreviewRenderer
 }
 
-function createId(): string {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+const createId = (): string => {
+    if (
+        typeof crypto !== 'undefined'
+        && 'randomUUID' in crypto
+    )
         return crypto.randomUUID()
-    }
+
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function createAiUserMessageNodeAttrs(): { id: string; createdAt: number } {
-    return { id: createId(), createdAt: Date.now() }
+export const createAiUserMessageNodeAttrs = (): {
+    id: string
+    createdAt: number
+} => {
+    return {
+        id: createId(),
+        createdAt: Date.now(),
+    }
 }
 
 export const aiUserMessageNodeView = (
@@ -58,6 +67,7 @@ export const aiUserMessageNodeView = (
 
     const destroyReferencePreviews = (): void => {
         for (const tile of tileInstances) tile.destroy()
+
         tileInstances = []
         shell.referencePreviewsEl.replaceChildren()
     }
@@ -66,14 +76,22 @@ export const aiUserMessageNodeView = (
         destroyReferencePreviews()
         const contextPreview = options.contextPreview
         const referenceNodeIds = normalizeReferenceNodeIds(messageNode.attrs.referenceNodeIds)
-        if (!contextPreview || referenceNodeIds.length === 0) {
+
+        if (
+            !contextPreview
+            || referenceNodeIds.length === 0
+        ) {
             shell.referencePreviewsEl.hidden = true
+
             return
         }
 
         for (const nodeId of referenceNodeIds) {
             const canvasNode = contextPreview.getNodeById(nodeId)
-            if (!canvasNode) continue
+
+            if (!canvasNode)
+                continue
+
             const tile = createContextPreviewTile({
                 node: canvasNode,
                 getNode: () => contextPreview.getNodeById(nodeId) ?? canvasNode,
@@ -94,20 +112,30 @@ export const aiUserMessageNodeView = (
         dom: shell.wrapper,
         contentDOM: shell.contentEl,
         ignoreMutation: (mutation: MutationRecord) => {
-            if (typeof Node !== 'undefined' && mutation.target instanceof Node && shell.referencePreviewsEl.contains(mutation.target)) {
+            if (
+                typeof Node !== 'undefined'
+                && mutation.target instanceof Node
+                && shell.referencePreviewsEl.contains(mutation.target)
+            )
                 return true
-            }
+
             // Ignore style attribute changes on the wrapper so ProseMirror
             // does not trigger DOM reconciliation for externally-set styles.
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            if (
+                mutation.type === 'attributes'
+                && mutation.attributeName === 'style'
+            )
                 return true
-            }
+
             return false
         },
         update: (updatedNode: ProseMirrorNode) => {
-            if (updatedNode.type.name !== aiUserMessageNodeType) return false
+            if (updatedNode.type.name !== aiUserMessageNodeType)
+                return false
+
             node = updatedNode
             renderReferencePreviews(node)
+
             return true
         },
         destroy: destroyReferencePreviews,

@@ -30,61 +30,110 @@ export type ProviderInputBudgetAssessment = {
 // megabyte of base64 is charged once as media rather than twice as text.
 // This is the single implementation of the heuristic; every gate that needs a
 // token count calls it rather than re-deriving the ratios.
-export function estimateInputTokens(request: unknown): ProviderInputTokenEstimate {
+export const estimateInputTokens = (request: unknown): ProviderInputTokenEstimate => {
     let mediaTokens = 0
     const serialized = JSON.stringify(request, (_key, value: unknown) => {
-        if (typeof value === 'string' && value.startsWith('data:')) {
+        if (
+            typeof value === 'string'
+            && value.startsWith('data:')
+        ) {
             const assessment = assessDataUrl(value)
-            if (!assessment) return value
+
+            if (!assessment)
+                return value
+
             mediaTokens += assessment.tokens
+
             return `<${assessment.mimeType} input:${assessment.byteLength} bytes>`
         }
+
         if (value instanceof Uint8Array) {
             mediaTokens += Math.ceil(value.byteLength / AUDIO_BYTES_PER_TOKEN)
+
             return `<binary input:${value.byteLength} bytes>`
         }
+
         const record = asRecord(value)
         const mediaType = typeof record?.mimeType === 'string'
             ? record.mimeType
             : typeof record?.media_type === 'string'
-            ? record.media_type
-            : undefined
-        if (mediaType && typeof record?.data === 'string' && isBase64(record.data)) {
+                ? record.media_type
+                : undefined
+
+        if (
+            mediaType
+            && typeof record?.data === 'string'
+            && isBase64(record.data)
+        ) {
             const byteLength = base64ByteLength(record.data)
             mediaTokens += mediaType.startsWith('audio/')
                 ? Math.ceil(byteLength / AUDIO_BYTES_PER_TOKEN)
                 : IMAGE_INPUT_TOKENS
-            return { ...record, data: `<${mediaType} input:${byteLength} bytes>` }
+
+            return {
+                ...record,
+                data: `<${mediaType} input:${byteLength} bytes>`,
+            }
         }
+
         return value
     }) ?? ''
     const textTokens = Math.ceil(serialized.length / TEXT_CHARACTERS_PER_TOKEN)
-    return { textTokens, mediaTokens, inputTokens: textTokens + mediaTokens }
+
+    return {
+        textTokens,
+        mediaTokens,
+        inputTokens: textTokens + mediaTokens,
+    }
 }
 
-export function assessProviderInputBudget({
+export const assessProviderInputBudget = ({
     state,
     request,
 }: {
     state: ProviderState
     request: Readonly<Record<string, unknown>>
-}): ProviderInputBudgetAssessment | undefined {
+}): ProviderInputBudgetAssessment | undefined => {
     const contextWindow = state.aiModelMetaInfo?.contextWindow
-    if (contextWindow === undefined) return undefined
+
+    if (contextWindow === undefined)
+        return undefined
+
     const reservedCompletionTokens = state.maxCompletionSize
         ?? state.aiModelMetaInfo?.maxCompletionSize
-    if (
-        !Number.isSafeInteger(contextWindow) || contextWindow <= 0
-        || !Number.isSafeInteger(reservedCompletionTokens) || reservedCompletionTokens < 0
-    ) {
-        throw contextError(state, 0, reservedCompletionTokens ?? 0, contextWindow)
-    }
 
-    const { inputTokens, mediaTokens } = estimateInputTokens(request)
-    if (inputTokens + reservedCompletionTokens > contextWindow) {
-        throw contextError(state, inputTokens, reservedCompletionTokens, contextWindow)
+    if (
+        !Number.isSafeInteger(contextWindow)
+        || contextWindow <= 0
+        || !Number.isSafeInteger(reservedCompletionTokens)
+        || reservedCompletionTokens < 0
+    )
+        throw contextError(
+            state,
+            0,
+            reservedCompletionTokens ?? 0,
+            contextWindow,
+        )
+
+    const {
+        inputTokens,
+        mediaTokens,
+    } = estimateInputTokens(request)
+
+    if (inputTokens + reservedCompletionTokens > contextWindow)
+        throw contextError(
+            state,
+            inputTokens,
+            reservedCompletionTokens,
+            contextWindow,
+        )
+
+    return {
+        inputTokens,
+        mediaTokens,
+        reservedCompletionTokens,
+        contextWindow,
     }
-    return { inputTokens, mediaTokens, reservedCompletionTokens, contextWindow }
 }
 
 function assessDataUrl(value: string): {
@@ -93,9 +142,13 @@ function assessDataUrl(value: string): {
     tokens: number
 } | undefined {
     const match = /^data:([^;,]+)(?:;[^,]*)?;base64,(.*)$/su.exec(value)
-    if (!match) return undefined
+
+    if (!match)
+        return undefined
+
     const mimeType = match[1]!
     const byteLength = base64ByteLength(match[2]!)
+
     return {
         mimeType,
         byteLength,
@@ -112,16 +165,27 @@ function contextError(
     contextWindow: number | undefined,
 ): CapabilityError {
     const modelId = state.aiModelMetaInfo?.model ?? state.modelVersion
+
     return new CapabilityError(
         'MODEL_INPUT_CONTEXT_EXCEEDED',
         `MODEL_INPUT_CONTEXT_EXCEEDED: ${modelId} cannot fit the complete translated request in its context window`,
-        { modelId, inputTokens, reservedCompletionTokens, contextWindow: contextWindow ?? 0 },
+        {
+            modelId,
+            inputTokens,
+            reservedCompletionTokens,
+            contextWindow: contextWindow ?? 0,
+        },
     )
 }
 
 function base64ByteLength(value: string): number {
-    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
-    return Math.max(0, Math.floor(value.length * 3 / 4) - padding)
+    const padding = value.endsWith('==')
+        ? 2
+        : value.endsWith('=')
+            ? 1
+            : 0
+
+    return Math.max(0, Math.floor((value.length * 3) / 4) - padding)
 }
 
 function isBase64(value: string): boolean {
@@ -129,7 +193,9 @@ function isBase64(value: string): boolean {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-    return value && typeof value === 'object' && !Array.isArray(value)
+    return value
+        && typeof value === 'object'
+        && !Array.isArray(value)
         ? value as Record<string, unknown>
         : undefined
 }

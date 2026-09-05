@@ -26,29 +26,37 @@ export {
     type AiLineageProjectionScope,
 }
 
-function getAiLineageEventIcon(kind: AiLineageEventKind): string {
-    if (kind === 'branch-origin') return branchMidIcon
-    if (kind === 'branch-line') return branchLineIcon
+const getAiLineageEventIcon = (kind: AiLineageEventKind): string => {
+    if (kind === 'branch-origin')
+        return branchMidIcon
+
+    if (kind === 'branch-line')
+        return branchLineIcon
+
     return branchForkfIcon
 }
 
-export function createAiLineageEventMarker(event: AiLineageEventDescriptor): HTMLElement {
+export const createAiLineageEventMarker = (event: AiLineageEventDescriptor): HTMLElement => {
     const label = getAiLineageEventLabel(event.kind)
     const icon = getAiLineageEventIcon(event.kind)
+
     return html`
         <div
             className=${`ai-lineage-event ai-lineage-event-${event.kind}`}
             aria-label=${label}
             data=${{
-        helpTooltip: 'aria-label',
-        lineageEventKind: event.kind,
-        branchOriginNodeId: event.branchOriginNodeId ?? '',
-        branchForkNodeId: event.branchForkNodeId ?? '',
-        branchLineNodeId: event.branchLineNodeId ?? '',
-    }}
+                helpTooltip: 'aria-label',
+                lineageEventKind: event.kind,
+                branchOriginNodeId: event.branchOriginNodeId ?? '',
+                branchForkNodeId: event.branchForkNodeId ?? '',
+                branchLineNodeId: event.branchLineNodeId ?? '',
+            }}
         >
-            <span className="ai-lineage-event-icon" innerHTML=${icon}></span>
-            <span className="ai-lineage-event-label">${label}</span>
-        </div>
+            <span
+                className="ai-lineage-event-icon"
+                innerHTML=${icon}
+            ></span>
+                <span className="ai-lineage-event-label">${label}</span>
+            </div>
     ` as HTMLElement
 }

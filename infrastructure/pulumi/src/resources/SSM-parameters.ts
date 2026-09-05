@@ -1,5 +1,5 @@
 import * as aws from '@pulumi/aws'
-import * as pulumi from '@pulumi/pulumi'
+
 import * as process from 'process'
 
 import { formatStageResourceName } from '@lixpi/constants'
@@ -12,68 +12,145 @@ const {
 export const createSsmParameters = () => {
     // --- Parameters (non-sensitive) ----------------------------------
 
-    const originHostUrlParam = new aws.ssm.Parameter('ORIGIN_HOST_URL', {
-        name: formatStageResourceName('ORIGIN_HOST_URL', ORG_NAME, STAGE),
-        type: 'String',
-        value: process.env.ORIGIN_HOST_URL || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-    })
+    const originHostUrlParam = new aws.ssm.Parameter(
+        'ORIGIN_HOST_URL',
+        {
+            name: formatStageResourceName(
+                'ORIGIN_HOST_URL',
+                ORG_NAME,
+                STAGE,
+            ),
+            type: 'String',
+            value: process.env.ORIGIN_HOST_URL || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+        },
+    )
 
-    const apiHostUrlParam = new aws.ssm.Parameter('API_HOST_URL', {
-        name: formatStageResourceName('API_HOST_URL', ORG_NAME, STAGE),
-        type: 'String',
-        value: process.env.API_HOST_URL || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-    })
+    const apiHostUrlParam = new aws.ssm.Parameter(
+        'API_HOST_URL',
+        {
+            name: formatStageResourceName(
+                'API_HOST_URL',
+                ORG_NAME,
+                STAGE,
+            ),
+            type: 'String',
+            value: process.env.API_HOST_URL || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+        },
+    )
 
-    const auth0DomainParam = new aws.ssm.Parameter('AUTH0_DOMAIN', {
-        name: formatStageResourceName('AUTH0_DOMAIN', ORG_NAME, STAGE),
-        type: 'String',
-        value: process.env.AUTH0_DOMAIN || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-    })
+    const auth0DomainParam = new aws.ssm.Parameter(
+        'AUTH0_DOMAIN',
+        {
+            name: formatStageResourceName(
+                'AUTH0_DOMAIN',
+                ORG_NAME,
+                STAGE,
+            ),
+            type: 'String',
+            value: process.env.AUTH0_DOMAIN || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+        },
+    )
 
-    const auth0ApiIdentifierParam = new aws.ssm.Parameter('AUTH0_API_IDENTIFIER', {
-        name: formatStageResourceName('AUTH0_API_IDENTIFIER', ORG_NAME, STAGE),
-        type: 'String',
-        value: process.env.AUTH0_API_IDENTIFIER || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-    })
+    const auth0ApiIdentifierParam = new aws.ssm.Parameter(
+        'AUTH0_API_IDENTIFIER',
+        {
+            name: formatStageResourceName(
+                'AUTH0_API_IDENTIFIER',
+                ORG_NAME,
+                STAGE,
+            ),
+            type: 'String',
+            value: process.env.AUTH0_API_IDENTIFIER || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+        },
+    )
 
-    const aiTokensUsageTopicArnParam = new aws.ssm.Parameter('AI_TOKENS_USAGE_TOPIC_ARN', {
-        name: formatStageResourceName('AI_TOKENS_USAGE_TOPIC_ARN', ORG_NAME, STAGE),
-        type: 'String',
-        value: 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER', // left empty as in original code
-    })
+    const aiTokensUsageTopicArnParam = new aws.ssm.Parameter(
+        'AI_TOKENS_USAGE_TOPIC_ARN',
+        {
+            name: formatStageResourceName(
+                'AI_TOKENS_USAGE_TOPIC_ARN',
+                ORG_NAME,
+                STAGE,
+            ),
+            type: 'String',
+            value: 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER', // left empty as in original code
+        },
+    )
 
-    const saveLlmResponsesParam = new aws.ssm.Parameter('SAVE_LLM_RESPONSES_TO_DEBUG_DIR', {
-        name: formatStageResourceName('SAVE_LLM_RESPONSES_TO_DEBUG_DIR', ORG_NAME, STAGE),
-        type: 'String',
-        value: process.env.SAVE_LLM_RESPONSES_TO_DEBUG_DIR || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-    })
+    const saveLlmResponsesParam = new aws.ssm.Parameter(
+        'SAVE_LLM_RESPONSES_TO_DEBUG_DIR',
+        {
+            name: formatStageResourceName(
+                'SAVE_LLM_RESPONSES_TO_DEBUG_DIR',
+                ORG_NAME,
+                STAGE,
+            ),
+            type: 'String',
+            value: process.env.SAVE_LLM_RESPONSES_TO_DEBUG_DIR || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+        },
+    )
 
     const webUiParams = {
-        VITE_AUTH0_LOGIN_URL: new aws.ssm.Parameter('VITE_AUTH0_LOGIN_URL', {
-            name: formatStageResourceName('VITE_AUTH0_LOGIN_URL', ORG_NAME, STAGE),
-            type: 'String',
-            value: process.env.VITE_AUTH0_LOGIN_URL || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-        }),
-        VITE_AUTH0_DOMAIN: new aws.ssm.Parameter('VITE_AUTH0_DOMAIN', {
-            name: formatStageResourceName('VITE_AUTH0_DOMAIN', ORG_NAME, STAGE),
-            type: 'String',
-            value: process.env.VITE_AUTH0_DOMAIN || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-        }),
-        VITE_AUTH0_CLIENT_ID: new aws.ssm.Parameter('VITE_AUTH0_CLIENT_ID', {
-            name: formatStageResourceName('VITE_AUTH0_CLIENT_ID', ORG_NAME, STAGE),
-            type: 'String',
-            value: process.env.VITE_AUTH0_CLIENT_ID || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-        }),
-        VITE_AUTH0_AUDIENCE: new aws.ssm.Parameter('VITE_AUTH0_AUDIENCE', {
-            name: formatStageResourceName('VITE_AUTH0_AUDIENCE', ORG_NAME, STAGE),
-            type: 'String',
-            value: process.env.VITE_AUTH0_AUDIENCE || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-        }),
-        VITE_AUTH0_REDIRECT_URI: new aws.ssm.Parameter('VITE_AUTH0_REDIRECT_URI', {
-            name: formatStageResourceName('VITE_AUTH0_REDIRECT_URI', ORG_NAME, STAGE),
-            type: 'String',
-            value: process.env.VITE_AUTH0_REDIRECT_URI || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
-        }),
+        VITE_AUTH0_LOGIN_URL: new aws.ssm.Parameter(
+            'VITE_AUTH0_LOGIN_URL',
+            {
+                name: formatStageResourceName(
+                    'VITE_AUTH0_LOGIN_URL',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                type: 'String',
+                value: process.env.VITE_AUTH0_LOGIN_URL || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+            },
+        ),
+        VITE_AUTH0_DOMAIN: new aws.ssm.Parameter(
+            'VITE_AUTH0_DOMAIN',
+            {
+                name: formatStageResourceName(
+                    'VITE_AUTH0_DOMAIN',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                type: 'String',
+                value: process.env.VITE_AUTH0_DOMAIN || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+            },
+        ),
+        VITE_AUTH0_CLIENT_ID: new aws.ssm.Parameter(
+            'VITE_AUTH0_CLIENT_ID',
+            {
+                name: formatStageResourceName(
+                    'VITE_AUTH0_CLIENT_ID',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                type: 'String',
+                value: process.env.VITE_AUTH0_CLIENT_ID || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+            },
+        ),
+        VITE_AUTH0_AUDIENCE: new aws.ssm.Parameter(
+            'VITE_AUTH0_AUDIENCE',
+            {
+                name: formatStageResourceName(
+                    'VITE_AUTH0_AUDIENCE',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                type: 'String',
+                value: process.env.VITE_AUTH0_AUDIENCE || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+            },
+        ),
+        VITE_AUTH0_REDIRECT_URI: new aws.ssm.Parameter(
+            'VITE_AUTH0_REDIRECT_URI',
+            {
+                name: formatStageResourceName(
+                    'VITE_AUTH0_REDIRECT_URI',
+                    ORG_NAME,
+                    STAGE,
+                ),
+                type: 'String',
+                value: process.env.VITE_AUTH0_REDIRECT_URI || 'PLACEHOLDER_VALUE_TO_BE_UPDATED_LATER',
+            },
+        ),
     }
 
     // --- Secrets (sensitive parameters) ----------------------------------

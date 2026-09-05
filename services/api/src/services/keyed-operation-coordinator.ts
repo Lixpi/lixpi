@@ -17,17 +17,27 @@ export class KeyedIdleBatchScheduler<T> {
         private readonly config: {
             delayMs: number
             onFlush: (batch: KeyedIdleBatch<T>) => Promise<void>
-            onError: (error: unknown, batch: KeyedIdleBatch<T>) => void
+            onError: (
+                error: unknown,
+                batch: KeyedIdleBatch<T>,
+            ) => void
         },
     ) {}
 
-    schedule(key: string, value: T): void {
+    schedule(
+        key: string,
+        value: T,
+    ): void {
         const existing = this.entries.get(key)
+
         if (existing) {
-            if (existing.timer) clearTimeout(existing.timer)
+            if (existing.timer)
+                clearTimeout(existing.timer)
+
             existing.value = value
             existing.coalescedRequestCount += 1
             existing.timer = this.armTimer(key, existing)
+
             return
         }
 
@@ -42,9 +52,15 @@ export class KeyedIdleBatchScheduler<T> {
 
     cancel(key: string): number {
         const entry = this.entries.get(key)
-        if (!entry) return 0
-        if (entry.timer) clearTimeout(entry.timer)
+
+        if (!entry)
+            return 0
+
+        if (entry.timer)
+            clearTimeout(entry.timer)
+
         this.entries.delete(key)
+
         return entry.coalescedRequestCount
     }
 
@@ -52,22 +68,35 @@ export class KeyedIdleBatchScheduler<T> {
         return this.entries.size
     }
 
-    private armTimer(key: string, entry: KeyedIdleBatchEntry<T>): ReturnType<typeof setTimeout> {
-        const timer = setTimeout(() => {
-            void this.flushEntry(key, entry)
-        }, this.config.delayMs)
-        if (typeof timer === 'object' && 'unref' in timer) timer.unref()
+    private armTimer(
+        key: string,
+        entry: KeyedIdleBatchEntry<T>,
+    ): ReturnType<typeof setTimeout> {
+        const timer = setTimeout(() => void this.flushEntry(key, entry), this.config.delayMs)
+
+        if (
+            typeof timer === 'object'
+            && 'unref' in timer
+        )
+            timer.unref()
+
         return timer
     }
 
-    private async flushEntry(key: string, entry: KeyedIdleBatchEntry<T>): Promise<void> {
-        if (this.entries.get(key) !== entry) return
+    private async flushEntry(
+        key: string,
+        entry: KeyedIdleBatchEntry<T>,
+    ): Promise<void> {
+        if (this.entries.get(key) !== entry)
+            return
+
         this.entries.delete(key)
         const batch: KeyedIdleBatch<T> = {
             key,
             value: entry.value,
             coalescedRequestCount: entry.coalescedRequestCount,
         }
+
         try {
             await this.config.onFlush(batch)
         } catch (error) {
@@ -90,22 +119,28 @@ export class KeyedOperationCoordinator {
                 // A failed operation releases the key for the next operation.
             }
         }
+
         return await operation()
     }
 
-    async run<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    async run<T>(
+        key: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
         const previous = this.tails.get(key)
         const current = this.runAfter(previous, operation)
         this.tails.set(key, current)
+
         try {
             return await current
         } finally {
-            if (this.tails.get(key) === current) this.tails.delete(key)
+            if (this.tails.get(key) === current)
+                this.tails.delete(key)
         }
     }
 }
 
-export async function runOperationWithRetry<T>({
+export const runOperationWithRetry = async <T>({
     operation,
     shouldRetry,
     maxAttempts,
@@ -113,13 +148,18 @@ export async function runOperationWithRetry<T>({
     operation: () => Promise<T>
     shouldRetry: (error: unknown) => boolean
     maxAttempts: number
-}): Promise<T> {
+}): Promise<T> => {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
             return await operation()
         } catch (error) {
-            if (!shouldRetry(error) || attempt === maxAttempts) throw error
+            if (
+                !shouldRetry(error)
+                || attempt === maxAttempts
+            )
+                throw error
         }
     }
+
     throw new Error('OPERATION_RETRY_EXHAUSTED')
 }

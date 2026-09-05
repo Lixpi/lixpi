@@ -17,16 +17,33 @@ export type NodePresentation = {
     visible: boolean
 }
 
-export type NodeMountScope = { context: ComponentContext; destroy: Dispose }
+export type NodeMountScope = {
+    context: ComponentContext
+    destroy: Dispose
+}
 export type NodeViewsOptions = {
     registry: NodeRegistry
     createScope: (node: EngineNode) => NodeMountScope
-    mountUnknown: (node: EngineNode, context: ComponentContext) => NodeView
-    onError: (error: unknown, nodeId: string) => void
+    mountUnknown: (
+        node: EngineNode,
+        context: ComponentContext,
+    ) => NodeView
+    onError: (
+        error: unknown,
+        nodeId: string,
+    ) => void
 }
 
-type MountedNode = { type: string; view: NodeView; scope: NodeMountScope }
-type SyncInput = { sceneKey: string; nodes: readonly EngineNode[]; presentation: (node: EngineNode) => NodePresentation }
+type MountedNode = {
+    type: string
+    view: NodeView
+    scope: NodeMountScope
+}
+type SyncInput = {
+    sceneKey: string
+    nodes: readonly EngineNode[]
+    presentation: (node: EngineNode) => NodePresentation
+}
 
 // Coordinates component lifetimes; scene geometry and user interaction remain
 // the controller's responsibility. Images use this path like any other type.
@@ -40,17 +57,30 @@ export class NodeViews {
     constructor(private readonly options: NodeViewsOptions) {}
 
     sync(input: SyncInput): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         const ids = new Set<string>()
+
         for (const node of input.nodes) {
-            if (ids.has(node.nodeId)) throw new Error(`Duplicate node ID: ${node.nodeId}`)
+            if (ids.has(node.nodeId))
+                throw new Error(`Duplicate node ID: ${node.nodeId}`)
+
             ids.add(node.nodeId)
         }
+
         this.next = input
-        if (this.syncing) return
+
+        if (this.syncing)
+            return
+
         this.syncing = true
+
         try {
-            while (this.next && !this.destroyed) {
+            while (
+                this.next
+                && !this.destroyed
+            ) {
                 const next = this.next
                 this.next = null
                 this.reconcile(next)
@@ -65,22 +95,41 @@ export class NodeViews {
             this.clear()
             this.sceneKey = input.sceneKey
         }
-        const nodesById = new Map(input.nodes.map(node => [node.nodeId, node]))
+
+        const nodesById = new Map(
+            input.nodes.map(node => [node.nodeId, node]),
+        )
+
         for (const [id, entry] of this.mounted) {
             const node = nodesById.get(id)
-            if (!node || node.type !== entry.type) this.remove(id)
+
+            if (
+                !node
+                || node.type !== entry.type
+            )
+                this.remove(id)
         }
+
         for (const node of input.nodes) {
-            if (this.destroyed) return
+            if (this.destroyed)
+                return
+
             let entry = this.mounted.get(node.nodeId)
+
             try {
                 if (!entry) {
                     entry = this.mount(node)
-                    if (!entry) continue
-                } else {
+
+                    if (!entry)
+                        continue
+                } else
                     entry.view.update(node)
-                }
-                if (!this.destroyed) this.present(node.nodeId, input.presentation(node))
+
+                if (!this.destroyed)
+                    this.present(
+                        node.nodeId,
+                        input.presentation(node),
+                    )
             } catch (error) {
                 this.remove(node.nodeId)
                 this.options.onError(error, node.nodeId)
@@ -92,17 +141,29 @@ export class NodeViews {
         const scope = this.options.createScope(node)
         let view: NodeView | undefined
         let mounted = false
+
         try {
-            if (this.destroyed) return undefined
+            if (this.destroyed)
+                return undefined
+
             scope.context.signal.throwIfAborted()
             const registration = this.options.registry.get(node.type)
             view = registration ? registration.mount(node, scope.context) : this.options.mountUnknown(node, scope.context)
-            if (this.destroyed || scope.context.signal.aborted) {
+
+            if (
+                this.destroyed
+                || scope.context.signal.aborted
+            )
                 return undefined
+
+            const entry = {
+                type: node.type,
+                view,
+                scope,
             }
-            const entry = { type: node.type, view, scope }
             this.mounted.set(node.nodeId, entry)
             mounted = true
+
             return entry
         } finally {
             if (!mounted) {
@@ -115,13 +176,33 @@ export class NodeViews {
         }
     }
 
-    present(nodeId: string, presentation: NodePresentation): void {
+    present(
+        nodeId: string,
+        presentation: NodePresentation,
+    ): void {
         const view = this.mounted.get(nodeId)?.view
-        if (!view || this.destroyed) return
+
+        if (
+            !view
+            || this.destroyed
+        )
+            return
+
         view.setGeometry(presentation.worldBounds, presentation.viewport)
-        if (this.destroyed || this.mounted.get(nodeId)?.view !== view) return
+
+        if (
+            this.destroyed
+            || this.mounted.get(nodeId)?.view !== view
+        )
+            return
+
         view.setSelected(presentation.selected)
-        if (!this.destroyed && this.mounted.get(nodeId)?.view === view) view.setVisible(presentation.visible)
+
+        if (
+            !this.destroyed
+            && this.mounted.get(nodeId)?.view === view
+        )
+            view.setVisible(presentation.visible)
     }
 
     get(nodeId: string): NodeView | undefined {
@@ -130,8 +211,12 @@ export class NodeViews {
 
     remove(nodeId: string): void {
         const entry = this.mounted.get(nodeId)
-        if (!entry) return
+
+        if (!entry)
+            return
+
         this.mounted.delete(nodeId)
+
         try {
             try {
                 entry.view.destroy()
@@ -144,11 +229,15 @@ export class NodeViews {
     }
 
     private clear(): void {
-        for (const id of Array.from(this.mounted.keys())) this.remove(id)
+        for (const id of Array.from(
+            this.mounted.keys(),
+        )) this.remove(id)
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.next = null
         this.clear()

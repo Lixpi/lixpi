@@ -3,13 +3,21 @@ import { routerStore } from '$src/stores/routerStore.ts'
 
 type RouteDefinition = {
     path: string
-    load?: (params: Record<string, unknown>, query: Record<string, unknown>) => Promise<any>
+    load?: (
+        params: Record<string, unknown>,
+        query: Record<string, unknown>,
+    ) => Promise<any>
 }
 
-function routeValuesMatch(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+const routeValuesMatch = (
+    left: Record<string, unknown>,
+    right: Record<string, unknown>,
+): boolean => {
     const leftEntries = Object.entries(left)
     const rightEntries = Object.entries(right)
-    if (leftEntries.length !== rightEntries.length) return false
+
+    if (leftEntries.length !== rightEntries.length)
+        return false
 
     return leftEntries.every(([key, value]) => String(value) === String(right[key]))
 }
@@ -20,9 +28,7 @@ export const routes: RouteDefinition[] = [
     },
     {
         path: '/workspace/:workspaceId',
-        load: async (params: any) => {
-            await loadWorkspaceRouteData(params.workspaceId as string)
-        },
+        load: async (params: any) => void (await loadWorkspaceRouteData(params.workspaceId as string)),
     },
 ]
 
@@ -63,10 +69,12 @@ class RouterService {
     private subscribeToRouter(): void {
         routerStore.subscribe(({ data }) => {
             const { currentRoute } = data
-            if (currentRoute.isInitializationStep) return
-            if (this.shouldUpdateBrowserHistory(currentRoute)) {
+
+            if (currentRoute.isInitializationStep)
+                return
+
+            if (this.shouldUpdateBrowserHistory(currentRoute))
                 this.updateBrowserHistory(currentRoute)
-            }
         })
     }
 
@@ -75,18 +83,25 @@ class RouterService {
         const segments = url.pathname.split('/').filter(Boolean).join('/')
         const routeMatch = this.findRouteByURL(segments)
 
-        if (!routeMatch) return
+        if (!routeMatch)
+            return
 
-        const { route, params } = routeMatch
-
-        this.navigateTo(route.path, {
+        const {
+            route,
             params,
-            query: Object.fromEntries(url.searchParams),
-            language: this.extractLanguage(url),
-            hash: url.hash.slice(1),
-            isInitializationStep: true,
-            shouldFetchData: !!route.load,
-        })
+        } = routeMatch
+
+        this.navigateTo(
+            route.path,
+            {
+                params,
+                query: Object.fromEntries(url.searchParams),
+                language: this.extractLanguage(url),
+                hash: url.hash.slice(1),
+                isInitializationStep: true,
+                shouldFetchData: !!route.load,
+            },
+        )
     }
 
     private findRouteByURL(urlPath: string): {
@@ -97,7 +112,9 @@ class RouterService {
 
         for (const route of this.routeDefinitions) {
             const routeSegments = route.path.replace(/\/$/, '').split('/').filter(Boolean)
-            if (routeSegments.length !== urlSegments.length) continue
+
+            if (routeSegments.length !== urlSegments.length)
+                continue
 
             const params: Record<string, unknown> = {}
             let matched = true
@@ -108,26 +125,38 @@ class RouterService {
                     params[paramName] = decodeURIComponent(urlSegments[i])
                 } else if (routeSegments[i] !== urlSegments[i]) {
                     matched = false
+
                     break
                 }
             }
 
-            if (matched) return { route, params }
+            if (matched)
+                return {
+                    route,
+                    params,
+                }
         }
 
         return null
     }
 
-    private async runDataLoaderIfNeeded(routeDef: RouteDefinition, params: any, query: any): Promise<void> {
-        if (typeof routeDef.load !== 'function') return
+    private async runDataLoaderIfNeeded(
+        routeDef: RouteDefinition,
+        params: any,
+        query: any,
+    ): Promise<void> {
+        if (typeof routeDef.load !== 'function')
+            return
 
         await routeDef.load(params, query)
         const currentRoute = routerStore.getData('currentRoute')
+
         if (
             currentRoute.path !== routeDef.path
             || !routeValuesMatch(currentRoute.routeParams, params)
             || !routeValuesMatch(currentRoute.routeQuery, query)
-        ) return
+        )
+            return
 
         this.markRouteDataFetched()
     }
@@ -138,35 +167,48 @@ class RouterService {
         const targetQuery = this.composeQuery(route.routeQuery)
         const targetHash = route.hash
 
-        return (
-            currentUrl.pathname !== targetPath
+        return currentUrl.pathname !== targetPath
             || currentUrl.search !== targetQuery
             || currentUrl.hash.slice(1) !== targetHash
-        )
     }
 
     private updateBrowserHistory(route: Router['currentRoute']): void {
         const newUrl = this.composeURL(route)
-        history.pushState({}, '', newUrl)
+        history.pushState(
+            {},
+            '',
+            newUrl,
+        )
     }
 
     private composeURL(route: Router['currentRoute']): string {
         const path = this.composePath(route.path, route.routeParams)
         const query = this.composeQuery(route.routeQuery)
         const hash = route.hash ? `#${route.hash}` : ''
+
         return `${path}${query}${hash}`
     }
 
-    private composePath(routePath: string, params: Record<string, unknown>): string {
+    private composePath(
+        routePath: string,
+        params: Record<string, unknown>,
+    ): string {
         let path = routePath
-        Object.entries(params).forEach(([key, value]) => {
-            path = path.replace(`:${key}`, encodeURIComponent(String(value)))
-        })
+        Object.entries(params).forEach(
+            ([key, value]) => void (path = path.replace(
+                `:${key}`,
+                encodeURIComponent(
+                    String(value),
+                ),
+            )),
+        )
+
         return path
     }
 
     private composeQuery(query: Record<string, unknown>): string {
         const queryString = new URLSearchParams(query as Record<string, string>).toString()
+
         return queryString ? `?${queryString}` : ''
     }
 
@@ -197,9 +239,11 @@ class RouterService {
         const routerState = routerStore.getData()
         const history = routerState.history.slice()
 
-        if (!isInitializationStep && routerState.currentRoute.path) {
+        if (
+            !isInitializationStep
+            && routerState.currentRoute.path
+        )
             history.push(routerState.currentRoute)
-        }
 
         routerStore.setDataValues({
             currentRoute: {
@@ -215,9 +259,17 @@ class RouterService {
         })
 
         const routeDef = this.routeDefinitions.find(route => route.path === path)
-        if (routeDef && routeDef.load && shouldFetchData) {
-            this.runDataLoaderIfNeeded(routeDef, params, query)
-        }
+
+        if (
+            routeDef
+            && routeDef.load
+            && shouldFetchData
+        )
+            this.runDataLoaderIfNeeded(
+                routeDef,
+                params,
+                query,
+            )
     }
 
     // TODO do we even need it? What's the usecase when this can be used outside?
@@ -229,13 +281,18 @@ class RouterService {
     public markRouteDataFetched(): void {
         const currentRoute = routerStore.getData('currentRoute')
         routerStore.setDataValues({
-            currentRoute: { ...currentRoute, shouldFetchData: false },
+            currentRoute: {
+                ...currentRoute,
+                shouldFetchData: false,
+            },
         })
     }
 
     public goBack(): void {
         const routerState = routerStore.getData()
-        if (!routerState.history.length) return
+
+        if (!routerState.history.length)
+            return
 
         const history = routerState.history.slice()
         const previousRoute = history.pop()

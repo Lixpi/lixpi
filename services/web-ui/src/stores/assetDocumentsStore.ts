@@ -10,34 +10,55 @@ export type AssetDocumentSnapshot = {
     doc: object
 }
 
-const store = writable(new Map<string, AssetDocumentSnapshot>())
-const key = (assetId: string, role: AssetDocumentRole): string => `${assetId}#${role}`
+const store = writable(
+    new Map<string, AssetDocumentSnapshot>(),
+)
+const key = (
+    assetId: string,
+    role: AssetDocumentRole,
+): string => `${assetId}#${role}`
 
 export const assetDocumentsStore = {
     ...store,
     set: (snapshot: AssetDocumentSnapshot): void =>
-        store.update((items) => {
+        void store.update(items => {
             const next = new Map(items)
-            next.set(key(snapshot.assetId, snapshot.role), snapshot)
+            next.set(
+                key(snapshot.assetId, snapshot.role),
+                snapshot,
+            )
+
             return next
         }),
     setMany: (snapshots: AssetDocumentSnapshot[]): void => {
-        if (snapshots.length === 0) return
-        store.update((items) => {
+        if (snapshots.length === 0)
+            return
+
+        store.update(items => {
             const next = new Map(items)
+
             for (const snapshot of snapshots) {
-                next.set(key(snapshot.assetId, snapshot.role), snapshot)
+                next.set(
+                    key(snapshot.assetId, snapshot.role),
+                    snapshot,
+                )
             }
+
             return next
         })
     },
     get: (assetId: string, role: AssetDocumentRole): AssetDocumentSnapshot | undefined => {
         let result: AssetDocumentSnapshot | undefined
-        const unsubscribe = store.subscribe((items) => {
-            result = items.get(key(assetId, role))
-        })
+        const unsubscribe = store.subscribe(
+            items => void (result = items.get(
+                key(assetId, role),
+            )),
+        )
         unsubscribe()
+
         return result
     },
-    reset: (): void => store.set(new Map()),
+    reset: (): void => void store.set(
+        new Map(),
+    ),
 }

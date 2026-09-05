@@ -38,6 +38,7 @@ class NavigationSidePanelStore {
     getData<Key extends keyof NavigationSidePanelState>(key: Key): NavigationSidePanelState[Key]
     getData<Key extends keyof NavigationSidePanelState>(key?: Key): NavigationSidePanelState | NavigationSidePanelState[Key] {
         const state = this.store.get()
+
         return key === undefined ? state : state[key]
     }
 

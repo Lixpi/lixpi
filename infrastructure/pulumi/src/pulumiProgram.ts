@@ -2,18 +2,6 @@ import * as process from 'process'
 import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-import {
-    log,
-    info,
-    warn,
-    err,
-} from '@lixpi/debug-tools'
-import {
-    plInfo,
-    plWarn,
-    plError,
-} from './pulumiLogger.ts'
-
 import { createSsmParameters } from './resources/SSM-parameters.ts'
 import { createDynamoDbTables } from './resources/db/DynamoDB-tables.ts'
 import { createNetworkInfrastructure } from './resources/network.ts'
@@ -25,7 +13,6 @@ import { createNexNodeService } from './resources/nex-node/nex-node.ts'
 import { createCertificate } from './resources//certificate.ts'
 import {
     createDnsRecords,
-    createHostedZone,
     createDelegationRecord,
     getOrCreateHostedZone,
 } from './resources/dns-records.ts'
@@ -100,21 +87,23 @@ export const createInfrastructure = async () => {
 
     const dynamoDBtables = await createDynamoDbTables({
         ...(USE_LOCAL_DYNAMODB && {
-            provider: new aws.Provider('local-dynamodb', {
-                region: 'us-east-1' as aws.Region,
-                accessKey: 'test',
-                secretKey: 'test',
-                skipCredentialsValidation: true,
-                skipRequestingAccountId: true,
-                endpoints: [{ dynamodb: DYNAMODB_ENDPOINT! }],
-            }),
+            provider: new aws.Provider(
+                'local-dynamodb',
+                {
+                    region: 'us-east-1' as aws.Region,
+                    accessKey: 'test',
+                    secretKey: 'test',
+                    skipCredentialsValidation: true,
+                    skipRequestingAccountId: true,
+                    endpoints: [{ dynamodb: DYNAMODB_ENDPOINT! }],
+                },
+            ),
         }),
     })
 
     // Local mode: only create DynamoDB tables (in DynamoDB Local) and exit early
-    if (!DEPLOY_TO_AWS) {
+    if (!DEPLOY_TO_AWS)
         return { dynamoDBtables }
-    }
 
     // Everything below is for real AWS deployments only
     const ssmParameters = createSsmParameters()
@@ -123,14 +112,17 @@ export const createInfrastructure = async () => {
     const networkInfrastructure = await createNetworkInfrastructure()
 
     // Configure provider to assume the role with Route53 permissions
-    const dnsProvider = new aws.Provider('dns-provider', {
-        ...(HOSTED_ZONE_DNS_ROLE_ARN && {
-            assumeRole: {
-                roleArn: HOSTED_ZONE_DNS_ROLE_ARN,
-                sessionName: 'PulumiDeployment',
-            },
-        }),
-    })
+    const dnsProvider = new aws.Provider(
+        'dns-provider',
+        {
+            ...(HOSTED_ZONE_DNS_ROLE_ARN && {
+                assumeRole: {
+                    roleArn: HOSTED_ZONE_DNS_ROLE_ARN,
+                    sessionName: 'PulumiDeployment',
+                },
+            }),
+        },
+    )
 
     // Hosted zone resolution strategy (idempotent & reuse-only):
     // 1. If explicit AWS_ROUTE53_HOSTED_ZONE_ID provided -> trust & reuse it (validate exists)
@@ -153,8 +145,10 @@ export const createInfrastructure = async () => {
             serviceName: 'domain',
         })
         hostedZoneId = zoneResult.outputs.hostedZoneId
+
         if (!zoneResult.reused) {
             createdHostedZone = zoneResult.hostedZone
+
             if (AWS_ROUTE53_PARENT_HOSTED_ZONE_ID) {
                 delegationRecord = createDelegationRecord({
                     parentHostedZoneId: AWS_ROUTE53_PARENT_HOSTED_ZONE_ID,
@@ -179,11 +173,14 @@ export const createInfrastructure = async () => {
 
     // Create CloudMap service discovery namespace (for DNS-based service discovery)
     const cloudMapNamespaceName = `cloudmap.${DOMAIN_NAME}.internal` // cloudmap.shelby-dev.lixpi.dev.internal
-    const cloudMapNamespace = new aws.servicediscovery.PrivateDnsNamespace(`${DOMAIN_NAME}-namespace`, {
-        name: cloudMapNamespaceName,
-        vpc: networkInfrastructure.vpc.id,
-        description: `Private service discovery namespace for ${cloudMapNamespaceName}`,
-    })
+    const cloudMapNamespace = new aws.servicediscovery.PrivateDnsNamespace(
+        `${DOMAIN_NAME}-namespace`,
+        {
+            name: cloudMapNamespaceName,
+            vpc: networkInfrastructure.vpc.id,
+            description: `Private service discovery namespace for ${cloudMapNamespaceName}`,
+        },
+    )
 
     // Create ECS Cluster for Fargate tasks
     const ecsCluster = await createEcsCluster({
@@ -222,14 +219,17 @@ export const createInfrastructure = async () => {
     // This allows DNS-01 challenge to succeed since the domain will exist in DNS
     // Note: Using a valid public IP (8.8.8.8) as placeholder instead of localhost
     // Idempotent placeholder record (safe overwrite if already present)
-    const natsPlaceholderRecord = new aws.route53.Record(`nats-placeholder-record`, {
-        name: natsDomain,
-        zoneId: hostedZoneId,
-        type: 'A',
-        allowOverwrite: true,
-        records: ['8.8.8.8'],
-        ttl: 60,
-    })
+    const natsPlaceholderRecord = new aws.route53.Record(
+        `nats-placeholder-record`,
+        {
+            name: natsDomain,
+            zoneId: hostedZoneId,
+            type: 'A',
+            allowOverwrite: true,
+            records: ['8.8.8.8'],
+            ttl: 60,
+        },
+    )
 
     // Create Lambda-based Caddy certificate manager for NATS TLS certificates
     // Note: DNS record created above ensures domain exists for certificate validation
@@ -240,7 +240,11 @@ export const createInfrastructure = async () => {
         hostedZoneId: hostedZoneId,
         storageType: 'secrets-manager',
         storageConfig: {
-            secretsManagerPrefix: formatStageResourceName('nats-certs', ORG_NAME!, STAGE!),
+            secretsManagerPrefix: formatStageResourceName(
+                'nats-certs',
+                ORG_NAME!,
+                STAGE!,
+            ),
         },
         functionName: 'nats-cert-manager',
         timeout: 900, // 15 minutes for certificate generation
@@ -257,7 +261,11 @@ export const createInfrastructure = async () => {
         natsDomain,
         'secrets-manager',
         {
-            secretsManagerPrefix: formatStageResourceName('nats-certs', ORG_NAME!, STAGE!),
+            secretsManagerPrefix: formatStageResourceName(
+                'nats-certs',
+                ORG_NAME!,
+                STAGE!,
+            ),
         },
     )
 
@@ -277,7 +285,11 @@ export const createInfrastructure = async () => {
         vpc: networkInfrastructure.vpc,
         publicSubnets: networkInfrastructure.publicSubnets,
         privateSubnets: networkInfrastructure.privateSubnets,
-        serviceName: formatStageResourceName('nats-cluster', ORG_NAME!, STAGE!).toLowerCase(),
+        serviceName: formatStageResourceName(
+            'nats-cluster',
+            ORG_NAME!,
+            STAGE!,
+        ).toLowerCase(),
         clientPort: 4222, // 4222: client connections
         httpManagementPort: 8222, // 8222: HTTP management/info
         clusterRoutingPort: 6222, // 6222: cluster routing
@@ -405,7 +417,11 @@ export const createInfrastructure = async () => {
         },
         vpc: networkInfrastructure.vpc,
         privateSubnets: networkInfrastructure.privateSubnets,
-        serviceName: formatStageResourceName('nex', ORG_NAME!, STAGE!).toLowerCase(),
+        serviceName: formatStageResourceName(
+            'nex',
+            ORG_NAME!,
+            STAGE!,
+        ).toLowerCase(),
         cpu: 512,
         memory: 1024,
         desiredCount: 1,

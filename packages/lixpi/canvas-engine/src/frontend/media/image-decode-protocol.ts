@@ -5,9 +5,22 @@ export type ImageSourceRequest = {
 }
 
 export type ImageDecodeRequest =
-    | { kind: 'decode'; requestId: string; source: ImageSourceRequest }
-    | { kind: 'cancel'; requestId: string }
+    | {
+        kind: 'decode'
+        requestId: string
+        source: ImageSourceRequest
+    }
+    | {
+        kind: 'cancel'
+        requestId: string
+    }
 
 export type ImageDecodeResponse =
-    | { requestId: string; bitmap: ImageBitmap }
-    | { requestId: string; error: string }
+    | {
+        requestId: string
+        bitmap: ImageBitmap
+    }
+    | {
+        requestId: string
+        error: string
+    }

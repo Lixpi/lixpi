@@ -96,7 +96,10 @@ export type StreamPublisherOptions = {
     proseMirrorBaseVersion?: number
     proseMirrorInitialDoc?: object
     deferProseMirrorEnd?: boolean
-    canvasVisibleArea?: { width: number; height: number }
+    canvasVisibleArea?: {
+        width: number
+        height: number
+    }
     proseMirrorContentMirror?: ProseMirrorContentHandler
 }
 
@@ -125,8 +128,16 @@ type CollapsiblePromptTag = {
 }
 
 const COLLAPSIBLE_PROMPT_TAGS: readonly CollapsiblePromptTag[] = [
-    { open: '<image_prompt>', close: '</image_prompt>', title: 'Image generation prompt' },
-    { open: '<video_prompt>', close: '</video_prompt>', title: 'Video generation prompt' },
+    {
+        open: '<image_prompt>',
+        close: '</image_prompt>',
+        title: 'Image generation prompt',
+    },
+    {
+        open: '<video_prompt>',
+        close: '</video_prompt>',
+        title: 'Video generation prompt',
+    },
 ]
 
 // Detects <image_prompt>…</image_prompt> and <video_prompt>…</video_prompt> XML tags
@@ -135,9 +146,7 @@ const COLLAPSIBLE_PROMPT_TAGS: readonly CollapsiblePromptTag[] = [
 // split across chunk boundaries by holding back up to BUFFER_SIZE characters.
 export class TagAwareStream {
     // Hold back enough characters that no open or close tag can be split across a flush.
-    private static readonly BUFFER_SIZE = Math.max(
-        ...COLLAPSIBLE_PROMPT_TAGS.flatMap(tag => [tag.open.length, tag.close.length]),
-    )
+    private static readonly BUFFER_SIZE = Math.max(...COLLAPSIBLE_PROMPT_TAGS.flatMap(tag => [tag.open.length, tag.close.length]))
 
     private buffer = ''
     private active: CollapsiblePromptTag | null = null
@@ -166,28 +175,48 @@ export class TagAwareStream {
     }
 
     // Finds the earliest-starting open tag in the buffer across all known specs.
-    private findEarliestOpenTag(): { index: number; tag: CollapsiblePromptTag } | null {
-        let best: { index: number; tag: CollapsiblePromptTag } | null = null
+    private findEarliestOpenTag(): {
+        index: number
+        tag: CollapsiblePromptTag
+    } | null {
+        let best: {
+            index: number
+            tag: CollapsiblePromptTag
+        } | null = null
+
         for (const tag of COLLAPSIBLE_PROMPT_TAGS) {
             const index = this.buffer.indexOf(tag.open)
-            if (index !== -1 && (best === null || index < best.index)) best = { index, tag }
+
+            if (
+                index !== -1
+                && (best === null || index < best.index)
+            )
+                best = {
+                    index,
+                    tag,
+                }
         }
+
         return best
     }
 
     // May hold back up to BUFFER_SIZE characters waiting to confirm whether
     // the chunk's tail is the start of a tag.
     push(text: string): void {
-        if (!text) return
+        if (!text)
+            return
+
         this.buffer += text
 
         while (this.buffer.length > 0) {
             if (!this.active) {
                 const match = this.findEarliestOpenTag()
+
                 if (!match) {
                     // No tag found — flush the safe portion (everything except a
                     // possible partial tag at the tail) and keep the rest buffered.
                     const safeLen = this.buffer.length - TagAwareStream.BUFFER_SIZE
+
                     if (safeLen > 0) {
                         const flush = this.buffer.slice(0, safeLen)
                         this.buffer = this.buffer.slice(safeLen)
@@ -197,6 +226,7 @@ export class TagAwareStream {
                             aiProvider: this.provider,
                         })
                     }
+
                     break
                 }
 
@@ -208,6 +238,7 @@ export class TagAwareStream {
                         aiProvider: this.provider,
                     })
                 }
+
                 this.buffer = this.buffer.slice(match.index + match.tag.open.length)
                 this.active = match.tag
                 this.publish({
@@ -217,8 +248,10 @@ export class TagAwareStream {
                 })
             } else {
                 const idx = this.buffer.indexOf(this.active.close)
+
                 if (idx === -1) {
                     const safeLen = this.buffer.length - TagAwareStream.BUFFER_SIZE
+
                     if (safeLen > 0) {
                         const flush = this.buffer.slice(0, safeLen)
                         this.buffer = this.buffer.slice(safeLen)
@@ -228,6 +261,7 @@ export class TagAwareStream {
                             aiProvider: this.provider,
                         })
                     }
+
                     break
                 }
 
@@ -239,6 +273,7 @@ export class TagAwareStream {
                         aiProvider: this.provider,
                     })
                 }
+
                 this.buffer = this.buffer.slice(idx + this.active.close.length)
                 this.active = null
                 this.publish({
@@ -259,6 +294,7 @@ export class TagAwareStream {
             })
             this.buffer = ''
         }
+
         if (this.active) {
             this.publish({
                 status: STREAM_STATUS.COLLAPSIBLE_END,
@@ -298,9 +334,9 @@ export class StreamPublisher {
         if (
             options.enableProseMirrorStream
             && (!options.organizationId || !options.assetLeaseId || !options.assetLeaseHolderId)
-        ) {
+        )
             throw new Error('Conversation Asset streaming requires organizationId, assetLeaseId, and assetLeaseHolderId')
-        }
+
         this.currentGenerationRun = generationRun
         this.pipelineEventLog = new PipelineEventLog(nats)
         this.proseMirrorAssembler = options.enableProseMirrorStream
@@ -324,41 +360,56 @@ export class StreamPublisher {
     }
 
     setGenerationRun(generationRun: MediaGenerationRunMeta | undefined): void {
-        if (!generationRun) return
+        if (!generationRun)
+            return
+
         this.currentGenerationRun = generationRun
         this.tagBuffer.setGenerationRun(generationRun)
     }
 
     beginMediaGenerationRequestCancellation(generationRequestId: string): void {
-        if (generationRequestId) this.cancellingMediaGenerationRequestIds.add(generationRequestId)
+        if (generationRequestId)
+            this.cancellingMediaGenerationRequestIds.add(generationRequestId)
     }
 
     async getProseMirrorSnapshot(): Promise<object | null> {
-        if (!this.proseMirrorAssembler) return null
+        if (!this.proseMirrorAssembler)
+            return null
+
         await this.proseMirrorAssembler.flushPendingWork()
+
         return this.proseMirrorAssembler.snapshotForProjection()
     }
 
-    publishChatContent(content: ChunkPayload['content'], options: PublishChatContentOptions = {}): void {
-        if (this.isCancelledMediaFailure(content)) return
+    publishChatContent(
+        content: ChunkPayload['content'],
+        options: PublishChatContentOptions = {},
+    ): void {
+        if (this.isCancelledMediaFailure(content))
+            return
 
         if (options.mirrorProseMirror !== false) {
             this.proseMirrorAssembler?.handleContent(content)
-            if (this.options.proseMirrorContentMirror && content.status !== STREAM_STATUS.END_STREAM) {
+
+            if (
+                this.options.proseMirrorContentMirror
+                && content.status !== STREAM_STATUS.END_STREAM
+            )
                 this.options.proseMirrorContentMirror(content)
-            }
         }
 
         this.enqueueResponsePublish({
             content,
             conversationAssetId: this.aiChatThreadId,
         })
+
         if (
             content.status === STREAM_STATUS.IMAGE_ERROR
             || content.status === STREAM_STATUS.VIDEO_ERROR
             || content.status === STREAM_STATUS.ERROR
         ) {
             const generationRun = content.generationRun
+
             if (generationRun?.lineageAssignment) {
                 const errorMessage = content.error || content.text
                 this.enqueueCanvasProjection(
@@ -373,9 +424,15 @@ export class StreamPublisher {
                     'failed to settle failed generated media run on canvas',
                 )
             }
+
             const assetId = generationRun?.lineageAssignment?.assetId
             const organizationId = this.options.organizationId
-            if (generationRun && assetId && organizationId) {
+
+            if (
+                generationRun
+                && assetId
+                && organizationId
+            ) {
                 const payload = {
                     organizationId,
                     assetId,
@@ -402,9 +459,12 @@ export class StreamPublisher {
             content.status !== STREAM_STATUS.IMAGE_ERROR
             && content.status !== STREAM_STATUS.VIDEO_ERROR
             && content.status !== STREAM_STATUS.ERROR
-        ) return false
+        )
+            return false
+
         const generationRequestId = content.generationRun?.generationRequestId
             ?? this.currentGenerationRun?.generationRequestId
+
         return Boolean(
             generationRequestId
                 && (this.cancellingMediaGenerationRequestIds.has(generationRequestId)
@@ -414,8 +474,10 @@ export class StreamPublisher {
 
     private enqueueResponsePublish(payload: ChunkPayload): void {
         const queueKey = this.getResponsePublishQueueKey(payload.content)
+
         if (!queueKey) {
             this.responsePublishChain = this.publishResponseAfterCurrent(this.responsePublishChain, payload)
+
             return
         }
 
@@ -427,28 +489,41 @@ export class StreamPublisher {
 
     private getResponsePublishQueueKey(content: ChunkPayload['content']): string | null {
         const mediaRunId = content.generationRun?.mediaRunId
-        if (!mediaRunId || !MEDIA_RESPONSE_PUBLISH_STATUSES.has(content.status)) return null
+
+        if (
+            !mediaRunId
+            || !MEDIA_RESPONSE_PUBLISH_STATUSES.has(content.status)
+        )
+            return null
+
         return `media:${mediaRunId}`
     }
 
-    private async forgetSettledMediaResponsePublishChain(queueKey: string, promise: Promise<void>): Promise<void> {
+    private async forgetSettledMediaResponsePublishChain(
+        queueKey: string,
+        promise: Promise<void>,
+    ): Promise<void> {
         try {
             await promise
         } catch {
             // publishResponseNow already logs and falls back to live publish.
         }
-        if (this.mediaResponsePublishChains.get(queueKey) === promise) {
+
+        if (this.mediaResponsePublishChains.get(queueKey) === promise)
             this.mediaResponsePublishChains.delete(queueKey)
-        }
     }
 
-    private async publishResponseAfterCurrent(previous: Promise<void>, payload: ChunkPayload): Promise<void> {
+    private async publishResponseAfterCurrent(
+        previous: Promise<void>,
+        payload: ChunkPayload,
+    ): Promise<void> {
         try {
             await previous
         } catch {
             // A failed previous JetStream write falls back to live publish and should
             // not prevent later pipeline events from being delivered in order.
         }
+
         await this.publishResponseNow(payload)
     }
 
@@ -458,6 +533,7 @@ export class StreamPublisher {
             ...payload,
             pipelineEventId,
         }
+
         try {
             const event = await this.pipelineEventLog.publishEvent({
                 workspaceId: this.workspaceId,
@@ -466,10 +542,7 @@ export class StreamPublisher {
                 payload: pipelinePayload as unknown as Record<string, any>,
             })
             this.nats.publish(
-                getAiInteractionCanonicalResponseSubject(
-                    this.options.organizationId ?? this.workspaceId,
-                    this.aiChatThreadId,
-                ),
+                getAiInteractionCanonicalResponseSubject(this.options.organizationId ?? this.workspaceId, this.aiChatThreadId),
                 {
                     ...pipelinePayload,
                     pipelineStreamSeq: event.streamSequence,
@@ -478,10 +551,7 @@ export class StreamPublisher {
         } catch (error) {
             err('[StreamPublisher] Failed to persist pipeline event before live publish:', error)
             this.nats.publish(
-                getAiInteractionCanonicalResponseSubject(
-                    this.options.organizationId ?? this.workspaceId,
-                    this.aiChatThreadId,
-                ),
+                getAiInteractionCanonicalResponseSubject(this.options.organizationId ?? this.workspaceId, this.aiChatThreadId),
                 pipelinePayload,
             )
         }
@@ -493,14 +563,19 @@ export class StreamPublisher {
                 this.responsePublishChain,
                 ...this.mediaResponsePublishChains.values(),
             ]
-            await Promise.all(chains.map(chain => this.ignorePublishChainFailure(chain)))
+            await Promise.all(
+                chains.map(chain => this.ignorePublishChainFailure(chain)),
+            )
             const nextChains = [
                 this.responsePublishChain,
                 ...this.mediaResponsePublishChains.values(),
             ]
-            if (nextChains.length === chains.length && nextChains.every((chain, index) => chain === chains[index])) {
+
+            if (
+                nextChains.length === chains.length
+                && nextChains.every((chain, index) => chain === chains[index])
+            )
                 return
-            }
         }
     }
 
@@ -512,17 +587,29 @@ export class StreamPublisher {
         }
     }
 
-    private enqueueCanvasProjection(write: () => Promise<void>, errorContext: string): void {
+    private enqueueCanvasProjection(
+        write: () => Promise<void>,
+        errorContext: string,
+    ): void {
         const previousWrite = this.canvasProjectionChain
-        this.canvasProjectionChain = this.runCanvasProjectionAfter(previousWrite, write, errorContext)
+        this.canvasProjectionChain = this.runCanvasProjectionAfter(
+            previousWrite,
+            write,
+            errorContext,
+        )
     }
 
-    private async runCanvasProjectionAfter(previousWrite: Promise<void>, write: () => Promise<void>, errorContext: string): Promise<void> {
+    private async runCanvasProjectionAfter(
+        previousWrite: Promise<void>,
+        write: () => Promise<void>,
+        errorContext: string,
+    ): Promise<void> {
         try {
             await previousWrite
         } catch {
             // The previous write logged its own failure.
         }
+
         try {
             await write()
         } catch (error) {
@@ -539,7 +626,8 @@ export class StreamPublisher {
     }
 
     start(): void {
-        if (this.hasStarted) return
+        if (this.hasStarted)
+            return
 
         this.hasStarted = true
         this.hasEnded = false
@@ -559,16 +647,20 @@ export class StreamPublisher {
     }
 
     finishProseMirrorStream(): Promise<void> {
-        if (this.proseMirrorFinishPromise) return this.proseMirrorFinishPromise
+        if (this.proseMirrorFinishPromise)
+            return this.proseMirrorFinishPromise
 
         this.proseMirrorFinishPromise = this.finishPipelineStream()
+
         return this.proseMirrorFinishPromise
     }
 
     finishProseMirrorConversation(): Promise<void> {
-        if (this.proseMirrorConversationFinishPromise) return this.proseMirrorConversationFinishPromise
+        if (this.proseMirrorConversationFinishPromise)
+            return this.proseMirrorConversationFinishPromise
 
         this.proseMirrorConversationFinishPromise = this.proseMirrorAssembler?.end() ?? Promise.resolve()
+
         return this.proseMirrorConversationFinishPromise
     }
 
@@ -586,12 +678,12 @@ export class StreamPublisher {
     private async finishPipelineStream(): Promise<void> {
         await this.drainPendingWrites()
         await this.finishProseMirrorConversation()
+
         // Matrix child publishers share the request publisher's pipeline subject.
         // Only the publisher that owns the persisted conversation lifecycle may
         // purge after the complete request, including every sibling, has settled.
-        if (this.options.enableProseMirrorStream) {
+        if (this.options.enableProseMirrorStream)
             await this.purgePipelineEventLog()
-        }
     }
 
     private async purgePipelineEventLog(): Promise<void> {
@@ -604,12 +696,14 @@ export class StreamPublisher {
     }
 
     private schedulePipelineEventPurgeRetry(): void {
-        const timer = setTimeout(() => {
-            void this.purgePipelineEventLog()
-        }, PIPELINE_EVENT_PURGE_RETRY_MS)
-        if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
+        const timer = setTimeout(() => void this.purgePipelineEventLog(), PIPELINE_EVENT_PURGE_RETRY_MS)
+
+        if (
+            typeof timer === 'object'
+            && 'unref' in timer
+            && typeof timer.unref === 'function'
+        )
             timer.unref()
-        }
     }
 
     chunk(text: string): void {
@@ -617,7 +711,11 @@ export class StreamPublisher {
     }
 
     end(options: EndStreamOptions = {}): void {
-        if (!this.hasStarted || this.hasEnded) return
+        if (
+            !this.hasStarted
+            || this.hasEnded
+        )
+            return
 
         this.hasEnded = true
         this.tagBuffer.flush()
@@ -629,14 +727,17 @@ export class StreamPublisher {
             ...(this.currentGenerationRun ? { generationRun: this.currentGenerationRun } : {}),
         }
         this.publishChatContent(content, { mirrorProseMirror: !deferPipelineFinish })
-        if (deferPipelineFinish) {
+
+        if (deferPipelineFinish)
             void this.proseMirrorAssembler?.finishTextPhase()
-        } else {
+        else
             void this.finishProseMirrorStream()
-        }
     }
 
-    mediaBranchResolved(resolution: MediaBranchVlmResolution, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+    mediaBranchResolved(
+        resolution: MediaBranchVlmResolution,
+        generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun,
+    ): void {
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_BRANCH_RESOLVED,
             aiProvider: this.provider,
@@ -648,17 +749,16 @@ export class StreamPublisher {
     // Broadcasts the API-resolved geometry once an async canvas projection has
     // persisted it, so every connected client applies authoritative positions
     // instead of computing its own layout.
-    canvasGeometryResolved(canvasGeometry: CanvasGeometryUpdate | null, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+    canvasGeometryResolved(
+        canvasGeometry: CanvasGeometryUpdate | null,
+        generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun,
+    ): void {
         if (
             !canvasGeometry
-            || (
-                canvasGeometry.nodes.length === 0
-                && (canvasGeometry.nodeSnapshots?.length ?? 0) === 0
-                && (canvasGeometry.edgeSnapshots?.length ?? 0) === 0
-                && (canvasGeometry.removedNodeIds?.length ?? 0) === 0
-                && (canvasGeometry.removedEdgeIds?.length ?? 0) === 0
-            )
-        ) return
+            || (canvasGeometry.nodes.length === 0 && (canvasGeometry.nodeSnapshots?.length ?? 0) === 0 && (canvasGeometry.edgeSnapshots?.length ?? 0) === 0 && (canvasGeometry.removedNodeIds?.length ?? 0) === 0 && (canvasGeometry.removedEdgeIds?.length ?? 0) === 0)
+        )
+            return
+
         this.publishChatContent({
             status: STREAM_STATUS.CANVAS_GEOMETRY_RESOLVED,
             aiProvider: this.provider,
@@ -667,12 +767,16 @@ export class StreamPublisher {
         })
     }
 
-    mediaLineagePlanned(lineagePlan: MediaBranchLineagePlan, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+    mediaLineagePlanned(
+        lineagePlan: MediaBranchLineagePlan,
+        generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun,
+    ): void {
         this.setGenerationRun(generationRun)
         this.mediaLineagePlans.set(lineagePlan.generationRequestId, lineagePlan)
-        if (lineagePlan.generationRequestId) {
+
+        if (lineagePlan.generationRequestId)
             this.mediaGenerationRequestIds.add(lineagePlan.generationRequestId)
-        }
+
         this.enqueueCanvasProjection(
             async () => {
                 const proseMirrorThreadContent = await this.getProseMirrorSnapshot()
@@ -703,7 +807,10 @@ export class StreamPublisher {
 
     // The reasoning model finished without emitting a media tool call after a
     // lineage plan was already published; the planned runs will never start.
-    mediaGenerationSkipped(generationRequestId: string, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+    mediaGenerationSkipped(
+        generationRequestId: string,
+        generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun,
+    ): void {
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.publishChatContent({
             status: STREAM_STATUS.MEDIA_GENERATION_SKIPPED,
@@ -717,16 +824,25 @@ export class StreamPublisher {
         generationRequestId: string,
         options: MediaGenerationRequestCompleteOptions = {},
     ): void {
-        if (!generationRequestId) return
+        if (!generationRequestId)
+            return
 
         const alreadyCompleted = this.completedMediaGenerationRequestIds.has(generationRequestId)
         const requiresCancellationCleanup = options.removeProjectedPendingNodes === true
             && !this.cancelledMediaGenerationRequestIds.has(generationRequestId)
-        if (alreadyCompleted && !requiresCancellationCleanup) return
+
+        if (
+            alreadyCompleted
+            && !requiresCancellationCleanup
+        )
+            return
 
         this.mediaGenerationRequestIds.add(generationRequestId)
         this.completedMediaGenerationRequestIds.add(generationRequestId)
-        if (requiresCancellationCleanup) this.cancelledMediaGenerationRequestIds.add(generationRequestId)
+
+        if (requiresCancellationCleanup)
+            this.cancelledMediaGenerationRequestIds.add(generationRequestId)
+
         const shouldPublishCompletion = !alreadyCompleted
         this.enqueueCanvasProjection(
             async () => {
@@ -744,14 +860,16 @@ export class StreamPublisher {
                     this.canvasGeometryResolved(canvasGeometry)
                 } finally {
                     if (shouldPublishCompletion) {
-                        info(`[StreamPublisher] media generation request complete ${
-                            JSON.stringify({
-                                workspaceId: this.workspaceId,
-                                aiChatThreadId: this.aiChatThreadId,
-                                generationRequestId,
-                                generationRun: this.currentGenerationRun,
-                            })
-                        }`)
+                        info(
+                            `[StreamPublisher] media generation request complete ${
+                                JSON.stringify({
+                                    workspaceId: this.workspaceId,
+                                    aiChatThreadId: this.aiChatThreadId,
+                                    generationRequestId,
+                                    generationRun: this.currentGenerationRun,
+                                })
+                            }`,
+                        )
                         this.publishChatContent({
                             status: STREAM_STATUS.MEDIA_GENERATION_REQUEST_COMPLETE,
                             aiProvider: this.provider,
@@ -763,10 +881,17 @@ export class StreamPublisher {
             },
             'failed to settle media generation request on canvas',
         )
-        if (alreadyCompleted) return
+
+        if (alreadyCompleted)
+            return
+
         const plan = this.mediaLineagePlans.get(generationRequestId)
         const organizationId = this.options.organizationId
-        if (plan && organizationId) {
+
+        if (
+            plan
+            && organizationId
+        ) {
             const settleUnfinishedAssets = async (): Promise<void> => {
                 try {
                     await settleUnfinishedGeneratedAssets({
@@ -790,7 +915,10 @@ export class StreamPublisher {
         }
     }
 
-    contextRelevanceResolved(workspaceContextResolution: WorkspaceContextResolution, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+    contextRelevanceResolved(
+        workspaceContextResolution: WorkspaceContextResolution,
+        generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun,
+    ): void {
         this.publishChatContent({
             status: STREAM_STATUS.CONTEXT_RELEVANCE_RESOLVED,
             aiProvider: this.provider,
@@ -808,17 +936,26 @@ export class StreamPublisher {
         })
     }
 
-    imageGenerationTrace(trace: ImageGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun): void {
+    imageGenerationTrace(
+        trace: ImageGenerationTrace,
+        generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun,
+    ): void {
         const content: ChunkPayload['content'] = {
             status: STREAM_STATUS.IMAGE_GENERATION_TRACE,
             aiProvider: this.provider,
-            imageGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            imageGenerationTrace: generationRun ? {
+                ...trace,
+                generationRun,
+            } : trace,
             ...(generationRun ? { generationRun } : {}),
         }
         this.publishChatContent(content)
     }
 
-    imageGenerationError(message: string, generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun): void {
+    imageGenerationError(
+        message: string,
+        generationRun: MediaGenerationRunMeta | undefined = this.currentGenerationRun,
+    ): void {
         this.publishChatContent({
             status: STREAM_STATUS.IMAGE_ERROR,
             aiProvider: this.provider,
@@ -827,11 +964,17 @@ export class StreamPublisher {
         })
     }
 
-    videoGenerationTrace(trace: VideoGenerationTrace, generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun): void {
+    videoGenerationTrace(
+        trace: VideoGenerationTrace,
+        generationRun: MediaGenerationRunMeta | undefined = trace.generationRun ?? this.currentGenerationRun,
+    ): void {
         const content: ChunkPayload['content'] = {
             status: STREAM_STATUS.VIDEO_GENERATION_TRACE,
             aiProvider: this.provider,
-            videoGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            videoGenerationTrace: generationRun ? {
+                ...trace,
+                generationRun,
+            } : trace,
             ...(generationRun ? { generationRun } : {}),
         }
         this.publishChatContent(content)
@@ -844,7 +987,10 @@ export class StreamPublisher {
         this.publishChatContent({
             status: STREAM_STATUS.CAPABILITY_GENERATION_TRACE,
             aiProvider: this.provider,
-            capabilityGenerationTrace: generationRun ? { ...trace, generationRun } : trace,
+            capabilityGenerationTrace: generationRun ? {
+                ...trace,
+                generationRun,
+            } : trace,
             ...(generationRun ? { generationRun } : {}),
         })
     }
@@ -858,14 +1004,23 @@ export class StreamPublisher {
         })
     }
 
-    error(message: string, code?: string, type?: string): void {
+    error(
+        message: string,
+        code?: string,
+        type?: string,
+    ): void {
         const instanceKey = `${this.workspaceId}:${this.aiChatThreadId}`
         const payload: Record<string, unknown> = {
             error: message,
             instanceKey,
         }
-        if (code) payload.errorCode = code
-        if (type) payload.errorType = type
+
+        if (code)
+            payload.errorCode = code
+
+        if (type)
+            payload.errorType = type
+
         this.nats.publish(`ai.interaction.chat.error.${instanceKey}`, payload)
         const content: ChunkPayload['content'] = {
             text: message,

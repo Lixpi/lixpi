@@ -17,9 +17,12 @@ export const createIntroPage = (): IntroPageInstance => {
                 <div className="intro-message">
                     <h1>I am <span className="accent">AI</span><span className="masked">...</span></h1>
                 </div>
-                <div className="intro-icon" innerHTML=${aiRobotFaceIcon}></div>
+                <div
+                    className="intro-icon"
+                    innerHTML=${aiRobotFaceIcon}
+                ></div>
+                </div>
             </div>
-        </div>
     ` as HTMLElement
 
     return {

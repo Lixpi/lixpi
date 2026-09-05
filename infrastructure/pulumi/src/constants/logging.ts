@@ -11,23 +11,22 @@ const VALID_RETENTION_DAYS = [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 40
 type ValidRetentionDays = typeof VALID_RETENTION_DAYS[number]
 
 const parseRetentionDays = (value: string | undefined): ValidRetentionDays => {
-    if (!value) {
+    if (!value)
         throw new Error('CLOUDWATCH_LOG_RETENTION_DAYS environment variable is required')
-    }
+
     const retentionDays = parseInt(value, 10)
 
-    if (VALID_RETENTION_DAYS.includes(retentionDays as ValidRetentionDays)) {
+    if (VALID_RETENTION_DAYS.includes(retentionDays as ValidRetentionDays))
         return retentionDays as ValidRetentionDays
-    }
+
     throw new Error(`Invalid CLOUDWATCH_LOG_RETENTION_DAYS value "${value}". Valid values: ${VALID_RETENTION_DAYS.join(', ')}`)
 }
 
 // How long to retain CloudWatch logs before automatic deletion (in days)
 export const LOG_RETENTION_DAYS: ValidRetentionDays = parseRetentionDays(CLOUDWATCH_LOG_RETENTION_DAYS)
 
-if (!CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED) {
+if (!CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED)
     throw new Error('CLOUDWATCH_CONTAINER_INSIGHTS_ENABLED environment variable is required')
-}
 
 // Whether to enable ECS Container Insights for cluster-level metrics and logs
 // When enabled: Provides CPU/memory graphs, task-level debugging, anomaly detection

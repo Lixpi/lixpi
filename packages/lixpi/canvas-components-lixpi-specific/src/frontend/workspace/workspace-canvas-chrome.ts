@@ -19,8 +19,17 @@ export type WorkspaceCanvasChromeSettings = {
         defaultDimensions: { width: number }
         dimensions: { maxPaneMargin: number }
         layout: { contentInset: number }
-        typography: { contentFontSize: number; tagPillFontSize: number; tagPillFontWeight: number }
-        styles: { backdropFill: string; backdropFillOpaque: string; toggleColor: string; toggleHoverColor: string }
+        typography: {
+            contentFontSize: number
+            tagPillFontSize: number
+            tagPillFontWeight: number
+        }
+        styles: {
+            backdropFill: string
+            backdropFillOpaque: string
+            toggleColor: string
+            toggleHoverColor: string
+        }
     }
     modelMenuHoverBackground: string
     palette: LixpiCanvasPalette
@@ -41,7 +50,10 @@ export class WorkspaceCanvasChrome {
     readonly viewportMount: HTMLDivElement
     readonly mediaModeSwitchMount: HTMLDivElement
     readonly modelMenuControlMount: HTMLDivElement
-    readonly glassTargets: readonly { id: string; element: HTMLElement }[]
+    readonly glassTargets: readonly {
+        id: string
+        element: HTMLElement
+    }[]
     private readonly html: ReturnType<typeof createDocumentHtml>
     private readonly imageWrapper: HTMLDivElement
     private readonly imageButton: HTMLButtonElement
@@ -53,36 +65,67 @@ export class WorkspaceCanvasChrome {
     private releaseOutsideClick: (() => void) | null = null
     private disposed = false
 
-    constructor(settings: WorkspaceCanvasChromeSettings, private readonly ports: WorkspaceCanvasChromePorts) {
-        const html = this.html = createDocumentHtml(ports.document)
+    constructor(
+        settings: WorkspaceCanvasChromeSettings,
+        private readonly ports: WorkspaceCanvasChromePorts,
+    ) {
+        const html = (this.html = createDocumentHtml(ports.document))
         this.viewportMount = html`<div className="workspace-viewport-mount"></div>` as HTMLDivElement
         this.pane = html`<div className="workspace-pane">${this.viewportMount}</div>` as HTMLDivElement
         this.mediaModeSwitchMount = html`<div className="workspace-canvas-media-mode-panel"></div>` as HTMLDivElement
         this.modelMenuControlMount = html`<div className="workspace-canvas-model-menu-panel"></div>` as HTMLDivElement
         this.zoomIndicator = html`<span className="workspace-zoom-indicator"></span>` as HTMLSpanElement
-        this.fileInput = html`<input type="file" accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.ppt,.pptx,.odt,.rtf,.txt,.md" style="display: none" onchange=${this.onFileChange} />` as HTMLInputElement
-        this.imageButton = html`<button className="workspace-floating-toolbar-button" aria-label="Add Image" data-help-tooltip="aria-label" onclick=${this.toggleUploadMenu} innerHTML=${imageIcon}></button>` as HTMLButtonElement
+        this.fileInput = html`
+            <input
+                type="file"
+                accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.ppt,.pptx,.odt,.rtf,.txt,.md"
+                style="display: none"
+                onchange=${this.onFileChange}
+            />
+        ` as HTMLInputElement
+        this.imageButton = html`
+            <button
+                className="workspace-floating-toolbar-button"
+                aria-label="Add Image"
+                data-help-tooltip="aria-label"
+                onclick=${this.toggleUploadMenu}
+                innerHTML=${imageIcon}
+            ></button>
+        ` as HTMLButtonElement
         this.imageWrapper = html`<div className="workspace-floating-toolbar-image-wrapper">${this.imageButton}</div>` as HTMLDivElement
         const actions = html`
             <div className="workspace-canvas-action-panel workspace-canvas-action-panel-left">
-                <button className="workspace-floating-toolbar-button" aria-label="New Document" data-help-tooltip="aria-label" onclick=${() => {
-            void this.invoke(ports.createDocument)
-        }} innerHTML=${createNewFileIcon}></button>
+                <button
+                    className="workspace-floating-toolbar-button"
+                    aria-label="New Document"
+                    data-help-tooltip="aria-label"
+                    onclick=${() => void this.invoke(ports.createDocument)}
+                    innerHTML=${createNewFileIcon}
+                ></button>
                 ${this.imageWrapper}
             </div>
         ` as HTMLDivElement
         const library = html`
             <div className="workspace-canvas-action-panel workspace-canvas-media-library-panel workspace-canvas-action-panel-single">
-                <button className="workspace-floating-toolbar-button" aria-label="Media Library" data-help-tooltip="aria-label" onclick=${() => {
-            if (!this.disposed) ports.toggleMediaLibrary()
-        }} innerHTML=${mediaFoloderIcon}></button>
+                <button
+                    className="workspace-floating-toolbar-button"
+                    aria-label="Media Library"
+                    data-help-tooltip="aria-label"
+                    onclick=${() => {
+                        if (!this.disposed)
+                            ports.toggleMediaLibrary()
+                    }}
+                    innerHTML=${mediaFoloderIcon}
+                ></button>
             </div>
         ` as HTMLDivElement
         const controls = html`
             <div className="workspace-canvas-action-panel workspace-canvas-right-control-rail">
-                <div className="workspace-canvas-model-menu-hover-background" aria-hidden="true"></div>
-                ${this.mediaModeSwitchMount}
-                ${this.modelMenuControlMount}
+                <div
+                    className="workspace-canvas-model-menu-hover-background"
+                    aria-hidden="true"
+                ></div>
+                ${this.mediaModeSwitchMount} ${this.modelMenuControlMount}
             </div>
         ` as HTMLDivElement
         controls.style.setProperty('--ai-prompt-model-menu-trigger-active-background', settings.modelMenuHoverBackground)
@@ -93,24 +136,40 @@ export class WorkspaceCanvasChrome {
             </div>
         ` as HTMLElement
         this.glassTargets = [
-            { id: 'workspace-action-panel-left', element: actions },
-            { id: 'workspace-media-library-panel', element: library },
-            { id: 'workspace-right-control-rail', element: controls },
+            {
+                id: 'workspace-action-panel-left',
+                element: actions,
+            },
+            {
+                id: 'workspace-media-library-panel',
+                element: library,
+            },
+            {
+                id: 'workspace-right-control-rail',
+                element: controls,
+            },
         ]
         this.applySettings(settings)
         this.setZoom(1)
     }
 
     setZoom(zoom: number): void {
-        if (!this.disposed && Number.isFinite(zoom)) this.zoomIndicator.textContent = `${Math.round(zoom * 100)}%`
+        if (
+            !this.disposed
+            && Number.isFinite(zoom)
+        )
+            this.zoomIndicator.textContent = `${Math.round(zoom * 100)}%`
     }
 
     setRightPanelOpen(open: boolean): void {
-        if (!this.disposed) this.element.classList.toggle('workspace-canvas-right-side-panel-open', open)
+        if (!this.disposed)
+            this.element.classList.toggle('workspace-canvas-right-side-panel-open', open)
     }
 
     closeUploadMenu(): void {
-        if (this.disposed) return
+        if (this.disposed)
+            return
+
         this.menuOpen = false
         this.menuMode = 'menu'
         this.imageUrl = ''
@@ -118,15 +177,22 @@ export class WorkspaceCanvasChrome {
     }
 
     destroy(): void {
-        if (this.disposed) return
+        if (this.disposed)
+            return
+
         this.disposed = true
         this.releaseOutsideClick?.()
         this.releaseOutsideClick = null
         this.element.remove()
     }
 
-    private applySettings({ panel, palette }: WorkspaceCanvasChromeSettings): void {
-        const hsl = rgbToHsl(parseHexColor(palette.nightBlue))
+    private applySettings({
+        panel,
+        palette,
+    }: WorkspaceCanvasChromeSettings): void {
+        const hsl = rgbToHsl(
+            parseHexColor(palette.nightBlue),
+        )
         const properties = {
             '--workspace-right-side-panel-width': `min(${panel.defaultDimensions.width}px, calc(100vw - ${panel.dimensions.maxPaneMargin}px))`,
             '--side-panel-backdrop-width': 'var(--workspace-right-side-panel-width)',
@@ -141,31 +207,47 @@ export class WorkspaceCanvasChrome {
             '--workspace-chrome-steel-blue': palette.steelBlue,
             '--workspace-chrome-night-blue': palette.nightBlue,
             '--workspace-chrome-off-white': palette.offWhite,
-            '--workspace-chrome-insert-hover': rgbToHex(hslToRgb({ ...hsl, l: Math.max(0, hsl.l - 0.05) })),
+            '--workspace-chrome-insert-hover': rgbToHex(
+                hslToRgb({
+                    ...hsl,
+                    l: Math.max(0, hsl.l - 0.05),
+                }),
+            ),
         }
+
         for (const [name, value] of Object.entries(properties)) this.element.style.setProperty(name, value)
     }
 
     private async invoke(action: () => Promise<void>): Promise<void> {
-        if (this.disposed) return
+        if (this.disposed)
+            return
+
         try {
             await action()
         } catch (error) {
-            if (!this.disposed) this.ports.reportError(error)
+            if (!this.disposed)
+                this.ports.reportError(error)
         }
     }
 
     private readonly onFileChange = (): void => {
-        if (this.disposed) return
+        if (this.disposed)
+            return
+
         const file = this.fileInput.files?.[0]
-        if (!file) return
+
+        if (!file)
+            return
+
         this.closeUploadMenu()
         this.fileInput.value = ''
         void this.invoke(() => this.ports.uploadFile(file))
     }
 
     private readonly toggleUploadMenu = (): void => {
-        if (this.disposed) return
+        if (this.disposed)
+            return
+
         this.menuOpen = !this.menuOpen
         this.menuMode = 'menu'
         this.imageUrl = ''
@@ -183,49 +265,91 @@ export class WorkspaceCanvasChrome {
         this.imageWrapper.querySelector('.workspace-image-submenu')?.remove()
         this.releaseOutsideClick?.()
         this.releaseOutsideClick = null
-        if (!this.menuOpen) return
+
+        if (!this.menuOpen)
+            return
+
         let menu: HTMLElement
+
         if (this.menuMode === 'menu') {
             menu = html`
                 <div className="workspace-image-submenu">
-                    <button className="workspace-image-submenu-option" onclick=${() => {
-                if (!this.disposed) this.fileInput.click()
-            }}>Upload from Device</button>
-                    <button className="workspace-image-submenu-option" onclick=${() => {
-                if (this.disposed) return
-                this.menuMode = 'url'
-                this.renderUploadMenu()
-            }}>Paste Image URL</button>
+                    <button
+                        className="workspace-image-submenu-option"
+                        onclick=${() => {
+                            if (!this.disposed)
+                                this.fileInput.click()
+                        }}
+                    >
+                        Upload from Device
+                    </button>
+                    <button
+                        className="workspace-image-submenu-option"
+                        onclick=${() => {
+                            if (this.disposed)
+                                return
+
+                            this.menuMode = 'url'
+                            this.renderUploadMenu()
+                        }}
+                    >
+                        Paste Image URL
+                    </button>
                 </div>
             ` as HTMLElement
         } else {
-            const input = html`<input type="url" className="workspace-image-submenu-url-input" placeholder="https://example.com/image.jpg" onkeydown=${(event: KeyboardEvent) => {
-                if (event.key === 'Enter') this.submitUrl()
-            }} oninput=${(event: Event) => {
-                this.imageUrl = (event.target as HTMLInputElement).value
-            }} />` as HTMLInputElement
+            const input = html`
+                <input
+                    type="url"
+                    className="workspace-image-submenu-url-input"
+                    placeholder="https://example.com/image.jpg"
+                    onkeydown=${(event: KeyboardEvent) => {
+                        if (event.key === 'Enter')
+                            this.submitUrl()
+                    }}
+                    oninput=${(event: Event) => void (this.imageUrl = (event.target as HTMLInputElement).value)}
+                />
+            ` as HTMLInputElement
             input.value = this.imageUrl
             menu = html`
                 <div className="workspace-image-submenu">
                     <div className="workspace-image-submenu-url-form">
                         ${input}
                         <div className="workspace-image-submenu-url-actions">
-                            <button className="workspace-image-submenu-url-back" onclick=${() => {
-                if (this.disposed) return
-                this.menuMode = 'menu'
-                this.renderUploadMenu()
-            }}>Back</button>
-                            <button className="workspace-image-submenu-url-insert" onclick=${this.submitUrl}>Add</button>
+                            <button
+                                className="workspace-image-submenu-url-back"
+                                onclick=${() => {
+                                    if (this.disposed)
+                                        return
+
+                                    this.menuMode = 'menu'
+                                    this.renderUploadMenu()
+                                }}
+                            >
+                                Back
+                            </button>
+                            <button
+                                className="workspace-image-submenu-url-insert"
+                                onclick=${this.submitUrl}
+                            >Add</button>
+                            </div>
                         </div>
                     </div>
-                </div>
             ` as HTMLElement
         }
+
         this.imageWrapper.append(menu)
         const outsideClick = (event: MouseEvent) => {
             const target = event.target
             const NodeType = this.ports.document.defaultView?.Node
-            if (NodeType && target instanceof NodeType && this.ports.document.contains(target) && !this.imageWrapper.contains(target)) this.closeUploadMenu()
+
+            if (
+                NodeType
+                && target instanceof NodeType
+                && this.ports.document.contains(target)
+                && !this.imageWrapper.contains(target)
+            )
+                this.closeUploadMenu()
         }
         const timer = setTimeout(() => this.ports.document.addEventListener('click', outsideClick), 0)
         this.releaseOutsideClick = () => {

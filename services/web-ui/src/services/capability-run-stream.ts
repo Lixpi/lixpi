@@ -10,9 +10,7 @@ export type CapabilityRunEventSegment = {
     usesServerProseMirror: true
 }
 
-export function toCapabilityRunEventSegment(
-    payload: CapabilityRunEventStreamPayload,
-): CapabilityRunEventSegment {
+export const toCapabilityRunEventSegment = (payload: CapabilityRunEventStreamPayload): CapabilityRunEventSegment => {
     return {
         type: 'capability_run_event',
         aiProvider: 'Capability',

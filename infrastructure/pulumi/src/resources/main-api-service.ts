@@ -44,13 +44,10 @@ export type MainApiServiceArgs = {
     // App configuration
     environment: {
         NODE_OPTIONS: string
-
         AWS_REGION: string
-
         STAGE: string
         ORG_NAME: string
         ENVIRONMENT: string
-
         NATS_SERVERS: string
         NATS_AUTH_ACCOUNT: string
         NATS_SYS_USER_PASSWORD: string
@@ -60,14 +57,11 @@ export type MainApiServiceArgs = {
         NATS_AUTH_XKEY_ISSUER_SEED: string
         NATS_AUTH_XKEY_ISSUER_PUBLIC: string
         NATS_NEX_NODE_NKEY_PUBLIC: string
-
         ORIGIN_HOST_URL: string
         API_HOST_URL: string
-
         AUTH0_DOMAIN: string
         AUTH0_API_IDENTIFIER: string
         SAVE_LLM_RESPONSES_TO_DEBUG_DIR: string
-
         OPENAI_API_KEY: string
         ANTHROPIC_API_KEY: string
         ANTHROPIC_USE_AWS_BEDROCK_INFERENCE: string
@@ -102,10 +96,18 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     } = args
 
     // Format names consistently
-    const formattedServiceName = formatStageResourceName(serviceName, ORG_NAME, STAGE)
+    const formattedServiceName = formatStageResourceName(
+        serviceName,
+        ORG_NAME,
+        STAGE,
+    )
 
     // Build and push main-api Docker image to ECR
-    const { repository, image, imageRef } = buildDockerImage({
+    const {
+        repository,
+        image,
+        imageRef,
+    } = buildDockerImage({
         imageName: serviceName,
         dockerBuildContext,
         dockerfilePath,
@@ -116,241 +118,289 @@ export const createMainApiService = async (args: MainApiServiceArgs) => {
     }) as DockerImageBuildResult
 
     // ECS Task Execution Role - used by ECS agent
-    const executionRole = new aws.iam.Role(`${formattedServiceName}-execution-role`, {
-        assumeRolePolicy: JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [{
-                Action: 'sts:AssumeRole',
-                Effect: 'Allow',
-                Principal: {
-                    Service: 'ecs-tasks.amazonaws.com',
-                },
-            }],
-        }),
-    })
+    const executionRole = new aws.iam.Role(
+        `${formattedServiceName}-execution-role`,
+        {
+            assumeRolePolicy: JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Action: 'sts:AssumeRole',
+                    Effect: 'Allow',
+                    Principal: {
+                        Service: 'ecs-tasks.amazonaws.com',
+                    },
+                }],
+            }),
+        },
+    )
 
     // Attach policies for task execution
-    new aws.iam.RolePolicyAttachment(`${formattedServiceName}-execution-policy`, {
-        role: executionRole.name,
-        policyArn: 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy',
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${formattedServiceName}-execution-policy`,
+        {
+            role: executionRole.name,
+            policyArn: 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy',
+        },
+    )
 
     // Add ECR permissions to allow pulling images
-    new aws.iam.RolePolicyAttachment(`${formattedServiceName}-ecr-policy`, {
-        role: executionRole.name,
-        policyArn: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly',
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${formattedServiceName}-ecr-policy`,
+        {
+            role: executionRole.name,
+            policyArn: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly',
+        },
+    )
 
     // ECS Task Role - used by the containers
-    const taskRole = new aws.iam.Role(`${formattedServiceName}-task-role`, {
-        assumeRolePolicy: JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [{
-                Action: 'sts:AssumeRole',
-                Effect: 'Allow',
-                Principal: {
-                    Service: 'ecs-tasks.amazonaws.com',
-                },
-            }],
-        }),
-    })
+    const taskRole = new aws.iam.Role(
+        `${formattedServiceName}-task-role`,
+        {
+            assumeRolePolicy: JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Action: 'sts:AssumeRole',
+                    Effect: 'Allow',
+                    Principal: {
+                        Service: 'ecs-tasks.amazonaws.com',
+                    },
+                }],
+            }),
+        },
+    )
 
     // Allow containers to access bound DynamoDB tables
     resourceBindings.tables && Object.values(resourceBindings.tables).forEach((table, i) => {
-        const tablePolicy = new aws.iam.Policy(`${formattedServiceName}-dynamo-policy-${i}`, {
-            policy: table.arn.apply(arn =>
-                JSON.stringify({
-                    Version: '2012-10-17',
-                    Statement: [{
-                        Effect: 'Allow',
-                        Action: [
-                            'dynamodb:BatchGetItem',
-                            'dynamodb:GetItem',
-                            'dynamodb:Query',
-                            'dynamodb:Scan',
-                            'dynamodb:BatchWriteItem',
-                            'dynamodb:PutItem',
-                            'dynamodb:UpdateItem',
-                            'dynamodb:DeleteItem',
-                            'dynamodb:TransactWriteItems',
-                        ],
-                        Resource: [arn, `${arn}/index/*`],
-                    }],
-                })
-            ),
-        })
+        const tablePolicy = new aws.iam.Policy(
+            `${formattedServiceName}-dynamo-policy-${i}`,
+            {
+                policy: table.arn.apply(
+                    arn =>
+                        JSON.stringify({
+                            Version: '2012-10-17',
+                            Statement: [{
+                                Effect: 'Allow',
+                                Action: [
+                                    'dynamodb:BatchGetItem',
+                                    'dynamodb:GetItem',
+                                    'dynamodb:Query',
+                                    'dynamodb:Scan',
+                                    'dynamodb:BatchWriteItem',
+                                    'dynamodb:PutItem',
+                                    'dynamodb:UpdateItem',
+                                    'dynamodb:DeleteItem',
+                                    'dynamodb:TransactWriteItems',
+                                ],
+                                Resource: [arn, `${arn}/index/*`],
+                            }],
+                        }),
+                ),
+            },
+        )
 
-        new aws.iam.RolePolicyAttachment(`${formattedServiceName}-dynamo-attachment-${i}`, {
-            role: taskRole.name,
-            policyArn: tablePolicy.arn,
-        })
+        new aws.iam.RolePolicyAttachment(
+            `${formattedServiceName}-dynamo-attachment-${i}`,
+            {
+                role: taskRole.name,
+                policyArn: tablePolicy.arn,
+            },
+        )
     })
 
     // Allow containers to access SSM parameters
-    const ssmPolicy = new aws.iam.Policy(`${formattedServiceName}-ssm-policy`, {
-        policy: JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [{
-                Effect: 'Allow',
-                Action: [
-                    'ssm:GetParameters',
-                    'ssm:GetParameter',
-                ],
-                Resource: `arn:aws:ssm:${aws.config.region}:${aws.config.accountId}:parameter/*`,
-            }],
-        }),
-    })
+    const ssmPolicy = new aws.iam.Policy(
+        `${formattedServiceName}-ssm-policy`,
+        {
+            policy: JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [{
+                    Effect: 'Allow',
+                    Action: [
+                        'ssm:GetParameters',
+                        'ssm:GetParameter',
+                    ],
+                    Resource: `arn:aws:ssm:${aws.config.region}:${aws.config.accountId}:parameter/*`,
+                }],
+            }),
+        },
+    )
 
-    new aws.iam.RolePolicyAttachment(`${formattedServiceName}-ssm-attachment`, {
-        role: taskRole.name,
-        policyArn: ssmPolicy.arn,
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${formattedServiceName}-ssm-attachment`,
+        {
+            role: taskRole.name,
+            policyArn: ssmPolicy.arn,
+        },
+    )
 
     // Allow the task role to run AWS Bedrock inference for the providers whose
     // {PROVIDER}_USE_AWS_BEDROCK_INFERENCE flag is on. The list actions back the runtime
     // catalog-id -> Bedrock-id resolution (see services/api/src/llm/providers/bedrock-inference.ts);
     // both are harmless when every provider stays on its own API.
-    const bedrockPolicy = new aws.iam.Policy(`${formattedServiceName}-bedrock-policy`, {
-        policy: JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [
-                {
-                    Effect: 'Allow',
-                    Action: [
-                        'bedrock:ListFoundationModels',
-                        'bedrock:GetFoundationModel',
-                        'bedrock:ListInferenceProfiles',
-                        'bedrock:GetInferenceProfile',
-                    ],
-                    Resource: '*',
-                },
-                {
-                    Effect: 'Allow',
-                    Action: [
-                        'bedrock:InvokeModel',
-                        'bedrock:InvokeModelWithResponseStream',
-                    ],
-                    Resource: [
-                        `arn:aws:bedrock:*::foundation-model/anthropic.*`,
-                        `arn:aws:bedrock:*::foundation-model/stability.*`,
-                        `arn:aws:bedrock:*:${aws.config.accountId}:inference-profile/*`,
-                    ],
-                },
-            ],
-        }),
-    })
+    const bedrockPolicy = new aws.iam.Policy(
+        `${formattedServiceName}-bedrock-policy`,
+        {
+            policy: JSON.stringify({
+                Version: '2012-10-17',
+                Statement: [
+                    {
+                        Effect: 'Allow',
+                        Action: [
+                            'bedrock:ListFoundationModels',
+                            'bedrock:GetFoundationModel',
+                            'bedrock:ListInferenceProfiles',
+                            'bedrock:GetInferenceProfile',
+                        ],
+                        Resource: '*',
+                    },
+                    {
+                        Effect: 'Allow',
+                        Action: [
+                            'bedrock:InvokeModel',
+                            'bedrock:InvokeModelWithResponseStream',
+                        ],
+                        Resource: [
+                            `arn:aws:bedrock:*::foundation-model/anthropic.*`,
+                            `arn:aws:bedrock:*::foundation-model/stability.*`,
+                            `arn:aws:bedrock:*:${aws.config.accountId}:inference-profile/*`,
+                        ],
+                    },
+                ],
+            }),
+        },
+    )
 
-    new aws.iam.RolePolicyAttachment(`${formattedServiceName}-bedrock-attachment`, {
-        role: taskRole.name,
-        policyArn: bedrockPolicy.arn,
-    })
+    new aws.iam.RolePolicyAttachment(
+        `${formattedServiceName}-bedrock-attachment`,
+        {
+            role: taskRole.name,
+            policyArn: bedrockPolicy.arn,
+        },
+    )
 
     // Create CloudWatch Log Group for Container
-    const logGroup = new aws.cloudwatch.LogGroup(`${formattedServiceName}-logs`, {
-        name: `/aws/ecs/${formattedServiceName}`,
-        retentionInDays: LOG_RETENTION_DAYS,
-    })
+    const logGroup = new aws.cloudwatch.LogGroup(
+        `${formattedServiceName}-logs`,
+        {
+            name: `/aws/ecs/${formattedServiceName}`,
+            retentionInDays: LOG_RETENTION_DAYS,
+        },
+    )
 
     // Create ECS Task Definition
-    const taskDefinition = new aws.ecs.TaskDefinition(`${formattedServiceName}-task`, {
-        family: formattedServiceName,
-        cpu: `${cpu}`,
-        memory: `${memory}`,
-        networkMode: 'awsvpc',
-        requiresCompatibilities: ['FARGATE'],
-        executionRoleArn: executionRole.arn,
-        taskRoleArn: taskRole.arn,
-        containerDefinitions: pulumi.all([
-            logGroup.name,
-            imageRef,
-        ]).apply(([logGroupName, imageReference]) =>
-            JSON.stringify([{
-                name: formattedServiceName,
-                image: imageReference,
-                cpu: cpu,
-                memory: memory,
-                essential: true,
-                portMappings: [{
-                    containerPort: containerPort,
-                    protocol: 'tcp',
-                }],
-                environment: Object.entries(environment).map(([name, value]) => ({
-                    name,
-                    value: value || '',
-                })),
-                logConfiguration: {
-                    logDriver: 'awslogs',
-                    options: {
-                        'awslogs-group': logGroupName,
-                        'awslogs-region': aws.config.region,
-                        'awslogs-stream-prefix': 'ecs',
-                        'awslogs-create-group': 'true',
-                    },
-                },
-                healthCheck: {
-                    command: ['CMD-SHELL', `curl -f http://localhost:${containerPort}/health-check || exit 1`],
-                    interval: 10,
-                    timeout: 5,
-                    retries: 2,
-                    startPeriod: 5,
-                },
-            }])
-        ),
-    }, {
-        dependsOn: [image], // Ensure image is fully built and pushed before creating task definition
-    })
+    const taskDefinition = new aws.ecs.TaskDefinition(
+        `${formattedServiceName}-task`,
+        {
+            family: formattedServiceName,
+            cpu: `${cpu}`,
+            memory: `${memory}`,
+            networkMode: 'awsvpc',
+            requiresCompatibilities: ['FARGATE'],
+            executionRoleArn: executionRole.arn,
+            taskRoleArn: taskRole.arn,
+            containerDefinitions: pulumi.all([
+                logGroup.name,
+                imageRef,
+            ]).apply(
+                ([logGroupName, imageReference]) =>
+                    JSON.stringify([{
+                        name: formattedServiceName,
+                        image: imageReference,
+                        cpu: cpu,
+                        memory: memory,
+                        essential: true,
+                        portMappings: [{
+                            containerPort: containerPort,
+                            protocol: 'tcp',
+                        }],
+                        environment: Object.entries(environment).map(
+                            ([name, value]) => ({
+                                name,
+                                value: value || '',
+                            }),
+                        ),
+                        logConfiguration: {
+                            logDriver: 'awslogs',
+                            options: {
+                                'awslogs-group': logGroupName,
+                                'awslogs-region': aws.config.region,
+                                'awslogs-stream-prefix': 'ecs',
+                                'awslogs-create-group': 'true',
+                            },
+                        },
+                        healthCheck: {
+                            command: ['CMD-SHELL', `curl -f http://localhost:${containerPort}/health-check || exit 1`],
+                            interval: 10,
+                            timeout: 5,
+                            retries: 2,
+                            startPeriod: 5,
+                        },
+                    }]),
+            ),
+        },
+        {
+            dependsOn: [image], // Ensure image is fully built and pushed before creating task definition
+        },
+    )
 
     // Security group for the ECS tasks
-    const taskSecurityGroup = new aws.ec2.SecurityGroup(`${formattedServiceName}-task-sg`, {
-        vpcId: vpc.id,
-        description: 'Security group for the API ECS tasks',
-        ingress: [],
-        egress: [
-            {
-                // Allow all outbound traffic
-                protocol: '-1',
-                fromPort: 0,
-                toPort: 0,
-                cidrBlocks: ['0.0.0.0/0'],
-                description: 'Allow all outbound traffic',
-            },
-        ],
-    })
+    const taskSecurityGroup = new aws.ec2.SecurityGroup(
+        `${formattedServiceName}-task-sg`,
+        {
+            vpcId: vpc.id,
+            description: 'Security group for the API ECS tasks',
+            ingress: [],
+            egress: [
+                {
+                    // Allow all outbound traffic
+                    protocol: '-1',
+                    fromPort: 0,
+                    toPort: 0,
+                    cidrBlocks: ['0.0.0.0/0'],
+                    description: 'Allow all outbound traffic',
+                },
+            ],
+        },
+    )
 
     // Create ECS Service
-    const ecsService = new aws.ecs.Service(`${formattedServiceName}-service`, {
-        cluster: ecsCluster.id,
-        taskDefinition: taskDefinition.arn,
-        desiredCount,
-        launchType: 'FARGATE',
-        schedulingStrategy: 'REPLICA',
-        deploymentMinimumHealthyPercent: 50,
-        deploymentMaximumPercent: 200,
-        deploymentCircuitBreaker: {
-            enable: true,
-            rollback: true,
+    const ecsService = new aws.ecs.Service(
+        `${formattedServiceName}-service`,
+        {
+            cluster: ecsCluster.id,
+            taskDefinition: taskDefinition.arn,
+            desiredCount,
+            launchType: 'FARGATE',
+            schedulingStrategy: 'REPLICA',
+            deploymentMinimumHealthyPercent: 50,
+            deploymentMaximumPercent: 200,
+            deploymentCircuitBreaker: {
+                enable: true,
+                rollback: true,
+            },
+            networkConfiguration: {
+                subnets: privateSubnets.map(subnet => subnet.id), // Changed from publicSubnets to privateSubnets
+                securityGroups: [taskSecurityGroup.id],
+                assignPublicIp: false, // Changed from true to false since we're in private subnets
+            },
+            forceNewDeployment: true, // Ensure we deploy a fresh version on updates
+            enableEcsManagedTags: true,
+            propagateTags: 'SERVICE',
+            waitForSteadyState: true, // Wait until service reaches a steady state before considering deployment complete
+            forceDelete: true,
         },
-        networkConfiguration: {
-            subnets: privateSubnets.map(subnet => subnet.id), // Changed from publicSubnets to privateSubnets
-            securityGroups: [taskSecurityGroup.id],
-            assignPublicIp: false, // Changed from true to false since we're in private subnets
+        {
+            customTimeouts: {
+                create: '10m',
+                update: '10m',
+                delete: '10m',
+            },
+            // Force replacement when image changes
+            replaceOnChanges: [
+                'taskDefinition',
+            ],
         },
-        forceNewDeployment: true, // Ensure we deploy a fresh version on updates
-        enableEcsManagedTags: true,
-        propagateTags: 'SERVICE',
-        waitForSteadyState: true, // Wait until service reaches a steady state before considering deployment complete
-        forceDelete: true,
-    }, {
-        customTimeouts: {
-            create: '10m',
-            update: '10m',
-            delete: '10m',
-        },
-        // Force replacement when image changes
-        replaceOnChanges: [
-            'taskDefinition',
-        ],
-    })
+    )
 
     return {
         repository,

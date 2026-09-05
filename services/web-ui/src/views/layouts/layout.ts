@@ -33,9 +33,7 @@ export const createLayout = (): LayoutInstance => {
     const el = html`
         <div className="layout-root">
             ${navigationSidePanelPaneEl}
-            <div className="workspace-main-pane">
-                ${contentEl}
-            </div>
+            <div className="workspace-main-pane">${contentEl}</div>
         </div>
     ` as HTMLElement
 
@@ -49,7 +47,9 @@ export const createLayout = (): LayoutInstance => {
     let workspaceCanvasView: WorkspaceCanvasViewInstance | null = null
 
     const renderMode = (nextMode: Mode): void => {
-        if (nextMode === mode) return
+        if (nextMode === mode)
+            return
+
         mode = nextMode
 
         introPage?.destroy()
@@ -66,9 +66,9 @@ export const createLayout = (): LayoutInstance => {
         }
     }
 
-    const unsubscribeRouter = routerStore.subscribe(({ data }) => {
-        renderMode(data.currentRoute.path === WORKSPACE_ROUTE_PATH ? 'workspace' : 'intro')
-    })
+    const unsubscribeRouter = routerStore.subscribe(
+        ({ data }) => void renderMode(data.currentRoute.path === WORKSPACE_ROUTE_PATH ? 'workspace' : 'intro'),
+    )
 
     return {
         el,
@@ -77,11 +77,12 @@ export const createLayout = (): LayoutInstance => {
             navigationSidePanel.destroy()
             introPage?.destroy()
             workspaceCanvasView?.destroy()
-            if (previousHoverTransitionDuration) {
+
+            if (previousHoverTransitionDuration)
                 document.documentElement.style.setProperty('--default-hover-transition-duration', previousHoverTransitionDuration)
-            } else {
+            else
                 document.documentElement.style.removeProperty('--default-hover-transition-duration')
-            }
+
             el.remove()
         },
     }

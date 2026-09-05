@@ -35,7 +35,7 @@ export type PromptControlFactories = {
     createCapabilityControls?: NodeViewOptions['createCapabilityControls']
 }
 
-export function createDefaultPromptControlFactories(): PromptControlFactories {
+export const createDefaultPromptControlFactories = (): PromptControlFactories => {
     return {
         createModelDropdown: createGenericAiModelDropdown,
         createModelMultiSelect: createGenericAiModelMultiSelect,

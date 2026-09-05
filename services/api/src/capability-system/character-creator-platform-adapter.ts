@@ -1,3 +1,7 @@
+import {
+    warn as debugWarn,
+    info as debugInfo,
+} from '@lixpi/debug-tools'
 import type NatsService from '@lixpi/nats-service'
 import {
     NATS_SUBJECTS,
@@ -28,10 +32,10 @@ import { throwIfProviderCancelled } from '../llm/providers/provider-cancellation
 
 const DEFAULT_FIDELITY_TIMEOUT_MS = 15_000
 
-export function createCharacterCreatorRuntimePorts(args: {
+export const createCharacterCreatorRuntimePorts = (args: {
     registry: ProviderRegistry
     natsService: NatsService
-}): CharacterCreatorRuntimePorts {
+}): CharacterCreatorRuntimePorts => {
     return {
         referenceAssets: {
             getAuthorizedAsset: async request => {
@@ -44,7 +48,10 @@ export function createCharacterCreatorRuntimePorts(args: {
                         organizationIds: [request.organizationId],
                     },
                 })
-                if ('error' in asset) throw new Error(`CHARACTER_REFERENCE_${asset.error}:${request.assetId}`)
+
+                if ('error' in asset)
+                    throw new Error(`CHARACTER_REFERENCE_${asset.error}:${request.assetId}`)
+
                 return {
                     assetId: asset.assetId,
                     organizationId: asset.organizationId,
@@ -65,16 +72,21 @@ export function createCharacterCreatorRuntimePorts(args: {
         },
         transientMedia: {
             create: context => {
-                const store = new TransientMediaStore(args.natsService, {
-                    organizationId: context.organizationId,
-                    workspaceId: context.workspaceId,
-                    conversationAssetId: context.conversationAssetId,
-                    generationRequestId: context.generationRequestId,
-                    mediaRunId: context.mediaRunId,
-                })
+                const store = new TransientMediaStore(
+                    args.natsService,
+                    {
+                        organizationId: context.organizationId,
+                        workspaceId: context.workspaceId,
+                        conversationAssetId: context.conversationAssetId,
+                        generationRequestId: context.generationRequestId,
+                        mediaRunId: context.mediaRunId,
+                    },
+                )
+
                 return {
                     putWithCoordinate: async input => {
                         const stored = await store.putWithCoordinate(input)
+
                         return {
                             coordinate: {
                                 ...stored.coordinate,
@@ -140,19 +152,30 @@ const generateCapabilityImage = async (
         args.operationKey,
     ].join(':')
     const provider = args.registry.createTransient(instanceKey, providerName)
-    const stopForAbort = (): void => {
-        void args.registry.stop(instanceKey)
-    }
-    args.signal?.addEventListener('abort', stopForAbort, { once: true })
+    const stopForAbort = (): void => void args.registry.stop(instanceKey)
+    args.signal?.addEventListener(
+        'abort',
+        stopForAbort,
+        { once: true },
+    )
     const resolvedImageSize = resolvePanelImageSize(args.context.imageModel.requestedSize, modelMeta)
-    const references: ImageGenerationReference[] = args.references.map(reference => ({
-        ...reference,
-        fileName: reference.fileName ?? `${reference.role}.png`,
-    }))
+    const references: ImageGenerationReference[] = args.references.map(
+        reference => ({
+            ...reference,
+            fileName: reference.fileName ?? `${reference.role}.png`,
+        }),
+    )
+
     try {
         const result = await provider.process({
-            messages: [{ role: 'user', content: args.prompt }],
-            aiModelMetaInfo: { ...modelMeta, modelVersion } as AiModelMetaInfo,
+            messages: [{
+                role: 'user',
+                content: args.prompt,
+            }],
+            aiModelMetaInfo: {
+                ...modelMeta,
+                modelVersion,
+            } as AiModelMetaInfo,
             organizationId: args.context.organizationId,
             workspaceId: args.context.workspaceId,
             aiChatThreadId: args.context.conversationAssetId,
@@ -162,18 +185,18 @@ const generateCapabilityImage = async (
             capabilityMediaExecutionPlan: args.plan,
             capabilityUsageMode: args.usageMode,
             captureOnlyImageGeneration: true,
-            captureOnlyImagePartialHandler: async (
-                imageBase64: string,
-                providerPartialIndex: number,
-            ): Promise<void> => {
+            captureOnlyImagePartialHandler: async (imageBase64: string, providerPartialIndex: number): Promise<void> => {
                 try {
                     await args.onImagePartial?.(imageBase64, providerPartialIndex)
                 } catch (error) {
-                    console.warn('[CharacterCreatorPartial] provider partial could not be projected', {
-                        operationKey: args.operationKey,
-                        providerPartialIndex,
-                        error: error instanceof Error ? error.message : String(error),
-                    })
+                    debugWarn(
+                        '[CharacterCreatorPartial] provider partial could not be projected',
+                        {
+                            operationKey: args.operationKey,
+                            providerPartialIndex,
+                            error: error instanceof Error ? error.message : String(error),
+                        },
+                    )
                 }
             },
             abortSignal: args.signal,
@@ -184,9 +207,15 @@ const generateCapabilityImage = async (
             metricsOperationId: args.context.metricsOperationId,
         })
         throwIfProviderCancelled(result, args.signal)
-        if (result.error) throw new Error(result.error)
+
+        if (result.error)
+            throw new Error(result.error)
+
         const image = result.generatedImages?.[0]
-        if (!image) throw new Error('CAPABILITY_IMAGE_PROVIDER_OUTPUT_MISSING')
+
+        if (!image)
+            throw new Error('CAPABILITY_IMAGE_PROVIDER_OUTPUT_MISSING')
+
         return {
             image,
             providerOperationId: result.aiVendorRequestId ?? result.responseId,
@@ -213,17 +242,32 @@ const resolvePanelImageSize = (
     const ratioForResolution = Object.fromEntries(
         Object.entries(resolutionForRatio).map(([ratio, resolution]) => [resolution, ratio]),
     )
+
     if (modelMeta.imageSizeMode === 'resolution') {
-        const supported = modelMeta.imageSizes?.flatMap(option => typeof option.value === 'string' ? [option.value] : []) ?? []
-        const normalized = requested ? resolutionForRatio[requested] ?? requested : undefined
-        if (normalized && normalized !== 'auto' && supported.includes(normalized)) return normalized
-        return supported.includes('1024x1024') ? '1024x1024' : supported[0] ?? 'auto'
+        const supported = modelMeta.imageSizes?.flatMap(option => (typeof option.value === 'string' ? [option.value] : [])) ?? []
+        const normalized = requested ? (resolutionForRatio[requested] ?? requested) : undefined
+
+        if (
+            normalized
+            && normalized !== 'auto'
+            && supported.includes(normalized)
+        )
+            return normalized
+
+        return supported.includes('1024x1024') ? '1024x1024' : (supported[0] ?? 'auto')
     }
 
     const supported = modelMeta.imageReferenceCapabilities?.supportedAspectRatios ?? []
-    const normalized = requested ? ratioForResolution[requested] ?? requested : undefined
-    if (normalized && normalized !== 'auto' && supported.includes(normalized)) return normalized
-    return supported.includes('1:1') ? '1:1' : supported[0] ?? 'auto'
+    const normalized = requested ? (ratioForResolution[requested] ?? requested) : undefined
+
+    if (
+        normalized
+        && normalized !== 'auto'
+        && supported.includes(normalized)
+    )
+        return normalized
+
+    return supported.includes('1:1') ? '1:1' : (supported[0] ?? 'auto')
 }
 
 const assessCharacterFidelity = async (
@@ -231,64 +275,88 @@ const assessCharacterFidelity = async (
     request: CharacterFidelityAssessmentRequest,
     signal?: AbortSignal,
 ): Promise<CharacterFidelityAssessmentResponse> => {
-    if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+    if (signal?.aborted)
+        throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+
     const startedAt = Date.now()
-    console.info('[CharacterFidelity] dispatch', {
-        jobId: request.jobId,
-        panelId: request.panelId,
-        attemptId: request.attemptId,
-        sourceCount: request.sources.length,
-        sourceMedium: request.sourceMedium,
-        expectedFaceVisibility: request.expectedFaceVisibility,
-        candidateObjectKey: request.candidate.objectKey,
-        candidateByteLength: request.candidate.byteLength,
-        timeoutMs: DEFAULT_FIDELITY_TIMEOUT_MS,
-    })
+    debugInfo(
+        '[CharacterFidelity] dispatch',
+        {
+            jobId: request.jobId,
+            panelId: request.panelId,
+            attemptId: request.attemptId,
+            sourceCount: request.sources.length,
+            sourceMedium: request.sourceMedium,
+            expectedFaceVisibility: request.expectedFaceVisibility,
+            candidateObjectKey: request.candidate.objectKey,
+            candidateByteLength: request.candidate.byteLength,
+            timeoutMs: DEFAULT_FIDELITY_TIMEOUT_MS,
+        },
+    )
     const pending = natsService.request<CharacterFidelityAssessmentRequest, CharacterFidelityAssessmentResponse>(
         NATS_SUBJECTS.CHARACTER_FIDELITY_SUBJECTS.ASSESS_PANEL,
         request,
         DEFAULT_FIDELITY_TIMEOUT_MS,
     )
+
     try {
         let response: CharacterFidelityAssessmentResponse
-        if (!signal) {
+
+        if (!signal)
             response = await pending
-        } else {
+        else {
             let abort: (() => void) | undefined
             const cancelled = new Promise<CharacterFidelityAssessmentResponse>((_resolve, reject) => {
                 abort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
-                signal.addEventListener('abort', abort, { once: true })
-                if (signal.aborted) abort?.()
+                signal.addEventListener(
+                    'abort',
+                    abort,
+                    { once: true },
+                )
+
+                if (signal.aborted)
+                    abort?.()
             })
+
             try {
                 response = await Promise.race([pending, cancelled])
             } finally {
-                if (abort) signal.removeEventListener('abort', abort)
+                if (abort)
+                    signal.removeEventListener('abort', abort)
             }
         }
-        console.info('[CharacterFidelity] result', {
-            jobId: request.jobId,
-            panelId: request.panelId,
-            attemptId: request.attemptId,
-            durationMs: Date.now() - startedAt,
-            available: response.metric.available,
-            unavailableReason: response.metric.unavailableReason,
-            cosineSimilarity: response.metric.cosineSimilarity,
-            sourceDetectionCount: response.sourceDetections.length,
-            candidateDetectionCount: response.candidateDetections.length,
-            errorCode: response.error?.code,
-            detectorArtifactId: response.detector.artifactId,
-            recognizerArtifactId: response.recognizer.artifactId,
-        })
+
+        debugInfo(
+            '[CharacterFidelity] result',
+            {
+                jobId: request.jobId,
+                panelId: request.panelId,
+                attemptId: request.attemptId,
+                durationMs: Date.now() - startedAt,
+                available: response.metric.available,
+                unavailableReason: response.metric.unavailableReason,
+                cosineSimilarity: response.metric.cosineSimilarity,
+                sourceDetectionCount: response.sourceDetections.length,
+                candidateDetectionCount: response.candidateDetections.length,
+                errorCode: response.error?.code,
+                detectorArtifactId: response.detector.artifactId,
+                recognizerArtifactId: response.recognizer.artifactId,
+            },
+        )
+
         return response
     } catch (error) {
-        console.warn('[CharacterFidelity] request failed', {
-            jobId: request.jobId,
-            panelId: request.panelId,
-            attemptId: request.attemptId,
-            durationMs: Date.now() - startedAt,
-            error: error instanceof Error ? error.message : String(error),
-        })
+        debugWarn(
+            '[CharacterFidelity] request failed',
+            {
+                jobId: request.jobId,
+                panelId: request.panelId,
+                attemptId: request.attemptId,
+                durationMs: Date.now() - startedAt,
+                error: error instanceof Error ? error.message : String(error),
+            },
+        )
+
         throw error
     }
 }

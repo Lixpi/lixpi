@@ -1,3 +1,4 @@
+import { err as debugError } from '@lixpi/debug-tools'
 import * as process from 'process'
 import {
     getDynamoDbTableStageName,
@@ -12,7 +13,11 @@ const {
 export default {
     get: async (userId: string): Promise<User | undefined> => {
         return await dynamoDBService.getItem({
-            tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'USERS',
+                ORG_NAME,
+                STAGE,
+            ),
             key: { userId },
             origin: `model::User->get( ${userId} )`,
         })
@@ -32,14 +37,18 @@ export default {
 
         try {
             await dynamoDBService.putItem({
-                tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'USERS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 item: newUserData,
                 origin: 'model::User->create()',
             })
 
             return newUserData
         } catch (e) {
-            console.error('Error creating user:', e)
+            debugError('Error creating user:', e)
         }
     },
 
@@ -59,7 +68,11 @@ export default {
 
         try {
             await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'USERS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { userId },
                 updates: {
                     ...(email && { email }),
@@ -74,7 +87,7 @@ export default {
                 origin: 'model::User->update()',
             })
         } catch (e) {
-            console.error('Error updating user:', e)
+            debugError('Error updating user:', e)
         }
     },
 
@@ -87,7 +100,11 @@ export default {
 
             // Fetch the current recentTags
             const user = await dynamoDBService.getItem({
-                tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'USERS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { userId },
                 origin: 'model::User->addRecentTag()',
             })
@@ -102,7 +119,11 @@ export default {
             const updatedTags = [tagId, ...currentTags].slice(0, 10)
 
             const result = await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('USERS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'USERS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { userId },
                 updateExpression: `SET
                     #recentTags = :updatedTags,
@@ -121,7 +142,8 @@ export default {
 
             return result
         } catch (error) {
-            console.error('Error adding recent tag:', error)
+            debugError('Error adding recent tag:', error)
+
             throw error
         }
     },

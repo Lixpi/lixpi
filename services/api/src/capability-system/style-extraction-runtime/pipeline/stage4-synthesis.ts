@@ -53,17 +53,39 @@ const buildSynthesisSchema = (): VlmJsonSchema => ({
         type: 'object',
         properties: {
             category: { type: 'string' },
-            name: { type: 'string', description: 'kebab-case style name, max 8 words' },
-            summary: { type: 'string', description: 'one sentence naming dominant traits with explicit negatives' },
-            tags: { type: 'array', items: { type: 'string' } },
-            instructions: { type: 'string', description: 'markdown body; first section is "## DO NOT", then "## Application notes", then dominance-weighted per-axis sections' },
+            name: {
+                type: 'string',
+                description: 'kebab-case style name, max 8 words',
+            },
+            summary: {
+                type: 'string',
+                description: 'one sentence naming dominant traits with explicit negatives',
+            },
+            tags: {
+                type: 'array',
+                items: { type: 'string' },
+            },
+            instructions: {
+                type: 'string',
+                description: 'markdown body; first section is "## DO NOT", then "## Application notes", then dominance-weighted per-axis sections',
+            },
             parameters: {
                 type: 'object',
                 description: 'Nested per-axis JSON. Properties: axisDominance, sceneAssessment, and one block per extracted axis.',
                 properties: {
-                    axisDominance: { type: 'object', additionalProperties: { type: 'number' } },
-                    sceneAssessment: { type: 'object', additionalProperties: true },
-                    axes: { type: 'object', additionalProperties: true, description: 'one entry per extracted axis with its full fields + dominance + rationale' },
+                    axisDominance: {
+                        type: 'object',
+                        additionalProperties: { type: 'number' },
+                    },
+                    sceneAssessment: {
+                        type: 'object',
+                        additionalProperties: true,
+                    },
+                    axes: {
+                        type: 'object',
+                        additionalProperties: true,
+                        description: 'one entry per extracted axis with its full fields + dominance + rationale',
+                    },
                 },
                 required: ['axisDominance', 'sceneAssessment', 'axes'],
                 additionalProperties: true,
@@ -73,9 +95,15 @@ const buildSynthesisSchema = (): VlmJsonSchema => ({
                 items: {
                     type: 'object',
                     properties: {
-                        kind: { type: 'string', description: 'palette-board | texture-specimen | applied-medium-probe' },
+                        kind: {
+                            type: 'string',
+                            description: 'palette-board | texture-specimen | applied-medium-probe',
+                        },
                         prompt: { type: 'string' },
-                        aspectRatio: { type: 'string', description: 'Positive integer width and height joined by x.' },
+                        aspectRatio: {
+                            type: 'string',
+                            description: 'Positive integer width and height joined by x.',
+                        },
                         rationale: { type: 'string' },
                     },
                     required: ['kind', 'prompt', 'aspectRatio', 'rationale'],
@@ -91,58 +119,82 @@ const buildSynthesisSchema = (): VlmJsonSchema => ({
 const buildSynthesisUserMessages = (state: StyleExtractionState): ChatMessage[] => {
     const scene = state.sceneAssessment
     const axesPayload: Record<string, any> = {}
+
     for (const [axis, extraction] of Object.entries(state.axisExtractions)) {
         axesPayload[axis] = extraction
     }
 
     const intent = state.input.intent ?? '(none — synthesize the dominant-axis style)'
-    const failedSummary = state.failedAxes.length === 0 ? 'none' : state.failedAxes.map((f) => `${f.axis}: ${f.error}`).join('; ')
+    const failedSummary = state.failedAxes.length === 0 ? 'none' : state.failedAxes.map(f => `${f.axis}: ${f.error}`).join('; ')
 
     const text = [
         `User intent: ${intent}`,
         '',
         '## Router scene assessment',
-        JSON.stringify(scene, null, 2),
+        JSON.stringify(
+            scene,
+            null,
+            2,
+        ),
         '',
         '## Axis extractions (succeeded)',
-        JSON.stringify(axesPayload, null, 2),
+        JSON.stringify(
+            axesPayload,
+            null,
+            2,
+        ),
         '',
         `## Failed axes: ${failedSummary}`,
         '',
         'Synthesize the Style definition per your system instructions. Weight axes by dominance. Honor the router\'s medium classification. Include the mandatory "## DO NOT" section.',
     ].join('\n')
 
-    return [{ role: 'user', content: text }]
+    return [{
+        role: 'user',
+        content: text,
+    }]
 }
 
-export const synthesizeStyle = async (state: StyleExtractionState, logger: StageLogger, _deps: StyleExtractionDependencies): Promise<Partial<StyleExtractionState>> => {
-    return await logger.span('synthesis', state.input.analysisModel.modelVersion, async () => {
-        const natsService = NATS_Service.getInstance()
-        if (!natsService) throw new Error('NATS service not initialized')
+export const synthesizeStyle = async (
+    state: StyleExtractionState,
+    logger: StageLogger,
+    _deps: StyleExtractionDependencies,
+): Promise<Partial<StyleExtractionState>> => {
+    return await logger.span(
+        'synthesis',
+        state.input.analysisModel.modelVersion,
+        async () => {
+            const natsService = NATS_Service.getInstance()
 
-        const schema = buildSynthesisSchema()
-        const messages = buildSynthesisUserMessages(state)
+            if (!natsService)
+                throw new Error('NATS service not initialized')
 
-        const result = await callStructuredVlm<StyleDraft>({
-            provider: state.input.analysisProvider,
-            modelVersion: state.input.analysisModel.modelVersion,
-            inferenceCapabilities: state.input.analysisModel.inferenceCapabilities,
-            systemPrompt: SYSTEM_PROMPT,
-            userMessages: messages,
-            schema,
-            natsService,
-            temperature: 0.3,
-            maxTokens: state.input.analysisModel.maxCompletionSize ?? 8192,
-            maxOutputTokensCeiling: state.input.analysisModel.maxCompletionSize,
-            enableThinking: state.input.analysisProvider === 'Anthropic',
-            thinkingBudgetTokens: 6144,
-            onTextChunk: (text) => logger.chunk(text),
-        })
+            const schema = buildSynthesisSchema()
+            const messages = buildSynthesisUserMessages(state)
+    
+            const result = await callStructuredVlm<StyleDraft>({
+                provider: state.input.analysisProvider,
+                modelVersion: state.input.analysisModel.modelVersion,
+                inferenceCapabilities: state.input.analysisModel.inferenceCapabilities,
+                systemPrompt: SYSTEM_PROMPT,
+                userMessages: messages,
+                schema,
+                natsService,
+                temperature: 0.3,
+                maxTokens: state.input.analysisModel.maxCompletionSize ?? 8192,
+                maxOutputTokensCeiling: state.input.analysisModel.maxCompletionSize,
+                enableThinking: state.input.analysisProvider === 'Anthropic',
+                thinkingBudgetTokens: 6144,
+                onTextChunk: text => logger.chunk(text),
+            })
 
-        return { draft: result.parsed }
-    }, {
-        inputSummary: `extractedAxes=${Object.keys(state.axisExtractions).length} failedAxes=${state.failedAxes.length} sourceCrops=${state.sourceCrops.length}`,
-        outputSummarizer: (result) => `category=${result.draft?.category} name=${result.draft?.name} sampleSubjects=${result.draft?.recommendedSampleSubjects.length ?? 0}`,
-        promptPreview: SYSTEM_PROMPT,
-    })
+            return { draft: result.parsed }
+        },
+        {
+            inputSummary: `extractedAxes=${Object.keys(state.axisExtractions).length} failedAxes=${state.failedAxes.length} sourceCrops=${state.sourceCrops.length}`,
+            outputSummarizer: result =>
+                `category=${result.draft?.category} name=${result.draft?.name} sampleSubjects=${result.draft?.recommendedSampleSubjects.length ?? 0}`,
+            promptPreview: SYSTEM_PROMPT,
+        },
+    )
 }

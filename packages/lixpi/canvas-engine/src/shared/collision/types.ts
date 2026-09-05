@@ -15,7 +15,10 @@ export type CollisionOptions = {
     overlapThreshold?: number
     margin?: number
     excludePairs?: Set<string>
-    shouldResolvePair?: (a: CollisionBox, b: CollisionBox) => boolean
+    shouldResolvePair?: (
+        a: CollisionBox,
+        b: CollisionBox,
+    ) => boolean
 }
 
 export type CollisionResult = {

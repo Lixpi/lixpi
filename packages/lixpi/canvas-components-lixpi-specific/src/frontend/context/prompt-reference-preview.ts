@@ -62,20 +62,32 @@ const mediaPromptReferenceIcons: Record<MediaKind, string> = {
     document: documentIcon,
 }
 
-export function getPromptReferenceIcon(
+export const getPromptReferenceIcon = (
     referenceType: PromptReferenceType,
     mediaKind: unknown,
-): string {
-    if (referenceType === 'capability-artifact') return atomIcon
-    if (referenceType !== 'media') return promptReferenceIcons[referenceType]
-    if (mediaKind === 'video' || mediaKind === 'audio' || mediaKind === 'document') {
+): string => {
+    if (referenceType === 'capability-artifact')
+        return atomIcon
+
+    if (referenceType !== 'media')
+        return promptReferenceIcons[referenceType]
+
+    if (
+        mediaKind === 'video'
+        || mediaKind === 'audio'
+        || mediaKind === 'document'
+    )
         return mediaPromptReferenceIcons[mediaKind]
-    }
+
     return mediaPromptReferenceIcons.image
 }
 
-function createPromptReferenceChipContent(descriptor: PromptReferenceChipDescriptor, document: Document): HTMLSpanElement {
+const createPromptReferenceChipContent = (
+    descriptor: PromptReferenceChipDescriptor,
+    document: Document,
+): HTMLSpanElement => {
     const html = createDocumentHtml(document)
+
     return html`
         <span className="prompt-reference-chip-content">
             <span
@@ -88,31 +100,36 @@ function createPromptReferenceChipContent(descriptor: PromptReferenceChipDescrip
     ` as HTMLSpanElement
 }
 
-function resolveMediaPromptReferenceDisplayName(
+const resolveMediaPromptReferenceDisplayName = (
     reference: MediaPromptReference & { displayName: string },
     previewRenderer: PromptReferencePreviewRenderer,
-): string {
+): string => {
     return previewRenderer.environment.getAsset?.(reference.assetId)?.title?.trim()
         || reference.displayName.trim()
         || reference.assetId
 }
 
-export function createMediaPromptReferencePreview(
+export const createMediaPromptReferencePreview = (
     reference: MediaPromptReference & { displayName: string },
     previewRenderer: PromptReferencePreviewRenderer,
     options: CreatePromptReferencePreviewOptions = {},
-): PromptReferencePreviewInstance | null {
+): PromptReferencePreviewInstance | null => {
     const previewNode = previewRenderer.getNode(reference)
-    if (!previewNode) return null
+
+    if (!previewNode)
+        return null
 
     const displayName = resolveMediaPromptReferenceDisplayName(reference, previewRenderer)
     const triggerContent = options.variant === 'thumbnail'
         ? undefined
-        : createPromptReferenceChipContent({
-            referenceType: 'media',
-            displayName,
-            mediaKind: reference.mediaKind,
-        }, previewRenderer.environment.document)
+        : createPromptReferenceChipContent(
+            {
+                referenceType: 'media',
+                displayName,
+                mediaKind: reference.mediaKind,
+            },
+            previewRenderer.environment.document,
+        )
     const previewTile = createContextPreviewTile({
         node: previewNode,
         getNode: () => previewRenderer.getNode(reference) ?? previewNode,
@@ -122,27 +139,30 @@ export function createMediaPromptReferencePreview(
         triggerContent,
         titleOverride: displayName,
     })
+
     if (options.variant !== 'thumbnail') {
         previewTile.dom.classList.add(
             'prompt-reference-chip',
             'prompt-reference-chip-media',
             'context-preview-inline-label',
         )
-    } else {
+    } else
         previewTile.dom.classList.add('context-preview-thumbnail')
-    }
+
     return previewTile
 }
 
-export function createPromptReferenceChipElement(
+export const createPromptReferenceChipElement = (
     descriptor: PromptReferenceChipDescriptor,
     document: Document,
-): HTMLSpanElement {
+): HTMLSpanElement => {
     const html = createDocumentHtml(document)
+
     return html`
         <span
             className=${`prompt-reference-chip prompt-reference-chip-${descriptor.referenceType}`}
             contenteditable="false"
-        >${createPromptReferenceChipContent(descriptor, document)}</span>
+        >${createPromptReferenceChipContent(descriptor, document)}</span
+    >
     ` as HTMLSpanElement
 }

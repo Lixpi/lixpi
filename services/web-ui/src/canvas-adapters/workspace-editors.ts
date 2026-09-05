@@ -8,12 +8,19 @@ import { mountReadOnlyAiChatThreadProjection } from '$src/components/proseMirror
 import { createCanvasConversationEditorPort } from './conversation-editor.ts'
 import { createPromptComposerEditorPort } from './prompt-composer-editor.ts'
 
-function conversationControls(createContextTray: () => HTMLDivElement) {
-    const { createCapabilityControls, ...controls } = createDefaultPromptControlFactories()
-    return { ...controls, createContextTray }
+const conversationControls = (createContextTray: () => HTMLDivElement) => {
+    const {
+        createCapabilityControls,
+        ...controls
+    } = createDefaultPromptControlFactories()
+
+    return {
+        ...controls,
+        createContextTray,
+    }
 }
 
-export function createWorkspaceCanvasEditors(): WorkspaceCanvasEditors {
+export const createWorkspaceCanvasEditors = (): WorkspaceCanvasEditors => {
     return {
         createConversation: integration =>
             createCanvasConversationEditorPort({
@@ -33,6 +40,7 @@ export function createWorkspaceCanvasEditors(): WorkspaceCanvasEditors {
             }),
         mountAsset: request => {
             const html = createDocumentHtml(request.host.ownerDocument)
+
             return new ProseMirrorEditor({
                 editorMountElement: request.host,
                 content: html`<div></div>` as HTMLDivElement,
@@ -46,8 +54,18 @@ export function createWorkspaceCanvasEditors(): WorkspaceCanvasEditors {
                 onAiChatStop: () => {},
             })
         },
-        mountDocument: ({ node, document, container, signal, onLeaseStateChange, workspaceId, onChange, createContextTray }) => {
+        mountDocument: ({
+            node,
+            document,
+            container,
+            signal,
+            onLeaseStateChange,
+            workspaceId,
+            onChange,
+            createContextTray,
+        }) => {
             const html = createDocumentHtml(container.ownerDocument)
+
             return new ProseMirrorEditor({
                 editorMountElement: container,
                 content: html`<div></div>` as HTMLDivElement,
@@ -60,11 +78,16 @@ export function createWorkspaceCanvasEditors(): WorkspaceCanvasEditors {
                     workspaceId,
                     assetId: node.assetId,
                     role: 'content',
-                    baseVersion: typeof document.proseMirrorVersion === 'number' && Number.isInteger(document.proseMirrorVersion) && document.proseMirrorVersion >= 0 ? document.proseMirrorVersion : 0,
+                    baseVersion: typeof document.proseMirrorVersion === 'number'
+                        && Number.isInteger(document.proseMirrorVersion)
+                        && document.proseMirrorVersion >= 0
+                        ? document.proseMirrorVersion
+                        : 0,
                     onLeaseStateChange,
                 },
                 onEditorChange: value => {
-                    if (!signal.aborted) onChange(value)
+                    if (!signal.aborted)
+                        onChange(value)
                 },
                 onStreamingUpdate: () => {},
                 onAiChatSubmit: () => {},
@@ -74,7 +97,21 @@ export function createWorkspaceCanvasEditors(): WorkspaceCanvasEditors {
                 onReceivingStateChange: () => {},
             })
         },
-        mountCapability: ({ container, document, schema, plugins, node, asset, version, signal, onLeaseStateChange, onContentChange, workspaceId, promptReferenceCatalog, promptReferencePreviewRenderer }) => {
+        mountCapability: ({
+            container,
+            document,
+            schema,
+            plugins,
+            node,
+            asset,
+            version,
+            signal,
+            onLeaseStateChange,
+            onContentChange,
+            workspaceId,
+            promptReferenceCatalog,
+            promptReferencePreviewRenderer,
+        }) => {
             const html = createDocumentHtml(container.ownerDocument)
             const editor = new ProseMirrorEditor({
                 editorMountElement: container,
@@ -97,10 +134,15 @@ export function createWorkspaceCanvasEditors(): WorkspaceCanvasEditors {
                 },
                 onEditorChange: () =>
                     queueMicrotask(() => {
-                        if (!signal.aborted) onContentChange()
+                        if (!signal.aborted)
+                            onContentChange()
                     }),
             })
-            return { updateDocument: value => editor.updateDocument(value), destroy: () => editor.destroy() }
+
+            return {
+                updateDocument: value => editor.updateDocument(value),
+                destroy: () => editor.destroy(),
+            }
         },
         mountHistory: request => mountReadOnlyAiChatThreadProjection(request),
     }

@@ -43,8 +43,15 @@ export type ContextPreviewEnvironment = {
     tooltipHideDelayMs: number
     getArtifactIcon: (artifactTypeId: string) => string
     extractDocumentText: (content: string | object) => string
-    initialRenditionUrl: (assetId: string, rendition: string) => string
-    resolveRenditionUrl: (assetId: string, rendition: string, signal: AbortSignal) => Promise<string>
+    initialRenditionUrl: (
+        assetId: string,
+        rendition: string,
+    ) => string
+    resolveRenditionUrl: (
+        assetId: string,
+        rendition: string,
+        signal: AbortSignal,
+    ) => Promise<string>
     onError: (error: unknown) => void
 }
 
@@ -85,7 +92,7 @@ export const CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES = [
     '--context-preview-popover-text-color',
 ]
 
-function getContextChipLabel(node: CanvasNode): string {
+const getContextChipLabel = (node: CanvasNode): string => {
     switch (node.type) {
         case 'document':
             return 'Document'
@@ -101,44 +108,68 @@ function getContextChipLabel(node: CanvasNode): string {
     }
 }
 
-function getContextPreviewTitle(node: CanvasNode, environment: ContextPreviewEnvironment): string {
-    if ('assetId' in node && node.assetId) {
+const getContextPreviewTitle = (
+    node: CanvasNode,
+    environment: ContextPreviewEnvironment,
+): string => {
+    if (
+        'assetId' in node
+        && node.assetId
+    ) {
         const assetTitle = environment.getAsset?.(node.assetId)?.title?.trim()
-        if (assetTitle) return assetTitle
+
+        if (assetTitle)
+            return assetTitle
     }
+
     if (node.type === 'document') {
-        const document = environment.getDocuments().find((item) => item.documentId === node.assetId)
+        const document = environment.getDocuments().find(item => item.documentId === node.assetId)
         const title = document?.title?.trim()
-        if (title) return title
+
+        if (title)
+            return title
     }
-    if (node.type === 'image' || node.type === 'video') return ''
+
+    if (
+        node.type === 'image'
+        || node.type === 'video'
+    )
+        return ''
+
     return getContextChipLabel(node)
 }
 
-function resolveContextPreviewTitle(
+const resolveContextPreviewTitle = (
     node: CanvasNode,
     environment: ContextPreviewEnvironment,
     titleOverride?: string,
-): string {
-    return getContextPreviewTitle(node, environment) || titleOverride?.trim() || ''
-}
+): string => getContextPreviewTitle(node, environment) || titleOverride?.trim() || ''
 
-function getContextPreviewText(node: CanvasNode, environment: ContextPreviewEnvironment): string {
-    const asset = 'assetId' in node && node.assetId ? environment.getAsset?.(node.assetId) : undefined
+const getContextPreviewText = (
+    node: CanvasNode,
+    environment: ContextPreviewEnvironment,
+): string => {
+    const asset = 'assetId' in node
+        && node.assetId
+        ? environment.getAsset?.(node.assetId)
+        : undefined
     const descriptor = asset?.descriptor?.status === 'ready'
         ? asset.descriptor.summary.trim()
         : ''
-    if (descriptor) return descriptor
+
+    if (descriptor)
+        return descriptor
 
     if (node.type === 'document') {
-        const document = environment.getDocuments().find((item) => item.documentId === node.assetId)
+        const document = environment.getDocuments().find(item => item.documentId === node.assetId)
+
         return environment.extractDocumentText(document?.content ?? '').trim()
     }
 
     return ''
 }
 
-function getContextPreviewTypeLabel(node: CanvasNode): string {
+const getContextPreviewTypeLabel = (node: CanvasNode): string => {
     switch (node.type) {
         case 'document':
             return 'Document'
@@ -153,9 +184,10 @@ function getContextPreviewTypeLabel(node: CanvasNode): string {
     }
 }
 
-export function getContextPreviewAccessibleLabel(node: CanvasNode, environment: ContextPreviewEnvironment): string {
-    return getContextPreviewTitle(node, environment) || getContextPreviewTypeLabel(node)
-}
+export const getContextPreviewAccessibleLabel = (
+    node: CanvasNode,
+    environment: ContextPreviewEnvironment,
+): string => getContextPreviewTitle(node, environment) || getContextPreviewTypeLabel(node)
 
 class ContextPreviewVisual {
     private readonly lifetime = new Lifetime()
@@ -165,18 +197,41 @@ class ContextPreviewVisual {
         this.html = createDocumentHtml(environment.document)
     }
 
-    private async hydrateMedia(element: HTMLImageElement | HTMLVideoElement, assetId: string, rendition: string, attribute: 'src' | 'poster' = 'src'): Promise<void> {
+    private async hydrateMedia(
+        element: HTMLImageElement | HTMLVideoElement,
+        assetId: string,
+        rendition: string,
+        attribute: 'src' | 'poster' = 'src',
+    ): Promise<void> {
         try {
-            const source = await this.environment.resolveRenditionUrl(assetId, rendition, this.lifetime.signal)
-            if (this.lifetime.signal.aborted || !source || !element.isConnected) return
-            if (attribute === 'poster') (element as HTMLVideoElement).poster = source
-            else element.src = source
+            const source = await this.environment.resolveRenditionUrl(
+                assetId,
+                rendition,
+                this.lifetime.signal,
+            )
+
+            if (
+                this.lifetime.signal.aborted
+                || !source
+                || !element.isConnected
+            )
+                return
+
+            if (attribute === 'poster')
+                (element as HTMLVideoElement).poster = source
+            else
+                element.src = source
         } catch (error) {
-            if (!this.lifetime.signal.aborted) this.environment.onError(error)
+            if (!this.lifetime.signal.aborted)
+                this.environment.onError(error)
         }
     }
 
-    private setContextPreviewVideoSources(videoEl: HTMLVideoElement, node: VideoCanvasNode, environment: ContextPreviewEnvironment): void {
+    private setContextPreviewVideoSources(
+        videoEl: HTMLVideoElement,
+        node: VideoCanvasNode,
+        environment: ContextPreviewEnvironment,
+    ): void {
         this.lifetime.own(() => {
             videoEl.pause()
             videoEl.removeAttribute('src')
@@ -187,28 +242,60 @@ class ContextPreviewVisual {
         const posterUrl = 'poster'
         const initialSrc = environment.initialRenditionUrl(node.assetId, videoUrl)
         const initialPoster = environment.initialRenditionUrl(node.assetId, posterUrl)
-        if (initialSrc) videoEl.src = initialSrc
-        if (initialPoster) videoEl.poster = initialPoster
-        void this.hydrateMedia(videoEl, node.assetId, videoUrl)
-        void this.hydrateMedia(videoEl, node.assetId, posterUrl, 'poster')
+
+        if (initialSrc)
+            videoEl.src = initialSrc
+
+        if (initialPoster)
+            videoEl.poster = initialPoster
+
+        void this.hydrateMedia(
+            videoEl,
+            node.assetId,
+            videoUrl,
+        )
+        void this.hydrateMedia(
+            videoEl,
+            node.assetId,
+            posterUrl,
+            'poster',
+        )
     }
 
-    private renderContextImagePreview(node: ImageCanvasNode, label: string, environment: ContextPreviewEnvironment, size: 'mini' | 'large'): HTMLElement {
+    private renderContextImagePreview(
+        node: ImageCanvasNode,
+        label: string,
+        environment: ContextPreviewEnvironment,
+        size: 'mini' | 'large',
+    ): HTMLElement {
         const previewUrl = 'preview'
-        const imageEl = this.html`<img
-            className=${`context-preview-image context-preview-image-${size}`}
-            src=${environment.initialRenditionUrl(node.assetId, previewUrl)}
-            alt=""
-            aria-label=${label}
-            loading="lazy"
-        />` as HTMLImageElement
-        void this.hydrateMedia(imageEl, node.assetId, previewUrl)
+        const imageEl = this.html`
+            <img
+                className=${`context-preview-image context-preview-image-${size}`}
+                src=${environment.initialRenditionUrl(node.assetId, previewUrl)}
+                alt=""
+                aria-label=${label}
+                loading="lazy"
+            />
+        ` as HTMLImageElement
+        void this.hydrateMedia(
+            imageEl,
+            node.assetId,
+            previewUrl,
+        )
+
         return imageEl
     }
 
-    private renderContextVideoPreview(node: VideoCanvasNode, label: string, environment: ContextPreviewEnvironment, size: 'mini' | 'large'): HTMLElement {
+    private renderContextVideoPreview(
+        node: VideoCanvasNode,
+        label: string,
+        environment: ContextPreviewEnvironment,
+        size: 'mini' | 'large',
+    ): HTMLElement {
         if (size === 'large') {
-            const previewEl = this.html`<div className="context-preview-video context-preview-video-large">
+            const previewEl = this.html`
+                <div className="context-preview-video context-preview-video-large">
                 <video
                     muted="true"
                     playsinline="true"
@@ -216,24 +303,47 @@ class ContextPreviewVisual {
                     controls="true"
                     aria-label=${label}
                 ></video>
-                <span className="context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
-            </div>` as HTMLElement
+                <span
+                    className="context-preview-video-glyph"
+                    innerHTML=${videoPlayGlyphIcon}
+                ></span>
+                </div>
+            ` as HTMLElement
             const videoEl = previewEl.querySelector('video')
-            if (videoEl) this.setContextPreviewVideoSources(videoEl, node, environment)
+
+            if (videoEl)
+                this.setContextPreviewVideoSources(
+                    videoEl,
+                    node,
+                    environment,
+                )
+
             return previewEl
         }
 
-        const previewEl = this.html`<div className="context-preview-video context-preview-video-mini">
+        const previewEl = this.html`
+            <div className="context-preview-video context-preview-video-mini">
             <video
                 muted="true"
                 playsinline="true"
                 preload="metadata"
                 aria-label=${label}
             ></video>
-            <span className="context-preview-video-glyph" innerHTML=${videoPlayGlyphIcon}></span>
-        </div>` as HTMLElement
+            <span
+                className="context-preview-video-glyph"
+                innerHTML=${videoPlayGlyphIcon}
+            ></span>
+            </div>
+        ` as HTMLElement
         const videoEl = previewEl.querySelector('video')
-        if (videoEl) this.setContextPreviewVideoSources(videoEl, node, environment)
+
+        if (videoEl)
+            this.setContextPreviewVideoSources(
+                videoEl,
+                node,
+                environment,
+            )
+
         return previewEl
     }
 
@@ -244,23 +354,36 @@ class ContextPreviewVisual {
         size: 'mini' | 'large',
     ): HTMLElement {
         if (size === 'mini') {
-            return this.html`<div className="context-preview-document context-preview-document-mini">
-                <span className="context-preview-document-icon" innerHTML=${documentIcon}></span>
-                <span className="context-preview-document-skeleton" aria-label=${title}>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </span>
-            </div>` as HTMLElement
+            return this.html`
+                <div className="context-preview-document context-preview-document-mini">
+                <span
+                    className="context-preview-document-icon"
+                    innerHTML=${documentIcon}
+                ></span>
+                    <span
+                        className="context-preview-document-skeleton"
+                        aria-label=${title}
+                    >
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </span>
+                    </div>
+            ` as HTMLElement
         }
 
-        return this.html`<div className=${`context-preview-document context-preview-document-${size}`}>
-            <span className="context-preview-document-icon" innerHTML=${documentIcon}></span>
-            <span className="context-preview-document-lines">
-                <span className="context-preview-document-title">${title}</span>
-                <span className="context-preview-document-text">${text || getContextPreviewTypeLabel(node)}</span>
-            </span>
-        </div>` as HTMLElement
+        return this.html`
+            <div className=${`context-preview-document context-preview-document-${size}`}>
+                <span
+                    className="context-preview-document-icon"
+                    innerHTML=${documentIcon}
+                ></span>
+                    <span className="context-preview-document-lines">
+                        <span className="context-preview-document-title">${title}</span>
+                        <span className="context-preview-document-text">${text || getContextPreviewTypeLabel(node)}</span>
+                    </span>
+                </div>
+        ` as HTMLElement
     }
 
     private renderContextArtifactPreview(
@@ -268,14 +391,17 @@ class ContextPreviewVisual {
         title: string,
         size: 'mini' | 'large',
     ): HTMLElement {
-        return this.html`<div className=${`context-preview-artifact context-preview-artifact-${size}`}>
-            <span className="context-preview-artifact-icon" innerHTML=${this.environment.getArtifactIcon(node.artifactTypeId)}></span>
-            ${
-            size === 'large'
-                ? this.html`<span className="context-preview-artifact-title">${title || 'Artifact'}</span>`
-                : ''
-        }
-        </div>` as HTMLElement
+        return this.html`
+            <div className=${`context-preview-artifact context-preview-artifact-${size}`}>
+                <span
+                    className="context-preview-artifact-icon"
+                    innerHTML=${this.environment.getArtifactIcon(node.artifactTypeId)}
+                ></span>
+                    ${size === 'large'
+                        ? this.html`<span className="context-preview-artifact-title">${title || 'Artifact'}</span>`
+                        : ''}
+                                                                        </div>
+        ` as HTMLElement
     }
 
     renderContextPreviewVisual(
@@ -285,18 +411,50 @@ class ContextPreviewVisual {
         environment: ContextPreviewEnvironment,
         size: 'mini' | 'large',
     ): HTMLElement {
-        if (node.type === 'image') return this.renderContextImagePreview(node, title, environment, size)
-        if (node.type === 'video') return this.renderContextVideoPreview(node, title, environment, size)
-        if (node.type === 'document') return this.renderContextDocumentPreview(node, title, text, size)
-        if (node.type === 'capabilityArtifact') return this.renderContextArtifactPreview(node, title, size)
+        if (node.type === 'image')
+            return this.renderContextImagePreview(
+                node,
+                title,
+                environment,
+                size,
+            )
+
+        if (node.type === 'video')
+            return this.renderContextVideoPreview(
+                node,
+                title,
+                environment,
+                size,
+            )
+
+        if (node.type === 'document')
+            return this.renderContextDocumentPreview(
+                node,
+                title,
+                text,
+                size,
+            )
+
+        if (node.type === 'capabilityArtifact')
+            return this.renderContextArtifactPreview(
+                node,
+                title,
+                size,
+            )
+
         return this.html`<div className="context-preview-document">${title}</div>` as HTMLElement
     }
 
-    private renderContextPreviewPopoverMeta(title: string, text: string): HTMLElement {
-        return this.html`<div className="context-preview-popover-meta">
+    private renderContextPreviewPopoverMeta(
+        title: string,
+        text: string,
+    ): HTMLElement {
+        return this.html`
+            <div className="context-preview-popover-meta">
             ${title ? this.html`<span className="context-preview-popover-title">${title}</span>` : ''}
             ${text ? this.html`<span className="context-preview-popover-text">${text}</span>` : ''}
-        </div>` as HTMLElement
+        </div>
+        ` as HTMLElement
     }
 
     renderContextPreviewPopoverContent(
@@ -306,18 +464,35 @@ class ContextPreviewVisual {
         accessibleLabel: string,
         environment: ContextPreviewEnvironment,
     ): HTMLElement {
-        if (node.type !== 'image' && node.type !== 'video') {
-            return this.renderContextPreviewVisual(node, accessibleLabel, text, environment, 'large')
-        }
+        if (
+            node.type !== 'image'
+            && node.type !== 'video'
+        )
+            return this.renderContextPreviewVisual(
+                node,
+                accessibleLabel,
+                text,
+                environment,
+                'large',
+            )
 
         const hasPopoverMeta = Boolean(title || text)
         const orientation = hasPopoverMeta ? getContextPreviewPopoverOrientation(node) : 'landscape'
-        return this.html`<div className=${`context-preview-popover-body context-preview-popover-body-${orientation}`}>
-            <div className="context-preview-popover-media">
-                ${this.renderContextPreviewVisual(node, accessibleLabel, text, environment, 'large')}
+
+        return this.html`
+            <div className=${`context-preview-popover-body context-preview-popover-body-${orientation}`}>
+                <div className="context-preview-popover-media">
+                    ${this.renderContextPreviewVisual(
+                        node,
+                        accessibleLabel,
+                        text,
+                        environment,
+                        'large',
+                    )}
+                </div>
+                ${hasPopoverMeta ? this.renderContextPreviewPopoverMeta(title, text) : ''}
             </div>
-            ${hasPopoverMeta ? this.renderContextPreviewPopoverMeta(title, text) : ''}
-        </div>` as HTMLElement
+        ` as HTMLElement
     }
 
     destroy(): void {
@@ -329,16 +504,29 @@ function getContextPreviewPopoverOrientation(node: ImageCanvasNode | VideoCanvas
     return node.dimensions.height > node.dimensions.width ? 'portrait' : 'landscape'
 }
 
-function getContextPreviewPopoverClassName(node: CanvasNode, hasPopoverMeta: boolean): string {
+const getContextPreviewPopoverClassName = (
+    node: CanvasNode,
+    hasPopoverMeta: boolean,
+): string => {
     const baseClassName = 'context-preview-popover'
-    if ((node.type !== 'image' && node.type !== 'video') || !hasPopoverMeta) return baseClassName
+
+    if (
+        (node.type !== 'image' && node.type !== 'video')
+        || !hasPopoverMeta
+    )
+        return baseClassName
+
     return `${baseClassName} ${baseClassName}-${getContextPreviewPopoverOrientation(node)}`
 }
 
-export function getContextPreviewCanvasPortal(dom: HTMLElement): ContextPreviewPortal | null {
+export const getContextPreviewCanvasPortal = (dom: HTMLElement): ContextPreviewPortal | null => {
     const pane = dom.closest<HTMLElement>('.workspace-pane')
-    if (!pane) return null
+
+    if (!pane)
+        return null
+
     const viewport = dom.closest<HTMLElement>('.workspace-viewport')
+
     return {
         root: pane,
         scale: viewport ? getElementScale(viewport) : 1,
@@ -352,8 +540,14 @@ class ContextPreviewTile implements ContextPreviewTileInstance {
     private content: ContextPreviewVisual | null = null
 
     constructor(private readonly options: CreateContextPreviewTileOptions) {
-        const { environment, triggerContent, preferredPlacement = 'top', inlinePopover = false } = options
+        const {
+            environment,
+            triggerContent,
+            preferredPlacement = 'top',
+            inlinePopover = false,
+        } = options
         this.lifetime.own(() => this.content?.destroy())
+
         try {
             const initialState = this.renderState()
             const trigger = new ContextPreviewVisual(environment)
@@ -363,51 +557,79 @@ class ContextPreviewTile implements ContextPreviewTileInstance {
                 contentCssVariableNames: CONTEXT_PREVIEW_CONTENT_CSS_VARIABLES,
                 hideDelayMs: environment.tooltipHideDelayMs,
                 ...initialState,
-                triggerContent: triggerContent ?? trigger.renderContextPreviewVisual(initialState.latestNode, initialState.accessibleLabel, initialState.text, environment, 'mini'),
+                triggerContent: triggerContent ?? trigger.renderContextPreviewVisual(
+                    initialState.latestNode,
+                    initialState.accessibleLabel,
+                    initialState.text,
+                    environment,
+                    'mini',
+                ),
                 preferredPlacement,
                 inlinePopover,
                 inlineLabelTrigger: !inlinePopover && Boolean(triggerContent),
                 beforeOpen: () => {
-                    if (!this.lifetime.signal.aborted) this.popover.updateContent(this.renderState())
+                    if (!this.lifetime.signal.aborted)
+                        this.popover.updateContent(
+                            this.renderState(),
+                        )
                 },
             })
             this.lifetime.own(() => this.popover.destroy())
             this.dom = this.popover.dom
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
 
-    private renderState(): ContextPreviewPopoverContent & { latestNode: CanvasNode; text: string } {
-        const { environment, titleOverride } = this.options
+    private renderState(): ContextPreviewPopoverContent & {
+        latestNode: CanvasNode
+        text: string
+    } {
+        const {
+            environment,
+            titleOverride,
+        } = this.options
         const latestNode = this.options.getNode?.() ?? this.options.node
-        const title = resolveContextPreviewTitle(latestNode, environment, titleOverride)
+        const title = resolveContextPreviewTitle(
+            latestNode,
+            environment,
+            titleOverride,
+        )
         const text = getContextPreviewText(latestNode, environment)
         const accessibleLabel = title || getContextPreviewTypeLabel(latestNode)
         const content = new ContextPreviewVisual(environment)
+
         try {
             const state = {
                 accessibleLabel,
-                content: content.renderContextPreviewPopoverContent(latestNode, title, text, accessibleLabel, environment),
-                contentClassName: getContextPreviewPopoverClassName(latestNode, Boolean(title || text)),
+                content: content.renderContextPreviewPopoverContent(
+                    latestNode,
+                    title,
+                    text,
+                    accessibleLabel,
+                    environment,
+                ),
+                contentClassName: getContextPreviewPopoverClassName(
+                    latestNode,
+                    Boolean(title || text),
+                ),
                 latestNode,
                 text,
             }
             this.content?.destroy()
             this.content = content
+
             return state
         } catch (error) {
             content.destroy()
+
             throw error
         }
     }
 
-    destroy = (): void => {
-        this.lifetime.destroy()
-    }
+    destroy = (): void => void this.lifetime.destroy()
 }
 
-export function createContextPreviewTile(options: CreateContextPreviewTileOptions): ContextPreviewTileInstance {
-    return new ContextPreviewTile(options)
-}
+export const createContextPreviewTile = (options: CreateContextPreviewTileOptions): ContextPreviewTileInstance => new ContextPreviewTile(options)

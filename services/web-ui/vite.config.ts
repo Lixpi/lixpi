@@ -71,9 +71,14 @@ export default defineConfig({
                 importers: [{
                     findFileUrl(url: string) {
                         if (url.startsWith('$src/')) {
-                            const resolved = path.resolve('./src', url.slice(5))
+                            const resolved = path.resolve(
+                                './src',
+                                url.slice(5),
+                            )
+
                             return pathToFileURL(resolved)
                         }
+
                         return null
                     },
                 }],

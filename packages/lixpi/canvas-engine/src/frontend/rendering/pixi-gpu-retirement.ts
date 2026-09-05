@@ -13,27 +13,40 @@ export class PixiGpuRetirement {
     private readonly create: WebGPURenderer['buffer']['createGPUBuffer']
     private restored = false
 
-    constructor(private readonly renderer: WebGPURenderer, private readonly retire: (dispose: Dispose) => void) {
+    constructor(
+        private readonly renderer: WebGPURenderer,
+        private readonly retire: (dispose: Dispose) => void,
+    ) {
         this.create = renderer.buffer.createGPUBuffer
         renderer.buffer.createGPUBuffer = this.createBuffer
     }
 
     private createBuffer = (buffer: Buffer): GPUBuffer => {
         const native = this.create.call(this.renderer.buffer, buffer)
-        const data = buffer._gpuData[this.renderer.uid] as { gpuBuffer: GPUBuffer | null; destroy: Dispose }
+        const data = buffer._gpuData[this.renderer.uid] as {
+            gpuBuffer: GPUBuffer | null
+            destroy: Dispose
+        }
         let retired = false
         data.destroy = () => {
-            if (retired) return
+            if (retired)
+                return
+
             retired = true
             data.gpuBuffer = null
             this.retire(() => native.destroy())
         }
+
         return native
     }
 
     destroy(): void {
-        if (this.restored) return
+        if (this.restored)
+            return
+
         this.restored = true
-        if (this.renderer.buffer.createGPUBuffer === this.createBuffer) this.renderer.buffer.createGPUBuffer = this.create
+
+        if (this.renderer.buffer.createGPUBuffer === this.createBuffer)
+            this.renderer.buffer.createGPUBuffer = this.create
     }
 }

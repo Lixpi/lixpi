@@ -1,11 +1,5 @@
 import chalk from 'chalk'
-import {
-    log,
-    info,
-    infoStr,
-    warn,
-    err,
-} from '@lixpi/debug-tools'
+import { infoStr } from '@lixpi/debug-tools'
 
 import Organization from '../../models/organization.ts'
 
@@ -26,7 +20,10 @@ export const organizationSubjects = [
             const { organizationId } = data
             const userId = data.user?.userId
 
-            return await Organization.getOrganization({ organizationId, userId })
+            return await Organization.getOrganization({
+                organizationId,
+                userId,
+            })
         },
     },
 
@@ -39,7 +36,10 @@ export const organizationSubjects = [
             sub: { allow: [] },
         },
         handler: async (data, msg) => {
-            const { name, availableModels } = data
+            const {
+                name,
+                availableModels,
+            } = data
             const userId = data.user?.userId
 
             return await Organization.createOrganization({
@@ -63,7 +63,11 @@ export const organizationSubjects = [
                 chalk.green('update->organization'),
             ])
 
-            const { organizationId, name, availableModels } = data
+            const {
+                organizationId,
+                name,
+                availableModels,
+            } = data
             const userId = data.user?.userId
 
             return await Organization.updateOrganization({
@@ -85,10 +89,19 @@ export const organizationSubjects = [
             sub: { allow: [] },
         },
         handler: async (data, msg) => {
-            const { organizationId, name, color } = data
+            const {
+                organizationId,
+                name,
+                color,
+            } = data
             const userId = data.user?.userId
 
-            return await Organization.createTag({ organizationId, name, color, userId })
+            return await Organization.createTag({
+                organizationId,
+                name,
+                color,
+                userId,
+            })
         },
     },
     {
@@ -100,10 +113,21 @@ export const organizationSubjects = [
             sub: { allow: [] },
         },
         handler: async (data, msg) => {
-            const { organizationId, tagId, name, color } = data
+            const {
+                organizationId,
+                tagId,
+                name,
+                color,
+            } = data
             const userId = data.user?.userId
 
-            return await Organization.updateTag({ organizationId, tagId, name, color, userId })
+            return await Organization.updateTag({
+                organizationId,
+                tagId,
+                name,
+                color,
+                userId,
+            })
         },
     },
     {
@@ -115,10 +139,17 @@ export const organizationSubjects = [
             sub: { allow: [] },
         },
         handler: async (data, msg) => {
-            const { organizationId, tagId } = data
+            const {
+                organizationId,
+                tagId,
+            } = data
             const userId = data.user?.userId
 
-            return await Organization.deleteTag({ organizationId, tagId, userId })
+            return await Organization.deleteTag({
+                organizationId,
+                tagId,
+                userId,
+            })
         },
     },
     // END Organization Tags ---------------------------------------------------------------------------------------------------

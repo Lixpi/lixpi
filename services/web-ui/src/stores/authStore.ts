@@ -36,9 +36,7 @@ export const authStore = {
     // Synchronous access for imperative components.
     getMeta: (key: keyof Meta | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(store => {
-            returnValue = key ? store.meta[key] : store.meta
-        })
+        const unsubscribe = store.subscribe(store => void (returnValue = key ? store.meta[key] : store.meta))
         unsubscribe()
 
         return returnValue
@@ -47,31 +45,33 @@ export const authStore = {
     // Synchronous access for imperative components.
     getData: (key: keyof Auth | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(store => {
-            returnValue = key ? store.data[key] : store.data
-        })
+        const unsubscribe = store.subscribe(store => void (returnValue = key ? store.data[key] : store.data))
         unsubscribe()
 
         return returnValue
     },
 
     setMetaValues: (values: Partial<Meta> = {}): void =>
-        store.update(state => ({
-            ...state,
-            meta: {
-                ...state.meta,
-                ...values,
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                meta: {
+                    ...state.meta,
+                    ...values,
+                },
+            }),
+        ),
 
     setDataValues: (values: Partial<Auth> = {}): void =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                ...values,
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    ...values,
+                },
+            }),
+        ),
 
-    resetStore: (): void => store.set(auth),
+    resetStore: (): void => void store.set(auth),
 }

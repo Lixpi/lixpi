@@ -35,16 +35,31 @@ export type DragStartOptions = {
 export type WorkspaceCanvasCallbacks = {
     onViewportChange?: (viewport: Viewport) => void
     onCanvasStateChange?: (state: CanvasState) => void
-    onAuthoritativeCanvasStateChange?: (params: { canvasState: CanvasState; layoutRevision: number }) => void
-    onDocumentContentChange?: (params: { documentId: string; title?: string; content: any }) => void
-    onAiChatThreadContentChange?: (params: { workspaceId: string; threadId: string; content: any }) => void
+    onAuthoritativeCanvasStateChange?: (params: {
+        canvasState: CanvasState
+        layoutRevision: number
+    }) => void
+    onDocumentContentChange?: (params: {
+        documentId: string
+        title?: string
+        content: any
+    }) => void
+    onAiChatThreadContentChange?: (params: {
+        workspaceId: string
+        threadId: string
+        content: any
+    }) => void
     onAssetDetach?: (params: {
         assetId: string
         nodeId: string
         removedNodeIds: string[]
         canvasState: CanvasState
     }) => Promise<CanvasState>
-    onAssetAttach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>
+    onAssetAttach?: (params: {
+        assetId: string
+        nodeId: string
+        canvasState: CanvasState
+    }) => Promise<CanvasState>
 }
 
 export type WorkspaceCanvasNodeInsertion =
@@ -63,7 +78,10 @@ export type WorkspaceCanvasOptions = {
     viewportEl: HTMLDivElement
     mediaModeSwitchMountEl: HTMLDivElement
     modelMenuControlMountEl: HTMLDivElement
-    glassTargets?: readonly { id: string; element: HTMLElement }[]
+    glassTargets?: readonly {
+        id: string
+        element: HTMLElement
+    }[]
     workspaceId: string
     canvasState: CanvasState | null
     documents: WorkspaceCanvasDocument[]

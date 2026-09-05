@@ -32,7 +32,11 @@ const EXECUTABLE_MIME = new Set([
     'application/vnd.microsoft.portable-executable',
     'application/x-msi',
 ])
-const SCRIPT_MIME = new Set(['application/x-sh', 'application/x-shellscript', 'text/x-shellscript'])
+const SCRIPT_MIME = new Set([
+    'application/x-sh',
+    'application/x-shellscript',
+    'text/x-shellscript',
+])
 const ARCHIVE_MIME = new Set([
     'application/zip',
     'application/x-tar',
@@ -44,10 +48,18 @@ const ARCHIVE_MIME = new Set([
 ])
 
 const denyReasonFor = (mime: string): string => {
-    if (EXECUTABLE_MIME.has(mime)) return 'Executable files are not permitted.'
-    if (SCRIPT_MIME.has(mime)) return 'Script files are not permitted.'
-    if (ARCHIVE_MIME.has(mime)) return 'Archive files are not permitted.'
-    if (mime.includes('macroEnabled')) return 'Macro-enabled office files are not permitted.'
+    if (EXECUTABLE_MIME.has(mime))
+        return 'Executable files are not permitted.'
+
+    if (SCRIPT_MIME.has(mime))
+        return 'Script files are not permitted.'
+
+    if (ARCHIVE_MIME.has(mime))
+        return 'Archive files are not permitted.'
+
+    if (mime.includes('macroEnabled'))
+        return 'Macro-enabled office files are not permitted.'
+
     return 'This file type is not permitted.'
 }
 
@@ -59,54 +71,85 @@ const looksLikeUtf8Text = (buffer: Buffer): boolean => {
     // Reject NUL bytes outright — they never appear in the textual formats we
     // accept and are a strong signal of binary content.
     const sample = buffer.subarray(0, 4096)
-    if (sample.includes(0)) return false
+
+    if (sample.includes(0))
+        return false
+
     try {
         new TextDecoder('utf-8', { fatal: true }).decode(sample)
+
         return true
     } catch {
         return false
     }
 }
 
-const detectTextualMime = (buffer: Buffer, declaredName?: string): string | undefined => {
-    if (!looksLikeUtf8Text(buffer)) return undefined
+const detectTextualMime = (
+    buffer: Buffer,
+    declaredName?: string,
+): string | undefined => {
+    if (!looksLikeUtf8Text(buffer))
+        return undefined
 
     const head = buffer.subarray(0, 4096).toString('utf-8').trimStart()
     const lowerHead = head.toLowerCase()
 
     // SVG is XML with an <svg> root, possibly behind an XML/doctype prolog.
-    if (lowerHead.startsWith('<?xml') || lowerHead.startsWith('<svg') || lowerHead.startsWith('<!doctype svg')) {
-        if (lowerHead.includes('<svg')) return 'image/svg+xml'
+    if (
+        lowerHead.startsWith('<?xml')
+        || lowerHead.startsWith('<svg')
+        || lowerHead.startsWith('<!doctype svg')
+    ) {
+        if (lowerHead.includes('<svg'))
+            return 'image/svg+xml'
     }
 
     const ext = declaredName?.toLowerCase().split('.').at(-1) ?? ''
-    if (ext === 'md' || ext === 'markdown') return 'text/markdown'
+
+    if (
+        ext === 'md'
+        || ext === 'markdown'
+    )
+        return 'text/markdown'
+
     return 'text/plain'
 }
 
 // Sniff the real type of an uploaded buffer and resolve it against the media
 // policy. Deny-list is checked first (specific error), then the allow-list
 // (MEDIA_POLICY); a MIME with no allow-list entry is rejected.
-export const detectFileType = async (buffer: Buffer, declaredName?: string): Promise<FileTypeResolution> => {
-    if (buffer.length === 0) {
-        return { rejected: true, reason: 'The uploaded file is empty.' }
-    }
+export const detectFileType = async (
+    buffer: Buffer,
+    declaredName?: string,
+): Promise<FileTypeResolution> => {
+    if (buffer.length === 0)
+        return {
+            rejected: true,
+            reason: 'The uploaded file is empty.',
+        }
 
     const sniffed = await fileTypeFromBuffer(buffer)
     const mimeType = sniffed?.mime ?? detectTextualMime(buffer, declaredName)
 
-    if (!mimeType) {
-        return { rejected: true, reason: 'Could not recognize this file type.' }
-    }
+    if (!mimeType)
+        return {
+            rejected: true,
+            reason: 'Could not recognize this file type.',
+        }
 
-    if (UPLOAD_DENYLIST_MIME.includes(mimeType)) {
-        return { rejected: true, reason: denyReasonFor(mimeType) }
-    }
+    if (UPLOAD_DENYLIST_MIME.includes(mimeType))
+        return {
+            rejected: true,
+            reason: denyReasonFor(mimeType),
+        }
 
     const policy = MEDIA_POLICY[mimeType]
-    if (!policy) {
-        return { rejected: true, reason: `Files of type "${mimeType}" are not supported.` }
-    }
+
+    if (!policy)
+        return {
+            rejected: true,
+            reason: `Files of type "${mimeType}" are not supported.`,
+        }
 
     return {
         rejected: false,

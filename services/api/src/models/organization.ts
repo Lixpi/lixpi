@@ -1,10 +1,10 @@
+import { err as debugError } from '@lixpi/debug-tools'
 import * as process from 'process'
 import { v4 as uuid } from 'uuid'
 
 import {
     getDynamoDbTableStageName,
     type Organization,
-    type OrganizationAccessList,
 } from '@lixpi/constants'
 
 const {
@@ -16,14 +16,20 @@ const {
 // access-list fan-out need it; getOrganization strips it before returning.
 const getOrganizationRecord = async (organizationId: string): Promise<Record<string, any> | null> => {
     const org = await dynamoDBService.getItem({
-        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+        tableName: getDynamoDbTableStageName(
+            'ORGANIZATIONS',
+            ORG_NAME,
+            STAGE,
+        ),
         key: { organizationId },
         origin: 'model::Organization->getRecord()',
     })
 
-    if (!org || Object.keys(org).length === 0) {
+    if (
+        !org
+        || Object.keys(org).length === 0
+    )
         return null
-    }
 
     return org
 }
@@ -34,21 +40,26 @@ const OrganizationModel = {
         userId,
     }: Pick<Organization, 'organizationId'> & { userId: string }): Promise<Organization | { error: string }> => {
         const org = await dynamoDBService.getItem({
-            tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'ORGANIZATIONS',
+                ORG_NAME,
+                STAGE,
+            ),
             key: { organizationId },
             origin: 'model::Organization->get()',
         })
 
-        if (!org || Object.keys(org).length === 0) {
+        if (
+            !org
+            || Object.keys(org).length === 0
+        )
             return { error: 'NOT_FOUND' }
-        }
 
         // Check if user has permission to access organization
         const hasAccess = org.accessList && org.accessList[userId]
 
-        if (!hasAccess) {
+        if (!hasAccess)
             return { error: 'PERMISSION_DENIED' }
-        }
 
         delete org.accessList
 
@@ -59,7 +70,11 @@ const OrganizationModel = {
         userId,
     }: { userId: string }): Promise<Organization[]> => {
         const userOrgs = await dynamoDBService.queryItems({
-            tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+            tableName: getDynamoDbTableStageName(
+                'ORGANIZATIONS_ACCESS_LIST',
+                ORG_NAME,
+                STAGE,
+            ),
             indexName: 'updatedAt',
             keyConditions: { userId: userId },
             limit: 25,
@@ -69,13 +84,16 @@ const OrganizationModel = {
             origin: 'model::Organization->getUserOrganizations()',
         })
 
-        if (!userOrgs.items.length) {
+        if (!userOrgs.items.length)
             return []
-        }
 
         const orgDetails = await dynamoDBService.batchReadItems({
             queries: [{
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'ORGANIZATIONS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 keys: userOrgs.items.map(({ organizationId }) => ({ organizationId })),
             }],
             readBatchSize: 100,
@@ -84,14 +102,21 @@ const OrganizationModel = {
             origin: 'model::Organization->getUserOrganizations()',
         })
 
-        return orgDetails.items[getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE)]
+        return orgDetails.items[getDynamoDbTableStageName(
+            'ORGANIZATIONS',
+            ORG_NAME,
+            STAGE,
+        )]
     },
 
     createOrganization: async ({
         name,
         userId,
         accessLevel,
-    }: Pick<Organization, 'name'> & { userId: string; accessLevel: string }): Promise<Organization | { error: string }> => {
+    }: Pick<Organization, 'name'> & {
+        userId: string
+        accessLevel: string
+    }): Promise<Organization | { error: string }> => {
         const currentDate = new Date().getTime()
         const organizationId = uuid()
 
@@ -110,12 +135,20 @@ const OrganizationModel = {
                 operations: [
                     {
                         type: 'put',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         item: newOrgData,
                     },
                     {
                         type: 'put',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS_ACCESS_LIST',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         item: {
                             userId: userId, // Partition key
                             organizationId, // Sort key
@@ -130,7 +163,8 @@ const OrganizationModel = {
 
             return newOrgData
         } catch (e) {
-            console.error('createOrganization failed', e)
+            debugError('createOrganization failed', e)
+
             return { error: 'CREATION_FAILED' }
         }
     },
@@ -139,17 +173,20 @@ const OrganizationModel = {
         organizationId,
         name,
         userId,
-    }: Pick<Organization, 'organizationId'> & { name?: string; userId: string }): Promise<Organization | { error: string }> => {
+    }: Pick<Organization, 'organizationId'> & {
+        name?: string
+        userId: string
+    }): Promise<Organization | { error: string }> => {
         const currentDate = new Date().getTime()
 
         try {
             const org = await getOrganizationRecord(organizationId)
-            if (!org) {
+
+            if (!org)
                 return { error: 'NOT_FOUND' }
-            }
-            if (!org.accessList?.[userId]) {
+
+            if (!org.accessList?.[userId])
                 return { error: 'PERMISSION_DENIED' }
-            }
 
             const updates = {
                 ...(name && { name }),
@@ -157,15 +194,23 @@ const OrganizationModel = {
             }
 
             await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'ORGANIZATIONS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { organizationId },
                 updates,
                 origin: 'updateOrganization',
             })
 
-            return { ...org, ...updates }
+            return {
+                ...org,
+                ...updates,
+            }
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return { error: 'UPDATE_FAILED' }
         }
     },
@@ -173,16 +218,18 @@ const OrganizationModel = {
     deleteOrganization: async ({
         organizationId,
         userId,
-    }: Pick<Organization, 'organizationId'> & { userId: string }): Promise<{ status: string; organizationId: string } | { error: string }> => {
+    }: Pick<Organization, 'organizationId'> & { userId: string }): Promise<{
+        status: string
+        organizationId: string
+    } | { error: string }> => {
         try {
             const org = await getOrganizationRecord(organizationId)
-            if (!org) {
-                return { error: 'NOT_FOUND' }
-            }
 
-            if (org.accessList?.[userId] !== 'owner') {
+            if (!org)
+                return { error: 'NOT_FOUND' }
+
+            if (org.accessList?.[userId] !== 'owner')
                 return { error: 'PERMISSION_DENIED' }
-            }
 
             // The org row's accessList map names every member whose access-list
             // row must go. Delete the org and all member rows in one transaction.
@@ -192,21 +239,38 @@ const OrganizationModel = {
                 operations: [
                     {
                         type: 'delete',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { organizationId },
                     },
-                    ...memberIds.map((memberId) => ({
-                        type: 'delete' as const,
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                        key: { userId: memberId, organizationId },
-                    })),
+                    ...memberIds.map(
+                        memberId => ({
+                            type: 'delete' as const,
+                            tableName: getDynamoDbTableStageName(
+                                'ORGANIZATIONS_ACCESS_LIST',
+                                ORG_NAME,
+                                STAGE,
+                            ),
+                            key: {
+                                userId: memberId,
+                                organizationId,
+                            },
+                        }),
+                    ),
                 ],
                 origin: 'deleteOrganization',
             })
 
-            return { status: 'deleted', organizationId }
+            return {
+                status: 'deleted',
+                organizationId,
+            }
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return { error: 'DELETION_FAILED' }
         }
     },
@@ -216,25 +280,37 @@ const OrganizationModel = {
         userId,
         accessLevel,
         addedByUserId,
-    }: Pick<Organization, 'organizationId'> & { userId: string; accessLevel: string; addedByUserId: string }): Promise<{ status: string; userId: string; organizationId: string; accessLevel: string } | { error: string }> => {
+    }: Pick<Organization, 'organizationId'> & {
+        userId: string
+        accessLevel: string
+        addedByUserId: string
+    }): Promise<{
+        status: string
+        userId: string
+        organizationId: string
+        accessLevel: string
+    } | { error: string }> => {
         const currentDate = new Date().getTime()
 
         try {
             const org = await getOrganizationRecord(organizationId)
-            if (!org) {
-                return { error: 'NOT_FOUND' }
-            }
 
-            if (org.accessList?.[addedByUserId] !== 'owner') {
+            if (!org)
+                return { error: 'NOT_FOUND' }
+
+            if (org.accessList?.[addedByUserId] !== 'owner')
                 return { error: 'PERMISSION_DENIED' }
-            }
 
             // Org row accessList map + member's access-list row commit together
             await dynamoDBService.transactWrite({
                 operations: [
                     {
                         type: 'update',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { organizationId },
                         updates: {
                             [`accessList.${userId}`]: accessLevel,
@@ -243,7 +319,11 @@ const OrganizationModel = {
                     },
                     {
                         type: 'put',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS_ACCESS_LIST',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         item: {
                             userId: userId, // Partition key
                             organizationId, // Sort key
@@ -256,9 +336,15 @@ const OrganizationModel = {
                 origin: 'addUserToOrganization',
             })
 
-            return { status: 'added', userId, organizationId, accessLevel }
+            return {
+                status: 'added',
+                userId,
+                organizationId,
+                accessLevel,
+            }
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return { error: 'ADD_USER_FAILED' }
         }
     },
@@ -267,25 +353,38 @@ const OrganizationModel = {
         organizationId,
         userId,
         removedByUserId,
-    }: Pick<Organization, 'organizationId'> & { userId: string; removedByUserId: string }): Promise<{ status: string; userId: string; organizationId: string } | { error: string }> => {
+    }: Pick<Organization, 'organizationId'> & {
+        userId: string
+        removedByUserId: string
+    }): Promise<{
+        status: string
+        userId: string
+        organizationId: string
+    } | { error: string }> => {
         const currentDate = new Date().getTime()
 
         try {
             const org = await getOrganizationRecord(organizationId)
-            if (!org) {
-                return { error: 'NOT_FOUND' }
-            }
 
-            if (org.accessList?.[removedByUserId] !== 'owner' && removedByUserId !== userId) {
+            if (!org)
+                return { error: 'NOT_FOUND' }
+
+            if (
+                org.accessList?.[removedByUserId] !== 'owner'
+                && removedByUserId !== userId
+            )
                 return { error: 'PERMISSION_DENIED' }
-            }
 
             // Org row accessList map + member's access-list row commit together
             await dynamoDBService.transactWrite({
                 operations: [
                     {
                         type: 'update',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS',
+                            ORG_NAME,
+                            STAGE,
+                        ),
                         key: { organizationId },
                         updates: {
                             [`accessList.${userId}`]: null,
@@ -294,16 +393,28 @@ const OrganizationModel = {
                     },
                     {
                         type: 'delete',
-                        tableName: getDynamoDbTableStageName('ORGANIZATIONS_ACCESS_LIST', ORG_NAME, STAGE),
-                        key: { userId: userId, organizationId },
+                        tableName: getDynamoDbTableStageName(
+                            'ORGANIZATIONS_ACCESS_LIST',
+                            ORG_NAME,
+                            STAGE,
+                        ),
+                        key: {
+                            userId: userId,
+                            organizationId,
+                        },
                     },
                 ],
                 origin: 'removeUserFromOrganization',
             })
 
-            return { status: 'removed', userId, organizationId }
+            return {
+                status: 'removed',
+                userId,
+                organizationId,
+            }
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return { error: 'REMOVE_USER_FAILED' }
         }
     },
@@ -313,7 +424,14 @@ const OrganizationModel = {
         name,
         color,
         userId,
-    }: Pick<Organization, 'organizationId'> & { name: string; color: string; userId: string }): Promise<{ tags: Record<string, { name: string; color: string }> } | null> => {
+    }: Pick<Organization, 'organizationId'> & {
+        name: string
+        color: string
+        userId: string
+    }): Promise<{ tags: Record<string, {
+        name: string
+        color: string
+    }> } | null> => {
         const currentDate = new Date().getTime()
         const tagId = uuid()
 
@@ -327,12 +445,19 @@ const OrganizationModel = {
             }
 
             const expressionAttributeValues = {
-                ':tagValue': { name, color },
+                ':tagValue': {
+                    name,
+                    color,
+                },
                 ':updatedAt': currentDate,
             }
 
             const createdOrganizationTag = await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'ORGANIZATIONS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { organizationId },
                 updateExpression,
                 expressionAttributeNames,
@@ -342,7 +467,8 @@ const OrganizationModel = {
 
             return { tags: createdOrganizationTag.tags } // Returns tags object where the key is the tagId and the value is the tag object
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return null
         }
     },
@@ -353,12 +479,20 @@ const OrganizationModel = {
         name,
         color,
         userId,
-    }: Pick<Organization, 'organizationId'> & { tagId: string; name: string; color: string; userId: string }): Promise<any> => {
+    }: Pick<Organization, 'organizationId'> & {
+        tagId: string
+        name: string
+        color: string
+        userId: string
+    }): Promise<any> => {
         const currentDate = new Date().getTime()
 
         try {
             const updates = {
-                [`#tags.${tagId}`]: { name, color },
+                [`#tags.${tagId}`]: {
+                    name,
+                    color,
+                },
                 updatedAt: currentDate,
             }
 
@@ -367,7 +501,11 @@ const OrganizationModel = {
             }
 
             const updatedOrganizationTag = await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'ORGANIZATIONS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { organizationId },
                 updates,
                 expressionAttributeNames,
@@ -376,7 +514,8 @@ const OrganizationModel = {
 
             return updatedOrganizationTag
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return null
         }
     },
@@ -385,7 +524,10 @@ const OrganizationModel = {
         organizationId,
         tagId,
         userId,
-    }: Pick<Organization, 'organizationId'> & { tagId: string; userId: string }): Promise<any> => {
+    }: Pick<Organization, 'organizationId'> & {
+        tagId: string
+        userId: string
+    }): Promise<any> => {
         const currentDate = new Date().getTime()
 
         try {
@@ -399,7 +541,11 @@ const OrganizationModel = {
             }
 
             const updatedOrg = await dynamoDBService.updateItem({
-                tableName: getDynamoDbTableStageName('ORGANIZATIONS', ORG_NAME, STAGE),
+                tableName: getDynamoDbTableStageName(
+                    'ORGANIZATIONS',
+                    ORG_NAME,
+                    STAGE,
+                ),
                 key: { organizationId },
                 updates,
                 expressionAttributeNames,
@@ -408,7 +554,8 @@ const OrganizationModel = {
 
             return updatedOrg
         } catch (e) {
-            console.error(e)
+            debugError(e)
+
             return null
         }
     },

@@ -32,30 +32,41 @@ export type CharacterReferencePack = {
     entries: CharacterReferencePackEntry[]
 }
 
-export async function buildCharacterReferencePack(args: {
+export const buildCharacterReferencePack = async (args: {
     sources: readonly ResolvedCharacterReference[]
     evidence: CharacterEvidenceProfile
     editTargetAssetId?: string
-    referenceAliases?: ReadonlyArray<{ assetId: string; alias: string }>
+    referenceAliases?: ReadonlyArray<{
+        assetId: string
+        alias: string
+    }>
     capabilities: ImageReferenceCapabilities
     store: CharacterTransientMediaStorePort
-}): Promise<CharacterReferencePack> {
+}): Promise<CharacterReferencePack> => {
     const entries: CharacterReferencePackEntry[] = []
-    const aliases = new Map((args.referenceAliases ?? []).map(reference => [
-        reference.assetId,
-        normalizeReferenceSlot(reference.alias),
-    ]))
+    const aliases = new Map(
+        (args.referenceAliases ?? []).map(
+            reference => [
+                reference.assetId,
+                normalizeReferenceSlot(reference.alias),
+            ],
+        ),
+    )
     let originalSourceIndex = 0
+
     for (const [sourceIndex, source] of args.sources.entries()) {
         const isEditTarget = source.sourceKind === 'composition-component'
             && source.assetId === args.editTargetAssetId
+
         if (
-            isEditTarget && (args.evidence.editTargetPolicy === 'identity-only'
-                || args.evidence.editTargetPolicy === 'discard')
-        ) {
+            isEditTarget
+            && (args.evidence.editTargetPolicy === 'identity-only' || args.evidence.editTargetPolicy === 'discard')
+        )
             continue
-        }
-        if (!isEditTarget) originalSourceIndex += 1
+
+        if (!isEditTarget)
+            originalSourceIndex += 1
+
         const alias = aliases.get(source.assetId)
         entries.push(
             await storeReference({
@@ -71,11 +82,13 @@ export async function buildCharacterReferencePack(args: {
     }
 
     if (args.evidence.editTargetPolicy === 'identity-only') {
-        const identityPanel = args.sources.find(source =>
-            source.sourceKind === 'composition-component'
-            && source.assetId === args.editTargetAssetId
-            && source.componentId === 'head-front-neutral'
+        const identityPanel = args.sources.find(
+            source =>
+                source.sourceKind === 'composition-component'
+                && source.assetId === args.editTargetAssetId
+                && source.componentId === 'head-front-neutral',
         )
+
         if (identityPanel) {
             entries.push(
                 await storeReference({
@@ -92,9 +105,14 @@ export async function buildCharacterReferencePack(args: {
     const faceFact = bestObservedRegion(args.evidence, 'face')
     const bodyFact = bestObservedRegion(args.evidence, 'body')
         ?? bestObservedRegion(args.evidence, 'outfit')
+
     if (faceFact) {
         const source = args.sources.find(candidate => candidate.assetId === faceFact.sourceAssetId)
-        if (source && faceFact.sourceRegion) {
+
+        if (
+            source
+            && faceFact.sourceRegion
+        ) {
             const alias = aliases.get(source.assetId)
             entries.push(
                 await storeReference({
@@ -107,9 +125,14 @@ export async function buildCharacterReferencePack(args: {
             )
         }
     }
+
     if (bodyFact) {
         const source = args.sources.find(candidate => candidate.assetId === bodyFact.sourceAssetId)
-        if (source && bodyFact.sourceRegion) {
+
+        if (
+            source
+            && bodyFact.sourceRegion
+        ) {
             const alias = aliases.get(source.assetId)
             entries.push(
                 await storeReference({
@@ -122,10 +145,16 @@ export async function buildCharacterReferencePack(args: {
             )
         }
     }
+
     const propFact = bestObservedRegion(args.evidence, 'prop')
+
     if (propFact) {
         const source = args.sources.find(candidate => candidate.assetId === propFact.sourceAssetId)
-        if (source && propFact.sourceRegion) {
+
+        if (
+            source
+            && propFact.sourceRegion
+        ) {
             const alias = aliases.get(source.assetId)
             entries.push(
                 await storeReference({
@@ -138,6 +167,7 @@ export async function buildCharacterReferencePack(args: {
             )
         }
     }
+
     return { entries }
 }
 
@@ -157,6 +187,7 @@ const storeReference = async (args: {
         mimeType: 'image/png',
         revision: 1,
     })
+
     return {
         url: `data:image/png;base64,${normalized.toString('base64')}`,
         role: args.role,
@@ -170,17 +201,56 @@ const storeReference = async (args: {
     }
 }
 
-const cropLossless = async (bytes: Buffer, region: CharacterSourceRegion): Promise<Buffer> => {
+const cropLossless = async (
+    bytes: Buffer,
+    region: CharacterSourceRegion,
+): Promise<Buffer> => {
     const metadata = await sharp(bytes).metadata()
     const sourceWidth = metadata.width ?? 0
     const sourceHeight = metadata.height ?? 0
-    if (sourceWidth < 1 || sourceHeight < 1) throw new Error('CHARACTER_REFERENCE_DIMENSIONS_INVALID')
-    const left = Math.min(sourceWidth - 1, Math.max(0, Math.round(region.x)))
-    const top = Math.min(sourceHeight - 1, Math.max(0, Math.round(region.y)))
-    const width = Math.min(sourceWidth - left, Math.max(1, Math.round(region.width)))
-    const height = Math.min(sourceHeight - top, Math.max(1, Math.round(region.height)))
+
+    if (
+        sourceWidth < 1
+        || sourceHeight < 1
+    )
+        throw new Error('CHARACTER_REFERENCE_DIMENSIONS_INVALID')
+
+    const left = Math.min(
+        sourceWidth - 1,
+        Math.max(
+            0,
+            Math.round(region.x),
+        ),
+    )
+    const top = Math.min(
+        sourceHeight - 1,
+        Math.max(
+            0,
+            Math.round(region.y),
+        ),
+    )
+    const width = Math.min(
+        sourceWidth - left,
+        Math.max(
+            1,
+            Math.round(region.width),
+        ),
+    )
+    const height = Math.min(
+        sourceHeight - top,
+        Math.max(
+            1,
+            Math.round(region.height),
+        ),
+    )
+
     return await sharp(bytes)
-        .extract({ left, top, width, height })
+        .extract({
+            left,
+            top,
+            width,
+            height,
+        })
         .png({ compressionLevel: 9 })
         .toBuffer()
 }
@@ -189,27 +259,64 @@ const cropStandardHeadPanelIdentity = async (bytes: Buffer): Promise<Buffer> => 
     const metadata = await sharp(bytes).metadata()
     const sourceWidth = metadata.width ?? 0
     const sourceHeight = metadata.height ?? 0
-    if (sourceWidth < 8 || sourceHeight < 8) throw new Error('CHARACTER_EDIT_TARGET_IDENTITY_DIMENSIONS_INVALID')
+
+    if (
+        sourceWidth < 8
+        || sourceHeight < 8
+    )
+        throw new Error('CHARACTER_EDIT_TARGET_IDENTITY_DIMENSIONS_INVALID')
+
     const left = Math.round(sourceWidth * 0.26)
     const top = Math.round(sourceHeight * 0.2)
-    const width = Math.max(1, Math.min(sourceWidth - left, Math.round(sourceWidth * 0.48)))
-    const height = Math.max(1, Math.min(sourceHeight - top, Math.round(sourceHeight * 0.35)))
+    const width = Math.max(
+        1,
+        Math.min(
+            sourceWidth - left,
+            Math.round(sourceWidth * 0.48),
+        ),
+    )
+    const height = Math.max(
+        1,
+        Math.min(
+            sourceHeight - top,
+            Math.round(sourceHeight * 0.35),
+        ),
+    )
+
     return await sharp(bytes)
-        .extract({ left, top, width, height })
+        .extract({
+            left,
+            top,
+            width,
+            height,
+        })
         .png({ compressionLevel: 9 })
         .toBuffer()
 }
 
-const fitWithinPixelLimit = async (bytes: Buffer, pixelLimit: number): Promise<Buffer> => {
+const fitWithinPixelLimit = async (
+    bytes: Buffer,
+    pixelLimit: number,
+): Promise<Buffer> => {
     const metadata = await sharp(bytes).metadata()
     const width = metadata.width ?? 0
     const height = metadata.height ?? 0
-    if (width * height <= pixelLimit) return bytes
+
+    if (width * height <= pixelLimit)
+        return bytes
+
     const scale = Math.sqrt(pixelLimit / (width * height))
+
     return await sharp(bytes)
         .resize({
-            width: Math.max(1, Math.floor(width * scale)),
-            height: Math.max(1, Math.floor(height * scale)),
+            width: Math.max(
+                1,
+                Math.floor(width * scale),
+            ),
+            height: Math.max(
+                1,
+                Math.floor(height * scale),
+            ),
             fit: 'inside',
             withoutEnlargement: true,
             kernel: 'lanczos3',
@@ -222,22 +329,25 @@ const bestObservedRegion = (
     evidence: CharacterEvidenceProfile,
     region: CharacterEvidenceRegion,
 ): CharacterEvidenceProfile['facts'][number] | undefined =>
-    evidence.facts
-        .filter(fact =>
-            fact.visibility === 'observed'
-            && fact.sourceRegion
-            && (fact.region === region
-                || (!fact.region && fact.feature.toLocaleLowerCase().includes(region)))
-        )
-        .sort((left, right) =>
-            requestAuthorityPriority(right.requestAuthority)
-                - requestAuthorityPriority(left.requestAuthority)
-            || right.confidence - left.confidence
+    evidence.facts.filter(
+        fact =>
+                fact.visibility === 'observed'
+                && fact.sourceRegion
+                && (fact.region === region
+                    || (!fact.region && fact.feature.toLocaleLowerCase().includes(region))),
+    )
+        .sort(
+            (left, right) =>
+                requestAuthorityPriority(right.requestAuthority)
+                    - requestAuthorityPriority(left.requestAuthority)
+                || right.confidence - left.confidence,
         )[0]
 
-const requestAuthorityPriority = (
-    authority: CharacterEvidenceProfile['facts'][number]['requestAuthority'],
-): number => authority === 'assigned' ? 2 : authority === 'supporting' ? 1 : 0
+const requestAuthorityPriority = (authority: CharacterEvidenceProfile['facts'][number]['requestAuthority']): number => (authority === 'assigned'
+    ? 2
+    : authority === 'supporting'
+        ? 1
+        : 0)
 
 const normalizeReferenceSlot = (value: string): string =>
     value

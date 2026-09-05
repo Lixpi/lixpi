@@ -23,13 +23,19 @@ const FIELDS_SCHEMA = {
     type: 'object',
     properties: {
         primaryMood: { type: 'string' },
-        secondaryMoods: { type: 'array', items: { type: 'string' } },
+        secondaryMoods: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         atmosphere: { type: 'string' },
         intendedAudience: { type: 'string' },
         pace: { type: 'string' },
         season: { type: 'string' },
         timeOfDay: { type: 'string' },
-        moodDrivers: { type: 'array', items: { type: 'string' } },
+        moodDrivers: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         transferGuidance: { type: 'string' },
     },
     required: ['primaryMood', 'secondaryMoods', 'atmosphere', 'intendedAudience', 'pace', 'season', 'timeOfDay', 'moodDrivers', 'transferGuidance'],
@@ -41,8 +47,19 @@ const extractor: StyleExtractor = {
     displayName: 'Mood',
     description: 'Extracts the mood / emotional register: primary mood, secondary moods, atmosphere, pace, season, time-of-day, and concrete drivers.',
     minDominance: 0.3,
-    applicableTo: (scene) => (scene.axisDominance['mood'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    applicableTo: scene => (scene.axisDominance['mood'] ?? 0) >= 0.3,
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

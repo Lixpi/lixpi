@@ -121,7 +121,11 @@ export const DEFAULT_VIDEO_MAX_REFERENCE_IMAGES = 3
 
 export const getVideoMaxReferenceImages = (meta: AiModelMetaInfo | undefined): number => {
     const raw = meta?.videoMaxReferenceImages
-    return typeof raw === 'number' && raw > 0 ? raw : DEFAULT_VIDEO_MAX_REFERENCE_IMAGES
+
+    return typeof raw === 'number'
+        && raw > 0
+        ? raw
+        : DEFAULT_VIDEO_MAX_REFERENCE_IMAGES
 }
 
 export type ChatMessage = {
@@ -189,7 +193,10 @@ export type ProviderState = {
     // carrying the whole lineage plan across the boundary.
     isMediaRegenerationRun?: boolean | undefined
     promptReferenceAssetIds?: string[] | undefined
-    canvasVisibleArea?: { width: number; height: number } | undefined
+    canvasVisibleArea?: {
+        width: number
+        height: number
+    } | undefined
 
     // Video generation (VEO) — async submit/poll routing. Mirrors the image
     // fields above; the VLM branch resolution is shared for first-frame and
@@ -261,21 +268,39 @@ export type ProviderState = {
 }
 
 // replace if defined, else keep — mirrors Python TypedDict(total=False) partial-overlay semantics
-const keep = <T>(curr: T | undefined, next: T | undefined): T | undefined => next !== undefined ? next : curr
+const keep = <T>(
+    curr: T | undefined,
+    next: T | undefined,
+): T | undefined => (next !== undefined ? next : curr)
 
-export const channels: Record<keyof ProviderState, { reducer: typeof keep; default?: () => any }> = {
-    messages: { reducer: keep, default: () => [] },
+export const channels: Record<keyof ProviderState, {
+    reducer: typeof keep
+    default?: () => any
+}> = {
+    messages: {
+        reducer: keep,
+        default: () => [],
+    },
     aiModelMetaInfo: { reducer: keep },
-    eventMeta: { reducer: keep, default: () => ({}) },
+    eventMeta: {
+        reducer: keep,
+        default: () => ({}),
+    },
     workspaceId: { reducer: keep },
     aiChatThreadId: { reducer: keep },
     instanceKey: { reducer: keep },
     provider: { reducer: keep },
     modelVersion: { reducer: keep },
     maxCompletionSize: { reducer: keep },
-    temperature: { reducer: keep, default: () => 0.7 },
+    temperature: {
+        reducer: keep,
+        default: () => 0.7,
+    },
     reasoningGenerationConfig: { reducer: keep },
-    streamActive: { reducer: keep, default: () => false },
+    streamActive: {
+        reducer: keep,
+        default: () => false,
+    },
     cancelledByUser: { reducer: keep },
     error: { reducer: keep },
     errorCode: { reducer: keep },
@@ -285,8 +310,14 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     aiVendorRequestId: { reducer: keep },
     aiRequestReceivedAt: { reducer: keep },
     aiRequestFinishedAt: { reducer: keep },
-    enableImageGeneration: { reducer: keep, default: () => false },
-    imageSize: { reducer: keep, default: () => 'auto' },
+    enableImageGeneration: {
+        reducer: keep,
+        default: () => false,
+    },
+    imageSize: {
+        reducer: keep,
+        default: () => 'auto',
+    },
     imageUsage: { reducer: keep },
     imageModelMetaInfo: { reducer: keep },
     imageModelVersion: { reducer: keep },
@@ -300,17 +331,26 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     imageReferenceAdaptation: { reducer: keep },
     capabilityReferenceImageTraceUrls: { reducer: keep },
     capabilityUsageMode: { reducer: keep },
-    imagePromptRetryCount: { reducer: keep, default: () => 0 },
+    imagePromptRetryCount: {
+        reducer: keep,
+        default: () => 0,
+    },
     generatedImages: { reducer: keep },
     workspaceContextSnapshot: { reducer: keep },
     workspaceContextResolution: { reducer: keep },
     mediaBranchCandidateSnapshot: { reducer: keep },
     mediaBranchResolution: { reducer: keep },
     mediaBranchLineagePlan: { reducer: keep },
-    isMediaRegenerationRun: { reducer: keep, default: () => false },
+    isMediaRegenerationRun: {
+        reducer: keep,
+        default: () => false,
+    },
     promptReferenceAssetIds: { reducer: keep },
     canvasVisibleArea: { reducer: keep },
-    enableVideoGeneration: { reducer: keep, default: () => false },
+    enableVideoGeneration: {
+        reducer: keep,
+        default: () => false,
+    },
     videoModelMetaInfo: { reducer: keep },
     videoModelVersion: { reducer: keep },
     videoProviderName: { reducer: keep },
@@ -329,7 +369,10 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     capabilityReferences: { reducer: keep },
     capabilityInputs: { reducer: keep },
     resolvedCapabilityPlan: { reducer: keep },
-    capabilityInvocationDepth: { reducer: keep, default: () => 0 },
+    capabilityInvocationDepth: {
+        reducer: keep,
+        default: () => 0,
+    },
     capabilityToolResults: { reducer: keep },
     capabilityOutputAssetIds: { reducer: keep },
     capabilityOutputMediaAssetIds: { reducer: keep },
@@ -341,11 +384,13 @@ export const channels: Record<keyof ProviderState, { reducer: typeof keep; defau
     workflowSeq: { reducer: keep },
     metricsOperationId: { reducer: keep },
     metricsAdmissionApproved: { reducer: keep },
-
     generationRun: { reducer: keep },
     mediaFanoutPlan: { reducer: keep },
     replayMediaPrompts: { reducer: keep },
-    preflightResolved: { reducer: keep, default: () => false },
+    preflightResolved: {
+        reducer: keep,
+        default: () => false,
+    },
     durableGenerationRequestId: { reducer: keep },
     durableMediaRuns: { reducer: keep },
     providerSafeMediaIntent: { reducer: keep },

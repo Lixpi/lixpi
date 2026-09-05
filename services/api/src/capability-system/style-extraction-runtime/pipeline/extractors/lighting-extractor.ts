@@ -35,7 +35,10 @@ const FIELDS_SCHEMA = {
         shadowSoftness: { type: 'string' },
         shadowColor: { type: 'string' },
         timeOfDay: { type: 'string' },
-        practicals: { type: 'array', items: { type: 'string' } },
+        practicals: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         transferGuidance: { type: 'string' },
     },
     required: ['direction', 'quality', 'temperature', 'keyLight', 'fillLight', 'rimLight', 'ambient', 'shadowSoftness', 'shadowColor', 'timeOfDay', 'practicals', 'transferGuidance'],
@@ -47,8 +50,19 @@ const extractor: StyleExtractor = {
     displayName: 'Lighting',
     description: 'Extracts the lighting setup: direction, quality, temperature, key/fill/rim balance, ambient, shadow behavior, time of day, practicals.',
     minDominance: 0.3,
-    applicableTo: (scene) => (scene.axisDominance['lighting'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    applicableTo: scene => (scene.axisDominance['lighting'] ?? 0) >= 0.3,
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

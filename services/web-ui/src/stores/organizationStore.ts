@@ -54,9 +54,7 @@ export const organizationStore = {
     // Synchronous access for imperative components.
     getMeta: (key: keyof Meta | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(store => {
-            returnValue = key ? store.meta[key] : store.meta
-        })
+        const unsubscribe = store.subscribe(store => void (returnValue = key ? store.meta[key] : store.meta))
         unsubscribe()
 
         return returnValue
@@ -65,58 +63,69 @@ export const organizationStore = {
     // Synchronous access for imperative components.
     getData: (key: keyof Organization | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(store => {
-            returnValue = key ? store.data[key] : store.data
-        })
+        const unsubscribe = store.subscribe(store => void (returnValue = key ? store.data[key] : store.data))
         unsubscribe()
 
         return returnValue
     },
 
     setMetaValues: (values: Partial<Meta> = {}): void =>
-        store.update(state => ({
-            ...state,
-            meta: {
-                ...state.meta,
-                ...values,
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                meta: {
+                    ...state.meta,
+                    ...values,
+                },
+            }),
+        ),
 
     setDataValues: (values: Partial<Organization> = {}): void =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                ...values,
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    ...values,
+                },
+            }),
+        ),
 
     addTag: (tags: Record<string, Tag>): void =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                tags: { ...state.data.tags, ...tags },
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    tags: {
+                        ...state.data.tags,
+                        ...tags,
+                    },
+                },
+            }),
+        ),
 
     updateTag: (updatedTag: Tag): void =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                tags: state.data.tags.map(tag => tag.tagId === updatedTag.tagId ? updatedTag : tag),
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    tags: state.data.tags.map(tag => tag.tagId === updatedTag.tagId ? updatedTag : tag),
+                },
+            }),
+        ),
 
     removeTag: (tagId: string): void =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                tags: state.data.tags.filter(tag => tag.tagId !== tagId),
-            },
-        })),
+        void store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    tags: state.data.tags.filter(tag => tag.tagId !== tagId),
+                },
+            }),
+        ),
 
-    resetStore: (): void => store.set(organization),
+    resetStore: (): void => void store.set(organization),
 }

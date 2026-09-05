@@ -16,7 +16,10 @@ import AiInteractionService from '$src/services/ai-interaction-service.ts'
 type EditorOptions = ConstructorParameters<typeof ProseMirrorEditor>[0]
 
 export type CanvasConversationEditorIntegration = Pick<EditorOptions, 'promptControlFactories' | 'promptReferencePreviewRenderer' | 'aiChatThreadRenderContext'> & {
-    register?: (threadId: string, view: EditorView) => () => void
+    register?: (
+        threadId: string,
+        view: EditorView,
+    ) => () => void
 }
 
 class CanvasConversationEditorAdapter implements CanvasConversationEditor {
@@ -24,7 +27,10 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     private unregister: (() => void) | null = null
     private destroyed = false
 
-    constructor(private readonly request: CanvasConversationEditorMount, private readonly integration: CanvasConversationEditorIntegration) {
+    constructor(
+        private readonly request: CanvasConversationEditorMount,
+        private readonly integration: CanvasConversationEditorIntegration,
+    ) {
         const html = createDocumentHtml(request.container.ownerDocument)
         const version = request.thread.proseMirrorVersion
         this.editor = new ProseMirrorEditor({
@@ -40,7 +46,11 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
                 workspaceId: request.workspaceId,
                 assetId: request.thread.threadId,
                 role: 'conversation',
-                baseVersion: typeof version === 'number' && Number.isInteger(version) && version >= 0 ? version : 0,
+                baseVersion: typeof version === 'number'
+                    && Number.isInteger(version)
+                    && version >= 0
+                    ? version
+                    : 0,
                 receiveOnly: true,
             },
             onEditorChange: request.onChange,
@@ -54,17 +64,27 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     }
 
     activate(): void {
-        if (this.destroyed || this.unregister || !this.integration.register) return
+        if (
+            this.destroyed
+            || this.unregister
+            || !this.integration.register
+        )
+            return
+
         try {
             const unregister = this.integration.register(this.request.thread.threadId, this.editor.editorView)
-            if (this.destroyed) unregister()
-            else this.unregister = unregister
+
+            if (this.destroyed)
+                unregister()
+            else
+                this.unregister = unregister
         } catch (error) {
             try {
                 this.destroy()
             } catch (cleanupError) {
                 throw new AggregateError([error, cleanupError], 'Canvas editor registration failed')
             }
+
             throw error
         }
     }
@@ -74,36 +94,62 @@ class CanvasConversationEditorAdapter implements CanvasConversationEditor {
     }
 
     submitPersisted(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         const view = this.editor.editorView
-        if (!view) return
+
+        if (!view)
+            return
+
         const threadId = this.request.thread.threadId
         let nodePos: number | undefined
         view.state.doc.descendants((node, pos) => {
-            if (node.type.name === 'aiChatThread' && node.attrs.threadId === threadId) {
+            if (
+                node.type.name === 'aiChatThread'
+                && node.attrs.threadId === threadId
+            ) {
                 nodePos = pos
+
                 return false
             }
+
             return true
         })
-        if (nodePos !== undefined) view.dispatch(view.state.tr.setMeta(USE_AI_CHAT_META, { threadId, nodePos }))
+
+        if (nodePos !== undefined)
+            view.dispatch(
+                view.state.tr.setMeta(
+                    USE_AI_CHAT_META,
+                    {
+                        threadId,
+                        nodePos,
+                    },
+                ),
+            )
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         const errors: unknown[] = []
+
         try {
             this.unregister?.()
         } catch (error) {
             errors.push(error)
         }
+
         try {
             this.editor.destroy()
         } catch (error) {
             errors.push(error)
         }
-        if (errors.length) throw new AggregateError(errors, 'Canvas conversation editor cleanup failed')
+
+        if (errors.length)
+            throw new AggregateError(errors, 'Canvas conversation editor cleanup failed')
     }
 }
 
@@ -130,8 +176,7 @@ class CanvasConversationTransportAdapter implements CanvasConversationTransport 
     }
 }
 
-export function createCanvasConversationEditorPort(integration: CanvasConversationEditorIntegration): CanvasConversationRunPorts['mountEditor'] {
-    return request => new CanvasConversationEditorAdapter(request, integration)
-}
+export const createCanvasConversationEditorPort = (integration: CanvasConversationEditorIntegration): CanvasConversationRunPorts['mountEditor'] =>
+    request => new CanvasConversationEditorAdapter(request, integration)
 
 export const createCanvasConversationTransport: CanvasConversationRunPorts['connect'] = options => new CanvasConversationTransportAdapter(options)

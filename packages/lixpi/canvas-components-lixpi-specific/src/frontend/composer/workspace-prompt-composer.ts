@@ -9,7 +9,10 @@ import {
 export type WorkspacePromptComposerOptions = Pick<AiPromptComposerConfig, 'document' | 'appearance' | 'mountEditor' | 'onSubmit'> & {
     workspaceId: string
     storage: Pick<Storage, 'getItem' | 'setItem'>
-    mountContextTray: () => { element: HTMLElement; destroy: () => void }
+    mountContextTray: () => {
+        element: HTMLElement
+        destroy: () => void
+    }
 }
 
 export class WorkspacePromptComposer {
@@ -23,6 +26,7 @@ export class WorkspacePromptComposer {
         const html = createDocumentHtml(options.document)
         this.element = html`<div className="workspace-canvas-global-composer-host nopan"></div>` as HTMLDivElement
         this.lifetime.own(() => this.element.remove())
+
         try {
             const tray = options.mountContextTray()
             this.lifetime.own(() => tray.destroy())
@@ -39,6 +43,7 @@ export class WorkspacePromptComposer {
             this.element.append(tray.element, this.input.element)
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
@@ -47,7 +52,12 @@ export class WorkspacePromptComposer {
         try {
             const raw = this.options.storage.getItem(this.draftKey)
             const parsed = raw ? JSON.parse(raw) : {}
-            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+
+            return parsed
+                && typeof parsed === 'object'
+                && !Array.isArray(parsed)
+                ? parsed
+                : {}
         } catch {
             return {}
         }
@@ -56,7 +66,10 @@ export class WorkspacePromptComposer {
     private writeDraft(content: object): void {
         // Draft persistence must not submit a canvas save or overwrite its viewport.
         try {
-            this.options.storage.setItem(this.draftKey, JSON.stringify(content))
+            this.options.storage.setItem(
+                this.draftKey,
+                JSON.stringify(content),
+            )
         } catch {}
     }
 

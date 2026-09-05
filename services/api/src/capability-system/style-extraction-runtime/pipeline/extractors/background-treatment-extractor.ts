@@ -22,10 +22,16 @@ const FIELDS_SCHEMA = {
     properties: {
         backgroundStyle: { type: 'string' },
         backgroundFocus: { type: 'string' },
-        backgroundElements: { type: 'array', items: { type: 'string' } },
+        backgroundElements: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         backgroundPalette: { type: 'string' },
         relationshipToSubject: { type: 'string' },
-        depthCues: { type: 'array', items: { type: 'string' } },
+        depthCues: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         transferGuidance: { type: 'string' },
     },
     required: ['backgroundStyle', 'backgroundFocus', 'backgroundElements', 'backgroundPalette', 'relationshipToSubject', 'depthCues', 'transferGuidance'],
@@ -37,8 +43,19 @@ const extractor: StyleExtractor = {
     displayName: 'Background treatment',
     description: 'Extracts how the background is rendered relative to the subject: style, focus, elements, palette, relationship, depth cues.',
     minDominance: 0.3,
-    applicableTo: (scene) => (scene.axisDominance['background-treatment'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    applicableTo: scene => (scene.axisDominance['background-treatment'] ?? 0) >= 0.3,
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

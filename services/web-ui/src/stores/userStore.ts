@@ -45,47 +45,44 @@ const store = writable({ ...user })
 
 export const userStore = {
     ...store,
-
     getMeta: (key: keyof Meta | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(store => {
-            returnValue = key ? store.meta[key] : store.meta
-        })
+        const unsubscribe = store.subscribe(store => void (returnValue = key ? store.meta[key] : store.meta))
         unsubscribe()
 
         return returnValue
     },
-
     getData: (key: keyof User | null = null): any => {
         let returnValue: any
-        const unsubscribe = store.subscribe(store => {
-            returnValue = key ? store.data[key] : store.data
-        })
+        const unsubscribe = store.subscribe(store => void (returnValue = key ? store.data[key] : store.data))
         unsubscribe()
 
         return returnValue
     },
-
     setMetaValues: (values: Partial<Meta> = {}): any =>
-        store.update(state => ({
-            ...state,
-            meta: {
-                ...state.meta,
-                ...values,
-            },
-        })),
-
+        store.update(
+            state => ({
+                ...state,
+                meta: {
+                    ...state.meta,
+                    ...values,
+                },
+            }),
+        ),
     setDataValues: (values: Partial<User> = {}): any =>
-        store.update(state => ({
-            ...state,
-            data: {
-                ...state.data,
-                ...values,
-            },
-        })),
-
+        store.update(
+            state => ({
+                ...state,
+                data: {
+                    ...state.data,
+                    ...values,
+                },
+            }),
+        ),
     resetStore: (): any =>
-        store.update(state => ({
-            ...user,
-        })),
+        store.update(
+            state => ({
+                ...user,
+            }),
+        ),
 }

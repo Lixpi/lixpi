@@ -1,6 +1,9 @@
 import { applyStyle } from '@lixpi/ui-primitives/dom'
 
-export type NodeLayerOptions = { initialIndex?: number; backgroundIndex?: number }
+export type NodeLayerOptions = {
+    initialIndex?: number
+    backgroundIndex?: number
+}
 
 export class NodeLayerManager {
     private topZIndex: number
@@ -27,6 +30,4 @@ export class NodeLayerManager {
     }
 }
 
-export function createNodeLayerManager(options?: NodeLayerOptions): NodeLayerManager {
-    return new NodeLayerManager(options)
-}
+export const createNodeLayerManager = (options?: NodeLayerOptions): NodeLayerManager => new NodeLayerManager(options)

@@ -35,9 +35,18 @@ type ElkEdge = {
 
 type ElkSection = {
     id: string
-    startPoint: { x: number; y: number }
-    endPoint: { x: number; y: number }
-    bendPoints?: Array<{ x: number; y: number }>
+    startPoint: {
+        x: number
+        y: number
+    }
+    endPoint: {
+        x: number
+        y: number
+    }
+    bendPoints?: Array<{
+        x: number
+        y: number
+    }>
 }
 
 type ElkEdgeResult = {
@@ -60,39 +69,54 @@ type ElkResult = {
 // Singleton ELK instance
 let elkInstance: InstanceType<typeof ELK> | null = null
 
-function getElk(): InstanceType<typeof ELK> {
-    if (!elkInstance) {
+const getElk = (): InstanceType<typeof ELK> => {
+    if (!elkInstance)
         elkInstance = new ELK()
-    }
+
     return elkInstance
 }
 
 // Compute port position along a node side based on t value (0-1)
 // For left/right sides: t=0 is top, t=1 is bottom
-function computePortPosition(
+const computePortPosition = (
     node: NodeConfig,
     side: 'left' | 'right',
     t: number = 0.5,
-): { x: number; y: number } {
+): {
+    x: number
+    y: number
+} => {
     const y = node.height * t
     const x = side === 'left' ? 0 : node.width
-    return { x, y }
+
+    return {
+        x,
+        y,
+    }
 }
 
 // Build elk ports for a node based on connected edges
-function buildNodePorts(
+const buildNodePorts = (
     node: NodeConfig,
     edges: EdgeConfig[],
-): ElkPort[] {
+): ElkPort[] => {
     const ports: ElkPort[] = []
 
     for (const edge of edges) {
         // Source port
         if (edge.source.nodeId === node.id) {
             const side = edge.source.position as 'left' | 'right'
-            if (side === 'left' || side === 'right') {
+
+            if (
+                side === 'left'
+                || side === 'right'
+            ) {
                 const t = edge.source.t ?? 0.5
-                const pos = computePortPosition(node, side, t)
+                const pos = computePortPosition(
+                    node,
+                    side,
+                    t,
+                )
                 ports.push({
                     id: `${node.id}_src_${edge.id}`,
                     x: pos.x,
@@ -109,9 +133,17 @@ function buildNodePorts(
         // Target port
         if (edge.target.nodeId === node.id) {
             const side = edge.target.position as 'left' | 'right'
-            if (side === 'left' || side === 'right') {
+
+            if (
+                side === 'left'
+                || side === 'right'
+            ) {
                 const t = edge.target.t ?? 0.5
-                const pos = computePortPosition(node, side, t)
+                const pos = computePortPosition(
+                    node,
+                    side,
+                    t,
+                )
                 ports.push({
                     id: `${node.id}_tgt_${edge.id}`,
                     x: pos.x,
@@ -131,10 +163,13 @@ function buildNodePorts(
 
 // Compute edge routes using elkjs
 // Returns a map of edge id -> bend points
-export async function computeEdgeRoutes(
+export const computeEdgeRoutes = async (
     nodes: NodeConfig[],
     edges: EdgeConfig[],
-): Promise<Map<string, Array<{ x: number; y: number }>>> {
+): Promise<Map<string, Array<{
+    x: number
+    y: number
+}>>> => {
     const elk = getElk()
 
     // Build elk graph
@@ -156,42 +191,63 @@ export async function computeEdgeRoutes(
             'elk.layered.nodePlacement.strategy': 'INTERACTIVE',
             'elk.layered.crossingMinimization.strategy': 'INTERACTIVE',
         },
-        children: nodes.map(node => ({
-            id: node.id,
-            x: node.x,
-            y: node.y,
-            width: node.width,
-            height: node.height,
-            ports: buildNodePorts(node, edges),
-            properties: {
-                'org.eclipse.elk.noLayout': 'true', // Don't move nodes
-            },
-        })),
-        edges: edges.map(edge => ({
-            id: edge.id,
-            sources: [`${edge.source.nodeId}_src_${edge.id}`],
-            targets: [`${edge.target.nodeId}_tgt_${edge.id}`],
-        })),
+        children: nodes.map(
+            node => ({
+                id: node.id,
+                x: node.x,
+                y: node.y,
+                width: node.width,
+                height: node.height,
+                ports: buildNodePorts(node, edges),
+                properties: {
+                    'org.eclipse.elk.noLayout': 'true', // Don't move nodes
+                },
+            }),
+        ),
+        edges: edges.map(
+            edge => ({
+                id: edge.id,
+                sources: [`${edge.source.nodeId}_src_${edge.id}`],
+                targets: [`${edge.target.nodeId}_tgt_${edge.id}`],
+            }),
+        ),
     }
 
-    const result = await elk.layout(elkGraph) as ElkResult
+    const result = (await elk.layout(elkGraph)) as ElkResult
 
     // Debug: log the elkjs result to understand what's being returned
-    console.log('[elkjs] Layout result:', JSON.stringify(result, null, 2))
+    console.log(
+        '[elkjs] Layout result:',
+        JSON.stringify(
+            result,
+            null,
+            2,
+        ),
+    )
 
     // Extract bend points from result
-    const routeMap = new Map<string, Array<{ x: number; y: number }>>()
+    const routeMap = new Map<string, Array<{
+        x: number
+        y: number
+    }>>()
 
     for (const elkEdge of result.edges ?? []) {
-        const points: Array<{ x: number; y: number }> = []
+        const points: Array<{
+            x: number
+            y: number
+        }> = []
 
         for (const section of elkEdge.sections ?? []) {
             // Add bend points (intermediate turns)
             // Note: startPoint and endPoint are the port positions,
             // bendPoints are the intermediate orthogonal turns
             console.log(`[elkjs] Edge ${elkEdge.id} section:`, section)
+
             for (const bp of section.bendPoints ?? []) {
-                points.push({ x: bp.x, y: bp.y })
+                points.push({
+                    x: bp.x,
+                    y: bp.y,
+                })
             }
         }
 
@@ -204,14 +260,20 @@ export async function computeEdgeRoutes(
 
 // Debounced edge routing computation
 type DebouncedCompute = {
-    schedule: (nodes: NodeConfig[], edges: EdgeConfig[]) => void
+    schedule: (
+        nodes: NodeConfig[],
+        edges: EdgeConfig[],
+    ) => void
     cancel: () => void
 }
 
-export function createDebouncedEdgeRouting(
-    onComplete: (routes: Map<string, Array<{ x: number; y: number }>>) => void,
+export const createDebouncedEdgeRouting = (
+    onComplete: (routes: Map<string, Array<{
+        x: number
+        y: number
+    }>>) => void,
     delay: number = 50,
-): DebouncedCompute {
+): DebouncedCompute => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     let pendingNodes: NodeConfig[] = []
     let pendingEdges: EdgeConfig[] = []
@@ -231,25 +293,27 @@ export function createDebouncedEdgeRouting(
     }
 
     return {
-        schedule(nodes: NodeConfig[], edges: EdgeConfig[]) {
+        schedule(
+            nodes: NodeConfig[],
+            edges: EdgeConfig[],
+        ) {
             pendingNodes = nodes
             pendingEdges = edges
 
-            if (timeoutId !== null) {
+            if (timeoutId !== null)
                 clearTimeout(timeoutId)
-            }
 
             timeoutId = setTimeout(() => {
                 timeoutId = null
                 execute()
             }, delay)
         },
-
         cancel() {
             if (timeoutId !== null) {
                 clearTimeout(timeoutId)
                 timeoutId = null
             }
+
             pendingNodes = []
             pendingEdges = []
         },

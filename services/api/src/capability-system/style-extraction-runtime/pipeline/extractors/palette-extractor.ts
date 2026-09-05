@@ -29,24 +29,45 @@ const FIELDS_SCHEMA = {
             items: {
                 type: 'object',
                 properties: {
-                    name: { type: 'string', description: 'Short human-readable name derived from the sampled color.' },
-                    hex: { type: 'string', description: '#rrggbb' },
+                    name: {
+                        type: 'string',
+                        description: 'Short human-readable name derived from the sampled color.',
+                    },
+                    hex: {
+                        type: 'string',
+                        description: '#rrggbb',
+                    },
                     role: { type: 'string' },
-                    usage: { type: 'integer', description: 'rough 0..100 percent of canvas occupied by this color' },
-                    temperature: { type: 'string', description: 'warm | cool | neutral' },
-                    notes: { type: 'string', description: '0–1 sentence on where this color appears' },
+                    usage: {
+                        type: 'integer',
+                        description: 'rough 0..100 percent of canvas occupied by this color',
+                    },
+                    temperature: {
+                        type: 'string',
+                        description: 'warm | cool | neutral',
+                    },
+                    notes: {
+                        type: 'string',
+                        description: '0–1 sentence on where this color appears',
+                    },
                 },
                 required: ['name', 'hex', 'role', 'usage', 'temperature', 'notes'],
                 additionalProperties: false,
             },
         },
         harmony: { type: 'string' },
-        contrast: { type: 'string', description: 'low | medium | high' },
+        contrast: {
+            type: 'string',
+            description: 'low | medium | high',
+        },
         usageGuidance: { type: 'string' },
         backgroundTreatment: { type: 'string' },
         shadowStrategy: { type: 'string' },
         highlightStrategy: { type: 'string' },
-        avoid: { type: 'array', items: { type: 'string' } },
+        avoid: {
+            type: 'array',
+            items: { type: 'string' },
+        },
     },
     required: ['palette', 'harmony', 'contrast', 'usageGuidance', 'backgroundTreatment', 'shadowStrategy', 'highlightStrategy', 'avoid'],
     additionalProperties: false,
@@ -58,10 +79,26 @@ const extractor: StyleExtractor = {
     description: 'Extracts the concrete color palette of the reference: 5–12 named hex colors with role, usage proportion, temperature, and palette-level harmony / contrast / strategy.',
     minDominance: 0.3,
     applicableTo: (scene, intent) => {
-        if (intent && /palette|colou?r/i.test(intent)) return true
+        if (
+            intent
+            && /palette|colou?r/i.test(intent)
+        )
+            return true
+
         return (scene.axisDominance['palette'] ?? 0) >= 0.3
     },
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

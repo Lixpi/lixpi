@@ -43,9 +43,11 @@ class BlockCardTilesList implements BlockCardTilesListInstance {
 
     setItems(items: BlockCardTileItem[]): void {
         for (const tile of this.tiles.values()) tile.destroy()
+
         this.tiles.clear()
         this.itemsHost.replaceChildren()
         this.empty.hidden = items.length > 0 || !this.options.emptyText
+
         for (const item of items) {
             const tile = createBlockCardTile({
                 item,
@@ -59,11 +61,10 @@ class BlockCardTilesList implements BlockCardTilesListInstance {
 
     destroy(): void {
         for (const tile of this.tiles.values()) tile.destroy()
+
         this.tiles.clear()
         this.element.remove()
     }
 }
 
-export function createBlockCardTilesList(options: BlockCardTilesListOptions): BlockCardTilesListInstance {
-    return new BlockCardTilesList(options)
-}
+export const createBlockCardTilesList = (options: BlockCardTilesListOptions): BlockCardTilesListInstance => new BlockCardTilesList(options)

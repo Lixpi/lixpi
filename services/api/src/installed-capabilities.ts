@@ -31,29 +31,34 @@ export type InstalledCapabilityDependencies = {
     metrics?: MetricsClient
 }
 
-export function createDefaultCapabilityModuleCatalog(
-    dependencies: InstalledCapabilityDependencies,
-): CapabilityModuleCatalog {
+export const createDefaultCapabilityModuleCatalog = (dependencies: InstalledCapabilityDependencies): CapabilityModuleCatalog => {
     const catalog = new CapabilityModuleCatalog()
     const capabilityStorage = {
         storeResource: storeCapabilityResource,
         seedBuiltInCapability,
     }
-    catalog.registerModule(createCharacterCreatorModule({
-        capabilityStorage,
-        runtime: dependencies.characterCreatorRuntime,
-    }))
-    catalog.registerModule(createStyleExtractionModule({
-        runtime: createStyleExtractionRuntimePort({
-            runImageRouter: state => dependencies.imageRouter.execute(state),
+    catalog.registerModule(
+        createCharacterCreatorModule({
+            capabilityStorage,
+            runtime: dependencies.characterCreatorRuntime,
         }),
-        capabilityStorage,
-    }))
-    catalog.registerModule(createActionTimelineModule({
-        resolveModelInputs: resolveCapabilityModelInputs,
-        model: createCapabilityStructuredModelPort(),
-        persistArtifact: persistActionTimelineArtifact,
-        capabilityStorage,
-    }))
+    )
+    catalog.registerModule(
+        createStyleExtractionModule({
+            runtime: createStyleExtractionRuntimePort({
+                runImageRouter: state => dependencies.imageRouter.execute(state),
+            }),
+            capabilityStorage,
+        }),
+    )
+    catalog.registerModule(
+        createActionTimelineModule({
+            resolveModelInputs: resolveCapabilityModelInputs,
+            model: createCapabilityStructuredModelPort(),
+            persistArtifact: persistActionTimelineArtifact,
+            capabilityStorage,
+        }),
+    )
+
     return catalog
 }
