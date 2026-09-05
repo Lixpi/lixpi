@@ -883,7 +883,9 @@ const canonicalizeDelimitedListsOnce = (
                         range!,
                         itemIndentation,
                     ))
-                    const replacement = `\n${itemIndentation}${itemTexts.join(`,\n${itemIndentation}`)},\n${indentation}`
+                    const lastItem = items.at(-1)
+                    const trailingComma = lastItem?.type === 'RestElement' ? '' : ','
+                    const replacement = `\n${itemIndentation}${itemTexts.join(`,\n${itemIndentation}`)}${trailingComma}\n${indentation}`
 
                     if (source.slice(
                         start,
@@ -2214,7 +2216,8 @@ const getAstExpressionText = (
             left == null
             || right == null
         )
-            ? null : `${left} ${node.operator} ${right}`
+            ? null
+            : `${left} ${node.operator} ${right}`
     }
 
     const range = getNodeRange(node)
@@ -2902,23 +2905,27 @@ const canonicalizeConditionStatements = (
         } else if (node.type === 'ConditionalExpression') {
             const test = node.test as AstNode | undefined
             const consequent = node.consequent as AstNode | undefined
+            const alternate = node.alternate as AstNode | undefined
             const testRange = getNodeRange(test)
             const consequentRange = getNodeRange(consequent)
+            const alternateRange = getNodeRange(alternate)
 
             if (
                 test
                 && testRange
                 && consequentRange
+                && alternateRange
                 && countLogicalEvaluations(test) > 1
                 && !hasCommentWithinRange(
                     comments,
-                    [testRange[0], consequentRange[0]],
+                    [testRange[0], alternateRange[0]],
                 )
             ) {
                 const indentation = getLineIndentation(
                     source,
                     testRange[0],
                 )
+                const branchIndentation = `${indentation}    `
                 const condition = getFormattedConditionText(
                     test,
                     source,
@@ -2929,7 +2936,7 @@ const canonicalizeConditionStatements = (
                 if (!condition)
                     throw new Error(`Could not format the ternary condition in ${file}`)
 
-                const conditionReplacement = `${condition}\n${indentation}    ? `
+                const conditionReplacement = `${condition}\n${branchIndentation}? `
 
                 if (source.slice(
                     testRange[0],
@@ -2939,6 +2946,19 @@ const canonicalizeConditionStatements = (
                         start: testRange[0],
                         end: consequentRange[0],
                         text: conditionReplacement,
+                    })
+                }
+
+                const alternateReplacement = `\n${branchIndentation}: `
+
+                if (source.slice(
+                    consequentRange[1],
+                    alternateRange[0],
+                ) !== alternateReplacement) {
+                    replacements.push({
+                        start: consequentRange[1],
+                        end: alternateRange[0],
+                        text: alternateReplacement,
                     })
                 }
             }
@@ -3056,7 +3076,8 @@ const getIndentedContainerClosingOffset = (
         node.type === 'ArrayExpression'
         || node.type === 'ArrayPattern'
     )
-        ? ']' : '}'
+        ? ']'
+        : '}'
 
     return source[closingOffset] === expectedCharacter ? closingOffset : null
 }

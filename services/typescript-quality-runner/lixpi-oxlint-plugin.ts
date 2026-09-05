@@ -822,7 +822,9 @@ const preferMultilineCondition = defineRule({
                 )
                     return
 
-                if (sourceCode.getCommentsInside(node.test).length > 0)
+                if (sourceCode.getAllComments().some((comment) =>
+                    comment.range[0] >= node.test.range[0]
+                    && comment.range[1] <= node.alternate.range[0]))
                     return
 
                 const indentation = getLineIndentation(
@@ -840,25 +842,43 @@ const preferMultilineCondition = defineRule({
                     return
 
                 const openParenthesis = sourceCode.getTokenBefore(node.test)
-                const conditionStart = openParenthesis?.value === '('
-                    ? openParenthesis.range[0]
-                    : node.test.range[0]
-                const replacementRange = [conditionStart, node.consequent.range[0]]
-                const replacement = `${condition}\n${indentation}    ? `
+                const ownsOpenParenthesis = Boolean(
+                    openParenthesis
+                    && openParenthesis.value === '('
+                    && openParenthesis.range[0] >= node.range[0],
+                )
+                const conditionStart = ownsOpenParenthesis ? openParenthesis.range[0] : node.test.range[0]
+                const branchIndentation = `${indentation}    `
+                const conditionRange = [conditionStart, node.consequent.range[0]]
+                const conditionReplacement = `${condition}\n${branchIndentation}? `
+                const alternateRange = [node.consequent.range[1], node.alternate.range[0]]
+                const alternateReplacement = `\n${branchIndentation}: `
 
-                if (sourceCode.text.slice(
-                    replacementRange[0],
-                    replacementRange[1],
-                ) === replacement)
+                if (
+                    sourceCode.text.slice(
+                        conditionRange[0],
+                        conditionRange[1],
+                    ) === conditionReplacement
+                    && sourceCode.text.slice(
+                        alternateRange[0],
+                        alternateRange[1],
+                    ) === alternateReplacement
+                )
                     return
 
                 context.report({
                     node: node.test,
                     messageId: 'preferMultilineCondition',
-                    fix: (fixer) => fixer.replaceTextRange(
-                        replacementRange,
-                        replacement,
-                    ),
+                    fix: (fixer) => [
+                        fixer.replaceTextRange(
+                            conditionRange,
+                            conditionReplacement,
+                        ),
+                        fixer.replaceTextRange(
+                            alternateRange,
+                            alternateReplacement,
+                        ),
+                    ],
                 })
             },
             DoWhileStatement: checkParenthesizedCondition,
@@ -1466,7 +1486,8 @@ const preferCompactIf = defineRule({
                                     block === node.consequent
                                     && node.alternate
                                 )
-                                    ? `\n${indentation}` : ''}`,
+                                    ? `\n${indentation}`
+                                    : ''}`,
                             ),
                     })
                 }
