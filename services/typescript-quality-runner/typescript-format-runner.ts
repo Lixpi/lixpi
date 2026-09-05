@@ -259,6 +259,18 @@ const getLineStart = (
     offset - 1,
 ) + 1
 
+const getNextLineStart = (
+    source: string,
+    offset: number,
+): number => {
+    const lineBreak = source.indexOf(
+        '\n',
+        offset,
+    )
+
+    return lineBreak < 0 ? -1 : lineBreak + 1
+}
+
 const getLineIndentation = (
     source: string,
     offset: number,
@@ -817,13 +829,16 @@ const getDelimitedListItems = (node: AstNode): AstNode[] | null => {
     return null
 }
 
-// A call inside a member chain has its own line. Anchoring the argument layout to
-// the start of the whole chain would indent the arguments and the closing
-// parenthesis against a line the call does not sit on, so the anchor is the end of
-// the callee instead.
+// A call whose member chain broke before its property sits on its own line, so its
+// arguments and closing parenthesis anchor to that property rather than to the start
+// of the chain. Every other call anchors to its own start. Anchoring to the end of
+// the callee instead would read the indentation of a continuation line that this
+// same pass produces, and the two would push each other one level deeper on every
+// pass.
 const getDelimitedListAnchor = (
     node: AstNode,
     nodeRange: [number, number],
+    source: string,
 ): number => {
     if (
         node.type !== 'CallExpression'
@@ -831,9 +846,29 @@ const getDelimitedListAnchor = (
     )
         return nodeRange[0]
 
-    const calleeRange = getNodeRange(node.callee as AstNode | undefined)
+    const callee = node.callee as AstNode | undefined
 
-    return calleeRange ? calleeRange[1] : nodeRange[0]
+    if (callee?.type !== 'MemberExpression')
+        return nodeRange[0]
+
+    const objectRange = getNodeRange(callee.object as AstNode | undefined)
+    const propertyRange = getNodeRange(callee.property as AstNode | undefined)
+
+    if (
+        !objectRange
+        || !propertyRange
+    )
+        return nodeRange[0]
+
+    return getLineStart(
+        source,
+        objectRange[1],
+    ) === getLineStart(
+        source,
+        propertyRange[0],
+    )
+        ? nodeRange[0]
+        : propertyRange[0]
 }
 
 const canonicalizeDelimitedListsOnce = (
@@ -897,6 +932,7 @@ const canonicalizeDelimitedListsOnce = (
                         getDelimitedListAnchor(
                             node,
                             nodeRange,
+                            source,
                         ),
                     )
                     const itemIndentation = `${indentation}    `
@@ -1435,6 +1471,12 @@ const canonicalizeAssignmentBoundaries = (
 
     const comments = parseResult.comments as AstComment[]
     const replacements: LayoutSpan[] = []
+    // One entry per line, so a nested assignment cannot dedent a line its enclosing
+    // assignment already accounted for.
+    const dedentedLineStarts = new Map<
+        number,
+        LayoutSpan
+    >()
     const visit = (node: AstNode): void => {
         const nodeRange = getNodeRange(node)
         const value = getAssignmentValue(node)
@@ -1464,6 +1506,48 @@ const canonicalizeAssignmentBoundaries = (
                     end: valueRange[0],
                     text: ' ',
                 })
+
+                // Oxfmt indents a value it moved onto its own line one level past the
+                // assignment. Pulling that value back onto the assignment line has to
+                // take the same level off every line the value spans, otherwise each
+                // run leaves the value one level deeper than the run before it.
+                const shift = getLineIndentation(
+                    source,
+                    valueRange[0],
+                ).length - getLineIndentation(
+                    source,
+                    nodeRange[0],
+                ).length
+
+                for (
+                    let lineStart = getNextLineStart(source, valueRange[0]);
+                    shift > 0
+                    && lineStart > 0
+                    && lineStart < valueRange[1];
+                    lineStart = getNextLineStart(source, lineStart)
+                ) {
+                    const removable = Math.min(
+                        shift,
+                        getLineIndentation(
+                            source,
+                            lineStart,
+                        ).length,
+                    )
+
+                    if (
+                        removable > 0
+                        && !dedentedLineStarts.has(lineStart)
+                    ) {
+                        dedentedLineStarts.set(
+                            lineStart,
+                            {
+                                start: lineStart,
+                                end: lineStart + removable,
+                                text: '',
+                            },
+                        )
+                    }
+                }
             }
         }
 
@@ -1482,7 +1566,7 @@ const canonicalizeAssignmentBoundaries = (
     visit(parseResult.program as AstNode)
     let output = source
 
-    for (const replacement of replacements.sort((
+    for (const replacement of [...replacements, ...dedentedLineStarts.values()].sort((
         left,
         right,
     ) => right.start - left.start)) output = `${output.slice(
@@ -2981,6 +3065,22 @@ const getIndentedContainerChildren = (node: AstNode): AstNode[] | null => {
     )
         return Array.isArray(node.elements) ? node.elements.filter(isAstNode) : null
 
+    // An argument list keeps its own indentation even when the split decision belongs
+    // to another rule, so a list this pass does not rewrite cannot drift.
+    if (
+        node.type === 'CallExpression'
+        || node.type === 'NewExpression'
+    ) {
+        const argumentNodes = Array.isArray(node.arguments) ? node.arguments.filter(isAstNode) : null
+
+        return (
+            argumentNodes
+            && argumentNodes.length > 0
+        )
+            ? argumentNodes
+            : null
+    }
+
     if (node.type === 'TSTypeLiteral')
         return Array.isArray(node.members) ? node.members.filter(isAstNode) : null
 
@@ -3019,12 +3119,18 @@ const getIndentedContainerClosingOffset = (
         nodeRange[0],
         end,
     ) - 1
-    const expectedCharacter = (
+    let expectedCharacter = '}'
+
+    if (
         node.type === 'ArrayExpression'
         || node.type === 'ArrayPattern'
     )
-        ? ']'
-        : '}'
+        expectedCharacter = ']'
+    else if (
+        node.type === 'CallExpression'
+        || node.type === 'NewExpression'
+    )
+        expectedCharacter = ')'
 
     return source[closingOffset] === expectedCharacter ? closingOffset : null
 }
@@ -3101,11 +3207,16 @@ const canonicalizeContainerIndentationOnce = (
             nodeRange
             && children
         ) {
+            const anchor = getDelimitedListAnchor(
+                node,
+                nodeRange,
+                source,
+            )
             const indentation = node.type === 'Program'
                 ? ''
                 : `${getLineIndentation(
                     source,
-                    nodeRange[0],
+                    anchor,
                 )}    `
 
             for (const child of children) {
@@ -3129,9 +3240,9 @@ const canonicalizeContainerIndentationOnce = (
                     closingOffset,
                     getLineIndentation(
                         source,
-                        nodeRange[0],
+                        anchor,
                     ),
-                    nodeRange[0],
+                    anchor,
                 )
         }
 

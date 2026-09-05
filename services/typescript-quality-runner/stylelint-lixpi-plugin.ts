@@ -302,31 +302,31 @@ const noBlockCommentsRule = (
     _secondaryOptions: unknown,
     context: RuleContext = {},
 ) =>
-    (
-        root: Root,
-        result: PostcssResult,
-    ) => {
-        if (!primary)
+(
+    root: Root,
+    result: PostcssResult,
+) => {
+    if (!primary)
+        return
+
+    root.walkComments((comment) => {
+        if (comment.raws.inline)
             return
 
-        root.walkComments((comment) => {
-            if (comment.raws.inline)
-                return
+        if (context.fix) {
+            convertBlockComment(comment)
 
-            if (context.fix) {
-                convertBlockComment(comment)
+            return
+        }
 
-                return
-            }
-
-            stylelint.utils.report({
-                message: blockCommentMessages.expected,
-                node: comment,
-                result,
-                ruleName: blockCommentRuleName,
-            })
+        stylelint.utils.report({
+            message: blockCommentMessages.expected,
+            node: comment,
+            result,
+            ruleName: blockCommentRuleName,
         })
-    }
+    })
+}
 
 noBlockCommentsRule.ruleName = blockCommentRuleName
 noBlockCommentsRule.messages = blockCommentMessages
