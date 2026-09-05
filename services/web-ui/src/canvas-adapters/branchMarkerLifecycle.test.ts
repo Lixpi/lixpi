@@ -22,12 +22,20 @@ function preflightMethod(name: string, module = 'workspace-preflight-markers'): 
     return source.slice(start, end)
 }
 
+// These assertions pin down what the source does, not how the formatter lays it out.
+// Line breaks and trailing commas are the formatter's choice and change nothing about
+// the behavior, so both sides are compared on tokens alone.
+const withoutLayout = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/,(?=[)\]}])/g, '')
+    .replace(/,$/, '')
+
 function expectSourceToContain(sourceText: string, snippet: string, label: string): void {
-    expect(sourceText.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+    expect(withoutLayout(sourceText).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 }
 
 function expectSourceNotToContain(sourceText: string, snippet: string, label: string): void {
-    expect(sourceText.includes(snippet), `${label} should not contain:\n${snippet}`).toBe(false)
+    expect(withoutLayout(sourceText).includes(withoutLayout(snippet)), `${label} should not contain:\n${snippet}`).toBe(false)
 }
 
 function extractFunctionBody(functionName: string): string {
@@ -40,11 +48,24 @@ function extractFunctionBody(functionName: string): string {
     const isArrow = arrowSignatureIndex >= 0 && (methodSignatureIndex < 0 || arrowSignatureIndex < methodSignatureIndex)
     const signatureIndex = isArrow ? arrowSignatureIndex : methodSignatureIndex
     if (signatureIndex < 0) throw new Error(`Missing function: ${functionName}`)
-    const bodyMarker = isArrow
-        ? source.indexOf('=> {', signatureIndex)
-        : source.indexOf('{', signatureIndex)
-    if (bodyMarker < 0) throw new Error(`Missing function body: ${functionName}`)
-    const bodyStart = bodyMarker + (isArrow ? 3 : 0)
+    // An arrow can carry a concise expression body (`=> void this.chrome.sync(state)`)
+    // rather than a braced one, so locate the body from the arrow itself and only
+    // brace-match when a brace is actually what follows.
+    const arrowIndex = isArrow ? source.indexOf('=>', signatureIndex) : -1
+    if (isArrow && arrowIndex < 0) throw new Error(`Missing function body: ${functionName}`)
+
+    let bodyStart = isArrow ? arrowIndex + 2 : source.indexOf('{', signatureIndex)
+    if (bodyStart < 0) throw new Error(`Missing function body: ${functionName}`)
+
+    if (isArrow) {
+        while (bodyStart < source.length && /\s/.test(source[bodyStart]!)) bodyStart += 1
+
+        if (source[bodyStart] !== '{') {
+            const lineEnd = source.indexOf('\n', bodyStart)
+
+            return source.slice(bodyStart, lineEnd < 0 ? source.length : lineEnd)
+        }
+    }
 
     let depth = 0
     for (let index = bodyStart; index < source.length; index += 1) {

@@ -25,12 +25,20 @@ function getExcerpt(startMarker: string, endMarker: string): string {
     return source.slice(start, end)
 }
 
+// These assertions pin down what the source does, not how the formatter lays it out.
+// Line breaks and trailing commas are the formatter's choice and change nothing about
+// the behavior, so both sides are compared on tokens alone.
+const withoutLayout = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/,(?=[)\]}])/g, '')
+    .replace(/,$/, '')
+
 function expectSourceToContain(value: string, snippet: string, label: string): void {
-    expect(value.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+    expect(withoutLayout(value).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 }
 
 function expectSourceNotToContain(value: string, snippet: string, label: string): void {
-    expect(value.includes(snippet), `${label} should not contain:\n${snippet}`).toBe(false)
+    expect(withoutLayout(value).includes(withoutLayout(snippet)), `${label} should not contain:\n${snippet}`).toBe(false)
 }
 
 describe('generated-media API ownership', () => {
@@ -41,10 +49,14 @@ describe('generated-media API ownership', () => {
         expect(start).toBeGreaterThan(-1)
         expect(end).toBeGreaterThan(start)
         const handler = settlementSource.slice(start, end)
-        const regenerationTargetIndex = handler.indexOf(
-            'if (lineagePlan.regenerationTarget && !lineagePlan.regenerationTarget.sourceMediaNodeId)',
+        // Ordering is what matters here, so compare positions in the layout-free text.
+        const normalizedHandler = withoutLayout(handler)
+        const regenerationTargetIndex = normalizedHandler.indexOf(
+            withoutLayout('if (lineagePlan.regenerationTarget && !lineagePlan.regenerationTarget.sourceMediaNodeId)'),
         )
-        const insertIndex = handler.indexOf('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)')
+        const insertIndex = normalizedHandler.indexOf(
+            withoutLayout('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)'),
+        )
 
         expect(regenerationTargetIndex).toBeGreaterThan(-1)
         expect(insertIndex).toBeGreaterThan(regenerationTargetIndex)
@@ -62,7 +74,7 @@ describe('generated-media API ownership', () => {
     })
 
     it('requires API geometry for video placeholders and never locally creates or balances them', () => {
-        const handler = getExcerpt('onVideoPendingToCanvas: (data) =>', 'onVideoGeneratingToCanvas:')
+        const handler = getExcerpt('onVideoPendingToCanvas:', 'onVideoGeneratingToCanvas:')
 
         expectSourceToContain(handler, 'missing video pending geometry; refusing local canvas topology mutation', 'video pending handler')
         expectSourceToContain(handler, 'applyApiCanvasGeometry(canvasGeometry)', 'video pending handler')

@@ -7,16 +7,28 @@ import {
 
 const workspaceModelSource = (): string => readFileSync(new URL('../models/workspace.ts', import.meta.url), 'utf8')
 
+// These assertions pin down what the source does, not how the formatter lays it out.
+// Line breaks and trailing commas are the formatter's choice and change nothing about
+// the behavior, so both sides are compared on tokens alone.
+const withoutLayout = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/,(?=[)\]}])/g, '')
+    .replace(/,$/, '')
+
 function expectSourceToContain(source: string, snippet: string, label = 'source'): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(
+            withoutLayout(snippet),
+        ),
         `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string, label = 'source'): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(
+            withoutLayout(snippet),
+        ),
         `${label} should not contain:\n${snippet}`,
     ).toBe(false)
 }

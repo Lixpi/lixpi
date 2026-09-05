@@ -14,15 +14,23 @@ function extractFlatRule(source: string, selector: string): string {
 }
 
 function expectRuleToContain(rule: string, declaration: string): void {
-    expect(rule.includes(declaration), `rule should contain: ${declaration}`).toBe(true)
+    expect(withoutLayout(rule).includes(withoutLayout(declaration)), `rule should contain: ${declaration}`).toBe(true)
 }
 
 function expectRuleNotToContain(rule: string, declaration: string): void {
-    expect(rule.includes(declaration), `rule should not contain: ${declaration}`).toBe(false)
+    expect(withoutLayout(rule).includes(withoutLayout(declaration)), `rule should not contain: ${declaration}`).toBe(false)
 }
 
+// These assertions pin down what the source does, not how the formatter lays it out.
+// Line breaks and trailing commas are the formatter's choice and change nothing about
+// the behavior, so both sides are compared on tokens alone.
+const withoutLayout = (value: string): string => value
+    .replace(/\s+/g, '')
+    .replace(/,(?=[)\]}])/g, '')
+    .replace(/,$/, '')
+
 function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
-    expect(source.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 }
 
 describe('prompt-reference-picker.scss', () => {
