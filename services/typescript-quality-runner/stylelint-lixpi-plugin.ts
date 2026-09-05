@@ -173,7 +173,10 @@ const isSharedTransitionValue = (value: string): boolean => {
     return getTopLevelValueGroups(parsed.nodes).every(isSharedTransitionGroup)
 }
 
-const transitionHelpersRule = (primary: boolean) => (root: Root, result: PostcssResult) => {
+const transitionHelpersRule = (primary: boolean) => (
+    root: Root,
+    result: PostcssResult,
+) => {
     if (!primary)
         return
 
@@ -279,7 +282,10 @@ const convertBlockComment = (comment: Comment): void => {
     const lines = getCommentLines(comment)
     const indentation = getCommentIndentation(comment)
     const comments = lines.map(
-        (line, index) => comment.clone({
+        (
+            line,
+            index,
+        ) => comment.clone({
             text: line,
             raws: {
                 ...comment.raws,
@@ -298,7 +304,10 @@ const noBlockCommentsRule = (
     _secondaryOptions: unknown,
     context: RuleContext = {},
 ) =>
-(root: Root, result: PostcssResult) => {
+(
+    root: Root,
+    result: PostcssResult,
+) => {
     if (!primary)
         return
 

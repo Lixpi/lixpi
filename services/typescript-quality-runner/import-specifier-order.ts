@@ -102,7 +102,10 @@ const collectTypeScriptFiles = async (inputPaths: string[]): Promise<CollectedTy
     }
 }
 
-const applyReplacements = (source: string, replacements: Replacement[]): string => {
+const applyReplacements = (
+    source: string,
+    replacements: Replacement[],
+): string => {
     if (replacements.length === 0)
         return source
 
@@ -118,11 +121,17 @@ const applyReplacements = (source: string, replacements: Replacement[]): string 
     return output + source.slice(cursor)
 }
 
-const hasComment = (range: [number, number], comments: AstComment[]): boolean => comments.some(
+const hasComment = (
+    range: [number, number],
+    comments: AstComment[],
+): boolean => comments.some(
     comment => comment.start >= range[0] && comment.end <= range[1],
 )
 
-const getNamedSpecifierBlock = (specifiers: NamedSpecifier[], singleTypeMustBeMultiline: boolean): string => {
+const getNamedSpecifierBlock = (
+    specifiers: NamedSpecifier[],
+    singleTypeMustBeMultiline: boolean,
+): string => {
     const ordered = [
         ...specifiers.filter(specifier => !specifier.isType),
         ...specifiers.filter(specifier => specifier.isType),
@@ -137,7 +146,10 @@ const getNamedSpecifierBlock = (specifiers: NamedSpecifier[], singleTypeMustBeMu
     return `{\n${ordered.map(specifier => `    ${specifier.text},`).join('\n')}\n}`
 }
 
-const getNodeText = (node: AstNode, source: string): string => {
+const getNodeText = (
+    node: AstNode,
+    source: string,
+): string => {
     const range = getNodeRange(node)
 
     if (!range)
@@ -146,7 +158,10 @@ const getNodeText = (node: AstNode, source: string): string => {
     return source.slice(range[0], range[1]).trim()
 }
 
-const hasSameIdentifierName = (left: AstNode, right: AstNode): boolean => left.type === 'Identifier'
+const hasSameIdentifierName = (
+    left: AstNode,
+    right: AstNode,
+): boolean => left.type === 'Identifier'
     && right.type === 'Identifier'
     && typeof left.name === 'string'
     && left.name === right.name
@@ -197,7 +212,10 @@ const getExportSpecifierText = (
     return typeKeywordRequired ? `type ${binding}` : binding
 }
 
-const canonicalizeImportDeclaration = (node: AstNode, source: string): string | null => {
+const canonicalizeImportDeclaration = (
+    node: AstNode,
+    source: string,
+): string | null => {
     const nodeRange = getNodeRange(node)
     const sourceNode = isAstNode(node.source) ? node.source : null
     const sourceRange = getNodeRange(sourceNode)
@@ -240,7 +258,10 @@ const canonicalizeImportDeclaration = (node: AstNode, source: string): string | 
     return `import${declarationIsTypeOnly ? ' type' : ''} ${clauseParts.join(', ')} from ${sourceText}${suffix}`
 }
 
-const canonicalizeExportDeclaration = (node: AstNode, source: string): string | null => {
+const canonicalizeExportDeclaration = (
+    node: AstNode,
+    source: string,
+): string | null => {
     const nodeRange = getNodeRange(node)
     const specifiers = Array.isArray(node.specifiers) ? node.specifiers.filter(isAstNode) : []
 

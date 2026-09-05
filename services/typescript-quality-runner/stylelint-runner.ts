@@ -17,7 +17,10 @@ const supportedExtensions = new Set([
     '.scss',
 ])
 
-const collectStylesheetPaths = async (inputPath: string, stylesheetPaths: string[]): Promise<void> => {
+const collectStylesheetPaths = async (
+    inputPath: string,
+    stylesheetPaths: string[],
+): Promise<void> => {
     const absolutePath = path.resolve(repositoryDirectory, inputPath)
     let pathStats: Stats
 

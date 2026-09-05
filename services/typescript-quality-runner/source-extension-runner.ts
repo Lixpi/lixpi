@@ -128,7 +128,10 @@ const collectSourceFiles = async (inputPaths: string[]): Promise<SourceFiles> =>
 
 const getTypeScriptPath = (path: string): string => `${path.slice(0, -extname(path).length)}.ts`
 
-const resolveModuleSpecifier = (importer: string, specifier: string): string | null => {
+const resolveModuleSpecifier = (
+    importer: string,
+    specifier: string,
+): string | null => {
     if (
         specifier.startsWith('./')
         || specifier.startsWith('../')
@@ -148,7 +151,10 @@ const resolveModuleSpecifier = (importer: string, specifier: string): string | n
     return null
 }
 
-const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
+const getModuleSpecifierNodes = (
+    file: string,
+    source: string,
+): AstNode[] => {
     const parseResult = parseSync(
         file,
         source,
@@ -211,15 +217,24 @@ const getModuleSpecifierNodes = (file: string, source: string): AstNode[] => {
     return specifiers
 }
 
-const applySourceReplacements = (source: string, replacements: SourceReplacement[]): string => {
+const applySourceReplacements = (
+    source: string,
+    replacements: SourceReplacement[],
+): string => {
     let output = source
 
-    for (const replacement of replacements.sort((left, right) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
+    for (const replacement of replacements.sort((
+        left,
+        right,
+    ) => right.start - left.start)) output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`
 
     return output
 }
 
-const updateModuleSpecifiers = async (importer: string, renamedFiles: Map<string, string>): Promise<boolean> => {
+const updateModuleSpecifiers = async (
+    importer: string,
+    renamedFiles: Map<string, string>,
+): Promise<boolean> => {
     const source = await readFile(importer, 'utf8')
     const replacements: SourceReplacement[] = []
 

@@ -10,7 +10,10 @@ const isAstNode = (value: unknown): boolean => Boolean(
     && typeof (value as { type?: unknown }).type === 'string',
 )
 
-const collectIdentifierNames = (node, names: Set<string>): void => {
+const collectIdentifierNames = (
+    node,
+    names: Set<string>,
+): void => {
     if (node.type === 'Identifier')
         names.add(node.name)
 
@@ -175,7 +178,10 @@ const noUnusedImports = defineRule({
     },
 })
 
-const hasReferenceBeforeDeclaration = (context, node): boolean =>
+const hasReferenceBeforeDeclaration = (
+    context,
+    node,
+): boolean =>
     context.sourceCode.scopeManager.scopes.some(
         scope =>
             scope.variables.some(
@@ -293,7 +299,10 @@ const syntaxSourceNames = new Set([
     'text',
 ])
 
-const getLineIndentation = (source: string, offset: number): string => {
+const getLineIndentation = (
+    source: string,
+    offset: number,
+): string => {
     const lineStart = source.lastIndexOf('\n', offset - 1) + 1
     let cursor = lineStart
 
@@ -377,7 +386,10 @@ const normalizeCommentLine = (line: string): string => {
     return line.slice(start, end)
 }
 
-const getLineCommentReplacement = (comment, sourceCode): string => {
+const getLineCommentReplacement = (
+    comment,
+    sourceCode,
+): string => {
     const lines = comment.value.split('\n').map(normalizeCommentLine)
 
     while (lines[0] === '')
@@ -576,7 +588,10 @@ const unwrapParenthesizedExpression = node => {
     return current
 }
 
-const getAstExpressionText = (node, sourceCode): string => {
+const getAstExpressionText = (
+    node,
+    sourceCode,
+): string => {
     if (node.type === 'ParenthesizedExpression')
         return `(${getAstExpressionText(node.expression, sourceCode)})`
 
@@ -624,7 +639,10 @@ const getLogicalConditionParts = (node): {
 
 // The AST drops grouping parentheses, so a source pair is recognised by the tokens on
 // either side of the operand and folded back into the operand's own text.
-const getOperandSourceText = (node, sourceCode): string | null => {
+const getOperandSourceText = (
+    node,
+    sourceCode,
+): string | null => {
     const before = sourceCode.getTokenBefore(node)
     const after = sourceCode.getTokenAfter(node)
     const parenthesized = before?.value === '(' && after?.value === ')'
@@ -654,7 +672,10 @@ const getFormattedConditionText = (
 
     const operandIndentation = wrapInParentheses ? `${indentation}    ` : indentation
     const lines = conditionParts.operands.map(
-        (operand, index) => {
+        (
+            operand,
+            index,
+        ) => {
             // An operand is copied out of the source exactly as it was written, on one line
             // or on several. The rule decides where the operands of a chain go, never how an
             // operand is laid out inside itself.
@@ -936,7 +957,10 @@ const preferMultilineCondition = defineRule({
     },
 })
 
-const getSeparatedVariableDeclarationText = (node, sourceCode): string => {
+const getSeparatedVariableDeclarationText = (
+    node,
+    sourceCode,
+): string => {
     const indentation = getLineIndentation(sourceCode.text, node.range[0])
     const comments = sourceCode.getCommentsInside(node)
     const declarationLines: string[] = []
@@ -1066,7 +1090,10 @@ const preferAttachedTrailingComma = defineRule({
     create(context) {
         const { sourceCode } = context
 
-        const checkLastItem = (container, items): void => {
+        const checkLastItem = (
+            container,
+            items,
+        ): void => {
             const lastItem = items.at(-1)
 
             if (!lastItem)
@@ -1300,7 +1327,10 @@ const preferMultilineCollection = defineRule({
 const isNestedCallChain = (node): boolean =>
     node.parent?.type === 'MemberExpression' && node.parent.object === node && node.parent.parent?.type === 'CallExpression' && node.parent.parent.callee === node.parent
 
-const getCallChain = (node, sourceCode): {
+const getCallChain = (
+    node,
+    sourceCode,
+): {
     attrCount: number
     base: unknown
     segments: string[]
@@ -1608,7 +1638,10 @@ const directVoidExpressionTypes = new Set([
     'TaggedTemplateExpression',
 ])
 
-const getVoidExpressionText = (expressionNode, sourceCode): string => {
+const getVoidExpressionText = (
+    expressionNode,
+    sourceCode,
+): string => {
     const expression = sourceCode.getText(expressionNode)
 
     if (
@@ -1622,7 +1655,10 @@ const getVoidExpressionText = (expressionNode, sourceCode): string => {
         : `void (${expression})`
 }
 
-const getConciseArrowBodyText = (statement, sourceCode): string => {
+const getConciseArrowBodyText = (
+    statement,
+    sourceCode,
+): string => {
     const isExpressionStatement = statement.type === 'ExpressionStatement'
     const expressionNode = isExpressionStatement ? statement.expression : statement.argument
     const expression = sourceCode.getText(expressionNode)
