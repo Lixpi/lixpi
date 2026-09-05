@@ -83,15 +83,17 @@ const isLowercaseIdentifierCharacter = (character: string | undefined): boolean 
     ),
 )
 
+// Longest first, so `--x-transitions` is not matched as `--x-transition`.
+const transitionCustomPropertySuffixes = [
+    '-transitions',
+    '-transition',
+]
+
 const isTransitionCustomProperty = (property: string): boolean => {
     if (!property.startsWith('--'))
         return false
 
-    const suffix = property.endsWith('-transitions')
-        ? '-transitions'
-        : property.endsWith('-transition')
-            ? '-transition'
-            : null
+    const suffix = transitionCustomPropertySuffixes.find(candidate => property.endsWith(candidate))
 
     if (!suffix)
         return false

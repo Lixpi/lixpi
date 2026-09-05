@@ -23,15 +23,27 @@ is_action() {
     esac
 }
 
+# Checksum of every file a fix round can touch, so a round that changes nothing ends the
+# loop instead of burning the remaining attempts on findings no fixer can resolve.
+source_fingerprint() {
+    find "$@" -type f -exec cksum {} + 2>/dev/null | sort | cksum
+}
+
 run_oxlint_fixes() {
     attempt=1
     while [ "$attempt" -le 5 ]; do
+        fingerprint=$(source_fingerprint "$@")
         "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --threads=1 --fix --silent "$@" || true
         node "$typescript_format_runner" fix "$@"
         if "$oxlint_bin" --config "$oxlint_config" --no-error-on-unmatched-pattern --deny-warnings --silent "$@" \
             && node "$typescript_format_runner" check "$@"; then
             return 0
         fi
+
+        if [ "$(source_fingerprint "$@")" = "$fingerprint" ]; then
+            break
+        fi
+
         attempt=$((attempt + 1))
     done
 

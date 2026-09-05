@@ -171,14 +171,11 @@ const getModuleSpecifierNodes = (
     const specifiers: AstNode[] = []
     const ranges = new Set<string>()
     const visit = (node: AstNode): void => {
-        const sourceNode = isAstNode(node.source)
-            ? node.source
-            : (
-                node.type === 'TSImportType'
-                && isAstNode(node.argument)
-            )
-                ? node.argument
-                : null
+        const importTypeArgument = node.type === 'TSImportType'
+            && isAstNode(node.argument)
+            ? node.argument
+            : null
+        const sourceNode = isAstNode(node.source) ? node.source : importTypeArgument
         const isModuleReference = node.type === 'ImportDeclaration'
             || node.type === 'ExportAllDeclaration'
             || node.type === 'ExportNamedDeclaration'
