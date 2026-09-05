@@ -495,9 +495,7 @@ const noNestedTernary = defineRule({
         },
         schema: [],
     },
-    create(
-        context,
-    ) {
+    create(context) {
         const { sourceCode } = context
         const unwrap = node => {
             let current = node
@@ -606,15 +604,11 @@ const requireAstFormatterRules = defineRule({
 
                 report(node)
             },
-            Literal(
-                node,
-            ) {
+            Literal(node) {
                 if (node.regex)
                     report(node)
             },
-            NewExpression(
-                node,
-            ) {
+            NewExpression(node) {
                 if (
                     node.callee.type === 'Identifier'
                     && node.callee.name === 'RegExp'
@@ -817,9 +811,7 @@ const preferMultilineCondition = defineRule({
             const ownsCompactBodyBoundary = Boolean(
                 directBody
                 && directBody.type !== 'BlockStatement'
-                && compactIfStatementTypes.has(
-                    directBody.type,
-                )
+                && compactIfStatementTypes.has(directBody.type)
                 && !sourceCode.getAllComments().some(
                     comment =>
                         comment.range[0] >= closeParenthesis.range[1]
@@ -953,9 +945,7 @@ const preferMultilineCondition = defineRule({
                 })
             },
             DoWhileStatement: checkParenthesizedCondition,
-            ForStatement(
-                node,
-            ) {
+            ForStatement(node) {
                 if (
                     !node.test
                     || countLogicalEvaluations(node.test) <= 1
@@ -1096,9 +1086,7 @@ const noCommaSeparatedStatements = defineRule({
                         : undefined,
                 })
             },
-            SequenceExpression(
-                node,
-            ) {
+            SequenceExpression(node) {
                 if (node.parent?.type === 'SequenceExpression')
                     return
 
@@ -1117,9 +1105,7 @@ const noCommaSeparatedStatements = defineRule({
                             fixer.replaceText(
                                 parent,
                                 node.expressions.map(
-                                    expression => sourceCode.getText(
-                                        expression,
-                                    ),
+                                    expression => sourceCode.getText(expression),
                                 ).join(
                                     `\n${indentation}`,
                                 ),
@@ -1160,9 +1146,7 @@ const preferAttachedTrailingComma = defineRule({
                 || !closeToken
                 || comma.range[0] >= closeToken.range[0]
                 || comma.loc.start.line === lastItem.loc.end.line
-                || sourceCode.getCommentsInside(
-                    container,
-                ).some(
+                || sourceCode.getCommentsInside(container).some(
                     comment =>
                         comment.range[0] >= lastItem.range[1]
                         && comment.range[1] <= comma.range[0],
@@ -1245,9 +1229,7 @@ const preferMultilineObjectPattern = defineRule({
                 const propertyIndentation = `${indentation}    `
                 const replacement = `{\n${node.properties.map(
                     property => `${propertyIndentation}${sourceCode.getText(property)}${property.type === 'RestElement' ? '' : ','}`,
-                ).join(
-                    '\n',
-                )}\n${indentation}}`
+                ).join('\n')}\n${indentation}}`
                 const replacementRange = [openBrace.range[0], closeBrace.range[1]]
 
                 if (sourceCode.text.slice(replacementRange[0], replacementRange[1]) === replacement)
@@ -1306,9 +1288,7 @@ const preferMultilineTypeLiteral = defineRule({
 
                         return `${memberIndentation}${sourceCode.text.slice(member.range[0], memberEnd)}`
                     },
-                ).join(
-                    '\n',
-                )}\n${indentation}}`
+                ).join('\n')}\n${indentation}}`
 
                 if (sourceCode.getText(node) === replacement)
                     return
@@ -1493,12 +1473,8 @@ const preferCompactIf = defineRule({
                 const bodyIndentation = `${indentation}    `
                 const conditionRuleOwnsConsequentBoundary = (
                     unwrapParenthesizedExpression(node.test).type === 'LogicalExpression'
-                    && countLogicalEvaluations(
-                        node.test,
-                    ) > 1
-                    && sourceCode.getCommentsInside(
-                        node.test,
-                    ).length === 0
+                    && countLogicalEvaluations(node.test) > 1
+                    && sourceCode.getCommentsInside(node.test).length === 0
                 )
                 const blocks = [node.consequent, node.alternate].filter(statement => statement?.type === 'BlockStatement')
 
@@ -1526,9 +1502,7 @@ const preferCompactIf = defineRule({
                         fix: fixer =>
                             fixer.replaceText(
                                 block,
-                                `\n${bodyIndentation}${sourceCode.getText(
-                                    statement,
-                                )}${(
+                                `\n${bodyIndentation}${sourceCode.getText(statement)}${(
                                     block === node.consequent
                                     && node.alternate
                                 )
@@ -1539,10 +1513,7 @@ const preferCompactIf = defineRule({
                 }
 
                 const directStatements = [node.consequent, node.alternate].filter(
-                    statement =>
-                        statement && statement.type !== 'BlockStatement' && compactIfStatementTypes.has(
-                            statement.type,
-                        ),
+                    statement => statement && statement.type !== 'BlockStatement' && compactIfStatementTypes.has(statement.type),
                 )
 
                 for (const statement of directStatements) {
@@ -1751,9 +1722,7 @@ const preferVoidArrowBody = defineRule({
                 const isEffectOnlyExpression = (
                     node.body.type === 'AssignmentExpression'
                     || node.body.type === 'UpdateExpression'
-                    || isWindowOpenCall(
-                        node.body,
-                    )
+                    || isWindowOpenCall(node.body)
                 )
 
                 if (
@@ -1865,9 +1834,7 @@ const noNativeConsoleLogging = defineRule({
                     || node.callee.object.type !== 'Identifier'
                     || node.callee.object.name !== 'console'
                     || node.callee.property.type !== 'Identifier'
-                    || !debugLoggingMethods.has(
-                        node.callee.property.name,
-                    )
+                    || !debugLoggingMethods.has(node.callee.property.name)
                 )
                     return
 
@@ -1876,9 +1843,7 @@ const noNativeConsoleLogging = defineRule({
                     methodName: node.callee.property.name,
                 })
             },
-            'Program:exit'(
-                program,
-            ) {
+            'Program:exit'(program) {
                 if (consoleCalls.length === 0)
                     return
 
@@ -1963,9 +1928,7 @@ const noNativeConsoleLogging = defineRule({
                                             closeBrace.range[0],
                                         )}    `,
                                     )},\n`
-                                    : `, ${addedSpecifiers.join(
-                                        ', ',
-                                    )}`
+                                    : `, ${addedSpecifiers.join(', ')}`
                                 fixes.push(
                                     fixer.insertTextBefore(closeBrace, insertion),
                                 )

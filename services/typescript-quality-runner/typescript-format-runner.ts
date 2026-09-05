@@ -875,11 +875,35 @@ const isMultilineExpressionBodiedFunction = (
         return false
 
     const body = node.body as AstNode | undefined
-    const range = getNodeRange(node)
+    const bodyRange = getNodeRange(body)
 
+    // The body itself has to span lines. Measuring the whole arrow would also count a
+    // body the arrow-body rule merely pushed onto the following line, and the two rules
+    // would then take turns undoing each other.
     return body?.type !== 'BlockStatement'
-        && range != null
-        && source.slice(range[0], range[1]).includes('\n')
+        && bodyRange != null
+        && source.slice(bodyRange[0], bodyRange[1]).includes('\n')
+}
+
+// A name, a literal, or a property path made of them. There is no inner structure for a
+// line break to reveal.
+const isAtomicItem = (node: AstNode | null | undefined): boolean => {
+    if (
+        node?.type === 'Identifier'
+        || node?.type === 'Literal'
+        || node?.type === 'ThisExpression'
+        || node?.type === 'Super'
+    )
+        return true
+
+    if (node?.type !== 'MemberExpression')
+        return false
+
+    return isAtomicItem(node.object as AstNode | undefined)
+        && (
+            node.computed !== true
+            || isAtomicItem(node.property as AstNode | undefined)
+        )
 }
 
 const endsWithBlockBodiedFunction = (items: AstNode[]): boolean => {
@@ -1085,9 +1109,7 @@ const canonicalizeDelimitedListsOnce = (
                     && (items.length > inlineItemLimit
                     || (isCall && items.some(
                         item => isCallLikeNode(
-                            unwrapParenthesizedExpression(
-                                item,
-                            ),
+                            unwrapParenthesizedExpression(item),
                         )
                             || isMultilineExpressionBodiedFunction(
                                 item,
@@ -1096,10 +1118,14 @@ const canonicalizeDelimitedListsOnce = (
                     ))
                     || (
                         // A callback with a block body never fits on one line, so its own
-                        // braces are what break the call, not the width rule.
-                        !endsWithBlockBodiedFunction(
-                            items,
-                        )
+                        // braces are what break the call, not the width rule. A sole
+                        // object or array argument is likewise laid out by the hug rule,
+                        // and letting width decide it too leaves the two disagreeing.
+                        // A call around one plain argument, a name or a literal, has
+                        // nothing to gain from splitting, however long the line it sits on
+                        // happens to be.
+                        !(items.length === 1 && isAtomicItem(items[0]))
+                        && !endsWithBlockBodiedFunction(items)
                         && getInlineClosingColumn(
                             source,
                             ownStatementStart,
@@ -1233,9 +1259,7 @@ const canonicalizeDelimitedLists = (
 const isHtmlTemplateTag = (tag: AstNode | undefined): boolean => tag?.type === 'Identifier' && tag.name === 'html'
     || tag?.type === 'MemberExpression'
     && tag.computed === false
-    && isAstNode(
-        tag.property,
-    )
+    && isAstNode(tag.property)
     && tag.property.type === 'Identifier'
     && tag.property.name === 'html'
 
@@ -1257,9 +1281,7 @@ const collectHtmlTemplateQuasis = (
             node.type === 'TaggedTemplateExpression'
             && isHtmlTemplateTag(tag)
             && template?.type === 'TemplateLiteral'
-            && Array.isArray(
-                template.quasis,
-            )
+            && Array.isArray(template.quasis)
         ) {
             for (const quasi of template.quasis) {
                 if (!isAstNode(quasi))
@@ -1369,9 +1391,7 @@ const collectHtmlTemplateContents = (
             && isHtmlTemplateTag(tag)
             && template?.type === 'TemplateLiteral'
             && templateRange
-            && Array.isArray(
-                template.quasis,
-            )
+            && Array.isArray(template.quasis)
         ) {
             const quasis = template.quasis.filter(isAstNode)
             const rawRanges = quasis.map(
@@ -1471,9 +1491,7 @@ const getExpandedHtmlStartTag = (
     const closing = source[closingOffset] === '/' ? '/>' : '>'
     const attributeIndentation = `${indentation}    `
     const attributeText = attributes.map(attribute => `${attributeIndentation}${source.slice(attribute.startOffset, attribute.endOffset).trim()}`)
-        .join(
-            '\n',
-        )
+        .join('\n')
 
     return `${source.slice(start, prefixEnd)}\n${attributeText}\n${indentation}${closing}`
 }
@@ -1879,12 +1897,8 @@ const getCallChain = (
         && isAstNode(current.callee)
         && current.callee.type === 'MemberExpression'
         && current.callee.computed === false
-        && isAstNode(
-            current.callee.object,
-        )
-        && isAstNode(
-            current.callee.property,
-        )
+        && isAstNode(current.callee.object)
+        && isAstNode(current.callee.property)
         && current.callee.property.type === 'Identifier'
         && typeof current.callee.property.name === 'string'
     ) {
@@ -2857,9 +2871,7 @@ const canonicalizeConditionStatements = (
                 alternate
                 && alternate.type !== 'BlockStatement'
                 && alternate.type !== 'IfStatement'
-                && compactIfStatementTypes.has(
-                    alternate.type,
-                ),
+                && compactIfStatementTypes.has(alternate.type),
             )
 
             if (

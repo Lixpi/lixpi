@@ -127,9 +127,7 @@ const isSharedTransitionFunction = (node: CssValueNode): boolean => node.type ==
     && (
         getUnqualifiedFunctionName(node.value) === 'var'
         || transitionHelpers.has(
-            getUnqualifiedFunctionName(
-                node.value,
-            ),
+            getUnqualifiedFunctionName(node.value),
         )
     )
 
