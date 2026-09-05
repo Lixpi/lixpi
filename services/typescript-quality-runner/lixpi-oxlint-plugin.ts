@@ -333,9 +333,11 @@ const getStatementGap = (
     nextStart: number,
 ): [number, number] | null => {
     let gapStart = previousEnd
-    const commentsInGap = sourceCode.getAllComments().filter(comment =>
-        comment.range[0] >= previousEnd
-        && comment.range[1] <= nextStart)
+    const commentsInGap = sourceCode.getAllComments().filter(
+        comment =>
+            comment.range[0] >= previousEnd
+            && comment.range[1] <= nextStart,
+    )
 
     for (const comment of commentsInGap) {
         const precedingGap = sourceCode.text.slice(gapStart, comment.range[0])

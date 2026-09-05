@@ -861,6 +861,27 @@ const isNamedFunctionDefinition = (
 ): boolean => (parent?.type === 'VariableDeclarator' && parent.init === node)
     || (parent?.type === 'PropertyDefinition' && parent.value === node)
 
+// A callback whose body is an expression rather than a block has no braces of its own to
+// open the call, so once it spans lines it needs a line of its own. A block-bodied
+// callback keeps hugging the call, since its braces already do that job.
+const isMultilineExpressionBodiedFunction = (
+    node: AstNode,
+    source: string,
+): boolean => {
+    if (
+        node.type !== 'ArrowFunctionExpression'
+        && node.type !== 'FunctionExpression'
+    )
+        return false
+
+    const body = node.body as AstNode | undefined
+    const range = getNodeRange(node)
+
+    return body?.type !== 'BlockStatement'
+        && range != null
+        && source.slice(range[0], range[1]).includes('\n')
+}
+
 const endsWithBlockBodiedFunction = (items: AstNode[]): boolean => {
     const last = items.at(-1)
 
@@ -1067,7 +1088,11 @@ const canonicalizeDelimitedListsOnce = (
                             unwrapParenthesizedExpression(
                                 item,
                             ),
-                        ),
+                        )
+                            || isMultilineExpressionBodiedFunction(
+                                item,
+                                source,
+                            ),
                     ))
                     || (
                         // A callback with a block body never fits on one line, so its own
@@ -1102,11 +1127,13 @@ const canonicalizeDelimitedListsOnce = (
                         ),
                     )
                     const itemIndentation = `${indentation}    `
-                    const itemTexts = itemRanges.map(range => reindentNodeText(
-                        source,
-                        range!,
-                        hugsSoleArgument ? indentation : itemIndentation,
-                    ))
+                    const itemTexts = itemRanges.map(
+                        range => reindentNodeText(
+                            source,
+                            range!,
+                            hugsSoleArgument ? indentation : itemIndentation,
+                        ),
+                    )
                     const lastItem = items.at(-1)
                     const trailingComma = lastItem?.type === 'RestElement' ? '' : ','
                     const replacement = hugsSoleArgument
