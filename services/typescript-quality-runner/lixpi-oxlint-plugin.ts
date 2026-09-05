@@ -727,6 +727,30 @@ const getFormattedConditionText = (
         : condition
 }
 
+// Walks outward from a conditional branch to its own `?` or `:` punctuator. The
+// branch node's range excludes any grouping parentheses, so the punctuator is the
+// only boundary a rewrite can use without deleting one half of a parenthesis pair.
+const getBranchPunctuator = (
+    sourceCode,
+    node,
+    value: string,
+    forward: boolean,
+) => {
+    let token = forward ? sourceCode.getTokenAfter(node) : sourceCode.getTokenBefore(node)
+
+    while (
+        token
+        && token.value !== value
+    ) {
+        if (token.value !== (forward ? ')' : '('))
+            return null
+
+        token = forward ? sourceCode.getTokenAfter(token) : sourceCode.getTokenBefore(token)
+    }
+
+    return token
+}
+
 const preferMultilineCondition = defineRule({
     meta: {
         type: 'layout',
@@ -848,10 +872,32 @@ const preferMultilineCondition = defineRule({
                     && openParenthesis.range[0] >= node.range[0],
                 )
                 const conditionStart = ownsOpenParenthesis ? openParenthesis.range[0] : node.test.range[0]
+                const questionToken = getBranchPunctuator(
+                    sourceCode,
+                    node.test,
+                    '?',
+                    true,
+                )
+                const colonToken = getBranchPunctuator(
+                    sourceCode,
+                    node.alternate,
+                    ':',
+                    false,
+                )
+
+                if (
+                    !questionToken
+                    || !colonToken
+                )
+                    return
+
                 const branchIndentation = `${indentation}    `
-                const conditionRange = [conditionStart, node.consequent.range[0]]
+                const conditionRange = [conditionStart, sourceCode.getTokenAfter(questionToken).range[0]]
                 const conditionReplacement = `${condition}\n${branchIndentation}? `
-                const alternateRange = [node.consequent.range[1], node.alternate.range[0]]
+                const alternateRange = [
+                    sourceCode.getTokenBefore(colonToken).range[1],
+                    sourceCode.getTokenAfter(colonToken).range[0],
+                ]
                 const alternateReplacement = `\n${branchIndentation}: `
 
                 if (
