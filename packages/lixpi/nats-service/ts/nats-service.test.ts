@@ -81,6 +81,14 @@ const createAsyncIterable = <T>(items: T[]): MockSubscription => ({
     },
 })
 
+// Stands in for a status iterator the client stopped with an error, which is what
+// QueuedIteratorImpl.stop(err) produces for a `for await` consumer.
+const createFailingAsyncIterable = (error: unknown): MockSubscription => ({
+    [Symbol.asyncIterator]: async function*() {
+        throw error
+    },
+})
+
 const createMockConnection = (overrides: Record<string, any> = {}) => {
     const protocolSubs = new Map(
         overrides.protocolSubs ?? [
@@ -221,6 +229,10 @@ describe('NatsService', () => {
 
             expect(onAuthError).toHaveBeenCalledWith(authError)
             expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+
+            // The scheduled reconnect runs on a real timer. Left pending it fires
+            // during a later test and adds a stray connect attempt there.
+            clearTimeout(service['reconnectTimer'])
         })
 
         it('only connects once through static init and reuses existing instance', async () => {
@@ -230,6 +242,44 @@ describe('NatsService', () => {
 
             expect(service).toBe(secondCall)
             expect(connectMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('retries the first connect through a DNS soft failure and resolves once the server answers', async () => {
+            connectMock.mockRejectedValueOnce(new Error('getaddrinfo EAI_AGAIN lixpi-nats-3'))
+
+            const service = await NatsService.init({ initialConnectMaxAttempts: 3 })
+
+            expect(connectMock).toHaveBeenCalledTimes(2)
+            expect(service.isConnected()).toBe(true)
+            expect(NatsService.getInstance()).toBe(service)
+        })
+
+        it('rejects init when the first connect never succeeds and clears the singleton', async () => {
+            connectMock.mockRejectedValue(new Error('getaddrinfo EAI_AGAIN lixpi-nats-3'))
+
+            await expect(NatsService.init({ initialConnectMaxAttempts: 2 }))
+                .rejects
+                .toThrow('first connect failed after 2 attempts')
+
+            expect(connectMock).toHaveBeenCalledTimes(2)
+            expect(NatsService.getInstance()).toBeNull()
+        })
+
+        it('keeps a failed reconnect silent and scheduled after the connection was already established', async () => {
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+            const service = new (NatsService as any)({})
+
+            await service.connect()
+            expect(service.isConnected()).toBe(true)
+
+            // Simulate the connection dropping, then a reconnect attempt that also fails.
+            service['nc'] = { isClosed: vi.fn().mockReturnValue(true) } as any
+            connectMock.mockRejectedValueOnce(new Error('still down'))
+
+            await expect(service.connect()).resolves.toBeUndefined()
+            expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+
+            clearTimeout(service['reconnectTimer'])
         })
 
         it('uses wsconnect when webSocket config is enabled', async () => {
@@ -416,6 +466,79 @@ describe('NatsService', () => {
     // =============================================================================
 
     describe('lifecycle and status hooks', () => {
+        const countScheduledReconnects = (spy: ReturnType<typeof vi.spyOn>) =>
+            spy.mock.calls.filter(([, delay]) => delay === 500).length
+
+        it('monitors every new connection so a second close also schedules a reconnect', async () => {
+            const firstConnection = createMockConnection({
+                status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
+            })
+            const secondConnection = createMockConnection({
+                status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
+            })
+            connectMock
+                .mockResolvedValueOnce(firstConnection)
+                .mockResolvedValueOnce(secondConnection)
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+            const service = new (NatsService as any)({})
+
+            await service.connect()
+            await flushPending()
+
+            expect(firstConnection.status).toHaveBeenCalledTimes(1)
+            expect(countScheduledReconnects(setTimeoutSpy)).toBe(1)
+            clearTimeout(service['reconnectTimer'])
+
+            // Stand in for the reconnect timer firing after the first close.
+            firstConnection.isClosed.mockReturnValue(true)
+            await service.connect()
+            await flushPending()
+
+            expect(connectMock).toHaveBeenCalledTimes(2)
+            // The regression: monitorStatus() used to see a monitoring flag that the
+            // first loop never cleared and return without touching the new
+            // connection, so this second close reached nobody and the service stayed
+            // down for good without logging a thing.
+            expect(secondConnection.status).toHaveBeenCalledTimes(1)
+            expect(countScheduledReconnects(setTimeoutSpy)).toBe(2)
+            clearTimeout(service['reconnectTimer'])
+        })
+
+        it('reports a failed status iterator and recovers instead of rejecting out of the monitor', async () => {
+            const monitorFailure = new Error('status iterator stopped with an error')
+            const service = new (NatsService as any)({})
+            service['nc'] = createMockConnection({
+                status: vi.fn().mockReturnValue(createFailingAsyncIterable(monitorFailure)),
+            })
+            service['subscriptionsInitialized'] = true
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+            service['monitorStatus']()
+            await flushPending()
+
+            expect(errorMock).toHaveBeenCalledWith('NATS -> status monitor failed', monitorFailure)
+            expect(service['isMonitoring']).toBe(false)
+            expect(service['subscriptionsInitialized']).toBe(false)
+            expect(countScheduledReconnects(setTimeoutSpy)).toBe(1)
+            clearTimeout(service['reconnectTimer'])
+        })
+
+        it('leaves an intentionally closed connection alone when the monitor loop ends', async () => {
+            const service = new (NatsService as any)({})
+            service['nc'] = createMockConnection({
+                status: vi.fn().mockReturnValue(createAsyncIterable([{ type: 'close' }])),
+            })
+            service['intentionalClose'] = true
+            const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+            service['monitorStatus']()
+            await flushPending()
+
+            expect(service['isMonitoring']).toBe(false)
+            expect(countScheduledReconnects(setTimeoutSpy)).toBe(0)
+        })
+
         it('updates connection visibility state after disconnect', async () => {
             const closeSpy = vi.fn().mockResolvedValue(undefined)
             const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')

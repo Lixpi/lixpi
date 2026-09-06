@@ -31,7 +31,7 @@ Provides a unified API for NATS messaging with support for:
    ```
 
 3. **Behavior Parity**: Both versions must:
-   - Handle connection failures the same way (retry without crashing)
+   - Handle connection failures the same way: the first connect retries on a bounded budget and then fails loudly, every later failure retries forever without crashing
    - Use identical timeout defaults (`initialConnectTimeout = 2s`, `request timeout = 3s`)
    - Apply the same authentication priority (NKey JWT → Token → User/Pass)
    - Log messages in the same format
@@ -387,6 +387,7 @@ config = NatsServiceConfig(
 - `user`/`password` (or `pass` in TS): Basic authentication
 - `nkey_seed`/`nkeySeed`: NKey seed for self-issued JWT
 - `user_id`/`userId`: User ID for JWT subject (used with `nkey_seed`)
+- `initial_connect_max_attempts`/`initialConnectMaxAttempts`: Attempts the first connect makes before `init()` fails (default: 9). Reconnects are unaffected and retry forever.
 
 ### Python-specific Options
 
@@ -408,6 +409,10 @@ config = NatsServiceConfig(
 - Automatic reconnection with configurable retry
 - Connection status monitoring
 - Graceful shutdown with drain
+
+`init()` resolves only once the connection is established. When the first connect cannot be made it retries on an exponential backoff (0.5s, 1s, 2s, 4s, 8s, then 16s) up to `initialConnectMaxAttempts` / `initial_connect_max_attempts`, which defaults to 9 attempts, roughly 80 seconds of wall clock. That budget covers a Docker cold boot where the NATS hostnames are not yet resolvable and every attempt fails with `EAI_AGAIN`. When the budget runs out `init()` rejects, so a caller never receives a service that is not connected.
+
+Once a connection has been established, every later failure goes through the reconnect path instead, which retries forever on the same backoff and re-registers subscriptions when the connection comes back. A NATS blip after startup never takes the process down.
 
 ### Messaging Patterns
 

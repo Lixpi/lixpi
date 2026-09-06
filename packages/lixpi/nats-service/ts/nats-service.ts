@@ -29,6 +29,16 @@ import {
 // silently lost when the meta-layer reassigns it during a health blip.
 const DEFAULT_STREAM_REPLICAS = 3
 
+// How many attempts init()'s first connect makes before it gives up and rejects.
+// The waits between attempts use the same exponential backoff as reconnect
+// (0.5s, 1s, 2s, 4s, 8s, then 16s), so nine attempts spend ~63s waiting and,
+// with each attempt's own 2s connect timeout, cover roughly 80s of wall clock.
+// That window is sized for a Docker Desktop cold boot, where a service can start
+// before Docker DNS can resolve the NATS hostnames and every attempt fails with
+// EAI_AGAIN. Only the first connect is bounded: once a connection has been
+// established, reconnects retry forever.
+const DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS = 9
+
 import {
     log,
     info,
@@ -80,6 +90,11 @@ export type NatsServiceConfig = {
     middleware?: NatsMiddleware[] // Middleware for all subscriptions
     replyMiddleware?: ReplyMiddleware[] // Middleware specifically for replies
     streamReplicas?: number // Replication factor for created stores (defaults to DEFAULT_STREAM_REPLICAS)
+    // How many attempts init()'s first connect makes before rejecting (defaults to
+    // DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS). Raise it for a caller that starts
+    // alongside a slow cluster, lower it for one that would rather fail quickly.
+    // It does not affect reconnects, which always retry forever.
+    initialConnectMaxAttempts?: number
 }
 
 export type NatsSubjectSubscription<T = any> = {
@@ -268,7 +283,7 @@ export const generateSelfIssuedJWT = (
 }
 
 export default class NatsService {
-    private static instance: NatsService
+    private static instance: NatsService | null = null
     private nc: NatsConnection | null = null
     private js: JetStreamClient | null = null
     private jsm: JetStreamManager | null = null
@@ -296,13 +311,30 @@ export default class NatsService {
         return NatsService.instance || null
     }
 
+    // Resolves only once the connection is real, and rejects when the first
+    // connect never succeeds. Returning a service whose `nc` is still null used to
+    // look like success and then blew up much later, in whatever startup code made
+    // the first JetStream call.
     static async init(config: NatsServiceConfig = {}): Promise<NatsService> {
-        if (!NatsService.instance) {
-            NatsService.instance = new NatsService(config)
-            await NatsService.instance.connect()
+        if (NatsService.instance)
+            return NatsService.instance
+
+        const instance = new NatsService(config)
+        // Published before connecting so subscription handlers that run while the
+        // connection is being established can still reach it through getInstance().
+        NatsService.instance = instance
+
+        try {
+            await instance.connectOrThrow()
+        } catch (error) {
+            // Drop the dead singleton so a caller that catches this and calls init()
+            // again builds a fresh instance instead of reusing the failed one.
+            NatsService.instance = null
+
+            throw error
         }
 
-        return NatsService.instance
+        return instance
     }
 
     private constructor(config: NatsServiceConfig) {
@@ -310,16 +342,31 @@ export default class NatsService {
         this.streamReplicas = config.streamReplicas ?? DEFAULT_STREAM_REPLICAS
     }
 
+    // Exponential backoff: 500ms, 1s, 2s, 4s, 8s, capped at 16s. Prevents a stale
+    // token or a down server from hammering the auth callout / JWKS endpoint
+    // (which is itself rate-limited) tens of times per second. Both the reconnect
+    // timer and the first-connect retry loop take their delay from here so the two
+    // paths cannot drift apart.
+    private nextBackoffDelay(delay?: number): number {
+        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, 16000)
+        this.reconnectAttempts++
+
+        return backoff
+    }
+
     private scheduleReconnect(delay?: number) {
         if (this.reconnectTimer)
             clearTimeout(this.reconnectTimer)
 
-        // Exponential backoff: 500ms, 1s, 2s, 4s, 8s, capped at 16s. Prevents a
-        // stale token or a down server from hammering the auth callout / JWKS
-        // endpoint (which is itself rate-limited) tens of times per second.
-        const backoff = delay ?? Math.min(500 * 2 ** this.reconnectAttempts, 16000)
-        this.reconnectAttempts++
-        this.reconnectTimer = setTimeout(() => this.connect(this.connectTimeout), backoff)
+        this.reconnectTimer = setTimeout(
+            () => this.connect(this.connectTimeout),
+            this.nextBackoffDelay(delay),
+        )
+    }
+
+    private async waitBeforeRetry(): Promise<void> {
+        const backoff = this.nextBackoffDelay()
+        await new Promise<void>(resolve => setTimeout(resolve, backoff))
     }
 
     private monitorStatus(): void {
@@ -330,49 +377,73 @@ export default class NatsService {
             return
 
         this.isMonitoring = true
+        // Bind the loop to the connection it was started for. connect() installs a
+        // fresh `this.nc` on every reconnect, so reading it inside the loop would
+        // eventually iterate one connection's status while holding another.
+        const monitored = this.nc
         ;(async () => {
-            for await (const status of this.nc.status()) {
-                switch (status.type) {
-                    case 'disconnect':
-                        err('NATS -> disconnected:', status)
+            try {
+                for await (const status of monitored.status()) {
+                    switch (status.type) {
+                        case 'disconnect':
+                            err('NATS -> disconnected:', status)
 
-                        break
-                    case 'reconnecting':
-                        warn('NATS -> reconnecting:', status)
+                            break
+                        case 'reconnecting':
+                            warn('NATS -> reconnecting:', status)
 
-                        break
-                    case 'reconnect':
-                        info('NATS -> reconnected:', status)
+                            break
+                        case 'reconnect':
+                            info('NATS -> reconnected:', status)
 
-                        // Check if subscriptions need to be initialized after reconnect
-                        if (!this.subscriptionsInitialized)
-                            await this.initSubscriptions()
+                            // Check if subscriptions need to be initialized after reconnect
+                            if (!this.subscriptionsInitialized)
+                                await this.initSubscriptions()
 
-                        break
-                    case 'error':
-                        err('NATS -> connection error:', status)
+                            break
+                        case 'error':
+                            err('NATS -> connection error:', status)
 
-                        // The client keeps retrying internally (maxReconnectAttempts: -1),
-                        // but with the credentials captured at connect time. If the server
-                        // rejected our token (expired or signing key rotated), refresh it so
-                        // the next internal reconnect presents valid credentials.
-                        if (this.isAuthError((status as any).error ?? status)) {
-                            await this.handleAuthError((status as any).error ?? status)
-                            await this.refreshToken()
-                        }
+                            // The client keeps retrying internally (maxReconnectAttempts: -1),
+                            // but with the credentials captured at connect time. If the server
+                            // rejected our token (expired or signing key rotated), refresh it so
+                            // the next internal reconnect presents valid credentials.
+                            if (this.isAuthError((status as any).error ?? status)) {
+                                await this.handleAuthError((status as any).error ?? status)
+                                await this.refreshToken()
+                            }
 
-                        break
-                    case 'close':
-                        warn('NATS -> connection closed:', status)
-                        // Reset the initialized flag on close so we can reconnect properly
-                        this.subscriptionsInitialized = false
+                            break
+                        case 'close':
+                            warn('NATS -> connection closed:', status)
+                            // Reset the initialized flag on close so we can reconnect properly
+                            this.subscriptionsInitialized = false
 
-                        // Reconnect unless we intentionally closed the connection.
-                        if (!this.intentionalClose)
-                            this.scheduleReconnect()
+                            // Reconnect unless we intentionally closed the connection.
+                            if (!this.intentionalClose)
+                                this.scheduleReconnect()
 
-                        break
+                            break
+                    }
                 }
+            } catch (error) {
+                // The status iterator itself failed. No 'close' status reached the
+                // handler above, so nothing has reset the subscription flag or
+                // scheduled the reconnect, and the connection is finished either way.
+                // Left uncaught this rejects out of the IIFE, and the API runs under
+                // --abort-on-uncaught-exception, which turns a monitoring failure
+                // into a process abort.
+                err('NATS -> status monitor failed', error)
+                this.subscriptionsInitialized = false
+
+                if (!this.intentionalClose)
+                    this.scheduleReconnect()
+            } finally {
+                // The flag means "this loop is running", nothing more. The iterator
+                // ends whenever the connection closes, so leaving it set turned
+                // monitorStatus() into a no-op for every connection after the first:
+                // the second close was then observed by nobody and never reconnected.
+                this.isMonitoring = false
             }
         })()
     }
@@ -513,6 +584,49 @@ export default class NatsService {
         return result
     }
 
+    // A single connect attempt. Throws on failure so the caller chooses between
+    // retrying forever (reconnect) and giving up (first connect).
+    private async attemptConnect(): Promise<void> {
+        // Fetch a fresh token before every attempt so a reload/reconnect after a
+        // token expiry or signing-key rotation does not keep replaying stale creds.
+        await this.refreshToken()
+
+        // Options are rebuilt for every attempt and the client resolves the server
+        // hostnames when it opens the socket, so a DNS soft failure (EAI_AGAIN,
+        // which is what a Docker cold boot produces) is re-resolved on the next
+        // attempt instead of replaying a cached failed lookup.
+        const options = this.buildConnectionOptions()
+        // The client honours `options.timeout` and rejects on failure (see
+        // waitOnFirstConnect: false), so there is no need for a Promise.race
+        // timeout that would leave a background client retrying forever.
+        this.nc = await (this.config.webSocket ? wsconnect(options) : connect(options))
+        // Connected: reset the reconnect backoff.
+        this.reconnectAttempts = 0
+        infoStr([
+            c.green('NATS -> listening on: '),
+            c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`),
+        ])
+        this.monitorStatus()
+        await this.initSubscriptions()
+    }
+
+    private async reportConnectError(error: unknown): Promise<void> {
+        if (this.isAuthError(error)) {
+            // Server rejected our credentials. Let the caller invalidate its cached
+            // token so the next refreshToken() obtains a valid one instead of looping
+            // forever on the same rejected token.
+            err('NATS -> authorization failed, refreshing credentials', error)
+            await this.handleAuthError(error)
+
+            return
+        }
+
+        err('NATS -> connection error or timeout', error)
+    }
+
+    // The reconnect path. It never throws: a NATS blip after startup must not take
+    // the process down, so a failed attempt schedules the next one and returns.
+    // scheduleReconnect() and monitorStatus()'s close handler both land here.
     async connect(initialConnectTimeout = 2000): Promise<void> {
         if (
             this.isConnecting
@@ -525,34 +639,43 @@ export default class NatsService {
         this.connectTimeout = initialConnectTimeout
 
         try {
-            // Fetch a fresh token before every attempt so a reload/reconnect after a
-            // token expiry or signing-key rotation does not keep replaying stale creds.
-            await this.refreshToken()
-
-            const options = this.buildConnectionOptions()
-            // The client honours `options.timeout` and rejects on failure (see
-            // waitOnFirstConnect: false), so there is no need for a Promise.race
-            // timeout that would leave a background client retrying forever.
-            this.nc = await (this.config.webSocket ? wsconnect(options) : connect(options))
-            // Connected: reset the reconnect backoff.
-            this.reconnectAttempts = 0
-            infoStr([
-                c.green('NATS -> listening on: '),
-                c.blue(`${this.config.webSocket ? 'wss://' : 'nats://'}${this.nc.getServer()}`),
-            ])
-            this.monitorStatus()
-            await this.initSubscriptions()
+            await this.attemptConnect()
         } catch (error) {
-            if (this.isAuthError(error)) {
-                // Server rejected our credentials. Let the caller invalidate its cached
-                // token so the next refreshToken() obtains a valid one instead of looping
-                // forever on the same rejected token.
-                err('NATS -> authorization failed, refreshing credentials', error)
-                await this.handleAuthError(error)
-            } else
-                err('NATS -> connection error or timeout', error)
-
+            await this.reportConnectError(error)
             this.scheduleReconnect()
+        } finally {
+            this.isConnecting = false
+        }
+    }
+
+    // The first-connect path. It retries on the same backoff as reconnect and then
+    // throws, so init() rejects instead of handing back a service that never
+    // connected. Once this returns, every later failure goes through connect().
+    private async connectOrThrow(initialConnectTimeout = 2000): Promise<void> {
+        if (this.isConnected())
+            return
+
+        this.isConnecting = true
+        this.intentionalClose = false
+        this.connectTimeout = initialConnectTimeout
+
+        const maxAttempts = this.config.initialConnectMaxAttempts ?? DEFAULT_INITIAL_CONNECT_MAX_ATTEMPTS
+
+        try {
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    await this.attemptConnect()
+
+                    return
+                } catch (error) {
+                    await this.reportConnectError(error)
+
+                    if (attempt === maxAttempts)
+                        throw new Error(`NATS -> first connect failed after ${maxAttempts} attempts`, { cause: error })
+
+                    await this.waitBeforeRetry()
+                }
+            }
         } finally {
             this.isConnecting = false
         }

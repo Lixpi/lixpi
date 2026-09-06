@@ -541,6 +541,10 @@ services:
             - ./services/api/tsconfig.json:/usr/src/service/tsconfig.json:cached
 
             - ./services/api/config:/usr/src/service/config:cached
+            # nodemon's `exec` wrapper, which decides whether a crashed app should
+            # take the container down. Mounted next to nodemon.json so editing it
+            # does not need an image rebuild. See services/api/scripts/nodemon-exec.sh.
+            - ./services/api/scripts:/usr/src/service/scripts:cached
             - ./services/api/src:/usr/src/service/src:cached
             - ./services/api/temp-ai-responses:/usr/src/service/temp-ai-responses:cached
 
