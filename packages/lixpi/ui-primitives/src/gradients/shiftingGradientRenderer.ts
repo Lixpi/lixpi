@@ -474,7 +474,8 @@ export class ShiftingGradientBackground {
                 if (this.destroyed)
                     return
 
-                for (const entry of entries) this.renderer.setVisibility(this.canvas, entry.isIntersecting)
+                for (const entry of entries)
+                    this.renderer.setVisibility(this.canvas, entry.isIntersecting)
             },
             { threshold: 0 },
         )

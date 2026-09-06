@@ -231,7 +231,8 @@ export class NodeViews {
     private clear(): void {
         for (const id of Array.from(
             this.mounted.keys(),
-        )) this.remove(id)
+        ))
+            this.remove(id)
     }
 
     destroy(): void {

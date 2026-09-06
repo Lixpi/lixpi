@@ -82,9 +82,10 @@ export class WorkspaceDocumentNodes {
             documents.map(document => [document.documentId, document]),
         )
 
-        for (const view of this.views.values()) view.setDocument(
-            byId.get(view.assetId),
-        )
+        for (const view of this.views.values())
+            view.setDocument(
+                byId.get(view.assetId),
+            )
     }
 
     destroy(): void {
@@ -93,7 +94,8 @@ export class WorkspaceDocumentNodes {
 
         this.destroyed = true
 
-        for (const view of this.views.values()) view.destroy()
+        for (const view of this.views.values())
+            view.destroy()
 
         this.views.clear()
     }

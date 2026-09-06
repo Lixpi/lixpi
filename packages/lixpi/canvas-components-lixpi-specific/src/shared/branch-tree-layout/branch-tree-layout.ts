@@ -374,7 +374,8 @@ export const buildBranchTrees = (
     }
 
     for (const tree of treesByRoot.values()) {
-        for (const siblings of tree.childrenByParentId.values()) siblings.sort(compareSiblings)
+        for (const siblings of tree.childrenByParentId.values())
+            siblings.sort(compareSiblings)
     }
 
     return [...treesByRoot.values()]
@@ -385,7 +386,8 @@ const parentByChildOf = (tree: BranchTree): Map<string, string> => {
     const parentByChild = new Map<string, string>()
 
     for (const [parentId, children] of tree.childrenByParentId) {
-        for (const childId of children) parentByChild.set(childId, parentId)
+        for (const childId of children)
+            parentByChild.set(childId, parentId)
     }
 
     return parentByChild
@@ -793,11 +795,13 @@ export const applyBranchTreeLayout = (
             if (layoutMemberIds.has(id))
                 orderedLayoutMemberIds.push(id)
 
-            for (const childId of tree.childrenByParentId.get(id) ?? []) visitInSiblingOrder(childId)
+            for (const childId of tree.childrenByParentId.get(id) ?? [])
+                visitInSiblingOrder(childId)
         }
         visitInSiblingOrder(tree.rootId)
 
-        for (const id of tree.memberIds) visitInSiblingOrder(id)
+        for (const id of tree.memberIds)
+            visitInSiblingOrder(id)
 
         const layoutNodes: TreeLayoutNode[] = orderedLayoutMemberIds.map((id: string) => {
             const node = nodesById.get(id) as BranchTreeMemberNode
@@ -1096,7 +1100,8 @@ export const rebalanceBranchTreesAndResolve = (
     const memberToRoot = new Map<string, string>()
 
     for (const tree of trees) {
-        for (const id of tree.memberIds) memberToRoot.set(id, tree.rootId)
+        for (const id of tree.memberIds)
+            memberToRoot.set(id, tree.rootId)
     }
 
     const boxes: CollisionBox[] = []

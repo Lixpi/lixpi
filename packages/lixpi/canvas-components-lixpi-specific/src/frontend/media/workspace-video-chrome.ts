@@ -157,7 +157,8 @@ export class WorkspaceVideoChrome {
         this.entries.clear()
         const cleanup = new Lifetime()
 
-        for (const entry of entries) cleanup.own(() => entry.destroy())
+        for (const entry of entries)
+            cleanup.own(() => entry.destroy())
 
         cleanup.destroy()
     }

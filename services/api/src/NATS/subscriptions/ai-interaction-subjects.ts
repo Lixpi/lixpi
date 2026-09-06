@@ -209,7 +209,8 @@ const findSealedMediaReplayTrace = (
         )
             traces.push(candidate as SealedMediaReplayTrace)
 
-        for (const child of node.content ?? []) visit(child)
+        for (const child of node.content ?? [])
+            visit(child)
     }
     visit(root)
     const exactTrace = traces.find(trace => {
@@ -919,7 +920,8 @@ const mergePromptReferenceMediaCandidates = ({
 
     const candidatesById = new Map<string, MediaBranchCandidateSnapshot['candidates'][number]>()
 
-    for (const candidate of snapshot?.candidates ?? []) candidatesById.set(candidate.candidateId, candidate)
+    for (const candidate of snapshot?.candidates ?? [])
+        candidatesById.set(candidate.candidateId, candidate)
 
     for (const candidate of candidates) {
         const existing = candidatesById.get(candidate.candidateId)

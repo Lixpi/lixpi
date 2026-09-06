@@ -253,7 +253,8 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
         const workspaces = workspacesStore.getData()
         const currentWorkspaceId = routerStore.getData('currentRoute')?.routeParams?.workspaceId
 
-        for (const dropdown of this.workspaceDropdowns.values()) dropdown.destroy()
+        for (const dropdown of this.workspaceDropdowns.values())
+            dropdown.destroy()
 
         this.workspaceDropdowns.clear()
 
@@ -425,9 +426,11 @@ class NavigationSidePanel implements NavigationSidePanelInstance {
     destroy = (): void => {
         this.importFileInput.removeEventListener('change', this.handleImportFileSelected)
 
-        for (const unsubscribe of this.unsubscribers) unsubscribe()
+        for (const unsubscribe of this.unsubscribers)
+            unsubscribe()
 
-        for (const dropdown of this.workspaceDropdowns.values()) dropdown.destroy()
+        for (const dropdown of this.workspaceDropdowns.values())
+            dropdown.destroy()
 
         this.workspaceDropdowns.clear()
         this.sidePanel.destroy()

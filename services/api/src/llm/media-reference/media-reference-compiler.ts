@@ -150,7 +150,8 @@ export const segmentMediaPrompt = (node: ProseMirrorJsonNode): MediaPromptSegmen
             return
         }
 
-        for (const child of candidate.content ?? []) visit(child)
+        for (const child of candidate.content ?? [])
+            visit(child)
     }
     visit(node)
 

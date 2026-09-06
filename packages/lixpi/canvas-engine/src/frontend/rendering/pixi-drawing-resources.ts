@@ -120,7 +120,8 @@ export class PixiDrawingResources implements DrawingResources {
 
         this.viewport = { ...viewport }
 
-        for (const layer of this.layers.values()) this.applyViewport(layer.world)
+        for (const layer of this.layers.values())
+            this.applyViewport(layer.world)
 
         this.invalidateCaptures()
         this.invalidate()
@@ -258,8 +259,9 @@ export class PixiDrawingResources implements DrawingResources {
 
         resource.update(input)
 
-        for (const [container, textures] of this.samples) if (textures.includes(handle))
-            this.changed(container)
+        for (const [container, textures] of this.samples)
+            if (textures.includes(handle))
+                this.changed(container)
 
         this.invalidate()
     }
@@ -417,9 +419,10 @@ export class PixiDrawingResources implements DrawingResources {
             if (shape.fill) {
                 graphics.beginPath().path(path).fill(shape.fill)
 
-                for (const hole of shape.holes ?? []) graphics.beginPath().path(
-                    projectVectorPath(hole, shape.projection),
-                ).cut()
+                for (const hole of shape.holes ?? [])
+                    graphics.beginPath().path(
+                        projectVectorPath(hole, shape.projection),
+                    ).cut()
             }
 
             if (shape.stroke) {
@@ -436,10 +439,11 @@ export class PixiDrawingResources implements DrawingResources {
 
         this.changed(graphics)
 
-        for (const [group, mask] of this.masks) if (mask === handle)
-            this.changed(
-                this.display(group),
-            )
+        for (const [group, mask] of this.masks)
+            if (mask === handle)
+                this.changed(
+                    this.display(group),
+                )
 
         this.invalidate()
     }
@@ -536,9 +540,11 @@ export class PixiDrawingResources implements DrawingResources {
         )
             throw new RangeError('Capture bounds and resolution must be finite and positive')
 
-        for (const handle of input.include) this.registry.get(handle, handle.kind)
+        for (const handle of input.include)
+            this.registry.get(handle, handle.kind)
 
-        for (const handle of input.exclude) this.registry.get(handle, 'group')
+        for (const handle of input.exclude)
+            this.registry.get(handle, 'group')
 
         for (const bounds of input.sampleBounds ?? []) {
             if (
@@ -632,8 +638,9 @@ export class PixiDrawingResources implements DrawingResources {
         parent: Container,
         child: Container,
     ): boolean {
-        for (let node: Container | null = child; node; node = node.parent) if (node === parent)
-            return true
+        for (let node: Container | null = child; node; node = node.parent)
+            if (node === parent)
+                return true
 
         return false
     }
@@ -655,7 +662,8 @@ export class PixiDrawingResources implements DrawingResources {
         const bounds = container.getBounds().rectangle
         const ancestors = new Set<Container>()
 
-        for (let node: Container | null = container; node; node = node.parent) ancestors.add(node)
+        for (let node: Container | null = container; node; node = node.parent)
+            ancestors.add(node)
 
         const previous = this.changes.get(container)
         const x = Math.min(bounds.x, previous?.bounds.x ?? bounds.x)
@@ -663,7 +671,8 @@ export class PixiDrawingResources implements DrawingResources {
         const right = Math.max(bounds.right, previous ? previous.bounds.x + previous.bounds.width : bounds.right)
         const bottom = Math.max(bounds.bottom, previous ? previous.bounds.y + previous.bounds.height : bounds.bottom)
 
-        for (const ancestor of previous?.ancestors ?? []) ancestors.add(ancestor)
+        for (const ancestor of previous?.ancestors ?? [])
+            ancestors.add(ancestor)
 
         this.changes.set(
             container,
@@ -774,7 +783,8 @@ export class PixiDrawingResources implements DrawingResources {
             ordered.push(capture)
         }
 
-        for (const capture of this.captures.values()) visit(capture)
+        for (const capture of this.captures.values())
+            visit(capture)
 
         const refreshed = new Set<Capture>()
 
@@ -814,7 +824,8 @@ export class PixiDrawingResources implements DrawingResources {
             )
                 node.renderable = false
 
-            for (const child of node.children) visit(child)
+            for (const child of node.children)
+                visit(child)
         }
 
         try {
@@ -835,16 +846,19 @@ export class PixiDrawingResources implements DrawingResources {
                 transform: new Matrix().translate(-capture.spec.bounds.x, -capture.spec.bounds.y),
             })
         } finally {
-            for (const [node, renderable] of visibility) node.renderable = renderable
+            for (const [node, renderable] of visibility)
+                node.renderable = renderable
 
             if (capture.spec.space === 'world') {
-                for (const layer of this.layers.values()) this.applyViewport(layer.world)
+                for (const layer of this.layers.values())
+                    this.applyViewport(layer.world)
             }
         }
     }
 
     prepareProjection(bounds: CanvasEngineRect): void {
-        for (const mesh of this.meshes.values()) mesh.prepareProjection(bounds)
+        for (const mesh of this.meshes.values())
+            mesh.prepareProjection(bounds)
     }
 
     release(handle: ResourceHandle): void {

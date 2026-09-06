@@ -108,7 +108,8 @@ export class WorkspaceMediaSources implements MediaSourceResolver {
     }
 
     retry(assetIds: ReadonlySet<string>): void {
-        for (const assetId of assetIds) this.retries.set(assetId, (this.retries.get(assetId) ?? 0) + 1)
+        for (const assetId of assetIds)
+            this.retries.set(assetId, (this.retries.get(assetId) ?? 0) + 1)
     }
 
     clear(): void {

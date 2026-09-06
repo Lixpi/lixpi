@@ -208,7 +208,8 @@ export class GlassBorder {
             )
             resources.setVisible(this.root, false)
         } catch (error) {
-            for (const handle of owned.reverse()) resources.release(handle)
+            for (const handle of owned.reverse())
+                resources.release(handle)
 
             throw error
         }
@@ -426,8 +427,9 @@ export class GlassBorder {
             datums.map(datum => datum.id),
         )
 
-        for (const [id, entry] of this.entries) if (!ids.has(id))
-            resources.setVisible(entry.mesh, false)
+        for (const [id, entry] of this.entries)
+            if (!ids.has(id))
+                resources.setVisible(entry.mesh, false)
 
         for (const datum of datums) {
             let entry = this.entries.get(datum.id)

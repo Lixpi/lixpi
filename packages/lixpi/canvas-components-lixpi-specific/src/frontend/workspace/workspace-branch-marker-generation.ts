@@ -245,7 +245,8 @@ export class WorkspaceBranchMarkerGeneration {
 
         this.ports.pruneTrackers(nodeIds)
 
-        for (const nodeId of nodeIds) this.ports.removeSelection(nodeId)
+        for (const nodeId of nodeIds)
+            this.ports.removeSelection(nodeId)
 
         this.ports.commit({
             ...state,

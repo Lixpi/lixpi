@@ -311,7 +311,8 @@ export class WorkspacePreflightMarkers {
         if (!this.isCurrent(scope))
             return
 
-        for (const mutate of recordMutations) mutate()
+        for (const mutate of recordMutations)
+            mutate()
 
         this.ports.commit({
             ...currentCanvasState,
@@ -477,7 +478,8 @@ export class WorkspacePreflightMarkers {
         if (!this.isCurrent(scope))
             return
 
-        for (const mutate of recordMutations) mutate()
+        for (const mutate of recordMutations)
+            mutate()
 
         this.ports.commit({
             ...currentCanvasState,
@@ -632,7 +634,8 @@ export class WorkspacePreflightMarkers {
         if (!this.isCurrent(scope))
             return
 
-        for (const mutate of recordMutations) mutate()
+        for (const mutate of recordMutations)
+            mutate()
 
         this.ports.commit({
             ...currentCanvasState,

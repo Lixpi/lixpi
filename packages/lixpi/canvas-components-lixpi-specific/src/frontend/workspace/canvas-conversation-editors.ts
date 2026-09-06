@@ -147,7 +147,8 @@ export class CanvasConversationEditors<Entry> {
         this.slots.clear()
         const cleanup = new Lifetime()
 
-        for (const slot of slots) cleanup.own(() => slot.lifetime.destroy())
+        for (const slot of slots)
+            cleanup.own(() => slot.lifetime.destroy())
 
         cleanup.destroy()
     }

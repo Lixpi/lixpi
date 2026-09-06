@@ -230,9 +230,10 @@ class ArtifactLibraryPanel implements ArtifactLibraryPanelInstance {
             else {
                 const list = this.html`<div className="capability-library-section-items"></div>` as HTMLElement
 
-                for (const entry of this.entries) list.appendChild(
-                    this.createRow(entry),
-                )
+                for (const entry of this.entries)
+                    list.appendChild(
+                        this.createRow(entry),
+                    )
 
                 this.browserEl.appendChild(list)
             }

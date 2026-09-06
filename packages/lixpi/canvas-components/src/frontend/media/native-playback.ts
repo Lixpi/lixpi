@@ -241,7 +241,8 @@ export class NativePlayback {
         this.element.addEventListener('loadedmetadata', this.onMetadata)
         this.element.addEventListener('error', this.onMediaError)
 
-        for (const event of ['play', 'pause', 'ended']) this.element.addEventListener(event, this.onPlaybackChange)
+        for (const event of ['play', 'pause', 'ended'])
+            this.element.addEventListener(event, this.onPlaybackChange)
 
         options.root.appendChild(this.element)
         options.signal.addEventListener(
@@ -362,7 +363,8 @@ export class NativePlayback {
         this.element.removeEventListener('loadedmetadata', this.onMetadata)
         this.element.removeEventListener('error', this.onMediaError)
 
-        for (const event of ['play', 'pause', 'ended']) this.element.removeEventListener(event, this.onPlaybackChange)
+        for (const event of ['play', 'pause', 'ended'])
+            this.element.removeEventListener(event, this.onPlaybackChange)
 
         this.pause()
         this.element.removeAttribute('src')

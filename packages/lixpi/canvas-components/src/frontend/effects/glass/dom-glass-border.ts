@@ -50,7 +50,8 @@ export class DomGlassBorder {
         this.targets = [...targets]
         this.radii.clear()
 
-        for (const target of targets) this.observer.observe(target.element)
+        for (const target of targets)
+            this.observer.observe(target.element)
 
         this.options.surface.invalidate()
     }

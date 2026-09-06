@@ -163,7 +163,8 @@ export class WorkspaceContextTrays {
         this.destroyed = true
         const lifetime = new Lifetime()
 
-        for (const tray of this.entries.values()) lifetime.own(() => tray.destroy())
+        for (const tray of this.entries.values())
+            lifetime.own(() => tray.destroy())
 
         this.entries.clear()
         lifetime.destroy()

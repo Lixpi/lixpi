@@ -393,7 +393,8 @@ function createActionTimelineCanvasView(host: CapabilityArtifactCanvasHost): Cap
     let referenceViews: Array<{ destroy: () => void }> = []
 
     const destroyReferenceViews = (): void => {
-        for (const view of referenceViews) view.destroy()
+        for (const view of referenceViews)
+            view.destroy()
 
         referenceViews = []
     }
@@ -572,7 +573,8 @@ function renderInlineContent(
             }
         }
 
-        for (const nested of child.content ?? []) visit(nested)
+        for (const nested of child.content ?? [])
+            visit(nested)
     }
     visit(node)
 }

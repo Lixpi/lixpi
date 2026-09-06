@@ -182,10 +182,11 @@ export const buildKeymap = (
     const heading = schema.nodes.heading
 
     if (heading) {
-        for (let level = 1; level <= 6; level += 1) bind(
-            `Shift-Ctrl-${level}`,
-            setBlockType(heading, { level }),
-        )
+        for (let level = 1; level <= 6; level += 1)
+            bind(
+                `Shift-Ctrl-${level}`,
+                setBlockType(heading, { level }),
+            )
     }
 
     const horizontalRule = schema.nodes.horizontal_rule

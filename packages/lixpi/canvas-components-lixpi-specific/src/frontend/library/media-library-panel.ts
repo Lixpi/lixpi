@@ -250,9 +250,10 @@ class MediaLibraryPanel implements MediaLibraryPanelInstance {
             else {
                 const itemsEl = this.html`<div className="capability-library-section-items"></div>` as HTMLElement
 
-                for (const asset of this.allAssets) itemsEl.appendChild(
-                    this.buildAssetRow(asset),
-                )
+                for (const asset of this.allAssets)
+                    itemsEl.appendChild(
+                        this.buildAssetRow(asset),
+                    )
 
                 this.browserEl.appendChild(itemsEl)
             }

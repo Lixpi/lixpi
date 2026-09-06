@@ -129,7 +129,8 @@ export const createInstalledCapabilityControls = (host: CapabilityControlsHost):
             }
         },
         destroy: () => {
-            for (const module of installedModules) unmount(module)
+            for (const module of installedModules)
+                unmount(module)
         },
     }
 }

@@ -4,7 +4,8 @@ export const topoSortByParent = <T extends {
 }>(nodes: readonly T[]): T[] => {
     const byId = new Map<string, T>()
 
-    for (const n of nodes) byId.set(n.nodeId, n)
+    for (const n of nodes)
+        byId.set(n.nodeId, n)
 
     const sorted: T[] = []
     const visiting = new Set<string>()
@@ -30,7 +31,8 @@ export const topoSortByParent = <T extends {
         sorted.push(n)
     }
 
-    for (const n of nodes) visit(n)
+    for (const n of nodes)
+        visit(n)
 
     return sorted
 }
