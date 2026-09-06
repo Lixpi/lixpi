@@ -1621,6 +1621,60 @@ const canonicalizeEmbeddedHtmlAttributes = (
     return applyHtmlAttributeReplacements(source, replacements)
 }
 
+const canonicalizeHtmlTemplateInterpolations = (
+    file: string,
+    source: string,
+): string => {
+    const replacements: LayoutSpan[] = []
+
+    // An interpolation that spans lines carries ordinary TypeScript, and nothing so far
+    // ties that code to the `${` holding it. Left alone it keeps whatever indentation it
+    // had in the authored file, which routinely leaves the expression and its closing
+    // brace further left than the interpolation they belong to.
+    for (const content of collectHtmlTemplateContents(file, source)) {
+        for (const [start, end] of content.interpolationRanges) {
+            const lines = source.slice(start, end).split('\n')
+
+            if (lines.length < 2)
+                continue
+
+            const openIndentation = getLineIndentation(source, start).length
+            const firstInner = lines.slice(1).find(line => line.trim().length > 0)
+
+            if (firstInner == null)
+                continue
+
+            const difference = openIndentation + indentationWidth
+                - (firstInner.length - firstInner.trimStart().length)
+
+            if (difference === 0)
+                continue
+
+            replacements.push({
+                start,
+                end,
+                text: lines.map(
+                    (line, index) => {
+                        if (
+                            index === 0
+                            || line.trim().length === 0
+                        )
+                            return line
+
+                        return difference > 0
+                            ? `${' '.repeat(difference)}${line}`
+                            : line.slice(
+                                Math.min(-difference, line.length - line.trimStart().length),
+                            )
+                    },
+                ).join('\n'),
+            })
+        }
+    }
+
+    return applyHtmlAttributeReplacements(source, replacements)
+}
+
 const canonicalizeStandaloneHtmlAttributes = (source: string): string => {
     const document = parse(source, { sourceCodeLocationInfo: true }) as HtmlNode
 
@@ -3369,7 +3423,8 @@ const canonicalizeTypeScriptLayout = (
         )
         const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
         const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, canonicalHtmlTemplates)
-        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlAttributes)
+        const canonicalHtmlInterpolations = canonicalizeHtmlTemplateInterpolations(file, canonicalHtmlAttributes)
+        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlInterpolations)
         const canonicalImports = canonicalizeImportLayout(
             canonicalStatementSpacing,
             true,
