@@ -5,6 +5,7 @@ import {
     expect,
     it,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 function extractFlatRule(source: string, selector: string): string {
     const start = source.indexOf(`${selector} {`)
@@ -14,15 +15,15 @@ function extractFlatRule(source: string, selector: string): string {
 }
 
 function expectRuleToContain(rule: string, declaration: string): void {
-    expect(rule.includes(declaration), `rule should contain: ${declaration}`).toBe(true)
+    expect(withoutLayout(rule).includes(withoutLayout(declaration)), `rule should contain: ${declaration}`).toBe(true)
 }
 
 function expectRuleNotToContain(rule: string, declaration: string): void {
-    expect(rule.includes(declaration), `rule should not contain: ${declaration}`).toBe(false)
+    expect(withoutLayout(rule).includes(withoutLayout(declaration)), `rule should not contain: ${declaration}`).toBe(false)
 }
 
 function expectSourceToContain(source: string, snippet: string, label = 'source excerpt'): void {
-    expect(source.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 }
 
 describe('prompt-reference-picker.scss', () => {

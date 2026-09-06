@@ -89,6 +89,9 @@ const iteratorMethodNames = new Set([
 ])
 const maximumInlineArrowFunctionLength = 150
 
+// One indentation step, matching oxfmt's tabWidth.
+const indentationWidth = 4
+
 // A call stays on one line only while its line fits this width.
 const maximumInlineCallLength = 150
 const maximumInlineIteratorChainLength = 150
@@ -1367,19 +1370,40 @@ const applyHtmlTemplateFormatting = (
     if (formattedLayouts.length !== htmlLayouts.length)
         throw new Error(`Oxfmt changed the html template syntax shape in ${file}`)
 
-    // Every quasi of one template shares a single indentation delta, measured at the
-    // template's opening backtick. Measuring per quasi instead reads the indentation of
-    // whatever interpolation that quasi resumes after, which differs between the two
-    // oxfmt passes and shifts the closing tags further right on every run.
+    // Anchor each template body on its own first line, and put that line exactly where
+    // canonicalizeHtmlTemplateBoundaries will put it: one step past the line the tagged
+    // template sits on. When the two disagree, the boundary step moves the first line on
+    // its own and leaves the attributes, children and closing tag behind at the offsets
+    // this reindent gave them.
+    //
+    // Every quasi of one template moves together, so the relative shape of the body is
+    // preserved. A quasi after the first resumes mid-line, so its first line belongs to
+    // the interpolation before it and is never shifted.
+    const bodyIndentation = new Map<number, number>()
+
+    for (const quasi of htmlLayouts) {
+        if (bodyIndentation.has(quasi.templateStart))
+            continue
+
+        for (const line of quasi.span.text.split('\n').slice(1)) {
+            if (line.trim().length === 0)
+                continue
+
+            bodyIndentation.set(quasi.templateStart, line.length - line.trimStart().length)
+
+            break
+        }
+    }
+
     const replacements = formattedLayouts.map(
         (target, index) => {
             const htmlQuasi = htmlLayouts[index]!
-            const indentationDifference = getLineIndentation(formatted, target.templateStart).length
-                - getLineIndentation(htmlFormatted, htmlQuasi.templateStart).length
+            const base = bodyIndentation.get(htmlQuasi.templateStart)
+            const wanted = getLineIndentation(formatted, target.templateStart).length + indentationWidth
 
             return {
                 ...target.span,
-                text: reindentHtmlTemplate(htmlQuasi.span.text, indentationDifference),
+                text: reindentHtmlTemplate(htmlQuasi.span.text, base == null ? 0 : wanted - base),
             }
         },
     )
@@ -1592,6 +1616,60 @@ const canonicalizeEmbeddedHtmlAttributes = (
             content.indentation,
             content.start,
         ))
+    }
+
+    return applyHtmlAttributeReplacements(source, replacements)
+}
+
+const canonicalizeHtmlTemplateInterpolations = (
+    file: string,
+    source: string,
+): string => {
+    const replacements: LayoutSpan[] = []
+
+    // An interpolation that spans lines carries ordinary TypeScript, and nothing so far
+    // ties that code to the `${` holding it. Left alone it keeps whatever indentation it
+    // had in the authored file, which routinely leaves the expression and its closing
+    // brace further left than the interpolation they belong to.
+    for (const content of collectHtmlTemplateContents(file, source)) {
+        for (const [start, end] of content.interpolationRanges) {
+            const lines = source.slice(start, end).split('\n')
+
+            if (lines.length < 2)
+                continue
+
+            const openIndentation = getLineIndentation(source, start).length
+            const firstInner = lines.slice(1).find(line => line.trim().length > 0)
+
+            if (firstInner == null)
+                continue
+
+            const difference = openIndentation + indentationWidth
+                - (firstInner.length - firstInner.trimStart().length)
+
+            if (difference === 0)
+                continue
+
+            replacements.push({
+                start,
+                end,
+                text: lines.map(
+                    (line, index) => {
+                        if (
+                            index === 0
+                            || line.trim().length === 0
+                        )
+                            return line
+
+                        return difference > 0
+                            ? `${' '.repeat(difference)}${line}`
+                            : line.slice(
+                                Math.min(-difference, line.length - line.trimStart().length),
+                            )
+                    },
+                ).join('\n'),
+            })
+        }
     }
 
     return applyHtmlAttributeReplacements(source, replacements)
@@ -3343,9 +3421,10 @@ const canonicalizeTypeScriptLayout = (
             canonicalConditionalExpressions,
             htmlFormatted,
         )
-        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, formattedHtmlTemplates)
-        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, canonicalHtmlAttributes)
-        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlTemplates)
+        const canonicalHtmlTemplates = canonicalizeHtmlTemplateBoundaries(file, formattedHtmlTemplates)
+        const canonicalHtmlAttributes = canonicalizeEmbeddedHtmlAttributes(file, canonicalHtmlTemplates)
+        const canonicalHtmlInterpolations = canonicalizeHtmlTemplateInterpolations(file, canonicalHtmlAttributes)
+        const canonicalStatementSpacing = canonicalizeStatementSpacing(file, canonicalHtmlInterpolations)
         const canonicalImports = canonicalizeImportLayout(
             canonicalStatementSpacing,
             true,

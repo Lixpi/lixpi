@@ -5,6 +5,7 @@ import {
     expect,
     it,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 function extractFlatRule(source: string, selector: string): string {
     const start = source.indexOf(`${selector} {`)
@@ -15,7 +16,7 @@ function extractFlatRule(source: string, selector: string): string {
 
 function expectRuleToContain(rule: string, snippet: string, selector: string): void {
     expect(
-        rule.includes(snippet),
+        withoutLayout(rule).includes(withoutLayout(snippet)),
         `${selector} should contain:\n${snippet}`,
     ).toBe(true)
 }

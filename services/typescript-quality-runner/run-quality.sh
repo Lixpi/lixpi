@@ -133,6 +133,7 @@ run_shared() {
         nats-auth-callout-service \
         nats-service/ts \
         prosemirror \
+        test-utils \
         ui-kit \
         ui-primitives
     do
@@ -229,6 +230,7 @@ run_all() {
         packages/lixpi/nats-auth-callout-service \
         packages/lixpi/nats-service/ts \
         packages/lixpi/prosemirror \
+        packages/lixpi/test-utils \
         packages/lixpi/ui-kit \
         packages/lixpi/ui-primitives
 }

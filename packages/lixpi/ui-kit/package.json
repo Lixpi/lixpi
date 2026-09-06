@@ -104,6 +104,7 @@
         "@lixpi/ui-primitives": "workspace:*"
     },
     "devDependencies": {
+        "@lixpi/test-utils": "workspace:*",
         "@types/d3-selection": "*",
         "@types/d3-transition": "*",
         "happy-dom": "*",

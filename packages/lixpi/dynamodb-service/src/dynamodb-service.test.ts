@@ -7,7 +7,25 @@ import {
     vi,
 } from 'vitest'
 
+import {
+    err as debugError,
+    info as debugInfo,
+    warn as debugWarn,
+} from '@lixpi/debug-tools'
+
 import DynamoDBService, { isTransactionConditionalCheckFailure } from './dynamodb-service.ts'
+
+// The service logs through @lixpi/debug-tools, which colours the message and runs every
+// non-string argument through util.inspect before reaching console. Asserting on the
+// debug-tools call keeps these expectations on the message and the error object the
+// service actually reports, rather than on the console formatting.
+vi.mock('@lixpi/debug-tools', () => ({
+    err: vi.fn(),
+    info: vi.fn(),
+    infoStr: vi.fn(),
+    log: vi.fn(),
+    warn: vi.fn(),
+}))
 
 type SendMock = ReturnType<typeof vi.fn>
 
@@ -22,25 +40,15 @@ const setDocumentClientSend = (service: DynamoDBService, sendMock: SendMock): vo
     }
 }
 
-let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null
-let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null
-let consoleInfoSpy: ReturnType<typeof vi.spyOn> | null = null
 
 describe('DynamoDBService', () => {
     beforeEach(() => {
-        consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-        consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+        vi.mocked(debugWarn).mockReset()
+        vi.mocked(debugError).mockReset()
+        vi.mocked(debugInfo).mockReset()
     })
 
     afterEach(() => {
-        consoleWarnSpy?.mockRestore()
-        consoleErrorSpy?.mockRestore()
-        consoleInfoSpy?.mockRestore()
-
-        consoleWarnSpy = null
-        consoleErrorSpy = null
-        consoleInfoSpy = null
         vi.restoreAllMocks()
     })
 
@@ -122,7 +130,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect(debugError).toHaveBeenCalledWith(
                 expect.stringContaining('Error: Table name and key must be provided!, origin: getItem()'),
             )
         })
@@ -149,7 +157,7 @@ describe('DynamoDBService', () => {
                 ConsistentRead: false,
                 ReturnConsumedCapacity: 'TOTAL',
             })
-            expect(consoleInfoSpy).toHaveBeenCalledWith(
+            expect(debugInfo).toHaveBeenCalledWith(
                 expect.stringContaining('DynamoDB <- getItem users, capacityUnits: 1,'),
             )
         })
@@ -162,7 +170,7 @@ describe('DynamoDBService', () => {
             const result = await service.getItem({ tableName: 'users', key: { userId: 'u1' } })
 
             expect(result).toBeUndefined()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect(debugError).toHaveBeenCalledWith(
                 `Error fetching record from DynamoDB users table:`,
                 expect.any(Error),
             )
@@ -183,7 +191,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Key conditions must be provided.')
+            expect(debugError).toHaveBeenCalledWith('Key conditions must be provided.')
         })
 
         it('returns one page without pagination when fetchAllItems is false', async () => {
@@ -252,7 +260,7 @@ describe('DynamoDBService', () => {
             expect((sendMock.mock.calls[1][0] as { input: Record<string, unknown> }).input.ExclusiveStartKey).toEqual({
                 pk: '2',
             })
-            expect(consoleInfoSpy).toHaveBeenCalledOnce()
+            expect(debugInfo).toHaveBeenCalledOnce()
         })
 
         it('builds a typed begins_with sort-key condition for prefix queries', async () => {
@@ -299,7 +307,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error: Table name must be provided!, origin: scan1')
+            expect(debugError).toHaveBeenCalledWith('Error: Table name must be provided!, origin: scan1')
         })
 
         it('returns a single page by default', async () => {
@@ -382,7 +390,7 @@ describe('DynamoDBService', () => {
                 consumedCapacities: [],
                 readIterations: 0,
             })
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching records from DynamoDB:', error)
+            expect(debugError).toHaveBeenCalledWith('Error fetching records from DynamoDB:', error)
             expect(sendMock).toHaveBeenCalledTimes(1)
         })
 
@@ -477,7 +485,7 @@ describe('DynamoDBService', () => {
 
             expect(missingItemsResult).toBeUndefined()
             expect(missingTableResult).toBeUndefined()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect(debugError).toHaveBeenCalledWith(
                 'Error: Table name and at least one item must be provided!, origin: unknown',
             )
         })
@@ -543,7 +551,7 @@ describe('DynamoDBService', () => {
                 }),
             ).rejects.toThrow('boom')
 
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error in batch write operation:', error)
+            expect(debugError).toHaveBeenCalledWith('Error in batch write operation:', error)
         })
     })
 
@@ -566,7 +574,7 @@ describe('DynamoDBService', () => {
                 ConsumedCapacity: { CapacityUnits: 2 },
                 Attributes: { id: 'u1' },
             })
-            expect(consoleInfoSpy).toHaveBeenCalledWith(
+            expect(debugInfo).toHaveBeenCalledWith(
                 expect.stringContaining('DynamoDB -> putItem users, capacityUnits: 2'),
             )
         })
@@ -580,7 +588,7 @@ describe('DynamoDBService', () => {
             const result = await service.putItem({ tableName: 'users', item: { id: 'u1' } })
 
             expect(result).toBeUndefined()
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error inserting record to DynamoDB users table:', error)
+            expect(debugError).toHaveBeenCalledWith('Error inserting record to DynamoDB users table:', error)
         })
     })
 
@@ -601,7 +609,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect(debugError).toHaveBeenCalledWith(
                 "Either 'updates' or 'updateExpression' must be provided.",
             )
         })
@@ -618,7 +626,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect(debugError).toHaveBeenCalledWith(
                 'Error: Table name and key must be provided!, origin: unknown',
             )
         })
@@ -690,7 +698,7 @@ describe('DynamoDBService', () => {
                     origin: 'cond',
                 }),
             ).rejects.toThrow('condition failed')
-            expect(consoleErrorSpy).not.toHaveBeenCalled()
+            expect(debugError).not.toHaveBeenCalled()
         })
 
         it('still logs non-conditional failures even when conditional logging is disabled', async () => {
@@ -709,7 +717,7 @@ describe('DynamoDBService', () => {
                     origin: 'cond2',
                 }),
             ).rejects.toThrow('fail')
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error updating item:', failure)
+            expect(debugError).toHaveBeenCalledWith('Error updating item:', failure)
         })
 
         it('includes custom condition expression when provided', async () => {
@@ -809,7 +817,7 @@ describe('DynamoDBService', () => {
                 },
                 { Delete: { TableName: 'users-access', Key: { id: 'u1' } } },
             ])
-            expect(consoleInfoSpy).toHaveBeenCalledWith(
+            expect(debugInfo).toHaveBeenCalledWith(
                 expect.stringContaining('DynamoDB -> transactWrite users,users-meta,users-access, capacityUnits: 6,'),
             )
         })
@@ -855,7 +863,7 @@ describe('DynamoDBService', () => {
                     operations: [{ type: 'put', tableName: 'users', item: { id: 'u1' } }],
                 }),
             ).rejects.toThrow('transact fail')
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error completing DynamoDB transaction:', error)
+            expect(debugError).toHaveBeenCalledWith('Error completing DynamoDB transaction:', error)
         })
 
         it('suppresses logging for conditional-check cancellations when asked', async () => {
@@ -873,7 +881,7 @@ describe('DynamoDBService', () => {
                     logConditionalCheckFailures: false,
                 }),
             ).rejects.toThrow('cancelled')
-            expect(consoleErrorSpy).not.toHaveBeenCalledWith('Error completing DynamoDB transaction:', error)
+            expect(debugError).not.toHaveBeenCalledWith('Error completing DynamoDB transaction:', error)
             expect(isTransactionConditionalCheckFailure(error)).toBe(true)
             expect(isTransactionConditionalCheckFailure(new Error('other'))).toBe(false)
         })
@@ -893,7 +901,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Key must be provided for delete operation')
+            expect(debugError).toHaveBeenCalledWith('Key must be provided for delete operation')
         })
 
         it('deletes a single item when deleteRange is false', async () => {
@@ -991,7 +999,7 @@ describe('DynamoDBService', () => {
 
             expect(result).toBeUndefined()
             expect(sendMock).not.toHaveBeenCalled()
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
+            expect(debugError).toHaveBeenCalledWith(
                 'Key, time-to-live attribute name, and value must be provided.',
             )
         })
@@ -1039,7 +1047,7 @@ describe('DynamoDBService', () => {
                 }),
             ).rejects.toThrow('delete fail')
 
-            expect(consoleErrorSpy).toHaveBeenCalledWith('Error performing soft delete on DynamoDB users table:', updateError)
+            expect(debugError).toHaveBeenCalledWith('Error performing soft delete on DynamoDB users table:', updateError)
             expect(sendMock).not.toHaveBeenCalled()
         })
     })

@@ -4,19 +4,24 @@ import {
     expect,
     it,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 const readSource = (relativeUrl: string): string => readFileSync(new URL(relativeUrl, import.meta.url), 'utf8')
 
 function expectSourceToContain(source: string, snippet: string, label = 'source'): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(
+            withoutLayout(snippet),
+        ),
         `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string, label = 'source'): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(
+            withoutLayout(snippet),
+        ),
         `${label} should not contain:\n${snippet}`,
     ).toBe(false)
 }
