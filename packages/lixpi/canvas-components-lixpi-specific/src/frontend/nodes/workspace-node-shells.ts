@@ -286,7 +286,8 @@ export class WorkspaceNodeShells {
     }
 
     setZoom(zoom: number): void {
-        for (const { shell } of this.entries.values()) shell.setZoom(zoom)
+        for (const { shell } of this.entries.values())
+            shell.setZoom(zoom)
     }
 
     replace(
@@ -325,7 +326,8 @@ export class WorkspaceNodeShells {
     clear(): void {
         for (const id of Array.from(
             this.entries.keys(),
-        )) this.remove(id)
+        ))
+            this.remove(id)
     }
 
     destroy(): void {

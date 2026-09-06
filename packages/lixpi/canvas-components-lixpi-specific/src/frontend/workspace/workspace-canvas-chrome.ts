@@ -216,7 +216,8 @@ export class WorkspaceCanvasChrome {
             ),
         }
 
-        for (const [name, value] of Object.entries(properties)) this.element.style.setProperty(name, value)
+        for (const [name, value] of Object.entries(properties))
+            this.element.style.setProperty(name, value)
     }
 
     private async invoke(action: () => Promise<void>): Promise<void> {

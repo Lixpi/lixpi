@@ -28,7 +28,8 @@ export class CapabilityDagRunner<Node extends CapabilityDagNode> {
         )
         this.validate(nodes)
 
-        for (const node of nodes) this.statuses.set(node.nodeId, 'pending')
+        for (const node of nodes)
+            this.statuses.set(node.nodeId, 'pending')
     }
 
     hasPending(): boolean {
@@ -140,12 +141,14 @@ export class CapabilityDagRunner<Node extends CapabilityDagNode> {
             const node = this.nodesById.get(nodeId)
                 ?? nodes.find(candidate => candidate.nodeId === nodeId)
 
-            for (const dependency of node?.dependsOn ?? []) visit(dependency)
+            for (const dependency of node?.dependsOn ?? [])
+                visit(dependency)
 
             visiting.delete(nodeId)
             visited.add(nodeId)
         }
 
-        for (const node of nodes) visit(node.nodeId)
+        for (const node of nodes)
+            visit(node.nodeId)
     }
 }

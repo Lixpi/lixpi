@@ -389,7 +389,8 @@ class ParamPicker {
 
         for (const provider of this.#catalog.providers) {
             for (const group of provider.groups) {
-                for (const model of group.supportedModels ?? []) models.add(model)
+                for (const model of group.supportedModels ?? [])
+                    models.add(model)
             }
         }
 

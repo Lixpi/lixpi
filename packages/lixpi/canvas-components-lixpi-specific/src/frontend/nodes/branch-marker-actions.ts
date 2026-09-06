@@ -74,7 +74,8 @@ export class BranchMarkerActions {
         ` as HTMLButtonElement
         this.lifetime.own(() => button.remove())
 
-        for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup']) this.listen(button, type)
+        for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup'])
+            this.listen(button, type)
 
         this.listen(
             button,

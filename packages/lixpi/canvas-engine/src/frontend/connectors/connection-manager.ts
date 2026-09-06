@@ -307,8 +307,9 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
             canvasNodes.map(node => node.nodeId),
         )
 
-        for (const id of this.nodeElements.keys()) if (!nodeIds.has(id))
-            this.nodeElements.delete(id)
+        for (const id of this.nodeElements.keys())
+            if (!nodeIds.has(id))
+                this.nodeElements.delete(id)
 
         // xyflow's adoptUserNodes requires parents to appear BEFORE their children in the
         // input array; otherwise it logs a warning and skips parent linkage. Stable
@@ -1106,7 +1107,8 @@ export class ConnectionManager<Node extends ConnectionNode = ConnectionNode> {
                 },
             )
 
-            for (const additional of this.config.additionalGeometry?.(canvasNode, this.nodes) ?? []) worldNodeMap.set(additional.id, additional)
+            for (const additional of this.config.additionalGeometry?.(canvasNode, this.nodes) ?? [])
+                worldNodeMap.set(additional.id, additional)
         }
 
         // Get current zoom for proportional scaling

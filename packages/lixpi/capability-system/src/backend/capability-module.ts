@@ -83,13 +83,15 @@ export class CapabilityModuleCatalog {
 
     registerActions(registry: CapabilityActionRegistry): void {
         for (const definition of this.modules.values()) {
-            for (const installer of definition.tools) installer.registerActions(registry)
+            for (const installer of definition.tools)
+                installer.registerActions(registry)
         }
     }
 
     registerMediaStrategies(registry: CapabilityMediaStrategyRegistry): void {
         for (const definition of this.modules.values()) {
-            for (const strategy of definition.mediaStrategies ?? []) registry.register(strategy)
+            for (const strategy of definition.mediaStrategies ?? [])
+                registry.register(strategy)
         }
     }
 
@@ -101,9 +103,11 @@ export class CapabilityModuleCatalog {
                 catalogExposure: 'module-internal',
             }
 
-            for (const installer of definition.skills) await installer.seed(context)
+            for (const installer of definition.skills)
+                await installer.seed(context)
 
-            for (const installer of definition.tools) await installer.seed(context)
+            for (const installer of definition.tools)
+                await installer.seed(context)
         }
     }
 
@@ -346,11 +350,12 @@ export function validateDescriptionSheet(
 
     const inputNames = new Set<string>()
 
-    for (const input of sheet.expectedInputs) validateExpectedInput(
-        moduleId,
-        input,
-        inputNames,
-    )
+    for (const input of sheet.expectedInputs)
+        validateExpectedInput(
+            moduleId,
+            input,
+            inputNames,
+        )
 
     validateDescriptionList(
         moduleId,

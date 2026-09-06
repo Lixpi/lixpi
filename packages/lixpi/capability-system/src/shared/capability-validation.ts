@@ -321,7 +321,8 @@ export const validateCapabilityDependencyGraph = (
         visiting.pop()
     }
 
-    for (const rootCapabilityId of rootCapabilityIds) visit(rootCapabilityId, 1)
+    for (const rootCapabilityId of rootCapabilityIds)
+        visit(rootCapabilityId, 1)
 
     return deduplicateIssues(issues)
 }
@@ -956,7 +957,8 @@ function validateStepGraph(
         visiting.add(stepId)
         const step = stepById.get(stepId)
 
-        for (const dependencyId of step?.dependsOn ?? []) visit(dependencyId, [...chain, stepId])
+        for (const dependencyId of step?.dependsOn ?? [])
+            visit(dependencyId, [...chain, stepId])
 
         visiting.delete(stepId)
         visited.add(stepId)

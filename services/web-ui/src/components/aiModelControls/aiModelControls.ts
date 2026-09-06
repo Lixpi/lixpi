@@ -1295,7 +1295,8 @@ class MediaGenerationConfigMatrixView implements MediaGenerationConfigMatrixView
             )
         }
 
-        for (const dropdown of this.mountedModelDropdowns) dropdown.update()
+        for (const dropdown of this.mountedModelDropdowns)
+            dropdown.update()
     }
 
     private getSelectionForGroup(

@@ -326,7 +326,8 @@ const buildPortableWorkspaceReferences = async ({
                 if (matchingSurfaces.length === 0)
                     throw new Error(`EMBEDDED_ASSET_REFERENCE_MISSING:${hostAsset.assetId}:${embeddedAssetId}`)
 
-                for (const surfaceId of matchingSurfaces) addSurface(embeddedAssetId, surfaceId)
+                for (const surfaceId of matchingSurfaces)
+                    addSurface(embeddedAssetId, surfaceId)
             }
         }
     }
@@ -1040,9 +1041,11 @@ router.get(
             const requester = await getAssetRequesterContext(req.user.userId)
             const initialAssetIds = getCanvasAssetIds(req.workspace.canvasState)
 
-            for (const assetId of await getWorkspaceCatalogAssetIds(req.params.workspaceId)) initialAssetIds.add(assetId)
+            for (const assetId of await getWorkspaceCatalogAssetIds(req.params.workspaceId))
+                initialAssetIds.add(assetId)
 
-            for (const assetId of await getWorkspaceReferenceAssetIds(req.params.workspaceId)) initialAssetIds.add(assetId)
+            for (const assetId of await getWorkspaceReferenceAssetIds(req.params.workspaceId))
+                initialAssetIds.add(assetId)
 
             const assets = await collectExportAssets({
                 initialAssetIds,

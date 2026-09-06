@@ -77,7 +77,8 @@ export const resolveCharacterReferences = async (args: {
                 composition?.kind === 'character-sheet'
                 && composition.capabilityId === 'global.character-creator'
             ) {
-                for (const sourceAssetId of composition.sourceAssetIds) await resolveAsset(sourceAssetId)
+                for (const sourceAssetId of composition.sourceAssetIds)
+                    await resolveAsset(sourceAssetId)
 
                 for (const component of composition.components) {
                     if (component.role === 'character-sheet-panel-review-only')
@@ -190,7 +191,8 @@ export const resolveCharacterReferences = async (args: {
         }
     }
 
-    for (const assetId of args.assetIds) await resolveAsset(assetId)
+    for (const assetId of args.assetIds)
+        await resolveAsset(assetId)
 
     return resolved
 }

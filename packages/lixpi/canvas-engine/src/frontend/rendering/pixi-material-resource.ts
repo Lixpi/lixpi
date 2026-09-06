@@ -67,9 +67,11 @@ export class PixiMaterialResource {
             this.gpu.destroy()
             gl?.destroy()
 
-            for (const sampler of this.samplers.values()) sampler.destroy()
+            for (const sampler of this.samplers.values())
+                sampler.destroy()
 
-            for (const uniform of this.uniforms.values()) uniform.buffer?.destroy()
+            for (const uniform of this.uniforms.values())
+                uniform.buffer?.destroy()
 
             throw error
         }
@@ -186,7 +188,8 @@ export class PixiMaterialResource {
                 : { ...binding },
         )
 
-        for (const instance of this.instances) this.apply(instance.shader)
+        for (const instance of this.instances)
+            this.apply(instance.shader)
     }
 
     createInstance(): MaterialInstance {
@@ -239,11 +242,14 @@ export class PixiMaterialResource {
     }
 
     destroy(): void {
-        for (const instance of Array.from(this.instances)) this.releaseInstance(instance)
+        for (const instance of Array.from(this.instances))
+            this.releaseInstance(instance)
 
-        for (const sampler of this.samplers.values()) sampler.destroy()
+        for (const sampler of this.samplers.values())
+            sampler.destroy()
 
-        for (const uniform of this.uniforms.values()) uniform.buffer?.destroy()
+        for (const uniform of this.uniforms.values())
+            uniform.buffer?.destroy()
 
         this.samplers.clear()
         this.uniforms.clear()

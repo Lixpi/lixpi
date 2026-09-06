@@ -420,7 +420,8 @@ export class ProseMirrorAuthorityService {
                         this.applySnapshot(snapshot.doc, snapshot.version)
                 }
 
-                for (const event of result.events ?? []) this.handleEvent(event)
+                for (const event of result.events ?? [])
+                    this.handleEvent(event)
 
                 this.localStreamSeq = Math.max(this.localStreamSeq, result.currentStreamSeq ?? 0)
                 hasMore = result.hasMore === true
@@ -658,7 +659,8 @@ export class ProseMirrorAuthorityService {
         } finally {
             this.submitting = false
 
-            for (const resolve of this.submissionWaiters.splice(0)) resolve()
+            for (const resolve of this.submissionWaiters.splice(0))
+                resolve()
 
             if (this.pendingLocalSteps.length > 0)
                 this.scheduleSubmit()

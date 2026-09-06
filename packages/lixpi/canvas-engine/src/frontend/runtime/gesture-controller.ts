@@ -130,7 +130,8 @@ export class CanvasGesture {
         )
             this.capture.releasePointerCapture(this.pointerId)
 
-        for (const style of this.styles) style.destroy()
+        for (const style of this.styles)
+            style.destroy()
 
         this.release()
     }

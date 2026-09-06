@@ -132,7 +132,8 @@ export class GeometryOverrides {
 
     // A scene switch expires old writers, including delayed gesture callbacks.
     clear(): void {
-        for (const scope of Array.from(this.scopes)) scope.destroy()
+        for (const scope of Array.from(this.scopes))
+            scope.destroy()
     }
 
     destroy(): void {

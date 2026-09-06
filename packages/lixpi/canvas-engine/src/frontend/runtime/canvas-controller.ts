@@ -180,7 +180,8 @@ export class CanvasController {
             })
             this.lifetime.own(() => this.gestures.destroy())
             this.lifetime.own(() => {
-                for (const handle of this.handles.values()) handle.destroy()
+                for (const handle of this.handles.values())
+                    handle.destroy()
 
                 this.handles.clear()
             })
@@ -197,7 +198,8 @@ export class CanvasController {
             this.setViewport(options.viewport)
             this.setScene(options.scene)
 
-            for (const extension of options.extensions ?? []) this.installExtension(extension)
+            for (const extension of options.extensions ?? [])
+                this.installExtension(extension)
 
             this.ready = this.initialize()
         } catch (error) {
@@ -619,7 +621,8 @@ export class CanvasController {
                 })
         }
 
-        for (const intent of intents) this.emit(intent)
+        for (const intent of intents)
+            this.emit(intent)
     }
 
     setScene(snapshot: SceneSnapshot): void {
@@ -638,8 +641,9 @@ export class CanvasController {
         if (changedScene) {
             this.selection.clear()
             this.selectedEdge = null
-        } else for (const id of this.selection.nodeIds) if (!snapshot.nodes.some(node => node.nodeId === id))
-            this.selection.remove(id)
+        } else for (const id of this.selection.nodeIds)
+            if (!snapshot.nodes.some(node => node.nodeId === id))
+                this.selection.remove(id)
 
         this.connections?.syncEdges(
             snapshot.edges.map(

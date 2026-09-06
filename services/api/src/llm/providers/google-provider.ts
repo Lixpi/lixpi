@@ -1476,7 +1476,8 @@ function mergeGoogleUsageMetadata(
         ...second,
     }
 
-    for (const key of numericKeys) merged[key] = (first[key] ?? 0) + (second[key] ?? 0)
+    for (const key of numericKeys)
+        merged[key] = (first[key] ?? 0) + (second[key] ?? 0)
 
     return merged
 }

@@ -92,7 +92,8 @@ export const extractLatestUserPromptReferences = (
             }
         }
 
-        for (const child of node.content ?? []) visit(child)
+        for (const child of node.content ?? [])
+            visit(child)
     }
     visit(latestUserMessage)
 

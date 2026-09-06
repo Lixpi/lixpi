@@ -131,7 +131,8 @@ export const extractPromptTextFromContentJSON = (contentJSON: any): string => {
             return
 
         if (Array.isArray(node)) {
-            for (const child of node) visit(child)
+            for (const child of node)
+                visit(child)
 
             return
         }
@@ -164,7 +165,8 @@ export const extractPromptTextFromContentJSON = (contentJSON: any): string => {
             chunks.push('\n')
 
         if (Array.isArray(node.content)) {
-            for (const child of node.content) visit(child)
+            for (const child of node.content)
+                visit(child)
 
             if (node.type === 'paragraph')
                 chunks.push('\n')

@@ -12,7 +12,8 @@ export class CanvasScrollLock {
             layers.filter((layer): layer is HTMLElement => Boolean(layer)),
         )]
 
-        for (const layer of this.layers) layer.addEventListener('scroll', this.resetScroll)
+        for (const layer of this.layers)
+            layer.addEventListener('scroll', this.resetScroll)
     }
 
     private resetScroll = (event: Event): void => {
@@ -26,7 +27,8 @@ export class CanvasScrollLock {
     }
 
     destroy = (): void => {
-        for (const layer of this.layers) layer.removeEventListener('scroll', this.resetScroll)
+        for (const layer of this.layers)
+            layer.removeEventListener('scroll', this.resetScroll)
 
         this.layers.length = 0
     }

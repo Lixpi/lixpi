@@ -54,7 +54,8 @@ export const projectVectorPath = (
                         ? 6
                         : 0
 
-            for (let i = 0; i < length; i++) data[i] = Math.round(data[i] * snapResolution) / snapResolution
+            for (let i = 0; i < length; i++)
+                data[i] = Math.round(data[i] * snapResolution) / snapResolution
 
             if (action === 'arcToSvg') {
                 data[5] = Math.round(data[5] * snapResolution) / snapResolution

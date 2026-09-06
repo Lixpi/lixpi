@@ -89,14 +89,15 @@ function validateNode(
         errors.push(`${path}: value does not match const`)
 
     if (Array.isArray(schema.allOf)) {
-        for (const child of schema.allOf) validateNode(
-            child,
-            value,
-            path,
-            errors,
-            depth + 1,
-            rootSchema,
-        )
+        for (const child of schema.allOf)
+            validateNode(
+                child,
+                value,
+                path,
+                errors,
+                depth + 1,
+                rootSchema,
+            )
     }
 
     if (Array.isArray(schema.anyOf)) {

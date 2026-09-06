@@ -306,9 +306,10 @@ export class WorkspaceCanvasSurface {
             )
             this.reconcile()
 
-            for (const subscribe of ports.subscriptions) this.lifetime.own(
-                subscribe(this.reconcile),
-            )
+            for (const subscribe of ports.subscriptions)
+                this.lifetime.own(
+                    subscribe(this.reconcile),
+                )
         } catch (error) {
             try {
                 this.destroy()

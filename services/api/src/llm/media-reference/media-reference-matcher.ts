@@ -202,9 +202,10 @@ const trigrams = (value: string): Set<string> => {
     const padded = `  ${value}  `
     const result = new Set<string>()
 
-    for (let index = 0; index <= padded.length - 3; index++) result.add(
-        padded.slice(index, index + 3),
-    )
+    for (let index = 0; index <= padded.length - 3; index++)
+        result.add(
+            padded.slice(index, index + 3),
+        )
 
     return result
 }

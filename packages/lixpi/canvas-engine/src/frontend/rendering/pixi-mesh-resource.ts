@@ -66,7 +66,8 @@ export class PixiMeshResource {
         slot.geometry.getBuffer('aUV').update()
         slot.geometry.getIndex().update()
 
-        for (const entry of this.slots) entry.mesh.renderable = entry === slot
+        for (const entry of this.slots)
+            entry.mesh.renderable = entry === slot
     }
 
     setPaint(paint: Texture | PixiMaterialResource): void {
@@ -75,7 +76,8 @@ export class PixiMeshResource {
 
         this.paint = paint
 
-        for (const slot of this.slots) this.applyPaint(slot)
+        for (const slot of this.slots)
+            this.applyPaint(slot)
     }
 
     prepareProjection(bounds: CanvasEngineRect): void {
@@ -148,7 +150,8 @@ export class PixiMeshResource {
             this.slots.push(slot)
         }
 
-        for (const slot of previous) this.container.removeChild(slot.mesh)
+        for (const slot of previous)
+            this.container.removeChild(slot.mesh)
 
         if (previous.length > 0)
             this.retire(() => this.destroySlots(previous))

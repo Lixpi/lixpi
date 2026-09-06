@@ -1353,7 +1353,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
         if (this.destroyed)
             return
 
-        for (const view of this.optionViews) this.renderOptionView(view)
+        for (const view of this.optionViews)
+            this.renderOptionView(view)
     }
 
     private renderIndicator(y: number): void {
@@ -2463,7 +2464,8 @@ class SlidingDropdown<Value extends string = string> implements SlidingDropdownI
             )
         }
 
-        for (const view of this.optionViews) view.customRenderer?.destroy?.()
+        for (const view of this.optionViews)
+            view.customRenderer?.destroy?.()
 
         this.restoreSvgPortal()
         this.group.remove()

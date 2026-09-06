@@ -592,7 +592,8 @@ const applyOperationPatches = (
             progressState: projection.progressState,
         })
 
-        for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
+        for (const nodeId of mediaProjection.updatedNodeIds)
+            updatedNodeIds.add(nodeId)
 
         nodes = mediaProjection.nodes
     }
@@ -802,7 +803,8 @@ export const applyMediaGenerationRequestToOperationNodes = (
         })
         nodes = mediaProjection.nodes
 
-        for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
+        for (const nodeId of mediaProjection.updatedNodeIds)
+            updatedNodeIds.add(nodeId)
     }
 
     let resultState = {
@@ -844,7 +846,8 @@ export const applyMediaGenerationRequestToOperationNodes = (
             updatedNodeIds.delete(nodeId)
         }
 
-        for (const nodeId of replacement.updatedNodeIds) updatedNodeIds.add(nodeId)
+        for (const nodeId of replacement.updatedNodeIds)
+            updatedNodeIds.add(nodeId)
     }
 
     return changed

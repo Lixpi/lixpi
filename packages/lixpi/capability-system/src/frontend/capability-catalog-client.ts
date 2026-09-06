@@ -467,7 +467,8 @@ export class CapabilityCatalogClient {
                 cursor: rawPage.cursor,
             }
 
-            for (const item of page.items) this.catalogItems.set(item.capabilityId, item)
+            for (const item of page.items)
+                this.catalogItems.set(item.capabilityId, item)
 
             this.cache.set(
                 cacheKey,

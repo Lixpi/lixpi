@@ -69,7 +69,8 @@ export const getWorkspaceCanvasAssetIds = (canvasState: CanvasState | undefined)
             assetIds.add(node.generatedBy.conversationAssetId)
     }
 
-    for (const assetId of getPersistedPanelConversationIds(canvasState.aiChatPanel)) assetIds.add(assetId)
+    for (const assetId of getPersistedPanelConversationIds(canvasState.aiChatPanel))
+        assetIds.add(assetId)
 
     if (canvasState.lastActiveConversationAssetId)
         assetIds.add(canvasState.lastActiveConversationAssetId)

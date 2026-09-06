@@ -113,7 +113,8 @@ export const validateScene = (scene: SceneSnapshot): void => {
             current = nodes.get(current.parentId)!
         }
 
-        for (const id of ancestors) resolved.add(id)
+        for (const id of ancestors)
+            resolved.add(id)
     }
 
     const edgeIds = new Set<string>()

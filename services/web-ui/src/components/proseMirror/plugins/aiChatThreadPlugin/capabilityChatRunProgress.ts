@@ -61,7 +61,8 @@ export class CapabilityChatRunProgressController {
     }
 
     destroy(): void {
-        for (const progress of this.progressByRunId.values()) progress.destroy()
+        for (const progress of this.progressByRunId.values())
+            progress.destroy()
 
         this.progressByRunId.clear()
     }

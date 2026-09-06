@@ -2159,7 +2159,8 @@ export const detachReviewedGeneratedOutputsFromCanvas = ({
                 'branchLineNodeId',
                 'lineageParentNodeId',
             ]
-        ) delete provenanceLocator[field]
+        )
+            delete provenanceLocator[field]
 
         if (
             candidate.type === 'image'

@@ -91,7 +91,8 @@ export const deduplicateMediaBranchSnapshotCandidatesByAsset = (snapshot: MediaB
             snapshot.resolvedTargetCandidateId,
         )
 
-        for (const candidate of candidateGroup) candidateIdAliases.set(candidate.candidateId, canonical.candidateId)
+        for (const candidate of candidateGroup)
+            candidateIdAliases.set(candidate.candidateId, canonical.candidateId)
 
         return canonical
     })

@@ -870,7 +870,8 @@ const summarizeEvidence = (evidence: CharacterEvidenceProfile): string => {
 const summarizeReferencePack = (entries: CharacterReferencePack['entries']): string => {
     const counts = new Map<string, number>()
 
-    for (const entry of entries) counts.set(entry.role, (counts.get(entry.role) ?? 0) + 1)
+    for (const entry of entries)
+        counts.set(entry.role, (counts.get(entry.role) ?? 0) + 1)
 
     const roles = [...counts.entries()].map(([role, count]) => `${role} ×${count}`).join(', ')
 
@@ -1430,7 +1431,8 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                         visiblePanels.set(panelId, rendered.bytes)
                 }
 
-                for (const [panelId, bytes] of livePartialPanels) visiblePanels.set(panelId, bytes)
+                for (const [panelId, bytes] of livePartialPanels)
+                    visiblePanels.set(panelId, bytes)
 
                 if (visiblePanels.size === 0)
                     return
@@ -1848,7 +1850,8 @@ export class CharacterSheetStrategy implements CapabilityMediaStrategy {
                     && panel.panelId !== observedPropSpec?.panelId
             })
 
-            for (const panel of assessablePanels) assessmentEligiblePanelIds.add(panel.panelId)
+            for (const panel of assessablePanels)
+                assessmentEligiblePanelIds.add(panel.panelId)
 
             await reportProgress({
                 phase: 'assessing',

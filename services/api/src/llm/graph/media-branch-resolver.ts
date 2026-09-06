@@ -993,9 +993,10 @@ export const resolveMediaBranch = async (
                     urlByCandidateId.get(resolution.targetCandidateId),
                 )
 
-            for (const candidateId of resolution.referenceCandidateIds) pushFrame(
-                urlByCandidateId.get(candidateId),
-            )
+            for (const candidateId of resolution.referenceCandidateIds)
+                pushFrame(
+                    urlByCandidateId.get(candidateId),
+                )
 
             videoFirstFrameImage = orderedFrames[0]
             videoReferenceImages = orderedFrames.slice(1, 2)

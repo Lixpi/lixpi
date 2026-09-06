@@ -404,7 +404,8 @@ export const assertAssetBackedMediaNodes = (node: unknown): void => {
     }
 
     if (Array.isArray(record.content)) {
-        for (const child of record.content) assertAssetBackedMediaNodes(child)
+        for (const child of record.content)
+            assertAssetBackedMediaNodes(child)
     }
 }
 

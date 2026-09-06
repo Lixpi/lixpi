@@ -206,13 +206,15 @@ export class WorkspaceOutputChrome {
         try {
             this.ports.video.sync(videos)
 
-            for (const node of pending) this.mountPendingIcon(node)
+            for (const node of pending)
+                this.mountPendingIcon(node)
 
-            for (const node of [...media, ...artifacts]) this.mountFooter(
-                node,
-                state,
-                pendingIds.has(node.nodeId),
-            )
+            for (const node of [...media, ...artifacts])
+                this.mountFooter(
+                    node,
+                    state,
+                    pendingIds.has(node.nodeId),
+                )
 
             this.layout(
                 this.ports.getViewport(),

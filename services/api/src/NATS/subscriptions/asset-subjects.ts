@@ -395,7 +395,8 @@ export const assetSubjects = [
                 primaryCategory: data.primaryCategory as AssetPrimaryCategory | undefined,
             })
 
-            for (const item of result.items) rememberAuthorizedAssetEvent(requester.userId, item.assetId)
+            for (const item of result.items)
+                rememberAuthorizedAssetEvent(requester.userId, item.assetId)
 
             return result
         },

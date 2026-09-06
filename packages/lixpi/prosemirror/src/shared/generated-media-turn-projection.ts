@@ -424,7 +424,8 @@ const collectMatchingGeneratedMediaLineageIds = (
             addLineageId(lineageIds.branchLineNodeIds, node.attrs?.branchLineNodeId)
         }
 
-        for (const child of node.content ?? []) visit(child)
+        for (const child of node.content ?? [])
+            visit(child)
     }
 
     visit(container)
@@ -641,7 +642,8 @@ export const getGeneratedMediaProgressFromThreadContent = (
         if (progress)
             return
 
-        for (const child of node.content ?? []) visit(child)
+        for (const child of node.content ?? [])
+            visit(child)
     }
     visit(root)
 
@@ -958,7 +960,8 @@ const relocateLineageEventsToResolverAudit = (node: ProseMirrorJsonNode): void =
         node.content = [...rest.slice(0, insertAt), ...lineageEvents, ...rest.slice(insertAt)]
     }
 
-    for (const child of node.content) relocateLineageEventsToResolverAudit(child)
+    for (const child of node.content)
+        relocateLineageEventsToResolverAudit(child)
 }
 
 const cloneResponseForProjection = (

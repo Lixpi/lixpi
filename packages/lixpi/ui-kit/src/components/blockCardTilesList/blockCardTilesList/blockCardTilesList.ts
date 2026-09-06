@@ -42,7 +42,8 @@ class BlockCardTilesList implements BlockCardTilesListInstance {
     }
 
     setItems(items: BlockCardTileItem[]): void {
-        for (const tile of this.tiles.values()) tile.destroy()
+        for (const tile of this.tiles.values())
+            tile.destroy()
 
         this.tiles.clear()
         this.itemsHost.replaceChildren()
@@ -60,7 +61,8 @@ class BlockCardTilesList implements BlockCardTilesListInstance {
     }
 
     destroy(): void {
-        for (const tile of this.tiles.values()) tile.destroy()
+        for (const tile of this.tiles.values())
+            tile.destroy()
 
         this.tiles.clear()
         this.element.remove()

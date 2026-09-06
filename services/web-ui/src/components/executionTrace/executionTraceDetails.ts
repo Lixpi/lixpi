@@ -421,7 +421,8 @@ class ExecutionTraceDetail implements ExecutionTraceDetailInstance {
     }
 
     destroy(): void {
-        for (const instance of this.previewInstances) instance.destroy()
+        for (const instance of this.previewInstances)
+            instance.destroy()
 
         this.previewInstances.length = 0
         this.element.remove()

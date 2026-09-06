@@ -168,11 +168,13 @@ export class ImageDecoder {
 
         this.destroyed = true
 
-        for (const id of this.pending.keys()) this.take(id)?.reject(
-            new DOMException('Image decoder destroyed', 'AbortError'),
-        )
+        for (const id of this.pending.keys())
+            this.take(id)?.reject(
+                new DOMException('Image decoder destroyed', 'AbortError'),
+            )
 
-        for (const worker of this.workers) worker.terminate()
+        for (const worker of this.workers)
+            worker.terminate()
 
         this.workers.length = 0
     }

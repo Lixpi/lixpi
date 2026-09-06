@@ -529,13 +529,15 @@ function assertAcyclicPanels(panels: CharacterPanelSpec[]): void {
 
         visiting.add(panelId)
 
-        for (const dependency of panelsById.get(panelId)?.dependsOn ?? []) visit(dependency)
+        for (const dependency of panelsById.get(panelId)?.dependsOn ?? [])
+            visit(dependency)
 
         visiting.delete(panelId)
         visited.add(panelId)
     }
 
-    for (const panel of panels) visit(panel.panelId)
+    for (const panel of panels)
+        visit(panel.panelId)
 }
 
 export const isCapabilityMediaExecutionPlan = (value: CapabilityJsonValue | unknown): value is CharacterSheetRenderPlan => {

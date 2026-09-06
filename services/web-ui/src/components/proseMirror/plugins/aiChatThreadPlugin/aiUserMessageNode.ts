@@ -66,7 +66,8 @@ export const aiUserMessageNodeView = (
     let tileInstances: ContextPreviewTileInstance[] = []
 
     const destroyReferencePreviews = (): void => {
-        for (const tile of tileInstances) tile.destroy()
+        for (const tile of tileInstances)
+            tile.destroy()
 
         tileInstances = []
         shell.referencePreviewsEl.replaceChildren()
