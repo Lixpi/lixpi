@@ -36,16 +36,33 @@ export const getImagePromptMaxChars = (
 ): number | undefined => {
     if (imageModelMetaInfo) {
         const value = imageModelMetaInfo.imagePromptMaxChars
-        if (typeof value === 'number' && value > 0) return value
-        if (typeof value === 'string' && /^\d+$/.test(value)) {
+
+        if (
+            typeof value === 'number'
+            && value > 0
+        )
+            return value
+
+        if (
+            typeof value === 'string'
+            && /^\d+$/.test(value)
+        ) {
             const parsed = parseInt(value, 10)
-            if (parsed > 0) return parsed
+
+            if (parsed > 0)
+                return parsed
         }
-        if (!imageProvider && typeof imageModelMetaInfo.provider === 'string') {
+
+        if (
+            !imageProvider
+            && typeof imageModelMetaInfo.provider === 'string'
+        )
             imageProvider = imageModelMetaInfo.provider
-        }
     }
-    if (!imageProvider) return undefined
+
+    if (!imageProvider)
+        return undefined
+
     return FALLBACK_MAX_PROMPT_LENGTH[imageProvider]
 }
 
@@ -54,11 +71,12 @@ export const buildImagePromptLimitInstruction = (
     imageProvider?: string,
 ): string | undefined => {
     const maxLen = getImagePromptMaxChars(imageModelMetaInfo, imageProvider)
-    if (!maxLen) return undefined
-    return (
-        `IMPORTANT: The generate_image tool prompt MUST NOT exceed ${maxLen} characters. `
+
+    if (!maxLen)
+        return undefined
+
+    return `IMPORTANT: The generate_image tool prompt MUST NOT exceed ${maxLen} characters. `
         + 'Stay under the limit during generation. Do not emit an overlong prompt that would need truncation.'
-    )
 }
 
 export const applyImagePromptLimitToSystemPrompt = (
@@ -67,7 +85,10 @@ export const applyImagePromptLimitToSystemPrompt = (
     imageProvider?: string,
 ): string | undefined => {
     const limit = buildImagePromptLimitInstruction(imageModelMetaInfo, imageProvider)
-    if (!limit) return systemPrompt
+
+    if (!limit)
+        return systemPrompt
+
     return systemPrompt ? `${systemPrompt}\n\n${limit}` : limit
 }
 
@@ -77,9 +98,15 @@ export const validateImagePrompt = (
     imageProvider?: string,
 ): string | undefined => {
     const maxChars = getImagePromptMaxChars(imageModelMetaInfo, imageProvider)
-    if (!maxChars) return undefined
+
+    if (!maxChars)
+        return undefined
+
     const len = (prompt || '').length
-    if (len <= maxChars) return undefined
+
+    if (len <= maxChars)
+        return undefined
+
     return `Image prompt exceeds the selected image model limit: ${len} characters > ${maxChars} characters.`
 }
 
@@ -88,12 +115,13 @@ const buildToolDescription = (
     imageProvider?: string,
 ): string => {
     const maxChars = getImagePromptMaxChars(imageModelMetaInfo, imageProvider)
-    if (!maxChars) return TOOL_DESCRIPTION
-    return (
-        `${TOOL_DESCRIPTION} `
+
+    if (!maxChars)
+        return TOOL_DESCRIPTION
+
+    return `${TOOL_DESCRIPTION} `
         + `CRITICAL CONSTRAINT: The prompt MUST NOT exceed ${maxChars} characters. `
         + 'Prioritize the most impactful visual details when approaching the limit.'
-    )
 }
 
 const buildToolParameters = (
@@ -101,7 +129,10 @@ const buildToolParameters = (
     imageProvider?: string,
 ): Record<string, any> => {
     const maxChars = getImagePromptMaxChars(imageModelMetaInfo, imageProvider)
-    if (!maxChars) return BASE_PARAMETERS
+
+    if (!maxChars)
+        return BASE_PARAMETERS
+
     return {
         type: 'object',
         properties: {
@@ -129,62 +160,106 @@ export const getToolForProvider = (
     const description = buildToolDescription(imageModelMetaInfo, imageProvider)
     const parameters = buildToolParameters(imageModelMetaInfo, imageProvider)
 
-    if (provider === 'OpenAI') {
-        return { type: 'function', name: TOOL_NAME, description, parameters }
-    }
-    if (provider === 'Anthropic') {
-        return { name: TOOL_NAME, description, input_schema: parameters }
-    }
-    if (provider === 'Google') {
-        return { name: TOOL_NAME, description, parameters }
-    }
+    if (provider === 'OpenAI')
+        return {
+            type: 'function',
+            name: TOOL_NAME,
+            description,
+            parameters,
+        }
+
+    if (provider === 'Anthropic')
+        return {
+            name: TOOL_NAME,
+            description,
+            input_schema: parameters,
+        }
+
+    if (provider === 'Google')
+        return {
+            name: TOOL_NAME,
+            description,
+            parameters,
+        }
+
     throw new Error(`Unsupported provider: ${provider}`)
 }
 
 // OpenAI Responses API: `response.output[*]` may contain a function_call item.
 export const extractToolCallOpenAI = (response: any): ImageToolCall | undefined => {
-    if (!response?.output) return undefined
+    if (!response?.output)
+        return undefined
+
     for (const item of response.output) {
-        if (item?.type === 'function_call' && item?.name === TOOL_NAME) {
+        if (
+            item?.type === 'function_call'
+            && item?.name === TOOL_NAME
+        ) {
             try {
                 const args = typeof item.arguments === 'string'
                     ? JSON.parse(item.arguments)
                     : item.arguments
-                return { prompt: args?.prompt ?? '', toolCallId: item.call_id }
+
+                return {
+                    prompt: args?.prompt ?? '',
+                    toolCallId: item.call_id,
+                }
             } catch (e) {
                 warn(`Failed to parse OpenAI tool call: ${e}`)
             }
         }
     }
+
     return undefined
 }
 
 // Anthropic Messages API: final_message.content[*] may contain tool_use blocks.
 export const extractToolCallAnthropic = (finalMessage: any): ImageToolCall | undefined => {
-    if (!finalMessage?.content) return undefined
+    if (!finalMessage?.content)
+        return undefined
+
     for (const block of finalMessage.content) {
-        if (block?.type === 'tool_use' && block?.name === TOOL_NAME) {
+        if (
+            block?.type === 'tool_use'
+            && block?.name === TOOL_NAME
+        ) {
             const args = block.input ?? {}
-            return { prompt: args.prompt ?? '', toolCallId: block.id }
+
+            return {
+                prompt: args.prompt ?? '',
+                toolCallId: block.id,
+            }
         }
     }
+
     return undefined
 }
 
 // Google Gen AI: response.candidates[*].content.parts[*].functionCall
 export const extractToolCallGoogle = (response: any): ImageToolCall | undefined => {
-    if (!response?.candidates) return undefined
+    if (!response?.candidates)
+        return undefined
+
     for (const candidate of response.candidates) {
         const parts = candidate?.content?.parts
-        if (!parts) continue
+
+        if (!parts)
+            continue
+
         for (const part of parts) {
             const fnCall = part.functionCall ?? part.function_call
-            if (fnCall && fnCall.name === TOOL_NAME) {
+
+            if (
+                fnCall
+                && fnCall.name === TOOL_NAME
+            ) {
                 const args = fnCall.args ? { ...fnCall.args } : {}
+
                 return { prompt: args.prompt ?? '' }
             }
         }
     }
+
     return undefined
 }
 
@@ -192,9 +267,15 @@ export const extractToolCall = (
     provider: ProviderName,
     response: any,
 ): ImageToolCall | undefined => {
-    if (provider === 'OpenAI') return extractToolCallOpenAI(response)
-    if (provider === 'Anthropic') return extractToolCallAnthropic(response)
-    if (provider === 'Google') return extractToolCallGoogle(response)
+    if (provider === 'OpenAI')
+        return extractToolCallOpenAI(response)
+
+    if (provider === 'Anthropic')
+        return extractToolCallAnthropic(response)
+
+    if (provider === 'Google')
+        return extractToolCallGoogle(response)
+
     return undefined
 }
 
@@ -204,27 +285,48 @@ export const extractReferenceImages = (messages: ChatMessage[]): string[] => {
     const seen = new Set<string>()
 
     const pushImage = (url: string): void => {
-        if (!url || seen.has(url)) return
+        if (
+            !url
+            || seen.has(url)
+        )
+            return
+
         seen.add(url)
         images.push(url)
     }
 
     for (const msg of messages) {
-        if (msg.role !== 'user') continue
+        if (msg.role !== 'user')
+            continue
+
         const content = msg.content
-        if (!Array.isArray(content)) continue
+
+        if (!Array.isArray(content))
+            continue
 
         for (const block of content) {
-            if (typeof block !== 'object' || block === null) continue
+            if (
+                typeof block !== 'object'
+                || block === null
+            )
+                continue
+
             const blockType = (block as any).type ?? ''
+
             // OpenAI format: input_image with image_url
             if (blockType === 'input_image') {
                 const url = (block as any).image_url
-                if (typeof url === 'string') pushImage(url)
+
+                if (typeof url === 'string')
+                    pushImage(url)
             } // Anthropic format: image with source
             else if (blockType === 'image') {
                 const source = (block as any).source ?? {}
-                if (source.type === 'base64' && source.data) {
+
+                if (
+                    source.type === 'base64'
+                    && source.data
+                ) {
                     const mediaType = source.media_type ?? 'image/png'
                     pushImage(`data:${mediaType};base64,${source.data}`)
                 }
@@ -232,13 +334,17 @@ export const extractReferenceImages = (messages: ChatMessage[]): string[] => {
             else if (blockType === 'inline_data') {
                 const mime = (block as any).mime_type ?? 'image/png'
                 const data = (block as any).data
-                if (data) pushImage(`data:${mime};base64,${data}`)
+
+                if (data)
+                    pushImage(`data:${mime};base64,${data}`)
             } // Google SDK format: inlineData
             else if ((block as any).inlineData) {
                 const inline = (block as any).inlineData
                 const mime = inline.mimeType ?? 'image/png'
                 const data = inline.data
-                if (data) pushImage(`data:${mime};base64,${data}`)
+
+                if (data)
+                    pushImage(`data:${mime};base64,${data}`)
             }
         }
     }

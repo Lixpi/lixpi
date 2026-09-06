@@ -18,7 +18,10 @@ import {
 // Returns a user-message array attaching the scene-assessment summary as text
 // and every reference image as an input_image block. The VLM client resolves
 // nats-obj:// URLs to base64 internally and converts per provider.
-export const buildExtractorMessages = (state: StyleExtractionState, scene: SceneAssessment): ChatMessage[] => {
+export const buildExtractorMessages = (
+    state: StyleExtractionState,
+    scene: SceneAssessment,
+): ChatMessage[] => {
     const blocks: Array<Record<string, any>> = []
 
     const intent = state.input.intent ?? '(none — extract the dominant traits)'
@@ -27,17 +30,27 @@ export const buildExtractorMessages = (state: StyleExtractionState, scene: Scene
         text: [
             `User intent: ${intent}`,
             '',
-            `Scene assessment (from the upstream router): ${JSON.stringify(scene, null, 2)}`,
+            `Scene assessment (from the upstream router): ${JSON.stringify(
+                scene,
+                null,
+                2,
+            )}`,
             '',
             'Analyze the reference image(s) attached below. Populate every field in your structured response with concrete observations. Do not invent details that are not visible. If a field genuinely does not apply, write a short rationale explaining why and leave the field empty (empty string or empty array), but populate everything else exhaustively.',
         ].join('\n'),
     })
 
     for (const ref of state.references) {
-        blocks.push({ type: 'input_image', image_url: ref.url })
+        blocks.push({
+            type: 'input_image',
+            image_url: ref.url,
+        })
     }
 
-    return [{ role: 'user', content: blocks }]
+    return [{
+        role: 'user',
+        content: blocks,
+    }]
 }
 
 export type AxisVlmResponse<T = Record<string, any>> = {
@@ -48,7 +61,11 @@ export type AxisVlmResponse<T = Record<string, any>> = {
 // Each per-axis extractor wraps a focused VLM call with this schema envelope.
 // The "fields" object is the axis-specific structured output; "rationale" is
 // the model's brief justification.
-export const wrapAxisSchema = (axis: string, description: string, fieldsSchema: Record<string, any>): VlmJsonSchema => ({
+export const wrapAxisSchema = (
+    axis: string,
+    description: string,
+    fieldsSchema: Record<string, any>,
+): VlmJsonSchema => ({
     name: `extract_${axis.replace(/[^a-z0-9]/gi, '_')}`,
     description,
     schema: {
@@ -74,9 +91,15 @@ export const runAxisVlm = async <T = Record<string, any>>(args: {
     logger: StageLogger
 }): Promise<AxisExtraction> => {
     const natsService = NATS_Service.getInstance()
-    if (!natsService) throw new Error('NATS service not initialized')
 
-    const schema = wrapAxisSchema(args.extractor.axis, args.extractor.description, args.fieldsSchema)
+    if (!natsService)
+        throw new Error('NATS service not initialized')
+
+    const schema = wrapAxisSchema(
+        args.extractor.axis,
+        args.extractor.description,
+        args.fieldsSchema,
+    )
     const messages = buildExtractorMessages(args.state, args.scene)
 
     const result = await callStructuredVlm<AxisVlmResponse<T>>({

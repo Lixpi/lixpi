@@ -39,7 +39,11 @@ const createDefinition = ({
         compile: compileProviderSafeIntent,
     },
     moderation,
-    normalizeProblem: (error, context) => normalizeProviderProblem({ provider, error, context }),
+    normalizeProblem: (error, context) => normalizeProviderProblem({
+        provider,
+        error,
+        context,
+    }),
     verification,
     retentionNotes,
     sensitiveDataNotes,
@@ -60,7 +64,10 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
             automaticRetry: 'never',
             costOnFilter: 'provider-dependent',
         },
-        verification: { strategy: 'unsupported', derivativeReuse: 'not-allowed' },
+        verification: {
+            strategy: 'unsupported',
+            derivativeReuse: 'not-allowed',
+        },
         retentionNotes: 'OpenAI endpoint retention is governed by the configured API account and service terms.',
         sensitiveDataNotes: 'Reference bytes are sent only for the selected generation request.',
         documentationUrls: ['https://platform.openai.com/docs/guides/image-generation'],
@@ -76,7 +83,10 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
             automaticRetry: 'never',
             costOnFilter: 'not-documented',
         },
-        verification: { strategy: 'unsupported', derivativeReuse: 'not-allowed' },
+        verification: {
+            strategy: 'unsupported',
+            derivativeReuse: 'not-allowed',
+        },
         retentionNotes: 'Reasoning-only provider; it does not receive media generation calls.',
         sensitiveDataNotes: 'Only provider-safe reference context may be used for reasoning.',
         documentationUrls: ['https://docs.anthropic.com/en/docs/about-claude/models'],
@@ -88,21 +98,32 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
         imageReferenceAdapter: GOOGLE_IMAGE_REFERENCE_ADAPTER,
         moderation: {
             policy: 'input-mode-least-restrictive',
-            settings: (modelId, inputMode, context) => {
-                if (!/veo/iu.test(modelId)) return {}
-                if (!context?.regionProfile) throw new Error('GOOGLE_VEO_PERSON_GENERATION_PROFILE_REQUIRED')
+            settings: (
+                modelId,
+                inputMode,
+                context,
+            ) => {
+                if (!/veo/iu.test(modelId))
+                    return {}
+
+                if (!context?.regionProfile)
+                    throw new Error('GOOGLE_VEO_PERSON_GENERATION_PROFILE_REQUIRED')
+
                 return {
                     personGeneration: context.regionProfile === 'restricted'
                         ? 'allow_adult'
                         : inputMode === 'image-conditioned'
-                        ? 'allow_adult'
-                        : 'allow_all',
+                            ? 'allow_adult'
+                            : 'allow_all',
                 }
             },
             automaticRetry: 'never',
             costOnFilter: 'provider-dependent',
         },
-        verification: { strategy: 'unsupported', derivativeReuse: 'not-allowed' },
+        verification: {
+            strategy: 'unsupported',
+            derivativeReuse: 'not-allowed',
+        },
         retentionNotes: 'Gemini Developer API or Vertex project retention applies by configured account mode.',
         sensitiveDataNotes: 'Veo receives only selected frames/reference bytes and safe prompt aliases.',
         documentationUrls: ['https://ai.google.dev/gemini-api/docs/veo'],
@@ -118,7 +139,10 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
             automaticRetry: 'never',
             costOnFilter: 'provider-dependent',
         },
-        verification: { strategy: 'unsupported', derivativeReuse: 'not-allowed' },
+        verification: {
+            strategy: 'unsupported',
+            derivativeReuse: 'not-allowed',
+        },
         retentionNotes: 'Stability API retention is governed by the configured account terms.',
         sensitiveDataNotes: 'Only selected reference images and safe prompt text are submitted.',
         documentationUrls: ['https://platform.stability.ai/docs/api-reference'],
@@ -134,7 +158,10 @@ export const CURRENT_MEDIA_PROVIDER_DEFINITIONS: Record<ProviderName, MediaProvi
             automaticRetry: 'never',
             costOnFilter: 'provider-dependent',
         },
-        verification: { strategy: 'provider-hosted-session', derivativeReuse: 'documented-lineage' },
+        verification: {
+            strategy: 'provider-hosted-session',
+            derivativeReuse: 'documented-lineage',
+        },
         retentionNotes: 'Seedance task output URLs are downloaded before provider expiry.',
         sensitiveDataNotes: 'Real-person verification media is sent directly to BytePlus and never stored by Lixpi.',
         documentationUrls: [

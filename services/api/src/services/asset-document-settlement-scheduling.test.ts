@@ -5,13 +5,14 @@ import {
     expect,
     it,
 } from 'vitest'
+import { withoutLayout } from '@lixpi/test-utils'
 
 const expectSourceToContain = (source: string, snippet: string, label: string): void => {
-    expect(source.includes(snippet), `${label} should contain:\n${snippet}`).toBe(true)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should contain:\n${snippet}`).toBe(true)
 }
 
 const expectSourceNotToContain = (source: string, snippet: string, label: string): void => {
-    expect(source.includes(snippet), `${label} should not contain:\n${snippet}`).toBe(false)
+    expect(withoutLayout(source).includes(withoutLayout(snippet)), `${label} should not contain:\n${snippet}`).toBe(false)
 }
 
 describe('AssetDocumentService settlement scheduling', () => {

@@ -96,6 +96,8 @@ services:
             - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/src:ro,cached
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/api/packages/lixpi/prosemirror/package.json:ro,cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/api/packages/lixpi/prosemirror/src:ro,cached
+            - ./packages/lixpi/test-utils/package.json:/usr/src/service/api/packages/lixpi/test-utils/package.json:ro,cached
+            - ./packages/lixpi/test-utils/src:/usr/src/service/api/packages/lixpi/test-utils/src:ro,cached
 
             # --- api domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
@@ -113,6 +115,7 @@ services:
             - typescript-test-runner-node-modules-api-nats-service-ts:/usr/src/service/api/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-api-nats-auth-callout-service:/usr/src/service/api/packages/lixpi/nats-auth-callout-service/node_modules
             - typescript-test-runner-node-modules-api-prosemirror:/usr/src/service/api/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-api-test-utils:/usr/src/service/api/packages/lixpi/test-utils/node_modules
 
             # --- web-ui domain (bind-mounts services/web-ui's own files — same
             #     package.json/pnpm-workspace.yaml/vitest.config.ts the
@@ -151,6 +154,8 @@ services:
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/package.json:ro,cached
             - ./packages/lixpi/prosemirror/package.json:/usr/src/service/web-ui/packages/lixpi/prosemirror/package.json:ro,cached
             - ./packages/lixpi/prosemirror/src:/usr/src/service/web-ui/packages/lixpi/prosemirror/src:ro,cached
+            - ./packages/lixpi/test-utils/package.json:/usr/src/service/web-ui/packages/lixpi/test-utils/package.json:ro,cached
+            - ./packages/lixpi/test-utils/src:/usr/src/service/web-ui/packages/lixpi/test-utils/src:ro,cached
             - ./packages/lixpi/ui-kit/package.json:/usr/src/service/web-ui/packages/lixpi/ui-kit/package.json:ro,cached
             - ./packages/lixpi/ui-kit/src:/usr/src/service/web-ui/packages/lixpi/ui-kit/src:ro,cached
             - ./packages/lixpi/ui-kit/styles:/usr/src/service/web-ui/packages/lixpi/ui-kit/styles:ro,cached
@@ -167,6 +172,7 @@ services:
             - typescript-test-runner-node-modules-web-ui-debug-tools-ts:/usr/src/service/web-ui/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-nats-service-ts:/usr/src/service/web-ui/packages/lixpi/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-web-ui-prosemirror:/usr/src/service/web-ui/packages/lixpi/prosemirror/node_modules
+            - typescript-test-runner-node-modules-web-ui-test-utils:/usr/src/service/web-ui/packages/lixpi/test-utils/node_modules
             - typescript-test-runner-node-modules-web-ui-ui-kit:/usr/src/service/web-ui/packages/lixpi/ui-kit/node_modules
 
             # --- nex domain (bind-mounts services/nex's own files, plus a
@@ -193,6 +199,8 @@ services:
             - ./packages/lixpi/dynamodb-service/src:/usr/src/service/nex/packages/lixpi/dynamodb-service/src:ro,cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/nats-service.ts:ro,cached
             - ./packages/lixpi/nats-service/ts/package.json:/usr/src/service/nex/packages/lixpi/nats-service/ts/package.json:ro,cached
+            - ./packages/lixpi/test-utils/package.json:/usr/src/service/nex/packages/lixpi/test-utils/package.json:ro,cached
+            - ./packages/lixpi/test-utils/src:/usr/src/service/nex/packages/lixpi/test-utils/src:ro,cached
 
             # --- nex domain: persisted node_modules (see the
             #     typescript-test-runner-node-modules-* comment above) ---
@@ -201,6 +209,7 @@ services:
             - typescript-test-runner-node-modules-nex-debug-tools-ts:/usr/src/service/nex/packages/lixpi/debug-tools/ts/node_modules
             - typescript-test-runner-node-modules-nex-dynamodb-service:/usr/src/service/nex/packages/lixpi/dynamodb-service/node_modules
             - typescript-test-runner-node-modules-nex-nats-service-ts:/usr/src/service/nex/packages/lixpi/nats-service/ts/node_modules
+            - typescript-test-runner-node-modules-nex-test-utils:/usr/src/service/nex/packages/lixpi/test-utils/node_modules
 
             # --- shared domain: this IS the source under test (read-write),
             #     but mounted file-by-file like the domains above rather than
@@ -220,6 +229,8 @@ services:
             - ./packages/lixpi/canvas-components/package.json:/usr/src/service/shared/canvas-components/package.json:cached
             - ./packages/lixpi/canvas-components/src:/usr/src/service/shared/canvas-components/src:cached
             - ./packages/lixpi/canvas-components/examples:/usr/src/service/shared/canvas-components/examples:cached
+            - ./packages/lixpi/test-utils/package.json:/usr/src/service/shared/test-utils/package.json:cached
+            - ./packages/lixpi/test-utils/src:/usr/src/service/shared/test-utils/src:cached
             - ./packages/lixpi/ui-primitives/package.json:/usr/src/service/shared/ui-primitives/package.json:cached
             - ./packages/lixpi/ui-primitives/src:/usr/src/service/shared/ui-primitives/src:cached
             - ./packages/lixpi/canvas-components-lixpi-specific/package.json:/usr/src/service/shared/canvas-components-lixpi-specific/package.json:cached
@@ -269,6 +280,7 @@ services:
             - typescript-test-runner-node-modules-shared-nats-auth-callout-service:/usr/src/service/shared/nats-auth-callout-service/node_modules
             - typescript-test-runner-node-modules-shared-nats-service-ts:/usr/src/service/shared/nats-service/ts/node_modules
             - typescript-test-runner-node-modules-shared-prosemirror:/usr/src/service/shared/prosemirror/node_modules
+            - typescript-test-runner-node-modules-shared-test-utils:/usr/src/service/shared/test-utils/node_modules
             - typescript-test-runner-node-modules-shared-ui-kit:/usr/src/service/shared/ui-kit/node_modules
         networks:
             - nats
@@ -297,6 +309,7 @@ volumes:
     typescript-test-runner-node-modules-api-nats-service-ts:
     typescript-test-runner-node-modules-api-nats-auth-callout-service:
     typescript-test-runner-node-modules-api-prosemirror:
+    typescript-test-runner-node-modules-api-test-utils:
     typescript-test-runner-node-modules-web-ui:
     typescript-test-runner-node-modules-web-ui-capability-system:
     typescript-test-runner-node-modules-web-ui-canvas-engine:
@@ -307,12 +320,14 @@ volumes:
     typescript-test-runner-node-modules-web-ui-debug-tools-ts:
     typescript-test-runner-node-modules-web-ui-nats-service-ts:
     typescript-test-runner-node-modules-web-ui-prosemirror:
+    typescript-test-runner-node-modules-web-ui-test-utils:
     typescript-test-runner-node-modules-web-ui-ui-kit:
     typescript-test-runner-node-modules-nex:
     typescript-test-runner-node-modules-nex-constants-ts:
     typescript-test-runner-node-modules-nex-debug-tools-ts:
     typescript-test-runner-node-modules-nex-dynamodb-service:
     typescript-test-runner-node-modules-nex-nats-service-ts:
+    typescript-test-runner-node-modules-nex-test-utils:
     typescript-test-runner-node-modules-shared-auth-service:
     typescript-test-runner-node-modules-shared-capability-system:
     typescript-test-runner-node-modules-shared-canvas-engine:
@@ -325,4 +340,5 @@ volumes:
     typescript-test-runner-node-modules-shared-nats-auth-callout-service:
     typescript-test-runner-node-modules-shared-nats-service-ts:
     typescript-test-runner-node-modules-shared-prosemirror:
+    typescript-test-runner-node-modules-shared-test-utils:
     typescript-test-runner-node-modules-shared-ui-kit:

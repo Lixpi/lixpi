@@ -24,7 +24,10 @@ export type CapabilityActionAuthorizationContext = {
     runId: string
     origin: 'prompt' | 'model' | 'panel'
     invocationGenerationRequestId?: string
-    variant: { axis: 'request'; variantKey: 'request' } | CapabilityReasoningModelVariant
+    variant: {
+        axis: 'request'
+        variantKey: 'request'
+    } | CapabilityReasoningModelVariant
 }
 
 export type CapabilityActionExecutionContext = CapabilityActionAuthorizationContext & {
@@ -32,7 +35,10 @@ export type CapabilityActionExecutionContext = CapabilityActionAuthorizationCont
     attempt: number
     signal: AbortSignal
     plan: SealedResolvedCapabilityPlan
-    getResource: (capabilityId: string, resourceId: string) => LoadedCapabilityResource | undefined
+    getResource: (
+        capabilityId: string,
+        resourceId: string,
+    ) => LoadedCapabilityResource | undefined
     getRunEvents: () => readonly Readonly<CapabilityRunEvent>[]
     // Records the step's own account of what it ran: model calls with their
     // params, the Assets and Capabilities it passed to each of them, and its
@@ -42,7 +48,10 @@ export type CapabilityActionExecutionContext = CapabilityActionAuthorizationCont
 
 export type CapabilityActionValidationResult =
     | { valid: true }
-    | { valid: false; message: string }
+    | {
+        valid: false
+        message: string
+    }
 
 export type CapabilityActionRetryClassification = 'retryable' | 'terminal'
 
@@ -77,35 +86,30 @@ export class CapabilityActionRegistry {
     private readonly actions = new Map<string, Readonly<CapabilityActionDefinition>>()
 
     register(definition: CapabilityActionDefinition): void {
-        if (!ACTION_KEY_PATTERN.test(definition.key)) {
-            throw new CapabilityError(
-                'CAPABILITY_WORKFLOW_INVALID',
-                `Capability action key ${definition.key} is invalid`,
-            )
-        }
-        if (!Number.isSafeInteger(definition.timeoutMs) || definition.timeoutMs <= 0) {
-            throw new CapabilityError(
-                'CAPABILITY_WORKFLOW_INVALID',
-                `Capability action ${definition.key} must have a positive integer timeout`,
-            )
-        }
-        if (this.actions.has(definition.key)) {
-            throw new CapabilityError(
-                'CAPABILITY_WORKFLOW_INVALID',
-                `Capability action ${definition.key} is already registered`,
-            )
-        }
-        this.actions.set(definition.key, Object.freeze({ ...definition }))
+        if (!ACTION_KEY_PATTERN.test(definition.key))
+            throw new CapabilityError('CAPABILITY_WORKFLOW_INVALID', `Capability action key ${definition.key} is invalid`)
+
+        if (
+            !Number.isSafeInteger(definition.timeoutMs)
+            || definition.timeoutMs <= 0
+        )
+            throw new CapabilityError('CAPABILITY_WORKFLOW_INVALID', `Capability action ${definition.key} must have a positive integer timeout`)
+
+        if (this.actions.has(definition.key))
+            throw new CapabilityError('CAPABILITY_WORKFLOW_INVALID', `Capability action ${definition.key} is already registered`)
+
+        this.actions.set(
+            definition.key,
+            Object.freeze({ ...definition }),
+        )
     }
 
     get(key: string): Readonly<CapabilityActionDefinition> {
         const action = this.actions.get(key)
-        if (!action) {
-            throw new CapabilityError(
-                'CAPABILITY_ACTION_NOT_ALLOWED',
-                `Capability action ${key} is not registered`,
-            )
-        }
+
+        if (!action)
+            throw new CapabilityError('CAPABILITY_ACTION_NOT_ALLOWED', `Capability action ${key} is not registered`)
+
         return action
     }
 
@@ -114,21 +118,41 @@ export class CapabilityActionRegistry {
     }
 
     allowedActionKeys(): ReadonlySet<string> {
-        return new Set(this.actions.keys())
+        return new Set(
+            this.actions.keys(),
+        )
     }
 }
 
-export function acceptCapabilityJsonValue(value: unknown): CapabilityActionValidationResult {
+export const acceptCapabilityJsonValue = (value: unknown): CapabilityActionValidationResult => {
     return isCapabilityJsonValue(value)
         ? { valid: true }
-        : { valid: false, message: 'Value must be JSON-compatible' }
+        : {
+            valid: false,
+            message: 'Value must be JSON-compatible',
+        }
 }
 
 function isCapabilityJsonValue(value: unknown): value is CapabilityJsonValue {
-    if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
-    if (typeof value === 'number') return Number.isFinite(value)
-    if (Array.isArray(value)) return value.every(isCapabilityJsonValue)
-    if (!value || typeof value !== 'object') return false
+    if (
+        value === null
+        || typeof value === 'string'
+        || typeof value === 'boolean'
+    )
+        return true
+
+    if (typeof value === 'number')
+        return Number.isFinite(value)
+
+    if (Array.isArray(value))
+        return value.every(isCapabilityJsonValue)
+
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return false
+
     return Object.entries(value).every(([key, child]) => isSafeProperty(key) && isCapabilityJsonValue(child))
 }
 

@@ -44,11 +44,18 @@ export type GlassMaterialStyle = {
     headSpecularAlphaStrength: number
 }
 
-export type RgbColor = { r: number; g: number; b: number }
+export type RgbColor = {
+    r: number
+    g: number
+    b: number
+}
 
 type GradientCanvas = OffscreenCanvas | HTMLCanvasElement
 type GradientCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D
-type GradientCanvasFactory<TCanvas extends GradientCanvas> = (width: number, height: number) => TCanvas
+type GradientCanvasFactory<TCanvas extends GradientCanvas> = (
+    width: number,
+    height: number,
+) => TCanvas
 
 // Result of mapping one destination pixel into the material's UV space.
 // `alphaMask` (default 1) lets a baker carve a shape out of the texture — the
@@ -242,22 +249,48 @@ const DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE: CircularGlassMaterialStyle = {
     innerShadowVeilStrength: 0.1,
 }
 
-export function interpolateTravelingOutlineColor(colors: ReadonlyArray<string>, progress: number): number {
-    if (colors.length === 0) return 0xffffff
-    if (colors.length === 1) return Number.parseInt(colors[0].slice(1), 16)
+export const interpolateTravelingOutlineColor = (
+    colors: ReadonlyArray<string>,
+    progress: number,
+): number => {
+    if (colors.length === 0)
+        return 0xffffff
 
-    const bounded = Math.max(0, Math.min(1, progress))
+    if (colors.length === 1)
+        return Number.parseInt(
+            colors[0].slice(1),
+            16,
+        )
+
+    const bounded = Math.max(
+        0,
+        Math.min(1, progress),
+    )
     const scaled = bounded * (colors.length - 1)
-    const index = Math.min(colors.length - 2, Math.floor(scaled))
+    const index = Math.min(
+        colors.length - 2,
+        Math.floor(scaled),
+    )
     const blend = scaled - index
-    const from = Number.parseInt(colors[index].slice(1), 16)
-    const to = Number.parseInt(colors[index + 1].slice(1), 16)
+    const from = Number.parseInt(
+        colors[index].slice(1),
+        16,
+    )
+    const to = Number.parseInt(
+        colors[index + 1].slice(1),
+        16,
+    )
     const channel = (shift: number) => Math.round(((from >> shift) & 0xff) + (((to >> shift) & 0xff) - ((from >> shift) & 0xff)) * blend)
+
     return (channel(16) << 16) | (channel(8) << 8) | channel(0)
 }
 
-function getTravelingOutlineColorChannels(colors: ReadonlyArray<string>, progress: number): RgbColor {
+const getTravelingOutlineColorChannels = (
+    colors: ReadonlyArray<string>,
+    progress: number,
+): RgbColor => {
     const color = interpolateTravelingOutlineColor(colors, progress)
+
     return {
         r: (color >> 16) & 0xff,
         g: (color >> 8) & 0xff,
@@ -265,10 +298,18 @@ function getTravelingOutlineColorChannels(colors: ReadonlyArray<string>, progres
     }
 }
 
-function parseHexColor(hex: string): RgbColor {
+const parseHexColor = (hex: string): RgbColor => {
     const normalized = hex.trim().replace(/^#/, '')
-    if (!/^[\da-f]{6}$/i.test(normalized)) return { r: 78, g: 91, b: 108 }
+
+    if (!/^[\da-f]{6}$/i.test(normalized))
+        return {
+            r: 78,
+            g: 91,
+            b: 108,
+        }
+
     const value = Number.parseInt(normalized, 16)
+
     return {
         r: (value >> 16) & 0xff,
         g: (value >> 8) & 0xff,
@@ -276,51 +317,102 @@ function parseHexColor(hex: string): RgbColor {
     }
 }
 
-function mixChannel(from: number, to: number, amount: number): number {
-    return Math.round(from + (to - from) * Math.max(0, Math.min(1, amount)))
+const mixChannel = (
+    from: number,
+    to: number,
+    amount: number,
+): number => {
+    return Math.round(from + (to - from) * Math.max(
+        0,
+        Math.min(1, amount),
+    ))
 }
 
-function mixColor(from: RgbColor, to: RgbColor, amount: number): RgbColor {
+const mixColor = (
+    from: RgbColor,
+    to: RgbColor,
+    amount: number,
+): RgbColor => {
     return {
-        r: mixChannel(from.r, to.r, amount),
-        g: mixChannel(from.g, to.g, amount),
-        b: mixChannel(from.b, to.b, amount),
+        r: mixChannel(
+            from.r,
+            to.r,
+            amount,
+        ),
+        g: mixChannel(
+            from.g,
+            to.g,
+            amount,
+        ),
+        b: mixChannel(
+            from.b,
+            to.b,
+            amount,
+        ),
     }
 }
 
-function clamp01(value: number): number {
-    return Math.max(0, Math.min(1, value))
+const clamp01 = (value: number): number => {
+    return Math.max(
+        0,
+        Math.min(1, value),
+    )
 }
 
-function gaussian(position: number, center: number, width: number): number {
-    return Math.exp(-((position - center) ** 2) / (2 * width ** 2))
-}
+const gaussian = (
+    position: number,
+    center: number,
+    width: number,
+): number => Math.exp(-((position - center) ** 2) / (2 * width ** 2))
 
-function smoothstep(edge0: number, edge1: number, value: number): number {
-    if (edge0 === edge1) return value >= edge1 ? 1 : 0
-    const progress = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)))
+const smoothstep = (
+    edge0: number,
+    edge1: number,
+    value: number,
+): number => {
+    if (edge0 === edge1)
+        return value >= edge1 ? 1 : 0
+
+    const progress = Math.max(
+        0,
+        Math.min(1, (value - edge0) / (edge1 - edge0)),
+    )
+
     return progress * progress * (3 - 2 * progress)
 }
 
-function getTextureEdgeFeatherFraction(edgeFeatherFraction: number): number {
+const getTextureEdgeFeatherFraction = (edgeFeatherFraction: number): number => {
     const boundedFeather = Math.max(0, edgeFeatherFraction)
+
     return Math.min(0.49, boundedFeather / (1 + 2 * boundedFeather))
 }
 
-function getTextureOpacityProgress(
+const getTextureOpacityProgress = (
     progress: number,
     tailAlpha: number,
     glassMaterial: GlassMaterialStyle,
-): number {
+): number => {
     const configuredOpacity = tailAlpha + (1 - tailAlpha) * Math.pow(progress, glassMaterial.tailOpacityPower)
-    const tailFade = smoothstep(0, glassMaterial.tailFadeFraction, progress)
-    return tailFade * Math.max(glassMaterial.minTailOpacity, Math.min(1, configuredOpacity))
+    const tailFade = smoothstep(
+        0,
+        glassMaterial.tailFadeFraction,
+        progress,
+    )
+
+    return tailFade * Math.max(
+        glassMaterial.minTailOpacity,
+        Math.min(1, configuredOpacity),
+    )
 }
 
-function createHtmlCanvas(width: number, height: number): HTMLCanvasElement {
+const createHtmlCanvas = (
+    width: number,
+    height: number,
+): HTMLCanvasElement => {
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
+
     return canvas
 }
 
@@ -329,7 +421,11 @@ export abstract class GlassMaterial {
     protected readonly tailAlpha: number
     protected readonly style: GlassMaterialStyle
 
-    constructor(colors: ReadonlyArray<string>, tailAlpha: number, style: GlassMaterialStyle) {
+    constructor(
+        colors: ReadonlyArray<string>,
+        tailAlpha: number,
+        style: GlassMaterialStyle,
+    ) {
         this.colors = colors.length > 0 ? colors : ['#ffffff']
         this.tailAlpha = tailAlpha
         this.style = style
@@ -337,36 +433,87 @@ export abstract class GlassMaterial {
 
     abstract bake(): GlassPixels
 
-    protected shadeSample(sample: GlassUvSample): { color: RgbColor; alpha: number } {
+    protected shadeSample(sample: GlassUvSample): {
+        color: RgbColor
+        alpha: number
+    } {
         return this.shade(sample.progress, sample.crossSection)
     }
 
     // Core glass shading shared by every baker. `progress` runs tail→head,
     // `crossSection` runs top edge (0) → bottom edge (1).
-    protected shade(progress: number, crossSection: number): { color: RgbColor; alpha: number } {
+    protected shade(
+        progress: number,
+        crossSection: number,
+    ): {
+        color: RgbColor
+        alpha: number
+    } {
         const glassMaterial = this.style
-        const white = { r: 255, g: 255, b: 255 }
+        const white = {
+            r: 255,
+            g: 255,
+            b: 255,
+        }
         const glassShadow = parseHexColor(glassMaterial.shadowColor)
         const baseColor = getTravelingOutlineColorChannels(this.colors, progress)
-        const opacityProgress = getTextureOpacityProgress(progress, this.tailAlpha, glassMaterial)
+        const opacityProgress = getTextureOpacityProgress(
+            progress,
+            this.tailAlpha,
+            glassMaterial,
+        )
         const textureEdgeFeather = getTextureEdgeFeatherFraction(glassMaterial.edgeFeatherFraction)
         const coreSpan = Math.max(0.001, 1 - textureEdgeFeather * 2)
-        const coreCrossSection = Math.max(0, Math.min(1, (crossSection - textureEdgeFeather) / coreSpan))
+        const coreCrossSection = Math.max(
+            0,
+            Math.min(1, (crossSection - textureEdgeFeather) / coreSpan),
+        )
         const edgeDistance = Math.abs(coreCrossSection - 0.5) * 2
         const edgeFeather = textureEdgeFeather <= 0
             ? 1
-            : smoothstep(0, textureEdgeFeather, crossSection) * smoothstep(0, textureEdgeFeather, 1 - crossSection)
-        const roundedBody = Math.max(0, Math.sin(Math.PI * coreCrossSection))
+            : smoothstep(
+                0,
+                textureEdgeFeather,
+                crossSection,
+            ) * smoothstep(
+                0,
+                textureEdgeFeather,
+                1 - crossSection,
+            )
+        const roundedBody = Math.max(
+            0,
+            Math.sin(Math.PI * coreCrossSection),
+        )
         const lensCore = Math.pow(roundedBody, glassMaterial.lensCorePower)
         const upperSpecular = gaussian(
             coreCrossSection,
             glassMaterial.upperSpecularCenter + glassMaterial.upperSpecularDrift * Math.sin(progress * Math.PI),
             glassMaterial.upperSpecularWidth,
-        ) * smoothstep(glassMaterial.upperSpecularFadeStart, glassMaterial.upperSpecularFadeEnd, progress)
-        const headSpecular = gaussian(progress, glassMaterial.headSpecularProgressCenter, glassMaterial.headSpecularProgressWidth)
-            * gaussian(coreCrossSection, glassMaterial.headSpecularCrossSectionCenter, glassMaterial.headSpecularCrossSectionWidth)
-        const lowerEdgeShadow = gaussian(coreCrossSection, glassMaterial.lowerEdgeShadowCenter, glassMaterial.lowerEdgeShadowWidth)
-        const upperEdgeShadow = gaussian(coreCrossSection, glassMaterial.upperEdgeShadowCenter, glassMaterial.upperEdgeShadowWidth)
+        ) * smoothstep(
+            glassMaterial.upperSpecularFadeStart,
+            glassMaterial.upperSpecularFadeEnd,
+            progress,
+        )
+        const headSpecular = gaussian(
+            progress,
+            glassMaterial.headSpecularProgressCenter,
+            glassMaterial.headSpecularProgressWidth,
+        )
+            * gaussian(
+                coreCrossSection,
+                glassMaterial.headSpecularCrossSectionCenter,
+                glassMaterial.headSpecularCrossSectionWidth,
+            )
+        const lowerEdgeShadow = gaussian(
+            coreCrossSection,
+            glassMaterial.lowerEdgeShadowCenter,
+            glassMaterial.lowerEdgeShadowWidth,
+        )
+        const upperEdgeShadow = gaussian(
+            coreCrossSection,
+            glassMaterial.upperEdgeShadowCenter,
+            glassMaterial.upperEdgeShadowWidth,
+        )
         const edgeShadow = lowerEdgeShadow * glassMaterial.lowerEdgeShadowStrength
             + upperEdgeShadow * glassMaterial.upperEdgeShadowStrength
             + Math.pow(edgeDistance, glassMaterial.edgeShadowPower) * glassMaterial.edgeShadowStrength
@@ -374,8 +521,16 @@ export abstract class GlassMaterial {
             + headSpecular * glassMaterial.headSpecularStrength
             + lensCore * glassMaterial.lensHighlightStrength
 
-        const litColor = mixColor(baseColor, white, Math.min(glassMaterial.highlightWhiteMixMax, highlight))
-        const color = mixColor(litColor, glassShadow, Math.min(glassMaterial.shadowMixMax, edgeShadow))
+        const litColor = mixColor(
+            baseColor,
+            white,
+            Math.min(glassMaterial.highlightWhiteMixMax, highlight),
+        )
+        const color = mixColor(
+            litColor,
+            glassShadow,
+            Math.min(glassMaterial.shadowMixMax, edgeShadow),
+        )
         const materialAlpha = Math.min(
             glassMaterial.materialAlphaMax,
             glassMaterial.materialAlphaBase
@@ -384,6 +539,7 @@ export abstract class GlassMaterial {
                 + headSpecular * glassMaterial.headSpecularAlphaStrength,
         )
         const alpha = opacityProgress * materialAlpha * Math.pow(edgeFeather, glassMaterial.edgeFeatherPower)
+
         return {
             color,
             alpha: Math.min(0.99, alpha),
@@ -393,23 +549,42 @@ export abstract class GlassMaterial {
     protected bakeCanvas<TCanvas extends GradientCanvas>(
         width: number,
         height: number,
-        sample: (px: number, py: number) => GlassUvSample,
+        sample: (
+            px: number,
+            py: number,
+        ) => GlassUvSample,
         createCanvas: GradientCanvasFactory<TCanvas>,
     ): TCanvas | null {
         const canvas = createCanvas(width, height)
         let context: GradientCanvasContext | null = null
+
         try {
             context = canvas.getContext('2d') as GradientCanvasContext | null
         } catch {
             return null
         }
-        if (!context) return null
+
+        if (!context)
+            return null
 
         const imageData = context.createImageData(width, height)
-        imageData.data.set(this.bakeTexture(width, height, sample).rgba)
+        imageData.data.set(this.bakeTexture(
+            width,
+            height,
+            sample,
+        ).rgba)
 
-        context.clearRect(0, 0, width, height)
-        context.putImageData(imageData, 0, 0)
+        context.clearRect(
+            0,
+            0,
+            width,
+            height,
+        )
+        context.putImageData(
+            imageData,
+            0,
+            0,
+        )
 
         return canvas
     }
@@ -419,15 +594,25 @@ export abstract class GlassMaterial {
     protected bakeTexture(
         width: number,
         height: number,
-        sample: (px: number, py: number) => GlassUvSample,
+        sample: (
+            px: number,
+            py: number,
+        ) => GlassUvSample,
     ): GlassPixels {
         const rgba = new Uint8ClampedArray(width * height * 4)
+
         for (let py = 0; py < height; py++) {
             for (let px = 0; px < width; px++) {
                 const uvSample = sample(px, py)
                 const { alphaMask = 1 } = uvSample
-                const { color, alpha } = this.shadeSample(uvSample)
-                const maskedAlpha = Math.max(0, Math.min(1, alpha * alphaMask))
+                const {
+                    color,
+                    alpha,
+                } = this.shadeSample(uvSample)
+                const maskedAlpha = Math.max(
+                    0,
+                    Math.min(1, alpha * alphaMask),
+                )
                 const offset = (py * width + px) * 4
                 rgba[offset] = color.r
                 rgba[offset + 1] = color.g
@@ -435,16 +620,35 @@ export abstract class GlassMaterial {
                 rgba[offset + 3] = Math.round(maskedAlpha * 255)
             }
         }
-        return { kind: 'pixels', size: { width, height }, rgba }
+
+        return {
+            kind: 'pixels',
+            size: {
+                width,
+                height,
+            },
+            rgba,
+        }
     }
 
     protected bakePngDataUrl(
         width: number,
         height: number,
-        sample: (px: number, py: number) => GlassUvSample,
+        sample: (
+            px: number,
+            py: number,
+        ) => GlassUvSample,
     ): string {
-        if (typeof document === 'undefined') return ''
-        const canvas = this.bakeCanvas(width, height, sample, createHtmlCanvas)
+        if (typeof document === 'undefined')
+            return ''
+
+        const canvas = this.bakeCanvas(
+            width,
+            height,
+            sample,
+            createHtmlCanvas,
+        )
+
         try {
             return canvas?.toDataURL('image/png') ?? ''
         } catch {
@@ -460,10 +664,14 @@ export class TravelingSnakeGlassMaterial extends GlassMaterial {
     private readonly height = 64
 
     bake(): GlassPixels {
-        return this.bakeTexture(this.width, this.height, (px, py) => ({
-            progress: px / (this.width - 1),
-            crossSection: py / (this.height - 1),
-        }))
+        return this.bakeTexture(
+            this.width,
+            this.height,
+            (px, py) => ({
+                progress: px / (this.width - 1),
+                crossSection: py / (this.height - 1),
+            }),
+        )
     }
 }
 
@@ -484,20 +692,34 @@ export class ClosedGlassStripMaterial extends GlassMaterial {
         style: GlassMaterialStyle,
         options: ClosedGlassStripMaterialOptions = {},
     ) {
-        super(colors, tailAlpha, {
-            ...style,
-            tailFadeFraction: 0,
-            minTailOpacity: 1,
-        })
-        this.width = Math.max(2, Math.round(options.width ?? 256))
-        this.height = Math.max(2, Math.round(options.height ?? 64))
+        super(
+            colors,
+            tailAlpha,
+            {
+                ...style,
+                tailFadeFraction: 0,
+                minTailOpacity: 1,
+            },
+        )
+        this.width = Math.max(
+            2,
+            Math.round(options.width ?? 256),
+        )
+        this.height = Math.max(
+            2,
+            Math.round(options.height ?? 64),
+        )
     }
 
     bake(): GlassPixels {
-        return this.bakeTexture(this.width, this.height, (px, py) => ({
-            progress: px / (this.width - 1),
-            crossSection: py / (this.height - 1),
-        }))
+        return this.bakeTexture(
+            this.width,
+            this.height,
+            (px, py) => ({
+                progress: px / (this.width - 1),
+                crossSection: py / (this.height - 1),
+            }),
+        )
     }
 }
 
@@ -527,26 +749,59 @@ export class CircularGlassMaterial extends GlassMaterial {
         style: GlassMaterialStyle,
         options: CircularGlassMaterialOptions = {},
     ) {
-        super(colors, tailAlpha, style)
-        this.size = Math.max(2, Math.round(options.size ?? 128))
-        this.translucency = Math.max(0, Math.min(1, options.translucency ?? 1))
-        this.rimFeatherFraction = Math.max(0, Math.min(0.5, options.rimFeatherFraction ?? 0.08))
-        this.discStyle = { ...DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE, ...options.discStyle }
+        super(
+            colors,
+            tailAlpha,
+            style,
+        )
+        this.size = Math.max(
+            2,
+            Math.round(options.size ?? 128),
+        )
+        this.translucency = Math.max(
+            0,
+            Math.min(1, options.translucency ?? 1),
+        )
+        this.rimFeatherFraction = Math.max(
+            0,
+            Math.min(0.5, options.rimFeatherFraction ?? 0.08),
+        )
+        this.discStyle = {
+            ...DEFAULT_CIRCULAR_GLASS_MATERIAL_STYLE,
+            ...options.discStyle,
+        }
     }
 
     bake(): GlassPixels {
         const size = this.size
-        return this.bakeTexture(size, size, (px, py) => this.sampleDisc(px, py))
+
+        return this.bakeTexture(
+            size,
+            size,
+            (px, py) => this.sampleDisc(px, py),
+        )
     }
 
     bakeDataUrl(): string {
         const size = this.size
-        return this.bakePngDataUrl(size, size, (px, py) => this.sampleDisc(px, py))
+
+        return this.bakePngDataUrl(
+            size,
+            size,
+            (px, py) => this.sampleDisc(px, py),
+        )
     }
 
-    protected override shadeSample(sample: GlassUvSample): { color: RgbColor; alpha: number } {
+    protected override shadeSample(sample: GlassUvSample): {
+        color: RgbColor
+        alpha: number
+    } {
         const shaded = super.shadeSample(sample)
-        const white = { r: 255, g: 255, b: 255 }
+        const white = {
+            r: 255,
+            g: 255,
+            b: 255,
+        }
         const glassShadow = parseHexColor(this.style.shadowColor)
         const volume = clamp01(sample.volume ?? 0)
         const fresnel = clamp01(sample.fresnel ?? 0)
@@ -563,8 +818,16 @@ export class CircularGlassMaterial extends GlassMaterial {
             caustic * discStyle.causticLightStrength
                 + specular * discStyle.specularLightStrength,
         )
-        const shadowedColor = mixColor(shaded.color, glassShadow, Math.min(this.style.shadowMixMax, absorption))
-        const color = mixColor(shadowedColor, white, Math.min(this.style.highlightWhiteMixMax, transmittedLight))
+        const shadowedColor = mixColor(
+            shaded.color,
+            glassShadow,
+            Math.min(this.style.shadowMixMax, absorption),
+        )
+        const color = mixColor(
+            shadowedColor,
+            white,
+            Math.min(this.style.highlightWhiteMixMax, transmittedLight),
+        )
         const alpha = clamp01(
             shaded.alpha * (discStyle.alphaBaseMultiplier + volume * discStyle.alphaVolumeStrength)
                 + specular * discStyle.specularAlphaStrength
@@ -577,7 +840,10 @@ export class CircularGlassMaterial extends GlassMaterial {
         }
     }
 
-    private sampleDisc(px: number, py: number): GlassUvSample {
+    private sampleDisc(
+        px: number,
+        py: number,
+    ): GlassUvSample {
         const size = this.size
         const center = (size - 1) / 2
         const radius = size / 2
@@ -587,42 +853,110 @@ export class CircularGlassMaterial extends GlassMaterial {
         const distance = Math.sqrt(dx * dx + dy * dy)
         const innerDistance = Math.min(1, distance)
         const discStyle = this.discStyle
-        const rimThickness = smoothstep(discStyle.rimThicknessStart, discStyle.rimThicknessEnd, innerDistance)
-        const upperMeniscusShadow = gaussian(dy, discStyle.upperMeniscusShadowCenterY, discStyle.upperMeniscusShadowWidthY)
-            * gaussian(dx, discStyle.upperMeniscusShadowCenterX, discStyle.upperMeniscusShadowWidthX)
-        const lowerMeniscusDepth = gaussian(dy, discStyle.lowerMeniscusDepthCenterY, discStyle.lowerMeniscusDepthWidthY)
-            * gaussian(dx, discStyle.lowerMeniscusDepthCenterX, discStyle.lowerMeniscusDepthWidthX)
-        const lowerTransmittedLight = gaussian(dy, discStyle.lowerTransmittedLightCenterY, discStyle.lowerTransmittedLightWidthY)
-            * gaussian(dx, discStyle.lowerTransmittedLightCenterX, discStyle.lowerTransmittedLightWidthX)
-        const topReflection = gaussian(dy, discStyle.topReflectionCenterY, discStyle.topReflectionWidthY)
-            * gaussian(dx, discStyle.topReflectionCenterX, discStyle.topReflectionWidthX)
-        const leftEdgeReflection = gaussian(dx, discStyle.leftEdgeReflectionCenterX, discStyle.leftEdgeReflectionWidthX)
-            * gaussian(dy, discStyle.leftEdgeReflectionCenterY, discStyle.leftEdgeReflectionWidthY)
-        const smallGlint = gaussian(dx, discStyle.smallGlintCenterX, discStyle.smallGlintWidthX)
-            * gaussian(dy, discStyle.smallGlintCenterY, discStyle.smallGlintWidthY)
+        const rimThickness = smoothstep(
+            discStyle.rimThicknessStart,
+            discStyle.rimThicknessEnd,
+            innerDistance,
+        )
+        const upperMeniscusShadow = gaussian(
+            dy,
+            discStyle.upperMeniscusShadowCenterY,
+            discStyle.upperMeniscusShadowWidthY,
+        )
+            * gaussian(
+                dx,
+                discStyle.upperMeniscusShadowCenterX,
+                discStyle.upperMeniscusShadowWidthX,
+            )
+        const lowerMeniscusDepth = gaussian(
+            dy,
+            discStyle.lowerMeniscusDepthCenterY,
+            discStyle.lowerMeniscusDepthWidthY,
+        )
+            * gaussian(
+                dx,
+                discStyle.lowerMeniscusDepthCenterX,
+                discStyle.lowerMeniscusDepthWidthX,
+            )
+        const lowerTransmittedLight = gaussian(
+            dy,
+            discStyle.lowerTransmittedLightCenterY,
+            discStyle.lowerTransmittedLightWidthY,
+        )
+            * gaussian(
+                dx,
+                discStyle.lowerTransmittedLightCenterX,
+                discStyle.lowerTransmittedLightWidthX,
+            )
+        const topReflection = gaussian(
+            dy,
+            discStyle.topReflectionCenterY,
+            discStyle.topReflectionWidthY,
+        )
+            * gaussian(
+                dx,
+                discStyle.topReflectionCenterX,
+                discStyle.topReflectionWidthX,
+            )
+        const leftEdgeReflection = gaussian(
+            dx,
+            discStyle.leftEdgeReflectionCenterX,
+            discStyle.leftEdgeReflectionWidthX,
+        )
+            * gaussian(
+                dy,
+                discStyle.leftEdgeReflectionCenterY,
+                discStyle.leftEdgeReflectionWidthY,
+            )
+        const smallGlint = gaussian(
+            dx,
+            discStyle.smallGlintCenterX,
+            discStyle.smallGlintWidthX,
+        )
+            * gaussian(
+                dy,
+                discStyle.smallGlintCenterY,
+                discStyle.smallGlintWidthY,
+            )
         const horizontalWave = 0.5 + Math.sin(
-                    (
+            (
                         dx * discStyle.horizontalWaveFrequencyX
                         + dy * discStyle.horizontalWaveFrequencyY
                         + discStyle.horizontalWavePhase
                     ) * Math.PI,
-                ) * 0.5
+        ) * 0.5
         const fineWave = 0.5 + Math.sin(
-                    (
+            (
                         dx * discStyle.fineWaveFrequencyX
                         + dy * discStyle.fineWaveFrequencyY
                         + discStyle.fineWavePhase
                     ) * Math.PI,
-                ) * 0.5
-        const upperStriation = gaussian(dy, discStyle.upperStriationCenterY, discStyle.upperStriationWidthY)
+        ) * 0.5
+        const upperStriation = gaussian(
+            dy,
+            discStyle.upperStriationCenterY,
+            discStyle.upperStriationWidthY,
+        )
             * (
                 discStyle.upperStriationBase
                 + horizontalWave * discStyle.upperStriationHorizontalWaveStrength
                 + fineWave * discStyle.upperStriationFineWaveStrength
             )
-        const lowerStriation = gaussian(dy, discStyle.lowerStriationCenterY, discStyle.lowerStriationWidthY)
-            * gaussian(dx, discStyle.lowerStriationCenterX, discStyle.lowerStriationWidthX)
-        const internalVeil = gaussian(dy, discStyle.internalVeilCenterY, discStyle.internalVeilWidthY)
+        const lowerStriation = gaussian(
+            dy,
+            discStyle.lowerStriationCenterY,
+            discStyle.lowerStriationWidthY,
+        )
+            * gaussian(
+                dx,
+                discStyle.lowerStriationCenterX,
+                discStyle.lowerStriationWidthX,
+            )
+        const internalVeil = gaussian(
+            dy,
+            discStyle.internalVeilCenterY,
+            discStyle.internalVeilWidthY,
+        )
             * (discStyle.internalVeilBase + horizontalWave * discStyle.internalVeilHorizontalWaveStrength)
         const flatThickness = clamp01(
             discStyle.flatThicknessBase
@@ -630,10 +964,10 @@ export class CircularGlassMaterial extends GlassMaterial {
                 + lowerMeniscusDepth * discStyle.flatThicknessLowerDepthStrength
                 + internalVeil * discStyle.flatThicknessInternalVeilStrength
                 + smoothstep(
-                        discStyle.flatThicknessVerticalDepthStartY,
-                        discStyle.flatThicknessVerticalDepthEndY,
-                        dy,
-                    ) * discStyle.flatThicknessVerticalDepthStrength,
+                    discStyle.flatThicknessVerticalDepthStartY,
+                    discStyle.flatThicknessVerticalDepthEndY,
+                    dy,
+                ) * discStyle.flatThicknessVerticalDepthStrength,
         )
         const directionalLight = clamp01(
             discStyle.directionalLightBase
@@ -651,7 +985,11 @@ export class CircularGlassMaterial extends GlassMaterial {
                 - dx * discStyle.crossSectionXStrength,
         )
         // 1 inside the disc, feathered to 0 across the rim, 0 outside.
-        const rimMask = smoothstep(1, innerEdge, distance)
+        const rimMask = smoothstep(
+            1,
+            innerEdge,
+            distance,
+        )
         const lensAlpha = discStyle.lensAlphaBase
             + flatThickness * discStyle.lensAlphaThicknessStrength
             + lowerMeniscusDepth * discStyle.lensAlphaLowerDepthStrength

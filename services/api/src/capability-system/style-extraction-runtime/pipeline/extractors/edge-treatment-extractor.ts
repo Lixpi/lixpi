@@ -33,8 +33,19 @@ const extractor: StyleExtractor = {
     displayName: 'Edge treatment',
     description: 'Extracts the canvas-edge treatment and how forms terminate at their boundaries: frame presence, vignette, falloff behavior.',
     minDominance: 0.3,
-    applicableTo: (scene) => (scene.axisDominance['edge-treatment'] ?? 0) >= 0.3,
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    applicableTo: scene => (scene.axisDominance['edge-treatment'] ?? 0) >= 0.3,
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

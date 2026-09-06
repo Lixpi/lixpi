@@ -77,26 +77,32 @@ const CHARACTER_PANEL_HARD_DIMENSIONS = new Set([
     'action-pose',
 ])
 
-export function getCharacterPanelStructuralFailures(
+export const getCharacterPanelStructuralFailures = (
     panel: CharacterPanelSpec,
     assessment: CharacterPanelAssessment,
-): string[] {
-    if (!assessment.valid) return []
-    const assessmentsByDimension = new Map(assessment.dimensions.map(dimension => [
-        dimension.dimension,
-        dimension,
-    ]))
-    return panel.acceptanceDimensions
-        .filter(dimension => CHARACTER_PANEL_HARD_DIMENSIONS.has(dimension))
-        .filter(dimension => {
-            const result = assessmentsByDimension.get(dimension)
-            return !result
+): string[] => {
+    if (!assessment.valid)
+        return []
+
+    const assessmentsByDimension = new Map(
+        assessment.dimensions.map(
+            dimension => [
+                dimension.dimension,
+                dimension,
+            ],
+        ),
+    )
+
+    return panel.acceptanceDimensions.filter(dimension => CHARACTER_PANEL_HARD_DIMENSIONS.has(dimension)).filter(dimension => {
+        const result = assessmentsByDimension.get(dimension)
+
+        return !result
                 || result.score < CHARACTER_PANEL_HARD_ACCEPTANCE_THRESHOLD
                 || result.mismatchCodes.length > 0
-        })
+    })
 }
 
-export async function assessCharacterPanel(args: {
+export const assessCharacterPanel = async (args: {
     panel: CharacterPanelSpec
     attemptId: string
     candidateBytes: Buffer
@@ -111,7 +117,7 @@ export async function assessCharacterPanel(args: {
     vlm: CharacterPanelVlmAssessorPort
     fidelity?: CharacterFidelityPort
     signal?: AbortSignal
-}): Promise<CharacterPanelAssessment> {
+}): Promise<CharacterPanelAssessment> => {
     await assertUsablePanel(args.candidateBytes)
     const candidateDataUrl = `data:image/png;base64,${args.candidateBytes.toString('base64')}`
     const [vlmAssessment, fidelity] = await Promise.all([
@@ -120,24 +126,36 @@ export async function assessCharacterPanel(args: {
     ])
     const dimensions = vlmAssessment.dimensions
     const scores = dimensions.map(dimension => clamp(dimension.score))
-    if (fidelity.metric.available && fidelity.metric.cosineSimilarity !== undefined) {
-        scores.push(clamp(fidelity.metric.cosineSimilarity))
-    }
+
+    if (
+        fidelity.metric.available
+        && fidelity.metric.cosineSimilarity !== undefined
+    )
+        scores.push(
+            clamp(fidelity.metric.cosineSimilarity),
+        )
+
     const score = scores.reduce((sum, value) => sum + value, 0) / Math.max(1, scores.length)
-    const failedDimensions = dimensions
-        .filter(dimension => dimension.score < 0.72 || dimension.mismatchCodes.length > 0)
-        .map(dimension => dimension.dimension)
-    if (fidelity.metric.available && (fidelity.metric.cosineSimilarity ?? 0) < 0.45) {
+    const failedDimensions = dimensions.filter(dimension => dimension.score < 0.72 || dimension.mismatchCodes.length > 0).map(
+        dimension => dimension.dimension,
+    )
+
+    if (
+        fidelity.metric.available
+        && (fidelity.metric.cosineSimilarity ?? 0) < 0.45
+    )
         failedDimensions.push('facial-identity')
-    }
+
     if (
         !fidelity.metric.available
         && fidelity.metric.unavailableReason !== 'face-not-required'
         && fidelity.metric.unavailableReason !== 'non-photographic'
-    ) {
+    )
         failedDimensions.push('face-similarity-unavailable')
-    }
-    if (dimensions.length === 0) failedDimensions.push('per-dimension-evaluation-unavailable')
+
+    if (dimensions.length === 0)
+        failedDimensions.push('per-dimension-evaluation-unavailable')
+
     return {
         panelId: args.panel.panelId,
         attemptId: args.attemptId,
@@ -145,8 +163,12 @@ export async function assessCharacterPanel(args: {
         score,
         dimensions,
         fidelityMetric: fidelity.metric,
-        fidelityModelIds: fidelity.detector.artifactId && fidelity.recognizer.artifactId
-            ? { detector: fidelity.detector.artifactId, recognizer: fidelity.recognizer.artifactId }
+        fidelityModelIds: fidelity.detector.artifactId
+            && fidelity.recognizer.artifactId
+            ? {
+                detector: fidelity.detector.artifactId,
+                recognizer: fidelity.recognizer.artifactId,
+            }
             : undefined,
         ...(fidelity.error ? { fidelityError: fidelity.error } : {}),
         vlmAssessor: vlmAssessment.assessor,
@@ -174,16 +196,21 @@ const assessPanelDimensions = async (
             signal: args.signal,
         })
     } catch (error) {
-        if (args.signal?.aborted) throw error
+        if (args.signal?.aborted)
+            throw error
+
         const diagnostic = error instanceof Error ? error.message : String(error)
-        warn(`[CharacterCreatorFidelity] dimension-assessor-unavailable ${
-            JSON.stringify({
-                attemptId: args.attemptId,
-                panelId: args.panel.panelId,
-                errorName: error instanceof Error ? error.name : 'Error',
-                diagnostic: diagnostic.slice(0, 320),
-            })
-        }`)
+        warn(
+            `[CharacterCreatorFidelity] dimension-assessor-unavailable ${
+                JSON.stringify({
+                    attemptId: args.attemptId,
+                    panelId: args.panel.panelId,
+                    errorName: error instanceof Error ? error.name : 'Error',
+                    diagnostic: diagnostic.slice(0, 320),
+                })
+            }`,
+        )
+
         return {
             dimensions: [],
             assessor: 'unavailable',
@@ -198,28 +225,34 @@ const assessPanelDimensions = async (
 
 const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[0]): Promise<CharacterFidelityAssessmentResponse> => {
     const requiresFaceFidelity = args.panel.acceptanceDimensions.includes('facial-identity')
+
     if (
-        !args.fidelity || args.evidence.medium !== 'photograph'
+        !args.fidelity
+        || args.evidence.medium !== 'photograph'
         || !requiresFaceFidelity
     ) {
         const reason: CharacterFidelityUnavailableReason = args.evidence.medium !== 'photograph'
             ? 'non-photographic'
             : !requiresFaceFidelity
-            ? 'face-not-required'
-            : 'assessor-unavailable'
-        info(`[CharacterFidelity] local-skip ${
-            JSON.stringify({
-                attemptId: args.attemptId,
-                panelId: args.panel.panelId,
-                panelKind: args.panel.kind,
-                sourceMedium: args.evidence.medium,
-                requiresFaceFidelity,
-                fidelityPortAvailable: Boolean(args.fidelity),
-                reason,
-            })
-        }`)
+                ? 'face-not-required'
+                : 'assessor-unavailable'
+        info(
+            `[CharacterFidelity] local-skip ${
+                JSON.stringify({
+                    attemptId: args.attemptId,
+                    panelId: args.panel.panelId,
+                    panelKind: args.panel.kind,
+                    sourceMedium: args.evidence.medium,
+                    requiresFaceFidelity,
+                    fidelityPortAvailable: Boolean(args.fidelity),
+                    reason,
+                })
+            }`,
+        )
+
         return unavailableMetric(args, reason)
     }
+
     const request: CharacterFidelityAssessmentRequest = {
         jobId: args.attemptId,
         organizationId: args.candidateCoordinate.organizationId,
@@ -230,20 +263,26 @@ const assessFaceFidelity = async (args: Parameters<typeof assessCharacterPanel>[
         expectedFaceVisibility: 'required',
         sourceMedium: args.evidence.medium,
     }
+
     // Face fidelity is one scoring signal among the VLM dimensions, never a
     // hard dependency: an unreachable or cold-starting assessor must degrade to
     // an unavailable metric instead of failing the panel and killing the sheet.
     try {
         return await args.fidelity.assess(request, args.signal)
     } catch (error) {
-        if (args.signal?.aborted) throw error
-        warn(`[CharacterFidelity] assessor-unavailable ${
-            JSON.stringify({
-                attemptId: args.attemptId,
-                panelId: args.panel.panelId,
-                error: error instanceof Error ? error.message : String(error),
-            })
-        }`)
+        if (args.signal?.aborted)
+            throw error
+
+        warn(
+            `[CharacterFidelity] assessor-unavailable ${
+                JSON.stringify({
+                    attemptId: args.attemptId,
+                    panelId: args.panel.panelId,
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            }`,
+        )
+
         return unavailableMetric(args, 'assessor-unavailable')
     }
 }
@@ -255,22 +294,39 @@ const unavailableMetric = (
     jobId: args.attemptId,
     panelId: args.panel.panelId,
     attemptId: args.attemptId,
-    metric: { available: false, unavailableReason: reason },
+    metric: {
+        available: false,
+        unavailableReason: reason,
+    },
     sourceDetections: [],
     candidateDetections: [],
-    detector: { artifactId: '', sha256: '' },
-    recognizer: { artifactId: '', sha256: '' },
+    detector: {
+        artifactId: '',
+        sha256: '',
+    },
+    recognizer: {
+        artifactId: '',
+        sha256: '',
+    },
 })
 
 const assertUsablePanel = async (bytes: Buffer): Promise<void> => {
     try {
         const metadata = await sharp(bytes).metadata()
-        if (!metadata.width || !metadata.height || metadata.width < 128 || metadata.height < 128) {
+
+        if (
+            !metadata.width
+            || !metadata.height
+            || metadata.width < 128
+            || metadata.height < 128
+        )
             throw new Error('dimensions')
-        }
     } catch (error) {
         throw new Error(`CHARACTER_PANEL_CORRUPT:${(error as Error).message}`)
     }
 }
 
-const clamp = (value: number): number => Math.max(0, Math.min(1, value))
+const clamp = (value: number): number => Math.max(
+    0,
+    Math.min(1, value),
+)

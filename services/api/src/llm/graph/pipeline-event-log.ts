@@ -54,9 +54,10 @@ export class PipelineEventLog {
 
     static fromSingleton(options: PipelineEventLogOptions = {}): PipelineEventLog {
         const natsService = NATS_Service.getInstance()
-        if (!natsService) {
+
+        if (!natsService)
             throw new Error('NATS service is not initialized')
-        }
+
         return new PipelineEventLog(natsService, options)
     }
 
@@ -72,11 +73,16 @@ export class PipelineEventLog {
             publishedAt: Date.now(),
             streamSequence: 0,
         }
-        const ack = await this.natsService.publishJetStream(subject, envelopeWithoutSequence, {
-            msgID: payload.eventId,
-            expect: { streamName },
-        })
+        const ack = await this.natsService.publishJetStream(
+            subject,
+            envelopeWithoutSequence,
+            {
+                msgID: payload.eventId,
+                expect: { streamName },
+            },
+        )
         const streamSequence = getPublishAckSequence(ack)
+
         return {
             ...envelopeWithoutSequence,
             streamSequence,
@@ -86,11 +92,18 @@ export class PipelineEventLog {
     async replayPipelineEvents(options: ReplayPipelineEventsOptions): Promise<PipelineReplayResult> {
         const streamName = getPipelineEventStreamName(options.workspaceId)
         const subject = getPipelineEventSubject(options.workspaceId, options.pipelineId)
-        const lastMessage = await this.natsService.getJetStreamMessage<PipelineEventEnvelope>(streamName, {
-            last_by_subj: subject,
-        })
+        const lastMessage = await this.natsService.getJetStreamMessage<PipelineEventEnvelope>(
+            streamName,
+            {
+                last_by_subj: subject,
+            },
+        )
         const startStreamSeq = options.startStreamSeq ?? 1
-        if (!lastMessage || lastMessage.seq < startStreamSeq) {
+
+        if (
+            !lastMessage
+            || lastMessage.seq < startStreamSeq
+        ) {
             return {
                 streamName,
                 subject,
@@ -99,32 +112,58 @@ export class PipelineEventLog {
             }
         }
 
-        const messages: Array<{ data: PipelineEventEnvelope; subject: string; seq: number }> = []
+        const messages: Array<{
+            data: PipelineEventEnvelope
+            subject: string
+            seq: number
+        }> = []
         const maxMessages = options.maxMessages ?? 1000
         let nextSeq = startStreamSeq
-        while (nextSeq <= lastMessage.seq && messages.length < maxMessages) {
-            const message = await this.natsService.getJetStreamMessage<PipelineEventEnvelope>(streamName, {
-                seq: nextSeq,
-                next_by_subj: subject,
-            })
-            if (!message || message.seq > lastMessage.seq) break
+
+        while (
+            nextSeq <= lastMessage.seq
+            && messages.length < maxMessages
+        ) {
+            const message = await this.natsService.getJetStreamMessage<PipelineEventEnvelope>(
+                streamName,
+                {
+                    seq: nextSeq,
+                    next_by_subj: subject,
+                },
+            )
+
+            if (
+                !message
+                || message.seq > lastMessage.seq
+            )
+                break
+
             messages.push(message)
             nextSeq = message.seq + 1
         }
+
         return {
             streamName,
             subject,
-            events: messages.map(message => ({
-                ...message.data,
-                streamSequence: message.seq,
-            })),
+            events: messages.map(
+                message => ({
+                    ...message.data,
+                    streamSequence: message.seq,
+                }),
+            ),
             hasMore: (messages.at(-1)?.seq ?? startStreamSeq - 1) < lastMessage.seq,
         }
     }
 
-    async purgePipelineEvents(workspaceId: string, pipelineId: string): Promise<void> {
+    async purgePipelineEvents(
+        workspaceId: string,
+        pipelineId: string,
+    ): Promise<void> {
         const streamName = await this.ensureWorkspaceStream(workspaceId)
-        await this.natsService.purgeJetStreamSubject(streamName, getPipelineEventSubject(workspaceId, pipelineId))
+        await this.natsService.purgeJetStreamSubject(
+            streamName,
+            getPipelineEventSubject(workspaceId, pipelineId),
+        )
     }
 
     async ensureWorkspaceStream(workspaceId: string): Promise<string> {
@@ -139,11 +178,15 @@ export class PipelineEventLog {
             max_bytes: this.options.maxBytes ?? DEFAULT_MAX_BYTES,
             max_msgs_per_subject: this.options.maxMsgsPerSubject ?? DEFAULT_MAX_MSGS_PER_SUBJECT,
         })
+
         return streamName
     }
 }
 
-export function getPipelineEventSubject(workspaceId: string, pipelineId: string): string {
+export function getPipelineEventSubject(
+    workspaceId: string,
+    pipelineId: string,
+): string {
     return [
         NATS_SUBJECTS.AI_INTERACTION_SUBJECTS.CHAT_PIPELINE_EVENTS,
         sanitizeSubjectToken(workspaceId),
@@ -160,21 +203,37 @@ function getPipelineEventStreamSubject(workspaceId: string): string {
 }
 
 function getPublishAckSequence(ack: any): number {
-    if (typeof ack?.seq === 'number') return ack.seq
-    if (typeof ack?.sequence === 'number') return ack.sequence
+    if (typeof ack?.seq === 'number')
+        return ack.seq
+
+    if (typeof ack?.sequence === 'number')
+        return ack.sequence
+
     throw new Error('JetStream publish ack did not include a stream sequence')
 }
 
 function sanitizeForJetStream(value: unknown): unknown {
-    if (value === undefined) return null
-    if (value === null || typeof value !== 'object') return value
-    if (Array.isArray(value)) return value.map(item => sanitizeForJetStream(item))
+    if (value === undefined)
+        return null
+
+    if (
+        value === null
+        || typeof value !== 'object'
+    )
+        return value
+
+    if (Array.isArray(value))
+        return value.map(item => sanitizeForJetStream(item))
 
     const result: Record<string, unknown> = {}
+
     for (const [key, item] of Object.entries(value)) {
-        if (item === undefined) continue
+        if (item === undefined)
+            continue
+
         result[key] = sanitizeForJetStream(item)
     }
+
     return result
 }
 

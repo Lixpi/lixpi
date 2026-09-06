@@ -102,7 +102,7 @@ export const uiKitSettings: UiKitRuntimeSettings = {
     },
 }
 
-export function configureUiKit(settings: UiKitRuntimeSettings): void {
+export const configureUiKit = (settings: UiKitRuntimeSettings): void => {
     uiKitSettings.modelSelectorDropdown = settings.modelSelectorDropdown
     uiKitSettings.dropdown = settings.dropdown
     uiKitSettings.slidingDropdown = settings.slidingDropdown

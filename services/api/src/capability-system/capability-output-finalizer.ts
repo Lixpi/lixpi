@@ -54,31 +54,42 @@ const capabilityOutputFinalizers = new Map<string, CapabilityOutputFinalizer>([[
     },
 ]])
 
-export async function finalizePendingCapabilityOutputsForState(
-    state: ProviderState,
-): Promise<FinalizedCapabilityOutput[]> {
+export const finalizePendingCapabilityOutputsForState = async (state: ProviderState): Promise<FinalizedCapabilityOutput[]> => {
     const pending = state.pendingCapabilityOutputFinalizations ?? []
     const finalized: FinalizedCapabilityOutput[] = []
+
     for (const output of pending) {
         finalized.push(await requireCapabilityOutputFinalizer(output.capabilityId).finalize(state, output))
     }
+
     return finalized
 }
 
-export async function discardPendingCapabilityOutputsForState(state: ProviderState): Promise<void> {
+export const discardPendingCapabilityOutputsForState = async (state: ProviderState): Promise<void> => {
     const pending = state.pendingCapabilityOutputFinalizations ?? []
-    await Promise.allSettled(pending.map(async output => {
-        await capabilityOutputFinalizers.get(output.capabilityId)?.discard(state, output)
-    }))
+    await Promise.allSettled(
+        pending.map(async output => void (await capabilityOutputFinalizers.get(output.capabilityId)?.discard(state, output))),
+    )
 }
 
 function requireCapabilityOutputFinalizer(capabilityId: string): CapabilityOutputFinalizer {
     const finalizer = capabilityOutputFinalizers.get(capabilityId)
-    if (!finalizer) throw new Error(`CAPABILITY_OUTPUT_FINALIZER_NOT_REGISTERED:${capabilityId}`)
+
+    if (!finalizer)
+        throw new Error(`CAPABILITY_OUTPUT_FINALIZER_NOT_REGISTERED:${capabilityId}`)
+
     return finalizer
 }
 
-function requireEventMetaString(value: unknown, errorCode: string): string {
-    if (typeof value !== 'string' || !value) throw new Error(errorCode)
+function requireEventMetaString(
+    value: unknown,
+    errorCode: string,
+): string {
+    if (
+        typeof value !== 'string'
+        || !value
+    )
+        throw new Error(errorCode)
+
     return value
 }

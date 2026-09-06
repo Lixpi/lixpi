@@ -46,14 +46,24 @@ let nats: NatsConnection | null = null
 // issuer-nkey strategy hands the workload the NEX-account nkey, so it
 // authenticates the same way the node does. Best-effort: a NATS failure disables
 // the completion event but never blocks or fails the sync.
-async function getNats(): Promise<NatsConnection | null> {
-    if (nats && !nats.isClosed()) return nats
+const getNats = async (): Promise<NatsConnection | null> => {
+    if (
+        nats
+        && !nats.isClosed()
+    )
+        return nats
+
     nats = null
 
     const servers = process.env.NEX_WORKLOAD_NATS_SERVERS?.split(',').map(s => s.trim()).filter(Boolean)
     const seed = process.env.NEX_WORKLOAD_NATS_NKEY
-    if (!servers?.length || !seed) {
+
+    if (
+        !servers?.length
+        || !seed
+    ) {
         warn('NEX_WORKLOAD_NATS_* not provided — aiModels.syncCompleted will not be published')
+
         return null
     }
 
@@ -61,22 +71,34 @@ async function getNats(): Promise<NatsConnection | null> {
         nats = await connect({
             servers,
             name: 'nex-ai-models-sync',
-            authenticator: nkeyAuthenticator(new TextEncoder().encode(seed)),
+            authenticator: nkeyAuthenticator(
+                new TextEncoder().encode(seed),
+            ),
         })
         info(`nex-entry connected to NATS (${nats.getServer()}) for completion events`)
+
         return nats
     } catch (error) {
         err('nex-entry could not connect to NATS; completion events disabled:', error)
         nats = null
+
         return null
     }
 }
 
-async function publishCompleted(payload: Record<string, unknown>): Promise<void> {
+const publishCompleted = async (payload: Record<string, unknown>): Promise<void> => {
     const nc = await getNats()
-    if (!nc) return
+
+    if (!nc)
+        return
+
     try {
-        nc.publish(AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED, new TextEncoder().encode(JSON.stringify(payload)))
+        nc.publish(
+            AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED,
+            new TextEncoder().encode(
+                JSON.stringify(payload),
+            ),
+        )
         await nc.flush()
         info(`📣 published ${AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED}`)
     } catch (error) {
@@ -84,8 +106,9 @@ async function publishCompleted(payload: Record<string, unknown>): Promise<void>
     }
 }
 
-async function runOnce(): Promise<void> {
+const runOnce = async (): Promise<void> => {
     const startedAt = new Date()
+
     try {
         info(`🚀 ai-models sync starting (${startedAt.toISOString()})`)
         const result = await sync.synchronizeModels()
@@ -109,28 +132,28 @@ async function runOnce(): Promise<void> {
 
 // Self-scheduling loop: wait `intervalMs` AFTER each run completes, so a slow
 // run can never overlap the next one (no concurrent DynamoDB writes).
-async function loop(): Promise<void> {
+const loop = async (): Promise<void> => {
     await runOnce()
-    timer = setTimeout(() => {
-        void loop()
-    }, intervalMs)
+    timer = setTimeout(() => void loop(), intervalMs)
 }
 
 const shutdown = async (signal: string): Promise<void> => {
     warn(`nex-entry received ${signal}; shutting down ai-models sync`)
-    if (timer) clearTimeout(timer)
+
+    if (timer)
+        clearTimeout(timer)
+
     try {
         await nats?.drain()
-    } catch { /* best-effort */ }
+    } catch {
+        // best-effort
+    }
+
     process.exit(0)
 }
 
-process.on('SIGTERM', () => {
-    void shutdown('SIGTERM')
-})
-process.on('SIGINT', () => {
-    void shutdown('SIGINT')
-})
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))
 
 info(`nex-entry ai-models-sync up; interval=${intervalMs}ms`)
 void loop()

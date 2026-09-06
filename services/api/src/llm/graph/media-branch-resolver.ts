@@ -60,7 +60,11 @@ type MediaBranchVlmRawResolution = {
     }>
 }
 
-const SUPPORTED_RESOLVER_PROVIDERS = new Set<ProviderName>(['Anthropic', 'OpenAI', 'Google'])
+const SUPPORTED_RESOLVER_PROVIDERS = new Set<ProviderName>([
+    'Anthropic',
+    'OpenAI',
+    'Google',
+])
 const RESOLVER_KIND = 'structured-vlm' as const
 
 const VALID_MODES = new Set<MediaBranchVlmResolution['mode']>([
@@ -209,20 +213,25 @@ const SYSTEM_PROMPT = [
     'Reserve mode="ambiguous" strictly for when the visual referent genuinely cannot be determined from the candidate pixels — never to flag an unsupported output type or a request you believe cannot be fulfilled. If the prompt is genuinely impossible to resolve from the candidate images, return mode="ambiguous" with low confidence and explain why.',
 ].join('\n')
 
-const getResolverModel = (state: ProviderState): { provider: ProviderName; modelVersion: string } => {
+const getResolverModel = (state: ProviderState): {
+    provider: ProviderName
+    modelVersion: string
+} => {
     const configuredProvider = process.env.MEDIA_BRANCH_RESOLVER_PROVIDER as ProviderName | undefined
     const configuredModel = process.env.MEDIA_BRANCH_RESOLVER_MODEL_VERSION
     const provider = configuredProvider ?? state.provider
     const modelVersion = configuredModel ?? (provider === state.provider ? state.modelVersion : undefined)
 
-    if (!SUPPORTED_RESOLVER_PROVIDERS.has(provider)) {
+    if (!SUPPORTED_RESOLVER_PROVIDERS.has(provider))
         throw new Error(`Image branch resolver requires a VLM-capable provider; got ${provider}`)
-    }
-    if (!modelVersion) {
-        throw new Error(`Image branch resolver model is not configured for provider ${provider}`)
-    }
 
-    return { provider, modelVersion }
+    if (!modelVersion)
+        throw new Error(`Image branch resolver model is not configured for provider ${provider}`)
+
+    return {
+        provider,
+        modelVersion,
+    }
 }
 
 const compactCandidateForPrompt = (candidate: MediaBranchCandidateImage): Record<string, unknown> => ({
@@ -246,23 +255,37 @@ const resolveCandidateImageUrls = async (
     candidates: MediaBranchCandidateImage[],
     natsService: NatsService,
 ): Promise<MediaBranchCandidateImage[]> => {
-    return Promise.all(candidates.map(async (candidate) => {
-        const resolved = await resolveImageUrls([{
-            type: 'input_image',
-            image_url: candidate.imageUrl,
-            detail: 'high',
-        }], natsService)
+    return Promise.all(
+        candidates.map(async candidate => {
+            const resolved = await resolveImageUrls(
+                [{
+                    type: 'input_image',
+                    image_url: candidate.imageUrl,
+                    detail: 'high',
+                }],
+                natsService,
+            )
 
-        if (!Array.isArray(resolved)) return candidate
-        const imageBlock = resolved.find((block) => block?.type === 'input_image')
-        const imageUrl = typeof imageBlock?.image_url === 'string' ? imageBlock.image_url : candidate.imageUrl
-        return imageUrl === candidate.imageUrl ? candidate : { ...candidate, imageUrl }
-    }))
+            if (!Array.isArray(resolved))
+                return candidate
+
+            const imageBlock = resolved.find(block => block?.type === 'input_image')
+            const imageUrl = typeof imageBlock?.image_url === 'string' ? imageBlock.image_url : candidate.imageUrl
+
+            return imageUrl === candidate.imageUrl ? candidate : {
+                ...candidate,
+                imageUrl,
+            }
+        }),
+    )
 }
 
 const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
     const snapshot = state.mediaBranchCandidateSnapshot
-    if (!snapshot) throw new Error('Image branch candidate snapshot is required')
+
+    if (!snapshot)
+        throw new Error('Image branch candidate snapshot is required')
+
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
         text: [
@@ -273,7 +296,11 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             snapshot.activeTargetCandidateId ? `Active target candidate ID: ${snapshot.activeTargetCandidateId}` : undefined,
             '',
             'Candidate metadata JSON:',
-            JSON.stringify(snapshot.candidates.map(compactCandidateForPrompt), null, 2),
+            JSON.stringify(
+                snapshot.candidates.map(compactCandidateForPrompt),
+                null,
+                2,
+            ),
             '',
             'Transcript/candidate context:',
             snapshot.transcriptContext,
@@ -287,60 +314,96 @@ const buildResolverMessages = (state: ProviderState): ChatMessage[] => {
             type: 'input_text',
             text: `Candidate image candidateId=${candidate.candidateId} nodeId=${candidate.nodeId ?? ''} roleHints=${candidate.roleHints.join(',')} branchId=${candidate.branchId ?? ''}`,
         })
-        blocks.push({ type: 'input_image', image_url: candidate.imageUrl, detail: 'high' })
+        blocks.push({
+            type: 'input_image',
+            image_url: candidate.imageUrl,
+            detail: 'high',
+        })
     }
 
-    return [{ role: 'user', content: blocks }]
+    return [{
+        role: 'user',
+        content: blocks,
+    }]
 }
 
 const normalizeOptionalCandidateId = (value: unknown): string | null => {
-    if (typeof value !== 'string') return null
+    if (typeof value !== 'string')
+        return null
+
     const trimmed = value.trim()
+
     return trimmed ? trimmed : null
 }
 
 const normalizeStringArray = (value: unknown): string[] => {
-    if (!Array.isArray(value)) return []
-    return Array.from(new Set(value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())))
+    if (!Array.isArray(value))
+        return []
+
+    return Array.from(
+        new Set(
+            value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map(item => item.trim()),
+        ),
+    )
 }
 
-const assertKnownCandidateIds = (label: string, candidateIds: string[], candidateById: Map<string, MediaBranchCandidateImage>): void => {
-    const unknown = candidateIds.filter((candidateId) => !candidateById.has(candidateId))
-    if (unknown.length > 0) {
+const assertKnownCandidateIds = (
+    label: string,
+    candidateIds: string[],
+    candidateById: Map<string, MediaBranchCandidateImage>,
+): void => {
+    const unknown = candidateIds.filter(candidateId => !candidateById.has(candidateId))
+
+    if (unknown.length > 0)
         throw new Error(`Image branch resolver returned unknown ${label}: ${unknown.join(', ')}`)
-    }
 }
 
-const appendRationale = (rationale: string, guardMessage: string): string => [rationale, guardMessage].filter(Boolean).join(' ')
+const appendRationale = (
+    rationale: string,
+    guardMessage: string,
+): string => [rationale, guardMessage].filter(Boolean).join(' ')
 
 const sanitizeDecisions = (
     decisions: unknown,
     candidateById: Map<string, MediaBranchCandidateImage>,
 ): MediaBranchVlmReferenceDecision[] => {
-    if (!Array.isArray(decisions)) return []
+    if (!Array.isArray(decisions))
+        return []
+
     const out: MediaBranchVlmReferenceDecision[] = []
+
     for (const decision of decisions) {
-        if (typeof decision !== 'object' || decision === null) continue
-        const candidateId = normalizeOptionalCandidateId(
-            (decision as any).candidateId ?? (decision as any).nodeId,
+        if (
+            typeof decision !== 'object'
+            || decision === null
         )
-        if (!candidateId) continue
+            continue
+
+        const candidateId = normalizeOptionalCandidateId((decision as any).candidateId ?? (decision as any).nodeId)
+
+        if (!candidateId)
+            continue
+
         // Decisions are trace/debug metadata, not routing authority. VLMs can
         // echo stale or invented nodeIds here even when target/reference arrays
         // are valid, so unknown audit rows are discarded instead of failing a
         // simple generation. The authoritative node-id fields are validated
         // below and still fail hard when they name unknown candidates.
-        if (!candidateById.has(candidateId)) continue
+        if (!candidateById.has(candidateId))
+            continue
+
         const role = (decision as any).role
-        if (!['target', 'base-context', 'style-reference', 'comparison-target', 'excluded'].includes(role)) {
+
+        if (!['target', 'base-context', 'style-reference', 'comparison-target', 'excluded'].includes(role))
             throw new Error(`Image branch resolver returned invalid decision role for ${candidateId}: ${role}`)
-        }
+
         out.push({
             candidateId,
             role,
             reason: typeof (decision as any).reason === 'string' ? (decision as any).reason : '',
         })
     }
+
     return out
 }
 
@@ -351,40 +414,64 @@ const sanitizeResolution = (args: {
     resolverModelId: string
 }): MediaBranchVlmResolution => {
     const snapshot = args.state.mediaBranchCandidateSnapshot
-    if (!snapshot) throw new Error('Image branch candidate snapshot is required')
 
-    const candidateById = new Map(snapshot.candidates.map((candidate) => [candidate.candidateId, candidate]))
+    if (!snapshot)
+        throw new Error('Image branch candidate snapshot is required')
+
+    const candidateById = new Map(
+        snapshot.candidates.map(candidate => [candidate.candidateId, candidate]),
+    )
     let mode = args.parsed.mode as MediaBranchVlmResolution['mode']
     let operationKind = args.parsed.operationKind as ImageGenerationOperationKind
-    if (!VALID_MODES.has(mode)) throw new Error(`Image branch resolver returned invalid mode: ${args.parsed.mode}`)
-    if (!VALID_OPERATION_KINDS.has(operationKind)) throw new Error(`Image branch resolver returned invalid operationKind: ${args.parsed.operationKind}`)
+
+    if (!VALID_MODES.has(mode))
+        throw new Error(`Image branch resolver returned invalid mode: ${args.parsed.mode}`)
+
+    if (!VALID_OPERATION_KINDS.has(operationKind))
+        throw new Error(`Image branch resolver returned invalid operationKind: ${args.parsed.operationKind}`)
 
     let targetCandidateId = normalizeOptionalCandidateId(args.parsed.targetCandidateId)
-    let parentCandidateId = normalizeOptionalCandidateId(args.parsed.parentCandidateId) ?? targetCandidateId ?? undefined
+    let parentCandidateId = normalizeOptionalCandidateId(args.parsed.parentCandidateId)
+        ?? targetCandidateId
+        ?? undefined
     let includeGeneratedCandidateIds = normalizeStringArray(args.parsed.includeGeneratedCandidateIds)
-    const referenceCandidateIds = snapshot.candidates.map((candidate) => candidate.candidateId)
-    const sourceContextNodeIds = [...new Set(snapshot.candidates.flatMap((candidate) => candidate.nodeId ? [candidate.nodeId] : []))]
+    const referenceCandidateIds = snapshot.candidates.map(candidate => candidate.candidateId)
+    const sourceContextNodeIds = [...new Set(
+        snapshot.candidates.flatMap(candidate => (candidate.nodeId ? [candidate.nodeId] : [])),
+    )]
     let styleReferenceCandidateIds = normalizeStringArray(args.parsed.styleReferenceCandidateIds)
-    const decisions = sanitizeDecisions(args.parsed.decisions, candidateById).map((decision) =>
-        decision.role === 'excluded'
-            ? {
-                ...decision,
-                role: 'base-context' as const,
-                reason: appendRationale(decision.reason, 'The reference remains attached because the user selected it explicitly.'),
-            }
-            : decision
+    const decisions = sanitizeDecisions(args.parsed.decisions, candidateById).map(
+        decision =>
+            decision.role === 'excluded'
+                ? {
+                    ...decision,
+                    role: 'base-context' as const,
+                    reason: appendRationale(decision.reason, 'The reference remains attached because the user selected it explicitly.'),
+                }
+                : decision,
     )
 
     let rationale = typeof args.parsed.rationale === 'string' ? args.parsed.rationale.trim() : ''
-    let confidence = Math.max(0, Math.min(1, Number(args.parsed.confidence) || 0))
-    if (mode === 'ambiguous' || confidence < 0.2) {
-        const candidateAssetIds = [...new Set(snapshot.candidates.map(candidate => candidate.assetId))]
+    let confidence = Math.max(
+        0,
+        Math.min(1, Number(args.parsed.confidence) || 0),
+    )
+
+    if (
+        mode === 'ambiguous'
+        || confidence < 0.2
+    ) {
+        const candidateAssetIds = [...new Set(
+            snapshot.candidates.map(candidate => candidate.assetId),
+        )]
+
         if (candidateAssetIds.length > 1) {
             throw new MediaBranchAmbiguityError({
                 candidateAssetIds,
                 rationale: rationale || 'The referenced branch could not be selected safely.',
             })
         }
+
         const onlyCandidate = snapshot.candidates.length === 1 ? snapshot.candidates[0] : undefined
         const promptLooksLikeEdit = /\b(?:fix|edit|correct|adjust|change|update|revise|redo|regenerate|remove|replace|add)\b/iu
             .test(snapshot.promptText)
@@ -396,9 +483,11 @@ const sanitizeResolution = (args: {
                     || (onlyCandidate.roleHints.includes('active-target')
                         && promptLooksLikeEdit)),
         )
-        const generatedTarget = onlyCandidate?.roleHints.includes('generated-variant') && generatedTargetWasSelected
+        const generatedTarget = onlyCandidate?.roleHints.includes('generated-variant')
+            && generatedTargetWasSelected
             ? onlyCandidate
             : undefined
+
         if (generatedTarget) {
             mode = 'edit-active-branch'
             operationKind = 'edit_existing'
@@ -428,13 +517,17 @@ const sanitizeResolution = (args: {
         }
     }
 
-    if (operationKind === 'edit_existing' && !targetCandidateId) {
+    if (
+        operationKind === 'edit_existing'
+        && !targetCandidateId
+    ) {
         const activeTarget = snapshot.activeTargetCandidateId
             ? candidateById.get(snapshot.activeTargetCandidateId)
             : undefined
-        if (!activeTarget) {
+
+        if (!activeTarget)
             throw new Error('Image branch resolver returned edit_existing without an active target')
-        }
+
         mode = 'edit-active-branch'
         targetCandidateId = activeTarget.candidateId
         parentCandidateId = activeTarget.candidateId
@@ -444,15 +537,16 @@ const sanitizeResolution = (args: {
                 activeTarget.candidateId,
             ]),
         ]
-        rationale = appendRationale(
-            rationale,
-            'Resolver guard restored the active target omitted from an edit_existing resolution.',
-        )
+        rationale = appendRationale(rationale, 'Resolver guard restored the active target omitted from an edit_existing resolution.')
     }
 
-    if (parentCandidateId && !candidateById.has(parentCandidateId)) {
+    if (
+        parentCandidateId
+        && !candidateById.has(parentCandidateId)
+    ) {
         const unknownParentCandidateId = parentCandidateId
-        parentCandidateId = targetCandidateId && candidateById.has(targetCandidateId)
+        parentCandidateId = targetCandidateId
+            && candidateById.has(targetCandidateId)
             ? targetCandidateId
             : undefined
         rationale = appendRationale(
@@ -463,13 +557,32 @@ const sanitizeResolution = (args: {
         )
     }
 
-    assertKnownCandidateIds('targetCandidateId', targetCandidateId ? [targetCandidateId] : [], candidateById)
-    assertKnownCandidateIds('parentCandidateId', parentCandidateId ? [parentCandidateId] : [], candidateById)
-    assertKnownCandidateIds('includeGeneratedCandidateIds', includeGeneratedCandidateIds, candidateById)
-    assertKnownCandidateIds('styleReferenceCandidateIds', styleReferenceCandidateIds, candidateById)
-    if (targetCandidateId && !referenceCandidateIds.includes(targetCandidateId)) {
+    assertKnownCandidateIds(
+        'targetCandidateId',
+        targetCandidateId ? [targetCandidateId] : [],
+        candidateById,
+    )
+    assertKnownCandidateIds(
+        'parentCandidateId',
+        parentCandidateId ? [parentCandidateId] : [],
+        candidateById,
+    )
+    assertKnownCandidateIds(
+        'includeGeneratedCandidateIds',
+        includeGeneratedCandidateIds,
+        candidateById,
+    )
+    assertKnownCandidateIds(
+        'styleReferenceCandidateIds',
+        styleReferenceCandidateIds,
+        candidateById,
+    )
+
+    if (
+        targetCandidateId
+        && !referenceCandidateIds.includes(targetCandidateId)
+    )
         throw new Error(`Image branch resolver targetCandidateId is not in referenceCandidateIds: ${targetCandidateId}`)
-    }
 
     const targetCandidate = targetCandidateId ? candidateById.get(targetCandidateId) : undefined
     const rawBranchId = normalizeOptionalCandidateId(args.parsed.branchId)
@@ -479,7 +592,10 @@ const sanitizeResolution = (args: {
             && targetCandidate.roleHints.includes('generated-variant'),
     )
     const branchId = targetCandidate?.branchId
-        ?? (mode === 'fresh-branch' || generatedTargetWithoutActiveBranch ? undefined : rawBranchId)
+        ?? (mode === 'fresh-branch'
+            || generatedTargetWithoutActiveBranch
+            ? undefined
+            : rawBranchId)
         ?? `branch-${randomUUID()}`
 
     return {
@@ -510,53 +626,93 @@ const sanitizeResolution = (args: {
 export class MediaBranchAmbiguityError extends Error {
     readonly candidateAssetIds: string[]
 
-    constructor({ candidateAssetIds, rationale }: { candidateAssetIds: string[]; rationale: string }) {
+    constructor({
+        candidateAssetIds,
+        rationale,
+    }: {
+        candidateAssetIds: string[]
+        rationale: string
+    }) {
         super(`MEDIA_BRANCH_REFERENCE_AMBIGUITY:${rationale}`)
         this.name = 'MediaBranchAmbiguityError'
         this.candidateAssetIds = [...new Set(candidateAssetIds)]
     }
 }
 
-const isCandidateImageBlock = (block: Record<string, any>, candidateImageUrls: Set<string>): boolean => {
-    if (block?.type !== 'input_image') return false
+const isCandidateImageBlock = (
+    block: Record<string, any>,
+    candidateImageUrls: Set<string>,
+): boolean => {
+    if (block?.type !== 'input_image')
+        return false
+
     const imageUrl = block.image_url
+
     return typeof imageUrl === 'string' && candidateImageUrls.has(imageUrl)
 }
 
 const isImageMetadataBlock = (block: Record<string, any>): boolean => {
-    if (block?.type !== 'input_text' || typeof block.text !== 'string') return false
+    if (
+        block?.type !== 'input_text'
+        || typeof block.text !== 'string'
+    )
+        return false
+
     try {
         const parsed = JSON.parse(block.text)
+
         return parsed?.type === 'standalone_image' || parsed?.type === 'generated_image_variant'
     } catch {
         return false
     }
 }
 
-const stripCandidateImageBlocks = (messages: ChatMessage[], candidateImageUrls: Set<string>): ChatMessage[] => {
-    return messages.flatMap((message) => {
-        if (!Array.isArray(message.content)) return [message]
+const stripCandidateImageBlocks = (
+    messages: ChatMessage[],
+    candidateImageUrls: Set<string>,
+): ChatMessage[] => {
+    return messages.flatMap(message => {
+        if (!Array.isArray(message.content))
+            return [message]
 
         const filtered: Array<Record<string, any>> = []
+
         for (let index = 0; index < message.content.length; index++) {
             const block = message.content[index]
-            if (block === undefined) continue
-            if (typeof block !== 'object' || block === null) {
+
+            if (block === undefined)
+                continue
+
+            if (
+                typeof block !== 'object'
+                || block === null
+            ) {
                 filtered.push(block)
+
                 continue
             }
-            if (isCandidateImageBlock(block, candidateImageUrls)) continue
+
+            if (isCandidateImageBlock(block, candidateImageUrls))
+                continue
 
             const nextBlock = message.content[index + 1]
             const nextIsCandidateImage = typeof nextBlock === 'object'
                 && nextBlock !== null
                 && isCandidateImageBlock(nextBlock, candidateImageUrls)
-            if (isImageMetadataBlock(block) && nextIsCandidateImage) continue
+
+            if (
+                isImageMetadataBlock(block)
+                && nextIsCandidateImage
+            )
+                continue
 
             filtered.push(block)
         }
 
-        return filtered.length > 0 ? [{ ...message, content: filtered }] : []
+        return filtered.length > 0 ? [{
+            ...message,
+            content: filtered,
+        }] : []
     })
 }
 
@@ -564,7 +720,9 @@ const buildResolvedBranchMessage = (
     resolution: MediaBranchVlmResolution,
     candidates: MediaBranchCandidateImage[],
 ): ChatMessage => {
-    const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]))
+    const candidateById = new Map(
+        candidates.map(candidate => [candidate.candidateId, candidate]),
+    )
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
         text: JSON.stringify({
@@ -581,7 +739,10 @@ const buildResolvedBranchMessage = (
 
     for (const candidateId of resolution.referenceCandidateIds) {
         const candidate = candidateById.get(candidateId)
-        if (!candidate) continue
+
+        if (!candidate)
+            continue
+
         blocks.push({
             type: 'input_text',
             text: JSON.stringify({
@@ -593,15 +754,25 @@ const buildResolvedBranchMessage = (
                 branchId: candidate.branchId ?? '',
             }),
         })
-        blocks.push({ type: 'input_image', image_url: candidate.imageUrl, detail: 'high' })
+        blocks.push({
+            type: 'input_image',
+            image_url: candidate.imageUrl,
+            detail: 'high',
+        })
     }
 
-    return { role: 'user', content: blocks }
+    return {
+        role: 'user',
+        content: blocks,
+    }
 }
 
 const buildFreshBranchResolution = (state: ProviderState): MediaBranchVlmResolution => {
     const snapshot = state.mediaBranchCandidateSnapshot
-    if (!snapshot) throw new Error('Image branch candidate snapshot is required')
+
+    if (!snapshot)
+        throw new Error('Image branch candidate snapshot is required')
+
     return {
         resolverKind: RESOLVER_KIND,
         resolverVersion: snapshot.resolverVersion,
@@ -624,44 +795,65 @@ const buildFreshBranchResolution = (state: ProviderState): MediaBranchVlmResolut
     }
 }
 
-export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMediaBranchDeps): Promise<Partial<ProviderState>> => {
+export const resolveMediaBranch = async (
+    state: ProviderState,
+    deps: ResolveMediaBranchDeps,
+): Promise<Partial<ProviderState>> => {
     // The resolver runs for both image AND video generation: VEO image-to-video
     // and reference-conditioned video both need the same VLM grounding that
     // image generation uses.
-    if (requiredCapabilityProducedCapabilityOnlyOutput(state)) return {}
+    if (requiredCapabilityProducedCapabilityOnlyOutput(state))
+        return {}
+
     const hasCapabilityMediaOutput = (
         state.capabilityOutputMediaAssetIds
             ?? state.capabilityOutputAssetIds
             ?? []
     ).length > 0
-    if (!hasCapabilityMediaOutput && !state.imageModelVersion && !state.videoModelVersion) return {}
+
+    if (
+        !hasCapabilityMediaOutput
+        && !state.imageModelVersion
+        && !state.videoModelVersion
+    )
+        return {}
+
     const snapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
+
     if (!snapshot) {
         const message = state.videoModelVersion
             ? 'Image branch candidate snapshot is required for video generation.'
             : 'Image branch candidate snapshot is required for image generation.'
         deps.publisher.mediaBranchResolutionError(message)
+
         throw new Error(message)
     }
+
     if (snapshot.candidates.length === 0) {
         const resolution = buildFreshBranchResolution(state)
         deps.publisher.mediaBranchResolved(resolution)
-        info(`[MediaBranchResolver] resolved fresh branch ${
-            JSON.stringify(
-                {
-                    workspaceId: state.workspaceId,
-                    aiChatThreadId: state.aiChatThreadId,
-                    branchId: resolution.branchId,
-                    rationale: resolution.rationale,
-                },
-                null,
-                0,
-            )
-        }`)
+        info(
+            `[MediaBranchResolver] resolved fresh branch ${
+                JSON.stringify(
+                    {
+                        workspaceId: state.workspaceId,
+                        aiChatThreadId: state.aiChatThreadId,
+                        branchId: resolution.branchId,
+                        rationale: resolution.rationale,
+                    },
+                    null,
+                    0,
+                )
+            }`,
+        )
+
         return { mediaBranchResolution: resolution }
     }
 
-    const { provider, modelVersion } = getResolverModel(state)
+    const {
+        provider,
+        modelVersion,
+    } = getResolverModel(state)
     const callVlm = deps.callVlm ?? ((args: VlmCallArgs) => callStructuredVlm<MediaBranchVlmRawResolution>(args))
 
     try {
@@ -676,9 +868,13 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
         const resolvedTarget = snapshot.resolvedTargetCandidateId
             ? resolvedCandidates.find(candidate => candidate.candidateId === snapshot.resolvedTargetCandidateId)
             : undefined
-        if (snapshot.resolvedTargetCandidateId && !resolvedTarget) {
+
+        if (
+            snapshot.resolvedTargetCandidateId
+            && !resolvedTarget
+        )
             throw new Error('MEDIA_BRANCH_RESOLVED_TARGET_NOT_FOUND')
-        }
+
         const result: VlmCallResult<MediaBranchVlmRawResolution> = resolvedTarget
             ? {
                 parsed: {
@@ -731,32 +927,36 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
             resolverProvider: provider,
             resolverModelId: result.modelName || modelVersion,
         })
-        const candidateImageUrls: Set<string> = new Set(snapshot.candidates.map((candidate: MediaBranchCandidateImage) => candidate.imageUrl))
+        const candidateImageUrls: Set<string> = new Set(
+            snapshot.candidates.map((candidate: MediaBranchCandidateImage) => candidate.imageUrl),
+        )
         const cleanedMessages = stripCandidateImageBlocks(state.messages, candidateImageUrls)
         const resolvedBranchMessage = buildResolvedBranchMessage(resolution, resolvedCandidates)
         const messages = [resolvedBranchMessage, ...cleanedMessages]
 
         deps.publisher.mediaBranchResolved(resolution)
-        info(`[MediaBranchResolver] resolved ${
-            JSON.stringify(
-                {
-                    workspaceId: state.workspaceId,
-                    aiChatThreadId: state.aiChatThreadId,
-                    provider,
-                    model: result.modelName || modelVersion,
-                    activeTargetCandidateId: snapshot.activeTargetCandidateId,
-                    mode: resolution.mode,
-                    operationKind: resolution.operationKind,
-                    targetCandidateId: resolution.targetCandidateId,
-                    referenceCandidateIds: resolution.referenceCandidateIds,
-                    excludedCandidateIds: resolution.excludedCandidateIds,
-                    confidence: resolution.confidence,
-                    rationale: resolution.rationale,
-                },
-                null,
-                0,
-            )
-        }`)
+        info(
+            `[MediaBranchResolver] resolved ${
+                JSON.stringify(
+                    {
+                        workspaceId: state.workspaceId,
+                        aiChatThreadId: state.aiChatThreadId,
+                        provider,
+                        model: result.modelName || modelVersion,
+                        activeTargetCandidateId: snapshot.activeTargetCandidateId,
+                        mode: resolution.mode,
+                        operationKind: resolution.operationKind,
+                        targetCandidateId: resolution.targetCandidateId,
+                        referenceCandidateIds: resolution.referenceCandidateIds,
+                        excludedCandidateIds: resolution.excludedCandidateIds,
+                        confidence: resolution.confidence,
+                        rationale: resolution.rationale,
+                    },
+                    null,
+                    0,
+                )
+            }`,
+        )
 
         // For video generation, map the explicit references and VLM-assigned roles onto the video
         // provider's inputs as FRAME CONDITIONING ONLY (never asset/style refs):
@@ -770,16 +970,32 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
         // each reference is used is planned but out of scope here.)
         let videoFirstFrameImage: string | undefined
         let videoReferenceImages: string[] | undefined
-        if (state.videoModelVersion && resolution.referenceCandidateIds.length > 0) {
-            const urlByCandidateId = new Map(resolvedCandidates.map(candidate => [candidate.candidateId, candidate.imageUrl]))
+
+        if (
+            state.videoModelVersion
+            && resolution.referenceCandidateIds.length > 0
+        ) {
+            const urlByCandidateId = new Map(
+                resolvedCandidates.map(candidate => [candidate.candidateId, candidate.imageUrl]),
+            )
             const orderedFrames: string[] = []
             const pushFrame = (url: string | undefined): void => {
-                if (typeof url === 'string' && url.length > 0 && !orderedFrames.includes(url)) {
+                if (
+                    typeof url === 'string'
+                    && url.length > 0
+                    && !orderedFrames.includes(url)
+                )
                     orderedFrames.push(url)
-                }
             }
-            if (resolution.targetCandidateId) pushFrame(urlByCandidateId.get(resolution.targetCandidateId))
-            for (const candidateId of resolution.referenceCandidateIds) pushFrame(urlByCandidateId.get(candidateId))
+
+            if (resolution.targetCandidateId)
+                pushFrame(
+                    urlByCandidateId.get(resolution.targetCandidateId),
+                )
+
+            for (const candidateId of resolution.referenceCandidateIds) pushFrame(
+                urlByCandidateId.get(candidateId),
+            )
 
             videoFirstFrameImage = orderedFrames[0]
             videoReferenceImages = orderedFrames.slice(1, 2)
@@ -794,6 +1010,7 @@ export const resolveMediaBranch = async (state: ProviderState, deps: ResolveMedi
     } catch (error: any) {
         const message = error?.message ?? String(error)
         deps.publisher.mediaBranchResolutionError(message)
+
         throw error
     }
 }

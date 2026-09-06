@@ -51,22 +51,28 @@ const toTimelineItem = (
         item.summary?.trim()
             && item.trace?.reasoning?.trim() === item.summary.trim(),
     )
+
     return {
         ...item,
-        status: operationFailed && item.status === 'running' ? 'failed' : item.status,
-        ...(showSummaryWhenCollapsedItemIds.has(item.id) || traceDuplicatesSummary
+        status: operationFailed
+            && item.status === 'running'
+            ? 'failed'
+            : item.status,
+        ...(showSummaryWhenCollapsedItemIds.has(item.id)
+            || traceDuplicatesSummary
             ? { showSummaryWhenCollapsed: true }
             : {}),
         ...(traceDuplicatesSummary ? { hideSummaryWhenExpanded: true } : {}),
         ...(item.trace ? { detail: item.trace } : {}),
         ...(item.children
             ? {
-                children: item.children.map(child =>
-                    toTimelineItem(
-                        child,
-                        operationFailed,
-                        showSummaryWhenCollapsedItemIds,
-                    )
+                children: item.children.map(
+                    child =>
+                        toTimelineItem(
+                            child,
+                            operationFailed,
+                            showSummaryWhenCollapsedItemIds,
+                        ),
                 ),
             }
             : {}),
@@ -81,14 +87,24 @@ const collectStatuses = (item: ProgressTimelineItem): ProgressTimelineItem['stat
 const getPipelineStatus = (items: readonly ProgressTimelineItem[]): string => {
     const statuses = items.flatMap(collectStatuses)
     const hasActiveItem = statuses.includes('running')
-    const hasIssueItem = statuses.some(status => (
-        status === 'attention' || status === 'failed' || status === 'cancelled'
-    ))
-    if (hasActiveItem) return hasIssueItem ? 'In progress · Issues found' : 'In progress'
-    if (hasIssueItem) return 'Needs attention'
-    if (statuses.length > 0 && statuses.every(status => status === 'completed' || status === 'skipped')) {
+    const hasIssueItem = statuses.some(
+        status => (
+            status === 'attention' || status === 'failed' || status === 'cancelled'
+        ),
+    )
+
+    if (hasActiveItem)
+        return hasIssueItem ? 'In progress · Issues found' : 'In progress'
+
+    if (hasIssueItem)
+        return 'Needs attention'
+
+    if (
+        statuses.length > 0
+        && statuses.every(status => status === 'completed' || status === 'skipped')
+    )
         return 'Completed'
-    }
+
     return 'Waiting'
 }
 
@@ -141,7 +157,10 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
             })
             this.lifetime.own(() => this.disclosureIcon.destroy())
             this.element = html`
-                <section className=${`workspace-media-generation-progress${className ? ` ${className}` : ''}`} aria-live="polite">
+                <section
+                    className=${`workspace-media-generation-progress${className ? ` ${className}` : ''}`}
+                    aria-live="polite"
+                >
                     <header className="workspace-media-generation-pipeline-header">
                         <span className="workspace-media-generation-pipeline-heading">Pipeline</span>
                         <span className="workspace-media-generation-pipeline-status">${getPipelineStatus(items)}</span>
@@ -155,15 +174,9 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
                 </section>
             ` as HTMLElement
             this.lifetime.own(() => this.element.remove())
-            this.disclosureButton = this.element.querySelector(
-                '.workspace-media-generation-pipeline-disclosure',
-            ) as HTMLButtonElement
-            this.pipelineStatus = this.element.querySelector(
-                '.workspace-media-generation-pipeline-status',
-            ) as HTMLSpanElement
-            this.disclosureLabel = html`
-                <span className="workspace-media-generation-pipeline-disclosure-label"></span>
-            ` as HTMLSpanElement
+            this.disclosureButton = this.element.querySelector('.workspace-media-generation-pipeline-disclosure') as HTMLButtonElement
+            this.pipelineStatus = this.element.querySelector('.workspace-media-generation-pipeline-status') as HTMLSpanElement
+            this.disclosureLabel = html`<span className="workspace-media-generation-pipeline-disclosure-label"></span>` as HTMLSpanElement
             this.disclosureButton.append(this.disclosureLabel, this.disclosureIcon.element)
             this.lifetime.own(() => {
                 this.disclosureButton.removeEventListener('pointerdown', this.stopEvent)
@@ -173,25 +186,32 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
             this.disclosureButton.addEventListener('click', this.toggleView)
             this.syncDisclosure(false)
             this.element.appendChild(this.timeline.element)
-            this.resizeObserver = onLayoutChange && typeof ResizeObserver !== 'undefined'
+            this.resizeObserver = onLayoutChange
+                && typeof ResizeObserver !== 'undefined'
                 ? new ResizeObserver(() => {
-                    if (!this.lifetime.signal.aborted) onLayoutChange({ allowCollisionShrink: false })
+                    if (!this.lifetime.signal.aborted)
+                        onLayoutChange({ allowCollisionShrink: false })
                 })
                 : null
             this.lifetime.own(() => this.resizeObserver?.disconnect())
             this.lifetime.own(() => {
-                if (this.layoutFrame !== null) cancelAnimationFrame(this.layoutFrame)
+                if (this.layoutFrame !== null)
+                    cancelAnimationFrame(this.layoutFrame)
+
                 this.layoutFrame = null
             })
             this.resizeObserver?.observe(this.element)
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
 
     update(state: MediaGenerationProgressState): void {
-        if (this.lifetime.signal.aborted) return
+        if (this.lifetime.signal.aborted)
+            return
+
         const items = this.getTimelineItems(state)
         this.timeline.setItems(items)
         this.pipelineStatus.textContent = getPipelineStatus(items)
@@ -202,9 +222,7 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.lifetime.destroy()
     }
 
-    private readonly stopEvent = (event: Event): void => {
-        event.stopPropagation()
-    }
+    private readonly stopEvent = (event: Event): void => void event.stopPropagation()
 
     private readonly toggleView = (event: Event): void => {
         event.preventDefault()
@@ -213,10 +231,15 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.disclosureIcon.setState(nextView === 'all' ? 'expanded' : 'collapsed', { animate: true })
         this.timeline.setViewMode(nextView)
         this.syncDisclosure(true)
-        if (this.layoutFrame !== null) cancelAnimationFrame(this.layoutFrame)
+
+        if (this.layoutFrame !== null)
+            cancelAnimationFrame(this.layoutFrame)
+
         this.layoutFrame = requestAnimationFrame(() => {
             this.layoutFrame = null
-            if (!this.lifetime.signal.aborted) this.onLayoutChange?.({ allowCollisionShrink: true })
+
+            if (!this.lifetime.signal.aborted)
+                this.onLayoutChange?.({ allowCollisionShrink: true })
         })
     }
 
@@ -226,13 +249,16 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
 
     private getTimelineItems(state: MediaGenerationProgressState): ProgressTimelineItem[] {
         const fallbackProgress = createDefaultMediaGenerationRunProgress(state.status, state.message)
-        return (state.progress.items ?? fallbackProgress.items ?? []).map(item => (
-            toTimelineItem(
-                item,
-                state.status === 'failed',
-                this.showSummaryWhenCollapsedItemIds,
-            )
-        ))
+
+        return (state.progress.items ?? fallbackProgress.items ?? []).map(
+            item => (
+                toTimelineItem(
+                    item,
+                    state.status === 'failed',
+                    this.showSummaryWhenCollapsedItemIds,
+                )
+            ),
+        )
     }
 
     private syncDisclosure(animateIcon: boolean): void {
@@ -248,12 +274,12 @@ class MediaGenerationProgress implements MediaGenerationProgressInstance {
         this.disclosureLabel.textContent = showsAllSteps
             ? 'Collapse'
             : 'Expand'
-        this.disclosureIcon.setState(this.getDisclosureIconState(), { animate: animateIcon })
+        this.disclosureIcon.setState(
+            this.getDisclosureIconState(),
+            { animate: animateIcon },
+        )
     }
 }
 
-export function createMediaGenerationProgress(
-    options: MediaGenerationProgressOptions,
-): MediaGenerationProgressInstance {
-    return new MediaGenerationProgress(options)
-}
+export const createMediaGenerationProgress = (options: MediaGenerationProgressOptions): MediaGenerationProgressInstance =>
+    new MediaGenerationProgress(options)

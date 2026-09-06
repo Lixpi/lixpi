@@ -17,11 +17,11 @@ export class ViewportBridge {
     applyViewport(viewport: CanvasViewport): void {
         const transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`
         applyStyle(this.options.viewportEl, { transform })
+
         for (const overlayEl of this.options.viewportOverlayEls ?? []) applyStyle(overlayEl, { transform })
+
         for (const target of this.options.targets?.() ?? []) target?.setViewport(viewport)
     }
 }
 
-export function createViewportBridge(options: ViewportBridgeOptions): ViewportBridge {
-    return new ViewportBridge(options)
-}
+export const createViewportBridge = (options: ViewportBridgeOptions): ViewportBridge => new ViewportBridge(options)

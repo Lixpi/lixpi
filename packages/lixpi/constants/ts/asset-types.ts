@@ -8,7 +8,9 @@ export type AssetScope = 'workspace' | 'user' | 'organization'
 export type AssetPrimaryCategory = 'image' | 'video' | 'audio' | 'document' | 'conversation' | 'capabilityArtifact'
 export const ASSET_DOCUMENT_ROLES = ['content', 'conversation', 'provenance', 'capabilityArtifact'] as const
 export type AssetDocumentRole = typeof ASSET_DOCUMENT_ROLES[number]
-export const isAssetDocumentRole = (value: unknown): value is AssetDocumentRole => typeof value === 'string' && ASSET_DOCUMENT_ROLES.some(role => role === value)
+export const isAssetDocumentRole = (value: unknown): value is AssetDocumentRole => typeof value === 'string' && ASSET_DOCUMENT_ROLES.some(
+    role => role === value,
+)
 export type AssetMediaKind = 'image' | 'video' | 'audio' | 'document'
 
 export type AssetLifecycleStatus = 'creating' | 'active' | 'deleting' | 'failed'

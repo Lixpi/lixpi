@@ -32,20 +32,33 @@ export class BranchReferenceResolution {
     constructor(private readonly options: BranchReferenceResolutionOptions) {
         const html = createDocumentHtml(options.document)
         this.element = html`
-            <div className="workspace-branch-reference-resolution nopan" role="group" aria-label="Resolve Asset reference">
+            <div
+                className="workspace-branch-reference-resolution nopan"
+                role="group"
+                aria-label="Resolve Asset reference"
+            >
                 <span className="workspace-branch-reference-resolution-message">Which Asset does this refer to?</span>
                 <span className="workspace-branch-reference-resolution-choices"></span>
-                <span className="workspace-branch-reference-resolution-error" role="status"></span>
+                <span
+                    className="workspace-branch-reference-resolution-error"
+                    role="status"
+                ></span>
             </div>
         ` as HTMLDivElement
         this.error = this.element.querySelector('.workspace-branch-reference-resolution-error')!
         this.lifetime.own(() => this.element.remove())
         const host = this.element.querySelector('.workspace-branch-reference-resolution-choices')!
-        const candidates = new Map(options.candidates.map(reference => [reference.assetId, reference]))
+        const candidates = new Map(
+            options.candidates.map(reference => [reference.assetId, reference]),
+        )
+
         try {
             for (const assetId of new Set(options.operation.candidateAssetIds)) {
                 const reference = candidates.get(assetId)
-                if (!reference) continue
+
+                if (!reference)
+                    continue
+
                 const preview = options.renderReference(reference)
                 this.lifetime.own(() => preview.dom.remove())
                 this.lifetime.own(() => preview.destroy())
@@ -61,21 +74,50 @@ export class BranchReferenceResolution {
                     void this.choose(assetId)
                 }
                 const keydown = (event: KeyboardEvent) => {
-                    if (event.key === 'Enter' || event.key === ' ') click(event)
+                    if (
+                        event.key === 'Enter'
+                        || event.key === ' '
+                    )
+                        click(event)
                 }
-                choice.addEventListener('pointerdown', stop, true)
-                choice.addEventListener('click', click, true)
-                choice.addEventListener('keydown', keydown, true)
+                choice.addEventListener(
+                    'pointerdown',
+                    stop,
+                    true,
+                )
+                choice.addEventListener(
+                    'click',
+                    click,
+                    true,
+                )
+                choice.addEventListener(
+                    'keydown',
+                    keydown,
+                    true,
+                )
                 this.lifetime.own(() => {
-                    choice.removeEventListener('pointerdown', stop, true)
-                    choice.removeEventListener('click', click, true)
-                    choice.removeEventListener('keydown', keydown, true)
+                    choice.removeEventListener(
+                        'pointerdown',
+                        stop,
+                        true,
+                    )
+                    choice.removeEventListener(
+                        'click',
+                        click,
+                        true,
+                    )
+                    choice.removeEventListener(
+                        'keydown',
+                        keydown,
+                        true,
+                    )
                 })
                 this.choices.push(choice)
                 host.appendChild(choice)
             }
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
@@ -87,16 +129,29 @@ export class BranchReferenceResolution {
     private setDisabled(disabled: boolean): void {
         for (const choice of this.choices) {
             choice.classList.toggle('is-resolving', disabled)
-            choice.setAttribute('aria-disabled', String(disabled))
+            choice.setAttribute(
+                'aria-disabled',
+                String(disabled),
+            )
         }
     }
 
     private async choose(assetId: string): Promise<void> {
         const { operation } = this.options
-        if (this.resolving || this.lifetime.signal.aborted || !operation.generationRequestId || operation.requestRevision === undefined || !operation.unresolvedBindingId) return
+
+        if (
+            this.resolving
+            || this.lifetime.signal.aborted
+            || !operation.generationRequestId
+            || operation.requestRevision === undefined
+            || !operation.unresolvedBindingId
+        )
+            return
+
         this.resolving = true
         this.error.textContent = ''
         this.setDisabled(true)
+
         try {
             await this.options.resolveReference({
                 generationRequestId: operation.generationRequestId,
@@ -105,7 +160,9 @@ export class BranchReferenceResolution {
                 assetId,
             })
         } catch (error) {
-            if (this.lifetime.signal.aborted) return
+            if (this.lifetime.signal.aborted)
+                return
+
             this.resolving = false
             this.setDisabled(false)
             this.error.textContent = error instanceof Error ? error.message : String(error)
@@ -117,11 +174,23 @@ export class BranchReferenceResolution {
     }
 }
 
-export function createBranchReferenceResolution(options: BranchReferenceResolutionOptions): BranchReferenceResolution | null {
+export const createBranchReferenceResolution = (options: BranchReferenceResolutionOptions): BranchReferenceResolution | null => {
     const { operation } = options
-    if (!operation.generationRequestId || operation.requestRevision === undefined || !operation.unresolvedBindingId || !operation.candidateAssetIds?.length) return null
+
+    if (
+        !operation.generationRequestId
+        || operation.requestRevision === undefined
+        || !operation.unresolvedBindingId
+        || !operation.candidateAssetIds?.length
+    )
+        return null
+
     const view = new BranchReferenceResolution(options)
-    if (view.hasChoices) return view
+
+    if (view.hasChoices)
+        return view
+
     view.destroy()
+
     return null
 }

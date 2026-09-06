@@ -11,6 +11,7 @@ import {
 
 import { uiKitSettings } from '../../runtime-settings.ts'
 import { createPureDropdown } from './index.ts'
+import { withoutLayout } from '@lixpi/test-utils'
 
 const defaultOptions = [
     { title: 'Model A', value: 'a' },
@@ -24,7 +25,7 @@ const dropdownMixinsSource = readFileSync(
 
 function expectSourceToContain(source: string, snippet: string, label: string): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }

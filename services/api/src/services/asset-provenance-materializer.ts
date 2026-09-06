@@ -36,22 +36,39 @@ import {
 import AssetDocumentService from './asset-document-service.ts'
 import { MediaGenerationRequestEventLog } from './media-generation-request-event-log.ts'
 
-const { ORG_NAME, STAGE } = process.env
+const {
+    ORG_NAME,
+    STAGE,
+} = process.env
 
 const isRevisionConflict = (error: unknown): boolean => {
-    if (!error || typeof error !== 'object') return false
+    if (
+        !error
+        || typeof error !== 'object'
+    )
+        return false
+
     const record = error as {
         name?: unknown
         CancellationReasons?: Array<{ Code?: unknown }>
     }
+
     return record.name === 'TransactionCanceledException'
-        && Boolean(record.CancellationReasons?.some((reason) => reason.Code === 'ConditionalCheckFailed'))
+        && Boolean(record.CancellationReasons?.some(reason => reason.Code === 'ConditionalCheckFailed'))
 }
 
 const collectDocumentText = (value: unknown): string => {
-    if (!value || typeof value !== 'object') return ''
-    if (Array.isArray(value)) return value.map(collectDocumentText).filter(Boolean).join(' ')
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return ''
+
+    if (Array.isArray(value))
+        return value.map(collectDocumentText).filter(Boolean).join(' ')
+
     const node = value as Record<string, unknown>
+
     return [
         typeof node.text === 'string' ? node.text : '',
         ...(Array.isArray(node.content) ? node.content.map(collectDocumentText) : []),
@@ -64,38 +81,50 @@ export const getReasoningPreambleSummary = (
 ): string => {
     let summary = ''
     const visit = (value: unknown): void => {
-        if (summary || !value || typeof value !== 'object') return
+        if (
+            summary
+            || !value
+            || typeof value !== 'object'
+        )
+            return
+
         if (Array.isArray(value)) {
             value.forEach(visit)
+
             return
         }
+
         const node = value as Record<string, unknown>
-        const attrs = node.attrs && typeof node.attrs === 'object'
+        const attrs = node.attrs
+            && typeof node.attrs === 'object'
             ? node.attrs as Record<string, unknown>
             : undefined
+
         if (
-            node.type === 'aiReasoningSection' && (
-                attrs?.reasoningRunId === generationRun.reasoningRunId
-                || attrs?.generationRequestId === generationRun.generationRequestId
-            )
+            node.type === 'aiReasoningSection'
+            && (attrs?.reasoningRunId === generationRun.reasoningRunId || attrs?.generationRequestId === generationRun.generationRequestId)
         ) {
             const content = Array.isArray(node.content) ? node.content : []
-            const firstInvocationIndex = content.findIndex(child => (
-                child && typeof child === 'object' && (child as Record<string, unknown>).type === 'aiCollapsibleBlock'
-            ))
+            const firstInvocationIndex = content.findIndex(
+                child => (
+                    child && typeof child === 'object' && (child as Record<string, unknown>).type === 'aiCollapsibleBlock'
+                ),
+            )
             const preamble = firstInvocationIndex >= 0
                 ? content.slice(0, firstInvocationIndex)
                 : content
-            summary = preamble
-                .map(block => collectDocumentText(block).replace(/\s+/gu, ' ').trim())
-                .filter(Boolean)
+            summary = preamble.map(block => collectDocumentText(block).replace(/\s+/gu, ' ').trim()).filter(Boolean)
                 .join('\n\n')
                 .slice(0, 600)
+
             return
         }
-        if (Array.isArray(node.content)) node.content.forEach(visit)
+
+        if (Array.isArray(node.content))
+            node.content.forEach(visit)
     }
     visit(document)
+
     return summary
 }
 
@@ -105,16 +134,16 @@ export const includeLineageProgressInAssetProvenance = (
     generationRun?: MediaGenerationRunMeta,
 ): MediaGenerationProgressState => {
     const referenceHandles: ExecutionTraceHandle[] = [
-        ...new Set(
-            generationRun?.lineageAssignment?.referenceAssetIds ?? [],
-        ),
-    ].map(assetId => ({
-        kind: 'media' as const,
-        id: assetId,
-        displayName: assetId,
-        mediaKind: 'image' as const,
-        role: 'message-reference',
-    }))
+        ...new Set(generationRun?.lineageAssignment?.referenceAssetIds ?? []),
+    ].map(
+        assetId => ({
+            kind: 'media' as const,
+            id: assetId,
+            displayName: assetId,
+            mediaKind: 'image' as const,
+            role: 'message-reference',
+        }),
+    )
     const sharedItems: OperationProgressItem[] = [
         {
             id: 'lineage:understand-request',
@@ -123,7 +152,9 @@ export const includeLineageProgressInAssetProvenance = (
             ...(reasoningSummary ? { summary: reasoningSummary } : {}),
             // A content-less trace is never sealed: it would give the reader a
             // disclosure that opens onto nothing.
-            ...(reasoningSummary || referenceHandles.length || generationRun
+            ...(reasoningSummary
+                || referenceHandles.length
+                || generationRun
                 ? {
                     trace: {
                         traceVersion: 'execution-trace-v1' as const,
@@ -170,16 +201,31 @@ export const includeLineageProgressInAssetProvenance = (
                     trace: {
                         traceVersion: 'execution-trace-v1' as const,
                         facts: [
-                            { label: 'Generation request', value: generationRun.generationRequestId },
-                            { label: 'Reasoning run', value: generationRun.reasoningRunId },
+                            {
+                                label: 'Generation request',
+                                value: generationRun.generationRequestId,
+                            },
+                            {
+                                label: 'Reasoning run',
+                                value: generationRun.reasoningRunId,
+                            },
                             ...(generationRun.mediaRunId
-                                ? [{ label: 'Media run', value: generationRun.mediaRunId }]
+                                ? [{
+                                    label: 'Media run',
+                                    value: generationRun.mediaRunId,
+                                }]
                                 : []),
                             ...(generationRun.mediaModelId
-                                ? [{ label: 'Media model', value: generationRun.mediaModelId }]
+                                ? [{
+                                    label: 'Media model',
+                                    value: generationRun.mediaModelId,
+                                }]
                                 : []),
                             ...(generationRun.lineageAssignment?.branchId
-                                ? [{ label: 'Branch', value: generationRun.lineageAssignment.branchId }]
+                                ? [{
+                                    label: 'Branch',
+                                    value: generationRun.lineageAssignment.branchId,
+                                }]
                                 : []),
                         ],
                     },
@@ -187,6 +233,7 @@ export const includeLineageProgressInAssetProvenance = (
                 : {}),
         },
     ]
+
     return {
         ...progress,
         progress: {
@@ -238,52 +285,87 @@ const embedGenerationProgressInProvenance = ({
 }): Record<string, unknown> => {
     let embedded = false
     const visit = (value: unknown): unknown => {
-        if (!value || typeof value !== 'object') return value
-        if (Array.isArray(value)) return value.map(visit)
+        if (
+            !value
+            || typeof value !== 'object'
+        )
+            return value
+
+        if (Array.isArray(value))
+            return value.map(visit)
+
         const node = value as Record<string, unknown>
-        const attrs = node.attrs && typeof node.attrs === 'object'
+        const attrs = node.attrs
+            && typeof node.attrs === 'object'
             ? node.attrs as Record<string, unknown>
             : undefined
-        const matches = (node.type === 'aiGeneratedImage' || node.type === 'aiGeneratedVideo') && (
+        const matches = (node.type === 'aiGeneratedImage' || node.type === 'aiGeneratedVideo')
+            && (
             attrs?.assetId === assetId
             || Boolean(generationRun.mediaRunId && attrs?.mediaRunId === generationRun.mediaRunId)
         )
+
         if (matches) {
             embedded = true
+
             return {
                 ...node,
-                attrs: { ...attrs, generationProgress },
+                attrs: {
+                    ...attrs,
+                    generationProgress,
+                },
                 ...(Array.isArray(node.content) ? { content: node.content.map(visit) } : {}),
             }
         }
+
         return {
             ...node,
             ...(Array.isArray(node.content) ? { content: node.content.map(visit) } : {}),
         }
     }
     const projected = visit(document) as Record<string, unknown>
-    if (embedded) return projected
+
+    if (embedded)
+        return projected
 
     let appended = false
     const appendToResponse = (value: unknown): unknown => {
-        if (!value || typeof value !== 'object') return value
-        if (Array.isArray(value)) return value.map(appendToResponse)
+        if (
+            !value
+            || typeof value !== 'object'
+        )
+            return value
+
+        if (Array.isArray(value))
+            return value.map(appendToResponse)
+
         const node = value as Record<string, unknown>
-        if (!appended && node.type === 'aiResponseMessage') {
+
+        if (
+            !appended
+            && node.type === 'aiResponseMessage'
+        ) {
             appended = true
+
             return {
                 ...node,
                 content: [
                     ...(Array.isArray(node.content) ? node.content : []),
-                    createProvenanceMediaNode({ assetId, generationRun, generationProgress }),
+                    createProvenanceMediaNode({
+                        assetId,
+                        generationRun,
+                        generationProgress,
+                    }),
                 ],
             }
         }
+
         return {
             ...node,
             ...(Array.isArray(node.content) ? { content: node.content.map(appendToResponse) } : {}),
         }
     }
+
     return appendToResponse(projected) as Record<string, unknown>
 }
 
@@ -305,31 +387,52 @@ const materializeAssetProvenanceAttempt = async ({
     allowMinimalCompletedProjection: boolean
 }): Promise<void> => {
     const asset = await getAssetRecord(assetId)
-    if (!asset) throw new Error('ASSET_NOT_FOUND')
-    if (asset.states.lifecycle === 'deleting') return
-    if (terminalStatus !== 'completed' && asset.media?.renditions.original?.status === 'ready') return
-    if (asset.documents.provenance && ['sealed', 'failed', 'cancelled'].includes(asset.states.provenance)) return
+
+    if (!asset)
+        throw new Error('ASSET_NOT_FOUND')
+
+    if (asset.states.lifecycle === 'deleting')
+        return
+
+    if (
+        terminalStatus !== 'completed'
+        && asset.media?.renditions.original?.status === 'ready'
+    )
+        return
+
+    if (
+        asset.documents.provenance
+        && ['sealed', 'failed', 'cancelled'].includes(asset.states.provenance)
+    )
+        return
+
     if (
         asset.lineage?.sourceConversationAssetId !== conversationAssetId
         || asset.lineage?.reasoningRunId !== generationRun.reasoningRunId
         || asset.lineage?.mediaRunId !== generationRun.mediaRunId
-    ) {
+    )
         throw new Error('PROVENANCE_LINEAGE_MISMATCH')
-    }
+
     const conversationAsset = await getAssetRecord(conversationAssetId)
-    if (!conversationAsset || conversationAsset.organizationId !== asset.organizationId) {
+
+    if (
+        !conversationAsset
+        || conversationAsset.organizationId !== asset.organizationId
+    )
         throw new Error('PROVENANCE_CONVERSATION_ASSET_NOT_FOUND')
-    }
+
     const conversationSnapshot = await AssetDocumentService.loadCurrentSnapshot(conversationAsset, 'conversation')
     const request = await MediaGenerationRequestModel.get({
         generationRequestId: generationRun.generationRequestId,
         workspaceId,
     })
-    const durableRun = request?.runs.find(run => (
-        Boolean(generationRun.mediaRunId && run.mediaRunId === generationRun.mediaRunId)
-        || (run.reasoningIndex === generationRun.reasoningIndex
-            && run.modelId === generationRun.mediaModelId)
-    ))
+    const durableRun = request?.runs.find(
+        run => (
+            Boolean(generationRun.mediaRunId && run.mediaRunId === generationRun.mediaRunId)
+            || (run.reasoningIndex === generationRun.reasoningIndex
+                && run.modelId === generationRun.mediaModelId)
+        ),
+    )
     const streamedProgress = durableRun
         ? await MediaGenerationRequestEventLog.fromSingleton().getLatestRunProgress({
             workspaceId,
@@ -337,7 +440,9 @@ const materializeAssetProvenanceAttempt = async ({
             generationRun: durableRun.generationRun,
         }).then(envelope => {
             const progress = envelope?.event.payload.progress
-            return progress && typeof progress === 'object'
+
+            return progress
+                && typeof progress === 'object'
                 ? progress as MediaGenerationRunProgress
                 : undefined
         }).catch(() => undefined)
@@ -347,8 +452,8 @@ const materializeAssetProvenanceAttempt = async ({
         ?? (terminalStatus === 'completed'
             ? 'Media generation completed.'
             : terminalStatus === 'cancelled'
-            ? 'Media generation cancelled.'
-            : durableRun?.problem?.detail ?? 'Media generation failed.')
+                ? 'Media generation cancelled.'
+                : durableRun?.problem?.detail ?? 'Media generation failed.')
     const mediaGenerationProgress: MediaGenerationProgressState = {
         generationRequestId: generationRun.generationRequestId,
         status: terminalStatus,
@@ -388,9 +493,14 @@ const materializeAssetProvenanceAttempt = async ({
             },
         )
         : null
-    if (terminalStatus === 'completed' && !projection && !allowMinimalCompletedProjection) {
+
+    if (
+        terminalStatus === 'completed'
+        && !projection
+        && !allowMinimalCompletedProjection
+    )
         throw new Error('PROVENANCE_PROJECTION_NOT_READY')
-    }
+
     const projectedContent = projection?.content
     const baseProvenanceDocument = projectedContent
         ? {
@@ -401,7 +511,10 @@ const materializeAssetProvenanceAttempt = async ({
             type: 'doc',
             content: [{
                 type: 'aiChatThread',
-                attrs: { threadId: conversationAssetId, status: terminalStatus },
+                attrs: {
+                    threadId: conversationAssetId,
+                    status: terminalStatus,
+                },
                 content: [{
                     type: 'aiResponseMessage',
                     attrs: {
@@ -414,7 +527,10 @@ const materializeAssetProvenanceAttempt = async ({
                     },
                     content: [{
                         type: 'paragraph',
-                        content: [{ type: 'text', text: `Generation ${terminalStatus}.` }],
+                        content: [{
+                            type: 'text',
+                            text: `Generation ${terminalStatus}.`,
+                        }],
                     }],
                 }],
             }],
@@ -431,7 +547,10 @@ const materializeAssetProvenanceAttempt = async ({
         version: 1,
     })
     AssetDocumentService.assertAssetBackedMediaNodes(provenanceDocument)
-    const bytes = Buffer.from(JSON.stringify(provenanceDocument), 'utf8')
+    const bytes = Buffer.from(
+        JSON.stringify(provenanceDocument),
+        'utf8',
+    )
     const blob = await BlobModel.store({
         organizationId: asset.organizationId,
         bytes,
@@ -450,11 +569,20 @@ const materializeAssetProvenanceAttempt = async ({
     }
     const next: Asset = {
         ...asset,
-        documents: { ...asset.documents, provenance: pointer },
+        documents: {
+            ...asset.documents,
+            provenance: pointer,
+        },
         states: {
             ...asset.states,
-            ...(terminalStatus === 'failed' ? { lifecycle: 'failed' as const, media: 'failed' as const } : {}),
-            ...(terminalStatus === 'cancelled' ? { lifecycle: 'failed' as const, media: 'cancelled' as const } : {}),
+            ...(terminalStatus === 'failed' ? {
+                lifecycle: 'failed' as const,
+                media: 'failed' as const,
+            } : {}),
+            ...(terminalStatus === 'cancelled' ? {
+                lifecycle: 'failed' as const,
+                media: 'cancelled' as const,
+            } : {}),
             provenance: terminalStatus === 'completed' ? 'sealed' : terminalStatus,
         },
         revision: asset.revision + 1,
@@ -477,7 +605,11 @@ const materializeAssetProvenanceAttempt = async ({
     })
     const previousBlobHash = asset.documents.provenance?.blobHash
     let previousBlobDeletionRequired = false
-    if (previousBlobHash && previousBlobHash !== blob.blobHash) {
+
+    if (
+        previousBlobHash
+        && previousBlobHash !== blob.blobHash
+    ) {
         const removal = await buildBlobReferenceRemovalOperations({
             organizationId: asset.organizationId,
             blobHash: previousBlobHash,
@@ -487,15 +619,25 @@ const materializeAssetProvenanceAttempt = async ({
         operations.push(...removal.operations)
         previousBlobDeletionRequired = removal.deletionRequired
     }
+
     try {
         await dynamoDBService.transactWrite({
             operations: [
                 ...operations,
                 {
                     type: 'update',
-                    tableName: getDynamoDbTableStageName('ASSETS', ORG_NAME, STAGE),
+                    tableName: getDynamoDbTableStageName(
+                        'ASSETS',
+                        ORG_NAME,
+                        STAGE,
+                    ),
                     key: { assetId },
-                    updates: { documents: next.documents, states: next.states, revision: next.revision, updatedAt: now },
+                    updates: {
+                        documents: next.documents,
+                        states: next.states,
+                        revision: next.revision,
+                        updatedAt: now,
+                    },
                     conditionExpression: '#revision = :expectedRevision',
                     expressionAttributeNames: { '#revision': 'revision' },
                     expressionAttributeValues: { ':expectedRevision': asset.revision },
@@ -506,7 +648,10 @@ const materializeAssetProvenanceAttempt = async ({
             origin: 'materializeAssetProvenance',
         })
     } catch (error) {
-        if (revisionRetryAttempt < 3 && isRevisionConflict(error)) {
+        if (
+            revisionRetryAttempt < 3
+            && isRevisionConflict(error)
+        ) {
             return await materializeAssetProvenanceAttempt({
                 assetId,
                 workspaceId,
@@ -517,12 +662,20 @@ const materializeAssetProvenanceAttempt = async ({
                 allowMinimalCompletedProjection,
             })
         }
+
         throw error
     }
+
     publishAssetEvent(NATS_SUBJECTS.ASSET_SUBJECTS.EVENTS.UPDATED, next)
-    if (previousBlobHash && previousBlobDeletionRequired) {
-        await enqueueBlobDeletion({ organizationId: asset.organizationId, blobHash: previousBlobHash })
-    }
+
+    if (
+        previousBlobHash
+        && previousBlobDeletionRequired
+    )
+        await enqueueBlobDeletion({
+            organizationId: asset.organizationId,
+            blobHash: previousBlobHash,
+        })
 }
 
 export const materializeAssetProvenance = async (payload: {
@@ -552,36 +705,57 @@ export const settleUnfinishedGeneratedAssets = async ({
     conversationAssetId: string
     terminalStatus: 'failed' | 'cancelled'
 }): Promise<void> => {
-    await Promise.all(plan.runAssignments.map(async (assignment) => {
-        if (!assignment.reasoningRunId || !assignment.reasoningModelId) return
-        const asset = await getAssetRecord(assignment.assetId)
-        if (!asset || asset.organizationId !== organizationId) return
-        if (asset.documents.provenance || asset.states.provenance === 'sealed') return
-        if (asset.media?.renditions.original?.status === 'ready') return
-        const generationRun: MediaGenerationRunMeta = {
-            requestKind: 'media-generation-matrix',
-            generationRequestId: assignment.generationRequestId,
-            reasoningRunId: assignment.reasoningRunId,
-            reasoningModelId: assignment.reasoningModelId,
-            reasoningIndex: assignment.reasoningIndex ?? 0,
-            ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
-            ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
-            ...(assignment.mediaType ? { mediaType: assignment.mediaType } : {}),
-            ...(typeof assignment.mediaIndex === 'number' ? { mediaIndex: assignment.mediaIndex } : {}),
-            lineageAssignment: assignment,
-        }
-        const payload = {
-            organizationId,
-            assetId: assignment.assetId,
-            workspaceId,
-            conversationAssetId,
-            generationRun,
-            terminalStatus,
-        }
-        try {
-            await materializeAssetProvenance(payload)
-        } catch {
-            await enqueueProvenanceRebuild(payload)
-        }
-    }))
+    await Promise.all(
+        plan.runAssignments.map(async assignment => {
+            if (
+                !assignment.reasoningRunId
+                || !assignment.reasoningModelId
+            )
+                return
+
+            const asset = await getAssetRecord(assignment.assetId)
+
+            if (
+                !asset
+                || asset.organizationId !== organizationId
+            )
+                return
+
+            if (
+                asset.documents.provenance
+                || asset.states.provenance === 'sealed'
+            )
+                return
+
+            if (asset.media?.renditions.original?.status === 'ready')
+                return
+
+            const generationRun: MediaGenerationRunMeta = {
+                requestKind: 'media-generation-matrix',
+                generationRequestId: assignment.generationRequestId,
+                reasoningRunId: assignment.reasoningRunId,
+                reasoningModelId: assignment.reasoningModelId,
+                reasoningIndex: assignment.reasoningIndex ?? 0,
+                ...(assignment.mediaRunId ? { mediaRunId: assignment.mediaRunId } : {}),
+                ...(assignment.mediaModelId ? { mediaModelId: assignment.mediaModelId } : {}),
+                ...(assignment.mediaType ? { mediaType: assignment.mediaType } : {}),
+                ...(typeof assignment.mediaIndex === 'number' ? { mediaIndex: assignment.mediaIndex } : {}),
+                lineageAssignment: assignment,
+            }
+            const payload = {
+                organizationId,
+                assetId: assignment.assetId,
+                workspaceId,
+                conversationAssetId,
+                generationRun,
+                terminalStatus,
+            }
+
+            try {
+                await materializeAssetProvenance(payload)
+            } catch {
+                await enqueueProvenanceRebuild(payload)
+            }
+        }),
+    )
 }

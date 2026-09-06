@@ -1,15 +1,7 @@
-import process from 'process'
 import chalk from 'chalk'
-import {
-    log,
-    info,
-    infoStr,
-    warn,
-    err,
-} from '@lixpi/debug-tools'
+import { infoStr } from '@lixpi/debug-tools'
 
 import SubscriptionService from '../../services/subscription-service.ts'
-import User from '../../models/user.ts'
 
 import { NATS_SUBJECTS } from '@lixpi/constants'
 
@@ -30,9 +22,12 @@ export const subscriptionSubjects = [
         handler: async (data, msg) => {
             // If user set and its not an empty object
             const user = data.user
-            if (!user || Object.keys(user).length === 0) {
+
+            if (
+                !user
+                || Object.keys(user).length === 0
+            )
                 return { error: 'No user found' }
-            }
 
             const {
                 userId,
@@ -52,9 +47,12 @@ export const subscriptionSubjects = [
         handler: async (data, msg) => {
             // If user set and its not an empty object
             const user = data.user
-            if (!user || Object.keys(user).length === 0) {
+
+            if (
+                !user
+                || Object.keys(user).length === 0
+            )
                 return { error: 'No user found' }
-            }
 
             const {
                 userId,
@@ -88,9 +86,12 @@ export const subscriptionSubjects = [
         handler: async (data, msg) => {
             // If user set and its not an empty object
             const user = data.user
-            if (!user || Object.keys(user).length === 0) {
+
+            if (
+                !user
+                || Object.keys(user).length === 0
+            )
                 return { error: 'No user found' }
-            }
 
             const {
                 userId,
@@ -118,9 +119,12 @@ export const subscriptionSubjects = [
         handler: async (data, msg) => {
             // If user set and its not an empty object
             const user = data.user
-            if (!user || Object.keys(user).length === 0) {
+
+            if (
+                !user
+                || Object.keys(user).length === 0
+            )
                 return { error: 'No user found' }
-            }
 
             const {
                 userId,

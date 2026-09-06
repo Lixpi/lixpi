@@ -23,7 +23,10 @@ class GeneratedOutputDetailsSidebar implements GeneratedOutputDetailsSidebarInst
     readonly body: HTMLElement
     private readonly lifetime = new Lifetime()
 
-    constructor({ onClose, renderContent }: GeneratedOutputDetailsSidebarOptions) {
+    constructor({
+        onClose,
+        renderContent,
+    }: GeneratedOutputDetailsSidebarOptions) {
         this.element = html`
             <section
                 className="workspace-media-generation-trace-panel workspace-generated-output-details-panel"
@@ -44,13 +47,17 @@ class GeneratedOutputDetailsSidebar implements GeneratedOutputDetailsSidebarInst
         this.body = this.element.querySelector('.workspace-generated-output-details-panel-body') as HTMLElement
         this.lifetime.own(() => this.element.remove())
         const close = this.element.querySelector('.workspace-media-generation-trace-panel-close')!
+
         try {
             this.lifetime.own(() => close.removeEventListener('click', onClose))
             close.addEventListener('click', onClose)
             const content = renderContent(this.body)
-            if (content?.destroy) this.lifetime.own(() => content.destroy!())
+
+            if (content?.destroy)
+                this.lifetime.own(() => content.destroy!())
         } catch (error) {
             this.lifetime.destroy()
+
             throw error
         }
     }
@@ -60,8 +67,5 @@ class GeneratedOutputDetailsSidebar implements GeneratedOutputDetailsSidebarInst
     }
 }
 
-export function createGeneratedOutputDetailsSidebar(
-    options: GeneratedOutputDetailsSidebarOptions,
-): GeneratedOutputDetailsSidebarInstance {
-    return new GeneratedOutputDetailsSidebar(options)
-}
+export const createGeneratedOutputDetailsSidebar = (options: GeneratedOutputDetailsSidebarOptions): GeneratedOutputDetailsSidebarInstance =>
+    new GeneratedOutputDetailsSidebar(options)

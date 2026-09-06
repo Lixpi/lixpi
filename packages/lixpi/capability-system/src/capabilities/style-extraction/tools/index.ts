@@ -13,19 +13,15 @@ import {
     type StyleExtractionActionDependencies,
 } from './style-extraction-actions.ts'
 
-export function createStyleExtractionToolPackage(
+export const createStyleExtractionToolPackage = (
     dependencies: StyleExtractionActionDependencies,
     storage: StyleExtractionCapabilityStorage,
-): CapabilityToolPackageInstaller {
+): CapabilityToolPackageInstaller => {
     return {
         kind: 'tool',
         capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.tool,
-        registerActions: (registry: CapabilityActionRegistry): void => {
-            registerStyleExtractionActions(registry, dependencies)
-        },
-        seed: async (context: CapabilityPackageSeedContext): Promise<void> => {
-            await seedStyleExtractionTool(context, storage)
-        },
+        registerActions: (registry: CapabilityActionRegistry): void => void registerStyleExtractionActions(registry, dependencies),
+        seed: async (context: CapabilityPackageSeedContext): Promise<void> => void (await seedStyleExtractionTool(context, storage)),
     }
 }
 

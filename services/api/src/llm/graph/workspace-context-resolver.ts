@@ -57,32 +57,58 @@ type ProseMirrorDoc = {
 const RESOLVER_VERSION = 'workspace-context-v1'
 
 const extractTextFromNode = (node: ProseMirrorNode): string => {
-    if (node.type === 'text' && node.text) return node.text
-    if (node.type === 'hard_break') return '\n'
-    if (node.type === 'code_block' && node.content) {
+    if (
+        node.type === 'text'
+        && node.text
+    )
+        return node.text
+
+    if (node.type === 'hard_break')
+        return '\n'
+
+    if (
+        node.type === 'code_block'
+        && node.content
+    )
         return `\n\`\`\`\n${node.content.map(extractTextFromNode).join('')}\n\`\`\`\n`
-    }
-    if (!node.content) return ''
+
+    if (!node.content)
+        return ''
+
     const childText = node.content.map(extractTextFromNode).join('')
+
     return ['paragraph', 'heading', 'blockquote', 'list_item'].includes(node.type) ? `${childText}\n` : childText
 }
 
 const extractTextFromProseMirror = (content: string | object | undefined): string => {
-    if (content === undefined) return ''
+    if (content === undefined)
+        return ''
+
     if (typeof content === 'string') {
         try {
             const parsed = JSON.parse(content) as ProseMirrorDoc
-            if (parsed?.type === 'doc') return extractTextFromProseMirror(parsed)
+
+            if (parsed?.type === 'doc')
+                return extractTextFromProseMirror(parsed)
         } catch {
             return content.trim()
         }
     }
+
     const doc = content as ProseMirrorDoc
-    if (!doc || doc.type !== 'doc' || !Array.isArray(doc.content)) return ''
+
+    if (
+        !doc
+        || doc.type !== 'doc'
+        || !Array.isArray(doc.content)
+    )
+        return ''
+
     return doc.content.map(extractTextFromNode).join('').trim()
 }
 
-const hasModelError = (value: unknown): value is { error: string } => typeof value === 'object' && value !== null && typeof (value as any).error === 'string'
+const hasModelError = (value: unknown): value is { error: string } =>
+    typeof value === 'object' && value !== null && typeof (value as any).error === 'string'
 
 const resolveContextAsset = async (
     assetId: string,
@@ -91,15 +117,24 @@ const resolveContextAsset = async (
 ): Promise<Asset | { error: string }> => {
     const organizationId = state.eventMeta?.organizationId
     const workspaceScope = organizationId
-        ? { workspaceId: state.workspaceId, organizationId }
+        ? {
+            workspaceId: state.workspaceId,
+            organizationId,
+        }
         : null
     const asset = deps.getAsset
         ? await deps.getAsset(assetId)
         : { error: 'WORKSPACE_CONTEXT_REQUESTER_REQUIRED' }
-    if ('error' in asset) return asset
-    if (!workspaceScope || !isAssetAvailableInWorkspaceScope(asset, workspaceScope)) {
+
+    if ('error' in asset)
+        return asset
+
+    if (
+        !workspaceScope
+        || !isAssetAvailableInWorkspaceScope(asset, workspaceScope)
+    )
         return { error: 'ORGANIZATION_BOUNDARY_VIOLATION' }
-    }
+
     return asset
 }
 
@@ -108,49 +143,88 @@ const loadAssetDocumentText = async (
     role: 'content',
     deps: ResolveWorkspaceContextDeps,
 ): Promise<string> => {
-    if (!asset.documents[role]) return ''
+    if (!asset.documents[role])
+        return ''
+
     const loadSnapshot = deps.loadAssetDocumentSnapshot ?? AssetDocumentService.loadCurrentSnapshot
     const snapshot = await loadSnapshot(asset, role)
+
     return extractTextFromProseMirror(snapshot?.doc)
 }
 
 const resolveAssetMediaUrl = async (asset: Asset): Promise<string | undefined> => {
-    if (!asset.media) return undefined
+    if (!asset.media)
+        return undefined
+
     const names = asset.media.kind === 'image'
         ? ['preview', 'original'] as const
         : asset.media.kind === 'video'
-        ? ['representativeFrame', 'poster', 'thumbnail'] as const
-        : asset.media.kind === 'document'
-        ? ['poster', 'thumbnail'] as const
-        : [] as const
-    const rendition = names
-        .map((name) => asset.media!.renditions[name])
-        .find((candidate) => candidate?.status === 'ready' && candidate.blobHash)
-    if (rendition?.status !== 'ready' || !rendition.blobHash) return undefined
-    const blob = await BlobModel.get({ organizationId: asset.organizationId, blobHash: rendition.blobHash })
+            ? ['representativeFrame', 'poster', 'thumbnail'] as const
+            : asset.media.kind === 'document'
+                ? ['poster', 'thumbnail'] as const
+                : [] as const
+    const rendition = names.map(name => asset.media!.renditions[name]).find(candidate => candidate?.status === 'ready' && candidate.blobHash)
+
+    if (
+        rendition?.status !== 'ready'
+        || !rendition.blobHash
+    )
+        return undefined
+
+    const blob = await BlobModel.get({
+        organizationId: asset.organizationId,
+        blobHash: rendition.blobHash,
+    })
+
     return blob ? `nats-obj://${blob.bucketName}/${blob.objectKey}` : undefined
 }
 
-const getFallbackText = (node: WorkspaceContextNode): string => [node.title, node.descriptorSummary].filter((part): part is string => Boolean(part?.trim())).join('\n')
+const getFallbackText = (node: WorkspaceContextNode): string => [node.title, node.descriptorSummary].filter(
+    (part): part is string => Boolean(part?.trim()),
+).join('\n')
 
 const resolveDocumentText = async (
     node: WorkspaceContextNode,
     state: ProviderState,
     deps: ResolveWorkspaceContextDeps,
-): Promise<{ title?: string; text: string } | undefined> => {
+): Promise<{
+    title?: string
+    text: string
+} | undefined> => {
     if (!node.assetId) {
         const text = getFallbackText(node)
-        return text ? { title: node.title, text } : undefined
+
+        return text ? {
+            title: node.title,
+            text,
+        } : undefined
     }
 
-    const asset = await resolveContextAsset(node.assetId, state, deps)
+    const asset = await resolveContextAsset(
+        node.assetId,
+        state,
+        deps,
+    )
+
     if (hasModelError(asset)) {
         const text = getFallbackText(node)
-        return text ? { title: node.title, text } : undefined
+
+        return text ? {
+            title: node.title,
+            text,
+        } : undefined
     }
 
-    const text = await loadAssetDocumentText(asset, 'content', deps) || getFallbackText(node)
-    return text ? { title: asset.title || node.title, text } : undefined
+    const text = (await loadAssetDocumentText(
+        asset,
+        'content',
+        deps,
+    )) || getFallbackText(node)
+
+    return text ? {
+        title: asset.title || node.title,
+        text,
+    } : undefined
 }
 
 const resolveAssetAudioDataUrl = async (
@@ -158,14 +232,29 @@ const resolveAssetAudioDataUrl = async (
     deps: ResolveWorkspaceContextDeps,
 ): Promise<string> => {
     const rendition = asset.media?.renditions.original
-    if (!rendition || rendition.status !== 'ready' || !rendition.blobHash) {
+
+    if (
+        !rendition
+        || rendition.status !== 'ready'
+        || !rendition.blobHash
+    )
         throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_NOT_READY:${asset.title}`)
-    }
-    const blob = await BlobModel.get({ organizationId: asset.organizationId, blobHash: rendition.blobHash })
-    if (!blob) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_BLOB_MISSING:${asset.title}`)
+
+    const blob = await BlobModel.get({
+        organizationId: asset.organizationId,
+        blobHash: rendition.blobHash,
+    })
+
+    if (!blob)
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_BLOB_MISSING:${asset.title}`)
+
     const bytes = await deps.natsService.getObject(blob.bucketName, blob.objectKey)
-    if (!bytes) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_OBJECT_MISSING:${asset.title}`)
+
+    if (!bytes)
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_AUDIO_OBJECT_MISSING:${asset.title}`)
+
     const mimeType = rendition.mimeType || asset.media.sourceMimeType
+
     return `data:${mimeType};base64,${Buffer.from(bytes).toString('base64')}`
 }
 
@@ -173,9 +262,15 @@ const resolveCapabilityArtifactCitedAssetBlocks = async (
     asset: Asset,
     deps: ResolveWorkspaceContextDeps,
 ): Promise<Array<Record<string, any>>> => {
-    if (asset.media?.kind === 'image' || asset.media?.kind === 'video') {
+    if (
+        asset.media?.kind === 'image'
+        || asset.media?.kind === 'video'
+    ) {
         const imageUrl = await resolveAssetMediaUrl(asset)
-        if (!imageUrl) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_MEDIA_NOT_READY:${asset.title}`)
+
+        if (!imageUrl)
+            throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_MEDIA_NOT_READY:${asset.title}`)
+
         return [{
             type: 'input_text',
             text: JSON.stringify({
@@ -184,14 +279,22 @@ const resolveCapabilityArtifactCitedAssetBlocks = async (
                     : 'workspace_artifact_image_reference',
                 title: asset.title,
             }),
-        }, { type: 'input_image', image_url: imageUrl, detail: 'high' }]
+        }, {
+            type: 'input_image',
+            image_url: imageUrl,
+            detail: 'high',
+        }]
     }
 
     if (asset.media?.kind === 'audio') {
         const dataUrl = await resolveAssetAudioDataUrl(asset, deps)
+
         return [{
             type: 'input_text',
-            text: JSON.stringify({ type: 'workspace_artifact_audio_reference', title: asset.title }),
+            text: JSON.stringify({
+                type: 'workspace_artifact_audio_reference',
+                title: asset.title,
+            }),
         }, {
             type: 'input_audio',
             input_audio: {
@@ -201,9 +304,19 @@ const resolveCapabilityArtifactCitedAssetBlocks = async (
         }]
     }
 
-    if (asset.media?.kind === 'document' || asset.documents.content) {
-        const text = await loadAssetDocumentText(asset, 'content', deps)
-        if (!text) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_DOCUMENT_NOT_READY:${asset.title}`)
+    if (
+        asset.media?.kind === 'document'
+        || asset.documents.content
+    ) {
+        const text = await loadAssetDocumentText(
+            asset,
+            'content',
+            deps,
+        )
+
+        if (!text)
+            throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_DOCUMENT_NOT_READY:${asset.title}`)
+
         return [{
             type: 'input_text',
             text: JSON.stringify({
@@ -223,39 +336,65 @@ const resolveCapabilityArtifactContextBlocks = async (
     state: ProviderState,
     deps: ResolveWorkspaceContextDeps,
 ): Promise<Array<Record<string, any>>> => {
-    if (!node.assetId) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_ASSET_REQUIRED:${node.nodeId}`)
-    const artifactAsset = await resolveContextAsset(node.assetId, state, deps)
+    if (!node.assetId)
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_ASSET_REQUIRED:${node.nodeId}`)
+
+    const artifactAsset = await resolveContextAsset(
+        node.assetId,
+        state,
+        deps,
+    )
+
     if (
         hasModelError(artifactAsset)
         || artifactAsset.states.lifecycle !== 'active'
         || !artifactAsset.artifact
         || !artifactAsset.documents.capabilityArtifact
-    ) {
+    )
         throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_UNAVAILABLE:${node.assetId}`)
-    }
-    if (node.artifactTypeId && node.artifactTypeId !== artifactAsset.artifact.artifactTypeId) {
+
+    if (
+        node.artifactTypeId
+        && node.artifactTypeId !== artifactAsset.artifact.artifactTypeId
+    )
         throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_TYPE_MISMATCH:${node.nodeId}`)
-    }
 
     const definition = capabilityArtifactBackendRegistry.require(artifactAsset.artifact.artifactTypeId).shared
     const loadSnapshot = deps.loadAssetDocumentSnapshot ?? AssetDocumentService.loadCurrentSnapshot
     const snapshot = await loadSnapshot(artifactAsset, 'capabilityArtifact')
-    if (!snapshot) throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_NOT_READY:${node.nodeId}`)
+
+    if (!snapshot)
+        throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_NOT_READY:${node.nodeId}`)
+
     definition.assertInitialDocument(snapshot.doc)
 
     const citedAssets: Asset[] = []
+
     for (const assetId of definition.collectReferencedAssetIds(snapshot.doc)) {
-        const citedAsset = await resolveContextAsset(assetId, state, deps)
-        if (hasModelError(citedAsset) || citedAsset.states.lifecycle !== 'active') {
+        const citedAsset = await resolveContextAsset(
+            assetId,
+            state,
+            deps,
+        )
+
+        if (
+            hasModelError(citedAsset)
+            || citedAsset.states.lifecycle !== 'active'
+        )
             throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_REFERENCE_UNAVAILABLE:${assetId}`)
-        }
-        if (citedAsset.artifact || citedAsset.primaryCategory === 'capabilityArtifact') {
+
+        if (
+            citedAsset.artifact
+            || citedAsset.primaryCategory === 'capabilityArtifact'
+        )
             throw new Error(`WORKSPACE_CONTEXT_ARTIFACT_NESTED_REFERENCE_FORBIDDEN:${assetId}`)
-        }
+
         citedAssets.push(citedAsset)
     }
 
-    const labels = new Map(citedAssets.map((asset) => [asset.assetId, asset.title]))
+    const labels = new Map(
+        citedAssets.map(asset => [asset.assetId, asset.title]),
+    )
     const serialized = definition.serializeForModel(snapshot.doc, labels)
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
@@ -270,8 +409,9 @@ const resolveCapabilityArtifactContextBlocks = async (
     }]
 
     for (const citedAsset of citedAssets) {
-        blocks.push(...await resolveCapabilityArtifactCitedAssetBlocks(citedAsset, deps))
+        blocks.push(...(await resolveCapabilityArtifactCitedAssetBlocks(citedAsset, deps)))
     }
+
     return blocks
 }
 
@@ -281,9 +421,16 @@ const buildSelectedContextMessage = async (
     resolution: WorkspaceContextResolution,
 ): Promise<ChatMessage | undefined> => {
     const snapshot = state.workspaceContextSnapshot
-    if (!snapshot || resolution.selections.length === 0) return undefined
 
-    const nodeById = new Map(snapshot.nodes.map((node) => [node.nodeId, node]))
+    if (
+        !snapshot
+        || resolution.selections.length === 0
+    )
+        return undefined
+
+    const nodeById = new Map(
+        snapshot.nodes.map(node => [node.nodeId, node]),
+    )
     const blocks: Array<Record<string, any>> = [{
         type: 'input_text',
         text: JSON.stringify({
@@ -295,26 +442,50 @@ const buildSelectedContextMessage = async (
 
     for (const selection of resolution.selections) {
         const node = nodeById.get(selection.nodeId)
-        if (!node) continue
+
+        if (!node)
+            continue
 
         if (node.type === 'capabilityArtifact') {
-            const artifactBlocks = await resolveCapabilityArtifactContextBlocks(node, selection.role, state, deps)
+            const artifactBlocks = await resolveCapabilityArtifactContextBlocks(
+                node,
+                selection.role,
+                state,
+                deps,
+            )
+
             if (artifactBlocks.length > 0) {
                 expandedCapabilityArtifact = true
                 blocks.push(...artifactBlocks)
             }
         } else if (node.type === 'document') {
-            const resolved = await resolveDocumentText(node, state, deps)
-            if (!resolved) continue
+            const resolved = await resolveDocumentText(
+                node,
+                state,
+                deps,
+            )
+
+            if (!resolved)
+                continue
+
             const payload: Record<string, string> = {
                 type: 'workspace_document',
                 nodeId: node.nodeId,
                 role: selection.role,
                 content: resolved.text,
             }
-            if (resolved.title) payload.title = resolved.title
-            blocks.push({ type: 'input_text', text: JSON.stringify(payload) })
-        } else if (node.type === 'image' || node.type === 'video') {
+
+            if (resolved.title)
+                payload.title = resolved.title
+
+            blocks.push({
+                type: 'input_text',
+                text: JSON.stringify(payload),
+            })
+        } else if (
+            node.type === 'image'
+            || node.type === 'video'
+        ) {
             blocks.push({
                 type: 'input_text',
                 text: JSON.stringify({
@@ -330,26 +501,52 @@ const buildSelectedContextMessage = async (
                     isCurrentConversationGenerated: node.isCurrentConversationGenerated === true,
                 }),
             })
+
             if (node.assetId) {
-                const asset = await resolveContextAsset(node.assetId, state, deps)
+                const asset = await resolveContextAsset(
+                    node.assetId,
+                    state,
+                    deps,
+                )
+
                 if (!hasModelError(asset)) {
                     const imageUrl = await resolveAssetMediaUrl(asset)
-                    if (imageUrl) blocks.push({ type: 'input_image', image_url: imageUrl, detail: 'auto' })
+
+                    if (imageUrl)
+                        blocks.push({
+                            type: 'input_image',
+                            image_url: imageUrl,
+                            detail: 'auto',
+                        })
                 }
             }
         }
     }
 
-    if (blocks.length <= 1) return undefined
+    if (blocks.length <= 1)
+        return undefined
+
     // Titles and document text come straight from the Asset records, so on a run
     // with provider-safe media bindings they still carry the real display names.
     // They must be aliased here or the provider payload fails the leak assertion.
     const safeBlocks = sanitizeContextBlocks(blocks, state)
-    if (expandedCapabilityArtifact || (!state.imageModelVersion && !state.videoModelVersion)) {
+
+    if (
+        expandedCapabilityArtifact
+        || (!state.imageModelVersion && !state.videoModelVersion)
+    ) {
         const resolvedBlocks = await resolveImageUrls(safeBlocks, deps.natsService)
-        return { role: 'user', content: Array.isArray(resolvedBlocks) ? resolvedBlocks : safeBlocks }
+
+        return {
+            role: 'user',
+            content: Array.isArray(resolvedBlocks) ? resolvedBlocks : safeBlocks,
+        }
     }
-    return { role: 'user', content: safeBlocks }
+
+    return {
+        role: 'user',
+        content: safeBlocks,
+    }
 }
 
 const sanitizeContextBlocks = (
@@ -357,26 +554,41 @@ const sanitizeContextBlocks = (
     state: ProviderState,
 ): Array<Record<string, any>> => {
     const bindings = state.providerSafeMediaIntent?.bindings ?? state.mediaReferenceBindings
-    if (!bindings?.length) return blocks
-    return blocks.map(block => (typeof block.text === 'string'
-        ? { ...block, text: sanitizeMediaReferenceText(block.text, bindings) }
-        : block)
+
+    if (!bindings?.length)
+        return blocks
+
+    return blocks.map(
+        block => (typeof block.text === 'string'
+            ? {
+                ...block,
+                text: sanitizeMediaReferenceText(block.text, bindings),
+            }
+            : block),
     )
 }
 
-const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode => Boolean(node && (node.type === 'image' || node.type === 'video'))
+const isMediaWorkspaceNode = (node: WorkspaceContextNode | undefined): node is WorkspaceContextNode => Boolean(
+    node && (node.type === 'image' || node.type === 'video'),
+)
 
 const buildExplicitResolution = (state: ProviderState): WorkspaceContextResolution => {
     const snapshot = state.workspaceContextSnapshot
-    if (!snapshot) throw new Error('Workspace context snapshot is required')
-    const explicitNodes = snapshot.nodes.filter((node) => node.isExplicitChip)
+
+    if (!snapshot)
+        throw new Error('Workspace context snapshot is required')
+
+    const explicitNodes = snapshot.nodes.filter(node => node.isExplicitChip)
+
     return {
         resolverVersion: snapshot.resolverVersion || RESOLVER_VERSION,
-        selections: explicitNodes.map((node) => ({
-            nodeId: node.nodeId,
-            role: 'forced-chip',
-        })),
-        narrowedMediaNodeIds: explicitNodes.filter(isMediaWorkspaceNode).map((node) => node.nodeId),
+        selections: explicitNodes.map(
+            node => ({
+                nodeId: node.nodeId,
+                role: 'forced-chip',
+            }),
+        ),
+        narrowedMediaNodeIds: explicitNodes.filter(isMediaWorkspaceNode).map(node => node.nodeId),
     }
 }
 
@@ -385,11 +597,26 @@ const buildCandidateFromWorkspaceNode = async (
     state: ProviderState,
     deps: ResolveWorkspaceContextDeps,
 ): Promise<MediaBranchCandidateImage | undefined> => {
-    if (!isMediaWorkspaceNode(node) || !node.assetId) return undefined
-    const asset = await resolveContextAsset(node.assetId, state, deps)
-    if (hasModelError(asset)) return undefined
+    if (
+        !isMediaWorkspaceNode(node)
+        || !node.assetId
+    )
+        return undefined
+
+    const asset = await resolveContextAsset(
+        node.assetId,
+        state,
+        deps,
+    )
+
+    if (hasModelError(asset))
+        return undefined
+
     const imageUrl = await resolveAssetMediaUrl(asset)
-    if (!imageUrl) return undefined
+
+    if (!imageUrl)
+        return undefined
+
     const roleHints: MediaBranchCandidateImage['roleHints'] = node.branchId
         ? ['base-context', 'generated-variant']
         : ['base-context']
@@ -418,24 +645,43 @@ const buildExplicitMediaBranchSnapshot = async (
 ): Promise<MediaBranchCandidateSnapshot | undefined> => {
     const contextSnapshot = state.workspaceContextSnapshot
     const existingSnapshot = restrictSnapshotToExplicitRefs(state.mediaBranchCandidateSnapshot)
-    if (!contextSnapshot) return existingSnapshot
 
-    const nodeById = new Map(contextSnapshot.nodes.map((node) => [node.nodeId, node]))
-    const candidatesById = new Map(
-        (existingSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId, candidate]),
+    if (!contextSnapshot)
+        return existingSnapshot
+
+    const nodeById = new Map(
+        contextSnapshot.nodes.map(node => [node.nodeId, node]),
     )
+    const candidatesById = new Map(
+        (existingSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId, candidate]),
+    )
+
     for (const selection of resolution.selections) {
         const node = nodeById.get(selection.nodeId)
-        if (!isMediaWorkspaceNode(node)) continue
-        const candidate = await buildCandidateFromWorkspaceNode(node, state, deps)
-        if (candidate) candidatesById.set(candidate.candidateId, candidate)
+
+        if (!isMediaWorkspaceNode(node))
+            continue
+
+        const candidate = await buildCandidateFromWorkspaceNode(
+            node,
+            state,
+            deps,
+        )
+
+        if (candidate)
+            candidatesById.set(candidate.candidateId, candidate)
     }
 
-    if (!existingSnapshot && candidatesById.size === 0) return undefined
+    if (
+        !existingSnapshot
+        && candidatesById.size === 0
+    )
+        return undefined
+
     const candidates = [...candidatesById.values()]
-    const explicitReferenceCandidateIds = candidates.map((candidate) => candidate.candidateId)
+    const explicitReferenceCandidateIds = candidates.map(candidate => candidate.candidateId)
     const activeTargetCandidateId = existingSnapshot?.activeTargetCandidateId
-            && explicitReferenceCandidateIds.includes(existingSnapshot.activeTargetCandidateId)
+        && explicitReferenceCandidateIds.includes(existingSnapshot.activeTargetCandidateId)
         ? existingSnapshot.activeTargetCandidateId
         : undefined
     const promptText = existingSnapshot?.promptText ?? contextSnapshot.promptText
@@ -450,7 +696,11 @@ const buildExplicitMediaBranchSnapshot = async (
         promptFingerprint: existingSnapshot?.promptFingerprint
             ?? `explicit-context:${contextSnapshot.conversationAssetId}:${contextSnapshot.promptText}:${explicitReferenceCandidateIds.join(',')}`,
         candidates,
-        transcriptContext: buildCandidateTranscriptContext(candidates, promptText, activeTargetCandidateId),
+        transcriptContext: buildCandidateTranscriptContext(
+            candidates,
+            promptText,
+            activeTargetCandidateId,
+        ),
     })
 }
 
@@ -458,43 +708,83 @@ export const resolveWorkspaceContext = async (
     state: ProviderState,
     deps: ResolveWorkspaceContextDeps,
 ): Promise<Partial<ProviderState>> => {
-    if (!state.workspaceContextSnapshot) return {}
+    if (!state.workspaceContextSnapshot)
+        return {}
 
     try {
         let scopedDeps = deps
+
         if (!deps.getAsset) {
             const userId = state.eventMeta?.userId
             const organizationId = state.eventMeta?.organizationId
-            if (!userId || !organizationId) throw new Error('WORKSPACE_CONTEXT_USER_REQUIRED')
-            const workspace = await Workspace.getWorkspace({ workspaceId: state.workspaceId, userId })
-            if ('error' in workspace || workspace.deletingAt || workspace.organizationId !== organizationId) {
+
+            if (
+                !userId
+                || !organizationId
+            )
+                throw new Error('WORKSPACE_CONTEXT_USER_REQUIRED')
+
+            const workspace = await Workspace.getWorkspace({
+                workspaceId: state.workspaceId,
+                userId,
+            })
+
+            if (
+                'error' in workspace
+                || workspace.deletingAt
+                || workspace.organizationId !== organizationId
+            )
                 throw new Error('WORKSPACE_CONTEXT_WORKSPACE_ACCESS_DENIED')
-            }
-            const organization = await Organization.getOrganization({ organizationId, userId })
-            if ('error' in organization) throw new Error('WORKSPACE_CONTEXT_ORGANIZATION_ACCESS_DENIED')
-            const requester = createAssetRequesterForWorkspaceUser(workspace, userId, true)
+
+            const organization = await Organization.getOrganization({
+                organizationId,
+                userId,
+            })
+
+            if ('error' in organization)
+                throw new Error('WORKSPACE_CONTEXT_ORGANIZATION_ACCESS_DENIED')
+
+            const requester = createAssetRequesterForWorkspaceUser(
+                workspace,
+                userId,
+                true,
+            )
             scopedDeps = {
                 ...deps,
-                getAsset: async (assetId) => await AssetModel.get({ assetId, requester }),
+                getAsset: async assetId => await AssetModel.get({
+                    assetId,
+                    requester,
+                }),
             }
         }
+
         const resolution = buildExplicitResolution(state)
-        const contextMessage = await buildSelectedContextMessage(state, scopedDeps, resolution)
-        const mediaBranchCandidateSnapshot = await buildExplicitMediaBranchSnapshot(state, resolution, scopedDeps)
+        const contextMessage = await buildSelectedContextMessage(
+            state,
+            scopedDeps,
+            resolution,
+        )
+        const mediaBranchCandidateSnapshot = await buildExplicitMediaBranchSnapshot(
+            state,
+            resolution,
+            scopedDeps,
+        )
 
         deps.publisher.contextRelevanceResolved(resolution)
-        info(`[WorkspaceContextResolver] resolved explicit context ${
-            JSON.stringify(
-                {
-                    workspaceId: state.workspaceId,
-                    aiChatThreadId: state.aiChatThreadId,
-                    selectedNodeIds: resolution.selections.map((selection) => selection.nodeId),
-                    narrowedMediaNodeIds: resolution.narrowedMediaNodeIds,
-                },
-                null,
-                0,
-            )
-        }`)
+        info(
+            `[WorkspaceContextResolver] resolved explicit context ${
+                JSON.stringify(
+                    {
+                        workspaceId: state.workspaceId,
+                        aiChatThreadId: state.aiChatThreadId,
+                        selectedNodeIds: resolution.selections.map(selection => selection.nodeId),
+                        narrowedMediaNodeIds: resolution.narrowedMediaNodeIds,
+                    },
+                    null,
+                    0,
+                )
+            }`,
+        )
 
         return {
             workspaceContextResolution: resolution,
@@ -504,6 +794,7 @@ export const resolveWorkspaceContext = async (
     } catch (error: any) {
         const message = error?.message ?? String(error)
         deps.publisher.contextRelevanceError(message)
+
         throw error
     }
 }

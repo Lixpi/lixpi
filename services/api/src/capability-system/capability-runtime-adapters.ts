@@ -46,7 +46,11 @@ export class CapabilityModelResolverStore implements CapabilityResolverStore {
             record,
             requester: toCatalogRequester(requester),
         })
-        this.manifestBySnapshot.set(snapshotKey(record.capabilityId, record.manifestBlobHash), loaded.manifest)
+        this.manifestBySnapshot.set(
+            snapshotKey(record.capabilityId, record.manifestBlobHash),
+            loaded.manifest,
+        )
+
         return loaded.bytes
     }
 
@@ -55,37 +59,53 @@ export class CapabilityModelResolverStore implements CapabilityResolverStore {
         resource,
         requester,
     }: Parameters<CapabilityResolverStore['readResource']>[0]): Promise<Uint8Array> {
-        const manifest = this.manifestBySnapshot.get(snapshotKey(record.capabilityId, record.manifestBlobHash))
-        if (!manifest) throw new Error(`Capability manifest snapshot ${record.capabilityId}/${record.manifestBlobHash} was not loaded`)
+        const manifest = this.manifestBySnapshot.get(
+            snapshotKey(record.capabilityId, record.manifestBlobHash),
+        )
+
+        if (!manifest)
+            throw new Error(`Capability manifest snapshot ${record.capabilityId}/${record.manifestBlobHash} was not loaded`)
+
         const loaded = await readAuthorizedCapabilityResourceSnapshot({
             record,
             manifest,
             resourceId: resource.resourceId,
             requester: toCatalogRequester(requester),
         })
+
         return loaded.bytes
     }
 }
 
-function snapshotKey(capabilityId: string, manifestBlobHash: string): string {
+function snapshotKey(
+    capabilityId: string,
+    manifestBlobHash: string,
+): string {
     return `${capabilityId}\u0000${manifestBlobHash}`
 }
 
-export function createCapabilityModelRunPersistence(
+export const createCapabilityModelRunPersistence = (
     ownerUserId: string,
     eventLog = CapabilityRunEventLog.fromSingleton(),
-): CapabilityRunPersistence {
+): CapabilityRunPersistence => {
     const workspaceIds = new Map<string, string>()
     const lastStatuses = new Map<string, CapabilityRunStatus>()
+
     return {
         async createRun(run): Promise<void> {
-            await createCapabilityRun({ ...run, ownerUserId })
+            await createCapabilityRun({
+                ...run,
+                ownerUserId,
+            })
             workspaceIds.set(run.runId, run.workspaceId)
             lastStatuses.set(run.runId, run.status)
         },
         async updateRun(run): Promise<void> {
             const previousStatus = lastStatuses.get(run.runId)
-            if (!previousStatus) throw new Error(`Capability run ${run.runId} is not initialized`)
+
+            if (!previousStatus)
+                throw new Error(`Capability run ${run.runId} is not initialized`)
+
             await updateCapabilityRunStatus({
                 runId: run.runId,
                 workspaceId: run.workspaceId,
@@ -98,20 +118,30 @@ export function createCapabilityModelRunPersistence(
         },
         async appendEvent(event): Promise<void> {
             const workspaceId = workspaceIds.get(event.runId)
-            if (!workspaceId) throw new Error(`Capability run ${event.runId} has no workspace mapping`)
-            await eventLog.append({ userId: ownerUserId, workspaceId, event })
+
+            if (!workspaceId)
+                throw new Error(`Capability run ${event.runId} has no workspace mapping`)
+
+            await eventLog.append({
+                userId: ownerUserId,
+                workspaceId,
+                event,
+            })
         },
     }
 }
 
-export async function mirrorCapabilityRunEventToChat(args: {
+export const mirrorCapabilityRunEventToChat = async (args: {
     event: Readonly<CapabilityRunEvent>
     workspaceId: string
     organizationId?: string
     conversationAssetId: string
-}): Promise<void> {
+}): Promise<void> => {
     const natsService = NATS_Service.getInstance()
-    if (!natsService) return
+
+    if (!natsService)
+        return
+
     const content: CapabilityRunEventStreamPayload = {
         status: STREAM_STATUS.CAPABILITY_RUN_EVENT,
         aiProvider: 'Capability',
@@ -123,7 +153,11 @@ export async function mirrorCapabilityRunEventToChat(args: {
         conversationAssetId: args.conversationAssetId,
         pipelineEventId: `capability:${args.event.runId}:${args.event.sequence}`,
     }
-    await publishCapabilityChatPayload({ ...args, natsService, payload })
+    await publishCapabilityChatPayload({
+        ...args,
+        natsService,
+        payload,
+    })
 
     if (args.event.canvasGeometry) {
         await publishCapabilityChatPayload({
@@ -161,18 +195,15 @@ async function publishCapabilityChatPayload(args: {
             payload: args.payload,
         })
         args.natsService.publish(
-            getAiInteractionCanonicalResponseSubject(
-                args.organizationId ?? args.workspaceId,
-                args.conversationAssetId,
-            ),
-            { ...args.payload, pipelineStreamSeq: durable.streamSequence },
+            getAiInteractionCanonicalResponseSubject(args.organizationId ?? args.workspaceId, args.conversationAssetId),
+            {
+                ...args.payload,
+                pipelineStreamSeq: durable.streamSequence,
+            },
         )
     } catch {
         args.natsService.publish(
-            getAiInteractionCanonicalResponseSubject(
-                args.organizationId ?? args.workspaceId,
-                args.conversationAssetId,
-            ),
+            getAiInteractionCanonicalResponseSubject(args.organizationId ?? args.workspaceId, args.conversationAssetId),
             args.payload,
         )
     }

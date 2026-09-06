@@ -11,7 +11,10 @@ import {
 // Match Python `Decimal` behavior (default 28-digit precision, ROUND_HALF_EVEN).
 // decimal.js defaults to 20-digit precision; bumping it here so pricing
 // arithmetic stays byte-identical to the Python implementation.
-Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_EVEN })
+Decimal.set({
+    precision: 28,
+    rounding: Decimal.ROUND_HALF_EVEN,
+})
 
 export type UsageReport = {
     eventMeta: EventMeta
@@ -92,7 +95,10 @@ export type VideoUsageReport = {
     }
 }
 
-const dec = (v: unknown, fallback: string = '0'): Decimal => new Decimal(v == null ? fallback : String(v))
+const dec = (
+    v: unknown,
+    fallback: string = '0',
+): Decimal => new Decimal(v == null ? fallback : String(v))
 
 export class UsageReporter {
     // Currently logs only. Swap the return value for natsService.publish('usage.tokens.ai', report) when ready.
@@ -106,7 +112,14 @@ export class UsageReporter {
         aiRequestFinishedAt: number
     }): UsageReport | undefined {
         try {
-            const { aiModelMetaInfo, usage, eventMeta, aiVendorRequestId, aiRequestReceivedAt, aiRequestFinishedAt } = args
+            const {
+                aiModelMetaInfo,
+                usage,
+                eventMeta,
+                aiVendorRequestId,
+                aiRequestReceivedAt,
+                aiRequestFinishedAt,
+            } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
             const resaleMargin = dec(pricing.resaleMargin, '1.0')
             const pricePer = dec(pricing.text?.pricePer, '1000000')
@@ -121,10 +134,18 @@ export class UsageReporter {
             const completionTokens = usage.completionTokens ?? 0
             const totalTokens = usage.totalTokens ?? 0
 
-            const promptPurchased = promptPrice.div(pricePer).mul(dec(promptTokens))
-            const promptSold = promptResale.div(pricePer).mul(dec(promptTokens))
-            const completionPurchased = completionPrice.div(pricePer).mul(dec(completionTokens))
-            const completionSold = completionResale.div(pricePer).mul(dec(completionTokens))
+            const promptPurchased = promptPrice.div(pricePer).mul(
+                dec(promptTokens),
+            )
+            const promptSold = promptResale.div(pricePer).mul(
+                dec(promptTokens),
+            )
+            const completionPurchased = completionPrice.div(pricePer).mul(
+                dec(completionTokens),
+            )
+            const completionSold = completionResale.div(pricePer).mul(
+                dec(completionTokens),
+            )
             const totalPurchased = promptPurchased.plus(completionPurchased)
             const totalSold = promptSold.plus(completionSold)
 
@@ -165,6 +186,7 @@ export class UsageReporter {
             return report
         } catch (e) {
             warn(`Failed to report token usage: ${e}`)
+
             return undefined
         }
     }
@@ -179,13 +201,23 @@ export class UsageReporter {
         aiRequestFinishedAt: number
     }): ImageUsageReport | undefined {
         try {
-            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, imageSize, imageQuality, aiRequestReceivedAt, aiRequestFinishedAt } = args
+            const {
+                eventMeta,
+                aiModelMetaInfo,
+                aiVendorRequestId,
+                imageSize,
+                imageQuality,
+                aiRequestReceivedAt,
+                aiRequestFinishedAt,
+            } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
             const resaleMargin = dec(pricing.resaleMargin, '1.0')
 
             const imagePricing = pricing.image ?? {}
-            const sizePricing = imagePricing[imageSize] ?? imagePricing.default ?? {}
-            const qualityKey = (imageQuality in sizePricing) ? imageQuality : 'high'
+            const sizePricing = imagePricing[imageSize]
+                ?? imagePricing.default
+                ?? {}
+            const qualityKey = imageQuality in sizePricing ? imageQuality : 'high'
             const pricePerImage = dec(sizePricing[qualityKey], '0.04')
             const pricePerImageResale = pricePerImage.mul(resaleMargin)
 
@@ -211,6 +243,7 @@ export class UsageReporter {
             return report
         } catch (e) {
             warn(`Failed to report image usage: ${e}`)
+
             return undefined
         }
     }
@@ -233,7 +266,19 @@ export class UsageReporter {
         aiRequestFinishedAt: number
     }): VideoUsageReport | undefined {
         try {
-            const { eventMeta, aiModelMetaInfo, aiVendorRequestId, durationSeconds, resolution, aspectRatio, totalTokens, completionTokens, inputVideoSeconds, aiRequestReceivedAt, aiRequestFinishedAt } = args
+            const {
+                eventMeta,
+                aiModelMetaInfo,
+                aiVendorRequestId,
+                durationSeconds,
+                resolution,
+                aspectRatio,
+                totalTokens,
+                completionTokens,
+                inputVideoSeconds,
+                aiRequestReceivedAt,
+                aiRequestFinishedAt,
+            } = args
             const pricing = aiModelMetaInfo.pricing ?? {}
             const resaleMargin = dec(pricing.resaleMargin, '1.0')
             const videoPricing = (pricing as any).video ?? {}
@@ -247,7 +292,8 @@ export class UsageReporter {
                 resolution,
                 aspectRatio,
                 // Whole seconds, rounded up, per the metrics contract.
-                ...(typeof inputVideoSeconds === 'number' && inputVideoSeconds > 0
+                ...(typeof inputVideoSeconds === 'number'
+                    && inputVideoSeconds > 0
                     ? { inputVideoSeconds: Math.ceil(inputVideoSeconds) }
                     : {}),
                 purchasedFor: '0',
@@ -256,6 +302,7 @@ export class UsageReporter {
 
             let purchased: Decimal
             let sold: Decimal
+
             if (measuringUnit === 'tokens') {
                 // total_tokens × price / pricePer (per-1M-token resource packs).
                 const pricePer = dec(videoPricing.pricePer, '1000000')
@@ -292,6 +339,7 @@ export class UsageReporter {
             return report
         } catch (e) {
             warn(`Failed to report video usage: ${e}`)
+
             return undefined
         }
     }

@@ -7,7 +7,12 @@ import {
 import { createDocumentHtml } from '@lixpi/ui-primitives/dom'
 
 export type ProgressRippleArtwork = {
-    viewBox: { x: number; y: number; width: number; height: number }
+    viewBox: {
+        x: number
+        y: number
+        width: number
+        height: number
+    }
     paths: readonly [string, string, string]
 }
 
@@ -33,9 +38,14 @@ const OUTER_DURATION_MS = 1600
 
 type RippleSvg = Selection<SVGSVGElement, unknown, null, undefined>
 
-function tintHex(color: string, whiteMix = 0.68): string {
+const tintHex = (
+    color: string,
+    whiteMix = 0.68,
+): string => {
     const match = color.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/iu)
-    if (!match) return '#cfd2fc'
+
+    if (!match)
+        return '#cfd2fc'
 
     const channels = match.slice(1).map(value => Number.parseInt(value, 16))
     const tinted = channels.map(channel => Math.round(channel + (255 - channel) * whiteMix))
@@ -43,15 +53,25 @@ function tintHex(color: string, whiteMix = 0.68): string {
     return `#${tinted.map(channel => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
-function centeredLayerScale(scale: number, artwork: ProgressRippleArtwork): string {
-    const { x, y, width, height } = artwork.viewBox
+const centeredLayerScale = (
+    scale: number,
+    artwork: ProgressRippleArtwork,
+): string => {
+    const {
+        x,
+        y,
+        width,
+        height,
+    } = artwork.viewBox
     const cx = x + width / 2
     const cy = y + height / 2
+
     return `translate(${cx} ${cy}) scale(${scale}) translate(${-cx} ${-cy})`
 }
 
-function rippleEase(t: number): number {
-    if (t <= 0.18) return 0.42 * Math.pow(t / 0.18, 1.35)
+const rippleEase = (t: number): number => {
+    if (t <= 0.18)
+        return 0.42 * Math.pow(t / 0.18, 1.35)
 
     return 0.42 + 0.58 * (1 - Math.pow(1 - (t - 0.18) / 0.82, 2.45))
 }
@@ -76,7 +96,10 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
         this.svg = select<HTMLElement, unknown>(this.element)
             .append<SVGSVGElement>('svg')
             .attr('class', 'progress-ripple-icon-svg')
-            .attr('viewBox', [config.artwork.viewBox.x, config.artwork.viewBox.y, config.artwork.viewBox.width, config.artwork.viewBox.height].join(' '))
+            .attr(
+                'viewBox',
+                [config.artwork.viewBox.x, config.artwork.viewBox.y, config.artwork.viewBox.width, config.artwork.viewBox.height].join(' '),
+            )
             .attr('focusable', 'false')
 
         const layers = [
@@ -97,7 +120,8 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
             },
         ] as const
         layers.forEach(layer => {
-            this.svg.append('g')
+            this.svg
+                .append('g')
                 .attr('class', layer.className)
                 .append('path')
                 .attr('d', layer.path)
@@ -107,7 +131,9 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
     }
 
     syncActive(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.clearCycleTimeout()
         this.clearOuterTimeouts()
         this.runCycle()
@@ -121,7 +147,9 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.reset()
         this.destroyed = true
         this.element.remove()
@@ -129,50 +157,78 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
 
     private resetLayers(selector: string): void {
         const artwork = this.config.artwork
-        this.svg.selectAll<SVGGElement, unknown>(selector)
+        this.svg
+            .selectAll<SVGGElement, unknown>(selector)
             .interrupt('progress-marker-middle')
             .interrupt('progress-marker-outer')
             .attr('opacity', 1)
-            .attr('transform', centeredLayerScale(1, artwork))
+            .attr(
+                'transform',
+                centeredLayerScale(1, artwork),
+            )
     }
 
     private runCycle(): void {
         const artwork = this.config.artwork
         const middleLayers = this.svg.selectAll<SVGGElement, unknown>('g.marker-middle')
-        if (!middleLayers.size()) return
+
+        if (!middleLayers.size())
+            return
 
         middleLayers
             .interrupt('progress-marker-middle')
             .attr('opacity', 1)
-            .attr('transform', centeredLayerScale(1, artwork))
+            .attr(
+                'transform',
+                centeredLayerScale(1, artwork),
+            )
             .transition('progress-marker-middle')
             .duration(MIDDLE_DURATION_MS)
             .ease(rippleEase)
             .attr('opacity', 0)
-            .attr('transform', centeredLayerScale(1.72, artwork))
+            .attr(
+                'transform',
+                centeredLayerScale(1.72, artwork),
+            )
             .on('end', function(this: SVGGElement) {
                 select(this)
                     .attr('opacity', 0)
-                    .attr('transform', centeredLayerScale(1.72, artwork))
+                    .attr(
+                        'transform',
+                        centeredLayerScale(1.72, artwork),
+                    )
             })
 
-        const outerTimeoutId = window.setTimeout(() => {
-            this.outerTimeoutIds.delete(outerTimeoutId)
-            this.svg.selectAll<SVGGElement, unknown>('g.marker-outer')
-                .interrupt('progress-marker-outer')
-                .attr('opacity', 1)
-                .attr('transform', centeredLayerScale(1, artwork))
-                .transition('progress-marker-outer')
-                .duration(OUTER_DURATION_MS)
-                .ease(rippleEase)
-                .attr('opacity', 0)
-                .attr('transform', centeredLayerScale(2.05, artwork))
-                .on('end', function(this: SVGGElement) {
-                    select(this)
-                        .attr('opacity', 0)
-                        .attr('transform', centeredLayerScale(2.05, artwork))
-                })
-        }, OUTER_DELAY_MS)
+        const outerTimeoutId = window.setTimeout(
+            () => {
+                this.outerTimeoutIds.delete(outerTimeoutId)
+                this.svg
+                    .selectAll<SVGGElement, unknown>('g.marker-outer')
+                    .interrupt('progress-marker-outer')
+                    .attr('opacity', 1)
+                    .attr(
+                        'transform',
+                        centeredLayerScale(1, artwork),
+                    )
+                    .transition('progress-marker-outer')
+                    .duration(OUTER_DURATION_MS)
+                    .ease(rippleEase)
+                    .attr('opacity', 0)
+                    .attr(
+                        'transform',
+                        centeredLayerScale(2.05, artwork),
+                    )
+                    .on('end', function(this: SVGGElement) {
+                        select(this)
+                            .attr('opacity', 0)
+                            .attr(
+                                'transform',
+                                centeredLayerScale(2.05, artwork),
+                            )
+                    })
+            },
+            OUTER_DELAY_MS,
+        )
 
         this.outerTimeoutIds.add(outerTimeoutId)
     }
@@ -187,7 +243,9 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
     }
 
     private clearCycleTimeout(): void {
-        if (this.cycleTimeoutId === undefined) return
+        if (this.cycleTimeoutId === undefined)
+            return
+
         window.clearTimeout(this.cycleTimeoutId)
         this.cycleTimeoutId = undefined
     }
@@ -198,8 +256,4 @@ class ProgressRippleIcon implements ProgressRippleIconInstance {
     }
 }
 
-export function createProgressRippleIcon(
-    config: ProgressRippleIconConfig,
-): ProgressRippleIconInstance {
-    return new ProgressRippleIcon(config)
-}
+export const createProgressRippleIcon = (config: ProgressRippleIconConfig): ProgressRippleIconInstance => new ProgressRippleIcon(config)

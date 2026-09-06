@@ -31,18 +31,25 @@ export const createCertificate = async (args: CertificateArgs): Promise<Certific
         dnsProvider,
     } = args
 
-    const certificate = new aws.acm.Certificate(`${formatStageResourceName(serviceName, orgName, stage)}-cert`, {
-        domainName: domainName,
-        validationMethod: 'DNS',
-        subjectAlternativeNames: [
-            domainName,
-            `www.${domainName}`,
-            `*.${domainName}`,
-        ],
-        tags: {
-            Name: `${serviceName}-cert`,
+    const certificate = new aws.acm.Certificate(
+        `${formatStageResourceName(
+            serviceName,
+            orgName,
+            stage,
+        )}-cert`,
+        {
+            domainName: domainName,
+            validationMethod: 'DNS',
+            subjectAlternativeNames: [
+                domainName,
+                `www.${domainName}`,
+                `*.${domainName}`,
+            ],
+            tags: {
+                Name: `${serviceName}-cert`,
+            },
         },
-    })
+    )
 
     // Extract unique validation records from ACM's response to avoid duplicates
     const certValidationRecords = certificate.domainValidationOptions.apply(options => {
@@ -59,7 +66,11 @@ export const createCertificate = async (args: CertificateArgs): Promise<Certific
                 uniqueRecords.set(
                     recordKey,
                     new aws.route53.Record(
-                        `${formatStageResourceName(serviceName, orgName, stage)}-cert-validation-${i}`,
+                        `${formatStageResourceName(
+                            serviceName,
+                            orgName,
+                            stage,
+                        )}-cert-validation-${i}`,
                         {
                             name: option.resourceRecordName,
                             zoneId: hostedZoneId,
@@ -77,14 +88,23 @@ export const createCertificate = async (args: CertificateArgs): Promise<Certific
         })
 
         // Return array of unique validation records
-        return Array.from(uniqueRecords.values())
+        return Array.from(
+            uniqueRecords.values(),
+        )
     })
 
     // Certificate validation resource for all SANs
-    const certValidation = new aws.acm.CertificateValidation(`${formatStageResourceName(serviceName, orgName, stage)}-cert-validation-complete`, {
-        certificateArn: certificate.arn,
-        validationRecordFqdns: certValidationRecords.apply(records => records.map(r => r.fqdn)),
-    })
+    const certValidation = new aws.acm.CertificateValidation(
+        `${formatStageResourceName(
+            serviceName,
+            orgName,
+            stage,
+        )}-cert-validation-complete`,
+        {
+            certificateArn: certificate.arn,
+            validationRecordFqdns: certValidationRecords.apply(records => records.map(r => r.fqdn)),
+        },
+    )
 
     return {
         certificate,

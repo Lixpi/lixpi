@@ -34,15 +34,22 @@ class PromptView {
     private readonly outsideListenerTimer: ReturnType<typeof setTimeout>
 
     constructor(private readonly options: PromptOptions) {
-        this.domFields = Object.values(options.fields).map((field) => field.render())
+        this.domFields = Object.values(options.fields).map(field => field.render())
         const title = options.title ? (html`<h5>${options.title}</h5>` as HTMLHeadingElement) : null
-        const fieldRows = this.domFields.map((field) => html`<div>${field}</div>` as HTMLDivElement)
+        const fieldRows = this.domFields.map(field => html`<div>${field}</div>` as HTMLDivElement)
         this.form = html`
             <form>
                 ${title} ${fieldRows}
                 <div className=${`${PREFIX}-buttons`}>
-                    <button type="submit" className=${`${PREFIX}-submit`}>OK</button>
-                    <button type="button" className=${`${PREFIX}-cancel`} onclick=${this.close}>Cancel</button>
+                    <button
+                        type="submit"
+                        className=${`${PREFIX}-submit`}
+                    >OK</button>
+                    <button
+                        type="button"
+                        className=${`${PREFIX}-cancel`}
+                        onclick=${this.close}
+                    >Cancel</button>
                 </div>
             </form>
         ` as HTMLFormElement
@@ -54,18 +61,20 @@ class PromptView {
         this.outsideListenerTimer = setTimeout(() => window.addEventListener('mousedown', this.handleMouseOutside), 50)
 
         const box = this.wrapper.getBoundingClientRect()
-        applyStyle(this.wrapper, {
-            top: `${(window.innerHeight - box.height) / 2}px`,
-            left: `${(window.innerWidth - box.width) / 2}px`,
-        })
+        applyStyle(
+            this.wrapper,
+            {
+                top: `${(window.innerHeight - box.height) / 2}px`,
+                left: `${(window.innerWidth - box.width) / 2}px`,
+            },
+        )
 
         this.domFields.at(0)?.focus()
     }
 
     private readonly handleMouseOutside = (event: MouseEvent): void => {
-        if (!this.wrapper.contains(event.target as Node)) {
+        if (!this.wrapper.contains(event.target as Node))
             this.close()
-        }
     }
 
     private readonly handleSubmit = (event: SubmitEvent): void => {
@@ -77,8 +86,10 @@ class PromptView {
         if (event.key === 'Escape') {
             event.preventDefault()
             this.close()
+
             return
         }
+
         if (
             event.key === 'Enter'
             && !event.ctrlKey
@@ -87,22 +98,24 @@ class PromptView {
         ) {
             event.preventDefault()
             this.submit()
+
             return
         }
+
         if (event.key === 'Tab') {
             window.setTimeout(() => {
-                if (!this.wrapper.contains(document.activeElement)) {
+                if (!this.wrapper.contains(document.activeElement))
                     this.close()
-                }
             }, 500)
         }
     }
 
     private submit(): void {
         const values = this.getValues()
-        if (!values) {
+
+        if (!values)
             return
-        }
+
         this.close()
         this.options.callback(values)
     }
@@ -110,30 +123,42 @@ class PromptView {
     private getValues(): Record<string, unknown> | null {
         const result: Record<string, unknown> = {}
         const fields = Object.entries(this.options.fields)
+
         for (const [index, [name, field]] of fields.entries()) {
             const dom = this.domFields[index]
             const value = field.read(dom)
             const validationError = field.validate(value)
+
             if (validationError) {
                 this.reportInvalid(dom, validationError)
+
                 return null
             }
+
             result[name] = field.clean(value)
         }
+
         return result
     }
 
-    private reportInvalid(dom: FieldElement, message: string): void {
+    private reportInvalid(
+        dom: FieldElement,
+        message: string,
+    ): void {
         const parent = dom.parentElement
-        if (!parent) {
+
+        if (!parent)
             return
-        }
+
         const error = html`<div className="ProseMirror-invalid">${message}</div>` as HTMLDivElement
         parent.appendChild(error)
-        applyStyle(error, {
-            left: `${dom.offsetLeft + dom.offsetWidth + 2}px`,
-            top: `${dom.offsetTop - 5}px`,
-        })
+        applyStyle(
+            error,
+            {
+                left: `${dom.offsetLeft + dom.offsetWidth + 2}px`,
+                top: `${dom.offsetTop - 5}px`,
+            },
+        )
         setTimeout(() => error.remove(), 1_500)
     }
 
@@ -162,9 +187,12 @@ export abstract class Field {
     }
 
     validate(value: string): string | null {
-        if (!value && this.options.required) {
+        if (
+            !value
+            && this.options.required
+        )
             return 'Required field'
-        }
+
         return this.validateType(value) ?? this.options.validate?.(value) ?? null
     }
 
@@ -175,17 +203,30 @@ export abstract class Field {
 
 export class TextField extends Field {
     render(): HTMLInputElement {
-        return html` <input type="text" placeholder=${this.options.label} value=${this.options.value ?? ''} autocomplete="off" /> ` as HTMLInputElement
+        return html`
+            <input
+                type="text"
+                placeholder=${this.options.label}
+                value=${this.options.value ?? ''}
+                autocomplete="off"
+            />
+        ` as HTMLInputElement
     }
 }
 
 export class SelectField extends Field {
     render(): HTMLSelectElement {
-        const options = (this.options.options ?? []).map((option) =>
-            html`
-                <option value=${option.value} selected=${option.value === this.options.value} label=${option.label}></option>
-            ` as HTMLOptionElement
+        const options = (this.options.options ?? []).map(
+            option =>
+                html`
+                    <option
+                        value=${option.value}
+                        selected=${option.value === this.options.value}
+                        label=${option.label}
+                    ></option>
+                ` as HTMLOptionElement,
         )
+
         return html`<select>
             ${options}
         </select>` as HTMLSelectElement

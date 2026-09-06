@@ -80,6 +80,7 @@ services:
             - ./packages/lixpi/nats-auth-callout-service/src:/usr/src/repository/packages/lixpi/nats-auth-callout-service/src:cached
             - ./packages/lixpi/nats-service/ts/nats-service.ts:/usr/src/repository/packages/lixpi/nats-service/ts/nats-service.ts:cached
             - ./packages/lixpi/prosemirror/src:/usr/src/repository/packages/lixpi/prosemirror/src:cached
+            - ./packages/lixpi/test-utils/src:/usr/src/repository/packages/lixpi/test-utils/src:cached
             - ./packages/lixpi/ui-kit/src:/usr/src/repository/packages/lixpi/ui-kit/src:cached
             - ./packages/lixpi/ui-kit/styles:/usr/src/repository/packages/lixpi/ui-kit/styles:cached
             - ./packages/lixpi/ui-primitives/src:/usr/src/repository/packages/lixpi/ui-primitives/src:cached

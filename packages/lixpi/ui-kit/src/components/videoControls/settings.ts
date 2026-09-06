@@ -71,7 +71,7 @@ export type VideoControlsSettings = {
     }
 }
 
-export function createDefaultVideoControlsSettings(): VideoControlsSettings {
+export const createDefaultVideoControlsSettings = (): VideoControlsSettings => {
     return {
         height: 40,
         layout: {

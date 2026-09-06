@@ -34,16 +34,21 @@ class ModelConfigurationRow implements ModelConfigurationRowInstance {
                     data-help-tooltip="aria-label"
                     onclick=${handleRemove}
                 >
-                    <span className="ai-model-config-remove-icon" innerHTML=${xIcon}></span>
+                    <span
+                        className="ai-model-config-remove-icon"
+                        innerHTML=${xIcon}
+                    ></span>
                 </button>
             ` as HTMLButtonElement
             : undefined
-        const className = ['ai-model-config-row', config.className]
-            .filter(Boolean)
+        const className = ['ai-model-config-row', config.className].filter(Boolean)
             .join(' ')
 
         this.dom = html`
-            <div className=${className} data=${config.data ?? {}}>
+            <div
+                className=${className}
+                data=${config.data ?? {}}
+            >
                 <div className="ai-model-config-primary-row">
                     <div className="ai-model-config-model-column">
                         <div className="ai-model-config-field">
@@ -51,22 +56,20 @@ class ModelConfigurationRow implements ModelConfigurationRowInstance {
                             <span className="ai-model-config-dropdown">${config.modelDropdownHost}</span>
                         </div>
                     </div>
-                    ${
-            config.inlineControls?.map(control =>
-                html`
-                        <div className="ai-model-config-inline-control">
-                            ${control}
-                        </div>
-                    `
-            )
-        }
+                    ${config.inlineControls?.map(
+                        control =>
+                            html`
+                                <div className="ai-model-config-inline-control">
+                                    ${control}
+                                </div>
+                            `,
+                    )}
                     ${removeButton}
                 </div>
-                ${
-            config.controls && config.controls.length > 0
-                ? html`<div className="ai-model-config-controls">${config.controls}</div>`
-                : undefined
-        }
+                ${config.controls
+                    && config.controls.length > 0
+                    ? html`<div className="ai-model-config-controls">${config.controls}</div>`
+                    : undefined}
             </div>
         ` as HTMLElement
     }
@@ -76,8 +79,4 @@ class ModelConfigurationRow implements ModelConfigurationRowInstance {
     }
 }
 
-export function createModelConfigurationRow(
-    config: ModelConfigurationRowConfig,
-): ModelConfigurationRowInstance {
-    return new ModelConfigurationRow(config)
-}
+export const createModelConfigurationRow = (config: ModelConfigurationRowConfig): ModelConfigurationRowInstance => new ModelConfigurationRow(config)

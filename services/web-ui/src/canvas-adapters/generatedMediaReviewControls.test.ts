@@ -5,6 +5,7 @@ import {
 } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { withoutLayout } from '@lixpi/test-utils'
 
 function readSourceFile(relativePath: string): string {
     return readFileSync(resolve(import.meta.dirname, relativePath), 'utf-8')
@@ -12,7 +13,7 @@ function readSourceFile(relativePath: string): string {
 
 function expectSourceToContain(source: string, snippet: string, label: string): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }

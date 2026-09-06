@@ -2,22 +2,35 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+        />
         <title>AI Model Registry</title>
-        <link rel="icon" href="data:," />
+        <link
+            rel="icon"
+            href="data:,"
+        />
         <!-- Painted before the stylesheet loads, so a reload does not flash white.
              color-scheme alone fixes the browser's own canvas and form controls;
              the two colours have to be literals here because custom properties
              are not defined yet. Keep them in step with --bg and --text in
              src/client/styles.scss. -->
-        <meta name="color-scheme" content="dark" />
+        <meta
+            name="color-scheme"
+            content="dark"
+        />
         <style>
             html { background: #1e242e; color: #c8d0dc; }
         </style>
     </head>
     <body>
         <nav class="toolbar">
-            <input id="search" type="search" autocomplete="off" />
+            <input
+                id="search"
+                type="search"
+                autocomplete="off"
+            />
             <select id="state-filter">
                 <option value="all">All</option>
                 <option value="exposed">Already exposed</option>
@@ -28,16 +41,31 @@
                 <option value="needs-param-clarification">Param clarification</option>
                 <option value="needs-implementation-investigation">Impl. investigation</option>
             </select>
-            <select id="model-filter"><option value="all">All models</option></select>
-            <div class="tally" id="tally"></div>
-            <div id="save-state" class="save-state" data-state="idle">Loading</div>
+            <select id="model-filter">
+                <option value="all">All models</option>
+            </select>
+            <div
+                class="tally"
+                id="tally"
+            ></div>
+            <div
+                id="save-state"
+                class="save-state"
+                data-state="idle"
+            >Loading</div>
         </nav>
 
-        <main id="providers" class="providers"></main>
+        <main
+            id="providers"
+            class="providers"
+        ></main>
 
         <script>
             if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
         </script>
-        <script type="module" src="/app.ts"></script>
+        <script
+            type="module"
+            src="/app.ts"
+        ></script>
     </body>
 </html>

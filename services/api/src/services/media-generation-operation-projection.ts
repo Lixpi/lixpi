@@ -22,7 +22,10 @@ import { info } from '@lixpi/debug-tools'
 
 import Workspace from '../models/workspace.ts'
 
-const DEFAULT_OPERATION_DIMENSIONS = { width: 360, height: 104 }
+const DEFAULT_OPERATION_DIMENSIONS = {
+    width: 360,
+    height: 104,
+}
 const DEFAULT_MEDIA_DIMENSIONS = {
     width: mediaGenerationLayoutSettings.generatedMediaSize,
     height: mediaGenerationLayoutSettings.generatedMediaSize,
@@ -31,8 +34,12 @@ const DEFAULT_MEDIA_DIMENSIONS = {
 type GeneratedMediaCanvasNode = ImageCanvasNode | VideoCanvasNode
 
 const getPlannedMediaType = (run: MediaGenerationRun): 'image' | 'video' => {
-    if (run.mediaType) return run.mediaType
-    return /(?:video|veo|seedance|sora)/iu.test(String(run.modelId)) ? 'video' : 'image'
+    if (run.mediaType)
+        return run.mediaType
+
+    return /(?:video|veo|seedance|sora)/iu.test(
+        String(run.modelId),
+    ) ? 'video' : 'image'
 }
 
 const isGeneratedMediaNode = (node: CanvasNode): node is GeneratedMediaCanvasNode => node.type === 'image' || node.type === 'video'
@@ -40,16 +47,26 @@ const isGeneratedMediaNode = (node: CanvasNode): node is GeneratedMediaCanvasNod
 const isBranchMarkerNode = (node: CanvasNode): boolean => node.type === 'branchOrigin' || node.type === 'branchFork' || node.type === 'branchLine'
 
 const stripLegacyMarkerProgress = (node: CanvasNode): CanvasNode => {
-    if (!isBranchMarkerNode(node)) return node
-    const { mediaGeneration: _mediaGeneration, ...cleanNode } = node as CanvasNode & {
+    if (!isBranchMarkerNode(node))
+        return node
+
+    const {
+        mediaGeneration: _mediaGeneration,
+        ...cleanNode
+    } = node as CanvasNode & {
         mediaGeneration?: unknown
     }
+
     return cleanNode as CanvasNode
 }
 
 const toRunStatus = (status: OperationStatusCanvasNode['status']): MediaGenerationRunStatus => {
-    if (status === 'failed') return 'failed'
-    if (status === 'action-required') return 'awaiting-provider-verification'
+    if (status === 'failed')
+        return 'failed'
+
+    if (status === 'action-required')
+        return 'awaiting-provider-verification'
+
     return 'running'
 }
 
@@ -102,14 +119,37 @@ const mediaNodeMatchesRun = (
         mediaRunId?: string
     },
 ): boolean => {
-    if (outputNodeId && node.nodeId === outputNodeId) return true
+    if (
+        outputNodeId
+        && node.nodeId === outputNodeId
+    )
+        return true
+
     if (node.generationProgress?.generationRequestId === generationRequestId) {
-        if (mediaRunId && node.generationProgress.mediaRunId === mediaRunId) return true
-        if (generationRun !== undefined && node.generationProgress.generationRun === generationRun) return true
+        if (
+            mediaRunId
+            && node.generationProgress.mediaRunId === mediaRunId
+        )
+            return true
+
+        if (
+            generationRun !== undefined
+            && node.generationProgress.generationRun === generationRun
+        )
+            return true
     }
+
     const generatedBy = node.generatedBy
-    if (generatedBy?.generationRequestId !== generationRequestId) return false
-    if (mediaRunId && generatedBy.mediaRunId === mediaRunId) return true
+
+    if (generatedBy?.generationRequestId !== generationRequestId)
+        return false
+
+    if (
+        mediaRunId
+        && generatedBy.mediaRunId === mediaRunId
+    )
+        return true
+
     return generationRun !== undefined
         && generatedBy.reasoningIndex !== undefined
         && node.generationProgress?.generationRun === generationRun
@@ -129,35 +169,58 @@ const projectProgressToMediaNode = ({
     generationRun?: number
     mediaRunId?: string
     state: MediaGenerationProgressState
-}): { nodes: CanvasNode[]; changed: boolean } => {
+}): {
+    nodes: CanvasNode[]
+    changed: boolean
+} => {
     let changed = false
     const projectedNodes = nodes.map(rawNode => {
         const node = stripLegacyMarkerProgress(rawNode)
+
         if (
-            !isGeneratedMediaNode(node) || !mediaNodeMatchesRun(node, {
+            !isGeneratedMediaNode(node)
+            || !mediaNodeMatchesRun(
+                node,
+                {
+                    outputNodeId,
+                    generationRequestId,
+                    generationRun,
+                    mediaRunId,
+                },
+            )
+        )
+            return node
+
+        changed = true
+
+        return {
+            ...node,
+            generationProgress: {
+                ...node.generationProgress,
+                ...state,
+            },
+        }
+    })
+    info(
+        `[MediaGenerationNodeProgress] ${changed ? 'projected' : 'output-missing'} ${
+            JSON.stringify({
                 outputNodeId,
                 generationRequestId,
                 generationRun,
                 mediaRunId,
+                status: state.status,
+                phase: state.progress.phase,
+                completedSteps: state.progress.completedSteps,
+                totalSteps: state.progress.totalSteps,
+                message: state.message,
             })
-        ) return node
-        changed = true
-        return { ...node, generationProgress: { ...node.generationProgress, ...state } }
-    })
-    info(`[MediaGenerationNodeProgress] ${changed ? 'projected' : 'output-missing'} ${
-        JSON.stringify({
-            outputNodeId,
-            generationRequestId,
-            generationRun,
-            mediaRunId,
-            status: state.status,
-            phase: state.progress.phase,
-            completedSteps: state.progress.completedSteps,
-            totalSteps: state.progress.totalSteps,
-            message: state.message,
-        })
-    }`)
-    return { nodes: projectedNodes, changed }
+        }`,
+    )
+
+    return {
+        nodes: projectedNodes,
+        changed,
+    }
 }
 
 const centerFailedOperationOverReservedOutput = ({
@@ -167,26 +230,45 @@ const centerFailedOperationOverReservedOutput = ({
     nodes: CanvasNode[]
     operationNodeId: string
 }): CanvasNode[] => {
-    const operation = nodes.find((node): node is OperationStatusCanvasNode => (
-        node.type === 'operationStatus'
-        && node.nodeId === operationNodeId
-        && node.status === 'failed'
-    ))
-    if (!operation?.outputNodeId) return nodes
-    const output = nodes.find((node): node is GeneratedMediaCanvasNode => (
-        isGeneratedMediaNode(node)
-        && node.nodeId === operation.outputNodeId
-        && node.mediaGenerationPhase === 'pending-before-first-frame'
-    ))
-    if (!output) return nodes
+    const operation = nodes.find(
+        (node): node is OperationStatusCanvasNode => (
+            node.type === 'operationStatus'
+            && node.nodeId === operationNodeId
+            && node.status === 'failed'
+        ),
+    )
+
+    if (!operation?.outputNodeId)
+        return nodes
+
+    const output = nodes.find(
+        (node): node is GeneratedMediaCanvasNode => (
+            isGeneratedMediaNode(node)
+            && node.nodeId === operation.outputNodeId
+            && node.mediaGenerationPhase === 'pending-before-first-frame'
+        ),
+    )
+
+    if (!output)
+        return nodes
 
     return nodes.map(node => {
-        if (node.nodeId !== operation.nodeId || node.type !== 'operationStatus') return node
-        const { parentId: _previousParentId, ...operationWithoutParent } = node
+        if (
+            node.nodeId !== operation.nodeId
+            || node.type !== 'operationStatus'
+        )
+            return node
+
+        const {
+            parentId: _previousParentId,
+            ...operationWithoutParent
+        } = node
+
         return {
             ...operationWithoutParent,
             ...(output.parentId ? { parentId: output.parentId } : {}),
-            ...(node.lineageAssignment || !output.generationProgress?.lineageAssignment
+            ...(node.lineageAssignment
+                || !output.generationProgress?.lineageAssignment
                 ? {}
                 : { lineageAssignment: output.generationProgress.lineageAssignment }),
             position: {
@@ -201,15 +283,23 @@ const getInitialPosition = (
     anchorNode: CanvasNode | undefined,
     generationRun: number,
     runCount: number,
-    viewport: { x: number; y: number; zoom: number },
-    visibleArea?: { width: number; height: number },
-): { x: number; y: number } => {
-    const preFrameSize = getGeneratedMediaPreFrameSize(
-        DEFAULT_MEDIA_DIMENSIONS,
-        mediaGenerationLayoutSettings.preFrameCircleScale,
-    )
+    viewport: {
+        x: number
+        y: number
+        zoom: number
+    },
+    visibleArea?: {
+        width: number
+        height: number
+    },
+): {
+    x: number
+    y: number
+} => {
+    const preFrameSize = getGeneratedMediaPreFrameSize(DEFAULT_MEDIA_DIMENSIONS, mediaGenerationLayoutSettings.preFrameCircleScale)
     const runPitch = preFrameSize + mediaGenerationLayoutSettings.branchRowGap
     const centeredRunOffset = (generationRun - (runCount - 1) / 2) * runPitch
+
     if (anchorNode) {
         return {
             x: anchorNode.position.x + anchorNode.dimensions.width + 80,
@@ -218,6 +308,7 @@ const getInitialPosition = (
                 + centeredRunOffset,
         }
     }
+
     if (
         visibleArea
         && Number.isFinite(visibleArea.width)
@@ -225,7 +316,11 @@ const getInitialPosition = (
         && Number.isFinite(visibleArea.height)
         && visibleArea.height > 0
     ) {
-        const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1
+        const zoom = Number.isFinite(viewport.zoom)
+            && viewport.zoom > 0
+            ? viewport.zoom
+            : 1
+
         return {
             x: (visibleArea.width / 2 - viewport.x) / zoom - DEFAULT_MEDIA_DIMENSIONS.width / 2,
             y: (visibleArea.height / 2 - viewport.y) / zoom
@@ -233,6 +328,7 @@ const getInitialPosition = (
                 + centeredRunOffset,
         }
     }
+
     return {
         x: 80 + generationRun * (DEFAULT_MEDIA_DIMENSIONS.width + 120),
         y: 80,
@@ -242,15 +338,26 @@ const getInitialPosition = (
 const getInitialOperationPosition = (
     anchorNode: CanvasNode | undefined,
     generationRun: number,
-    viewport: { x: number; y: number; zoom: number },
-    visibleArea?: { width: number; height: number },
-): { x: number; y: number } => {
+    viewport: {
+        x: number
+        y: number
+        zoom: number
+    },
+    visibleArea?: {
+        width: number
+        height: number
+    },
+): {
+    x: number
+    y: number
+} => {
     if (anchorNode) {
         return {
             x: anchorNode.position.x + anchorNode.dimensions.width + 80,
             y: anchorNode.position.y + generationRun * (DEFAULT_OPERATION_DIMENSIONS.height + 24),
         }
     }
+
     if (
         visibleArea
         && Number.isFinite(visibleArea.width)
@@ -258,13 +365,21 @@ const getInitialOperationPosition = (
         && Number.isFinite(visibleArea.height)
         && visibleArea.height > 0
     ) {
-        const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1
+        const zoom = Number.isFinite(viewport.zoom)
+            && viewport.zoom > 0
+            ? viewport.zoom
+            : 1
+
         return {
             x: (visibleArea.width / 2 - viewport.x) / zoom - DEFAULT_OPERATION_DIMENSIONS.width / 2,
             y: (visibleArea.height / 2 - viewport.y) / zoom - DEFAULT_OPERATION_DIMENSIONS.height / 2,
         }
     }
-    return { x: 80 + generationRun * 400, y: 80 }
+
+    return {
+        x: 80 + generationRun * 400,
+        y: 80,
+    }
 }
 
 const createPendingMediaNode = ({
@@ -282,11 +397,23 @@ const createPendingMediaNode = ({
     lineageAssignment?: MediaRunLineageAssignment
     anchorNode?: CanvasNode
     runCount: number
-    viewport: { x: number; y: number; zoom: number }
-    visibleArea?: { width: number; height: number }
+    viewport: {
+        x: number
+        y: number
+        zoom: number
+    }
+    visibleArea?: {
+        width: number
+        height: number
+    }
     now: number
 }): GeneratedMediaCanvasNode | null => {
-    if (!run.outputNodeId || !run.outputAssetId) return null
+    if (
+        !run.outputNodeId
+        || !run.outputAssetId
+    )
+        return null
+
     const message = run.progress?.message ?? 'Preparing the media request.'
     const shared = {
         nodeId: run.outputNodeId,
@@ -305,12 +432,25 @@ const createPendingMediaNode = ({
             updatedAt: now,
         }),
         ...(anchorNode?.parentId ? { parentId: anchorNode.parentId } : {}),
-        position: getInitialPosition(anchorNode, run.generationRun, runCount, viewport, visibleArea),
+        position: getInitialPosition(
+            anchorNode,
+            run.generationRun,
+            runCount,
+            viewport,
+            visibleArea,
+        ),
         dimensions: DEFAULT_MEDIA_DIMENSIONS,
     }
+
     return getPlannedMediaType(run) === 'video'
-        ? { ...shared, type: 'video' }
-        : { ...shared, type: 'image' }
+        ? {
+            ...shared,
+            type: 'video',
+        }
+        : {
+            ...shared,
+            type: 'image',
+        }
 }
 
 const createOperationNode = ({
@@ -326,8 +466,15 @@ const createOperationNode = ({
     generationRequestId: string
     lineageAssignment?: MediaRunLineageAssignment
     anchorNode?: CanvasNode
-    viewport: { x: number; y: number; zoom: number }
-    visibleArea?: { width: number; height: number }
+    viewport: {
+        x: number
+        y: number
+        zoom: number
+    }
+    visibleArea?: {
+        width: number
+        height: number
+    }
     now: number
 }): OperationStatusCanvasNode => ({
     nodeId: run.operationNodeId,
@@ -336,14 +483,11 @@ const createOperationNode = ({
     status: run.status === 'failed'
         ? 'failed'
         : run.status === 'awaiting-provider-verification'
-        ? 'action-required'
-        : 'in-progress',
+            ? 'action-required'
+            : 'in-progress',
     title: `Generating with ${run.modelId}`,
     message: run.problem?.detail ?? run.progress?.message ?? 'Preparing the media request.',
-    progress: run.progress ?? createDefaultMediaGenerationRunProgress(
-        run.status,
-        run.problem?.detail ?? 'Preparing the media request.',
-    ),
+    progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, run.problem?.detail ?? 'Preparing the media request.'),
     generationRequestId,
     generationRun: run.generationRun,
     ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
@@ -352,7 +496,12 @@ const createOperationNode = ({
     ...(lineageAssignment ? { lineageAssignment } : {}),
     ...(run.problem ? { problem: run.problem } : {}),
     ...(anchorNode?.parentId ? { parentId: anchorNode.parentId } : {}),
-    position: getInitialOperationPosition(anchorNode, run.generationRun, viewport, visibleArea),
+    position: getInitialOperationPosition(
+        anchorNode,
+        run.generationRun,
+        viewport,
+        visibleArea,
+    ),
     dimensions: DEFAULT_OPERATION_DIMENSIONS,
     createdAt: now,
     updatedAt: now,
@@ -371,7 +520,10 @@ export const projectMediaGenerationOperationNodes = async ({
     runs: MediaGenerationRun[]
     bindings: MediaReferenceBinding[]
     lineagePlan?: MediaBranchLineagePlan
-    visibleArea?: { width: number; height: number }
+    visibleArea?: {
+        width: number
+        height: number
+    }
 }): Promise<CanvasGeometryUpdate> => {
     const now = Date.now()
     const projection = await Workspace.mutateCanvasState({
@@ -379,32 +531,41 @@ export const projectMediaGenerationOperationNodes = async ({
         origin: 'MediaGenerationOperationProjection.create',
         allowUnboundGeneratedMediaReservationMutation: true,
         mutate: canvasState => {
-            const existingIds = new Set(canvasState.nodes.map(node => node.nodeId))
+            const existingIds = new Set(
+                canvasState.nodes.map(node => node.nodeId),
+            )
             const anchorNodeId = bindings.find(binding => binding.nodeId)?.nodeId
             const anchorNode = anchorNodeId
                 ? canvasState.nodes.find(node => node.nodeId === anchorNodeId)
                 : undefined
             const additions: CanvasNode[] = []
+
             for (const run of runs) {
-                const lineageAssignment = lineagePlan?.runAssignments.find(candidate => (
-                    Boolean(run.mediaRunId && candidate.mediaRunId === run.mediaRunId)
-                    || (candidate.reasoningIndex === run.reasoningIndex
-                        && candidate.mediaModelId === run.modelId
-                        && (run.mediaType === undefined || candidate.mediaType === run.mediaType)
-                        && (run.mediaIndex === undefined || candidate.mediaIndex === run.mediaIndex))
-                ))
+                const lineageAssignment = lineagePlan?.runAssignments.find(
+                    candidate => (
+                        Boolean(run.mediaRunId && candidate.mediaRunId === run.mediaRunId)
+                        || (candidate.reasoningIndex === run.reasoningIndex
+                            && candidate.mediaModelId === run.modelId
+                            && (run.mediaType === undefined || candidate.mediaType === run.mediaType)
+                            && (run.mediaIndex === undefined || candidate.mediaIndex === run.mediaIndex))
+                    ),
+                )
+
                 if (!existingIds.has(run.operationNodeId)) {
-                    additions.push(createOperationNode({
-                        run,
-                        generationRequestId,
-                        lineageAssignment,
-                        anchorNode,
-                        viewport: canvasState.viewport,
-                        visibleArea,
-                        now,
-                    }))
+                    additions.push(
+                        createOperationNode({
+                            run,
+                            generationRequestId,
+                            lineageAssignment,
+                            anchorNode,
+                            viewport: canvasState.viewport,
+                            visibleArea,
+                            now,
+                        }),
+                    )
                     existingIds.add(run.operationNodeId)
                 }
+
                 const pendingMediaNode = createPendingMediaNode({
                     run,
                     generationRequestId,
@@ -415,40 +576,62 @@ export const projectMediaGenerationOperationNodes = async ({
                     visibleArea,
                     now,
                 })
-                if (pendingMediaNode && !existingIds.has(pendingMediaNode.nodeId)) {
+
+                if (
+                    pendingMediaNode
+                    && !existingIds.has(pendingMediaNode.nodeId)
+                ) {
                     additions.push(pendingMediaNode)
                     existingIds.add(pendingMediaNode.nodeId)
                 }
             }
+
             const nodes = canvasState.nodes.map(stripLegacyMarkerProgress)
             const removedLegacyProgress = nodes.some((node, index) => node !== canvasState.nodes[index])
-            return additions.length === 0 && !removedLegacyProgress
-                ? { canvasState, changed: false }
+
+            return additions.length === 0
+                && !removedLegacyProgress
+                ? {
+                    canvasState,
+                    changed: false,
+                }
                 : {
-                    canvasState: { ...canvasState, nodes: [...nodes, ...additions] },
+                    canvasState: {
+                        ...canvasState,
+                        nodes: [...nodes, ...additions],
+                    },
                     changed: true,
                 }
         },
     })
-    if (!projection.canvasState || projection.canvasStateUpdatedAt === null) {
+
+    if (
+        !projection.canvasState
+        || projection.canvasStateUpdatedAt === null
+    )
         throw new Error('MEDIA_GENERATION_WORKSPACE_NOT_FOUND')
-    }
-    const nodeSnapshots = projection.canvasState.nodes.filter(node => (
-        (node.type === 'operationStatus'
-            && node.operation === 'media-generation'
-            && node.generationRequestId === generationRequestId)
-        || (isGeneratedMediaNode(node)
-            && node.generationProgress?.generationRequestId === generationRequestId)
-    ))
+
+    const nodeSnapshots = projection.canvasState.nodes.filter(
+        node => (
+            (node.type === 'operationStatus'
+                && node.operation === 'media-generation'
+                && node.generationRequestId === generationRequestId)
+            || (isGeneratedMediaNode(node)
+                && node.generationProgress?.generationRequestId === generationRequestId)
+        ),
+    )
+
     return {
         generationRequestId,
         layoutRevision: projection.canvasStateUpdatedAt,
-        nodes: nodeSnapshots.map(node => ({
-            nodeId: node.nodeId,
-            position: node.position,
-            dimensions: node.dimensions,
-            ...(node.parentId ? { parentNodeId: node.parentId } : {}),
-        })),
+        nodes: nodeSnapshots.map(
+            node => ({
+                nodeId: node.nodeId,
+                position: node.position,
+                dimensions: node.dimensions,
+                ...(node.parentId ? { parentNodeId: node.parentId } : {}),
+            }),
+        ),
         nodeSnapshots,
     }
 }
@@ -486,21 +669,32 @@ export const updateMediaGenerationOperationNode = async ({
         workspaceId,
         origin: 'MediaGenerationOperationProjection.update',
         mutate: canvasState => {
-            const operationNode = canvasState.nodes.find((node): node is OperationStatusCanvasNode => node.type === 'operationStatus' && node.nodeId === operationNodeId)
+            const operationNode = canvasState.nodes.find(
+                (node): node is OperationStatusCanvasNode => node.type === 'operationStatus' && node.nodeId === operationNodeId,
+            )
             const resolvedGenerationRequestId = generationRequestId ?? operationNode?.generationRequestId
             const resolvedGenerationRun = generationRun ?? operationNode?.generationRun
             const projectedRunStatus: MediaGenerationRunStatus = status === 'action-required'
-                    && Boolean(candidateAssetIds?.length)
-                    && Boolean(unresolvedBindingId)
+                && Boolean(candidateAssetIds?.length)
+                && Boolean(unresolvedBindingId)
                 ? 'pending'
                 : toRunStatus(status)
-            const nextProgress = progress ?? operationNode?.progress
+            const nextProgress = progress
+                ?? operationNode?.progress
                 ?? createDefaultMediaGenerationRunProgress(projectedRunStatus, message)
             let changed = false
             let nodes = canvasState.nodes.map(rawNode => {
                 const node = stripLegacyMarkerProgress(rawNode)
-                if (node !== rawNode) changed = true
-                if (node.type !== 'operationStatus' || node.nodeId !== operationNodeId) return node
+
+                if (node !== rawNode)
+                    changed = true
+
+                if (
+                    node.type !== 'operationStatus'
+                    || node.nodeId !== operationNodeId
+                )
+                    return node
+
                 changed = true
                 const next: OperationStatusCanvasNode = {
                     ...node,
@@ -514,14 +708,17 @@ export const updateMediaGenerationOperationNode = async ({
                     ...(verificationAssetId ? { verificationAssetId } : {}),
                     updatedAt: Date.now(),
                 }
+
                 if (clearAction) {
                     delete next.problem
                     delete next.candidateAssetIds
                     delete next.unresolvedBindingId
                     delete next.verificationAssetId
                 }
+
                 return next
             })
+
             if (resolvedGenerationRequestId) {
                 const mediaProjection = projectProgressToMediaNode({
                     nodes,
@@ -540,9 +737,13 @@ export const updateMediaGenerationOperationNode = async ({
                 nodes = mediaProjection.nodes
                 changed ||= mediaProjection.changed
             }
-            if (status === 'failed') {
-                nodes = centerFailedOperationOverReservedOutput({ nodes, operationNodeId })
-            }
+
+            if (status === 'failed')
+                nodes = centerFailedOperationOverReservedOutput({
+                    nodes,
+                    operationNodeId,
+                })
+
             return {
                 canvasState: changed
                     ? {
@@ -579,33 +780,46 @@ export const rebindMediaGenerationOperationNodes = async ({
         origin: 'MediaGenerationOperationProjection.rebindLineage',
         allowUnboundGeneratedMediaReservationMutation: true,
         mutate: canvasState => {
-            const previousOperationIds = new Set(bindings.map(binding => binding.previousNodeId))
-            const targetOperationIds = new Set(bindings.map(binding => binding.operationNodeId))
-            const previousOutputIds = new Set(bindings.flatMap(binding =>
-                binding.previousOutputNodeId
-                    ? [binding.previousOutputNodeId]
-                    : []
-            ))
-            const targetOutputIds = new Set(bindings.flatMap(binding =>
-                binding.run.outputNodeId
-                    ? [binding.run.outputNodeId]
-                    : []
-            ))
-            const outputReplacementById = new Map(bindings.flatMap(binding => (
-                binding.previousOutputNodeId
-                    && binding.run.outputNodeId
-                    && binding.previousOutputNodeId !== binding.run.outputNodeId
-                    ? [[binding.previousOutputNodeId, binding.run.outputNodeId] as const]
-                    : []
-            )))
+            const previousOperationIds = new Set(
+                bindings.map(binding => binding.previousNodeId),
+            )
+            const targetOperationIds = new Set(
+                bindings.map(binding => binding.operationNodeId),
+            )
+            const previousOutputIds = new Set(
+                bindings.flatMap(
+                    binding =>
+                        binding.previousOutputNodeId
+                            ? [binding.previousOutputNodeId]
+                            : [],
+                ),
+            )
+            const targetOutputIds = new Set(
+                bindings.flatMap(
+                    binding =>
+                        binding.run.outputNodeId
+                            ? [binding.run.outputNodeId]
+                            : [],
+                ),
+            )
+            const outputReplacementById = new Map(
+                bindings.flatMap(
+                    binding => (
+                        binding.previousOutputNodeId
+                            && binding.run.outputNodeId
+                            && binding.previousOutputNodeId !== binding.run.outputNodeId
+                            ? [[binding.previousOutputNodeId, binding.run.outputNodeId] as const]
+                            : []
+                    ),
+                ),
+            )
             const oldOperationById = new Map(
-                canvasState.nodes
-                    .filter((node): node is OperationStatusCanvasNode =>
-                        node.type === 'operationStatus'
-                        && node.operation === 'media-generation'
-                        && node.generationRequestId === generationRequestId
-                    )
-                    .map(node => [node.nodeId, node]),
+                canvasState.nodes.filter(
+                    (node): node is OperationStatusCanvasNode =>
+                            node.type === 'operationStatus'
+                            && node.operation === 'media-generation'
+                            && node.generationRequestId === generationRequestId,
+                ).map(node => [node.nodeId, node]),
             )
             const oldOutputById = new Map(
                 canvasState.nodes
@@ -617,12 +831,16 @@ export const rebindMediaGenerationOperationNodes = async ({
                 .filter(node => !previousOperationIds.has(node.nodeId) && !targetOperationIds.has(node.nodeId))
                 .filter(node => !previousOutputIds.has(node.nodeId) || targetOutputIds.has(node.nodeId))
                 .map(stripLegacyMarkerProgress)
-            const nodeById = new Map(retainedNodes.map(node => [node.nodeId, node]))
+            const nodeById = new Map(
+                retainedNodes.map(node => [node.nodeId, node]),
+            )
             const now = Date.now()
 
             for (const binding of bindings) {
                 const run = binding.run
-                const message = run.problem?.detail ?? run.progress?.message ?? 'Preparing the media request.'
+                const message = run.problem?.detail
+                    ?? run.progress?.message
+                    ?? 'Preparing the media request.'
                 const progressState = createProgressState({
                     generationRequestId,
                     status: run.status,
@@ -636,12 +854,14 @@ export const rebindMediaGenerationOperationNodes = async ({
                     updatedAt: now,
                 })
                 const outputNodeId = run.outputNodeId
+
                 if (outputNodeId) {
                     const currentOutput = nodeById.get(outputNodeId)
                     const previousOutput = binding.previousOutputNodeId
                         ? oldOutputById.get(binding.previousOutputNodeId)
                         : undefined
-                    const outputBase = currentOutput && isGeneratedMediaNode(currentOutput)
+                    const outputBase = currentOutput
+                        && isGeneratedMediaNode(currentOutput)
                         ? currentOutput
                         : previousOutput
                     const outputNode = outputBase
@@ -660,7 +880,9 @@ export const rebindMediaGenerationOperationNodes = async ({
                             viewport: canvasState.viewport,
                             now,
                         })
-                    if (outputNode) nodeById.set(outputNodeId, outputNode)
+
+                    if (outputNode)
+                        nodeById.set(outputNodeId, outputNode)
                 }
 
                 const previousOperation = oldOperationById.get(binding.previousNodeId)
@@ -675,37 +897,59 @@ export const rebindMediaGenerationOperationNodes = async ({
                     viewport: canvasState.viewport,
                     now,
                 })
-                nodeById.set(binding.operationNodeId, {
-                    ...operationNode,
-                    ...(previousOperation
-                        ? {
-                            title: previousOperation.title,
-                            createdAt: previousOperation.createdAt,
-                            ...(!binding.lineageParentNodeId
-                                ? {
-                                    position: previousOperation.position,
-                                    dimensions: previousOperation.dimensions,
-                                }
-                                : {}),
-                        }
-                        : {}),
-                    requestRevision,
-                    ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
-                    ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
-                })
+                nodeById.set(
+                    binding.operationNodeId,
+                    {
+                        ...operationNode,
+                        ...(previousOperation
+                            ? {
+                                title: previousOperation.title,
+                                createdAt: previousOperation.createdAt,
+                                ...(!binding.lineageParentNodeId
+                                    ? {
+                                        position: previousOperation.position,
+                                        dimensions: previousOperation.dimensions,
+                                    }
+                                    : {}),
+                            }
+                            : {}),
+                        requestRevision,
+                        ...(run.outputNodeId ? { outputNodeId: run.outputNodeId } : {}),
+                        ...(run.mediaRunId ? { mediaRunId: run.mediaRunId } : {}),
+                    },
+                )
             }
 
-            const operationIds = new Set([...previousOperationIds, ...targetOperationIds])
+            const operationIds = new Set([
+                ...previousOperationIds,
+                ...targetOperationIds,
+            ])
             const edgeKeys = new Set<string>()
             const edges = canvasState.edges.flatMap(edge => {
-                if (operationIds.has(edge.sourceNodeId) || operationIds.has(edge.targetNodeId)) return []
+                if (
+                    operationIds.has(edge.sourceNodeId)
+                    || operationIds.has(edge.targetNodeId)
+                )
+                    return []
+
                 const sourceNodeId = outputReplacementById.get(edge.sourceNodeId) ?? edge.sourceNodeId
                 const targetNodeId = outputReplacementById.get(edge.targetNodeId) ?? edge.targetNodeId
-                if (!nodeById.has(sourceNodeId) || !nodeById.has(targetNodeId)) return []
+
+                if (
+                    !nodeById.has(sourceNodeId)
+                    || !nodeById.has(targetNodeId)
+                )
+                    return []
+
                 const key = `${sourceNodeId}:${targetNodeId}:${edge.sourceHandle ?? ''}:${edge.targetHandle ?? ''}`
-                if (edgeKeys.has(key)) return []
+
+                if (edgeKeys.has(key))
+                    return []
+
                 edgeKeys.add(key)
-                return sourceNodeId === edge.sourceNodeId && targetNodeId === edge.targetNodeId
+
+                return sourceNodeId === edge.sourceNodeId
+                    && targetNodeId === edge.targetNodeId
                     ? [edge]
                     : [{
                         ...edge,
@@ -714,17 +958,24 @@ export const rebindMediaGenerationOperationNodes = async ({
                         targetNodeId,
                     }]
             })
+
             for (const binding of bindings) {
                 const outputNodeId = binding.run.outputNodeId
                 const lineageParentNodeId = binding.lineageParentNodeId
+
                 if (
                     !outputNodeId
                     || !lineageParentNodeId
                     || !nodeById.has(outputNodeId)
                     || !nodeById.has(lineageParentNodeId)
-                ) continue
+                )
+                    continue
+
                 const key = `${lineageParentNodeId}:${outputNodeId}:right:left`
-                if (edgeKeys.has(key)) continue
+
+                if (edgeKeys.has(key))
+                    continue
+
                 edgeKeys.add(key)
                 edges.push(
                     {
@@ -737,6 +988,7 @@ export const rebindMediaGenerationOperationNodes = async ({
                     } satisfies WorkspaceEdge,
                 )
             }
+
             return {
                 canvasState: {
                     ...canvasState,
@@ -765,26 +1017,39 @@ export const removeMediaGenerationOperationNodes = async ({
         origin: 'MediaGenerationOperationProjection.remove',
         allowUnboundGeneratedMediaReservationMutation: discardUnboundOutputNodes,
         mutate: canvasState => {
-            const removedOperations = canvasState.nodes
-                .filter((node): node is OperationStatusCanvasNode =>
-                    node.type === 'operationStatus'
-                    && node.operation === 'media-generation'
-                    && node.generationRequestId === generationRequestId
-                )
-            const removedIds = new Set(removedOperations.map(node => node.nodeId))
-            const operationByOutputNodeId = new Map(removedOperations.flatMap(operation =>
-                operation.outputNodeId
-                    ? [[operation.outputNodeId, operation] as const]
-                    : []
-            ))
+            const removedOperations = canvasState.nodes.filter(
+                (node): node is OperationStatusCanvasNode =>
+                        node.type === 'operationStatus'
+                        && node.operation === 'media-generation'
+                        && node.generationRequestId === generationRequestId,
+            )
+            const removedIds = new Set(
+                removedOperations.map(node => node.nodeId),
+            )
+            const operationByOutputNodeId = new Map(
+                removedOperations.flatMap(
+                    operation =>
+                        operation.outputNodeId
+                            ? [[operation.outputNodeId, operation] as const]
+                            : [],
+                ),
+            )
             const discardedOutputNodeIds = new Set<string>()
             let changed = removedIds.size > 0
             const nodes = canvasState.nodes.flatMap(rawNode => {
-                if (removedIds.has(rawNode.nodeId)) return []
+                if (removedIds.has(rawNode.nodeId))
+                    return []
+
                 const node = stripLegacyMarkerProgress(rawNode)
-                if (node !== rawNode) changed = true
-                if (!isGeneratedMediaNode(node)) return [node]
+
+                if (node !== rawNode)
+                    changed = true
+
+                if (!isGeneratedMediaNode(node))
+                    return [node]
+
                 const operation = operationByOutputNodeId.get(node.nodeId)
+
                 if (
                     discardUnboundOutputNodes
                     && !node.generatedBy
@@ -792,8 +1057,10 @@ export const removeMediaGenerationOperationNodes = async ({
                 ) {
                     discardedOutputNodeIds.add(node.nodeId)
                     changed = true
+
                     return []
                 }
+
                 const hasActiveRequestProgress = node.generationProgress?.generationRequestId === generationRequestId
                     && !['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)
                 const belongsToRequest = terminalStatus === 'cancelled'
@@ -801,13 +1068,20 @@ export const removeMediaGenerationOperationNodes = async ({
                     : operation
                         || node.generationProgress?.generationRequestId === generationRequestId
                         || node.generatedBy?.generationRequestId === generationRequestId
-                if (!belongsToRequest || !node.generationProgress) return [node]
+
+                if (
+                    !belongsToRequest
+                    || !node.generationProgress
+                )
+                    return [node]
+
                 const message = operation?.progress?.message
                     ?? node.generationProgress.progress.message
                     ?? (terminalStatus === 'completed'
                         ? 'Media generation completed.'
                         : 'Media generation cancelled.')
                 changed = true
+
                 return [{
                     ...node,
                     generationProgress: {
@@ -823,17 +1097,20 @@ export const removeMediaGenerationOperationNodes = async ({
                     },
                 }]
             })
+
             return {
                 canvasState: changed
                     ? {
                         ...canvasState,
                         nodes,
-                        edges: canvasState.edges.filter(edge => (
-                            !removedIds.has(edge.sourceNodeId)
-                            && !removedIds.has(edge.targetNodeId)
-                            && !discardedOutputNodeIds.has(edge.sourceNodeId)
-                            && !discardedOutputNodeIds.has(edge.targetNodeId)
-                        )),
+                        edges: canvasState.edges.filter(
+                            edge => (
+                                !removedIds.has(edge.sourceNodeId)
+                                && !removedIds.has(edge.targetNodeId)
+                                && !discardedOutputNodeIds.has(edge.sourceNodeId)
+                                && !discardedOutputNodeIds.has(edge.targetNodeId)
+                            ),
+                        ),
                     }
                     : canvasState,
                 changed,
@@ -859,8 +1136,12 @@ export const removeMediaGenerationOperationNode = async ({
         workspaceId,
         origin: 'MediaGenerationOperationProjection.removeOne',
         mutate: canvasState => {
-            const operationNode = canvasState.nodes.find((node): node is OperationStatusCanvasNode => node.nodeId === operationNodeId && node.type === 'operationStatus')
-            const message = progress?.message ?? operationNode?.progress?.message ?? 'Media generation completed.'
+            const operationNode = canvasState.nodes.find(
+                (node): node is OperationStatusCanvasNode => node.nodeId === operationNodeId && node.type === 'operationStatus',
+            )
+            const message = progress?.message
+                ?? operationNode?.progress?.message
+                ?? 'Media generation completed.'
             const terminalProgress = settleMediaGenerationRunProgress(
                 progress ?? operationNode?.progress,
                 'completed',
@@ -880,14 +1161,17 @@ export const removeMediaGenerationOperationNode = async ({
                     mediaRunId: operationNode?.mediaRunId,
                 }),
             })
+
             return {
                 canvasState: {
                     ...canvasState,
                     nodes: projection.nodes,
-                    edges: canvasState.edges.filter(edge => (
-                        edge.sourceNodeId !== operationNodeId
-                        && edge.targetNodeId !== operationNodeId
-                    )),
+                    edges: canvasState.edges.filter(
+                        edge => (
+                            edge.sourceNodeId !== operationNodeId
+                            && edge.targetNodeId !== operationNodeId
+                        ),
+                    ),
                 },
                 changed: Boolean(operationNode) || projection.changed,
             }

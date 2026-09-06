@@ -25,13 +25,20 @@ const sourceOnlyPanelIds = new Set([
 
 const poseReferenceBytesByFileName = new Map<string, Promise<Buffer>>()
 
-export async function loadCharacterPoseReference(
-    panel: CharacterPanelSpec,
-): Promise<CharacterImageReference | undefined> {
+export const loadCharacterPoseReference = async (panel: CharacterPanelSpec): Promise<CharacterImageReference | undefined> => {
     const fileName = poseReferenceFileByPanelId[panel.panelId]
-    if (!fileName && sourceOnlyPanelIds.has(panel.panelId)) return undefined
-    if (!fileName) throw new Error(`CHARACTER_PANEL_POSE_REFERENCE_MISSING:${panel.panelId}`)
+
+    if (
+        !fileName
+        && sourceOnlyPanelIds.has(panel.panelId)
+    )
+        return undefined
+
+    if (!fileName)
+        throw new Error(`CHARACTER_PANEL_POSE_REFERENCE_MISSING:${panel.panelId}`)
+
     const bytes = await loadPoseReferenceBytes(fileName)
+
     return {
         url: `data:image/png;base64,${bytes.toString('base64')}`,
         role: 'pose-reference',
@@ -39,14 +46,18 @@ export async function loadCharacterPoseReference(
     }
 }
 
-export function hasCharacterPoseReference(panel: CharacterPanelSpec): boolean {
-    return Boolean(poseReferenceFileByPanelId[panel.panelId])
-}
+export const hasCharacterPoseReference = (panel: CharacterPanelSpec): boolean => Boolean(poseReferenceFileByPanelId[panel.panelId])
 
 function loadPoseReferenceBytes(fileName: string): Promise<Buffer> {
     const cached = poseReferenceBytesByFileName.get(fileName)
-    if (cached) return cached
-    const pending = readFile(new URL(`../../tools/resources/pose-references/${fileName}`, import.meta.url))
+
+    if (cached)
+        return cached
+
+    const pending = readFile(
+        new URL(`../../tools/resources/pose-references/${fileName}`, import.meta.url),
+    )
     poseReferenceBytesByFileName.set(fileName, pending)
+
     return pending
 }

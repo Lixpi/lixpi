@@ -83,16 +83,27 @@ const outputSchemaSource: ResourceSource = {
     name: 'Style Extraction Output Schema',
 }
 
-export async function seedStyleExtractionTool(
+export const seedStyleExtractionTool = async (
     context: CapabilityPackageSeedContext,
     storage: StyleExtractionCapabilityStorage,
     storageOwnerId = 'system',
-): Promise<void> {
-    const inputSchema = await storeToolResource(storage, storageOwnerId, inputSchemaSource)
-    const outputSchema = await storeToolResource(storage, storageOwnerId, outputSchemaSource)
+): Promise<void> => {
+    const inputSchema = await storeToolResource(
+        storage,
+        storageOwnerId,
+        inputSchemaSource,
+    )
+    const outputSchema = await storeToolResource(
+        storage,
+        storageOwnerId,
+        outputSchemaSource,
+    )
     await storage.seedBuiltInCapability({
         allowedActions: context.allowedActions,
-        manifest: buildStyleExtractionManifest({ inputSchema, outputSchema }),
+        manifest: buildStyleExtractionManifest({
+            inputSchema,
+            outputSchema,
+        }),
         summary: 'Analyzes visual references through parallel specialist axes and saves a reusable visual style.',
         tags: ['style', 'visual-analysis', 'extraction', 'global'],
         parentModuleId: context.parentModuleId,
@@ -106,39 +117,63 @@ export function buildStyleExtractionManifest(resources: {
     outputSchema: CapabilityResourceRef
 }): CapabilityManifest {
     const routeStepId = 'route'
-    const axisSteps = STYLE_EXTRACTION_AXES.map((axis, index) => ({
-        stepId: `extract-${axis}`,
-        title: `Extract ${axis.replace(/-/g, ' ')}`,
-        action: 'style.extract-axis',
-        dependsOn: [routeStepId],
-        input: {
-            state: { source: 'step', stepId: routeStepId, path: ['state'] } as CapabilityValueBinding,
-            axis: { source: 'literal', value: axis } as CapabilityValueBinding,
-            instructions: {
-                source: 'resource',
-                capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.axesSkill,
-                resourceId: STYLE_EXTRACTION_AXES_RESOURCE_ID,
-            } as CapabilityValueBinding,
-        },
-        condition: {
-            type: 'compare' as const,
-            operator: 'equals' as const,
-            left: {
-                source: 'step' as const,
-                stepId: routeStepId,
-                path: ['applicableAxes', axis],
+    const axisSteps = STYLE_EXTRACTION_AXES.map(
+        (axis, index) => ({
+            stepId: `extract-${axis}`,
+            title: `Extract ${axis.replace(/-/g, ' ')}`,
+            action: 'style.extract-axis',
+            dependsOn: [routeStepId],
+            input: {
+                state: {
+                    source: 'step',
+                    stepId: routeStepId,
+                    path: ['state'],
+                } as CapabilityValueBinding,
+                axis: {
+                    source: 'literal',
+                    value: axis,
+                } as CapabilityValueBinding,
+                instructions: {
+                    source: 'resource',
+                    capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.axesSkill,
+                    resourceId: STYLE_EXTRACTION_AXES_RESOURCE_ID,
+                } as CapabilityValueBinding,
             },
-            right: { source: 'literal' as const, value: true },
-        },
-        progress: { group: 'axis-extraction' },
-    }))
+            condition: {
+                type: 'compare' as const,
+                operator: 'equals' as const,
+                left: {
+                    source: 'step' as const,
+                    stepId: routeStepId,
+                    path: ['applicableAxes', axis],
+                },
+                right: {
+                    source: 'literal' as const,
+                    value: true,
+                },
+            },
+            progress: { group: 'axis-extraction' },
+        }),
+    )
     const mergeInputs: Record<string, CapabilityValueBinding> = {
-        state: { source: 'step', stepId: routeStepId, path: ['state'] },
-        crops: { source: 'step', stepId: 'materialize-crops', path: [] },
+        state: {
+            source: 'step',
+            stepId: routeStepId,
+            path: ['state'],
+        },
+        crops: {
+            source: 'step',
+            stepId: 'materialize-crops',
+            path: [],
+        },
     }
-    axisSteps.forEach((step, index) => {
-        mergeInputs[`axis${index}`] = { source: 'step', stepId: step.stepId, path: [] }
-    })
+    axisSteps.forEach(
+        (step, index) => void (mergeInputs[`axis${index}`] = {
+            source: 'step',
+            stepId: step.stepId,
+            path: [],
+        }),
+    )
 
     return {
         schemaVersion: 1,
@@ -147,9 +182,21 @@ export function buildStyleExtractionManifest(resources: {
         name: 'Style Extraction',
         description: 'Extracts reusable visual traits through routing, parallel specialist analysis, crop evidence, synthesis, samples, and persistence.',
         references: [
-            { capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.routerSkill, kind: 'skill', import: ['router'] },
-            { capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.axesSkill, kind: 'skill', import: ['axes'] },
-            { capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.synthesisSkill, kind: 'skill', import: ['synthesis'] },
+            {
+                capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.routerSkill,
+                kind: 'skill',
+                import: ['router'],
+            },
+            {
+                capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.axesSkill,
+                kind: 'skill',
+                import: ['axes'],
+            },
+            {
+                capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.synthesisSkill,
+                kind: 'skill',
+                import: ['synthesis'],
+            },
         ],
         resources: [resources.inputSchema, resources.outputSchema],
         tool: {
@@ -172,11 +219,26 @@ export function buildStyleExtractionManifest(resources: {
                         action: 'style.initialize',
                         dependsOn: [],
                         input: {
-                            prompt: { source: 'input', path: ['prompt'] },
-                            intent: { source: 'input', path: ['intent'] },
-                            sourceAssetIds: { source: 'input', path: ['sourceAssetIds'] },
-                            analysisModelId: { source: 'input', path: ['analysisModelId'] },
-                            imageModelId: { source: 'input', path: ['imageModelId'] },
+                            prompt: {
+                                source: 'input',
+                                path: ['prompt'],
+                            },
+                            intent: {
+                                source: 'input',
+                                path: ['intent'],
+                            },
+                            sourceAssetIds: {
+                                source: 'input',
+                                path: ['sourceAssetIds'],
+                            },
+                            analysisModelId: {
+                                source: 'input',
+                                path: ['analysisModelId'],
+                            },
+                            imageModelId: {
+                                source: 'input',
+                                path: ['imageModelId'],
+                            },
                         },
                         progress: {},
                     },
@@ -186,14 +248,21 @@ export function buildStyleExtractionManifest(resources: {
                         action: 'style.route',
                         dependsOn: ['initialize'],
                         input: {
-                            state: { source: 'step', stepId: 'initialize', path: ['state'] },
+                            state: {
+                                source: 'step',
+                                stepId: 'initialize',
+                                path: ['state'],
+                            },
                             instructions: {
                                 source: 'resource',
                                 capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.routerSkill,
                                 resourceId: STYLE_EXTRACTION_ROUTER_RESOURCE_ID,
                             },
                         },
-                        retry: { maxAttempts: 2, backoffMs: 1000 },
+                        retry: {
+                            maxAttempts: 2,
+                            backoffMs: 1000,
+                        },
                         progress: { exposeReasoning: true },
                     },
                     ...axisSteps,
@@ -203,7 +272,11 @@ export function buildStyleExtractionManifest(resources: {
                         action: 'style.materialize-crops',
                         dependsOn: [routeStepId],
                         input: {
-                            state: { source: 'step', stepId: routeStepId, path: ['state'] },
+                            state: {
+                                source: 'step',
+                                stepId: routeStepId,
+                                path: ['state'],
+                            },
                         },
                         progress: { group: 'axis-extraction' },
                     },
@@ -221,14 +294,21 @@ export function buildStyleExtractionManifest(resources: {
                         action: 'style.synthesize',
                         dependsOn: ['merge-analysis'],
                         input: {
-                            state: { source: 'step', stepId: 'merge-analysis', path: ['state'] },
+                            state: {
+                                source: 'step',
+                                stepId: 'merge-analysis',
+                                path: ['state'],
+                            },
                             instructions: {
                                 source: 'resource',
                                 capabilityId: STYLE_EXTRACTION_CAPABILITY_IDS.synthesisSkill,
                                 resourceId: STYLE_EXTRACTION_SYNTHESIS_RESOURCE_ID,
                             },
                         },
-                        retry: { maxAttempts: 2, backoffMs: 1000 },
+                        retry: {
+                            maxAttempts: 2,
+                            backoffMs: 1000,
+                        },
                         progress: { exposeReasoning: true },
                     },
                     {
@@ -237,7 +317,11 @@ export function buildStyleExtractionManifest(resources: {
                         action: 'style.generate-samples',
                         dependsOn: ['synthesize'],
                         input: {
-                            state: { source: 'step', stepId: 'synthesize', path: ['state'] },
+                            state: {
+                                source: 'step',
+                                stepId: 'synthesize',
+                                path: ['state'],
+                            },
                         },
                         progress: { group: 'samples' },
                     },
@@ -247,16 +331,35 @@ export function buildStyleExtractionManifest(resources: {
                         action: 'style.persist',
                         dependsOn: ['generate-samples'],
                         input: {
-                            state: { source: 'step', stepId: 'generate-samples', path: ['state'] },
+                            state: {
+                                source: 'step',
+                                stepId: 'generate-samples',
+                                path: ['state'],
+                            },
                         },
-                        retry: { maxAttempts: 2, backoffMs: 500 },
+                        retry: {
+                            maxAttempts: 2,
+                            backoffMs: 500,
+                        },
                         progress: {},
                     },
                 ],
                 outputs: {
-                    state: { source: 'step', stepId: 'persist', path: ['state'] },
-                    success: { source: 'step', stepId: 'persist', path: ['success'] },
-                    capabilityId: { source: 'step', stepId: 'persist', path: ['capabilityId'] },
+                    state: {
+                        source: 'step',
+                        stepId: 'persist',
+                        path: ['state'],
+                    },
+                    success: {
+                        source: 'step',
+                        stepId: 'persist',
+                        path: ['success'],
+                    },
+                    capabilityId: {
+                        source: 'step',
+                        stepId: 'persist',
+                        path: ['capabilityId'],
+                    },
                 },
             },
         },
@@ -271,7 +374,9 @@ async function storeToolResource(
     return await storage.storeResource({
         storageOwnerId,
         resourceId: source.resourceId,
-        bytes: await readFile(new URL(`./resources/${source.fileName}`, import.meta.url)),
+        bytes: await readFile(
+            new URL(`./resources/${source.fileName}`, import.meta.url),
+        ),
         mediaType: source.mediaType,
         role: source.role,
         name: source.name,

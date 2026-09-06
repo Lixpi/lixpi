@@ -2,7 +2,7 @@
 // Emits events on state changes for parent to handle
 
 // @ts-ignore - runtime import
-import { select } from 'd3-selection'
+
 import 'd3-transition'
 // @ts-ignore - runtime import
 import { easeCubicOut } from 'd3-ease'
@@ -19,7 +19,10 @@ type ToggleSwitchConfig = {
     checked?: boolean
     disabled?: boolean
     className?: string
-    onChange?: (checked: boolean, id: string) => void
+    onChange?: (
+        checked: boolean,
+        id: string,
+    ) => void
 }
 
 type ToggleSwitchState = {
@@ -58,10 +61,10 @@ const COLORS = {
 }
 
 // Render a toggle switch as SVG group
-export function createToggleSwitch(
+export const createToggleSwitch = (
     parent: any,
     config: ToggleSwitchConfig,
-): ToggleSwitchInstance {
+): ToggleSwitchInstance => {
     const {
         id,
         x,
@@ -96,7 +99,8 @@ export function createToggleSwitch(
     // Create toggle group visible at its final position. The prompt model menu
     // mounts inside ProseMirror DOM where transition setup can be skipped during
     // hot updates; visibility must not depend on the entrance animation.
-    const toggleGroup = parent.append('g')
+    const toggleGroup = parent
+        .append('g')
         .attr('class', `toggle-switch-group toggle-switch ${className}`)
         .attr('transform', `translate(${x}, ${y})`)
         .attr('data-toggle-switch-id', id)
@@ -104,7 +108,8 @@ export function createToggleSwitch(
         .style('opacity', 1)
 
     // Track (pill-shaped background)
-    const track = toggleGroup.append('rect')
+    const track = toggleGroup
+        .append('rect')
         .attr('class', 'toggle-track')
         .attr('x', 0)
         .attr('y', 0)
@@ -117,7 +122,8 @@ export function createToggleSwitch(
         .attr('stroke-width', 1)
 
     // Knob (circular slider)
-    const knob = toggleGroup.append('circle')
+    const knob = toggleGroup
+        .append('circle')
         .attr('class', 'toggle-knob')
         .attr('cx', state.checked ? knobCheckedX : knobUncheckedX)
         .attr('cy', knobCenterY)
@@ -135,25 +141,34 @@ export function createToggleSwitch(
     const checkmarkOffsetX = (knobSize - checkmarkWidth) / 2
     const checkmarkOffsetY = (knobSize - checkmarkHeight) / 2
 
-    function getCheckmarkTransform(targetX: number): string {
+    const getCheckmarkTransform = (targetX: number): string => {
         const x = targetX - knobRadius + checkmarkOffsetX
         const y = knobCenterY - knobRadius + checkmarkOffsetY
+
         return `translate(${x}, ${y}) scale(${checkmarkScale}) translate(${-checkmarkIcon.minX}, ${-checkmarkIcon.minY})`
     }
 
-    const checkmark = toggleGroup.append('g')
+    const checkmark = toggleGroup
+        .append('g')
         .attr('class', 'toggle-checkmark')
         .attr('opacity', state.checked ? 1 : 0)
 
     for (const pathData of checkmarkIcon.pathData) {
-        checkmark.append('path')
+        checkmark
+            .append('path')
             .attr('d', pathData)
             .attr('fill', COLORS.active.fill)
-            .attr('transform', getCheckmarkTransform(state.checked ? knobCheckedX : knobUncheckedX))
+            .attr(
+                'transform',
+                getCheckmarkTransform(state.checked ? knobCheckedX : knobUncheckedX),
+            )
     }
 
     // Click handler
-    if (!state.disabled && onChange) {
+    if (
+        !state.disabled
+        && onChange
+    ) {
         toggleGroup.on('click', (event: MouseEvent) => {
             event.stopPropagation()
             const newChecked = !state.checked
@@ -163,7 +178,7 @@ export function createToggleSwitch(
     }
 
     // Render function to update visual state with smooth transitions
-    function render() {
+    const render = () => {
         const duration = 200 // Smooth toggle animation
 
         // Animate track color
@@ -192,7 +207,10 @@ export function createToggleSwitch(
             .transition()
             .duration(duration)
             .ease(easeCubicOut)
-            .attr('transform', getCheckmarkTransform(targetX))
+            .attr(
+                'transform',
+                getCheckmarkTransform(targetX),
+            )
 
         toggleGroup
             .style('cursor', state.disabled ? 'not-allowed' : 'pointer')
@@ -204,14 +222,14 @@ export function createToggleSwitch(
         render()
     }
 
-    function setDisabled(disabled: boolean) {
+    const setDisabled = (disabled: boolean) => {
         state.disabled = disabled
         render()
 
         // Re-attach event handlers if needed
-        if (disabled) {
+        if (disabled)
             toggleGroup.on('click', null)
-        } else if (onChange) {
+        else if (onChange) {
             toggleGroup.on('click', (event: MouseEvent) => {
                 event.stopPropagation()
                 const newChecked = !state.checked
@@ -221,13 +239,9 @@ export function createToggleSwitch(
         }
     }
 
-    function getChecked(): boolean {
-        return state.checked
-    }
+    const getChecked = (): boolean => state.checked
 
-    function destroy() {
-        toggleGroup.remove()
-    }
+    const destroy = () => void toggleGroup.remove()
 
     // Initial render (without animation for initial state)
     // The entrance animation will handle the initial appearance

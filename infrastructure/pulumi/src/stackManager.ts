@@ -5,8 +5,11 @@ import {
     type Stack,
     type Deployment,
 } from '@pulumi/pulumi/automation/index.js'
-import * as aws from '@pulumi/aws'
-import { info } from '@lixpi/debug-tools'
+
+import {
+    info,
+    log as debugLog,
+} from '@lixpi/debug-tools'
 import {
     startOutputSession,
     printPulumiLine,
@@ -23,14 +26,18 @@ export class StackManager {
     private region: string
     private stack: Stack | null = null
 
-    constructor(stackName: string, region: string) {
+    constructor(
+        stackName: string,
+        region: string,
+    ) {
         this.stackName = stackName
         this.region = region
     }
 
     // Initialize the Pulumi stack if not already initialized
     async init() {
-        if (this.stack) return
+        if (this.stack)
+            return
 
         const workspaceOptions = getWorkspaceOptions()
         const stackArgs = getStackArgs(this.stackName)
@@ -65,10 +72,15 @@ export class StackManager {
                     spinner.start()
                 },
             })
-            spinner.succeed(chalk.green('Pulumi Update Completed'))
+            spinner.succeed(
+                chalk.green('Pulumi Update Completed'),
+            )
             this.printChangesSummary(res.summary.resourceChanges)
         } catch (error) {
-            spinner.fail(chalk.red('Pulumi Update Failed'))
+            spinner.fail(
+                chalk.red('Pulumi Update Failed'),
+            )
+
             // Bubble up without re-printing the full diagnostics (already streamed)
             throw error
         }
@@ -93,10 +105,15 @@ export class StackManager {
                     spinner.start()
                 },
             })
-            spinner.succeed(chalk.green('Preview Completed Successfully'))
+            spinner.succeed(
+                chalk.green('Preview Completed Successfully'),
+            )
             this.printChangesSummary(res.changeSummary)
         } catch (error) {
-            spinner.fail(chalk.red('Preview Failed'))
+            spinner.fail(
+                chalk.red('Preview Failed'),
+            )
+
             throw error
         }
     }
@@ -115,8 +132,12 @@ export class StackManager {
 
         try {
             if (force) {
-                info('Force Destroy', chalk.red('Force destroy flag enabled.'))
+                info(
+                    'Force Destroy',
+                    chalk.red('Force destroy flag enabled.'),
+                )
             }
+
             const res = await this.stack!.destroy({
                 onOutput: text => {
                     spinner.stop()
@@ -125,10 +146,15 @@ export class StackManager {
                 },
                 ...(force ? { destroy: true } : {}),
             })
-            spinner.succeed(chalk.green('Pulumi Destroy Completed Successfully'))
+            spinner.succeed(
+                chalk.green('Pulumi Destroy Completed Successfully'),
+            )
             this.printChangesSummary(res.summary.resourceChanges)
         } catch (error) {
-            spinner.fail(chalk.red('Pulumi Destroy Failed'))
+            spinner.fail(
+                chalk.red('Pulumi Destroy Failed'),
+            )
+
             throw error
         }
     }
@@ -153,9 +179,14 @@ export class StackManager {
                 },
                 ...(options?.clearPendingCreates ? { clearPendingCreates: true } : {}),
             })
-            spinner.succeed(chalk.green('Pulumi Refresh Completed Successfully'))
+            spinner.succeed(
+                chalk.green('Pulumi Refresh Completed Successfully'),
+            )
         } catch (error) {
-            spinner.fail(chalk.red('Pulumi Refresh Failed'))
+            spinner.fail(
+                chalk.red('Pulumi Refresh Failed'),
+            )
+
             throw error
         }
     }
@@ -163,9 +194,13 @@ export class StackManager {
     // Cancel ongoing Pulumi operation
     async cancel() {
         await this.init()
+
         try {
             await this.stack!.cancel()
-            info('Pulumi Cancel', chalk.green('Operation cancelled successfully.'))
+            info(
+                'Pulumi Cancel',
+                chalk.green('Operation cancelled successfully.'),
+            )
         } catch (error) {
             // Bubble up
             throw error
@@ -177,14 +212,22 @@ export class StackManager {
         await this.init()
         const outs = await this.stack!.outputs()
 
-        console.log(chalk.bold('\nStack Outputs:'))
-        console.log(chalk.gray('─'.repeat(50)))
+        debugLog(
+            chalk.bold('\nStack Outputs:'),
+        )
+        debugLog(
+            chalk.gray(
+                '─'.repeat(50),
+            ),
+        )
 
-        Object.entries(outs).forEach(([key, output]) => {
-            console.log(`${chalk.cyan(key)}: ${chalk.yellow(output.value)}`)
-        })
+        Object.entries(outs).forEach(([key, output]) => void debugLog(`${chalk.cyan(key)}: ${chalk.yellow(output.value)}`))
 
-        console.log(chalk.gray('─'.repeat(50)))
+        debugLog(
+            chalk.gray(
+                '─'.repeat(50),
+            ),
+        )
     }
 
     // Export current stack state
@@ -192,7 +235,11 @@ export class StackManager {
         await this.init()
         const deployment = await this.stack!.exportStack()
 
-        return JSON.stringify(deployment.deployment, null, 2)
+        return JSON.stringify(
+            deployment.deployment,
+            null,
+            2,
+        )
     }
 
     // Import stack state
@@ -202,40 +249,63 @@ export class StackManager {
         const deployment: Deployment = JSON.parse(state)
         await this.stack!.importStack(deployment)
 
-        info('Pulumi Import Stack', chalk.green('Successfully imported stack state.'))
+        info(
+            'Pulumi Import Stack',
+            chalk.green('Successfully imported stack state.'),
+        )
     }
 
     // Create new Pulumi Stack explicitly
     async createStack() {
-        const workspace = await LocalWorkspace.create(getWorkspaceOptions())
+        const workspace = await LocalWorkspace.create(
+            getWorkspaceOptions(),
+        )
         const created = await workspace.createStack(this.stackName)
         // Some type defs may mark createStack as void; cast defensively
         this.stack = created as unknown as Stack
 
-        info('Stack Created', chalk.green(this.stackName))
+        info(
+            'Stack Created',
+            chalk.green(this.stackName),
+        )
     }
 
     // Remove existing Pulumi Stack explicitly
     async removeStack() {
-        const workspace = await LocalWorkspace.create(getWorkspaceOptions())
+        const workspace = await LocalWorkspace.create(
+            getWorkspaceOptions(),
+        )
         await workspace.removeStack(this.stackName)
 
-        info('Stack Removed', chalk.red(this.stackName))
+        info(
+            'Stack Removed',
+            chalk.red(this.stackName),
+        )
     }
 
     // List available Pulumi stacks
     async listStacks(): Promise<void> {
-        const workspace = await LocalWorkspace.create(getWorkspaceOptions())
+        const workspace = await LocalWorkspace.create(
+            getWorkspaceOptions(),
+        )
         const stacks = await workspace.listStacks()
 
-        console.log(chalk.bold('\nAvailable Stacks:'))
-        console.log(chalk.gray('─'.repeat(50)))
+        debugLog(
+            chalk.bold('\nAvailable Stacks:'),
+        )
+        debugLog(
+            chalk.gray(
+                '─'.repeat(50),
+            ),
+        )
 
-        stacks.forEach(s => {
-            console.log(`- ${chalk.cyan(s.name)}`)
-        })
+        stacks.forEach(s => void debugLog(`- ${chalk.cyan(s.name)}`))
 
-        console.log(chalk.gray('─'.repeat(50)))
+        debugLog(
+            chalk.gray(
+                '─'.repeat(50),
+            ),
+        )
     }
 
     // Clean all images from ECR repositories (not supported in Pulumi Automation API)
@@ -245,17 +315,46 @@ export class StackManager {
 
     // Helper to print Pulumi change summary in formatted style
     private printChangesSummary(changes: any) {
-        console.log(chalk.bold('\nResource Changes:'))
-        console.log(chalk.gray('─'.repeat(50)))
+        debugLog(
+            chalk.bold('\nResource Changes:'),
+        )
+        debugLog(
+            chalk.gray(
+                '─'.repeat(50),
+            ),
+        )
 
         if (changes) {
-            if (changes.create) console.log(chalk.green(`✓ Created: ${changes.create}`))
-            if (changes.update) console.log(chalk.yellow(`↻ Updated: ${changes.update}`))
-            if (changes.delete) console.log(chalk.red(`✗ Deleted: ${changes.delete}`))
-            if (changes.replace) console.log(chalk.magenta(`↺ Replaced: ${changes.replace}`))
-            if (changes.same) console.log(chalk.blue(`≡ Unchanged: ${changes.same}`))
+            if (changes.create)
+                debugLog(
+                    chalk.green(`✓ Created: ${changes.create}`),
+                )
+
+            if (changes.update)
+                debugLog(
+                    chalk.yellow(`↻ Updated: ${changes.update}`),
+                )
+
+            if (changes.delete)
+                debugLog(
+                    chalk.red(`✗ Deleted: ${changes.delete}`),
+                )
+
+            if (changes.replace)
+                debugLog(
+                    chalk.magenta(`↺ Replaced: ${changes.replace}`),
+                )
+
+            if (changes.same)
+                debugLog(
+                    chalk.blue(`≡ Unchanged: ${changes.same}`),
+                )
         }
 
-        console.log(chalk.gray('─'.repeat(50)))
+        debugLog(
+            chalk.gray(
+                '─'.repeat(50),
+            ),
+        )
     }
 }

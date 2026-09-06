@@ -15,20 +15,32 @@ export class IdleTask {
     constructor(private readonly options: IdleTaskOptions) {
         if (options.signal?.aborted) {
             this.finished = true
+
             return
         }
-        options.signal?.addEventListener('abort', this.destroy, { once: true })
+
+        options.signal?.addEventListener(
+            'abort',
+            this.destroy,
+            { once: true },
+        )
+
         if (typeof globalThis.requestIdleCallback === 'function') {
             const id = globalThis.requestIdleCallback(this.run, { timeout: options.timeoutMs ?? 1500 })
             this.cancel = () => globalThis.cancelIdleCallback(id)
         } else {
-            const id = setTimeout(this.run, Math.min(options.timeoutMs ?? 250, 250))
+            const id = setTimeout(
+                this.run,
+                Math.min(options.timeoutMs ?? 250, 250),
+            )
             this.cancel = () => clearTimeout(id)
         }
     }
 
     private run = (): void => {
-        if (this.finished) return
+        if (this.finished)
+            return
+
         this.finished = true
         this.cancel = () => {}
         this.options.signal?.removeEventListener('abort', this.destroy)
@@ -36,7 +48,9 @@ export class IdleTask {
     }
 
     destroy = (): void => {
-        if (this.finished) return
+        if (this.finished)
+            return
+
         this.finished = true
         this.cancel()
         this.options.signal?.removeEventListener('abort', this.destroy)

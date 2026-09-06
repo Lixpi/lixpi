@@ -1,6 +1,5 @@
 import * as process from 'process'
 import * as aws from '@pulumi/aws'
-import * as pulumi from '@pulumi/pulumi'
 
 import { formatStageResourceName } from '@lixpi/constants'
 
@@ -24,9 +23,7 @@ export type EcsClusterArgs = {
     tags?: { [key: string]: string }
 }
 
-export const createEcsCluster = async (
-    args: EcsClusterArgs,
-) => {
+export const createEcsCluster = async (args: EcsClusterArgs) => {
     const {
         vpc,
         publicSubnets,
@@ -36,16 +33,22 @@ export const createEcsCluster = async (
     } = args
 
     // Validate VPC and subnets (required for proper infrastructure setup)
-    if (!vpc || !publicSubnets || !privateSubnets) {
+    if (
+        !vpc
+        || !publicSubnets
+        || !privateSubnets
+    )
         throw new Error('VPC and subnets are required for ECS cluster creation')
-    }
 
-    if (privateSubnets.length < 2) {
+    if (privateSubnets.length < 2)
         throw new Error('At least 2 private subnets are required for high availability')
-    }
 
     // Format resource names
-    const formattedClusterName = formatStageResourceName(clusterName, ORG_NAME, STAGE)
+    const formattedClusterName = formatStageResourceName(
+        clusterName,
+        ORG_NAME,
+        STAGE,
+    )
 
     // Merge default tags with custom tags
     const defaultTags = {
@@ -54,19 +57,25 @@ export const createEcsCluster = async (
         LaunchType: 'FARGATE',
     }
 
-    const resourceTags = { ...defaultTags, ...tags }
+    const resourceTags = {
+        ...defaultTags,
+        ...tags,
+    }
 
     // ==========================================
     // Create ECS Cluster (Fargate-only)
     // ==========================================
-    const cluster = new aws.ecs.Cluster(formattedClusterName, {
-        name: formattedClusterName,
-        settings: [{
-            name: 'containerInsights',
-            value: CONTAINER_INSIGHTS_ENABLED ? 'enabled' : 'disabled',
-        }],
-        tags: resourceTags,
-    })
+    const cluster = new aws.ecs.Cluster(
+        formattedClusterName,
+        {
+            name: formattedClusterName,
+            settings: [{
+                name: 'containerInsights',
+                value: CONTAINER_INSIGHTS_ENABLED ? 'enabled' : 'disabled',
+            }],
+            tags: resourceTags,
+        },
+    )
 
     // ==========================================
     // Return cluster resources and outputs

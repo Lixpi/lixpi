@@ -27,24 +27,27 @@ export type AiMediaGenerationProgressRenderer = (options: {
     showSummaryWhenCollapsedItemIds: readonly string[]
 }) => AiMediaGenerationProgressRenderResult
 
-export function aiMediaGenerationProgressNodeView(
+export const aiMediaGenerationProgressNodeView = (
     node: ProseMirrorNode,
     render?: AiMediaGenerationProgressRenderer,
-) {
+) => {
     const state = node.attrs.state as MediaGenerationProgressState | null
     const id = String(node.attrs.id ?? '')
     const showSummaryWhenCollapsedItemIds = Array.isArray(node.attrs.showSummaryWhenCollapsedItemIds)
         ? node.attrs.showSummaryWhenCollapsedItemIds.filter((value: unknown): value is string => typeof value === 'string')
         : []
-    const rendered = state && render
-        ? render({ id, state, showSummaryWhenCollapsedItemIds })
+    const rendered = state
+        && render
+        ? render({
+            id,
+            state,
+            showSummaryWhenCollapsedItemIds,
+        })
         : null
-    const dom = rendered?.element ?? html`
-        <div
+    const dom = rendered?.element ?? html`<div
             className="ai-media-generation-progress"
             data=${{ mediaGenerationProgressId: id }}
-        ></div>
-    ` as HTMLElement
+        ></div>` as HTMLElement
     dom.classList.add('ai-media-generation-progress')
     dom.dataset.mediaGenerationProgressId = id
 

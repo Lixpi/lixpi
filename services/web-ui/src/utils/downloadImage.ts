@@ -37,45 +37,54 @@ const MIME_TO_EXTENSION: Record<string, string> = {
     'image/tiff': '.tiff',
 }
 
-function getExtensionFromMime(mimeType: string): string {
-    return MIME_TO_EXTENSION[mimeType] ?? '.png'
-}
+const getExtensionFromMime = (mimeType: string): string => MIME_TO_EXTENSION[mimeType] ?? '.png'
 
-function deriveFilename(url: string, blob: Blob): string {
+const deriveFilename = (
+    url: string,
+    blob: Blob,
+): string => {
     try {
         const pathname = new URL(url, window.location.origin).pathname
         const lastSegment = pathname.split('/').pop()
-        if (lastSegment && lastSegment.includes('.')) {
+
+        if (
+            lastSegment
+            && lastSegment.includes('.')
+        )
             return lastSegment
-        }
     } catch {
         // URL parsing failed — fall through to default
     }
 
     const ext = getExtensionFromMime(blob.type)
+
     return `image${ext}`
 }
 
-function appendDownloadParam(url: string): string {
+const appendDownloadParam = (url: string): string => {
     const separator = url.includes('?') ? '&' : '?'
+
     return `${url}${separator}download=true`
 }
 
-async function downloadViaFetch(imageUrl: string, filename?: string): Promise<void> {
+const downloadViaFetch = async (
+    imageUrl: string,
+    filename?: string,
+): Promise<void> => {
     const response = await fetch(imageUrl)
-    if (!response.ok) throw new Error(`Fetch failed: ${response.status}`)
+
+    if (!response.ok)
+        throw new Error(`Fetch failed: ${response.status}`)
 
     const blob = await response.blob()
     const resolvedFilename = filename ?? deriveFilename(imageUrl, blob)
 
     const objectUrl = URL.createObjectURL(blob)
-    const anchor = html`
-        <a
+    const anchor = html`<a
             href=${objectUrl}
             download=${resolvedFilename}
             style=${{ display: 'none' }}
-        ></a>
-    ` as HTMLAnchorElement
+        ></a>` as HTMLAnchorElement
 
     document.body.appendChild(anchor)
     anchor.click()
@@ -86,16 +95,25 @@ async function downloadViaFetch(imageUrl: string, filename?: string): Promise<vo
     }, 100)
 }
 
-async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Promise<string>): Promise<void> {
+const downloadViaNavigation = async (
+    imageUrl: string,
+    getAuthToken?: () => Promise<string>,
+): Promise<void> => {
     let url = imageUrl
 
     // Refresh stale auth token if a token refresher is provided.
-    if (getAuthToken && isApiEndpoint(url)) {
+    if (
+        getAuthToken
+        && isApiEndpoint(url)
+    ) {
         const freshToken = await getAuthToken()
-        url = resolveMediaUrl(url, {
-            apiBaseUrl: import.meta.env.VITE_API_URL || '',
-            token: freshToken,
-        })
+        url = resolveMediaUrl(
+            url,
+            {
+                apiBaseUrl: import.meta.env.VITE_API_URL || '',
+                token: freshToken,
+            },
+        )
     }
 
     const downloadUrl = appendDownloadParam(url)
@@ -103,29 +121,35 @@ async function downloadViaNavigation(imageUrl: string, getAuthToken?: () => Prom
     // Use a hidden iframe so the current page isn't disrupted.
     // The server responds with Content-Disposition: attachment which
     // triggers the browser's native save dialog.
-    const iframe = html`
-        <iframe
+    const iframe = html`<iframe
             src=${downloadUrl}
             style=${{ display: 'none' }}
-        ></iframe>
-    ` as HTMLIFrameElement
+        ></iframe>` as HTMLIFrameElement
     document.body.appendChild(iframe)
 
-    setTimeout(() => {
-        document.body.removeChild(iframe)
-    }, 30000)
+    setTimeout(() => void document.body.removeChild(iframe), 30000)
 }
 
-export async function downloadImage(imageUrl: string, options?: DownloadImageOptions): Promise<void> {
-    const { filename, getAuthToken } = options ?? {}
+export const downloadImage = async (
+    imageUrl: string,
+    options?: DownloadImageOptions,
+): Promise<void> => {
+    const {
+        filename,
+        getAuthToken,
+    } = options ?? {}
 
     // data: and blob: URLs can be fetched without CORS issues
-    if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+    if (
+        imageUrl.startsWith('data:')
+        || imageUrl.startsWith('blob:')
+    ) {
         try {
             await downloadViaFetch(imageUrl, filename)
         } catch {
             window.open(imageUrl, '_blank')
         }
+
         return
     }
 

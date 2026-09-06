@@ -32,22 +32,16 @@ export type StyleExtractionRuntimeDependencies = StyleExtractionDependencies & {
     initializeInput?: typeof resolveStyleExtractionInput
 }
 
-export function createStyleExtractionRuntimePort(
-    dependencies: StyleExtractionRuntimeDependencies,
-): StyleExtractionRuntimePort {
+export const createStyleExtractionRuntimePort = (dependencies: StyleExtractionRuntimeDependencies): StyleExtractionRuntimePort => {
     const stages = resolveStages(dependencies)
+
     return {
         initialize: async (input, context) => {
-            const styleExtractionInput = await (dependencies.initializeInput ?? resolveStyleExtractionInput)(
-                input,
-                context,
-            )
+            const styleExtractionInput = await (dependencies.initializeInput ?? resolveStyleExtractionInput)(input, context)
+
             return {
                 input: styleExtractionInput,
-                references: extractStyleReferenceImagesFromMessages(
-                    styleExtractionInput.messages,
-                    styleExtractionInput.sourceAssetIds,
-                ),
+                references: extractStyleReferenceImagesFromMessages(styleExtractionInput.messages, styleExtractionInput.sourceAssetIds),
                 axisExtractions: {},
                 failedAxes: [],
                 sourceCrops: [],
@@ -61,14 +55,22 @@ export function createStyleExtractionRuntimePort(
                 loggerFor(dependencies, runtimeState),
                 dependencies,
             )
-            const routedState = { ...runtimeState, ...update }
+            const routedState = {
+                ...runtimeState,
+                ...update,
+            }
+
             return {
                 update: update as unknown as Partial<StyleExtractionRuntimeState>,
                 applicableAxes: selectApplicableExtractors(routedState).map(extractor => extractor.axis),
             }
         },
-        extractAxis: async ({ state, axis }) => {
+        extractAxis: async ({
+            state,
+            axis,
+        }) => {
             const runtimeState = asStyleExtractionState(state)
+
             return await stages.runExtractorAxis(
                 runtimeState,
                 axis,
@@ -78,6 +80,7 @@ export function createStyleExtractionRuntimePort(
         },
         materializeSourceCrops: async ({ state }) => {
             const runtimeState = asStyleExtractionState(state)
+
             return await stages.materializeSourceCrops(
                 runtimeState,
                 loggerFor(dependencies, runtimeState),
@@ -86,6 +89,7 @@ export function createStyleExtractionRuntimePort(
         },
         synthesizeStyle: async ({ state }) => {
             const runtimeState = asStyleExtractionState(state)
+
             return await stages.synthesizeStyle(
                 runtimeState,
                 loggerFor(dependencies, runtimeState),
@@ -94,14 +98,19 @@ export function createStyleExtractionRuntimePort(
         },
         generateSamples: async ({ state }) => {
             const runtimeState = asStyleExtractionState(state)
+
             return await stages.generateSamples(
                 runtimeState,
                 loggerFor(dependencies, runtimeState),
                 dependencies,
             ) as unknown as Partial<StyleExtractionRuntimeState>
         },
-        persistStyle: async ({ state, allowedActionKeys }) => {
+        persistStyle: async ({
+            state,
+            allowedActionKeys,
+        }) => {
             const runtimeState = asStyleExtractionState(state)
+
             return await stages.persistStyle(
                 runtimeState,
                 loggerFor(dependencies, runtimeState),
@@ -129,7 +138,9 @@ function loggerFor(
     dependencies: StyleExtractionRuntimeDependencies,
     state: StyleExtractionState,
 ): StageLogger {
-    if (dependencies.createLogger) return dependencies.createLogger(state)
+    if (dependencies.createLogger)
+        return dependencies.createLogger(state)
+
     return createStageLogger({
         styleExtractionRunId: state.input.styleExtractionRunId,
     })

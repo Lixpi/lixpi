@@ -24,20 +24,28 @@ class WorkspaceService {
     readonly canvasSessions = new WorkspaceCanvasSessionHub(createWorkspacePersistencePorts)
 
     public async getWorkspace({ workspaceId }: { workspaceId: string }): Promise<void> {
-        if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+        if (RouterService.getRouteParams().workspaceId !== workspaceId)
+            return
+
         workspaceStore.beginWorkspaceLoad(workspaceId)
 
         try {
-            const workspace: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.GET_WORKSPACE, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-            }, WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS)
+            const workspace: any = await servicesStore.getData('nats')!.request(
+                WORKSPACE_SUBJECTS.GET_WORKSPACE,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                },
+                WORKSPACE_ROUTE_LOAD_REQUEST_TIMEOUT_MS,
+            )
 
-            if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+            if (RouterService.getRouteParams().workspaceId !== workspaceId)
+                return
 
             if (workspace.error) {
                 workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
                 workspaceStore.setDataValues({ error: workspace.error })
+
                 return
             }
 
@@ -50,7 +58,8 @@ class WorkspaceService {
             workspaceStore.setDataValues(normalizedWorkspace)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.success })
         } catch (error) {
-            if (RouterService.getRouteParams().workspaceId !== workspaceId) return
+            if (RouterService.getRouteParams().workspaceId !== workspaceId)
+                return
 
             console.error('Failed to load workspace:', error)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
@@ -62,9 +71,12 @@ class WorkspaceService {
         try {
             workspacesStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
-            const response: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.GET_USER_WORKSPACES, {
-                token: await AuthService.getTokenSilently(),
-            })
+            const response: any = await servicesStore.getData('nats')!.request(
+                WORKSPACE_SUBJECTS.GET_USER_WORKSPACES,
+                {
+                    token: await AuthService.getTokenSilently(),
+                },
+            )
 
             // Ensure response is an array
             const workspaces = Array.isArray(response) ? response : []
@@ -79,14 +91,18 @@ class WorkspaceService {
 
     public async createWorkspace({ name }: { name: string }): Promise<void> {
         try {
-            const workspace: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.CREATE_WORKSPACE, {
-                token: await AuthService.getTokenSilently(),
-                name,
-            })
+            const workspace: any = await servicesStore.getData('nats')!.request(
+                WORKSPACE_SUBJECTS.CREATE_WORKSPACE,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    name,
+                },
+            )
 
             if (workspace.error) {
                 workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
                 workspaceStore.setDataValues({ error: workspace.error })
+
                 return
             }
 
@@ -110,10 +126,13 @@ class WorkspaceService {
                 updatedAt: workspace.updatedAt,
             }])
 
-            RouterService.navigateTo('/workspace/:workspaceId', {
-                params: { workspaceId: workspace.workspaceId },
-                shouldFetchData: true,
-            })
+            RouterService.navigateTo(
+                '/workspace/:workspaceId',
+                {
+                    params: { workspaceId: workspace.workspaceId },
+                    shouldFetchData: true,
+                },
+            )
         } catch (error) {
             console.error('Failed to create workspace:', error)
             workspaceStore.setMetaValues({ loadingStatus: LoadingStatus.error })
@@ -121,13 +140,22 @@ class WorkspaceService {
         }
     }
 
-    public async updateWorkspace({ workspaceId, name }: { workspaceId: string; name: string }): Promise<void> {
+    public async updateWorkspace({
+        workspaceId,
+        name,
+    }: {
+        workspaceId: string
+        name: string
+    }): Promise<void> {
         try {
-            const result: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.UPDATE_WORKSPACE, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-                name,
-            })
+            const result: any = await servicesStore.getData('nats')!.request(
+                WORKSPACE_SUBJECTS.UPDATE_WORKSPACE,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                    name,
+                },
+            )
 
             if (!result.error) {
                 workspaceStore.setDataValues({ name })
@@ -138,7 +166,11 @@ class WorkspaceService {
         }
     }
 
-    public updateCanvasState({ workspaceId, canvasState, persistViewport = false }: {
+    public updateCanvasState({
+        workspaceId,
+        canvasState,
+        persistViewport = false,
+    }: {
         workspaceId: string
         canvasState: CanvasState
         persistViewport?: boolean
@@ -146,21 +178,31 @@ class WorkspaceService {
         this.canvasSessions.get(workspaceId).persistence.update(canvasState, persistViewport)
     }
 
-    public async runCanvasMembershipMutation<Result>({ workspaceId, mutation }: {
+    public async runCanvasMembershipMutation<Result>({
+        workspaceId,
+        mutation,
+    }: {
         workspaceId: string
         mutation: () => Promise<Result>
     }): Promise<Result> {
         return await this.canvasSessions.get(workspaceId).persistence.runMembershipMutation(mutation)
     }
 
-    public adoptAuthoritativeCanvasState({ workspaceId, canvasState, canvasStateUpdatedAt }: {
+    public adoptAuthoritativeCanvasState({
+        workspaceId,
+        canvasState,
+        canvasStateUpdatedAt,
+    }: {
         workspaceId: string
         canvasState: CanvasState
         canvasStateUpdatedAt: number
     }): void {
         this.canvasSessions.get(workspaceId).persistence.adoptAuthoritative({
             canvasState,
-            version: { updatedAt: canvasStateUpdatedAt, canvasStateUpdatedAt },
+            version: {
+                updatedAt: canvasStateUpdatedAt,
+                canvasStateUpdatedAt,
+            },
         })
     }
 
@@ -168,16 +210,21 @@ class WorkspaceService {
         try {
             workspacesStore.setMetaValues({ loadingStatus: LoadingStatus.loading })
 
-            const result: any = await servicesStore.getData('nats')!.request(WORKSPACE_SUBJECTS.DELETE_WORKSPACE, {
-                token: await AuthService.getTokenSilently(),
-                workspaceId,
-            })
+            const result: any = await servicesStore.getData('nats')!.request(
+                WORKSPACE_SUBJECTS.DELETE_WORKSPACE,
+                {
+                    token: await AuthService.getTokenSilently(),
+                    workspaceId,
+                },
+            )
 
-            const { workspaceId: deletedWorkspaceId, success } = result
+            const {
+                workspaceId: deletedWorkspaceId,
+                success,
+            } = result
 
-            if (!success) {
+            if (!success)
                 throw new Error('Failed to delete workspace')
-            }
 
             const currentWorkspaceIndex = workspacesStore.getData().findIndex(workspace => workspace.workspaceId === deletedWorkspaceId)
 
@@ -192,13 +239,15 @@ class WorkspaceService {
 
             if (isDeletingCurrentlyOpenedWorkspace) {
                 if (prevWorkspaceId) {
-                    RouterService.navigateTo('/workspace/:workspaceId', {
-                        params: { workspaceId: prevWorkspaceId },
-                        shouldFetchData: true,
-                    })
-                } else {
+                    RouterService.navigateTo(
+                        '/workspace/:workspaceId',
+                        {
+                            params: { workspaceId: prevWorkspaceId },
+                            shouldFetchData: true,
+                        },
+                    )
+                } else
                     RouterService.navigateTo('/', { params: {} })
-                }
             }
 
             workspacesStore.setMetaValues({ loadingStatus: LoadingStatus.success })
@@ -208,7 +257,15 @@ class WorkspaceService {
         }
     }
 
-    addTagToWorkspace({ workspaceId, tagId, organizationId }: { workspaceId: string; tagId: string; organizationId: string }) {
+    addTagToWorkspace({
+        workspaceId,
+        tagId,
+        organizationId,
+    }: {
+        workspaceId: string
+        tagId: string
+        organizationId: string
+    }) {
         // SocketService.emit({
         //     event: WORKSPACE_SUBJECTS.ADD_TAG_TO_WORKSPACE,
         //     data: {
@@ -226,16 +283,20 @@ class WorkspaceService {
         // } else {
         //     // Assuming data contains updated workspace tags
         //     const updatedTags = data.tags
-
         //     // Update the tags in the workspace data
         //     workspaceStore.setDataValues({ tags: updatedTags })
-
         //     // Set metadata indicating successful loading
         //     workspaceStore.setMetaValues({ isLoaded: true, errorLoading: false })
         // }
     }
 
-    removeTagFromWorkspace({ workspaceId, tagId }: { workspaceId: string; tagId: string }) {
+    removeTagFromWorkspace({
+        workspaceId,
+        tagId,
+    }: {
+        workspaceId: string
+        tagId: string
+    }) {
         // SocketService.emit({
         //     event: WORKSPACE_SUBJECTS.REMOVE_TAG_FROM_WORKSPACE,
         //     data: {
@@ -245,8 +306,7 @@ class WorkspaceService {
         // })
     }
 
-    _removeTagFromWorkspaceResponse(data: any) {
-    }
+    _removeTagFromWorkspaceResponse(data: any) {}
 }
 
 export default WorkspaceService

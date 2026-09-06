@@ -13,7 +13,10 @@ export type CapabilityPromptControlHost = {
     container: HTMLElement
     initialValue?: Record<string, CapabilityJsonValue>
     setValue: (value: Record<string, CapabilityJsonValue> | undefined) => void
-    setValid: (valid: boolean, message?: string) => void
+    setValid: (
+        valid: boolean,
+        message?: string,
+    ) => void
 }
 
 export type CapabilityPromptControls = {
@@ -115,10 +118,14 @@ export class CapabilityArtifactFrontendRegistry {
 
     register(definition: CapabilityArtifactFrontendDefinition): void {
         assertCompleteFrontendDefinition(definition)
-        if (this.definitions.has(definition.artifactTypeId)) {
+
+        if (this.definitions.has(definition.artifactTypeId))
             throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_ALREADY_REGISTERED:${definition.artifactTypeId}`)
-        }
-        this.definitions.set(definition.artifactTypeId, Object.freeze({ ...definition }))
+
+        this.definitions.set(
+            definition.artifactTypeId,
+            Object.freeze({ ...definition }),
+        )
     }
 
     get(artifactTypeId: string): CapabilityArtifactFrontendDefinition | undefined {
@@ -127,7 +134,10 @@ export class CapabilityArtifactFrontendRegistry {
 
     require(artifactTypeId: string): CapabilityArtifactFrontendDefinition {
         const definition = this.get(artifactTypeId)
-        if (!definition) throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_UNKNOWN:${artifactTypeId}`)
+
+        if (!definition)
+            throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_UNKNOWN:${artifactTypeId}`)
+
         return definition
     }
 
@@ -137,12 +147,25 @@ export class CapabilityArtifactFrontendRegistry {
 }
 
 function assertCompleteFrontendDefinition(definition: CapabilityArtifactFrontendDefinition): void {
-    if (!definition.artifactTypeId.trim()) throw new Error('CAPABILITY_ARTIFACT_FRONTEND_TYPE_ID_REQUIRED')
-    if (!definition.iconId.trim()) throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_ICON_REQUIRED:${definition.artifactTypeId}`)
-    const { width, height } = definition.initialCanvasDimensions ?? {}
-    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    if (!definition.artifactTypeId.trim())
+        throw new Error('CAPABILITY_ARTIFACT_FRONTEND_TYPE_ID_REQUIRED')
+
+    if (!definition.iconId.trim())
+        throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_ICON_REQUIRED:${definition.artifactTypeId}`)
+
+    const {
+        width,
+        height,
+    } = definition.initialCanvasDimensions ?? {}
+
+    if (
+        !Number.isFinite(width)
+        || width <= 0
+        || !Number.isFinite(height)
+        || height <= 0
+    )
         throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_DIMENSIONS_INVALID:${definition.artifactTypeId}`)
-    }
+
     const requiredFactories = [
         definition.createCanvasNodeView,
         definition.createGeneratedOutputInfoView,
@@ -150,7 +173,7 @@ function assertCompleteFrontendDefinition(definition: CapabilityArtifactFrontend
         definition.createPromptReferenceView,
         definition.createLibraryItemView,
     ]
-    if (requiredFactories.some(factory => typeof factory !== 'function')) {
+
+    if (requiredFactories.some(factory => typeof factory !== 'function'))
         throw new Error(`CAPABILITY_ARTIFACT_FRONTEND_INCOMPLETE:${definition.artifactTypeId}`)
-    }
 }

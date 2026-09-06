@@ -26,7 +26,11 @@ export {
     aiGeneratedImageNodeType,
 }
 
-export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => number | undefined) => {
+export const aiGeneratedImageNodeView = (
+    node: any,
+    view: any,
+    getPos: () => number | undefined,
+) => {
     const wrapper = html`
         <div className="ai-generated-image-wrapper ai-generated-media-node">
             <div className="ai-generated-media-section-title">Final generated image</div>
@@ -35,7 +39,10 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
                     <div className="spinner-ring"></div>
                     <span className="spinner-text">Generating image...</span>
                 </div>
-                <img className="ai-generated-image-content" alt="" />
+                <img
+                    className="ai-generated-image-content"
+                    alt=""
+                />
             </div>
             <div className="ai-generated-media-model-chrome ai-generated-media-run-meta"></div>
         </div>
@@ -54,12 +61,18 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     const handleClick = (event: MouseEvent) => {
         event.preventDefault()
         event.stopPropagation()
-        if (!view.editable) return
+
+        if (!view.editable)
+            return
 
         const pos = getPos()
-        if (pos === undefined) return
 
-        const tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos))
+        if (pos === undefined)
+            return
+
+        const tr = view.state.tr.setSelection(
+            NodeSelection.create(view.state.doc, pos),
+        )
         view.dispatch(tr)
         view.focus()
     }
@@ -76,13 +89,19 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     }
 
     const updateDisplay = async () => {
-        const { imageData, assetId, isPartial } = node.attrs
+        const {
+            imageData,
+            assetId,
+            isPartial,
+        } = node.attrs
 
         const imageSource = imageData || (assetId ? buildAssetRenditionPath(assetId, 'preview') : '')
+
         if (!imageSource) {
             titleElement.hidden = true
             spinnerElement.classList.add('is-active')
             imageElement.classList.remove('is-visible')
+
             return
         }
 
@@ -90,21 +109,22 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
         spinnerElement.classList.remove('is-active')
         imageElement.classList.add('is-visible')
 
-        const imageSrc = await resolveAuthenticatedMediaUrl(imageSource, {
-            apiBaseUrl: import.meta.env.VITE_API_URL || '',
-            base64MimeType: 'image/png',
-            getAuthToken: () => AuthService.getTokenSilently(),
-        })
+        const imageSrc = await resolveAuthenticatedMediaUrl(
+            imageSource,
+            {
+                apiBaseUrl: import.meta.env.VITE_API_URL || '',
+                base64MimeType: 'image/png',
+                getAuthToken: () => AuthService.getTokenSilently(),
+            },
+        )
 
-        if (imageElement.src !== imageSrc) {
+        if (imageElement.src !== imageSrc)
             imageElement.src = imageSrc
-        }
 
-        if (isPartial) {
+        if (isPartial)
             container.classList.add('is-partial')
-        } else {
+        else
             container.classList.remove('is-partial')
-        }
     }
 
     const updateDisplaySafely = async (): Promise<void> => {
@@ -118,10 +138,13 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     imageElement.onerror = () => {
         titleElement.hidden = true
         applyStyle(imageElement, { display: 'none' })
+
         if (!container.querySelector('.image-error-placeholder')) {
-            container.appendChild(html`
-                <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>
-            `)
+            container.appendChild(
+                html`
+                    <div className="image-error-placeholder"><span innerHTML=${brokenImageIcon}></span><span>Image unavailable</span></div>
+                `,
+            )
         }
     }
 
@@ -131,13 +154,13 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
     return {
         dom: wrapper,
         update: (updatedNode: any) => {
-            if (updatedNode.type.name !== aiGeneratedImageNodeType) {
+            if (updatedNode.type.name !== aiGeneratedImageNodeType)
                 return false
-            }
 
             node = updatedNode
             void updateDisplaySafely()
             updateModelChrome()
+
             return true
         },
         destroy: () => {
@@ -145,8 +168,6 @@ export const aiGeneratedImageNodeView = (node: any, view: any, getPos: () => num
             unsubscribeAiModelsStore?.()
             unsubscribeAiModelsStore = null
         },
-        stopEvent: (event: Event) => {
-            return false
-        },
+        stopEvent: (event: Event) => false,
     }
 }

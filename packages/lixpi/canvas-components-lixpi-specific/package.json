@@ -138,6 +138,7 @@
         "@lixpi/constants": "workspace:*"
     },
     "devDependencies": {
+        "@lixpi/test-utils": "workspace:*",
         "@types/d3-selection": "*",
         "vitest": "*",
         "happy-dom": "*"

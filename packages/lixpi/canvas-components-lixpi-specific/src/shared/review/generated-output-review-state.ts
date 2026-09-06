@@ -15,35 +15,62 @@ type GeneratedOutputReviewStateInput = {
     edges: WorkspaceEdge[]
 }
 
-export function isGeneratedOutputAcceptedForCanvas({
+export const isGeneratedOutputAcceptedForCanvas = ({
     node,
     asset,
     nodes,
     edges,
-}: GeneratedOutputReviewStateInput): boolean {
-    if (asset?.generatedOutputReview?.status !== 'accepted') return false
-    return !hasActiveGeneratedOutputLineage(node, nodes, edges)
+}: GeneratedOutputReviewStateInput): boolean => {
+    if (asset?.generatedOutputReview?.status !== 'accepted')
+        return false
+
+    return !hasActiveGeneratedOutputLineage(
+        node,
+        nodes,
+        edges,
+    )
 }
 
-export function isGeneratedOutputReadyForReview(
+export const isGeneratedOutputReadyForReview = (
     node: GeneratedOutputCanvasNode,
     asset: Asset | undefined,
-): boolean {
+): boolean => {
     const assetIsReady = Boolean(
         asset && asset.states.provenance === 'sealed' && (node.type === 'capabilityArtifact'
             ? Boolean(asset.documents.capabilityArtifact)
             : asset.media?.renditions.original?.status === 'ready'),
     )
-    if (assetIsReady) return true
-    if (node.type === 'capabilityArtifact') return false
+
+    if (assetIsReady)
+        return true
+
+    if (node.type === 'capabilityArtifact')
+        return false
+
     return node.mediaGenerationPhase === 'ready'
 }
 
-export function isGeneratedOutputRejectableForCanvas(input: GeneratedOutputReviewStateInput): boolean {
-    const { node, asset, nodes, edges } = input
-    if (!node.generatedBy || isGeneratedOutputAcceptedForCanvas(input)) return false
+export const isGeneratedOutputRejectableForCanvas = (input: GeneratedOutputReviewStateInput): boolean => {
+    const {
+        node,
+        asset,
+        nodes,
+        edges,
+    } = input
+
+    if (
+        !node.generatedBy
+        || isGeneratedOutputAcceptedForCanvas(input)
+    )
+        return false
+
     const reviewStatus = asset?.generatedOutputReview?.status
-    return hasActiveGeneratedOutputLineage(node, nodes, edges)
+
+    return hasActiveGeneratedOutputLineage(
+        node,
+        nodes,
+        edges,
+    )
         || reviewStatus === 'candidate'
         || reviewStatus === 'superseded'
 }

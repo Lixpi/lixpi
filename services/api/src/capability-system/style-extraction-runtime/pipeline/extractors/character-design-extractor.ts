@@ -39,13 +39,19 @@ const FIELDS_SCHEMA = {
             required: ['headToBody', 'eyeToFace', 'limbProportions'],
             additionalProperties: false,
         },
-        featureEmphasis: { type: 'array', items: { type: 'string' } },
+        featureEmphasis: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         expression: { type: 'string' },
         pose: { type: 'string' },
         shadingApproach: { type: 'string' },
         lineTreatment: { type: 'string' },
         silhouetteStyle: { type: 'string' },
-        distinctiveDetails: { type: 'array', items: { type: 'string' } },
+        distinctiveDetails: {
+            type: 'array',
+            items: { type: 'string' },
+        },
         transferGuidance: { type: 'string' },
     },
     required: ['archetype', 'proportions', 'featureEmphasis', 'expression', 'pose', 'shadingApproach', 'lineTreatment', 'silhouetteStyle', 'distinctiveDetails', 'transferGuidance'],
@@ -57,10 +63,19 @@ const extractor: StyleExtractor = {
     displayName: 'Character design',
     description: 'Captures rendering-of-the-subject as a first-class signature: archetype, proportions, feature emphasis, shading approach, line treatment, and transfer guidance to unrelated subjects.',
     minDominance: 0.3,
-    applicableTo: (scene) => {
-        return scene.references.some((r) => r.subjects.length > 0)
-    },
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    applicableTo: scene => scene.references.some(r => r.subjects.length > 0),
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

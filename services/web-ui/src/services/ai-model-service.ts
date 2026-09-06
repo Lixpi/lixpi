@@ -16,12 +16,7 @@ export default class AiModelService {
 
     constructor(private readonly natsClient?: NatsService) {
         this.catalogSyncSubscription = natsClient
-            ? natsClient.subscribe(
-                AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED,
-                () => {
-                    void this.getAvailableAiModels()
-                },
-            )
+            ? natsClient.subscribe(AI_MODELS_SUBJECTS.MODELS_SYNC_COMPLETED, () => void this.getAvailableAiModels())
             : null
     }
 
@@ -30,19 +25,24 @@ export default class AiModelService {
 
         try {
             const natsClient = this.natsClient ?? (servicesStore.getData('nats') as NatsService | undefined)
-            if (!natsClient) throw new Error('AI model catalog requires an active NATS connection')
 
-            const availableModels: any = await natsClient.request(AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS, {
-                token: await AuthService.getTokenSilently(),
-            })
+            if (!natsClient)
+                throw new Error('AI model catalog requires an active NATS connection')
 
-            if (Array.isArray(availableModels)) {
+            const availableModels: any = await natsClient.request(
+                AI_MODELS_SUBJECTS.GET_AVAILABLE_MODELS,
+                {
+                    token: await AuthService.getTokenSilently(),
+                },
+            )
+
+            if (Array.isArray(availableModels))
                 aiModelsStore.setAiModels(availableModels)
-            } else if (Array.isArray(availableModels?.models)) {
+            else if (Array.isArray(availableModels?.models))
                 aiModelsStore.setAiModelsCatalog(availableModels)
-            } else {
+            else
                 aiModelsStore.setAiModels([])
-            }
+
             aiModelsStore.setMetaValues({ loadingStatus: LoadingStatus.success })
         } catch (error) {
             console.error('Failed to load AI models data:', error)

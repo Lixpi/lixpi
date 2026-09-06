@@ -19,14 +19,20 @@ export type BranchMediaModelCircleSettings = {
         rimFeatherFraction: number
         fallbackColors: string[]
         brandColorAdjust: ColorAdjustment
-        brandColorStops: { targetColor: string; amount: number }[]
+        brandColorStops: {
+            targetColor: string
+            amount: number
+        }[]
         material: GlassMaterialStyle
         discMaterial: Partial<CircularGlassMaterialStyle>
     }
     texture: {
         fallbackColor: string
         fillOpacity: number
-        brandColorMix: { targetColor: string; amount: number }
+        brandColorMix: {
+            targetColor: string
+            amount: number
+        }
     }
 }
 
@@ -41,21 +47,41 @@ export class BranchMediaModelCircleStyles {
     getGlassImage(modelColor: string | null): string {
         const glass = this.settings.glass
         const normalized = normalizeHexColor(modelColor)
-        const adjusted = normalized ? adjustHexColor(normalized, glass.brandColorAdjust, '#53616C') : null
+        const adjusted = normalized ? adjustHexColor(
+            normalized,
+            glass.brandColorAdjust,
+            '#53616C',
+        ) : null
         const colors = adjusted
-            ? glass.brandColorStops.map(stop => mixHexColors(adjusted, stop.targetColor, stop.amount, '#53616C'))
+            ? glass.brandColorStops.map(
+                stop => mixHexColors(
+                    adjusted,
+                    stop.targetColor,
+                    stop.amount,
+                    '#53616C',
+                ),
+            )
             : glass.fallbackColors
         const key = JSON.stringify([colors, glass.textureSize, glass.translucency, glass.rimFeatherFraction, glass.material, glass.discMaterial])
         const cached = this.glassImages.get(key)
-        if (cached !== undefined) return cached
-        const dataUrl = new CircularGlassMaterial(colors, 0, glass.material, {
-            size: glass.textureSize,
-            translucency: glass.translucency,
-            rimFeatherFraction: glass.rimFeatherFraction,
-            discStyle: glass.discMaterial,
-        }).bakeDataUrl()
+
+        if (cached !== undefined)
+            return cached
+
+        const dataUrl = new CircularGlassMaterial(
+            colors,
+            0,
+            glass.material,
+            {
+                size: glass.textureSize,
+                translucency: glass.translucency,
+                rimFeatherFraction: glass.rimFeatherFraction,
+                discStyle: glass.discMaterial,
+            },
+        ).bakeDataUrl()
         const image = dataUrl ? `url(${dataUrl})` : ''
         this.glassImages.set(key, image)
+
         return image
     }
 
@@ -63,14 +89,23 @@ export class BranchMediaModelCircleStyles {
         const texture = this.settings.texture
         const normalized = normalizeHexColor(modelColor)
         const color = normalized
-            ? mixHexColors(normalized, texture.brandColorMix.targetColor, texture.brandColorMix.amount, '#53616C')
+            ? mixHexColors(
+                normalized,
+                texture.brandColorMix.targetColor,
+                texture.brandColorMix.amount,
+                '#53616C',
+            )
             : texture.fallbackColor
         const key = `${color}|${texture.fillOpacity}`
         const cached = this.textureImages.get(key)
-        if (cached !== undefined) return cached
+
+        if (cached !== undefined)
+            return cached
+
         const svg = tPatternSvgTexture.replace('<path ', `<path fill="${color}" fill-opacity="${texture.fillOpacity}" `)
         const image = svgToCssImageUrl(svg)
         this.textureImages.set(key, image)
+
         return image
     }
 

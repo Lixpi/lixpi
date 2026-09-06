@@ -25,24 +25,37 @@ export type PromptReferenceCatalogClient = {
     }>
 }
 
-export function createPromptReferenceCatalogClient(
+export const createPromptReferenceCatalogClient = (
     workspaceId: string,
     organizationId: string,
-): PromptReferenceCatalogClient {
-    const request = async <Response>(subject: string, payload: Record<string, unknown>): Promise<Response> => {
+): PromptReferenceCatalogClient => {
+    const request = async <Response>(
+        subject: string,
+        payload: Record<string, unknown>,
+    ): Promise<Response> => {
         const nats = servicesStore.getData('nats')
-        if (!nats) throw new Error('Prompt-reference catalog requires an active NATS connection')
-        const response = await nats.request(subject, {
-            token: await AuthService.getTokenSilently(),
-            workspaceId,
-            organizationId,
-            ...payload,
-        }) as Response & { error?: string }
-        if (response.error) throw new Error(response.error)
+
+        if (!nats)
+            throw new Error('Prompt-reference catalog requires an active NATS connection')
+
+        const response = (await nats.request(
+            subject,
+            {
+                token: await AuthService.getTokenSilently(),
+                workspaceId,
+                organizationId,
+                ...payload,
+            },
+        )) as Response & { error?: string }
+
+        if (response.error)
+            throw new Error(response.error)
+
         return response
     }
+
     return {
-        list: async (query) =>
+        list: async query =>
             await request<PromptReferenceCatalogPage>(
                 NATS_SUBJECTS.PROMPT_REFERENCE_SUBJECTS.LIST,
                 {
@@ -57,9 +70,10 @@ export function createPromptReferenceCatalogClient(
                 NATS_SUBJECTS.CAPABILITY_SUBJECTS.MODULES.LIST,
                 { query: query.normalize('NFKC').trim().toLocaleLowerCase('en-US') },
             )
+
             return response.items
         },
-        getModule: async (moduleId) =>
+        getModule: async moduleId =>
             await request<{
                 meta: CapabilityModuleMeta
                 entry: CapabilityPromptReference

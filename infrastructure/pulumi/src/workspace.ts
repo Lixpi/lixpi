@@ -1,8 +1,3 @@
-import {
-    Stack,
-    LocalWorkspace,
-} from '@pulumi/pulumi/automation/index.js'
-
 import { createInfrastructure } from './pulumiProgram.ts'
 
 export const getStackArgs = (stackName: string): InlineProgramArgs => ({

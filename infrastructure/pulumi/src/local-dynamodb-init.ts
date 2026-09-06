@@ -17,6 +17,10 @@
 // local-dynamodb-table-reconciler.ts for the prompt, the
 // LOCAL_DYNAMODB_FORCE_RECREATE override, and the data-loss reporting.
 
+import {
+    err as debugError,
+    log as debugLog,
+} from '@lixpi/debug-tools'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { getTableDefinitions } from './resources/db/DynamoDB-tables.ts'
 import {
@@ -28,7 +32,7 @@ import {
 const { DYNAMODB_ENDPOINT } = process.env
 
 if (!DYNAMODB_ENDPOINT) {
-    console.error('DYNAMODB_ENDPOINT is required')
+    debugError('DYNAMODB_ENDPOINT is required')
     process.exit(1)
 }
 
@@ -41,25 +45,27 @@ const client = new DynamoDBClient({
     },
 })
 
-async function createTables() {
-    const tableDefs = Object.values(getTableDefinitions()) as TableDefinition[]
+const createTables = async () => {
+    const tableDefs = Object.values(
+        getTableDefinitions(),
+    ) as TableDefinition[]
     const forceRecreate = await resolveForceRecreate()
     const reconciler = new LocalDynamoDbTableReconciler(client, forceRecreate)
 
-    console.log(`Creating DynamoDB tables in ${DYNAMODB_ENDPOINT}...`)
-    console.log(`Stage: ${process.env.STAGE}, Org: ${process.env.ORG_NAME}`)
-    console.log(`Force-recreate existing tables: ${forceRecreate}`)
+    debugLog(`Creating DynamoDB tables in ${DYNAMODB_ENDPOINT}...`)
+    debugLog(`Stage: ${process.env.STAGE}, Org: ${process.env.ORG_NAME}`)
+    debugLog(`Force-recreate existing tables: ${forceRecreate}`)
 
     for (const table of tableDefs) {
         await reconciler.ensureTable(table)
     }
 
-    console.log('Done!')
+    debugLog('Done!')
 }
 
 try {
     await createTables()
 } catch (e) {
-    console.error('Failed to create tables:', e)
+    debugError('Failed to create tables:', e)
     process.exit(1)
 }

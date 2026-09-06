@@ -19,56 +19,102 @@ export type CapabilityRunFormConfig = {
     onSubmit: (value: Record<string, CapabilityJsonValue>) => void | Promise<void>
 }
 
-export function coerceCapabilityFormValue(
+export const coerceCapabilityFormValue = (
     property: CapabilityInputSchemaProperty,
     value: FormDataEntryValue | null,
-): CapabilityJsonValue | undefined {
-    if (property.type === 'boolean') return value === 'on'
-    if (value === null || String(value).trim() === '') return property.default
+): CapabilityJsonValue | undefined => {
+    if (property.type === 'boolean')
+        return value === 'on'
+
+    if (
+        value === null
+        || String(value).trim() === ''
+    )
+        return property.default
+
     const raw = String(value).trim()
-    if (property.type === 'number' || property.type === 'integer') {
+
+    if (
+        property.type === 'number'
+        || property.type === 'integer'
+    )
         return Number(raw)
-    }
+
     if (property.type === 'array') {
-        return raw.split(',').map((entry) => {
+        return raw.split(',').map(entry => {
             const trimmed = entry.trim()
-            if (property.items?.type === 'number' || property.items?.type === 'integer') return Number(trimmed)
+
+            if (
+                property.items?.type === 'number'
+                || property.items?.type === 'integer'
+            )
+                return Number(trimmed)
+
             return trimmed
-        }).filter((entry) => entry !== '')
+        }).filter(entry => entry !== '')
     }
+
     return raw
 }
 
-export function readCapabilityRunForm(
+export const readCapabilityRunForm = (
     schema: CapabilityInputSchema,
     formData: FormData,
-): { value?: Record<string, CapabilityJsonValue>; errors: string[] } {
+): {
+    value?: Record<string, CapabilityJsonValue>
+    errors: string[]
+} => {
     const value: Record<string, CapabilityJsonValue> = {}
     const errors: string[] = []
     const required = new Set(schema.required ?? [])
 
     for (const [name, property] of Object.entries(schema.properties)) {
-        const coerced = coerceCapabilityFormValue(property, formData.get(name))
+        const coerced = coerceCapabilityFormValue(
+            property,
+            formData.get(name),
+        )
+
         if (coerced === undefined) {
-            if (required.has(name)) errors.push(`${property.title ?? name} is required.`)
+            if (required.has(name))
+                errors.push(`${property.title ?? name} is required.`)
+
             continue
         }
-        if ((property.type === 'number' || property.type === 'integer') && typeof coerced !== 'number') {
+
+        if (
+            (property.type === 'number' || property.type === 'integer')
+            && typeof coerced !== 'number'
+        ) {
             errors.push(`${property.title ?? name} must be a number.`)
+
             continue
         }
-        if (typeof coerced === 'number' && !Number.isFinite(coerced)) {
+
+        if (
+            typeof coerced === 'number'
+            && !Number.isFinite(coerced)
+        ) {
             errors.push(`${property.title ?? name} must be a number.`)
+
             continue
         }
-        if (Array.isArray(coerced) && coerced.some((entry) => typeof entry === 'number' && !Number.isFinite(entry))) {
+
+        if (
+            Array.isArray(coerced)
+            && coerced.some(entry => typeof entry === 'number' && !Number.isFinite(entry))
+        ) {
             errors.push(`${property.title ?? name} contains an invalid number.`)
+
             continue
         }
+
         value[name] = coerced
     }
 
-    return errors.length > 0 ? { errors } : { value, errors }
+    return errors.length > 0 ? { errors } : {
+        value,
+        errors,
+    }
 }
 
 class CapabilityRunForm implements CapabilityRunFormInstance {
@@ -76,18 +122,32 @@ class CapabilityRunForm implements CapabilityRunFormInstance {
     private readonly errorElement: HTMLDivElement
 
     constructor(private readonly config: CapabilityRunFormConfig) {
-        this.errorElement = html`<div className="capability-run-form-errors" role="alert"></div>` as HTMLDivElement
+        this.errorElement = html`<div
+                className="capability-run-form-errors"
+                role="alert"
+            ></div>` as HTMLDivElement
         this.element = html`
             <form className="capability-run-form">
                 <div className="capability-run-form-fields"></div>
                 ${this.errorElement}
-                <button type="submit" className="capability-run-form-submit">${config.submitLabel ?? 'Run Tool'}</button>
+                <button
+                    type="submit"
+                    className="capability-run-form-submit"
+                >${config.submitLabel ?? 'Run Tool'}</button>
             </form>
         ` as HTMLFormElement
         const fields = this.element.querySelector('.capability-run-form-fields') as HTMLDivElement
+
         for (const [name, property] of Object.entries(config.schema.properties)) {
-            fields.appendChild(this.buildField(name, property, config.schema.required?.includes(name) === true))
+            fields.appendChild(
+                this.buildField(
+                    name,
+                    property,
+                    config.schema.required?.includes(name) === true,
+                ),
+            )
         }
+
         this.element.addEventListener('submit', this.handleSubmit)
     }
 
@@ -98,39 +158,95 @@ class CapabilityRunForm implements CapabilityRunFormInstance {
 
     private readonly handleSubmit = (event: SubmitEvent): void => {
         event.preventDefault()
-        const result = readCapabilityRunForm(this.config.schema, new FormData(this.element))
-        this.errorElement.replaceChildren(...result.errors.map((error) => html`<div>${error}</div>`))
-        if (!result.value) return
+        const result = readCapabilityRunForm(
+            this.config.schema,
+            new FormData(this.element),
+        )
+        this.errorElement.replaceChildren(...result.errors.map(error => html`<div>${error}</div>`))
+
+        if (!result.value)
+            return
+
         void this.config.onSubmit(result.value)
     }
 
-    private buildField(name: string, property: CapabilityInputSchemaProperty, required: boolean): HTMLElement {
+    private buildField(
+        name: string,
+        property: CapabilityInputSchemaProperty,
+        required: boolean,
+    ): HTMLElement {
         const id = `capability-run-field-${name}`
-        const label = html`<label className="capability-run-form-field" for=${id}></label>` as HTMLLabelElement
+        const label = html`<label
+                className="capability-run-form-field"
+                for=${id}
+            ></label>` as HTMLLabelElement
         label.appendChild(html`<span>${property.title ?? name}${required ? ' *' : ''}</span>`)
 
         let input: HTMLElement
-        if (property.type === 'boolean') {
-            input = html`<input id=${id} name=${name} type="checkbox" checked=${property.default === true} />`
-        } else if (property.enum) {
-            const select = html`<select id=${id} name=${name} required=${required}></select>` as HTMLSelectElement
-            if (!required) select.appendChild(html`<option value="">Select…</option>`)
+
+        if (property.type === 'boolean')
+            input = html`
+                <input
+                    id=${id}
+                    name=${name}
+                    type="checkbox"
+                    checked=${property.default === true}
+                />
+            `
+        else if (property.enum) {
+            const select = html`<select
+                    id=${id}
+                    name=${name}
+                    required=${required}
+                ></select>` as HTMLSelectElement
+
+            if (!required)
+                select.appendChild(html`<option value="">Select…</option>`)
+
             for (const option of property.enum) {
-                select.appendChild(html`<option value=${String(option)} selected=${property.default === option}>${String(option)}</option>`)
+                select.appendChild(html`
+                    <option
+                        value=${String(option)}
+                        selected=${property.default === option}
+                    >${String(option)}</option>
+                `)
             }
+
             input = select
-        } else if (property.type === 'string' && !name.toLocaleLowerCase().endsWith('id')) {
-            input = html`<textarea id=${id} name=${name} required=${required}>${String(property.default ?? '')}</textarea>`
-        } else {
-            const inputType = property.type === 'number' || property.type === 'integer' ? 'number' : 'text'
-            input = html`<input id=${id} name=${name} type=${inputType} required=${required} value=${String(property.default ?? '')} />`
+        } else if (
+            property.type === 'string'
+            && !name.toLocaleLowerCase().endsWith('id')
+        )
+            input = html`
+                <textarea
+                    id=${id}
+                    name=${name}
+                    required=${required}
+                >${String(property.default ?? '')}</textarea>
+            `
+        else {
+            const inputType = property.type === 'number'
+                || property.type === 'integer'
+                ? 'number'
+                : 'text'
+            input = html`
+                <input
+                    id=${id}
+                    name=${name}
+                    type=${inputType}
+                    required=${required}
+                    value=${String(property.default ?? '')}
+                />
+            `
         }
+
         label.appendChild(input)
-        if (property.description) label.appendChild(html`<small>${property.description}</small>`)
+
+        if (property.description)
+            label.appendChild(html`<small>${property.description}</small>`)
+
         return label
     }
 }
 
-export function createCapabilityRunForm(config: CapabilityRunFormConfig): CapabilityRunFormInstance {
-    return new CapabilityRunForm(config)
-}
+export const createCapabilityRunForm = (config: CapabilityRunFormConfig): CapabilityRunFormInstance => new CapabilityRunForm(config)

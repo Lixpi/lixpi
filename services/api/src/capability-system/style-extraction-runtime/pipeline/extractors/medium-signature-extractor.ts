@@ -22,12 +22,30 @@ const FIELDS_SCHEMA = {
     type: 'object',
     properties: {
         medium: { type: 'string' },
-        mediumConfidence: { type: 'number', description: '0..1' },
-        techniqueSignatures: { type: 'array', items: { type: 'string' } },
-        softwareGuess: { type: 'array', items: { type: 'string' } },
-        digitalArtifacts: { type: 'array', items: { type: 'string' } },
-        traditionalArtifacts: { type: 'array', items: { type: 'string' } },
-        mediumMismatchWarning: { type: 'string', description: 'empty string if no mismatch with the router; 1 sentence otherwise' },
+        mediumConfidence: {
+            type: 'number',
+            description: '0..1',
+        },
+        techniqueSignatures: {
+            type: 'array',
+            items: { type: 'string' },
+        },
+        softwareGuess: {
+            type: 'array',
+            items: { type: 'string' },
+        },
+        digitalArtifacts: {
+            type: 'array',
+            items: { type: 'string' },
+        },
+        traditionalArtifacts: {
+            type: 'array',
+            items: { type: 'string' },
+        },
+        mediumMismatchWarning: {
+            type: 'string',
+            description: 'empty string if no mismatch with the router; 1 sentence otherwise',
+        },
     },
     required: ['medium', 'mediumConfidence', 'techniqueSignatures', 'softwareGuess', 'digitalArtifacts', 'traditionalArtifacts', 'mediumMismatchWarning'],
     additionalProperties: false,
@@ -39,7 +57,18 @@ const extractor: StyleExtractor = {
     description: "Classifies the medium and enumerates the concrete technique signatures and artifacts that justify the classification. Cross-checks the router's medium claim.",
     minDominance: 0.0,
     applicableTo: () => true,
-    extract: async ({ scene, state, logger }) => runAxisVlm({ extractor, state, scene, systemPrompt: SYSTEM_PROMPT, fieldsSchema: FIELDS_SCHEMA, logger }),
+    extract: async ({
+        scene,
+        state,
+        logger,
+    }) => runAxisVlm({
+        extractor,
+        state,
+        scene,
+        systemPrompt: SYSTEM_PROMPT,
+        fieldsSchema: FIELDS_SCHEMA,
+        logger,
+    }),
 }
 
 registerExtractor(extractor)

@@ -19,21 +19,41 @@ import {
 } from '../services/blob-storage.ts'
 import { enqueueBlobDeletion } from '../services/asset-maintenance-queue.ts'
 
-const { ORG_NAME, STAGE } = process.env
+const {
+    ORG_NAME,
+    STAGE,
+} = process.env
 const BLOB_DELETION_CLAIM_TIMEOUT_MS = 5 * 60 * 1000
 
-const blobsTableName = (): string => getDynamoDbTableStageName('BLOBS', ORG_NAME, STAGE)
-const blobReferencesTableName = (): string => getDynamoDbTableStageName('BLOB_REFERENCES', ORG_NAME, STAGE)
+const blobsTableName = (): string => getDynamoDbTableStageName(
+    'BLOBS',
+    ORG_NAME,
+    STAGE,
+)
+const blobReferencesTableName = (): string => getDynamoDbTableStageName(
+    'BLOB_REFERENCES',
+    ORG_NAME,
+    STAGE,
+)
 
-const getReference = async (blobKey: string, referenceKey: string): Promise<BlobReference | undefined> =>
-    await dynamoDBService.getItem({
+const getReference = async (
+    blobKey: string,
+    referenceKey: string,
+): Promise<BlobReference | undefined> =>
+    (await dynamoDBService.getItem({
         tableName: blobReferencesTableName(),
-        key: { blobKey, referenceKey },
+        key: {
+            blobKey,
+            referenceKey,
+        },
         consistentRead: true,
         origin: 'Blob.getReference',
-    }) as BlobReference | undefined
+    })) as BlobReference | undefined
 
-const assertMatchingReference = (existing: BlobReference, expected: BlobReference): void => {
+const assertMatchingReference = (
+    existing: BlobReference,
+    expected: BlobReference,
+): void => {
     if (
         existing.blobKey !== expected.blobKey
         || existing.blobHash !== expected.blobHash
@@ -41,9 +61,8 @@ const assertMatchingReference = (existing: BlobReference, expected: BlobReferenc
         || existing.referenceKey !== expected.referenceKey
         || existing.ownerType !== expected.ownerType
         || existing.ownerId !== expected.ownerId
-    ) {
+    )
         throw new Error('BLOB_REFERENCE_METADATA_CONFLICT')
-    }
 }
 
 export const buildBlobReferenceOperations = ({
@@ -88,40 +107,81 @@ export const buildBlobReferenceBatchOperations = ({
     removals = [],
     now = Date.now(),
 }: {
-    additions: Array<{ blob: BlobRecord; reference: BlobReference }>
-    removals?: Array<{ blob: BlobRecord; reference: BlobReference }>
+    additions: Array<{
+        blob: BlobRecord
+        reference: BlobReference
+    }>
+    removals?: Array<{
+        blob: BlobRecord
+        reference: BlobReference
+    }>
     now?: number
-}): { operations: TransactOperation[]; deletionBlobHashes: string[] } => {
+}): {
+    operations: TransactOperation[]
+    deletionBlobHashes: string[]
+} => {
     const groups = new Map<string, {
         blob: BlobRecord
         additions: BlobReference[]
         removals: BlobReference[]
     }>()
+
     for (const change of additions) {
-        const group = groups.get(change.blob.blobKey) ?? { blob: change.blob, additions: [], removals: [] }
+        const group = groups.get(change.blob.blobKey) ?? {
+            blob: change.blob,
+            additions: [],
+            removals: [],
+        }
         group.additions.push(change.reference)
         groups.set(change.blob.blobKey, group)
     }
+
     for (const change of removals) {
-        const group = groups.get(change.blob.blobKey) ?? { blob: change.blob, additions: [], removals: [] }
+        const group = groups.get(change.blob.blobKey) ?? {
+            blob: change.blob,
+            additions: [],
+            removals: [],
+        }
         group.removals.push(change.reference)
         groups.set(change.blob.blobKey, group)
     }
 
     const operations: TransactOperation[] = []
     const deletionBlobHashes: string[] = []
-    for (const { blob, additions: blobAdditions, removals: blobRemovals } of groups.values()) {
-        const addedKeys = new Set(blobAdditions.map((reference) => reference.referenceKey))
-        const removedKeys = new Set(blobRemovals.map((reference) => reference.referenceKey))
-        if (addedKeys.size !== blobAdditions.length || removedKeys.size !== blobRemovals.length) {
+
+    for (const {
+        blob,
+        additions: blobAdditions,
+        removals: blobRemovals,
+    } of groups.values()) {
+        const addedKeys = new Set(
+            blobAdditions.map(reference => reference.referenceKey),
+        )
+        const removedKeys = new Set(
+            blobRemovals.map(reference => reference.referenceKey),
+        )
+
+        if (
+            addedKeys.size !== blobAdditions.length
+            || removedKeys.size !== blobRemovals.length
+        )
             throw new Error('DUPLICATE_BLOB_REFERENCE_MUTATION')
-        }
+
         for (const referenceKey of addedKeys) {
-            if (removedKeys.has(referenceKey)) throw new Error('CONFLICTING_BLOB_REFERENCE_MUTATION')
+            if (removedKeys.has(referenceKey))
+                throw new Error('CONFLICTING_BLOB_REFERENCE_MUTATION')
         }
+
         const nextReferenceCount = blob.referenceCount + blobAdditions.length - blobRemovals.length
-        if (nextReferenceCount < 0) throw new Error('BLOB_REFERENCE_COUNT_CORRUPT')
-        if (blobAdditions.length > 0 && blob.status === 'deleting') throw new Error('BLOB_DELETION_IN_PROGRESS')
+
+        if (nextReferenceCount < 0)
+            throw new Error('BLOB_REFERENCE_COUNT_CORRUPT')
+
+        if (
+            blobAdditions.length > 0
+            && blob.status === 'deleting'
+        )
+            throw new Error('BLOB_DELETION_IN_PROGRESS')
 
         const counterOperation: TransactOperation = blobRemovals.length === 0
             ? {
@@ -164,25 +224,38 @@ export const buildBlobReferenceBatchOperations = ({
             }
 
         operations.push(
-            ...blobAdditions.map((reference): TransactOperation => ({
-                type: 'put',
-                tableName: blobReferencesTableName(),
-                item: reference,
-                conditionExpression: 'attribute_not_exists(#referenceKey)',
-                expressionAttributeNames: { '#referenceKey': 'referenceKey' },
-            })),
-            ...blobRemovals.map((reference): TransactOperation => ({
-                type: 'delete',
-                tableName: blobReferencesTableName(),
-                key: { blobKey: blob.blobKey, referenceKey: reference.referenceKey },
-                conditionExpression: 'attribute_exists(#referenceKey)',
-                expressionAttributeNames: { '#referenceKey': 'referenceKey' },
-            })),
+            ...blobAdditions.map(
+                (reference): TransactOperation => ({
+                    type: 'put',
+                    tableName: blobReferencesTableName(),
+                    item: reference,
+                    conditionExpression: 'attribute_not_exists(#referenceKey)',
+                    expressionAttributeNames: { '#referenceKey': 'referenceKey' },
+                }),
+            ),
+            ...blobRemovals.map(
+                (reference): TransactOperation => ({
+                    type: 'delete',
+                    tableName: blobReferencesTableName(),
+                    key: {
+                        blobKey: blob.blobKey,
+                        referenceKey: reference.referenceKey,
+                    },
+                    conditionExpression: 'attribute_exists(#referenceKey)',
+                    expressionAttributeNames: { '#referenceKey': 'referenceKey' },
+                }),
+            ),
             counterOperation,
         )
-        if (nextReferenceCount === 0) deletionBlobHashes.push(blob.blobHash)
+
+        if (nextReferenceCount === 0)
+            deletionBlobHashes.push(blob.blobHash)
     }
-    return { operations, deletionBlobHashes }
+
+    return {
+        operations,
+        deletionBlobHashes,
+    }
 }
 
 export const buildBlobReferenceRemovalOperations = async ({
@@ -195,11 +268,29 @@ export const buildBlobReferenceRemovalOperations = async ({
     blobHash: string
     referenceKey: string
     now?: number
-}): Promise<{ operations: TransactOperation[]; deletionRequired: boolean }> => {
-    const blob = await BlobModel.get({ organizationId, blobHash })
-    if (!blob) return { operations: [], deletionRequired: false }
+}): Promise<{
+    operations: TransactOperation[]
+    deletionRequired: boolean
+}> => {
+    const blob = await BlobModel.get({
+        organizationId,
+        blobHash,
+    })
+
+    if (!blob)
+        return {
+            operations: [],
+            deletionRequired: false,
+        }
+
     const reference = await getReference(blob.blobKey, referenceKey)
-    if (!reference) return { operations: [], deletionRequired: blob.referenceCount === 0 }
+
+    if (!reference)
+        return {
+            operations: [],
+            deletionRequired: blob.referenceCount === 0,
+        }
+
     const deletionRequired = blob.referenceCount === 1
     const updateOperation: TransactOperation = deletionRequired
         ? {
@@ -237,12 +328,16 @@ export const buildBlobReferenceRemovalOperations = async ({
                 ':one': 1,
             },
         }
+
     return {
         operations: [
             {
                 type: 'delete',
                 tableName: blobReferencesTableName(),
-                key: { blobKey: blob.blobKey, referenceKey },
+                key: {
+                    blobKey: blob.blobKey,
+                    referenceKey,
+                },
                 conditionExpression: 'attribute_exists(#referenceKey)',
                 expressionAttributeNames: { '#referenceKey': 'referenceKey' },
             },
@@ -267,7 +362,6 @@ const BlobModel = {
             consistentRead: true,
             origin: 'Blob.get',
         }) as BlobRecord | undefined,
-
     registerStoredBlob: async ({
         organizationId,
         blobHash,
@@ -290,7 +384,11 @@ const BlobModel = {
         derivationVersion?: string
     }): Promise<BlobRecord> => {
         const blobKey = getBlobKey(organizationId, blobHash)
-        const existing = await BlobModel.get({ organizationId, blobHash })
+        const existing = await BlobModel.get({
+            organizationId,
+            blobHash,
+        })
+
         if (existing) {
             if (
                 existing.organizationId !== organizationId
@@ -299,10 +397,12 @@ const BlobModel = {
                 || existing.objectKey !== objectKey
                 || existing.mimeType !== mimeType
                 || existing.byteSize !== byteSize
-            ) {
+            )
                 throw new Error('BLOB_METADATA_CONFLICT')
-            }
-            if (existing.status === 'deleting') throw new Error('BLOB_DELETION_IN_PROGRESS')
+
+            if (existing.status === 'deleting')
+                throw new Error('BLOB_DELETION_IN_PROGRESS')
+
             return existing
         }
 
@@ -336,23 +436,31 @@ const BlobModel = {
                 logConditionalCheckFailures: false,
                 origin: 'Blob.registerStoredBlob',
             })
+
             return blob
         } catch (error) {
-            if (!isTransactionConditionalCheckFailure(error)) throw error
-            const concurrent = await BlobModel.get({ organizationId, blobHash })
-            if (!concurrent) throw error
+            if (!isTransactionConditionalCheckFailure(error))
+                throw error
+
+            const concurrent = await BlobModel.get({
+                organizationId,
+                blobHash,
+            })
+
+            if (!concurrent)
+                throw error
+
             if (
                 concurrent.bucketName !== bucketName
                 || concurrent.objectKey !== objectKey
                 || concurrent.mimeType !== mimeType
                 || concurrent.byteSize !== byteSize
-            ) {
+            )
                 throw new Error('BLOB_METADATA_CONFLICT')
-            }
+
             return concurrent
         }
     },
-
     store: async ({
         organizationId,
         bytes,
@@ -371,7 +479,13 @@ const BlobModel = {
         derivationVersion?: string
     }): Promise<BlobRecord> => {
         for (let attempt = 1; attempt <= 10; attempt++) {
-            const stored = await putContentAddressedBlob({ organizationId, bytes, mimeType, description })
+            const stored = await putContentAddressedBlob({
+                organizationId,
+                bytes,
+                mimeType,
+                description,
+            })
+
             try {
                 return await BlobModel.registerStoredBlob({
                     organizationId,
@@ -381,13 +495,18 @@ const BlobModel = {
                     ...(derivationVersion ? { derivationVersion } : {}),
                 })
             } catch (error) {
-                if ((error as Error).message !== 'BLOB_DELETION_IN_PROGRESS' || attempt === 10) throw error
+                if (
+                    (error as Error).message !== 'BLOB_DELETION_IN_PROGRESS'
+                    || attempt === 10
+                )
+                    throw error
+
                 await new Promise(resolve => setTimeout(resolve, attempt * 50))
             }
         }
+
         throw new Error('BLOB_STORE_RETRY_EXHAUSTED')
     },
-
     addReference: async ({
         organizationId,
         blobHash,
@@ -400,9 +519,18 @@ const BlobModel = {
         referenceKey: string
         ownerType: BlobOwnerType
         ownerId: string
-    }): Promise<{ created: boolean; reference: BlobReference }> => {
-        const blob = await BlobModel.get({ organizationId, blobHash })
-        if (!blob) throw new Error('BLOB_NOT_FOUND')
+    }): Promise<{
+        created: boolean
+        reference: BlobReference
+    }> => {
+        const blob = await BlobModel.get({
+            organizationId,
+            blobHash,
+        })
+
+        if (!blob)
+            throw new Error('BLOB_NOT_FOUND')
+
         const reference: BlobReference = {
             blobKey: blob.blobKey,
             blobHash,
@@ -413,27 +541,47 @@ const BlobModel = {
             createdAt: Date.now(),
         }
         const existing = await getReference(blob.blobKey, referenceKey)
+
         if (existing) {
             assertMatchingReference(existing, reference)
-            return { created: false, reference: existing }
+
+            return {
+                created: false,
+                reference: existing,
+            }
         }
 
         try {
             await dynamoDBService.transactWrite({
-                operations: buildBlobReferenceOperations({ blob, reference }),
+                operations: buildBlobReferenceOperations({
+                    blob,
+                    reference,
+                }),
                 logConditionalCheckFailures: false,
                 origin: 'Blob.addReference',
             })
-            return { created: true, reference }
+
+            return {
+                created: true,
+                reference,
+            }
         } catch (error) {
-            if (!isTransactionConditionalCheckFailure(error)) throw error
+            if (!isTransactionConditionalCheckFailure(error))
+                throw error
+
             const concurrent = await getReference(blob.blobKey, referenceKey)
-            if (!concurrent) throw error
+
+            if (!concurrent)
+                throw error
+
             assertMatchingReference(concurrent, reference)
-            return { created: false, reference: concurrent }
+
+            return {
+                created: false,
+                reference: concurrent,
+            }
         }
     },
-
     removeReference: async ({
         organizationId,
         blobHash,
@@ -442,11 +590,28 @@ const BlobModel = {
         organizationId: string
         blobHash: string
         referenceKey: string
-    }): Promise<{ removed: boolean; deletionRequired: boolean }> => {
-        const blob = await BlobModel.get({ organizationId, blobHash })
-        if (!blob) return { removed: false, deletionRequired: false }
+    }): Promise<{
+        removed: boolean
+        deletionRequired: boolean
+    }> => {
+        const blob = await BlobModel.get({
+            organizationId,
+            blobHash,
+        })
+
+        if (!blob)
+            return {
+                removed: false,
+                deletionRequired: false,
+            }
+
         const reference = await getReference(blob.blobKey, referenceKey)
-        if (!reference) return { removed: false, deletionRequired: blob.referenceCount === 0 }
+
+        if (!reference)
+            return {
+                removed: false,
+                deletionRequired: blob.referenceCount === 0,
+            }
 
         const deletionRequired = blob.referenceCount === 1
         const now = Date.now()
@@ -493,7 +658,10 @@ const BlobModel = {
                     {
                         type: 'delete',
                         tableName: blobReferencesTableName(),
-                        key: { blobKey: blob.blobKey, referenceKey },
+                        key: {
+                            blobKey: blob.blobKey,
+                            referenceKey,
+                        },
                         conditionExpression: 'attribute_exists(#referenceKey)',
                         expressionAttributeNames: { '#referenceKey': 'referenceKey' },
                     },
@@ -502,21 +670,42 @@ const BlobModel = {
                 logConditionalCheckFailures: false,
                 origin: 'Blob.removeReference',
             })
-            if (deletionRequired) {
-                await enqueueBlobDeletion({ organizationId, blobHash })
+
+            if (deletionRequired)
+                await enqueueBlobDeletion({
+                    organizationId,
+                    blobHash,
+                })
+
+            return {
+                removed: true,
+                deletionRequired,
             }
-            return { removed: true, deletionRequired }
         } catch (error) {
-            if (!isTransactionConditionalCheckFailure(error)) throw error
+            if (!isTransactionConditionalCheckFailure(error))
+                throw error
+
             const concurrentReference = await getReference(blob.blobKey, referenceKey)
+
             if (!concurrentReference) {
-                const current = await BlobModel.get({ organizationId, blobHash })
-                return { removed: false, deletionRequired: current?.referenceCount === 0 }
+                const current = await BlobModel.get({
+                    organizationId,
+                    blobHash,
+                })
+
+                return {
+                    removed: false,
+                    deletionRequired: current?.referenceCount === 0,
+                }
             }
-            return await BlobModel.removeReference({ organizationId, blobHash, referenceKey })
+
+            return await BlobModel.removeReference({
+                organizationId,
+                blobHash,
+                referenceKey,
+            })
         }
     },
-
     deleteZeroReferenceBlob: async ({
         organizationId,
         blobHash,
@@ -524,13 +713,23 @@ const BlobModel = {
         organizationId: string
         blobHash: string
     }): Promise<boolean> => {
-        const blob = await BlobModel.get({ organizationId, blobHash })
-        if (!blob) return false
-        if (blob.referenceCount !== 0) return false
-        if (blob.status === 'staging') return false
+        const blob = await BlobModel.get({
+            organizationId,
+            blobHash,
+        })
+
+        if (!blob)
+            return false
+
+        if (blob.referenceCount !== 0)
+            return false
+
+        if (blob.status === 'staging')
+            return false
 
         const claimTime = Date.now()
         const deletionClaim = `${claimTime}-${crypto.randomUUID()}`
+
         try {
             await dynamoDBService.updateItem({
                 tableName: blobsTableName(),
@@ -554,7 +753,9 @@ const BlobModel = {
                 origin: 'Blob.deleteZeroReferenceBlob.claim',
             })
         } catch (error) {
-            if (!isTransactionConditionalCheckFailure(error)) throw error
+            if (!isTransactionConditionalCheckFailure(error))
+                throw error
+
             return false
         }
 
@@ -579,12 +780,16 @@ const BlobModel = {
                     origin: 'Blob.deleteZeroReferenceBlob.releaseClaim',
                 })
             } catch (error) {
-                if (!isTransactionConditionalCheckFailure(error)) throw error
+                if (!isTransactionConditionalCheckFailure(error))
+                    throw error
             }
         }
 
         try {
-            await deleteContentAddressedBlob({ ...blob, status: 'deleting' })
+            await deleteContentAddressedBlob({
+                ...blob,
+                status: 'deleting',
+            })
             await dynamoDBService.transactWrite({
                 operations: [{
                     type: 'delete',
@@ -605,14 +810,17 @@ const BlobModel = {
                 logConditionalCheckFailures: false,
                 origin: 'Blob.deleteZeroReferenceBlob.finalize',
             })
+
             return true
         } catch (error) {
-            if (isTransactionConditionalCheckFailure(error)) return false
+            if (isTransactionConditionalCheckFailure(error))
+                return false
+
             await releaseDeletionClaim()
+
             throw error
         }
     },
-
     collectOrphanedStagingBlobs: async ({
         olderThan,
         limit = 100,
@@ -626,15 +834,16 @@ const BlobModel = {
             fetchAllItems: true,
             origin: 'Blob.collectOrphanedStagingBlobs',
         })
-        const candidates = ((result?.items ?? []) as BlobRecord[])
-            .filter((blob) =>
-                blob.referenceCount === 0 && (
-                    blob.status === 'deleting'
-                    || (blob.status === 'staging' && blob.updatedAt <= olderThan)
-                )
-            )
+        const candidates = ((result?.items ?? []) as BlobRecord[]).filter(
+            blob =>
+                    blob.referenceCount === 0 && (
+                        blob.status === 'deleting'
+                        || (blob.status === 'staging' && blob.updatedAt <= olderThan)
+                    ),
+        )
             .slice(0, limit)
         let deleted = 0
+
         for (const blob of candidates) {
             try {
                 if (blob.status === 'staging') {
@@ -659,18 +868,18 @@ const BlobModel = {
                         origin: 'Blob.collectOrphanedStagingBlobs.mark',
                     })
                 }
-                if (
-                    await BlobModel.deleteZeroReferenceBlob({
-                        organizationId: blob.organizationId,
-                        blobHash: blob.blobHash,
-                    })
-                ) {
+
+                if (await BlobModel.deleteZeroReferenceBlob({
+                    organizationId: blob.organizationId,
+                    blobHash: blob.blobHash,
+                }))
                     deleted += 1
-                }
             } catch (error) {
-                if ((error as { name?: string })?.name !== 'ConditionalCheckFailedException') throw error
+                if ((error as { name?: string })?.name !== 'ConditionalCheckFailedException')
+                    throw error
             }
         }
+
         return deleted
     },
 }

@@ -49,12 +49,30 @@ export const nodes = {
         group: 'block',
         defining: true,
         parseDOM: [
-            { tag: 'h1', attrs: { level: 1 } },
-            { tag: 'h2', attrs: { level: 2 } },
-            { tag: 'h3', attrs: { level: 3 } },
-            { tag: 'h4', attrs: { level: 4 } },
-            { tag: 'h5', attrs: { level: 5 } },
-            { tag: 'h6', attrs: { level: 6 } },
+            {
+                tag: 'h1',
+                attrs: { level: 1 },
+            },
+            {
+                tag: 'h2',
+                attrs: { level: 2 },
+            },
+            {
+                tag: 'h3',
+                attrs: { level: 3 },
+            },
+            {
+                tag: 'h4',
+                attrs: { level: 4 },
+            },
+            {
+                tag: 'h5',
+                attrs: { level: 5 },
+            },
+            {
+                tag: 'h6',
+                attrs: { level: 6 },
+            },
         ],
         toDOM(node) {
             return [`h${node.attrs.level}`, 0]
@@ -67,7 +85,10 @@ export const nodes = {
         group: 'block',
         code: true,
         defining: true,
-        parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }],
+        parseDOM: [{
+            tag: 'pre',
+            preserveWhitespace: 'full',
+        }],
         toDOM() {
             return preDOM
         },
@@ -99,7 +120,10 @@ export const nodes = {
                 tag: 'figure.pm-image-wrapper',
                 getAttrs(dom: HTMLElement) {
                     const img = dom.querySelector('img')
-                    if (!img) return false
+
+                    if (!img)
+                        return false
+
                     return {
                         src: img.getAttribute('src'),
                         title: img.getAttribute('title'),
@@ -127,18 +151,31 @@ export const nodes = {
             },
         ],
         toDOM(node) {
-            const { src, alt, assetId, width, alignment, textWrap } = node.attrs
+            const {
+                src,
+                alt,
+                assetId,
+                width,
+                alignment,
+                textWrap,
+            } = node.attrs
             const imgAttrs: Record<string, string> = { src }
-            if (alt) imgAttrs.alt = alt
-            if (assetId) imgAttrs['data-asset-id'] = assetId
+
+            if (alt)
+                imgAttrs.alt = alt
+
+            if (assetId)
+                imgAttrs['data-asset-id'] = assetId
 
             const figureAttrs: Record<string, string> = {
                 class: `pm-image-wrapper pm-image-align-${alignment} pm-image-wrap-${textWrap}`,
             }
+
             if (width) {
                 figureAttrs['data-width'] = width
                 figureAttrs.style = `width: ${width}`
             }
+
             figureAttrs['data-alignment'] = alignment
             figureAttrs['data-text-wrap'] = textWrap
 
@@ -190,6 +227,7 @@ export const nodes = {
             const referenceType = ['media', 'capability-artifact', 'capability-module', 'tool', 'skill'].includes(node.attrs.referenceType)
                 ? node.attrs.referenceType
                 : 'skill'
+
             return ['span', {
                 'data-prompt-reference-type': referenceType,
                 'data-asset-id': node.attrs.assetId,
@@ -230,6 +268,7 @@ export const nodes = {
         }],
         toDOM(node) {
             const kind = node.attrs.kind === 'tool' ? 'tool' : 'skill'
+
             return ['span', {
                 'data-capability-id': node.attrs.capabilityId,
                 'data-capability-kind': kind,
@@ -255,51 +294,66 @@ export const marks = {
         parseDOM: [{
             tag: 'a[href]',
             getAttrs(dom: HTMLElement) {
-                return { href: dom.getAttribute('href'), title: dom.getAttribute('title') }
+                return {
+                    href: dom.getAttribute('href'),
+                    title: dom.getAttribute('title'),
+                }
             },
         }],
         toDOM(node) {
             const { href } = node.attrs
+
             return ['a', { href }, 0]
         },
     } as MarkSpec,
-
     em: {
         parseDOM: [
             { tag: 'i' },
             { tag: 'em' },
             { style: 'font-style=italic' },
-            { style: 'font-style=normal', clearMark: m => m.type.name === 'em' },
+            {
+                style: 'font-style=normal',
+                clearMark: m => m.type.name === 'em',
+            },
         ],
         toDOM() {
             return emDOM
         },
     } as MarkSpec,
-
     strikethrough: {
         parseDOM: [
             { tag: 's' },
             { tag: 'strikethrough' },
             { style: 'font-style=strikethrough' },
-            { style: 'font-style=normal', clearMark: m => m.type.name === 'strikethrough' },
+            {
+                style: 'font-style=normal',
+                clearMark: m => m.type.name === 'strikethrough',
+            },
         ],
         toDOM() {
             return strikethroughDOM
         },
     } as MarkSpec,
-
     strong: {
         parseDOM: [
             { tag: 'strong' },
-            { tag: 'b', getAttrs: (node: HTMLElement) => node.style.fontWeight !== 'normal' && null },
-            { style: 'font-weight=400', clearMark: m => m.type.name === 'strong' },
-            { style: 'font-weight', getAttrs: (value: string) => /^(bold(er)?|[5-9]\d{2,})$/.test(value) && null },
+            {
+                tag: 'b',
+                getAttrs: (node: HTMLElement) => node.style.fontWeight !== 'normal' && null,
+            },
+            {
+                style: 'font-weight=400',
+                clearMark: m => m.type.name === 'strong',
+            },
+            {
+                style: 'font-weight',
+                getAttrs: (value: string) => /^(bold(er)?|[5-9]\d{2,})$/.test(value) && null,
+            },
         ],
         toDOM() {
             return strongDOM
         },
     } as MarkSpec,
-
     code: {
         parseDOM: [{ tag: 'code' }],
         toDOM() {
@@ -308,4 +362,7 @@ export const marks = {
     } as MarkSpec,
 }
 
-export const schema = new Schema({ nodes, marks })
+export const schema = new Schema({
+    nodes,
+    marks,
+})

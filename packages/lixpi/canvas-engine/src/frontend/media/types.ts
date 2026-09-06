@@ -6,7 +6,12 @@ import {
     type ResourceHandle,
 } from '../rendering/resources.ts'
 
-export type MediaRendition = { id: string; width?: number; height?: number; mimeType: string }
+export type MediaRendition = {
+    id: string
+    width?: number
+    height?: number
+    mimeType: string
+}
 export type MediaDescriptor = {
     key: string
     kind: 'image' | 'video' | 'audio' | 'document'
@@ -16,9 +21,16 @@ export type MediaDescriptor = {
 }
 
 export type MediaSourceResolver = {
-    resolve: (media: MediaDescriptor, renditionId: string, signal: AbortSignal) => Promise<{
+    resolve: (
+        media: MediaDescriptor,
+        renditionId: string,
+        signal: AbortSignal,
+    ) => Promise<{
         url: string
-        request?: { headers?: Readonly<Record<string, string>>; credentials?: RequestCredentials }
+        request?: {
+            headers?: Readonly<Record<string, string>>
+            credentials?: RequestCredentials
+        }
         release: Dispose
     }>
 }
@@ -31,8 +43,22 @@ export type ImageLease = {
 }
 
 export type EngineMedia = {
-    acquireImage: (request: { media: MediaDescriptor; visiblePixels: CanvasEngineSize; signal: AbortSignal }) => Promise<ImageLease>
-    acquirePlayback: (request: { media: MediaDescriptor; renditionId: string; signal: AbortSignal }) => Promise<{ url: string; release: Dispose }>
+    acquireImage: (request: {
+        media: MediaDescriptor
+        visiblePixels: CanvasEngineSize
+        signal: AbortSignal
+    }) => Promise<ImageLease>
+    acquirePlayback: (request: {
+        media: MediaDescriptor
+        renditionId: string
+        signal: AbortSignal
+    }) => Promise<{
+        url: string
+        release: Dispose
+    }>
 }
 
-export type MediaCacheOptions = { maxTextures?: number; maxBytes?: number }
+export type MediaCacheOptions = {
+    maxTextures?: number
+    maxBytes?: number
+}

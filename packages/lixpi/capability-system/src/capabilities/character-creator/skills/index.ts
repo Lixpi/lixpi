@@ -21,7 +21,7 @@ export {
     CHARACTER_SHEET_LAYOUT_SKILL_ID,
 } from './sheet-layout/index.ts'
 
-export function createCharacterCreatorSkillPackages(storage: InstructionSkillStorage): CapabilitySkillPackageInstaller[] {
+export const createCharacterCreatorSkillPackages = (storage: InstructionSkillStorage): CapabilitySkillPackageInstaller[] => {
     return [
         createCharacterSheetLayoutSkillPackage(storage),
         createReferenceFidelitySkillPackage(storage),

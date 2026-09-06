@@ -52,12 +52,14 @@ export class HeadlessProseMirrorEngine {
     applyStepJson(stepJson: object): AppliedStepResult {
         const step = Step.fromJSON(this.schema, stepJson)
         const transaction = this.editorState.tr.step(step)
+
         return this.applyTransaction(transaction)
     }
 
     applyTransaction(transaction: Transaction): AppliedStepResult {
         this.editorState = this.editorState.apply(transaction)
         this.currentVersion += transaction.steps.length
+
         return {
             transaction,
             doc: this.editorState.doc,
@@ -73,14 +75,17 @@ export class HeadlessProseMirrorEngine {
         if (docJson) {
             const doc = this.schema.nodeFromJSON(docJson)
             doc.check()
+
             return doc
         }
 
         const doc = this.schema.nodes.doc.createAndFill()
-        if (!doc) {
+
+        if (!doc)
             throw new Error('Unable to create a schema-valid ProseMirror document')
-        }
+
         doc.check()
+
         return doc
     }
 }

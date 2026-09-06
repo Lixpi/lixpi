@@ -37,7 +37,11 @@ export type WorkspaceCanvasLibrariesPorts = {
     createLibraryPorts: () => WorkspaceLibraryPorts
     createAssetViewPorts: () => WorkspaceAssetDetailsPorts
     insertNode: (node: WorkspaceCanvasNodeInsertion) => CanvasState
-    attachAsset?: (request: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>
+    attachAsset?: (request: {
+        assetId: string
+        nodeId: string
+        canvasState: CanvasState
+    }) => Promise<CanvasState>
     commit: (state: CanvasState) => void
     applyGeometry: (geometry: CanvasGeometryUpdate) => void
 }
@@ -49,8 +53,12 @@ export class WorkspaceCanvasLibraries {
 
     constructor(private readonly ports: WorkspaceCanvasLibrariesPorts) {}
 
-    mount(host: HTMLElement, mode: CanvasRightSidePanelMode): (() => void) | null {
+    mount(
+        host: HTMLElement,
+        mode: CanvasRightSidePanelMode,
+    ): (() => void) | null {
         const lifetime = new Lifetime()
+
         try {
             if (mode === 'capabilities') {
                 const library = this.ensureCapability()
@@ -65,13 +73,14 @@ export class WorkspaceCanvasLibraries {
                 const library = this.ensureMedia()
                 lifetime.own(() => library.unmount())
                 library.mountInto(host)
-            } else {
+            } else
                 return null
-            }
         } catch (error) {
             lifetime.destroy()
+
             throw error
         }
+
         return () => lifetime.destroy()
     }
 
@@ -104,30 +113,67 @@ export class WorkspaceCanvasLibraries {
                 ...this.ports.createLibraryPorts(),
                 tooltipHideDelayMs: this.ports.host.settings.helpTooltip.interactiveHideDelayMs,
                 mountEditor: this.ports.createAssetViewPorts().mountEditor,
-                attestSubjectIdentity: (assetId, revision, classification) => this.ports.host.assets.attestSubjectIdentity(assetId, revision, classification),
-                removeFromLibrary: async assetId => await this.ports.host.assets.detach({ assetId, referenceType: 'catalog' }) as { error?: string },
+                attestSubjectIdentity: (
+                    assetId,
+                    revision,
+                    classification,
+                ) => this.ports.host.assets.attestSubjectIdentity(
+                    assetId,
+                    revision,
+                    classification,
+                ),
+                removeFromLibrary: async assetId => await this.ports.host.assets.detach({
+                    assetId,
+                    referenceType: 'catalog',
+                }) as { error?: string },
                 prepareRenditionUrls: this.ports.host.media.prepareRenditionUrls,
                 onInsertAsset: async (item: AssetMeta) => {
-                    if (!this.ports.attachAsset || !current()) return false
+                    if (
+                        !this.ports.attachAsset
+                        || !current()
+                    )
+                        return false
+
                     const nodeId = `node-${this.ports.host.createId()}`
                     const width = this.ports.host.settings.mediaNode.image.defaultInsertionWidth
-                    const aspectRatio = item.aspectRatio && item.aspectRatio > 0 ? item.aspectRatio : 1
+                    const aspectRatio = item.aspectRatio
+                        && item.aspectRatio > 0
+                        ? item.aspectRatio
+                        : 1
                     const type = item.primaryCategory === 'document' ? 'mediaDocument' : item.primaryCategory
-                    if (type === 'conversation') return false
+
+                    if (type === 'conversation')
+                        return false
+
                     const insertion = {
                         nodeId,
                         type,
                         assetId: item.assetId,
-                        dimensions: type === 'audio' ? { width: 360, height: 96 } : { width, height: width / aspectRatio },
+                        dimensions: type === 'audio' ? {
+                            width: 360,
+                            height: 96,
+                        } : {
+                            width,
+                            height: width / aspectRatio,
+                        },
                     } as WorkspaceCanvasNodeInsertion
                     const nextState = this.ports.insertNode(insertion)
-                    const committedState = await this.ports.attachAsset({ assetId: item.assetId, nodeId, canvasState: nextState })
-                    if (!current()) return false
+                    const committedState = await this.ports.attachAsset({
+                        assetId: item.assetId,
+                        nodeId,
+                        canvasState: nextState,
+                    })
+
+                    if (!current())
+                        return false
+
                     this.ports.commit(committedState)
+
                     return true
                 },
             })
         }
+
         return this.media
     }
 
@@ -140,7 +186,13 @@ export class WorkspaceCanvasLibraries {
                 sharedRegistry: this.ports.host.capabilities.shared,
                 ensureStyles: this.ports.host.capabilities.ensureStyles,
                 onInsertAsset: async (item: AssetMeta) => {
-                    if (!this.ports.attachAsset || !item.artifactTypeId || !current()) return false
+                    if (
+                        !this.ports.attachAsset
+                        || !item.artifactTypeId
+                        || !current()
+                    )
+                        return false
+
                     const nodeId = `node-${this.ports.host.createId()}`
                     const insertion: WorkspaceCanvasNodeInsertion = {
                         nodeId,
@@ -150,30 +202,54 @@ export class WorkspaceCanvasLibraries {
                         dimensions: { ...this.ports.host.capabilities.frontend.require(item.artifactTypeId).initialCanvasDimensions },
                     }
                     const nextState = this.ports.insertNode(insertion)
-                    const committedState = await this.ports.attachAsset({ assetId: item.assetId, nodeId, canvasState: nextState })
-                    if (!current()) return false
+                    const committedState = await this.ports.attachAsset({
+                        assetId: item.assetId,
+                        nodeId,
+                        canvasState: nextState,
+                    })
+
+                    if (!current())
+                        return false
+
                     this.ports.commit(committedState)
+
                     return true
                 },
-                onAcceptAsset: async (asset) => {
-                    if (!current()) return false
+                onAcceptAsset: async asset => {
+                    if (!current())
+                        return false
+
                     const workspaceId = this.ports.getWorkspaceId()
-                    const node = this.ports.getCanvasState()?.nodes.find(candidate => (
-                        candidate.type === 'capabilityArtifact' && candidate.assetId === asset.assetId
-                    ))
-                    if (!node) return false
+                    const node = this.ports.getCanvasState()?.nodes.find(
+                        candidate => (
+                            candidate.type === 'capabilityArtifact' && candidate.assetId === asset.assetId
+                        ),
+                    )
+
+                    if (!node)
+                        return false
+
                     const result = await this.ports.host.assets.reviewGeneratedOutput({
                         workspaceId,
                         scope: 'output-node',
                         action: 'accept',
                         nodeId: node.nodeId,
                     })
-                    if ('error' in result || !current() || result.workspaceId !== this.ports.getWorkspaceId()) return false
+
+                    if (
+                        'error' in result
+                        || !current()
+                        || result.workspaceId !== this.ports.getWorkspaceId()
+                    )
+                        return false
+
                     this.ports.applyGeometry(result.canvasGeometry)
+
                     return true
                 },
             })
         }
+
         return this.artifact
     }
 
@@ -186,12 +262,20 @@ export class WorkspaceCanvasLibraries {
                     this.ports.getWorkspaceId(),
                     this.ports.host.workspace.organizationId() as string,
                 ),
-                onAttach: (reference) => {
-                    if (!current()) return
+                onAttach: reference => {
+                    if (!current())
+                        return
+
                     const composer = this.ports.getComposer()
                     const view = composer?.input.editorView
                     const nodeType = view?.state.schema.nodes.prompt_reference
-                    if (!view || !nodeType) return
+
+                    if (
+                        !view
+                        || !nodeType
+                    )
+                        return
+
                     const atom = nodeType.create({
                         referenceType: reference.kind,
                         capabilityId: reference.capabilityId,
@@ -204,6 +288,7 @@ export class WorkspaceCanvasLibraries {
                 },
             })
         }
+
         return this.capability
     }
 

@@ -5,6 +5,7 @@ import {
 } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { withoutLayout } from '@lixpi/test-utils'
 
 // =============================================================================
 // HELPERS
@@ -27,28 +28,28 @@ function sourceName(source: string): string {
 
 function expectSourceToContain(source: string, snippet: string): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${sourceName(source)} should contain:\n${snippet}`,
     ).toBe(true)
 }
 
 function expectSourceNotToContain(source: string, snippet: string): void {
     expect(
-        source.includes(snippet),
+        withoutLayout(source).includes(withoutLayout(snippet)),
         `${sourceName(source)} should not contain:\n${snippet}`,
     ).toBe(false)
 }
 
 function expectExcerptToContain(excerpt: string, snippet: string, label = 'source excerpt'): void {
     expect(
-        excerpt.includes(snippet),
+        withoutLayout(excerpt).includes(withoutLayout(snippet)),
         `${label} should contain:\n${snippet}`,
     ).toBe(true)
 }
 
 function expectExcerptNotToContain(excerpt: string, snippet: string, label = 'source excerpt'): void {
     expect(
-        excerpt.includes(snippet),
+        withoutLayout(excerpt).includes(withoutLayout(snippet)),
         `${label} should not contain:\n${snippet}`,
     ).toBe(false)
 }
@@ -140,11 +141,27 @@ function loadGenerationHandlers(): string {
     return readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/frontend/media/workspace-generation-handlers.ts')
 }
 
+function closingBraceIndex(source: string, openIndex: number): number {
+    let depth = 0
+
+    for (let index = openIndex; index < source.length; index++) {
+        if (source[index] === '{') depth++
+        if (source[index] === '}') {
+            depth--
+            if (depth === 0) return index + 1
+        }
+    }
+
+    return source.length
+}
+
 function loadWorkspacePreflightMethod(name: string, module = 'workspace-preflight-markers'): string {
     const source = readSourceFile(`../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/${module}.ts`)
     const start = source.indexOf(`\n    ${name}(`)
-    const end = source.indexOf('\n    }\n', start)
     expect(start, `Missing preflight method ${name}`).toBeGreaterThan(-1)
+    // Brace matching rather than a `\n    }\n` marker, so the slice survives a
+    // change in how deeply the formatter indents the closing brace.
+    const end = closingBraceIndex(source, source.indexOf('{', start))
     expect(end).toBeGreaterThan(start)
     return source.slice(start, end)
 }
@@ -356,7 +373,25 @@ function extractFunctionBody(source: string, functionName: string): string {
         .sort((left, right) => left - right)[0] ?? -1
     if (functionIndex === -1) return ''
 
-    const signatureCloseIndex = source.indexOf(')', functionIndex)
+    // Track paren depth instead of taking the first `)`, which now lands inside a
+    // parameter type or default value once the formatter expands the signature.
+    const signatureOpenIndex = source.indexOf('(', functionIndex)
+    if (signatureOpenIndex === -1) return ''
+
+    let signatureCloseIndex = -1
+    let signatureDepth = 0
+
+    for (let i = signatureOpenIndex; i < source.length; i++) {
+        if (source[i] === '(') signatureDepth++
+        if (source[i] === ')') {
+            signatureDepth--
+            if (signatureDepth === 0) {
+                signatureCloseIndex = i
+                break
+            }
+        }
+    }
+
     if (signatureCloseIndex === -1) return ''
 
     const trailingSignature = source.slice(signatureCloseIndex + 1)
@@ -377,10 +412,51 @@ function extractFunctionBody(source: string, functionName: string): string {
         }
     }
 
-    const arrowIndex = source.indexOf('=> {', signatureCloseIndex)
     const methodBodyIndex = source.indexOf('{', bodySearchIndex)
-    const arrowBodyIndex = arrowIndex !== -1 && (methodBodyIndex === -1 || arrowIndex < methodBodyIndex) ? arrowIndex + 3 : -1
-    const openIndex = arrowBodyIndex >= 3 ? arrowBodyIndex : methodBodyIndex
+
+    // A return type can itself contain an arrow (`): () => void => {`), so the body
+    // arrow is the last `=>` before the opening brace with nothing but space after it.
+    if (methodBodyIndex !== -1) {
+        const beforeBody = source.slice(signatureCloseIndex, methodBodyIndex)
+        const lastArrow = beforeBody.lastIndexOf('=>')
+
+        if (lastArrow !== -1 && beforeBody.slice(lastArrow + 2).trim() === '') {
+            let depth = 0
+
+            for (let i = methodBodyIndex; i < source.length; i++) {
+                if (source[i] === '{') depth++
+                if (source[i] === '}') {
+                    depth--
+                    if (depth === 0) return source.slice(functionIndex, i + 1)
+                }
+            }
+        }
+    }
+
+    const arrowIndex = source.indexOf('=>', signatureCloseIndex)
+
+    // A concise arrow body (`=> void this.chrome.sync(state)`) has no braces, so the
+    // declaration ends at the end of its line.
+    if (arrowIndex !== -1 && (methodBodyIndex === -1 || arrowIndex < methodBodyIndex)) {
+        let conciseStart = arrowIndex + 2
+        while (conciseStart < source.length && /\s/.test(source[conciseStart]!)) conciseStart++
+
+        if (source[conciseStart] !== '{') {
+            let depth = 0
+
+            for (let i = conciseStart; i < source.length; i++) {
+                const character = source[i]
+                if (character === '(' || character === '[' || character === '{') depth++
+                if (character === ')' || character === ']' || character === '}') depth--
+                if (character === '\n' && depth <= 0) return source.slice(functionIndex, i)
+            }
+
+            return source.slice(functionIndex)
+        }
+    }
+
+    const arrowBodyIndex = arrowIndex !== -1 && (methodBodyIndex === -1 || arrowIndex < methodBodyIndex) ? source.indexOf('{', arrowIndex) : -1
+    const openIndex = arrowBodyIndex !== -1 ? arrowBodyIndex : methodBodyIndex
     if (openIndex === -1) return ''
 
     let depth = 0
@@ -792,7 +868,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
         expectSourceToContain(ts, 'private rebalanceGeneratedMediaTrees = (nodes: CanvasNode[], edges: WorkspaceEdge[]): CanvasNode[]')
         expectSourceToContain(ts, 'const result = this.createGeneratedMediaRebalancePipeline().rebalance(nodes, edges)')
         expectSourceToContain(ts, 'clearStartedBranchMarkerProjectionOverrides(result.startedMarkerNodeIds)')
-        expectSourceToContain(ts, 'return this.workspaceGeometry.createGeneratedMediaRebalancePipeline()')
+        expectSourceToContain(ts, 'this.workspaceGeometry.createGeneratedMediaRebalancePipeline()')
         // Layout boxes equal rendered boxes: pending media use the compact
         // pre-frame circle for collision/layout purposes until a frame exists.
         expectSourceToContain(ts, 'getPendingGeneratedMediaBeforeFrameCircleGeometry(')
@@ -852,7 +928,7 @@ describe('Workspace canvas — generated image preview rendering', () => {
         expect(waitingForFrameStart).toBeGreaterThan(-1)
         expect(waitingForFrameEnd).toBeGreaterThan(waitingForFrameStart)
         const waitingForFrame = ts.slice(waitingForFrameStart, waitingForFrameEnd)
-        expectExcerptToContain(waitingForFrame, 'return this.generationVisuals.isWaitingForFrame(node)', 'terminal media progress guard')
+        expectExcerptToContain(waitingForFrame, 'this.generationVisuals.isWaitingForFrame(node)', 'terminal media progress guard')
     })
 
     it('swaps partial pixels without replaying geometry or blanking the prior texture', () => {
@@ -965,7 +1041,7 @@ describe('Workspace canvas — generated video canvas state', () => {
         const detailsBody = extractBlock(loadScss(), '.workspace-generated-output-details-panel-body.workspace-generated-output-details-content')
         const traceProgressBlock = extractBlock(loadScss(), '.workspace-media-generation-sidebar-progress')
         expectExcerptToContain(ts, "onOpenDetails: nodeId => this.outputDetails.open({ kind: 'output', nodeId }, { toggle: true })", 'canvas node footer')
-        expectExcerptToContain(resolveTraceState, 'return this.ports.history.getMediaGenerationTraceState(node)', 'live generation trace state')
+        expectExcerptToContain(resolveTraceState, 'this.ports.history.getMediaGenerationTraceState(node)', 'live generation trace state')
         expectExcerptToContain(resolveProgress, "status === 'pending'", 'active footer progress')
         expectExcerptToContain(resolveProgress, "status === 'awaiting-provider-verification'", 'active footer progress')
         expectExcerptToContain(renderDetails, 'progressDetails: this.ports.context.getExecutionTraceTimelineDetail()', 'sidebar timeline')
@@ -1123,7 +1199,7 @@ describe('Workspace canvas — media descriptors', () => {
         // video Assets), so there is no separate fileId/posterFileId branch anymore.
         expectSourceToContain(ts, 'this.queueCanvasMediaAnalysis(preparedNode.nodeId, this.getMediaDescriptorStillAssetId(preparedNode))')
         expectSourceToContain(ts, 'this.queueCanvasMediaAnalysis(node.nodeId, this.getMediaDescriptorStillAssetId(node))')
-        expectSourceToContain(ts, 'private getMediaDescriptorStillAssetId = (node: ImageCanvasNode | VideoCanvasNode): string | undefined => {\n        return node.assetId || undefined\n    }')
+        expectSourceToContain(ts, 'private getMediaDescriptorStillAssetId = (node: ImageCanvasNode | VideoCanvasNode): string | undefined => node.assetId || undefined')
         expectSourceToContain(ts, 'private queueCanvasMediaAnalysis = (nodeId: string, stillAssetId: string | undefined): void')
     })
 
@@ -1373,8 +1449,10 @@ describe('Workspace canvas — detached generation resume stability', () => {
         const insertBody = loadWorkspacePreflightMethod('insertPendingBranchMarkersFromLineagePlan')
         const specBody = loadWorkspaceMarkerHandoff()
         const applyLineageBody = loadWorkspacePreflightMethod('applyMediaBranchLineagePlan', 'workspace-generation-settlement')
-        const insertIndex = applyLineageBody.indexOf('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)')
-        const resolveIndex = applyLineageBody.indexOf('resolvePendingBranchMarkersForLineagePlan(threadId, lineagePlan, generationRun)')
+        // Ordering is what matters here, so compare positions in the layout-free text.
+        const normalizedApplyLineageBody = withoutLayout(applyLineageBody)
+        const insertIndex = normalizedApplyLineageBody.indexOf(withoutLayout('insertPendingBranchMarkersFromLineagePlan(threadId, lineagePlan, generationRun)'))
+        const resolveIndex = normalizedApplyLineageBody.indexOf(withoutLayout('resolvePendingBranchMarkersForLineagePlan(threadId, lineagePlan, generationRun)'))
 
         expectExcerptToContain(specBody, 'getUniqueLineageAssignmentsForMarkers(lineagePlan)', 'lineage preflight marker specs')
         expectExcerptToContain(specBody, 'buildGenerationRunFromLineageAssignment(lineagePlan, assignment, sourceGenerationRun)', 'lineage preflight marker specs')
@@ -1399,9 +1477,9 @@ describe('Workspace canvas — detached generation resume stability', () => {
         const resolveBody = extractFunctionBody(ts, 'resolvePendingBranchMarkerWithLineagePlan')
         const applyApiGeometryBody = loadWorkspacePreflightMethod('applyApiCanvasGeometry', '../scene/workspace-api-canvas-geometry')
 
-        expectExcerptToContain(ensureOriginBody, "if (existing?.type === 'branchOrigin') {\n            return existing as BranchOriginCanvasNode", 'branch origin geometry ownership')
-        expectExcerptToContain(ensureForkBody, "if (existing?.type === 'branchFork') {\n            return existing as BranchForkCanvasNode", 'branch fork geometry ownership')
-        expectExcerptToContain(ensureLineBody, "if (existing?.type === 'branchLine' && existing.pendingState?.phase !== 'preflight') {\n            return existing as BranchLineCanvasNode", 'branch line geometry ownership')
+        expectExcerptToContain(ensureOriginBody, "if (existing?.type === 'branchOrigin') return existing as BranchOriginCanvasNode", 'branch origin geometry ownership')
+        expectExcerptToContain(ensureForkBody, "if (existing?.type === 'branchFork') return existing as BranchForkCanvasNode", 'branch fork geometry ownership')
+        expectExcerptToContain(ensureLineBody, "if (existing?.type === 'branchLine' && existing.pendingState?.phase !== 'preflight') return existing as BranchLineCanvasNode", 'branch line geometry ownership')
         expectExcerptNotToContain(resolveBody, 'positionPendingBranchMarkerBeforeGeneratedMedia', 'pending marker promotion')
         expectExcerptToContain(applyApiGeometryBody, 'resolvePendingBranchMarkersAfterApiGeometry(canvasGeometry.generationRequestId)', 'API geometry lineage handoff')
         expectSourceNotToContain(ts, 'shouldReplaceApiFallbackFreshRootPosition')
@@ -1420,7 +1498,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
         const clickBody = extractFunctionBody(ts, 'handleInfoClick')
 
         expectExcerptToContain(phaseBody, 'generationPlacements.getBranchMarkerUiPhase(node)', 'branch marker UI phase')
-        expectExcerptToContain(activeBody, 'return this.branchActivity.isBranchMarkerGenerationActive(node)', 'branch marker active check')
+        expectExcerptToContain(activeBody, 'this.branchActivity.isBranchMarkerGenerationActive(node)', 'branch marker active check')
         expectExcerptToContain(clickBody, 'pendingForUi: this.ports.isPending(node)', 'branch marker pending click guard')
         expectExcerptToContain(clickBody, "this.ports.log('info-click'", 'branch marker info click')
         expectExcerptToContain(clickBody, 'this.ports.openDetails(node.nodeId)', 'branch marker info click')
@@ -1432,7 +1510,7 @@ describe('Workspace canvas — detached generation resume stability', () => {
         const activeBody = extractFunctionBody(ts, 'isBranchMarkerGenerationGroupActive')
         const stopBody = extractFunctionBody(ts, 'stop')
 
-        expectExcerptToContain(activeBody, 'return this.branchActivity.isBranchMarkerGenerationGroupActive(node)', 'branch group activity recovery')
+        expectExcerptToContain(activeBody, 'this.branchActivity.isBranchMarkerGenerationGroupActive(node)', 'branch group activity recovery')
         expectExcerptToContain(stopBody, 'conversationAssetId: threadId', 'reloaded branch cancellation')
         expectExcerptToContain(stopBody, 'generationRequestId: projectionGenerationRequestId', 'reloaded branch cancellation')
     })
@@ -1849,7 +1927,7 @@ describe('Right side panel — TS infrastructure', () => {
         const scss = loadScss()
         const detachedEditor = extractFunctionBody(ts, 'createDetachedCanvasThreadEditor')
         expectSourceToContain(ts, 'new WorkspaceContextTrays({')
-        expectSourceToContain(ts, 'refresh = (): void => this.trays.refresh()')
+        expectSourceToContain(ts, 'refresh = (): void => void this.trays.refresh()')
         expectSourceToContain(ts, 'remove = (nodeId: string): void => {')
         expectSourceToContain(ts, 'clear = (): void => {')
         expectSourceToContain(ts, 'getContextNodeIds: () => ports.getPanelState().contextChips,')
@@ -1909,8 +1987,8 @@ describe('Right side panel — TS infrastructure', () => {
         expectSourceToContain(ts, 'return this.currentCanvasState')
         expectSourceToContain(ts, 'viewport: this.getLiveViewport()')
         expectSourceToContain(ts, 'return null')
-        expectSourceToContain(ts, 'getViewport = () => {')
-        expectSourceToContain(ts, 'return this.getLiveViewport()')
+        expectSourceToContain(ts, 'getViewport = () => this.getLiveViewport()')
+        expectSourceToContain(ts, 'this.getLiveViewport()')
     })
 
     it('maps media generation request completion callbacks back into generation-settling', () => {
@@ -2061,8 +2139,8 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
     it('stores selected nodes in a Set instead of a single selectedNodeId', () => {
         expectSourceToContain(ts, 'this.selection = this.canvasRuntime.selection')
-        expectSourceToContain(ts, 'setNodes = (nodeIds: Set<string>, fromMarquee = false): void => {')
-        expectSourceToContain(ts, 'toggleNode = (nodeId: string): void => {')
+        expectSourceToContain(ts, 'setNodes = (nodeIds: Set<string>, fromMarquee = false): void => void this.reflectChange(')
+        expectSourceToContain(ts, 'toggleNode = (nodeId: string): void => void this.reflectChange(')
     })
 
     it('single-target UI is derived from getSingleSelectedNodeId', () => {
@@ -2112,7 +2190,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
         expectSourceToContain(ts, 'this.selection.nodeIds.size > 1 || this.selection.fromMarquee')
 
         // The focused selection owner accepts a fromMarquee parameter.
-        expectSourceToContain(ts, 'setNodes = (nodeIds: Set<string>, fromMarquee = false): void => {')
+        expectSourceToContain(ts, 'setNodes = (nodeIds: Set<string>, fromMarquee = false): void => void this.reflectChange(')
         expectSourceToContain(ts, 'this.selection.replace(this.filterSelectableNodeIds(nodeIds), fromMarquee)')
     })
 
@@ -2368,7 +2446,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
 
     it('preserves multi-selection after drag by suppressing the follow-up click collapse', () => {
         expectSourceToContain(ts, 'private nextNodeClickSuppressed = false')
-        expectSourceToContain(ts, 'consumeSuppressedClick: () => {')
+        expectSourceToContain(ts, 'consumeSuppressedClick: () => this.nodeGestures.consumeNodeClick()')
         expectSourceToContain(ts, 'if (!dragDidMove) {')
         expectSourceToContain(ts, 'this.suppressNodeClick()')
     })
@@ -2383,7 +2461,7 @@ describe('Workspace canvas — multi-selection and group drag', () => {
         expect(fnMatch).not.toBeNull()
         const fnBody = fnMatch![0]
 
-        expectExcerptToContain(fnBody, 'if (dragPlan.allowProximityConnection) {')
+        expectExcerptToContain(fnBody, 'if (dragPlan.allowProximityConnection)')
         expectExcerptToContain(fnBody, 'this.ports.connections()?.checkProximity(resolvedNodeId, currentPos, currentDims)')
     })
 })
@@ -2436,7 +2514,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
 
     it('includes resolved media title and action chrome in collision boxes', () => {
         const geometry = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/branch-tree-layout/workspace-geometry.ts')
-        expectSourceToContain(ts, 'return this.workspaceGeometry.getCanvasNodeCollisionRect(node, worldPosition)')
+        expectSourceToContain(ts, 'this.workspaceGeometry.getCanvasNodeCollisionRect(node, worldPosition)')
         expectSourceToContain(geometry, 'getNodeConnectorAnchorRect: (node, position) => this.getCanvasNodeConnectorAnchorRect(node, position)')
     })
 
@@ -2447,7 +2525,7 @@ describe('Workspace canvas — collision resolution ownership', () => {
     })
 
     it('uses the shared generic resolver rather than a workspace-specific duplicate', () => {
-        expectSourceToContain(collisionTs, 'export function resolveCollisions(')
+        expectSourceToContain(collisionTs, 'export const resolveCollisions = (')
         expectSourceToContain(collisionTs, 'shouldResolvePair && !shouldResolvePair(originalA, originalB)')
         expectSourceToContain(ts, "from '@lixpi/canvas-engine/shared'")
         expectSourceToContain(ts, 'resolveCollisions(collisionPlan.nodeBoxes')
@@ -2568,7 +2646,7 @@ describe('Image loading — PIXI ownership and URL resolution strategy', () => {
     })
 
     it('render() accepts optional newWorkspaceId parameter and updates workspaceId', () => {
-        expect(/render = \(.*newWorkspaceId\?: string/.test(ts)).toBe(true)
+        expect(/render = \([^)]*newWorkspaceId\?: string/.test(ts)).toBe(true)
         expectSourceToContain(ts, 'const transition = planWorkspaceRenderTransition({')
         expectSourceToContain(ts, 'this.ports.setWorkspaceId(transition.routeWorkspaceId)')
         expectSourceToContain(ts, 'this.rendering.render(newCanvasState, newDocuments, newAiChatThreads, newWorkspaceId)')
@@ -2584,7 +2662,7 @@ describe('Image generation error cleanup', () => {
     const ts = loadTs()
 
     function getImageErrorHandler(): string {
-        const start = ts.indexOf('onImageErrorToCanvas: ({ workspaceId: eventWorkspaceId, threadId, error, generationRun }) => {')
+        const start = ts.indexOf('onImageErrorToCanvas: ({')
         expect(start, 'WorkspaceCanvas.ts should contain onImageErrorToCanvas handler').toBeGreaterThan(-1)
         const end = ts.indexOf('onImagePartialToCanvas:', start)
         expect(end, 'onImageErrorToCanvas handler should end before onImagePartialToCanvas').toBeGreaterThan(start)
@@ -2787,7 +2865,7 @@ describe('video generation — canvas + plugin source shape', () => {
         // rendition resolver: videos resolve to the representativeFrame rendition
         // (falling back to the frame-0 poster), the MP4 itself is never sent.
         const branchingTs = readSourceFile('../../packages/lixpi/canvas-components-lixpi-specific/src/shared/generation/workspace-generation-context.ts')
-        expectSourceToContain(branchingTs, "return ports.renditionPath(node.assetId, node.type === 'video' ? 'representativeFrame' : 'preview')")
+        expectSourceToContain(branchingTs, "ports.renditionPath(node.assetId, node.type === 'video' ? 'representativeFrame' : 'preview')")
         expectSourceNotToContain(branchingTs, "'.mp4'")
     })
 })
@@ -2817,7 +2895,7 @@ describe('asset membership persistence', () => {
         expectSourceToContain(membershipRebase, 'removedNodeIdSet.has(edge.sourceNodeId)')
         expectSourceToContain(workspaceCanvasViewSource, 'revision: this.viewRevision }')
         expectSourceToContain(ts, 'removedNodeIds: string[]')
-        expectSourceToContain(ts, 'onAssetAttach?: (params: { assetId: string; nodeId: string; canvasState: CanvasState }) => Promise<CanvasState>')
+        expectSourceToContain(ts, 'onAssetAttach?: (params: {')
         expectSourceToContain(ts, 'const committedState = await this.ports.attachAsset({ assetId: item.assetId, nodeId, canvasState: nextState })')
         expectSourceToContain(ts, 'this.ports.commit(committedState)')
     })
@@ -2842,9 +2920,9 @@ describe('canvas node deletion', () => {
         expectSourceToContain(ts, 'void ports.deleteNodes(new Set([nodeId]))')
         expectSourceToContain(ts, 'private deleteCanvasNodes = async (nodeIds: ReadonlySet<string>): Promise<void>')
         expectSourceToContain(ts, 'return isGeneratedOutputRejectableForCanvas({')
-        expectSourceToContain(ts, 'return await this.ports.review.rejectGeneratedOutput(scope, nodeId)')
+        expectSourceToContain(ts, 'await this.ports.review.rejectGeneratedOutput(scope, nodeId)')
         expectSourceToContain(ts, 'rejectOutput: this.outputDetails.reject,')
-        expectSourceToContain(ts, 'onReject: nodeId => {')
+        expectSourceToContain(ts, 'onReject: nodeId => void this.deleteCanvasNodes(')
     })
 
     it('rejects a selected lineage marker authoritatively and locally removes an unpersisted orphan', () => {
@@ -2860,7 +2938,7 @@ describe('canvas node deletion', () => {
             'deleteCanvasNodes',
         )
         expectExcerptToContain(deletion, 'await this.detachCanvasNode(node.nodeId, scope)', 'deleteCanvasNodes branch marker handling')
-        expectSourceToContain(ts, 'return await this.ports.review.rejectGeneratedOutput(scope, nodeId)')
+        expectSourceToContain(ts, 'await this.ports.review.rejectGeneratedOutput(scope, nodeId)')
         expectSourceToContain(ts, 'rejectOutput: this.outputDetails.reject,')
     })
 
@@ -2947,7 +3025,7 @@ describe('Workspace canvas — selection deletion', () => {
         expectExcerptToContain(body, 'this.ports.commit(nextState)', 'detachCanvasNode')
         expectExcerptToContain(
             source,
-            "return error instanceof Error && error.message === 'NOT_FOUND'",
+            "error instanceof Error && error.message === 'NOT_FOUND'",
             'isMissingAssetDetachError',
         )
     })

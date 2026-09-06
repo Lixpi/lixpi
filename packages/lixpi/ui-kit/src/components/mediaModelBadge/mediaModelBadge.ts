@@ -22,18 +22,24 @@ export type MediaModelBadgeStyleProperties = {
 
 const DEFAULT_SEPARATOR = ' : '
 
-function normalizeLabelPart(value: string | null | undefined): string {
-    return String(value ?? '').trim()
-}
+const normalizeLabelPart = (value: string | null | undefined): string => String(value ?? '').trim()
 
-export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElement | null {
+export const createMediaModelBadge = (config: MediaModelBadgeConfig): HTMLElement | null => {
     const providerTitle = normalizeLabelPart(config.providerTitle)
     const modelTitle = normalizeLabelPart(config.modelTitle)
-    const separator = providerTitle && modelTitle ? (config.separator ?? DEFAULT_SEPARATOR) : ''
+    const separator = providerTitle
+        && modelTitle
+        ? (config.separator ?? DEFAULT_SEPARATOR)
+        : ''
     const label = normalizeLabelPart(config.label) || `${providerTitle}${separator}${modelTitle}`
     const icon = config.icon || null
     const visibleLabel = config.iconOnly ? '' : label
-    if (!icon && !visibleLabel) return null
+
+    if (
+        !icon
+        && !visibleLabel
+    )
+        return null
 
     return html`
         <div
@@ -42,23 +48,38 @@ export function createMediaModelBadge(config: MediaModelBadgeConfig): HTMLElemen
             aria-label=${label}
             data-help-tooltip="aria-label"
         >
-            ${icon ? html`<span className="media-model-badge-icon" innerHTML=${icon}></span>` : null}
-            ${visibleLabel ? html`<span className="media-model-badge-name">${providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null}${separator}${modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null}</span>` : null}
+            ${
+                icon ? html`<span
+                        className="media-model-badge-icon"
+                        innerHTML=${icon}
+                    ></span>` : null
+            }
+            ${
+                visibleLabel ? html`
+                    <span className="media-model-badge-name">${providerTitle ? html`<span className="media-model-badge-provider">${providerTitle}</span>` : null}${separator}${modelTitle ? html`<span className="media-model-badge-model">${modelTitle}</span>` : null}</span>
+                ` : null
+            }
         </div>
     ` as HTMLElement
 }
 
-export function renderMediaModelBadge(host: HTMLElement, config: MediaModelBadgeConfig): void {
+export const renderMediaModelBadge = (
+    host: HTMLElement,
+    config: MediaModelBadgeConfig,
+): void => {
     const modelBadge = createMediaModelBadge(config)
     host.replaceChildren()
-    if (modelBadge) host.appendChild(modelBadge)
+
+    if (modelBadge)
+        host.appendChild(modelBadge)
+
     host.hidden = !modelBadge
 }
 
-export function applyMediaModelBadgeStyleProperties(
+export const applyMediaModelBadgeStyleProperties = (
     host: HTMLElement,
     properties: MediaModelBadgeStyleProperties,
-): void {
+): void => {
     host.style.setProperty('--canvas-node-footer-icon-size', properties.iconSize)
     host.style.setProperty('--workspace-generated-media-chrome-top-gap', properties.topGap)
     host.style.setProperty('--workspace-media-model-badge-icon-gap', properties.iconGap)

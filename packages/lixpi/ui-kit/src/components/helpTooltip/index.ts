@@ -1,4 +1,7 @@
-export { createHelpTooltip, createHelpTooltipProvider } from './helpTooltip.ts'
+export {
+    createHelpTooltip,
+    createHelpTooltipProvider,
+} from './helpTooltip.ts'
 export type {
     HelpTooltipConfig,
     HelpTooltipContent,

@@ -1,7 +1,7 @@
 @use "../../styles/tokens" as *;
 @use "./infoBubble-mixins" as *;
 
-/* InfoBubble component styles */
+// InfoBubble component styles
 .info-bubble-wrapper {
     position: fixed; // Positioned relative to viewport; JS computes top/left based on anchor
     z-index: 10;

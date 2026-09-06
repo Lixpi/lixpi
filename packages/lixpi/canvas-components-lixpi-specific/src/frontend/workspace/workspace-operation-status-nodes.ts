@@ -33,7 +33,10 @@ export type WorkspaceOperationStatusNodesPorts = {
     commit: (state: CanvasState) => void
     commitTransient: (state: CanvasState) => void
     removeSelection: (nodeId: string) => void
-    rebalance: (nodes: CanvasNode[], edges: WorkspaceEdge[]) => CanvasNode[]
+    rebalance: (
+        nodes: CanvasNode[],
+        edges: WorkspaceEdge[],
+    ) => CanvasNode[]
     removeNodes: (nodeIds: Iterable<string>) => void
     pruneTrackers: (nodeIds: Iterable<string>) => void
     clearTransientImage: (nodeId: string) => void
@@ -54,43 +57,80 @@ export class WorkspaceOperationStatusNodes {
 
     create = (node: OperationStatusCanvasNode): HTMLElement => {
         this.ports.ensureRecovery(node)
-        return new OperationStatusNode(node, this.ports.shells, {
-            verify: async (operation, signal) => {
-                const current = this.ports.captureAdmission()
-                if (signal.aborted || !current()) return
-                const session = await this.ports.host.generation.startVerification({
-                    generationRequestId: operation.generationRequestId!,
-                    workspaceId: this.ports.getWorkspaceId(),
-                    requestRevision: operation.requestRevision!,
-                    generationRun: operation.generationRun!,
-                    assetId: operation.verificationAssetId!,
-                })
-                if (!signal.aborted && current()) this.ports.host.openExternalUrl(session.verificationUrl)
+
+        return new OperationStatusNode(
+            node,
+            this.ports.shells,
+            {
+                verify: async (operation, signal) => {
+                    const current = this.ports.captureAdmission()
+
+                    if (
+                        signal.aborted
+                        || !current()
+                    )
+                        return
+
+                    const session = await this.ports.host.generation.startVerification({
+                        generationRequestId: operation.generationRequestId!,
+                        workspaceId: this.ports.getWorkspaceId(),
+                        requestRevision: operation.requestRevision!,
+                        generationRun: operation.generationRun!,
+                        assetId: operation.verificationAssetId!,
+                    })
+
+                    if (
+                        !signal.aborted
+                        && current()
+                    )
+                        this.ports.host.openExternalUrl(session.verificationUrl)
+                },
+                cancel: async (operation, signal) => {
+                    const current = this.ports.captureAdmission()
+
+                    if (
+                        signal.aborted
+                        || !current()
+                    )
+                        return
+
+                    await this.ports.host.generation.cancel({
+                        generationRequestId: operation.generationRequestId!,
+                        workspaceId: this.ports.getWorkspaceId(),
+                        requestRevision: operation.requestRevision!,
+                    })
+
+                    if (
+                        !signal.aborted
+                        && current()
+                    )
+                        this.remove(operation.nodeId, 'media-generation')
+                },
+                edit: this.edit,
+                dismissUpload: operation => this.remove(operation.nodeId, operation.operation),
             },
-            cancel: async (operation, signal) => {
-                const current = this.ports.captureAdmission()
-                if (signal.aborted || !current()) return
-                await this.ports.host.generation.cancel({
-                    generationRequestId: operation.generationRequestId!,
-                    workspaceId: this.ports.getWorkspaceId(),
-                    requestRevision: operation.requestRevision!,
-                })
-                if (!signal.aborted && current()) this.remove(operation.nodeId, 'media-generation')
-            },
-            edit: this.edit,
-            dismissUpload: operation => this.remove(operation.nodeId, operation.operation),
-        }).element
+        ).element
     }
 
-    remove = (nodeId: string, operation?: OperationStatusCanvasNode['operation']): CanvasState | null => {
+    remove = (
+        nodeId: string,
+        operation?: OperationStatusCanvasNode['operation'],
+    ): CanvasState | null => {
         const state = this.ports.getState()
-        if (!state) return null
-        const exists = state.nodes.some(candidate => (
-            candidate.type === 'operationStatus'
-            && (!operation || candidate.operation === operation)
-            && candidate.nodeId === nodeId
-        ))
-        if (!exists) return null
+
+        if (!state)
+            return null
+
+        const exists = state.nodes.some(
+            candidate => (
+                candidate.type === 'operationStatus'
+                && (!operation || candidate.operation === operation)
+                && candidate.nodeId === nodeId
+            ),
+        )
+
+        if (!exists)
+            return null
 
         const nextState = {
             ...state,
@@ -99,32 +139,45 @@ export class WorkspaceOperationStatusNodes {
         }
         this.ports.commit(nextState)
         this.ports.removeSelection(nodeId)
+
         return nextState
     }
 
     applyRecovery = (result: MediaGenerationOperationRecoveryResult): void => {
         const state = this.ports.getState()
-        if (!result.changed || !state) return
+
+        if (
+            !result.changed
+            || !state
+        )
+            return
+
         const replacedGeneratedMediaNodeIds = result.updatedNodeIds.filter(nodeId => {
             const previousNode = state.nodes.find(node => node.nodeId === nodeId)
             const updatedNode = result.state.nodes.find(node => node.nodeId === nodeId)
+
             return (previousNode?.type === 'image' || previousNode?.type === 'video')
                 && updatedNode?.type === 'operationStatus'
         })
-        const nodes = result.removedNodeIds.length > 0 || replacedGeneratedMediaNodeIds.length > 0
+        const nodes = result.removedNodeIds.length > 0
+            || replacedGeneratedMediaNodeIds.length > 0
             ? this.ports.rebalance(result.state.nodes, result.state.edges)
             : result.state.nodes
         const changedGeometryNodeIds = nodes.flatMap(node => {
             const previous = result.state.nodes.find(candidate => candidate.nodeId === node.nodeId)
+
             return previous
-                    && previous.position.x === node.position.x
-                    && previous.position.y === node.position.y
-                    && previous.dimensions.width === node.dimensions.width
-                    && previous.dimensions.height === node.dimensions.height
+                && previous.position.x === node.position.x
+                && previous.position.y === node.position.y
+                && previous.dimensions.width === node.dimensions.width
+                && previous.dimensions.height === node.dimensions.height
                 ? []
                 : [node.nodeId]
         })
-        this.ports.commitTransient({ ...result.state, nodes })
+        this.ports.commitTransient({
+            ...result.state,
+            nodes,
+        })
         this.ports.removeNodes(result.removedNodeIds)
         this.ports.pruneTrackers([...result.removedNodeIds, ...replacedGeneratedMediaNodeIds])
 
@@ -132,15 +185,24 @@ export class WorkspaceOperationStatusNodes {
             this.ports.clearTransientImage(nodeId)
             this.ports.removeSelection(nodeId)
         }
+
         const currentState = this.ports.getState()
-        if (!currentState) return
+
+        if (!currentState)
+            return
+
         for (const nodeId of result.updatedNodeIds) {
             const updatedNode = currentState.nodes.find(candidate => candidate.nodeId === nodeId)
-            if (updatedNode?.type === 'operationStatus') this.ports.syncNode(updatedNode)
+
+            if (updatedNode?.type === 'operationStatus')
+                this.ports.syncNode(updatedNode)
         }
-        if (changedGeometryNodeIds.length > 0) {
-            this.ports.syncGeometry(currentState.nodes.filter(node => changedGeometryNodeIds.includes(node.nodeId)))
-        }
+
+        if (changedGeometryNodeIds.length > 0)
+            this.ports.syncGeometry(
+                currentState.nodes.filter(node => changedGeometryNodeIds.includes(node.nodeId)),
+            )
+
         this.ports.syncMedia(currentState)
         this.ports.syncChrome()
         this.ports.syncMarkers()
@@ -148,22 +210,47 @@ export class WorkspaceOperationStatusNodes {
     }
 
     applyProgress = (result: MediaGenerationOperationRecoveryResult): void => {
-        if (!result.changed || !this.ports.getState()) return
+        if (
+            !result.changed
+            || !this.ports.getState()
+        )
+            return
+
         this.ports.replaceState(result.state)
         this.ports.syncProgress(result.state)
     }
 
-    private edit = async (node: OperationStatusCanvasNode, signal: AbortSignal): Promise<void> => {
+    private edit = async (
+        node: OperationStatusCanvasNode,
+        signal: AbortSignal,
+    ): Promise<void> => {
         const current = this.ports.captureAdmission()
-        if (signal.aborted || !current()) return
+
+        if (
+            signal.aborted
+            || !current()
+        )
+            return
+
         const response = await this.ports.host.generation.get({
             generationRequestId: node.generationRequestId!,
             workspaceId: this.ports.getWorkspaceId(),
         })
-        if (signal.aborted || !current()) return
-        if (!response.checkpoint) throw new Error('Media request checkpoint is no longer available.')
+
+        if (
+            signal.aborted
+            || !current()
+        )
+            return
+
+        if (!response.checkpoint)
+            throw new Error('Media request checkpoint is no longer available.')
+
         const promptDocument = response.checkpoint.promptDocument as { content?: unknown[] }
-        const selection = response.checkpoint.modelSelection as { reasoningModelIds?: string[]; mediaModelIds?: string[] }
+        const selection = response.checkpoint.modelSelection as {
+            reasoningModelIds?: string[]
+            mediaModelIds?: string[]
+        }
         const generation = (response.checkpoint.configuration as { generation?: AiInteractionMediaGenerationRequest }).generation
         const state = this.ports.getState()
         const restoredContextNodeIds = response.checkpoint.selectedReferences.flatMap(reference => {
@@ -172,11 +259,16 @@ export class WorkspaceOperationStatusNodes {
                 : undefined
             const assetNode = state?.nodes.find(candidate => 'assetId' in candidate && candidate.assetId === reference.assetId)
             const nodeId = explicitNode?.nodeId ?? assetNode?.nodeId
+
             return nodeId ? [nodeId] : []
         })
         this.ports.addContext(restoredContextNodeIds)
-        const imageModelIds = generation?.imageModelIds ?? selection.mediaModelIds?.filter(modelId => !modelId.toLocaleLowerCase().includes('video')) ?? []
-        const videoModelIds = generation?.videoModelIds ?? selection.mediaModelIds?.filter(modelId => modelId.toLocaleLowerCase().includes('video')) ?? []
+        const imageModelIds = generation?.imageModelIds
+            ?? selection.mediaModelIds?.filter(modelId => !modelId.toLocaleLowerCase().includes('video'))
+            ?? []
+        const videoModelIds = generation?.videoModelIds
+            ?? selection.mediaModelIds?.filter(modelId => modelId.toLocaleLowerCase().includes('video'))
+            ?? []
         this.ports.getComposer()?.input.restoreContent({
             type: 'doc',
             content: [{

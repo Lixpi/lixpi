@@ -1,28 +1,27 @@
 import chalk from 'chalk'
 import {
     log,
-    info,
     infoStr,
-    warn,
-    err,
 } from '@lixpi/debug-tools'
 
 import SocketIoConnectionsManager from '../socket.io-connections-manager.ts'
 
 import {
-    USER_SUBJECTS,
     USER_SUBSCRIPTION_SUBJECTS,
-    LoadingStatus,
     PaymentProcessingStatus,
     type SocketIoResponse,
 } from '@lixpi/constants'
 
-export const notifyClientOfBalanceTopUp = async (data) => {
-    console.log('notifyClientOfBalanceTopUp', data)
+export const notifyClientOfBalanceTopUp = async data => {
+    log('notifyClientOfBalanceTopUp', data)
 
     const socketIoConnectionsManager = SocketIoConnectionsManager.getInstance({})
 
-    const { userId, balance, netBalance } = data
+    const {
+        userId,
+        balance,
+        netBalance,
+    } = data
 
     socketIoConnectionsManager.emit({
         room: `session-${userId}`,
@@ -47,12 +46,16 @@ export const notifyClientOfBalanceTopUp = async (data) => {
     ])
 }
 
-export const notifyClientOfCreditsUse = async (data) => {
-    console.log('notifyClientOfCreditsUse', data)
+export const notifyClientOfCreditsUse = async data => {
+    log('notifyClientOfCreditsUse', data)
 
     const socketIoConnectionsManager = SocketIoConnectionsManager.getInstance({})
 
-    const { userId, balance, netBalance } = data
+    const {
+        userId,
+        balance,
+        netBalance,
+    } = data
 
     // console.log('data USER_SUBJECTS.GET_USER_RESPONSE', data)
 

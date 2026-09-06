@@ -18,56 +18,80 @@ import { characterCreatorSettings } from '../settings.ts'
 
 export type CharacterCreatorActionDependencies = Record<never, never>
 
-export function registerCharacterCreatorActions(
+export const registerCharacterCreatorActions = (
     registry: CapabilityActionRegistry,
     _dependencies: CharacterCreatorActionDependencies = {},
-): void {
-    registerIfMissing(registry, {
-        key: 'character.validate-request',
-        timeoutMs: characterCreatorSettings.actionTimeoutsMs.validateRequest,
-        validateInput: validateObject,
-        validateOutput: validateObject,
-        authorize: authorizeCharacterCreator,
-        execute: (input, context) => {
-            const request = validateCharacterCreatorRequest(input)
-            context.trace.addFact('Prompt characters', String(request.prompt.length))
-            context.trace.addFact('Accepted references', String(request.referenceAssetIds.length))
-            return request
+): void => {
+    registerIfMissing(
+        registry,
+        {
+            key: 'character.validate-request',
+            timeoutMs: characterCreatorSettings.actionTimeoutsMs.validateRequest,
+            validateInput: validateObject,
+            validateOutput: validateObject,
+            authorize: authorizeCharacterCreator,
+            execute: (input, context) => {
+                const request = validateCharacterCreatorRequest(input)
+                context.trace.addFact(
+                    'Prompt characters',
+                    String(request.prompt.length),
+                )
+                context.trace.addFact(
+                    'Accepted references',
+                    String(request.referenceAssetIds.length),
+                )
+
+                return request
+            },
+            classifyRetry: () => 'terminal',
+            collectInputHandles: input => characterReferenceHandles(input.referenceAssetIds),
+            summarizeInput: input => `Checking a ${stringLength(input.prompt)}-character request with ${formatReferenceCount(
+                arrayLength(input.referenceAssetIds),
+            )}.`,
+            summarizeOutput: output => `Request valid. ${formatReferenceCount(
+                arrayLength(asRecord(output)?.referenceAssetIds),
+            )} accepted for character planning.`,
         },
-        classifyRetry: () => 'terminal',
-        collectInputHandles: input => characterReferenceHandles(input.referenceAssetIds),
-        summarizeInput: input => `Checking a ${stringLength(input.prompt)}-character request with ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
-        summarizeOutput: output => `Request valid. ${formatReferenceCount(arrayLength(asRecord(output)?.referenceAssetIds))} accepted for character planning.`,
-    })
-    registerIfMissing(registry, {
-        key: 'character.build-render-plan',
-        timeoutMs: characterCreatorSettings.actionTimeoutsMs.buildRenderPlan,
-        validateInput: validateObject,
-        validateOutput: validatePlanOutput,
-        authorize: authorizeCharacterCreator,
-        execute: (input, context) => buildPlanOutput(input, context),
-        classifyRetry: () => 'terminal',
-        collectInputHandles: input => characterReferenceHandles(input.referenceAssetIds),
-        summarizeInput: input => `Building the character-shot graph from ${formatReferenceCount(arrayLength(input.referenceAssetIds))}.`,
-        summarizeOutput: output => `Render plan ready: ${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)} shot(s). The portrait, front full-body, and back full-body anchors run sequentially before optional shots are released; one provider attempt per shot.`,
-    })
+    )
+    registerIfMissing(
+        registry,
+        {
+            key: 'character.build-render-plan',
+            timeoutMs: characterCreatorSettings.actionTimeoutsMs.buildRenderPlan,
+            validateInput: validateObject,
+            validateOutput: validatePlanOutput,
+            authorize: authorizeCharacterCreator,
+            execute: (input, context) => buildPlanOutput(input, context),
+            classifyRetry: () => 'terminal',
+            collectInputHandles: input => characterReferenceHandles(input.referenceAssetIds),
+            summarizeInput: input => `Building the character-shot graph from ${formatReferenceCount(
+                arrayLength(input.referenceAssetIds),
+            )}.`,
+            summarizeOutput: output =>
+                `Render plan ready: ${arrayLength(asRecord(asRecord(output)?.capabilityMediaExecutionPlan)?.panels)} shot(s). The portrait, front full-body, and back full-body anchors run sequentially before optional shots are released; one provider attempt per shot.`,
+        },
+    )
 }
 
 // Asset titles are resolved by the client from its Asset store, so the durable
 // handle carries the Asset identity and a readable fallback rather than a title
 // that could drift after the trace is sealed.
 function characterReferenceHandles(value: unknown): ExecutionTraceHandle[] {
-    if (!Array.isArray(value)) return []
-    return value.flatMap(assetId =>
-        typeof assetId === 'string' && assetId.trim()
-            ? [{
-                kind: 'media' as const,
-                id: assetId,
-                displayName: assetId,
-                mediaKind: 'image' as const,
-                role: 'character-reference',
-            }]
-            : []
+    if (!Array.isArray(value))
+        return []
+
+    return value.flatMap(
+        assetId =>
+            typeof assetId === 'string'
+                && assetId.trim()
+                ? [{
+                    kind: 'media' as const,
+                    id: assetId,
+                    displayName: assetId,
+                    mediaKind: 'image' as const,
+                    role: 'character-reference',
+                }]
+                : [],
     )
 }
 
@@ -77,13 +101,22 @@ function buildPlanOutput(
 ): Record<string, CapabilityJsonValue> {
     const plan = buildCharacterSheetRenderPlan({
         capabilityRunId: context.runId,
-        sourceAssetIds: readStringArray(input.referenceAssetIds, 'referenceAssetIds', true),
+        sourceAssetIds: readStringArray(
+            input.referenceAssetIds,
+            'referenceAssetIds',
+            true,
+        ),
         userPrompt: readString(input.prompt, 'prompt'),
     })
-    context.trace.addFact('Planned shots', String(plan.panels.length))
+    context.trace.addFact(
+        'Planned shots',
+        String(plan.panels.length),
+    )
+
     for (const panel of plan.panels) {
         context.trace.addFact(panel.panelId, panel.title)
     }
+
     return {
         mediaGenerationMode: 'character-creator',
         preserveUserPrompt: true,
@@ -96,12 +129,25 @@ function validateCharacterCreatorRequest(input: Readonly<Record<string, unknown>
     referenceAssetIds: string[]
 } {
     const prompt = readString(input.prompt, 'prompt').trim()
-    if (prompt.length > 8000) throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Character prompt exceeds 8000 characters')
-    const referenceAssetIds = [...new Set(readStringArray(input.referenceAssetIds, 'referenceAssetIds', true))]
-    if (referenceAssetIds.length > 8) {
+
+    if (prompt.length > 8000)
+        throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Character prompt exceeds 8000 characters')
+
+    const referenceAssetIds = [...new Set(
+        readStringArray(
+            input.referenceAssetIds,
+            'referenceAssetIds',
+            true,
+        ),
+    )]
+
+    if (referenceAssetIds.length > 8)
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Character Creator accepts at most 8 reference Assets')
+
+    return {
+        prompt,
+        referenceAssetIds,
     }
-    return { prompt, referenceAssetIds }
 }
 
 function authorizeCharacterCreator(context: { rootCapabilityId: string }): boolean {
@@ -112,45 +158,80 @@ function registerIfMissing(
     registry: CapabilityActionRegistry,
     definition: Parameters<CapabilityActionRegistry['register']>[0],
 ): void {
-    if (!registry.has(definition.key)) registry.register(definition)
+    if (!registry.has(definition.key))
+        registry.register(definition)
 }
 
 function validateObject(input: unknown): CapabilityActionValidationResult {
     return asRecord(input)
         ? { valid: true }
-        : { valid: false, message: 'Value must be an object' }
+        : {
+            valid: false,
+            message: 'Value must be an object',
+        }
 }
 
 function validatePlanOutput(output: unknown): CapabilityActionValidationResult {
     const record = asRecord(output)
-    if (record?.mediaGenerationMode !== 'character-creator' || record.preserveUserPrompt !== true) {
-        return { valid: false, message: 'Output must contain a Character Sheet media execution plan' }
-    }
+
+    if (
+        record?.mediaGenerationMode !== 'character-creator'
+        || record.preserveUserPrompt !== true
+    )
+        return {
+            valid: false,
+            message: 'Output must contain a Character Sheet media execution plan',
+        }
+
     try {
         assertValidCharacterSheetRenderPlan(record.capabilityMediaExecutionPlan)
+
         return { valid: true }
     } catch {
-        return { valid: false, message: 'Output must contain a Character Sheet media execution plan' }
+        return {
+            valid: false,
+            message: 'Output must contain a Character Sheet media execution plan',
+        }
     }
 }
 
-function readString(value: unknown, field: string): string {
-    if (typeof value !== 'string' || !value.trim()) {
+function readString(
+    value: unknown,
+    field: string,
+): string {
+    if (
+        typeof value !== 'string'
+        || !value.trim()
+    )
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `${field} must be a non-empty string`)
-    }
+
     return value
 }
 
-function readStringArray(value: unknown, field: string, optional: boolean): string[] {
-    if (value === undefined && optional) return []
-    if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) {
+function readStringArray(
+    value: unknown,
+    field: string,
+    optional: boolean,
+): string[] {
+    if (
+        value === undefined
+        && optional
+    )
+        return []
+
+    if (
+        !Array.isArray(value)
+        || value.some(item => typeof item !== 'string' || !item.trim())
+    )
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `${field} must be an array of non-empty strings`)
-    }
+
     return value as string[]
 }
 
 function asRecord(value: unknown): Record<string, any> | undefined {
-    return value && typeof value === 'object' && !Array.isArray(value)
+    return value
+        && typeof value === 'object'
+        && !Array.isArray(value)
         ? value as Record<string, any>
         : undefined
 }

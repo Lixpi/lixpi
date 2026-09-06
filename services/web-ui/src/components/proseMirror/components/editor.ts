@@ -5,7 +5,6 @@ import { EditorView } from 'prosemirror-view'
 import { DOMParser } from 'prosemirror-model'
 import {
     DOCUMENT_TYPE,
-    aiChatThreadNodeType,
     aiPromptInputNodeType,
     createProseMirrorSchema,
 } from '@lixpi/prosemirror'
@@ -61,7 +60,10 @@ type ProseMirrorEditorConfig = {
     promptControlFactories?: any
     promptReferenceCatalog?: any
     promptReferencePreviewRenderer?: PromptReferencePreviewRenderer
-    onReceivingStateChange?: (threadId: string, receiving: boolean) => void
+    onReceivingStateChange?: (
+        threadId: string,
+        receiving: boolean,
+    ) => void
     readOnly?: boolean
     proseMirrorAuthority?: any
     aiChatThreadRenderContext?: any
@@ -131,13 +133,16 @@ export class ProseMirrorEditor {
 
         const initialDocContent = this.createInitialDocument(initialVal, content)
 
-        this.editorView = new EditorView(editorMountElement, {
-            state: EditorState.create({
-                doc: initialDocContent, // initialVal is the initial content of the editor
-                plugins: this.createPlugins(initialVal, isDisabled),
-            }),
-            editable: () => this.isEditorEditable(),
-        })
+        this.editorView = new EditorView(
+            editorMountElement,
+            {
+                state: EditorState.create({
+                    doc: initialDocContent, // initialVal is the initial content of the editor
+                    plugins: this.createPlugins(initialVal, isDisabled),
+                }),
+                editable: () => this.isEditorEditable(),
+            },
+        )
 
         if (this.proseMirrorAuthorityOptions) {
             const onLeaseStateChange = this.proseMirrorAuthorityOptions.onLeaseStateChange
@@ -150,20 +155,28 @@ export class ProseMirrorEditor {
         }
     }
 
-    createInitialDocument(initialVal, content) {
-        const hasValidContent = initialVal && typeof initialVal === 'object' && Object.keys(initialVal).length > 0
+    createInitialDocument(
+        initialVal,
+        content,
+    ) {
+        const hasValidContent = initialVal
+            && typeof initialVal === 'object'
+            && Object.keys(initialVal).length > 0
 
         if (this.documentType === DOCUMENT_TYPE.AI_PROMPT_INPUT) {
             if (hasValidContent) {
                 try {
                     const doc = this.editorSchema.nodeFromJSON(initialVal)
                     doc.check()
+
                     return doc
                 } catch (e) {
                     console.warn('[EDITOR] Invalid AI prompt draft, creating fresh input:', e)
                 }
             }
+
             const inputNode = this.editorSchema.nodes[aiPromptInputNodeType].createAndFill()
+
             return this.editorSchema.nodes.doc.create(null, [inputNode])
         }
 
@@ -175,14 +188,23 @@ export class ProseMirrorEditor {
                 try {
                     const doc = this.editorSchema.nodeFromJSON(initialVal)
                     doc.check()
+
                     return doc
                 } catch (e) {
                     console.warn('📝 [EDITOR] Invalid AI chat thread content, creating fresh document:', e)
-                    console.warn('📝 [EDITOR] Failed initialVal:', JSON.stringify(initialVal, null, 2))
+                    console.warn(
+                        '📝 [EDITOR] Failed initialVal:',
+                        JSON.stringify(
+                            initialVal,
+                            null,
+                            2,
+                        ),
+                    )
                 }
             }
 
             const threadNode = this.editorSchema.nodes.aiChatThread.createAndFill({ threadId: this.threadId })
+
             return this.editorSchema.nodes.doc.create(null, [threadNode])
         }
 
@@ -195,7 +217,10 @@ export class ProseMirrorEditor {
         return this.registeredSchema ?? createProseMirrorSchema(this.documentType)
     }
 
-    createPlugins(initialValue, isDisabled) {
+    createPlugins(
+        initialValue,
+        isDisabled,
+    ) {
         if (this.registeredSchema) {
             const registeredPlugins = [
                 statePlugin(
@@ -204,7 +229,9 @@ export class ProseMirrorEditor {
                     this.dispatchStreamingUpdate.bind(this),
                     this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null,
                 ),
-                focusPlugin(this.updateEditorFocusState.bind(this)),
+                focusPlugin(
+                    this.updateEditorFocusState.bind(this),
+                ),
                 createPromptReferenceNodeViewPlugin(this.promptReferencePreviewRenderer),
                 ...this.registeredPlugins,
                 keymap(baseKeymap),
@@ -212,11 +239,18 @@ export class ProseMirrorEditor {
                 gapCursor(),
                 history(),
             ]
-            if (this.enablePromptReferences && this.promptReferenceCatalog) {
-                registeredPlugins.push(createAtPromptReferencePickerPlugin(this.promptReferenceCatalog))
-            }
+
+            if (
+                this.enablePromptReferences
+                && this.promptReferenceCatalog
+            )
+                registeredPlugins.push(
+                    createAtPromptReferencePickerPlugin(this.promptReferenceCatalog),
+                )
+
             return registeredPlugins
         }
+
         const basePlugins = [
             statePlugin(
                 initialValue,
@@ -224,13 +258,17 @@ export class ProseMirrorEditor {
                 this.dispatchStreamingUpdate.bind(this),
                 this.proseMirrorAuthorityOptions ? this.dispatchLocalTransaction.bind(this) : null,
             ),
-            focusPlugin(this.updateEditorFocusState.bind(this)), // Allows to enable editor if it was disabled and user clicks on the editor area
+            focusPlugin(
+                this.updateEditorFocusState.bind(this),
+            ), // Allows to enable editor if it was disabled and user clicks on the editor area
             bubbleMenuPlugin(),
             linkTooltipPlugin(),
             imageSelectionPlugin(),
             createPromptReferenceNodeViewPlugin(this.promptReferencePreviewRenderer),
             buildInputRules(this.editorSchema),
-            keymap(buildKeymap(this.editorSchema, this.documentType)),
+            keymap(
+                buildKeymap(this.editorSchema, this.documentType),
+            ),
             keymap(baseKeymap),
             dropCursor(),
             gapCursor(),
@@ -268,9 +306,10 @@ export class ProseMirrorEditor {
                     createSlashCapabilityModulePickerPlugin(this.promptReferenceCatalog),
                 )
             }
+
             basePlugins.push(
                 createAiPromptInputPlugin({
-                    onSubmit: (data) => this.onPromptSubmit?.(data),
+                    onSubmit: data => this.onPromptSubmit?.(data),
                     createContextTray: this.promptControlFactories?.createContextTray,
                     mountMediaModeSwitch: this.promptControlFactories?.mountMediaModeSwitch,
                     mountModelMenuControl: this.promptControlFactories?.mountModelMenuControl,
@@ -295,14 +334,24 @@ export class ProseMirrorEditor {
     }
 
     updateDocument(value) {
-        if (!this.editorView || !value) return
+        if (
+            !this.editorView
+            || !value
+        )
+            return
+
         const nextDoc = this.editorSchema.nodeFromJSON(value)
         nextDoc.check()
-        if (this.editorView.state.doc.eq(nextDoc)) return
-        this.editorView.updateState(EditorState.create({
-            doc: nextDoc,
-            plugins: this.createPlugins(value, this.isDisabled),
-        }))
+
+        if (this.editorView.state.doc.eq(nextDoc))
+            return
+
+        this.editorView.updateState(
+            EditorState.create({
+                doc: nextDoc,
+                plugins: this.createPlugins(value, this.isDisabled),
+            }),
+        )
     }
 
     isEditorEditable() {
@@ -310,12 +359,19 @@ export class ProseMirrorEditor {
     }
 
     updateEditorFocusState(focusedState) {
-        if (!this.editorView) return
+        if (!this.editorView)
+            return
+
         this.editorView.setProps({ editable: () => this.isEditorEditable() })
     }
 
-    handleLeaseStateChange(state, onLeaseStateChange) {
-        if (!this.editorView) return
+    handleLeaseStateChange(
+        state,
+        onLeaseStateChange,
+    ) {
+        if (!this.editorView)
+            return
+
         this.readOnly = state.readOnly
         this.editorView.setProps({ editable: () => this.isEditorEditable() })
         onLeaseStateChange?.(state)
@@ -336,6 +392,7 @@ export class ProseMirrorEditor {
     destroy() {
         this.proseMirrorAuthority?.disconnect()
         this.proseMirrorAuthority = null
+
         if (this.editorView) {
             this.editorView.destroy()
             this.editorView = null

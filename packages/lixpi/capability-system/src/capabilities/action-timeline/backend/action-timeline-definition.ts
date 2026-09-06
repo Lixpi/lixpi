@@ -59,16 +59,27 @@ const outputSchemaSource: ResourceSource = {
     name: 'Action Timeline Output Schema',
 }
 
-export async function seedActionTimelineTool(
+export const seedActionTimelineTool = async (
     context: CapabilityPackageSeedContext,
     storage: ActionTimelineCapabilityStorage,
     storageOwnerId = 'system',
-): Promise<void> {
-    const inputSchema = await storeResource(storage, storageOwnerId, inputSchemaSource)
-    const outputSchema = await storeResource(storage, storageOwnerId, outputSchemaSource)
+): Promise<void> => {
+    const inputSchema = await storeResource(
+        storage,
+        storageOwnerId,
+        inputSchemaSource,
+    )
+    const outputSchema = await storeResource(
+        storage,
+        storageOwnerId,
+        outputSchemaSource,
+    )
     await storage.seedBuiltInCapability({
         allowedActions: context.allowedActions,
-        manifest: buildActionTimelineManifest({ inputSchema, outputSchema }),
+        manifest: buildActionTimelineManifest({
+            inputSchema,
+            outputSchema,
+        }),
         summary: 'Creates an editable, reusable time-segmented action plan from a prompt and cited Assets.',
         tags: ['timeline', 'shot-plan', 'storyboard', 'artifact', 'global'],
         parentModuleId: context.parentModuleId,
@@ -88,9 +99,21 @@ export function buildActionTimelineManifest(resources: {
         name: 'Action Timeline',
         description: 'Create a reusable timed action or shot plan. Requires durationMs and precisionMs; produces one Artifact per selected reasoning model and no image or video output.',
         references: [
-            { capabilityId: 'global.action-timeline-timing-grid', kind: 'skill', import: ['timing-grid'] },
-            { capabilityId: 'global.action-timeline-segment-writing', kind: 'skill', import: ['segment-writing'] },
-            { capabilityId: 'global.action-timeline-reference-fidelity', kind: 'skill', import: ['reference-fidelity'] },
+            {
+                capabilityId: 'global.action-timeline-timing-grid',
+                kind: 'skill',
+                import: ['timing-grid'],
+            },
+            {
+                capabilityId: 'global.action-timeline-segment-writing',
+                kind: 'skill',
+                import: ['segment-writing'],
+            },
+            {
+                capabilityId: 'global.action-timeline-reference-fidelity',
+                kind: 'skill',
+                import: ['reference-fidelity'],
+            },
         ],
         resources: [resources.inputSchema, resources.outputSchema],
         tool: {
@@ -113,10 +136,22 @@ export function buildActionTimelineManifest(resources: {
                         action: 'action-timeline.validate-request',
                         dependsOn: [],
                         input: {
-                            prompt: { source: 'input', path: ['prompt'] },
-                            referenceAssetIds: { source: 'input', path: ['referenceAssetIds'] },
-                            durationMs: { source: 'input', path: ['durationMs'] },
-                            precisionMs: { source: 'input', path: ['precisionMs'] },
+                            prompt: {
+                                source: 'input',
+                                path: ['prompt'],
+                            },
+                            referenceAssetIds: {
+                                source: 'input',
+                                path: ['referenceAssetIds'],
+                            },
+                            durationMs: {
+                                source: 'input',
+                                path: ['durationMs'],
+                            },
+                            precisionMs: {
+                                source: 'input',
+                                path: ['precisionMs'],
+                            },
                         },
                         progress: {},
                     },
@@ -126,7 +161,11 @@ export function buildActionTimelineManifest(resources: {
                         action: 'action-timeline.write-segments',
                         dependsOn: ['validate-request'],
                         input: {
-                            prepared: { source: 'step', stepId: 'validate-request', path: [] },
+                            prepared: {
+                                source: 'step',
+                                stepId: 'validate-request',
+                                path: [],
+                            },
                         },
                         progress: { exposeReasoning: true },
                     },
@@ -136,16 +175,35 @@ export function buildActionTimelineManifest(resources: {
                         action: 'action-timeline.persist-timeline',
                         dependsOn: ['write-segments'],
                         input: {
-                            prepared: { source: 'step', stepId: 'validate-request', path: [] },
-                            written: { source: 'step', stepId: 'write-segments', path: [] },
+                            prepared: {
+                                source: 'step',
+                                stepId: 'validate-request',
+                                path: [],
+                            },
+                            written: {
+                                source: 'step',
+                                stepId: 'write-segments',
+                                path: [],
+                            },
                         },
-                        retry: { maxAttempts: 2, backoffMs: 250 },
+                        retry: {
+                            maxAttempts: 2,
+                            backoffMs: 250,
+                        },
                         progress: {},
                     },
                 ],
                 outputs: {
-                    outputKind: { source: 'step', stepId: 'persist-timeline', path: ['outputKind'] },
-                    assetId: { source: 'step', stepId: 'persist-timeline', path: ['assetId'] },
+                    outputKind: {
+                        source: 'step',
+                        stepId: 'persist-timeline',
+                        path: ['outputKind'],
+                    },
+                    assetId: {
+                        source: 'step',
+                        stepId: 'persist-timeline',
+                        path: ['assetId'],
+                    },
                 },
             },
         },
@@ -157,7 +215,10 @@ async function storeResource(
     storageOwnerId: string,
     source: ResourceSource,
 ): Promise<CapabilityResourceRef> {
-    const bytes = await readFile(new URL(`./resources/${source.fileName}`, import.meta.url))
+    const bytes = await readFile(
+        new URL(`./resources/${source.fileName}`, import.meta.url),
+    )
+
     return await storage.storeResource({
         storageOwnerId,
         resourceId: source.resourceId,

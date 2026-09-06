@@ -1,3 +1,7 @@
+import {
+    info as debugInfo,
+    err as debugError,
+} from '@lixpi/debug-tools'
 import type NatsService from '@lixpi/nats-service'
 import {
     getAiInteractionCanonicalResponseSubject,
@@ -30,26 +34,53 @@ export type CapturedImagePartialHandler = (
     providerPartialIndex: number,
 ) => Promise<void>
 
-function readImageMimeType(buffer: Buffer): TransientMediaMimeType | null {
+const readImageMimeType = (buffer: Buffer): TransientMediaMimeType | null => {
     if (
         buffer.length >= 8
-        && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
-    ) {
+        && buffer[0] === 0x89
+        && buffer[1] === 0x50
+        && buffer[2] === 0x4e
+        && buffer[3] === 0x47
+    )
         return 'image/png'
-    }
-    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+
+    if (
+        buffer.length >= 3
+        && buffer[0] === 0xff
+        && buffer[1] === 0xd8
+        && buffer[2] === 0xff
+    )
         return 'image/jpeg'
-    }
+
     if (
         buffer.length >= 12
-        && buffer.toString('ascii', 0, 4) === 'RIFF'
-        && buffer.toString('ascii', 8, 12) === 'WEBP'
-    ) {
+        && buffer.toString(
+            'ascii',
+            0,
+            4,
+        ) === 'RIFF'
+        && buffer.toString(
+            'ascii',
+            8,
+            12,
+        ) === 'WEBP'
+    )
         return 'image/webp'
-    }
-    if (buffer.length >= 6 && (buffer.toString('ascii', 0, 6) === 'GIF87a' || buffer.toString('ascii', 0, 6) === 'GIF89a')) {
+
+    if (
+        buffer.length >= 6
+        && (buffer.toString(
+            'ascii',
+            0,
+            6,
+        ) === 'GIF87a' || buffer.toString(
+            'ascii',
+            0,
+            6,
+        ) === 'GIF89a')
+    )
         return 'image/gif'
-    }
+
     return null
 }
 
@@ -66,46 +97,66 @@ export class ImagePublisher {
         private readonly generationRun?: MediaGenerationRunMeta,
         private readonly onProseMirrorContent?: ProseMirrorContentHandler,
         private readonly onPipelineContent?: ProseMirrorContentHandler,
-        private readonly canvasVisibleArea?: { width: number; height: number },
+        private readonly canvasVisibleArea?: {
+            width: number
+            height: number
+        },
         private readonly getProseMirrorSnapshot?: ProseMirrorSnapshotProvider,
         private readonly captureOnly = false,
         private readonly onCapturedPartial?: CapturedImagePartialHandler,
     ) {
         if (generationRun) {
-            this.transientMediaStore = new TransientMediaStore(nats, {
-                organizationId,
-                workspaceId,
-                conversationAssetId: aiChatThreadId,
-                generationRequestId: generationRun.generationRequestId,
-                mediaRunId: generationRun.mediaRunId ?? generationRun.generationRequestId,
-            })
+            this.transientMediaStore = new TransientMediaStore(
+                nats,
+                {
+                    organizationId,
+                    workspaceId,
+                    conversationAssetId: aiChatThreadId,
+                    generationRequestId: generationRun.generationRequestId,
+                    mediaRunId: generationRun.mediaRunId ?? generationRun.generationRequestId,
+                },
+            )
         }
     }
 
     private publish(content: ChunkPayload['content']): void {
         if (this.onPipelineContent) {
             this.onPipelineContent(content)
+
             return
         }
 
-        this.nats.publish(getAiInteractionCanonicalResponseSubject(this.organizationId, this.aiChatThreadId), {
-            content,
-            conversationAssetId: this.aiChatThreadId,
-        })
+        this.nats.publish(
+            getAiInteractionCanonicalResponseSubject(this.organizationId, this.aiChatThreadId),
+            {
+                content,
+                conversationAssetId: this.aiChatThreadId,
+            },
+        )
         this.onProseMirrorContent?.(content)
     }
 
     // Capture-only publishers forward provider revisions to their owner without
     // exposing an isolated intermediate as top-level media. Ordinary partials
     // stay transient; only final bytes settle the preassigned Asset.
-    async partial(imageBase64: string, partialIndex: number): Promise<void> {
+    async partial(
+        imageBase64: string,
+        partialIndex: number,
+    ): Promise<void> {
         if (this.captureOnly) {
             await this.onCapturedPartial?.(imageBase64, partialIndex)
+
             return
         }
-        if (!this.generationRun) throw new Error('Image partial is missing generationRun')
+
+        if (!this.generationRun)
+            throw new Error('Image partial is missing generationRun')
+
         const assetId = this.generationRun.lineageAssignment?.assetId
-        if (!assetId) throw new Error('Image partial is missing Asset assignment')
+
+        if (!assetId)
+            throw new Error('Image partial is missing Asset assignment')
+
         const partialBuffer = imageBase64 ? Buffer.from(imageBase64, 'base64') : null
         const intrinsicSize = partialBuffer ? readImageIntrinsicSize(partialBuffer) : null
         this.pendingCanvasGeometry ??= attachGeneratedAssetNode({
@@ -128,11 +179,17 @@ export class ImagePublisher {
                 canvasGeometry,
                 generationRun: this.generationRun,
             })
+
             return
         }
 
         try {
-            if (!this.transientMediaStore || !partialBuffer) return
+            if (
+                !this.transientMediaStore
+                || !partialBuffer
+            )
+                return
+
             const mimeType = readImageMimeType(partialBuffer) ?? 'image/png'
             const imageUrl = await this.transientMediaStore.put({
                 mediaKind: 'image',
@@ -167,10 +224,17 @@ export class ImagePublisher {
         imageModelId: string
         generationSeed?: number
     }): Promise<void> {
-        const { imageBase64, responseId, revisedPrompt, imageModelId, generationSeed } = args
-        if (!imageBase64) {
+        const {
+            imageBase64,
+            responseId,
+            revisedPrompt,
+            imageModelId,
+            generationSeed,
+        } = args
+
+        if (!imageBase64)
             throw new Error('Image completion failed: provider returned no final image bytes')
-        }
+
         const buffer = Buffer.from(imageBase64, 'base64')
         const isPng = buffer.length > 8
             && buffer[0] === 0x89
@@ -181,11 +245,19 @@ export class ImagePublisher {
             && buffer[0] === 0xff
             && buffer[1] === 0xd8
             && buffer[2] === 0xff
-        if (!isPng && !isJpeg) {
+
+        if (
+            !isPng
+            && !isJpeg
+        )
             throw new Error('Image completion failed: provider returned bytes that are not a PNG or JPEG image')
-        }
-        if (this.captureOnly) return
-        if (!this.generationRun) throw new Error('Image completion is missing generationRun')
+
+        if (this.captureOnly)
+            return
+
+        if (!this.generationRun)
+            throw new Error('Image completion is missing generationRun')
+
         const result = await settleGeneratedAssetOriginal({
             generationRun: this.generationRun,
             workspaceId: this.workspaceId,
@@ -207,15 +279,18 @@ export class ImagePublisher {
             conversationAssetId: this.aiChatThreadId,
         })
 
-        console.info('[ImagePublisher] IMAGE_COMPLETE prepared', {
-            workspaceId: this.workspaceId,
-            conversationAssetId: this.aiChatThreadId,
-            generationRequestId: this.generationRun?.generationRequestId ?? '',
-            mediaRunId: this.generationRun?.mediaRunId ?? '',
-            mediaModelId: this.generationRun?.mediaModelId ?? '',
-            responseId,
-            assetId: result.assetId,
-        })
+        debugInfo(
+            '[ImagePublisher] IMAGE_COMPLETE prepared',
+            {
+                workspaceId: this.workspaceId,
+                conversationAssetId: this.aiChatThreadId,
+                generationRequestId: this.generationRun?.generationRequestId ?? '',
+                mediaRunId: this.generationRun?.mediaRunId ?? '',
+                mediaModelId: this.generationRun?.mediaModelId ?? '',
+                responseId,
+                assetId: result.assetId,
+            },
+        )
 
         this.publish({
             status: STREAM_STATUS.IMAGE_COMPLETE,
@@ -229,11 +304,13 @@ export class ImagePublisher {
             canvasGeometry,
             ...(this.generationRun ? { generationRun: this.generationRun } : {}),
         })
+
         try {
             await this.clearTransientMedia()
         } catch {
             // Provider teardown retries failed terminal cleanup.
         }
+
         const provenancePayload = {
             assetId: result.assetId,
             organizationId: result.organizationId,
@@ -242,13 +319,14 @@ export class ImagePublisher {
             generationRun: this.generationRun,
             terminalStatus: 'completed' as const,
         }
+
         try {
             await this.getProseMirrorSnapshot?.()
             await materializeAssetProvenance(provenancePayload)
         } catch (error) {
-            if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY') {
-                console.error('Image Asset provenance materialization failed; queued retry', error)
-            }
+            if ((error as { message?: unknown })?.message !== 'PROVENANCE_PROJECTION_NOT_READY')
+                debugError('Image Asset provenance materialization failed; queued retry', error)
+
             await enqueueProvenanceRebuild(provenancePayload)
         }
     }

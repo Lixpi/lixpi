@@ -67,16 +67,27 @@ const outputSchemaSource: ResourceSource = {
     name: 'Character Creator Output Schema',
 }
 
-export async function seedCharacterCreatorTool(
+export const seedCharacterCreatorTool = async (
     context: CapabilityPackageSeedContext,
     storage: CharacterCreatorCapabilityStorage,
     storageOwnerId = 'system',
-): Promise<void> {
-    const inputSchema = await storeToolResource(storage, storageOwnerId, inputSchemaSource)
-    const outputSchema = await storeToolResource(storage, storageOwnerId, outputSchemaSource)
+): Promise<void> => {
+    const inputSchema = await storeToolResource(
+        storage,
+        storageOwnerId,
+        inputSchemaSource,
+    )
+    const outputSchema = await storeToolResource(
+        storage,
+        storageOwnerId,
+        outputSchemaSource,
+    )
     await storage.seedBuiltInCapability({
         allowedActions: context.allowedActions,
-        manifest: buildCharacterCreatorManifest({ inputSchema, outputSchema }),
+        manifest: buildCharacterCreatorManifest({
+            inputSchema,
+            outputSchema,
+        }),
         summary: 'Plans configurable 3-to-10-shot character sheets with progressive results and no automatic retries.',
         tags: ['character', 'image', 'turnaround', 'global'],
         parentModuleId: context.parentModuleId,
@@ -96,9 +107,21 @@ export function buildCharacterCreatorManifest(resources: {
         name: 'Character Creator',
         description: 'Use for a request to create, design, or develop a character sheet. It uses a required three-shot identity-and-turnaround plan and accepts 3 to 10 user-prioritized shots. Every shot runs once and the final sheet contains imagery only.',
         references: [
-            { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.layoutSkill, kind: 'skill', import: ['layout'] },
-            { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.referenceFidelitySkill, kind: 'skill', import: ['reference-fidelity'] },
-            { capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.imagePromptSkill, kind: 'skill', import: ['image-prompt'] },
+            {
+                capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.layoutSkill,
+                kind: 'skill',
+                import: ['layout'],
+            },
+            {
+                capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.referenceFidelitySkill,
+                kind: 'skill',
+                import: ['reference-fidelity'],
+            },
+            {
+                capabilityId: CHARACTER_CREATOR_CAPABILITY_IDS.imagePromptSkill,
+                kind: 'skill',
+                import: ['image-prompt'],
+            },
         ],
         resources: [resources.inputSchema, resources.outputSchema],
         tool: {
@@ -121,8 +144,14 @@ export function buildCharacterCreatorManifest(resources: {
                         action: 'character.validate-request',
                         dependsOn: [],
                         input: {
-                            prompt: { source: 'input', path: ['prompt'] },
-                            referenceAssetIds: { source: 'input', path: ['referenceAssetIds'] },
+                            prompt: {
+                                source: 'input',
+                                path: ['prompt'],
+                            },
+                            referenceAssetIds: {
+                                source: 'input',
+                                path: ['referenceAssetIds'],
+                            },
                         },
                         progress: {},
                     },
@@ -132,16 +161,36 @@ export function buildCharacterCreatorManifest(resources: {
                         action: 'character.build-render-plan',
                         dependsOn: ['validate-request'],
                         input: {
-                            prompt: { source: 'step', stepId: 'validate-request', path: ['prompt'] },
-                            referenceAssetIds: { source: 'step', stepId: 'validate-request', path: ['referenceAssetIds'] },
+                            prompt: {
+                                source: 'step',
+                                stepId: 'validate-request',
+                                path: ['prompt'],
+                            },
+                            referenceAssetIds: {
+                                source: 'step',
+                                stepId: 'validate-request',
+                                path: ['referenceAssetIds'],
+                            },
                         },
                         progress: {},
                     },
                 ],
                 outputs: {
-                    mediaGenerationMode: { source: 'step', stepId: 'build-render-plan', path: ['mediaGenerationMode'] },
-                    preserveUserPrompt: { source: 'step', stepId: 'build-render-plan', path: ['preserveUserPrompt'] },
-                    capabilityMediaExecutionPlan: { source: 'step', stepId: 'build-render-plan', path: ['capabilityMediaExecutionPlan'] },
+                    mediaGenerationMode: {
+                        source: 'step',
+                        stepId: 'build-render-plan',
+                        path: ['mediaGenerationMode'],
+                    },
+                    preserveUserPrompt: {
+                        source: 'step',
+                        stepId: 'build-render-plan',
+                        path: ['preserveUserPrompt'],
+                    },
+                    capabilityMediaExecutionPlan: {
+                        source: 'step',
+                        stepId: 'build-render-plan',
+                        path: ['capabilityMediaExecutionPlan'],
+                    },
                 },
             },
         },
@@ -153,7 +202,10 @@ async function storeToolResource(
     storageOwnerId: string,
     source: ResourceSource,
 ): Promise<CapabilityResourceRef> {
-    const bytes = await readFile(new URL(`./resources/${source.fileName}`, import.meta.url))
+    const bytes = await readFile(
+        new URL(`./resources/${source.fileName}`, import.meta.url),
+    )
+
     return await storage.storeResource({
         storageOwnerId,
         resourceId: source.resourceId,

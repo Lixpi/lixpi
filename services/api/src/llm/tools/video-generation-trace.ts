@@ -74,26 +74,34 @@ export const VIDEO_MODEL_PROFILES: Record<VideoModelProfileName, VideoModelProfi
 // non-Seedance model.
 export const getVideoModelProfile = (state: ProviderState): VideoModelProfile => {
     const modelVersion = state.videoModelVersion ?? ''
-    if (/seedance/i.test(modelVersion)) return VIDEO_MODEL_PROFILES.seedance
+
+    if (/seedance/i.test(modelVersion))
+        return VIDEO_MODEL_PROFILES.seedance
+
     return VIDEO_MODEL_PROFILES.veo
 }
 
-const buildInputModeDirection = (state: ProviderState, profile: VideoModelProfile): string => {
-    if (state.videoSourceForExtension) {
+const buildInputModeDirection = (
+    state: ProviderState,
+    profile: VideoModelProfile,
+): string => {
+    if (state.videoSourceForExtension)
         return 'EXTENSION CONTINUITY: continue from the final second of the source video. Preserve the existing motion direction, camera continuity, subject identity, lighting, and spatial layout. Do not restart the scene or return to the opening composition.'
-    }
 
     if (state.videoFirstFrameImage) {
         const hasStopFrame = !!(state.videoReferenceImages && state.videoReferenceImages.length > 0)
-        if (hasStopFrame) {
+
+        if (hasStopFrame)
             return 'FIRST-LAST-FRAME DIRECTION: the first attached image is the start frame and the second is the end frame; both define the subject, composition, scene, color palette, and visual style. Generate a smooth, physically coherent transition from the start frame to the end frame, focusing on the motion, environmental animation, and lighting changes that bridge the two frames.'
-        }
+
         return 'IMAGE-TO-VIDEO DIRECTION: the attached image is the first frame and already defines the subject, composition, scene, color palette, and visual style. Preserve that starting frame and focus on motion, environmental animation, and lighting changes.'
     }
 
-    if (state.videoReferenceImages && state.videoReferenceImages.length > 0) {
+    if (
+        state.videoReferenceImages
+        && state.videoReferenceImages.length > 0
+    )
         return profile.referenceImageDirection
-    }
 
     return 'TEXT-TO-VIDEO DIRECTION: generate one focused short-video moment with a clear subject, coherent physical action, and consistent lighting.'
 }
@@ -106,16 +114,24 @@ const buildAudioDirection = (state: ProviderState): string => (
 
 const CAMERA_DIRECTION = 'CAMERA DIRECTION: follow any camera instructions in the user request while maintaining smooth, coherent motion.'
 
-const buildImageConditioningSafetyDirection = (state: ProviderState, profile: VideoModelProfile): string | undefined => {
-    if (!profile.imageConditioningSafetyDirection) return undefined
-    return state.videoFirstFrameImage || (state.videoReferenceImages?.length ?? 0) > 0
+const buildImageConditioningSafetyDirection = (
+    state: ProviderState,
+    profile: VideoModelProfile,
+): string | undefined => {
+    if (!profile.imageConditioningSafetyDirection)
+        return undefined
+
+    return state.videoFirstFrameImage
+        || (state.videoReferenceImages?.length ?? 0) > 0
         ? profile.imageConditioningSafetyDirection
         : undefined
 }
 
 export const buildVideoModelPrompt = (state: ProviderState): string => {
     const prompt = state.generatedVideoPrompt ?? ''
-    if (!prompt) return ''
+
+    if (!prompt)
+        return ''
 
     const profile = getVideoModelProfile(state)
     const capabilityReferenceImages = state.capabilityReferenceImages ?? []
@@ -143,7 +159,8 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
         buildInputModeDirection(state, profile),
         CAMERA_DIRECTION,
         buildAudioDirection(state),
-        hasCapabilityReferences || capabilityUsagePrompt
+        hasCapabilityReferences
+            || capabilityUsagePrompt
             ? 'MANDATORY VISUAL CAPABILITY TRANSFER FOR VIDEO: the capability reference image(s) and capability brief define a reusable visual medium or material, not optional inspiration. Transfer that medium into the moving subject itself so texture, palette, mark-making, grain, edge behavior, and material response remain visible on the subject during motion. Do not copy the capability sample subject, pose, composition, or layout.'
             : undefined,
         capabilityUsagePrompt ? `VISUAL CAPABILITY BRIEF:\n${capabilityUsagePrompt}` : undefined,
@@ -153,14 +170,25 @@ export const buildVideoModelPrompt = (state: ProviderState): string => {
     ].filter((part): part is string => typeof part === 'string' && part.length > 0).join('\n\n')
 }
 
-const shortText = (value: string | undefined, fallback: string): string => {
+const shortText = (
+    value: string | undefined,
+    fallback: string,
+): string => {
     const trimmed = value?.replace(/\s+/g, ' ').trim()
-    if (!trimmed) return fallback
+
+    if (!trimmed)
+        return fallback
+
     return trimmed.length > 80 ? `${trimmed.slice(0, 77).trim()}...` : trimmed
 }
 
-const getCandidateLabel = (candidate: MediaBranchCandidateImage | undefined, fallback: string): string => {
-    if (!candidate) return fallback
+const getCandidateLabel = (
+    candidate: MediaBranchCandidateImage | undefined,
+    fallback: string,
+): string => {
+    if (!candidate)
+        return fallback
+
     return shortText(
         candidate.visualEntitySummary
             ?? candidate.visualStyleSummary
@@ -169,41 +197,55 @@ const getCandidateLabel = (candidate: MediaBranchCandidateImage | undefined, fal
     )
 }
 
-const getTraceSafeImageUrl = (imageUrl: string, candidate?: MediaBranchCandidateImage): string => {
+const getTraceSafeImageUrl = (
+    imageUrl: string,
+    candidate?: MediaBranchCandidateImage,
+): string => {
     if (candidate?.assetId) {
         const rendition = candidate.mediaKind === 'video' ? 'representativeFrame' : 'preview'
+
         return `/api/assets/${encodeURIComponent(candidate.assetId)}/renditions/${rendition}`
     }
-    if (!imageUrl.startsWith('/api/')) return ''
+
+    if (!imageUrl.startsWith('/api/'))
+        return ''
+
     try {
         const url = new URL(imageUrl, 'http://trace.local')
         url.searchParams.delete('token')
+
         return `${url.pathname}${url.search}`
     } catch {
         return ''
     }
 }
 
-const getDecisionByCandidateId = (
-    decisions: MediaBranchVlmReferenceDecision[] | undefined,
-): Map<string, MediaBranchVlmReferenceDecision> => {
-    return new Map((decisions ?? []).map((decision) => [
-        decision.candidateId ?? (decision as { nodeId?: string }).nodeId ?? '',
-        decision,
-    ]))
+const getDecisionByCandidateId = (decisions: MediaBranchVlmReferenceDecision[] | undefined): Map<string, MediaBranchVlmReferenceDecision> => {
+    return new Map(
+        (decisions ?? []).map(
+            decision => [
+                decision.candidateId ?? (decision as { nodeId?: string }).nodeId ?? '',
+                decision,
+            ],
+        ),
+    )
 }
 
 const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const resolution = state.mediaBranchResolution
-    if (!resolution) return []
+
+    if (!resolution)
+        return []
+
     const candidatesById = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId ?? candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
     const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
     return resolution.referenceCandidateIds.map((candidateId, index) => {
         const candidate = candidatesById.get(candidateId)
         const decision = decisionsById.get(candidateId)
+
         return {
             id: `branch:${candidateId}`,
             imageUrl: getTraceSafeImageUrl(candidate?.imageUrl ?? '', candidate),
@@ -219,7 +261,11 @@ const buildBranchReferenceTrace = (state: ProviderState): ImageGenerationTraceRe
     })
 }
 
-const buildCapabilityReference = (imageUrl: string, traceImageUrl: string | undefined, index: number): ImageGenerationTraceReference => ({
+const buildCapabilityReference = (
+    imageUrl: string,
+    traceImageUrl: string | undefined,
+    index: number,
+): ImageGenerationTraceReference => ({
     id: `capability:${index + 1}`,
     imageUrl: traceImageUrl ?? getTraceSafeImageUrl(imageUrl),
     source: 'capability-reference',
@@ -230,29 +276,35 @@ const buildCapabilityReference = (imageUrl: string, traceImageUrl: string | unde
 const buildReferenceTrace = (state: ProviderState): ImageGenerationTraceReference[] => {
     const capabilityReferenceImages = state.capabilityReferenceImages ?? []
     const capabilityReferenceImageTraceUrls = state.capabilityReferenceImageTraceUrls ?? []
+
     return [
         ...buildBranchReferenceTrace(state),
-        ...capabilityReferenceImages.map((imageUrl, index) =>
-            buildCapabilityReference(
-                imageUrl,
-                capabilityReferenceImageTraceUrls[index],
-                index,
-            )
+        ...capabilityReferenceImages.map(
+            (imageUrl, index) =>
+                buildCapabilityReference(
+                    imageUrl,
+                    capabilityReferenceImageTraceUrls[index],
+                    index,
+                ),
         ),
     ]
 }
 
 const buildExcludedTrace = (state: ProviderState): ImageGenerationTraceExcludedReference[] => {
     const resolution = state.mediaBranchResolution
-    if (!resolution) return []
+
+    if (!resolution)
+        return []
+
     const candidatesById = new Map(
-        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map((candidate) => [candidate.candidateId ?? candidate.nodeId, candidate]),
+        (state.mediaBranchCandidateSnapshot?.candidates ?? []).map(candidate => [candidate.candidateId ?? candidate.nodeId, candidate]),
     )
     const decisionsById = getDecisionByCandidateId(resolution.decisions)
 
-    return resolution.excludedCandidateIds.map((candidateId) => {
+    return resolution.excludedCandidateIds.map(candidateId => {
         const candidate = candidatesById.get(candidateId)
         const decision = decisionsById.get(candidateId)
+
         return {
             candidateId,
             nodeId: candidate?.nodeId,
@@ -269,7 +321,13 @@ export const buildVideoGenerationTrace = (state: ProviderState): VideoGeneration
     const videoProvider = state.videoProviderName
     const videoModel = state.videoModelVersion
     const toolPrompt = state.generatedVideoPrompt ?? ''
-    if (!videoProvider || !videoModel || !toolPrompt) return undefined
+
+    if (
+        !videoProvider
+        || !videoModel
+        || !toolPrompt
+    )
+        return undefined
 
     const finalPrompt = buildVideoModelPrompt(state)
     const resolution = state.mediaBranchResolution

@@ -17,7 +17,10 @@ export type CanvasNodeFooterState = {
 
 export type CanvasNodeFooterConfig = CanvasNodeFooterState & {
     document?: Document
-    icons: { info: string; progress: ProgressRippleArtwork }
+    icons: {
+        info: string
+        progress: ProgressRippleArtwork
+    }
     infoLabel: string
     infoTitle?: string
     progressLabel?: string
@@ -44,7 +47,7 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
     private progressActive = false
 
     constructor(private readonly config: CanvasNodeFooterConfig) {
-        const html = this.html = createDocumentHtml(config.document ?? document)
+        const html = (this.html = createDocumentHtml(config.document ?? document))
         this.progressRipple = createProgressRippleIcon({
             document: config.document,
             artwork: config.icons.progress,
@@ -57,7 +60,10 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
                 aria-label=${config.infoLabel}
                 data-help-tooltip=${config.infoTitle ?? 'aria-label'}
             >
-                <span className="canvas-node-footer-info-icon" innerHTML=${config.icons.info}></span>
+                <span
+                    className="canvas-node-footer-info-icon"
+                    innerHTML=${config.icons.info}
+                ></span>
             </button>
         ` as HTMLButtonElement
         this.progressButton = html`
@@ -86,11 +92,21 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
         this.progressActive = state.progressActive
         this.infoButton.classList.toggle('is-selected', state.selected)
         this.progressButton.classList.toggle('is-selected', state.selected)
-        this.infoButton.setAttribute('aria-expanded', String(state.selected))
-        this.progressButton.setAttribute('aria-expanded', String(state.selected))
+        this.infoButton.setAttribute(
+            'aria-expanded',
+            String(state.selected),
+        )
+        this.progressButton.setAttribute(
+            'aria-expanded',
+            String(state.selected),
+        )
         this.progressButton.hidden = !state.progressActive
-        if (becameActive) this.progressRipple.syncActive()
-        if (!state.progressActive) this.progressRipple.reset()
+
+        if (becameActive)
+            this.progressRipple.syncActive()
+
+        if (!state.progressActive)
+            this.progressRipple.reset()
     }
 
     destroy(): void {
@@ -102,14 +118,20 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
 
     private appendSections(sections: readonly CanvasNodeFooterSection[]): void {
         const html = this.html
+
         for (const section of sections) {
             const elements = section.elements.filter((element): element is HTMLElement => Boolean(element))
-            if (elements.length === 0) continue
+
+            if (elements.length === 0)
+                continue
+
             if (section.separated) {
-                this.element.appendChild(html`
-                    <div className="canvas-node-footer-separator" aria-hidden="true"></div>
-                ` as HTMLDivElement)
+                this.element.appendChild(html`<div
+                        className="canvas-node-footer-separator"
+                        aria-hidden="true"
+                    ></div>` as HTMLDivElement)
             }
+
             this.element.append(...elements)
         }
     }
@@ -121,6 +143,4 @@ class CanvasNodeFooter implements CanvasNodeFooterInstance {
     }
 }
 
-export function createCanvasNodeFooter(config: CanvasNodeFooterConfig): CanvasNodeFooterInstance {
-    return new CanvasNodeFooter(config)
-}
+export const createCanvasNodeFooter = (config: CanvasNodeFooterConfig): CanvasNodeFooterInstance => new CanvasNodeFooter(config)

@@ -37,23 +37,49 @@ export class BranchCapabilityProgress {
         return this.threads.get(threadId)
     }
 
-    apply(threadId: string, event: CapabilityRunEvent): boolean {
+    apply(
+        threadId: string,
+        event: CapabilityRunEvent,
+    ): boolean {
         const runs = this.threads.get(threadId) ?? new Map<string, BranchCapabilityProgressRun>()
         const previous = runs.get(event.runId)
-        if (event.sequence <= (previous?.lastSequence ?? 0)) return false
+
+        if (event.sequence <= (previous?.lastSequence ?? 0))
+            return false
+
         const steps = new Map(previous?.steps)
-        if (event.stepId && event.stepStatus) {
+
+        if (
+            event.stepId
+            && event.stepStatus
+        ) {
             const existing = steps.get(event.stepId)
-            steps.set(event.stepId, {
-                id: event.stepId,
-                title: event.stepTitle ?? existing?.title ?? event.stepId,
-                status: event.stepStatus,
-                summary: event.errorMessage ?? event.safeOutputSummary ?? event.safeInputSummary ?? existing?.summary,
-                ...(event.trace ?? existing?.trace ? { trace: event.trace ?? existing?.trace } : {}),
-            })
+            steps.set(
+                event.stepId,
+                {
+                    id: event.stepId,
+                    title: event.stepTitle ?? existing?.title ?? event.stepId,
+                    status: event.stepStatus,
+                    summary: event.errorMessage ?? event.safeOutputSummary ?? event.safeInputSummary ?? existing?.summary,
+                    ...(event.trace
+                        ?? existing?.trace
+                        ? { trace: event.trace ?? existing?.trace }
+                        : {}),
+                },
+            )
         }
-        runs.set(event.runId, { runId: event.runId, status: event.runStatus, lastSequence: event.sequence, steps })
+
+        runs.set(
+            event.runId,
+            {
+                runId: event.runId,
+                status: event.runStatus,
+                lastSequence: event.sequence,
+                steps,
+            },
+        )
         this.threads.set(threadId, runs)
+
         return true
     }
 
@@ -72,17 +98,30 @@ export type BranchMarkerProgressOptions = {
     responseText: string
     isReasoningReceiving: boolean
     promptHandles: ExecutionTraceHandle[]
-    reasoningModelDescriptor?: { modelId: string; modelProvider?: string }
-    mediaModelDescriptors: readonly { label: string; modelId: string }[]
+    reasoningModelDescriptor?: {
+        modelId: string
+        modelProvider?: string
+    }
+    mediaModelDescriptors: readonly {
+        label: string
+        modelId: string
+    }[]
     updatedAt: number
 }
 
-function getCapabilityRunStatus(status: CapabilityRunEvent['runStatus']): OperationProgressItem['status'] {
-    if (status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'pending') return status
+const getCapabilityRunStatus = (status: CapabilityRunEvent['runStatus']): OperationProgressItem['status'] => {
+    if (
+        status === 'completed'
+        || status === 'failed'
+        || status === 'cancelled'
+        || status === 'pending'
+    )
+        return status
+
     return 'running'
 }
 
-export function buildBranchMarkerProgress({
+export const buildBranchMarkerProgress = ({
     nodeId,
     generationRequestId,
     nodes,
@@ -95,63 +134,72 @@ export function buildBranchMarkerProgress({
     reasoningModelDescriptor,
     mediaModelDescriptors,
     updatedAt,
-}: BranchMarkerProgressOptions): MediaGenerationProgressState | null {
-    const requestNodes = nodes.filter((candidate): candidate is ImageCanvasNode | VideoCanvasNode | OperationStatusCanvasNode => (
-        candidate.nodeId !== nodeId
-        && (
-            ((candidate.type === 'image' || candidate.type === 'video')
-                && (candidate.generationProgress?.generationRequestId
-                        ?? candidate.generatedBy?.generationRequestId) === generationRequestId)
-            || (candidate.type === 'operationStatus'
-                && candidate.operation === 'media-generation'
-                && candidate.generationRequestId === generationRequestId)
-        )
-    ))
-    const mediaRequestStatuses = resolveBranchMarkerMediaRequestStatuses(requestNodes.map(candidate => (
-        candidate.type === 'operationStatus'
-            ? {
-                kind: 'operation' as const,
-                nodeId: candidate.nodeId,
-                outputNodeId: candidate.outputNodeId,
-                mediaRunId: candidate.mediaRunId,
-                status: candidate.status,
-            }
-            : {
-                kind: 'output' as const,
-                nodeId: candidate.nodeId,
-                mediaRunId: candidate.generationProgress?.mediaRunId ?? candidate.generatedBy?.mediaRunId,
-                status: candidate.generationProgress
-                    ? settleReadyMediaGenerationProgress(
-                        candidate.generationProgress,
-                        candidate.mediaGenerationPhase,
-                    ).status
-                    : candidate.mediaGenerationPhase === 'ready'
-                    ? 'completed'
-                    : undefined,
-            }
-    )))
-    if (!pending && !active && requestNodes.length === 0 && capabilityRuns.length === 0) {
-        return null
-    }
-
-    const capabilityItems: OperationProgressItem[] = capabilityRuns.map((run, index) => ({
-        id: `capability:${run.runId}`,
-        title: capabilityRuns.length === 1 ? 'Selected capability workflow' : `Capability workflow ${index + 1}`,
-        status: settleBranchMarkerProgressStatusForTerminalMedia(
-            getCapabilityRunStatus(run.status),
-            mediaRequestStatuses,
+}: BranchMarkerProgressOptions): MediaGenerationProgressState | null => {
+    const requestNodes = nodes.filter(
+        (candidate): candidate is ImageCanvasNode | VideoCanvasNode | OperationStatusCanvasNode => (
+            candidate.nodeId !== nodeId
+            && (
+                ((candidate.type === 'image' || candidate.type === 'video')
+                    && (candidate.generationProgress?.generationRequestId
+                            ?? candidate.generatedBy?.generationRequestId) === generationRequestId)
+                || (candidate.type === 'operationStatus'
+                    && candidate.operation === 'media-generation'
+                    && candidate.generationRequestId === generationRequestId)
+            )
         ),
-        children: [...run.steps.values()].map(step => ({
-            id: `capability:${run.runId}:${step.id}`,
-            title: step.title,
+    )
+    const mediaRequestStatuses = resolveBranchMarkerMediaRequestStatuses(
+        requestNodes.map(
+            candidate => (
+                candidate.type === 'operationStatus'
+                    ? {
+                        kind: 'operation' as const,
+                        nodeId: candidate.nodeId,
+                        outputNodeId: candidate.outputNodeId,
+                        mediaRunId: candidate.mediaRunId,
+                        status: candidate.status,
+                    }
+                    : {
+                        kind: 'output' as const,
+                        nodeId: candidate.nodeId,
+                        mediaRunId: candidate.generationProgress?.mediaRunId ?? candidate.generatedBy?.mediaRunId,
+                        status: candidate.generationProgress
+                            ? settleReadyMediaGenerationProgress(candidate.generationProgress, candidate.mediaGenerationPhase).status
+                            : candidate.mediaGenerationPhase === 'ready'
+                                ? 'completed'
+                                : undefined,
+                    }
+            ),
+        ),
+    )
+
+    if (
+        !pending
+        && !active
+        && requestNodes.length === 0
+        && capabilityRuns.length === 0
+    )
+        return null
+
+    const capabilityItems: OperationProgressItem[] = capabilityRuns.map(
+        (run, index) => ({
+            id: `capability:${run.runId}`,
+            title: capabilityRuns.length === 1 ? 'Selected capability workflow' : `Capability workflow ${index + 1}`,
             status: settleBranchMarkerProgressStatusForTerminalMedia(
-                step.status,
+                getCapabilityRunStatus(run.status),
                 mediaRequestStatuses,
             ),
-            ...(step.summary ? { summary: step.summary } : {}),
-            ...(step.trace ? { trace: step.trace } : {}),
-        })),
-    }))
+            children: [...run.steps.values()].map(
+                step => ({
+                    id: `capability:${run.runId}:${step.id}`,
+                    title: step.title,
+                    status: settleBranchMarkerProgressStatusForTerminalMedia(step.status, mediaRequestStatuses),
+                    ...(step.summary ? { summary: step.summary } : {}),
+                    ...(step.trace ? { trace: step.trace } : {}),
+                }),
+            ),
+        }),
+    )
     const statuses = resolveBranchMarkerGlobalProgressStatuses({
         hasReasoningResponse: Boolean(responseText),
         isReasoningReceiving,
@@ -199,8 +247,14 @@ export function buildBranchMarkerProgress({
                 traceVersion: 'execution-trace-v1',
                 ...(promptHandles.length ? { handles: promptHandles } : {}),
                 facts: [
-                    { label: 'Capability runs', value: String(capabilityRuns.length) },
-                    { label: 'References attached', value: String(promptHandles.filter(handle => handle.kind === 'media').length) },
+                    {
+                        label: 'Capability runs',
+                        value: String(capabilityRuns.length),
+                    },
+                    {
+                        label: 'References attached',
+                        value: String(promptHandles.filter(handle => handle.kind === 'media').length),
+                    },
                 ],
             },
             ...(capabilityItems.length ? { children: capabilityItems } : {}),
@@ -212,11 +266,16 @@ export function buildBranchMarkerProgress({
             trace: {
                 traceVersion: 'execution-trace-v1',
                 facts: [
-                    { label: 'Media runs', value: String(requestNodes.length) },
-                    ...mediaModelDescriptors.map(descriptor => ({
-                        label: `${descriptor.label} model`,
-                        value: descriptor.modelId,
-                    })),
+                    {
+                        label: 'Media runs',
+                        value: String(requestNodes.length),
+                    },
+                    ...mediaModelDescriptors.map(
+                        descriptor => ({
+                            label: `${descriptor.label} model`,
+                            value: descriptor.modelId,
+                        }),
+                    ),
                 ],
             },
         },
@@ -224,13 +283,22 @@ export function buildBranchMarkerProgress({
 
     return {
         generationRequestId,
-        status: active || pending ? 'running' : 'completed',
-        message: active || pending ? 'Preparing this branch.' : 'Branch preparation completed.',
+        status: active
+            || pending
+            ? 'running'
+            : 'completed',
+        message: active
+            || pending
+            ? 'Preparing this branch.'
+            : 'Branch preparation completed.',
         progress: {
             phase: 'preparing',
             completedSteps: items.filter(item => item.status === 'completed').length,
             totalSteps: items.length,
-            message: active || pending ? 'Preparing this branch.' : 'Branch preparation completed.',
+            message: active
+                || pending
+                ? 'Preparing this branch.'
+                : 'Branch preparation completed.',
             items,
         },
         updatedAt,

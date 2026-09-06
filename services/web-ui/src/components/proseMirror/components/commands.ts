@@ -4,7 +4,10 @@ import {
     type Command,
 } from 'prosemirror-state'
 
-export const insertAiChatThread: Command = (state, dispatch) => {
+export const insertAiChatThread: Command = (
+    state,
+    dispatch,
+) => {
     const attrs = {
         threadId: uuidv4(),
         status: 'active',
@@ -14,6 +17,7 @@ export const insertAiChatThread: Command = (state, dispatch) => {
 
     if (dispatch) {
         dispatch(tr)
+
         return true
     }
 
