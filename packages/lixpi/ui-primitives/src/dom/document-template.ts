@@ -10,38 +10,86 @@ type TemplateProperties = Record<string, unknown> & {
 class DocumentTemplateBuilder {
     constructor(private readonly document: Document) {}
 
-    private buildElement = (tagName: string, properties?: TemplateProperties, ...children: unknown[]): HTMLElement => {
+    private buildElement = (
+        tagName: string,
+        properties?: TemplateProperties,
+        ...children: unknown[]
+    ): HTMLElement => {
         const element = this.document.createElement(tagName)
+
         for (const [key, value] of Object.entries(properties ?? {})) {
-            if (value === undefined || value === null || value === false) continue
-            if (key === 'class' || key === 'className') {
+            if (
+                value === undefined
+                || value === null
+                || value === false
+            )
+                continue
+
+            if (
+                key === 'class'
+                || key === 'className'
+            ) {
                 element.className = String(value)
+
                 continue
             }
-            if (key === 'data' && typeof value === 'object') {
+
+            if (
+                key === 'data'
+                && typeof value === 'object'
+            ) {
                 for (const [dataKey, dataValue] of Object.entries(value as Record<string, string | number>)) {
                     element.dataset[dataKey] = String(dataValue)
                 }
+
                 continue
             }
-            if (key === 'style' && typeof value === 'object') {
+
+            if (
+                key === 'style'
+                && typeof value === 'object'
+            ) {
                 Object.assign(element.style, value)
+
                 continue
             }
-            if (key.startsWith('on') && typeof value === 'function') {
-                element.addEventListener(key.slice(2).toLocaleLowerCase('en-US'), value as EventListener)
+
+            if (
+                key.startsWith('on')
+                && typeof value === 'function'
+            ) {
+                element.addEventListener(
+                    key.slice(2).toLocaleLowerCase('en-US'),
+                    value as EventListener,
+                )
+
                 continue
             }
-            if (key === 'textContent' || key === 'innerHTML') {
+
+            if (
+                key === 'textContent'
+                || key === 'innerHTML'
+            ) {
                 element[key] = String(value)
+
                 continue
             }
+
             element.setAttribute(key, value === true ? '' : String(value))
         }
+
         for (const child of children.flat(Infinity)) {
-            if (typeof child === 'string' || (child && typeof child === 'object' && 'nodeType' in child)) element.append(child as Node | string)
-            else if (typeof child === 'number') element.append(String(child))
+            if (
+                typeof child === 'string'
+                || (child && typeof child === 'object' && 'nodeType' in child)
+            )
+                element.append(child as Node | string)
+            else if (typeof child === 'number')
+                element.append(
+                    String(child),
+                )
         }
+
         return element
     }
 
@@ -50,6 +98,4 @@ class DocumentTemplateBuilder {
     }
 }
 
-export function createDocumentHtml(document: Document) {
-    return new DocumentTemplateBuilder(document).getTemplateFunction()
-}
+export const createDocumentHtml = (document: Document) => new DocumentTemplateBuilder(document).getTemplateFunction()

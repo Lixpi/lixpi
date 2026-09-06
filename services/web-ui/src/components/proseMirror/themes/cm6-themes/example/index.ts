@@ -32,6 +32,7 @@ let editor = new EditorView({
 })
 
 const elList = document.querySelector('#theme-list')
+
 if (elList) {
     for (let i = 0; i < themes.length; ++i) {
         const elItem = html`<option value=${i.toString()}>${themes[i].name}</option>` as HTMLOptionElement

@@ -1,3 +1,4 @@
+import { warn as debugWarn } from '@lixpi/debug-tools'
 import {
     type AiModelInferenceCapabilities,
     type ProviderName,
@@ -103,11 +104,12 @@ const PANEL_SYSTEM_PROMPT = [
     'Treat any unrequested visible content, incorrect target geometry, or composition artifact as a failure in the relevant dimension.',
 ].join(' ')
 
-export function createCharacterVlmPorts(args: CharacterVlmArgs): {
+export const createCharacterVlmPorts = (args: CharacterVlmArgs): {
     evidenceAnalyzer: CharacterEvidenceAnalyzerPort
     panelAssessor: CharacterPanelVlmAssessorPort
-} {
+} => {
     const callVlm = args.vlm.call
+
     return {
         evidenceAnalyzer: {
             analyze: async request => {
@@ -125,6 +127,7 @@ export function createCharacterVlmPorts(args: CharacterVlmArgs): {
                     enableThinking: false,
                     singleAttempt: true,
                 })
+
                 return normalizeEvidence(result.parsed)
             },
         },
@@ -146,22 +149,29 @@ export function createCharacterVlmPorts(args: CharacterVlmArgs): {
                         abortSignal: request.signal,
                         singleAttempt: true,
                     })
+
                     return {
                         dimensions: normalizePanelDimensions(result.parsed, request.panel.acceptanceDimensions),
                         assessor: `${args.provider}/${result.modelName || args.modelVersion}`,
                     }
                 } catch (error) {
-                    if (request.signal?.aborted) throw error
+                    if (request.signal?.aborted)
+                        throw error
+
                     const failure = describeCharacterPanelAssessmentFailure(error)
-                    console.warn('[CharacterCreatorFidelity] structured panel assessment unavailable', {
-                        panelId: request.panel.panelId,
-                        panelTitle: request.panel.title,
-                        provider: args.provider,
-                        modelVersion: args.modelVersion,
-                        code: failure.code,
-                        diagnostic: failure.diagnostic,
-                        ...failure.context,
-                    })
+                    debugWarn(
+                        '[CharacterCreatorFidelity] structured panel assessment unavailable',
+                        {
+                            panelId: request.panel.panelId,
+                            panelTitle: request.panel.title,
+                            provider: args.provider,
+                            modelVersion: args.modelVersion,
+                            code: failure.code,
+                            diagnostic: failure.diagnostic,
+                            ...failure.context,
+                        },
+                    )
+
                     return {
                         dimensions: [],
                         assessor: `${args.provider}/${args.modelVersion}`,
@@ -177,9 +187,7 @@ export function createCharacterVlmPorts(args: CharacterVlmArgs): {
     }
 }
 
-export function describeCharacterPanelAssessmentFailure(
-    error: unknown,
-): CharacterPanelAssessmentFailureDescription {
+export function describeCharacterPanelAssessmentFailure(error: unknown): CharacterPanelAssessmentFailureDescription {
     if (error instanceof CharacterPanelAssessmentResponseError) {
         return {
             code: error.code,
@@ -190,6 +198,7 @@ export function describeCharacterPanelAssessmentFailure(
     }
 
     const diagnostic = error instanceof Error ? error.message : String(error)
+
     if (/truncated structured output|max(?:imum)?[_ -]?tokens/iu.test(diagnostic)) {
         return {
             code: 'CHARACTER_PANEL_ASSESSMENT_RESPONSE_TRUNCATED',
@@ -197,6 +206,7 @@ export function describeCharacterPanelAssessmentFailure(
             diagnostic,
         }
     }
+
     if (/did not call tool|empty structured output|non-JSON|invalid JSON payload/iu.test(diagnostic)) {
         return {
             code: 'CHARACTER_PANEL_ASSESSMENT_STRUCTURED_OUTPUT_UNAVAILABLE',
@@ -204,6 +214,7 @@ export function describeCharacterPanelAssessmentFailure(
             diagnostic,
         }
     }
+
     if (/CHARACTER_PANEL_CORRUPT/iu.test(diagnostic)) {
         return {
             code: 'CHARACTER_PANEL_ASSESSMENT_CANDIDATE_INVALID',
@@ -211,6 +222,7 @@ export function describeCharacterPanelAssessmentFailure(
             diagnostic,
         }
     }
+
     return {
         code: 'CHARACTER_PANEL_ASSESSMENT_UNAVAILABLE',
         progressMessage: 'The evaluation service could not produce a usable score set.',
@@ -218,64 +230,74 @@ export function describeCharacterPanelAssessmentFailure(
     }
 }
 
-const buildEvidenceMessages = (
-    request: Parameters<CharacterEvidenceAnalyzerPort['analyze']>[0],
-): CharacterVlmMessage[] => {
-    const referenceAliases = new Map((request.referenceAliases ?? []).map(reference => [
-        reference.assetId,
-        reference.alias,
-    ]))
-    const panelContract = (request.panels ?? []).map(panel => ({
-        panelId: panel.panelId,
-        kind: panel.kind,
-        target: panel.target,
-        crop: panel.crop,
-    }))
+const buildEvidenceMessages = (request: Parameters<CharacterEvidenceAnalyzerPort['analyze']>[0]): CharacterVlmMessage[] => {
+    const referenceAliases = new Map(
+        (request.referenceAliases ?? []).map(
+            reference => [
+                reference.assetId,
+                reference.alias,
+            ],
+        ),
+    )
+    const panelContract = (request.panels ?? []).map(
+        panel => ({
+            panelId: panel.panelId,
+            kind: panel.kind,
+            target: panel.target,
+            crop: panel.crop,
+        }),
+    )
+
     return [{
         role: 'user',
         content: [
-            { type: 'input_text', text: `Character request: ${request.userPrompt}` },
+            {
+                type: 'input_text',
+                text: `Character request: ${request.userPrompt}`,
+            },
             {
                 type: 'input_text',
                 text: `Planned panel contract: ${JSON.stringify(panelContract)}.`,
             },
-            ...request.sources.flatMap((source, index) => [
-                {
-                    type: 'input_text',
-                    text: [
-                        `Original reference ${referenceAliases.get(source.assetId) ?? `SOURCE_${index + 1}`}.`,
-                        `Asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
-                        'This input may provide observed facts and source regions.',
-                    ].join(' '),
-                },
-                {
-                    type: 'input_image',
-                    image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
-                    detail: 'high',
-                },
-            ]),
-            ...(request.editTargets ?? []).flatMap((source, index) => [
-                {
-                    type: 'input_text',
-                    text: [
-                        `Editable prior panel ${referenceAliases.get(source.assetId) ?? `EDIT_TARGET_${index + 1}`}.`,
-                        `Panel ${source.componentId ?? 'unknown'}; asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
-                        'Use this input only to determine approved and rejected edit-target regions. Do not record it as original-source evidence.',
-                    ].join(' '),
-                },
-                {
-                    type: 'input_image',
-                    image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
-                    detail: 'high',
-                },
-            ]),
+            ...request.sources.flatMap(
+                (source, index) => [
+                    {
+                        type: 'input_text',
+                        text: [
+                            `Original reference ${referenceAliases.get(source.assetId) ?? `SOURCE_${index + 1}`}.`,
+                            `Asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
+                            'This input may provide observed facts and source regions.',
+                        ].join(' '),
+                    },
+                    {
+                        type: 'input_image',
+                        image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
+                        detail: 'high',
+                    },
+                ],
+            ),
+            ...(request.editTargets ?? []).flatMap(
+                (source, index) => [
+                    {
+                        type: 'input_text',
+                        text: [
+                            `Editable prior panel ${referenceAliases.get(source.assetId) ?? `EDIT_TARGET_${index + 1}`}.`,
+                            `Panel ${source.componentId ?? 'unknown'}; asset ${source.assetId}; pixel size ${source.width}x${source.height}.`,
+                            'Use this input only to determine approved and rejected edit-target regions. Do not record it as original-source evidence.',
+                        ].join(' '),
+                    },
+                    {
+                        type: 'input_image',
+                        image_url: `data:${source.mimeType};base64,${source.bytes.toString('base64')}`,
+                        detail: 'high',
+                    },
+                ],
+            ),
         ],
     }]
 }
 
-const buildPanelMessages = (
-    request: Parameters<CharacterPanelVlmAssessorPort['assess']>[0],
-): CharacterVlmMessage[] => [{
+const buildPanelMessages = (request: Parameters<CharacterPanelVlmAssessorPort['assess']>[0]): CharacterVlmMessage[] => [{
     role: 'user',
     content: [
         {
@@ -291,46 +313,85 @@ const buildPanelMessages = (
                 `Evidence: ${JSON.stringify(request.evidence)}`,
             ].join('\n'),
         },
-        ...request.sourceDataUrls.flatMap((imageUrl, index) => [
-            { type: 'input_text', text: `Authoritative source ${index + 1}.` },
-            { type: 'input_image', image_url: imageUrl, detail: 'high' },
-        ]),
-        ...request.capabilityReferenceDataUrls.flatMap((imageUrl, index) => [
-            { type: 'input_text', text: `Shared Capability reference ${index + 1}. Apply only according to the shared Capability instructions.` },
-            { type: 'input_image', image_url: imageUrl, detail: 'high' },
-        ]),
+        ...request.sourceDataUrls.flatMap(
+            (imageUrl, index) => [
+                {
+                    type: 'input_text',
+                    text: `Authoritative source ${index + 1}.`,
+                },
+                {
+                    type: 'input_image',
+                    image_url: imageUrl,
+                    detail: 'high',
+                },
+            ],
+        ),
+        ...request.capabilityReferenceDataUrls.flatMap(
+            (imageUrl, index) => [
+                {
+                    type: 'input_text',
+                    text: `Shared Capability reference ${index + 1}. Apply only according to the shared Capability instructions.`,
+                },
+                {
+                    type: 'input_image',
+                    image_url: imageUrl,
+                    detail: 'high',
+                },
+            ],
+        ),
         ...(request.poseReferenceDataUrl
             ? [
-                { type: 'input_text', text: 'Exact grayscale spatial template for this panel. Compare structure only; ignore its identity and design.' },
-                { type: 'input_image', image_url: request.poseReferenceDataUrl, detail: 'high' },
+                {
+                    type: 'input_text',
+                    text: 'Exact grayscale spatial template for this panel. Compare structure only; ignore its identity and design.',
+                },
+                {
+                    type: 'input_image',
+                    image_url: request.poseReferenceDataUrl,
+                    detail: 'high',
+                },
             ]
             : []),
-        { type: 'input_text', text: 'Candidate to assess.' },
-        { type: 'input_image', image_url: request.candidateDataUrl, detail: 'high' },
+        {
+            type: 'input_text',
+            text: 'Candidate to assess.',
+        },
+        {
+            type: 'input_image',
+            image_url: request.candidateDataUrl,
+            detail: 'high',
+        },
     ],
 }]
 
-const buildEvidenceSchema = (
-    panels: readonly CharacterPanelSpec[],
-): CharacterVlmJsonSchema => ({
+const buildEvidenceSchema = (panels: readonly CharacterPanelSpec[]): CharacterVlmJsonSchema => ({
     name: 'character_evidence',
     description: 'Observed and inferred character evidence from source images.',
     schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-            medium: { type: 'string', enum: ['photograph', 'illustration', 'render', 'mixed', 'unknown'] },
+            medium: {
+                type: 'string',
+                enum: ['photograph', 'illustration', 'render', 'mixed', 'unknown'],
+            },
             editTargetPolicy: {
                 type: 'string',
                 enum: ['not-present', 'preserve-panel', 'identity-only', 'discard'],
             },
             editTargetApprovedRegions: {
                 type: 'array',
-                items: { type: 'string', enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'] },
+                items: {
+                    type: 'string',
+                    enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'],
+                },
             },
             editTargetRejectedRegions: {
                 type: 'array',
-                items: { type: 'string', enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'] },
+                items: {
+                    type: 'string',
+                    enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'],
+                },
             },
             regenerationScope: {
                 type: 'string',
@@ -339,11 +400,20 @@ const buildEvidenceSchema = (
             affectedPanelIds: {
                 type: 'array',
                 items: panels.length > 0
-                    ? { type: 'string', enum: panels.map(panel => panel.panelId) }
+                    ? {
+                        type: 'string',
+                        enum: panels.map(panel => panel.panelId),
+                    }
                     : { type: 'string' },
             },
-            promptDirectives: { type: 'array', items: { type: 'string' } },
-            promptChangedFeatures: { type: 'array', items: { type: 'string' } },
+            promptDirectives: {
+                type: 'array',
+                items: { type: 'string' },
+            },
+            promptChangedFeatures: {
+                type: 'array',
+                items: { type: 'string' },
+            },
             facts: {
                 type: 'array',
                 items: {
@@ -360,7 +430,10 @@ const buildEvidenceSchema = (
                             type: 'string',
                             enum: ['assigned', 'supporting', 'unassigned'],
                         },
-                        visibility: { type: 'string', enum: ['observed', 'inferred'] },
+                        visibility: {
+                            type: 'string',
+                            enum: ['observed', 'inferred'],
+                        },
                         sourceAssetId: { type: ['string', 'null'] },
                         sourceRegion: {
                             anyOf: [
@@ -368,10 +441,22 @@ const buildEvidenceSchema = (
                                     type: 'object',
                                     additionalProperties: false,
                                     properties: {
-                                        x: { type: 'number', minimum: 0 },
-                                        y: { type: 'number', minimum: 0 },
-                                        width: { type: 'number', exclusiveMinimum: 0 },
-                                        height: { type: 'number', exclusiveMinimum: 0 },
+                                        x: {
+                                            type: 'number',
+                                            minimum: 0,
+                                        },
+                                        y: {
+                                            type: 'number',
+                                            minimum: 0,
+                                        },
+                                        width: {
+                                            type: 'number',
+                                            exclusiveMinimum: 0,
+                                        },
+                                        height: {
+                                            type: 'number',
+                                            exclusiveMinimum: 0,
+                                        },
                                     },
                                     required: ['x', 'y', 'width', 'height'],
                                 },
@@ -385,7 +470,11 @@ const buildEvidenceSchema = (
                                 enum: ['front', 'three-quarter-front', 'profile', 'three-quarter-back', 'back', 'unspecified'],
                             },
                         },
-                        confidence: { type: 'number', minimum: 0, maximum: 1 },
+                        confidence: {
+                            type: 'number',
+                            minimum: 0,
+                            maximum: 1,
+                        },
                         conflictGroupId: { type: ['string', 'null'] },
                     },
                     required: [
@@ -402,10 +491,26 @@ const buildEvidenceSchema = (
                     ],
                 },
             },
-            palette: { type: 'array', items: { type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' }, maxItems: 8 },
-            costumeNotes: { type: 'array', items: { type: 'string' } },
-            materialNotes: { type: 'array', items: { type: 'string' } },
-            distinguishingDetailNotes: { type: 'array', items: { type: 'string' } },
+            palette: {
+                type: 'array',
+                items: {
+                    type: 'string',
+                    pattern: '^#[0-9A-Fa-f]{6}$',
+                },
+                maxItems: 8,
+            },
+            costumeNotes: {
+                type: 'array',
+                items: { type: 'string' },
+            },
+            materialNotes: {
+                type: 'array',
+                items: { type: 'string' },
+            },
+            distinguishingDetailNotes: {
+                type: 'array',
+                items: { type: 'string' },
+            },
             sourceCoverage: {
                 type: 'array',
                 items: {
@@ -422,7 +527,10 @@ const buildEvidenceSchema = (
                         },
                         regions: {
                             type: 'array',
-                            items: { type: 'string', enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'] },
+                            items: {
+                                type: 'string',
+                                enum: ['face', 'body', 'outfit', 'hands', 'feet', 'prop'],
+                            },
                         },
                     },
                     required: ['sourceAssetId', 'angles', 'regions'],
@@ -463,9 +571,19 @@ const buildPanelAssessmentSchema = (dimensions: readonly string[]): CharacterVlm
                     type: 'object',
                     additionalProperties: false,
                     properties: {
-                        dimension: { type: 'string', enum: [...dimensions] },
-                        score: { type: 'number', minimum: 0, maximum: 1 },
-                        mismatchCodes: { type: 'array', items: { type: 'string' } },
+                        dimension: {
+                            type: 'string',
+                            enum: [...dimensions],
+                        },
+                        score: {
+                            type: 'number',
+                            minimum: 0,
+                            maximum: 1,
+                        },
+                        mismatchCodes: {
+                            type: 'array',
+                            items: { type: 'string' },
+                        },
                     },
                     required: ['dimension', 'score', 'mismatchCodes'],
                 },
@@ -477,9 +595,13 @@ const buildPanelAssessmentSchema = (dimensions: readonly string[]): CharacterVlm
 
 const normalizeEvidence = (value: unknown): CharacterEvidenceAnalysis => {
     const analysis = value as RawEvidenceAnalysis
-    if (!analysis || !['photograph', 'illustration', 'render', 'mixed', 'unknown'].includes(analysis.medium)) {
+
+    if (
+        !analysis
+        || !['photograph', 'illustration', 'render', 'mixed', 'unknown'].includes(analysis.medium)
+    )
         throw new Error('CHARACTER_EVIDENCE_RESPONSE_INVALID')
-    }
+
     return {
         ...analysis,
         editTargetPolicy: normalizeEditTargetPolicy(analysis.editTargetPolicy),
@@ -489,47 +611,76 @@ const normalizeEvidence = (value: unknown): CharacterEvidenceAnalysis => {
         affectedPanelIds: normalizeStringList(analysis.affectedPanelIds),
         promptDirectives: normalizeStringList(analysis.promptDirectives),
         promptChangedFeatures: normalizeStringList(analysis.promptChangedFeatures),
-        facts: analysis.facts.map(({ sourceAssetId, sourceRegion, conflictGroupId, ...fact }) => ({
-            ...fact,
-            ...(sourceAssetId ? { sourceAssetId } : {}),
-            ...(sourceRegion ? { sourceRegion } : {}),
-            ...(conflictGroupId ? { conflictGroupId } : {}),
-        })),
+        facts: analysis.facts.map(
+            ({
+                sourceAssetId,
+                sourceRegion,
+                conflictGroupId,
+                ...fact
+            }) => ({
+                ...fact,
+                ...(sourceAssetId ? { sourceAssetId } : {}),
+                ...(sourceRegion ? { sourceRegion } : {}),
+                ...(conflictGroupId ? { conflictGroupId } : {}),
+            }),
+        ),
     }
 }
 
 const normalizeEditTargetPolicy = (value: unknown): CharacterEditTargetPolicy => {
-    if (value === 'not-present' || value === 'preserve-panel' || value === 'identity-only' || value === 'discard') {
+    if (
+        value === 'not-present'
+        || value === 'preserve-panel'
+        || value === 'identity-only'
+        || value === 'discard'
+    )
         return value
-    }
+
     throw new Error('CHARACTER_EVIDENCE_EDIT_TARGET_POLICY_INVALID')
 }
 
 const normalizeEvidenceRegions = (value: unknown): CharacterEvidenceRegion[] => {
-    if (!Array.isArray(value)) return []
+    if (!Array.isArray(value))
+        return []
+
     return [
-        ...new Set(value.flatMap(region => (
-            region === 'face'
-                || region === 'body'
-                || region === 'outfit'
-                || region === 'hands'
-                || region === 'feet'
-                || region === 'prop'
-                ? [region]
-                : []
-        ))),
+        ...new Set(
+            value.flatMap(
+                region => (
+                    region === 'face'
+                        || region === 'body'
+                        || region === 'outfit'
+                        || region === 'hands'
+                        || region === 'feet'
+                        || region === 'prop'
+                        ? [region]
+                        : []
+                ),
+            ),
+        ),
     ]
 }
 
 const normalizeRegenerationScope = (value: unknown): CharacterRegenerationScope => {
-    if (value === 'full-sheet' || value === 'selected-panels') return value
+    if (
+        value === 'full-sheet'
+        || value === 'selected-panels'
+    )
+        return value
+
     throw new Error('CHARACTER_EVIDENCE_REGENERATION_SCOPE_INVALID')
 }
 
-const normalizeStringList = (value: unknown): string[] =>
-    Array.isArray(value)
-        ? [...new Set(value.flatMap(item => typeof item === 'string' && item.trim() ? [item.trim()] : []))]
-        : []
+const normalizeStringList = (value: unknown): string[] => Array.isArray(value)
+    ? [...new Set(
+        value.flatMap(
+            item => typeof item === 'string'
+                && item.trim()
+                ? [item.trim()]
+                : [],
+        ),
+    )]
+    : []
 
 const normalizePanelDimensions = (
     value: unknown,
@@ -538,6 +689,7 @@ const normalizePanelDimensions = (
     const response = isRecord(value) ? value : undefined
     const rawDimensions = response?.dimensions
     const dimensions = coercePanelDimensionCollection(rawDimensions, expectedDimensions)
+
     if (!dimensions) {
         throw new CharacterPanelAssessmentResponseError(
             'The evaluator returned no usable per-dimension score list.',
@@ -561,26 +713,32 @@ const normalizePanelDimensions = (
     dimensions.forEach((dimension, index) => {
         if (!isRecord(dimension)) {
             invalidEntries.push(`entry ${index + 1} is ${describeValueType(dimension)}`)
+
             return
         }
-        const dimensionName = normalizeRequestedDimensionName(
-            dimension.dimension,
-            expectedDimensions,
-        )
+
+        const dimensionName = normalizeRequestedDimensionName(dimension.dimension, expectedDimensions)
         const score = normalizePanelDimensionScore(dimension.score)
         const mismatchCodes = normalizeMismatchCodes(dimension.mismatchCodes)
+
         if (!dimensionName) {
             invalidEntries.push(`entry ${index + 1}: dimension`)
+
             return
         }
+
         if (score === undefined) {
             invalidEntries.push(`${dimensionName}: score`)
+
             return
         }
+
         if (!mismatchCodes) {
             invalidEntries.push(`${dimensionName}: mismatchCodes`)
+
             return
         }
+
         normalizedDimensions.push({
             dimension: dimensionName,
             score,
@@ -604,16 +762,26 @@ const normalizePanelDimensions = (
     const missingDimensions = expectedDimensions.filter(dimension => !receivedDimensionNames.includes(dimension))
     const unexpectedDimensions = receivedDimensionNames.filter(dimension => !expectedDimensions.includes(dimension))
     const duplicateDimensions = [
-        ...new Set(receivedDimensionNames.filter((dimension, index) => (
-            receivedDimensionNames.indexOf(dimension) !== index
-        ))),
+        ...new Set(
+            receivedDimensionNames.filter(
+                (dimension, index) => (
+                    receivedDimensionNames.indexOf(dimension) !== index
+                ),
+            ),
+        ),
     ]
-    if (missingDimensions.length > 0 || unexpectedDimensions.length > 0 || duplicateDimensions.length > 0) {
+
+    if (
+        missingDimensions.length > 0
+        || unexpectedDimensions.length > 0
+        || duplicateDimensions.length > 0
+    ) {
         const issues = [
             missingDimensions.length > 0 ? `missing ${missingDimensions.join(', ')}` : '',
             unexpectedDimensions.length > 0 ? `unexpected ${unexpectedDimensions.join(', ')}` : '',
             duplicateDimensions.length > 0 ? `duplicated ${duplicateDimensions.join(', ')}` : '',
         ].filter(Boolean)
+
         throw new CharacterPanelAssessmentResponseError(
             `The evaluator returned an incomplete score set (${issues.join('; ')}).`,
             `Dimension set mismatch: ${issues.join('; ')}.`,
@@ -627,59 +795,91 @@ const normalizePanelDimensions = (
         )
     }
 
-    const byDimension = new Map(normalizedDimensions.map(dimension => [dimension.dimension, dimension]))
+    const byDimension = new Map(
+        normalizedDimensions.map(dimension => [dimension.dimension, dimension]),
+    )
+
     return expectedDimensions.map(dimension => byDimension.get(dimension)!)
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-    typeof value === 'object' && value !== null && !Array.isArray(value)
-)
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const coercePanelDimensionCollection = (
     value: unknown,
     expectedDimensions: readonly string[],
 ): unknown[] | undefined => {
-    if (Array.isArray(value)) return value
+    if (Array.isArray(value))
+        return value
+
     if (typeof value === 'string') {
         try {
-            return coercePanelDimensionCollection(JSON.parse(value), expectedDimensions)
+            return coercePanelDimensionCollection(
+                JSON.parse(value),
+                expectedDimensions,
+            )
         } catch {
             return undefined
         }
     }
-    if (!isRecord(value)) return undefined
+
+    if (!isRecord(value))
+        return undefined
+
     for (const candidateKey of ['items', 'scores', 'values', 'dimensions']) {
         const candidate = value[candidateKey]
+
         if (candidate !== value) {
             const nested = coercePanelDimensionCollection(candidate, expectedDimensions)
-            if (nested) return nested
+
+            if (nested)
+                return nested
         }
     }
-    const expectedByNormalizedName = new Map(expectedDimensions.map(dimension => [
-        normalizeDimensionToken(dimension),
-        dimension,
-    ]))
+
+    const expectedByNormalizedName = new Map(
+        expectedDimensions.map(
+            dimension => [
+                normalizeDimensionToken(dimension),
+                dimension,
+            ],
+        ),
+    )
     const entries = Object.entries(value).flatMap(([dimensionKey, dimensionValue]) => {
-        const expectedDimension = expectedByNormalizedName.get(normalizeDimensionToken(dimensionKey))
+        const expectedDimension = expectedByNormalizedName.get(
+            normalizeDimensionToken(dimensionKey),
+        )
+
         if (
-            !expectedDimension || (!isRecord(dimensionValue)
+            !expectedDimension
+            || (!isRecord(dimensionValue)
                 && typeof dimensionValue !== 'number'
                 && typeof dimensionValue !== 'string')
-        ) return []
+        )
+            return []
+
         const normalizedValue = isRecord(dimensionValue)
             ? dimensionValue
-            : { score: dimensionValue, mismatchCodes: [] }
+            : {
+                score: dimensionValue,
+                mismatchCodes: [],
+            }
         const suppliedDimension = isRecord(dimensionValue)
             ? dimensionValue.dimension
             : undefined
+
         return [{
             ...normalizedValue,
             dimension: suppliedDimension ?? expectedDimension,
         }]
     })
-    if (entries.length > 0) return entries
+
+    if (entries.length > 0)
+        return entries
+
     const recordValues = Object.values(value)
-    return recordValues.length > 0 && recordValues.every(isRecord)
+
+    return recordValues.length > 0
+        && recordValues.every(isRecord)
         ? recordValues
         : undefined
 }
@@ -689,24 +889,29 @@ const summarizeDimensionPayloadShape = (value: unknown): Readonly<Record<string,
         return {
             kind: 'array',
             entryCount: value.length,
-            entryShapes: value.slice(0, 12).map(entry =>
-                isRecord(entry)
-                    ? Object.keys(entry)
-                    : [describeValueType(entry)]
+            entryShapes: value.slice(0, 12).map(
+                entry =>
+                    isRecord(entry)
+                        ? Object.keys(entry)
+                        : [describeValueType(entry)],
             ),
         }
     }
+
     if (isRecord(value)) {
         return {
             kind: 'object',
             entryCount: Object.keys(value).length,
-            entries: Object.entries(value).slice(0, 12).map(([key, entry]) => ({
-                key,
-                type: describeValueType(entry),
-                fields: isRecord(entry) ? Object.keys(entry) : [],
-            })),
+            entries: Object.entries(value).slice(0, 12).map(
+                ([key, entry]) => ({
+                    key,
+                    type: describeValueType(entry),
+                    fields: isRecord(entry) ? Object.keys(entry) : [],
+                }),
+            ),
         }
     }
+
     return { kind: describeValueType(value) }
 }
 
@@ -714,8 +919,11 @@ const normalizeRequestedDimensionName = (
     value: unknown,
     expectedDimensions: readonly string[],
 ): string => {
-    if (typeof value !== 'string') return ''
+    if (typeof value !== 'string')
+        return ''
+
     const normalized = normalizeDimensionToken(value)
+
     return expectedDimensions.find(dimension => normalizeDimensionToken(dimension) === normalized)
         ?? value.trim()
 }
@@ -728,24 +936,46 @@ const normalizeDimensionToken = (value: string): string =>
         .replace(/^-|-$/gu, '')
 
 const normalizePanelDimensionScore = (value: unknown): number | undefined => {
-    if (typeof value === 'number') {
-        return Number.isFinite(value) && value >= 0 && value <= 1 ? value : undefined
-    }
-    if (typeof value !== 'string') return undefined
+    if (typeof value === 'number')
+        return Number.isFinite(value)
+            && value >= 0
+            && value <= 1
+            ? value
+            : undefined
+
+    if (typeof value !== 'string')
+        return undefined
+
     const normalized = value.trim()
     const percent = /^(\d+(?:\.\d+)?)%$/u.exec(normalized)
     const parsed = percent?.[1] ? Number(percent[1]) / 100 : Number(normalized)
-    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : undefined
+
+    return Number.isFinite(parsed)
+        && parsed >= 0
+        && parsed <= 1
+        ? parsed
+        : undefined
 }
 
 const normalizeMismatchCodes = (value: unknown): string[] | undefined => {
-    if (typeof value === 'string') return value.trim() ? [value.trim()] : []
-    if (!Array.isArray(value) || value.some(code => typeof code !== 'string')) return undefined
+    if (typeof value === 'string')
+        return value.trim() ? [value.trim()] : []
+
+    if (
+        !Array.isArray(value)
+        || value.some(code => typeof code !== 'string')
+    )
+        return undefined
+
     return value.map(code => code.trim()).filter(Boolean)
 }
 
 const describeValueType = (value: unknown): string => {
-    if (Array.isArray(value)) return 'array'
-    if (value === null) return 'null'
+    if (Array.isArray(value))
+        return 'array'
+
+    if (value === null)
+        return 'null'
+
     return typeof value
 }

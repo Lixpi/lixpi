@@ -7,7 +7,10 @@ import {
 
 export const hashPrompt = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16)
 
-export const previewPrompt = (text: string, maxChars = 800): string => text.length > maxChars ? `${text.slice(0, maxChars)}…` : text
+export const previewPrompt = (
+    text: string,
+    maxChars = 800,
+): string => (text.length > maxChars ? `${text.slice(0, maxChars)}…` : text)
 
 export const createStageLogger = (args: {
     styleExtractionRunId: string
@@ -17,16 +20,25 @@ export const createStageLogger = (args: {
     const { styleExtractionRunId } = args
 
     const emit = (event: StageTraceEvent): void => {
-        info(`[style-extraction:${styleExtractionRunId}] stage=${event.stage} model=${event.modelName ?? '-'} status=${event.status} duration=${event.durationMs}ms ${event.outputSummary ?? ''}`)
+        info(
+            `[style-extraction:${styleExtractionRunId}] stage=${event.stage} model=${event.modelName ?? '-'} status=${event.status} duration=${event.durationMs}ms ${event.outputSummary ?? ''}`,
+        )
         args.onTrace?.(event)
     }
 
     const chunk = (text: string): void => {
-        if (!text) return
+        if (!text)
+            return
+
         args.onChunk?.(text)
     }
 
-    const span: StageLogger['span'] = async (stage, modelName, body, opts) => {
+    const span: StageLogger['span'] = async (
+        stage,
+        modelName,
+        body,
+        opts,
+    ) => {
         const startedAt = Date.now()
         // Emit an in-flight marker before the terminal stage event.
         emit({
@@ -41,6 +53,7 @@ export const createStageLogger = (args: {
             status: 'running',
             inputSummary: opts?.inputSummary,
         })
+
         try {
             const result = await body()
             const finishedAt = Date.now()
@@ -57,6 +70,7 @@ export const createStageLogger = (args: {
                 inputSummary: opts?.inputSummary,
                 outputSummary: opts?.outputSummarizer ? opts.outputSummarizer(result) : undefined,
             })
+
             return result
         } catch (e: any) {
             const finishedAt = Date.now()
@@ -74,9 +88,15 @@ export const createStageLogger = (args: {
                 errorMessage,
                 inputSummary: opts?.inputSummary,
             })
+
             throw e
         }
     }
 
-    return { styleExtractionRunId, emit, chunk, span }
+    return {
+        styleExtractionRunId,
+        emit,
+        chunk,
+        span,
+    }
 }

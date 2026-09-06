@@ -29,7 +29,10 @@ export type EngineNode<Data = unknown> = CanvasGeometryNode & {
     ports: readonly CanvasPort[]
 }
 
-export type EdgeEndpoint = { nodeId: string; portId: string }
+export type EdgeEndpoint = {
+    nodeId: string
+    portId: string
+}
 export type ConnectorPathType = 'bezier' | 'straight' | 'smoothstep' | 'horizontal-bezier' | 'orthogonal'
 
 export type EngineEdge<Data = unknown> = {
@@ -55,11 +58,36 @@ export type NodeGeometryChange = {
 }
 
 export type CanvasIntent =
-    | { kind: 'geometry'; sceneKey: string; revision: string; changes: readonly NodeGeometryChange[] }
-    | { kind: 'connect'; sceneKey: string; source: EdgeEndpoint; target: EdgeEndpoint }
-    | { kind: 'reconnect'; sceneKey: string; edgeId: string; source: EdgeEndpoint; target: EdgeEndpoint }
-    | { kind: 'delete'; sceneKey: string; nodeIds: readonly string[]; edgeIds: readonly string[] }
-    | { kind: 'viewport'; sceneKey: string; viewport: CanvasViewport }
+    | {
+        kind: 'geometry'
+        sceneKey: string
+        revision: string
+        changes: readonly NodeGeometryChange[]
+    }
+    | {
+        kind: 'connect'
+        sceneKey: string
+        source: EdgeEndpoint
+        target: EdgeEndpoint
+    }
+    | {
+        kind: 'reconnect'
+        sceneKey: string
+        edgeId: string
+        source: EdgeEndpoint
+        target: EdgeEndpoint
+    }
+    | {
+        kind: 'delete'
+        sceneKey: string
+        nodeIds: readonly string[]
+        edgeIds: readonly string[]
+    }
+    | {
+        kind: 'viewport'
+        sceneKey: string
+        viewport: CanvasViewport
+    }
 
 export type NodeGeometryPolicy<Data = unknown> = {
     measure: (node: EngineNode<Data>) => {
@@ -69,7 +97,11 @@ export type NodeGeometryPolicy<Data = unknown> = {
         collisionBounds: CanvasEngineRect
         connectorBounds: CanvasEngineRect
     }
-    resize: { min: CanvasEngineSize; max?: CanvasEngineSize; preserveAspectRatio: boolean }
+    resize: {
+        min: CanvasEngineSize
+        max?: CanvasEngineSize
+        preserveAspectRatio: boolean
+    }
     movable: boolean
     collisionGroup?: string
 }

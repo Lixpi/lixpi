@@ -44,7 +44,10 @@ const SOCKET_ERROR_CODES = new Set([
 // User-initiated cancellation must never be retried, whatever layer reports it.
 // Note that AWS/Smithy classifies AbortError as transient and retries it; that
 // is wrong for us, because here an abort is always the user stopping the run.
-const ABORT_ERROR_NAMES = new Set(['AbortError', 'APIUserAbortError'])
+const ABORT_ERROR_NAMES = new Set([
+    'AbortError',
+    'APIUserAbortError',
+])
 
 // Connection-failure class names shared by every Stainless-generated SDK, which
 // is what both the OpenAI and the Anthropic clients are — the classes and their
@@ -69,26 +72,50 @@ export type TransportRetryAttempt = {
     markPublished: () => void
 }
 
-const walkCauses = (error: unknown, predicate: (candidate: Error) => boolean): boolean => {
+const walkCauses = (
+    error: unknown,
+    predicate: (candidate: Error) => boolean,
+): boolean => {
     let current: unknown = error
-    for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
-        if (predicate(current)) return true
+
+    for (
+        let depth = 0;
+        depth < 5
+        && current instanceof Error;
+        depth++
+    ) {
+        if (predicate(current))
+            return true
+
         current = current.cause
     }
+
     return false
 }
 
-export const isTransportFault = (error: unknown, faultNames: readonly string[] = []): boolean => {
-    if (walkCauses(error, candidate => ABORT_ERROR_NAMES.has(candidate.name))) return false
+export const isTransportFault = (
+    error: unknown,
+    faultNames: readonly string[] = [],
+): boolean => {
+    if (walkCauses(error, candidate => ABORT_ERROR_NAMES.has(candidate.name)))
+        return false
+
     const providerNames = new Set(faultNames)
+
     return walkCauses(error, candidate => {
-        if (providerNames.has(candidate.name)) return true
+        if (providerNames.has(candidate.name))
+            return true
+
         const code = (candidate as { code?: unknown }).code
+
         return typeof code === 'string' && SOCKET_ERROR_CODES.has(code)
     })
 }
 
-const sleep = async (delayMs: number, signal?: AbortSignal): Promise<void> => {
+const sleep = async (
+    delayMs: number,
+    signal?: AbortSignal,
+): Promise<void> => {
     await new Promise<void>((resolve, reject) => {
         const onAbort = () => {
             clearTimeout(timer)
@@ -98,7 +125,11 @@ const sleep = async (delayMs: number, signal?: AbortSignal): Promise<void> => {
             signal?.removeEventListener('abort', onAbort)
             resolve()
         }, delayMs)
-        signal?.addEventListener('abort', onAbort, { once: true })
+        signal?.addEventListener(
+            'abort',
+            onAbort,
+            { once: true },
+        )
     })
 }
 
@@ -117,25 +148,33 @@ export const withTransportRetry = async <T>(args: {
 }): Promise<T> => {
     const deadline = Date.now() + RETRY_BUDGET_MS
     let attemptsMade = 0
+
     for (;;) {
         let published = false
+
         try {
             return await args.attempt({
-                markPublished: () => {
-                    published = true
-                },
+                markPublished: () => void (published = true),
             })
         } catch (error) {
             attemptsMade += 1
+
             if (
                 published
                 || args.signal?.aborted
                 || args.shouldStop?.()
                 || !isTransportFault(error, args.faultNames)
-            ) throw error
-            const delayMs = Math.min(RETRY_BASE_DELAY_MS * (2 ** (attemptsMade - 1)), RETRY_MAX_DELAY_MS)
-            if (Date.now() + delayMs >= deadline) throw error
-            warn(`[${args.label}] provider transport fault on attempt ${attemptsMade}; reconnecting in ${delayMs}ms: ${(error as Error)?.message ?? error}`)
+            )
+                throw error
+
+            const delayMs = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attemptsMade - 1), RETRY_MAX_DELAY_MS)
+
+            if (Date.now() + delayMs >= deadline)
+                throw error
+
+            warn(
+                `[${args.label}] provider transport fault on attempt ${attemptsMade}; reconnecting in ${delayMs}ms: ${(error as Error)?.message ?? error}`,
+            )
             await sleep(delayMs, args.signal)
         }
     }

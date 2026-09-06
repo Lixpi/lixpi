@@ -27,7 +27,7 @@ export type CharacterSheetComposition = {
     issues: string[]
 }
 
-export async function composeCharacterSheet(args: {
+export const composeCharacterSheet = async (args: {
     panelSpecs: readonly CharacterPanelSpec[]
     panels: readonly CharacterPanelImage[]
     evidence: CharacterEvidenceProfile
@@ -35,25 +35,36 @@ export async function composeCharacterSheet(args: {
     unavailablePanelIds?: ReadonlySet<string>
     additionalIssues?: readonly string[]
     final?: boolean
-}): Promise<CharacterSheetComposition> {
-    if (args.panels.length === 0) throw new Error('CHARACTER_SHEET_NO_RENDERED_PANELS')
+}): Promise<CharacterSheetComposition> => {
+    if (args.panels.length === 0)
+        throw new Error('CHARACTER_SHEET_NO_RENDERED_PANELS')
+
     const layout = buildCharacterSheetLayout(args.panelSpecs)
-    const panelsById = new Map(args.panels.map(panel => [panel.panelId, panel.bytes]))
+    const panelsById = new Map(
+        args.panels.map(panel => [panel.panelId, panel.bytes]),
+    )
     const missing = args.panelSpecs.filter(panel => !panelsById.has(panel.panelId)).map(panel => panel.panelId)
     const comparisonIssues = args.panelSpecs.flatMap(panel => {
         const assessment = args.assessments?.get(panel.panelId)
-        if (!panelsById.has(panel.panelId)) return []
-        if (!assessment) return args.final ? [`${panel.title}: comparison unavailable`] : []
-        if (assessment.dimensions.length === 0) return [`${panel.title}: comparison unavailable`]
-        if (assessment.failedDimensions.length === 0) return []
+
+        if (!panelsById.has(panel.panelId))
+            return []
+
+        if (!assessment)
+            return args.final ? [`${panel.title}: comparison unavailable`] : []
+
+        if (assessment.dimensions.length === 0)
+            return [`${panel.title}: comparison unavailable`]
+
+        if (assessment.failedDimensions.length === 0)
+            return []
+
         return [`${panel.title}: ${assessment.failedDimensions.join(', ')}`]
     })
     const unavailablePanelIds = args.unavailablePanelIds ?? new Set<string>()
     const issues = [
         ...(args.additionalIssues ?? []),
-        ...missing
-            .filter(panelId => args.final || unavailablePanelIds.has(panelId))
-            .map(panelId => `${panelId}: unavailable`),
+        ...missing.filter(panelId => args.final || unavailablePanelIds.has(panelId)).map(panelId => `${panelId}: unavailable`),
         ...comparisonIssues,
     ]
     const sourceCoverageNote = buildCharacterSourceCoverageNote(args.evidence)
@@ -65,30 +76,55 @@ export async function composeCharacterSheet(args: {
             background: '#ffffff',
         },
     }).png().toBuffer()
-    const composites: { input: Buffer; left: number; top: number }[] = []
+    const composites: {
+        input: Buffer
+        left: number
+        top: number
+    }[] = []
+
     for (const cell of layout.cells) {
         const input = panelsById.get(cell.sourcePanelId)
-        if (!input) continue
+
+        if (!input)
+            continue
+
         const panel = args.panelSpecs.find(candidate => candidate.panelId === cell.sourcePanelId)
-        if (!panel) continue
+
+        if (!panel)
+            continue
+
         const normalized = await normalizePanelForCell(
             input,
             cell.width,
             cell.height,
             panel.crop,
         )
-        composites.push({ input: normalized, left: cell.x, top: cell.y })
+        composites.push({
+            input: normalized,
+            left: cell.x,
+            top: cell.y,
+        })
     }
+
     const bytes = await sharp(base)
         .composite(composites)
         .removeAlpha()
         .toColourspace('srgb')
-        .png({ compressionLevel: 9, adaptiveFiltering: false, palette: false })
+        .png({
+            compressionLevel: 9,
+            adaptiveFiltering: false,
+            palette: false,
+        })
         .toBuffer()
     const metadata = await sharp(bytes).metadata()
-    if (metadata.format !== 'png' || metadata.width !== 3840 || metadata.height !== 2560) {
+
+    if (
+        metadata.format !== 'png'
+        || metadata.width !== 3840
+        || metadata.height !== 2560
+    )
         throw new Error('CHARACTER_SHEET_COMPOSITION_INVALID')
-    }
+
     return {
         bytes,
         sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -107,17 +143,35 @@ const normalizePanelForCell = async (
 ): Promise<Buffer> => {
     try {
         const metadata = await sharp(bytes).metadata()
-        if (!metadata.width || !metadata.height) throw new Error('dimensions missing')
+
+        if (
+            !metadata.width
+            || !metadata.height
+        )
+            throw new Error('dimensions missing')
+
         const horizontalPaddingRatio = crop === 'prop' ? 0.07 : 0.04
-        const verticalPaddingRatio = crop === 'full-body' || crop === 'action' ? 0.035 : 0.04
-        const horizontalPadding = Math.max(1, Math.round(width * horizontalPaddingRatio))
-        const verticalPadding = Math.max(1, Math.round(height * verticalPaddingRatio))
+        const verticalPaddingRatio = crop === 'full-body'
+            || crop === 'action'
+            ? 0.035
+            : 0.04
+        const horizontalPadding = Math.max(
+            1,
+            Math.round(width * horizontalPaddingRatio),
+        )
+        const verticalPadding = Math.max(
+            1,
+            Math.round(height * verticalPaddingRatio),
+        )
         const contentWidth = width - horizontalPadding * 2
         const contentHeight = height - verticalPadding * 2
         const normalized = await sharp(bytes)
             .rotate()
             .flatten({ background: '#ffffff' })
-            .trim({ background: '#ffffff', threshold: 12 })
+            .trim({
+                background: '#ffffff',
+                threshold: 12,
+            })
             .resize({
                 width: contentWidth,
                 height: contentHeight,
@@ -128,8 +182,13 @@ const normalizePanelForCell = async (
             })
             .removeAlpha()
             .toColourspace('srgb')
-            .png({ compressionLevel: 9, adaptiveFiltering: false, palette: false })
+            .png({
+                compressionLevel: 9,
+                adaptiveFiltering: false,
+                palette: false,
+            })
             .toBuffer()
+
         return await sharp(normalized)
             .extend({
                 top: verticalPadding,
@@ -138,7 +197,11 @@ const normalizePanelForCell = async (
                 right: width - contentWidth - horizontalPadding,
                 background: '#ffffff',
             })
-            .png({ compressionLevel: 9, adaptiveFiltering: false, palette: false })
+            .png({
+                compressionLevel: 9,
+                adaptiveFiltering: false,
+                palette: false,
+            })
             .toBuffer()
     } catch (error) {
         throw new Error(`CHARACTER_SHEET_PANEL_CORRUPT:${(error as Error).message}`)

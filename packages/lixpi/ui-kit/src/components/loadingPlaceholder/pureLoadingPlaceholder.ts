@@ -7,8 +7,15 @@ type PlaceholderConfig = {
     className?: string
 }
 
-export type LoadingPlaceholderConfig = PlaceholderConfig & { size?: 'small' | 'medium' | 'large'; label?: string }
-export type ErrorPlaceholderConfig = PlaceholderConfig & { message?: string; retryLabel?: string; onRetry?: () => void }
+export type LoadingPlaceholderConfig = PlaceholderConfig & {
+    size?: 'small' | 'medium' | 'large'
+    label?: string
+}
+export type ErrorPlaceholderConfig = PlaceholderConfig & {
+    message?: string
+    retryLabel?: string
+    onRetry?: () => void
+}
 
 export type LoadingPlaceholderInstance = {
     readonly dom: HTMLElement
@@ -19,18 +26,26 @@ export type LoadingPlaceholderInstance = {
 
 export type ErrorPlaceholderInstance = LoadingPlaceholderInstance & { setMessage: (message: string) => void }
 
-function classes(config: PlaceholderConfig): string {
-    return `loading-placeholder ${config.withOverlay !== false ? 'with-overlay' : ''} theme-${config.theme ?? 'light'} ${config.className ?? ''}`
-}
+const classes = (config: PlaceholderConfig): string =>
+    `loading-placeholder ${config.withOverlay !== false ? 'with-overlay' : ''} theme-${config.theme ?? 'light'} ${config.className ?? ''}`
 
 class LoadingPlaceholder implements LoadingPlaceholderInstance {
     readonly dom: HTMLElement
 
     constructor(config: LoadingPlaceholderConfig) {
         const html = createDocumentHtml(config.document ?? document)
-        this.dom = html`<div className=${`${classes(config)} size-${config.size ?? 'medium'}`} role="status" aria-label=${config.label ?? 'Loading'}>
-            <span className="loader" aria-hidden="true"></span>
-        </div>` as HTMLElement
+        this.dom = html`
+            <div
+                className=${`${classes(config)} size-${config.size ?? 'medium'}`}
+                role="status"
+                aria-label=${config.label ?? 'Loading'}
+            >
+            <span
+                className="loader"
+                aria-hidden="true"
+            ></span>
+        </div>
+        ` as HTMLElement
     }
 
     show(): void {
@@ -51,15 +66,25 @@ class ErrorPlaceholder implements ErrorPlaceholderInstance {
 
     constructor(private readonly config: ErrorPlaceholderConfig) {
         const html = createDocumentHtml(config.document ?? document)
-        this.dom = html`<div className=${`${classes(config)} error-state`} role="alert">
+        this.dom = html`
+            <div
+                className=${`${classes(config)} error-state`}
+                role="alert"
+            >
             <div className="error-content">
                 <span className="error-message">${config.message ?? 'Failed to load content'}</span>
-                <button className="retry-button" type="button">${config.retryLabel ?? 'Retry'}</button>
+                <button
+                    className="retry-button"
+                    type="button"
+                >${config.retryLabel ?? 'Retry'}</button>
             </div>
-        </div>` as HTMLElement
+        </div>
+        ` as HTMLElement
         this.message = this.dom.querySelector('.error-message')!
         this.retry = this.dom.querySelector('.retry-button')!
-        if (config.onRetry) this.retry.addEventListener('click', config.onRetry)
+
+        if (config.onRetry)
+            this.retry.addEventListener('click', config.onRetry)
     }
 
     show(): void {
@@ -72,14 +97,12 @@ class ErrorPlaceholder implements ErrorPlaceholderInstance {
         this.message.textContent = message
     }
     destroy(): void {
-        if (this.config.onRetry) this.retry.removeEventListener('click', this.config.onRetry)
+        if (this.config.onRetry)
+            this.retry.removeEventListener('click', this.config.onRetry)
+
         this.dom.remove()
     }
 }
 
-export function createLoadingPlaceholder(config: LoadingPlaceholderConfig = {}): LoadingPlaceholderInstance {
-    return new LoadingPlaceholder(config)
-}
-export function createErrorPlaceholder(config: ErrorPlaceholderConfig = {}): ErrorPlaceholderInstance {
-    return new ErrorPlaceholder(config)
-}
+export const createLoadingPlaceholder = (config: LoadingPlaceholderConfig = {}): LoadingPlaceholderInstance => new LoadingPlaceholder(config)
+export const createErrorPlaceholder = (config: ErrorPlaceholderConfig = {}): ErrorPlaceholderInstance => new ErrorPlaceholder(config)

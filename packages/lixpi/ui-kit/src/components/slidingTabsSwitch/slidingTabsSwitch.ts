@@ -30,29 +30,51 @@ export type SlidingTabsSwitchConfig<Value extends string = string> = {
     transition?: Partial<SlidingSwitchTransitionConfig>
     activeTabBoxShadow?: string
     activeTabInsetShadow?: SlidingSwitchIndicatorInsetShadow
-    onChange?: (value: Value, id: string) => void
-    onClose?: (value: Value, id: string, tab: SlidingTabsSwitchTab<Value>) => void
+    onChange?: (
+        value: Value,
+        id: string,
+    ) => void
+    onClose?: (
+        value: Value,
+        id: string,
+        tab: SlidingTabsSwitchTab<Value>,
+    ) => void
 }
 
 export type SlidingTabsSwitchInstance<Value extends string = string> = SlidingSwitchInstance<Value>
 
-function toSlidingSwitchOption<Value extends string>(tab: SlidingTabsSwitchTab<Value>): SlidingSwitchOption<Value> {
+const toSlidingSwitchOption = <Value extends string>(tab: SlidingTabsSwitchTab<Value>): SlidingSwitchOption<Value> => {
     const option: SlidingSwitchOption<Value> = {
         label: tab.label,
         value: tab.value,
     }
-    if (tab.closable !== undefined) option.closable = tab.closable
-    if (tab.disabled !== undefined) option.disabled = tab.disabled
-    if (tab.ariaLabel !== undefined) option.ariaLabel = tab.ariaLabel
-    if (tab.closeAriaLabel !== undefined) option.closeAriaLabel = tab.closeAriaLabel
+
+    if (tab.closable !== undefined)
+        option.closable = tab.closable
+
+    if (tab.disabled !== undefined)
+        option.disabled = tab.disabled
+
+    if (tab.ariaLabel !== undefined)
+        option.ariaLabel = tab.ariaLabel
+
+    if (tab.closeAriaLabel !== undefined)
+        option.closeAriaLabel = tab.closeAriaLabel
+
     return option
 }
 
 class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwitchInstance<Value> {
     private readonly switchInstance: SlidingSwitchInstance<Value>
 
-    constructor(parent: any, private readonly config: SlidingTabsSwitchConfig<Value>) {
-        this.switchInstance = createSlidingSwitch<Value>(parent, this.createSwitchConfig())
+    constructor(
+        parent: any,
+        private readonly config: SlidingTabsSwitchConfig<Value>,
+    ) {
+        this.switchInstance = createSlidingSwitch<Value>(
+            parent,
+            this.createSwitchConfig(),
+        )
     }
 
     private createSwitchConfig(): SlidingSwitchConfig<Value> {
@@ -67,35 +89,61 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
             selectedAriaAttribute: 'aria-selected',
             observeParentResize: true,
             renderOption: (optionParent, state) =>
-                createTagPill(optionParent, {
-                    id: state.id,
-                    x: state.x,
-                    y: state.y,
-                    width: state.width,
-                    height: state.height,
-                    label: state.option.label,
-                    selected: state.selected,
-                    hovered: state.hovered,
-                    disabled: state.disabled,
-                    closable: state.closable,
-                    surface: 'content',
-                    closeVisibility: 'hover',
-                    closeAriaLabel: state.option.closeAriaLabel,
-                    onClose: (_id, event) => state.onClose(event),
-                }),
+                createTagPill(
+                    optionParent,
+                    {
+                        id: state.id,
+                        x: state.x,
+                        y: state.y,
+                        width: state.width,
+                        height: state.height,
+                        label: state.option.label,
+                        selected: state.selected,
+                        hovered: state.hovered,
+                        disabled: state.disabled,
+                        closable: state.closable,
+                        surface: 'content',
+                        closeVisibility: 'hover',
+                        closeAriaLabel: state.option.closeAriaLabel,
+                        onClose: (_id, event) => state.onClose(event),
+                    },
+                ),
         }
 
-        if (this.config.height !== undefined) switchConfig.height = this.config.height
-        if (this.config.minTabWidth !== undefined) switchConfig.minOptionWidth = this.config.minTabWidth
-        if (this.config.transition !== undefined) switchConfig.transition = this.config.transition
-        if (this.config.selectedValue !== undefined) switchConfig.selectedValue = this.config.selectedValue
-        if (this.config.className !== undefined) switchConfig.className = this.config.className
-        if (this.config.activeTabBoxShadow !== undefined) switchConfig.indicatorBoxShadow = this.config.activeTabBoxShadow
-        if (this.config.activeTabInsetShadow !== undefined) switchConfig.indicatorInsetShadow = this.config.activeTabInsetShadow
-        if (this.config.onChange !== undefined) switchConfig.onChange = this.config.onChange
-        if (this.config.onClose !== undefined) {
-            switchConfig.onClose = (value, id, option) => this.config.onClose?.(value, id, option)
-        }
+        if (this.config.height !== undefined)
+            switchConfig.height = this.config.height
+
+        if (this.config.minTabWidth !== undefined)
+            switchConfig.minOptionWidth = this.config.minTabWidth
+
+        if (this.config.transition !== undefined)
+            switchConfig.transition = this.config.transition
+
+        if (this.config.selectedValue !== undefined)
+            switchConfig.selectedValue = this.config.selectedValue
+
+        if (this.config.className !== undefined)
+            switchConfig.className = this.config.className
+
+        if (this.config.activeTabBoxShadow !== undefined)
+            switchConfig.indicatorBoxShadow = this.config.activeTabBoxShadow
+
+        if (this.config.activeTabInsetShadow !== undefined)
+            switchConfig.indicatorInsetShadow = this.config.activeTabInsetShadow
+
+        if (this.config.onChange !== undefined)
+            switchConfig.onChange = this.config.onChange
+
+        if (this.config.onClose !== undefined)
+            switchConfig.onClose = (
+                value,
+                id,
+                option,
+            ) => this.config.onClose?.(
+                value,
+                id,
+                option,
+            )
 
         return switchConfig
     }
@@ -104,8 +152,18 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
         this.switchInstance.render()
     }
 
-    resize(x: number, y: number, width: number, height?: number): void {
-        this.switchInstance.resize(x, y, width, height)
+    resize(
+        x: number,
+        y: number,
+        width: number,
+        height?: number,
+    ): void {
+        this.switchInstance.resize(
+            x,
+            y,
+            width,
+            height,
+        )
     }
 
     setValue(value: Value): void {
@@ -129,9 +187,7 @@ class SlidingTabsSwitch<Value extends string = string> implements SlidingTabsSwi
     }
 }
 
-export function createSlidingTabsSwitch<Value extends string = string>(
+export const createSlidingTabsSwitch = <Value extends string = string>(
     parent: any,
     config: SlidingTabsSwitchConfig<Value>,
-): SlidingTabsSwitchInstance<Value> {
-    return new SlidingTabsSwitch(parent, config)
-}
+): SlidingTabsSwitchInstance<Value> => new SlidingTabsSwitch(parent, config)

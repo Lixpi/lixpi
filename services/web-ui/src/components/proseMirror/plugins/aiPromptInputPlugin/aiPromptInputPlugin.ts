@@ -81,24 +81,30 @@ class KeyboardHandler {
     }
 }
 
-export function extractContentJSON(state: EditorState): any[] | null {
+export const extractContentJSON = (state: EditorState): any[] | null => {
     // Find the aiPromptInput node and extract its content as JSON
     let inputNode: ProseMirrorNode | null = null
     state.doc.descendants((node: ProseMirrorNode) => {
         if (node.type.name === aiPromptInputNodeType) {
             inputNode = node
+
             return false
         }
     })
 
-    if (!inputNode) return null
-    if (!hasAiPromptInputContent(inputNode as ProseMirrorNode)) return null
+    if (!inputNode)
+        return null
+
+    if (!hasAiPromptInputContent(inputNode as ProseMirrorNode))
+        return null
 
     // Convert content to JSON array
     const content: any[] = []
-    ;(inputNode as ProseMirrorNode).content.forEach((child: ProseMirrorNode) => {
-        content.push(child.toJSON())
-    })
+    ;(inputNode as ProseMirrorNode).content.forEach(
+        (child: ProseMirrorNode) => void content.push(
+            child.toJSON(),
+        ),
+    )
 
     return content
 }
@@ -118,7 +124,7 @@ type InputAttrs = {
     capabilityInputs: Record<string, Record<string, CapabilityJsonValue>>
 }
 
-function getInputAttrs(state: EditorState): InputAttrs {
+const getInputAttrs = (state: EditorState): InputAttrs => {
     let attrs: InputAttrs = {
         mediaGenerationMode: 'image',
         aiReasoningModels: [],
@@ -149,13 +155,15 @@ function getInputAttrs(state: EditorState): InputAttrs {
                 videoGenerationConfigGroups: parseMediaGenerationConfigSelectionAttr(node.attrs.videoGenerationConfigGroups),
                 capabilityInputs: parseCapabilityInputsAttr(node.attrs.capabilityInputs),
             }
+
             return false
         }
     })
+
     return attrs
 }
 
-function clearInputContent(view: EditorView): void {
+const clearInputContent = (view: EditorView): void => {
     const { state } = view
     const paragraphType = state.schema.nodes.paragraph
 
@@ -166,28 +174,41 @@ function clearInputContent(view: EditorView): void {
         if (node.type.name === aiPromptInputNodeType) {
             inputPos = pos
             inputNode = node
+
             return false
         }
     })
 
-    if (inputPos === -1 || !inputNode) return
+    if (
+        inputPos === -1
+        || !inputNode
+    )
+        return
 
     const emptyParagraph = paragraphType.createAndFill()
-    if (!emptyParagraph) return
+
+    if (!emptyParagraph)
+        return
 
     const contentFrom = inputPos + 1
     const contentTo = inputPos + (inputNode as ProseMirrorNode).nodeSize - 1
 
-    let tr = state.tr.replaceWith(contentFrom, contentTo, emptyParagraph)
+    let tr = state.tr.replaceWith(
+        contentFrom,
+        contentTo,
+        emptyParagraph,
+    )
 
     // Place cursor at start of the empty paragraph
     const cursorPos = inputPos + 2
-    tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos))
+    tr = tr.setSelection(
+        TextSelection.create(tr.doc, cursorPos),
+    )
 
     view.dispatch(tr)
 }
 
-export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): Plugin {
+export const createAiPromptInputPlugin = (options: AiPromptInputPluginOptions): Plugin => {
     const {
         onSubmit,
         createContextTray,
@@ -208,7 +229,10 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
         placeholderText,
     } = options
 
-    const buildSubmitPayload = (contentJSON: any[], attrs: InputAttrs) => {
+    const buildSubmitPayload = (
+        contentJSON: any[],
+        attrs: InputAttrs,
+    ) => {
         const aiReasoningModels = attrs.aiReasoningModels
         const aiImageModels = attrs.aiImageModels
         const aiVideoModels = attrs.aiVideoModels
@@ -250,12 +274,18 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
 
     const handleSubmit = (view: EditorView) => {
         const contentJSON = extractContentJSON(view.state)
-        if (!contentJSON) return
+
+        if (!contentJSON)
+            return
 
         const attrs = getInputAttrs(view.state)
-        if (!attrs.aiReasoningModels[0]) return
 
-        onSubmit(buildSubmitPayload(contentJSON, attrs))
+        if (!attrs.aiReasoningModels[0])
+            return
+
+        onSubmit(
+            buildSubmitPayload(contentJSON, attrs),
+        )
 
         clearInputContent(view)
     }
@@ -280,33 +310,41 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
                     if (KeyboardHandler.isModEnter(event)) {
                         event.preventDefault()
                         handleSubmit(_view)
+
                         return true
                     }
+
                     return false
                 },
             },
-
             decorations: (state: EditorState) => {
                 const decorations: Decoration[] = []
 
                 state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-                    if (node.type.name === aiPromptInputNodeType && !hasAiPromptInputContent(node)) {
+                    if (
+                        node.type.name === aiPromptInputNodeType
+                        && !hasAiPromptInputContent(node)
+                    ) {
                         decorations.push(
-                            Decoration.node(pos, pos + node.nodeSize, {
-                                class: 'empty-node-placeholder',
-                                'data-placeholder': placeholderText,
-                            }),
+                            Decoration.node(
+                                pos,
+                                pos + node.nodeSize,
+                                {
+                                    class: 'empty-node-placeholder',
+                                    'data-placeholder': placeholderText,
+                                },
+                            ),
                         )
                     }
                 })
 
                 return DecorationSet.create(state.doc, decorations)
             },
-
             nodeViews: {
                 [aiPromptInputNodeType]: createAiPromptInputNodeView({
                     onSubmit: () => {
-                        if (editorViewRef) handleSubmit(editorViewRef)
+                        if (editorViewRef)
+                            handleSubmit(editorViewRef)
                     },
                     placeholderText,
                     createContextTray,
@@ -330,23 +368,33 @@ export function createAiPromptInputPlugin(options: AiPromptInputPluginOptions): 
 
         view: (editorView: EditorView) => {
             editorViewRef = editorView
+
             return {
                 update: () => {},
-                destroy: () => {
-                    editorViewRef = null
-                },
+                destroy: () => void (editorViewRef = null),
             }
         },
 
-        appendTransaction: (transactions: Transaction[], _oldState: EditorState, newState: EditorState) => {
+        appendTransaction: (
+            transactions: Transaction[],
+            _oldState: EditorState,
+            newState: EditorState,
+        ) => {
             // Handle submit meta if dispatched
             const submitTx = transactions.find(tr => tr.getMeta(SUBMIT_AI_PROMPT_META))
+
             if (submitTx) {
                 const contentJSON = extractContentJSON(newState)
+
                 if (contentJSON) {
                     const attrs = getInputAttrs(newState)
-                    if (!attrs.aiReasoningModels[0]) return null
-                    onSubmit(buildSubmitPayload(contentJSON, attrs))
+
+                    if (!attrs.aiReasoningModels[0])
+                        return null
+
+                    onSubmit(
+                        buildSubmitPayload(contentJSON, attrs),
+                    )
                 }
             }
 

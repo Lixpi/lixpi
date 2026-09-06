@@ -70,28 +70,82 @@ export type VideoFrameSize = {
 // PROVISIONAL_ naming stays until the vendor's own table replaces it.
 const PROVISIONAL_SEEDANCE_FRAME_SIZES: Record<string, Record<string, VideoFrameSize>> = {
     '480p': {
-        '16:9': { width: 864, height: 496 },
-        '4:3': { width: 752, height: 560 },
-        '1:1': { width: 640, height: 640 },
-        '3:4': { width: 560, height: 752 },
-        '9:16': { width: 496, height: 864 },
-        '21:9': { width: 992, height: 432 },
+        '16:9': {
+            width: 864,
+            height: 496,
+        },
+        '4:3': {
+            width: 752,
+            height: 560,
+        },
+        '1:1': {
+            width: 640,
+            height: 640,
+        },
+        '3:4': {
+            width: 560,
+            height: 752,
+        },
+        '9:16': {
+            width: 496,
+            height: 864,
+        },
+        '21:9': {
+            width: 992,
+            height: 432,
+        },
     },
     '720p': {
-        '16:9': { width: 1280, height: 720 },
-        '4:3': { width: 1120, height: 848 },
-        '1:1': { width: 960, height: 960 },
-        '3:4': { width: 848, height: 1120 },
-        '9:16': { width: 720, height: 1280 },
-        '21:9': { width: 1472, height: 640 },
+        '16:9': {
+            width: 1280,
+            height: 720,
+        },
+        '4:3': {
+            width: 1120,
+            height: 848,
+        },
+        '1:1': {
+            width: 960,
+            height: 960,
+        },
+        '3:4': {
+            width: 848,
+            height: 1120,
+        },
+        '9:16': {
+            width: 720,
+            height: 1280,
+        },
+        '21:9': {
+            width: 1472,
+            height: 640,
+        },
     },
     '1080p': {
-        '16:9': { width: 1920, height: 1088 },
-        '4:3': { width: 1664, height: 1248 },
-        '1:1': { width: 1440, height: 1440 },
-        '3:4': { width: 1248, height: 1664 },
-        '9:16': { width: 1088, height: 1920 },
-        '21:9': { width: 2208, height: 960 },
+        '16:9': {
+            width: 1920,
+            height: 1088,
+        },
+        '4:3': {
+            width: 1664,
+            height: 1248,
+        },
+        '1:1': {
+            width: 1440,
+            height: 1440,
+        },
+        '3:4': {
+            width: 1248,
+            height: 1664,
+        },
+        '9:16': {
+            width: 1088,
+            height: 1920,
+        },
+        '21:9': {
+            width: 2208,
+            height: 960,
+        },
     },
 }
 
@@ -119,7 +173,7 @@ export type VideoTokenEstimate = {
 // estimateVideoTokens bounds one clip in vendor video tokens. Unknown tiers and
 // ratios resolve to the largest entry available rather than to nothing, keeping
 // an unrecognized option on the over-estimating side of the gate.
-export function estimateVideoTokens({
+export const estimateVideoTokens = ({
     resolutionTier,
     aspectRatio,
     outputSeconds,
@@ -129,14 +183,13 @@ export function estimateVideoTokens({
     aspectRatio: string | undefined
     outputSeconds: number
     inputSeconds: number
-}): VideoTokenEstimate {
+}): VideoTokenEstimate => {
     const tier = resolveTier(resolutionTier)
     const ratio = resolveRatio(tier, aspectRatio)
     const frameSize = PROVISIONAL_SEEDANCE_FRAME_SIZES[tier]![ratio]!
     const seconds = Math.max(0, outputSeconds) + Math.max(0, inputSeconds)
-    const tokens = Math.ceil(
-        seconds * frameSize.width * frameSize.height * VIDEO_FRAMES_PER_SECOND / VIDEO_TOKEN_DIVISOR,
-    )
+    const tokens = Math.ceil((seconds * frameSize.width * frameSize.height * VIDEO_FRAMES_PER_SECOND) / VIDEO_TOKEN_DIVISOR)
+
     return {
         tokens: Math.max(tokens, inputSeconds > 0 ? PROVISIONAL_MINIMUM_VIDEO_INPUT_TOKENS : 0),
         frameSize,
@@ -151,23 +204,49 @@ export function estimateVideoTokens({
 // rather than silently priced as the smallest option.
 function resolveTier(requested: string | undefined): string {
     const tiers = Object.keys(PROVISIONAL_SEEDANCE_FRAME_SIZES)
-    if (requested && Object.hasOwn(PROVISIONAL_SEEDANCE_FRAME_SIZES, requested)) return requested
-    return tiers.reduce((largest, tier) => (
-        largestFramePixels(tier) > largestFramePixels(largest) ? tier : largest
-    ), tiers[0]!)
+
+    if (
+        requested
+        && Object.hasOwn(PROVISIONAL_SEEDANCE_FRAME_SIZES, requested)
+    )
+        return requested
+
+    return tiers.reduce(
+        (largest, tier) => (
+            largestFramePixels(tier) > largestFramePixels(largest) ? tier : largest
+        ),
+        tiers[0]!,
+    )
 }
 
-function resolveRatio(tier: string, requested: string | undefined): string {
+function resolveRatio(
+    tier: string,
+    requested: string | undefined,
+): string {
     const sizes = PROVISIONAL_SEEDANCE_FRAME_SIZES[tier]!
-    if (requested && Object.hasOwn(sizes, requested)) return requested
-    return Object.keys(sizes).reduce((largest, ratio) => (
-        framePixels(sizes[ratio]!) > framePixels(sizes[largest]!) ? ratio : largest
-    ), Object.keys(sizes)[0]!)
+
+    if (
+        requested
+        && Object.hasOwn(sizes, requested)
+    )
+        return requested
+
+    return Object.keys(sizes).reduce(
+        (largest, ratio) => (
+            framePixels(sizes[ratio]!) > framePixels(sizes[largest]!) ? ratio : largest
+        ),
+        Object.keys(sizes)[0]!,
+    )
 }
 
 function largestFramePixels(tier: string): number {
-    return Object.values(PROVISIONAL_SEEDANCE_FRAME_SIZES[tier]!)
-        .reduce((largest, size) => Math.max(largest, framePixels(size)), 0)
+    return Object.values(PROVISIONAL_SEEDANCE_FRAME_SIZES[tier]!).reduce(
+        (largest, size) => Math.max(
+            largest,
+            framePixels(size),
+        ),
+        0,
+    )
 }
 
 function framePixels(size: VideoFrameSize): number {

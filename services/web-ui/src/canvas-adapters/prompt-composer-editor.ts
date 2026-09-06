@@ -26,7 +26,10 @@ class PromptComposerEditorAdapter implements PromptComposerEditor {
     private readonly editor: ProseMirrorEditor
     private destroyed = false
 
-    constructor(request: PromptComposerEditorRequest, options: PromptComposerEditorOptions) {
+    constructor(
+        request: PromptComposerEditorRequest,
+        options: PromptComposerEditorOptions,
+    ) {
         const html = createDocumentHtml(request.host.ownerDocument)
         this.editor = new ProseMirrorEditor({
             editorMountElement: request.host,
@@ -46,25 +49,35 @@ class PromptComposerEditorAdapter implements PromptComposerEditor {
     }
 
     get editorView() {
-        return this.destroyed ? null : this.editor.editorView ?? null
+        return this.destroyed ? null : (this.editor.editorView ?? null)
     }
 
     restoreContent(content: object): void {
         const view = this.editorView
-        if (!view) throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
+
+        if (!view)
+            throw new Error('AI_PROMPT_COMPOSER_NOT_READY')
+
         const restored = view.state.schema.nodeFromJSON(content)
         restored.check()
-        view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, restored.content))
+        view.dispatch(
+            view.state.tr.replaceWith(
+                0,
+                view.state.doc.content.size,
+                restored.content,
+            ),
+        )
         view.focus()
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.editor.destroy()
     }
 }
 
-export function createPromptComposerEditorPort(options: PromptComposerEditorOptions): AiPromptComposerConfig['mountEditor'] {
-    return request => new PromptComposerEditorAdapter(request, options)
-}
+export const createPromptComposerEditorPort = (options: PromptComposerEditorOptions): AiPromptComposerConfig['mountEditor'] =>
+    request => new PromptComposerEditorAdapter(request, options)

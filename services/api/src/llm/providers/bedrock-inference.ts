@@ -54,11 +54,20 @@ type BedrockModelCandidate = {
 
 // Matches both current pinned, dateless ids such as `anthropic.claude-sonnet-5`
 // and legacy version-suffixed ids such as `anthropic.claude-haiku-4-5-20251001-v1:0`.
-export const buildBedrockModelIdPattern = (vendor: BedrockVendor, modelNameStem: string): RegExp => new RegExp(`^${vendor}\\.${modelNameStem}(?:-(\\d{8}))?(?:-v(\\d+)(?::(\\d+))?)?$`, 'i')
+export const buildBedrockModelIdPattern = (
+    vendor: BedrockVendor,
+    modelNameStem: string,
+): RegExp => new RegExp(`^${vendor}\\.${modelNameStem}(?:-(\\d{8}))?(?:-v(\\d+)(?::(\\d+))?)?$`, 'i')
 
-const normalizeModelNameStem = (vendor: BedrockVendor, modelVersion: string): string => {
+const normalizeModelNameStem = (
+    vendor: BedrockVendor,
+    modelVersion: string,
+): string => {
     const alias = BEDROCK_MODEL_NAME_ALIASES[vendor][modelVersion]
-    if (alias) return alias
+
+    if (alias)
+        return alias
+
     return modelVersion
         .replace(/-latest$/i, '')
         .replaceAll('.', '-')
@@ -67,7 +76,10 @@ const normalizeModelNameStem = (vendor: BedrockVendor, modelVersion: string): st
 // Escapes the regex metacharacters that can appear in a normalized model-name stem.
 const escapeForRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const compareCandidates = (a: BedrockModelCandidate, b: BedrockModelCandidate): number => b.releaseDate - a.releaseDate || b.majorVersion - a.majorVersion || b.minorVersion - a.minorVersion
+const compareCandidates = (
+    a: BedrockModelCandidate,
+    b: BedrockModelCandidate,
+): number => b.releaseDate - a.releaseDate || b.majorVersion - a.majorVersion || b.minorVersion - a.minorVersion
 
 // Owns Bedrock inference configuration: the per-vendor opt-in flags, the region, the
 // credential resolution shared by every Bedrock client, and the catalog-id -> Bedrock-id
@@ -86,7 +98,10 @@ class BedrockInference {
 
     get region(): string {
         const region = this.env.AWS_REGION?.trim()
-        if (!region) throw new Error('AWS_REGION must be set to use AWS Bedrock inference')
+
+        if (!region)
+            throw new Error('AWS_REGION must be set to use AWS Bedrock inference')
+
         return region
     }
 
@@ -95,44 +110,64 @@ class BedrockInference {
     // picked up by the default provider chain, so no explicit credentials are returned.
     credentials(): { credentials: ReturnType<typeof fromSSO> } | Record<string, never> {
         const ssoProfile = this.env.AWS_PROFILE?.trim()
-        if (this.env.ENVIRONMENT === 'local' && ssoProfile) {
+
+        if (
+            this.env.ENVIRONMENT === 'local'
+            && ssoProfile
+        )
             return { credentials: fromSSO({ profile: ssoProfile }) }
-        }
+
         return {}
     }
 
-    async resolveModelId(vendor: BedrockVendor, modelVersion: string): Promise<string> {
+    async resolveModelId(
+        vendor: BedrockVendor,
+        modelVersion: string,
+    ): Promise<string> {
         const cacheKey = `${vendor}:${modelVersion}`
         let pending = this.resolvedModels.get(cacheKey)
+
         if (!pending) {
             pending = this.discoverModel(vendor, modelVersion)
             this.resolvedModels.set(cacheKey, pending)
         }
+
         try {
             const resolved = await pending
+
             return resolved.modelId
         } catch (e) {
             // A failed lookup must not be cached — the next request should retry (e.g. after
             // expired SSO credentials are refreshed).
             this.resolvedModels.delete(cacheKey)
+
             throw e
         }
     }
 
     private client(): BedrockClient {
-        this.controlPlaneClient ??= new BedrockClient({ region: this.region, ...this.credentials() })
+        this.controlPlaneClient ??= new BedrockClient({
+            region: this.region,
+            ...this.credentials(),
+        })
+
         return this.controlPlaneClient
     }
 
     private async listFoundationModels(): Promise<FoundationModelSummary[]> {
         this.foundationModelsPromise ??= (async () => {
-            const response = await this.client().send(new ListFoundationModelsCommand({}))
+            const response = await this.client().send(
+                new ListFoundationModelsCommand({}),
+            )
+
             return response.modelSummaries ?? []
         })()
+
         try {
             return await this.foundationModelsPromise
         } catch (e) {
             this.foundationModelsPromise = undefined
+
             throw e
         }
     }
@@ -141,32 +176,51 @@ class BedrockInference {
         this.inferenceProfilesPromise ??= (async () => {
             const profiles: InferenceProfileSummary[] = []
             let nextToken: string | undefined
+
             do {
-                const response = await this.client().send(new ListInferenceProfilesCommand({ nextToken }))
+                const response = await this.client().send(
+                    new ListInferenceProfilesCommand({ nextToken }),
+                )
                 profiles.push(...(response.inferenceProfileSummaries ?? []))
                 nextToken = response.nextToken
             } while (nextToken)
+
             return profiles
         })()
+
         try {
             return await this.inferenceProfilesPromise
         } catch (e) {
             this.inferenceProfilesPromise = undefined
+
             throw e
         }
     }
 
-    private async discoverModel(vendor: BedrockVendor, modelVersion: string): Promise<ResolvedBedrockModel> {
+    private async discoverModel(
+        vendor: BedrockVendor,
+        modelVersion: string,
+    ): Promise<ResolvedBedrockModel> {
         const stem = normalizeModelNameStem(vendor, modelVersion)
-        const pattern = buildBedrockModelIdPattern(vendor, escapeForRegex(stem))
+        const pattern = buildBedrockModelIdPattern(
+            vendor,
+            escapeForRegex(stem),
+        )
         const summaries = await this.listFoundationModels()
 
         const candidates: BedrockModelCandidate[] = []
+
         for (const summary of summaries) {
             const modelId = summary.modelId
-            if (!modelId) continue
+
+            if (!modelId)
+                continue
+
             const match = pattern.exec(modelId)
-            if (!match) continue
+
+            if (!match)
+                continue
+
             candidates.push({
                 modelId,
                 releaseDate: Number(match[1] ?? 0),
@@ -190,18 +244,19 @@ class BedrockInference {
 
         if (selected.supportsOnDemand) {
             info(`[Bedrock] Resolved ${vendor} model "${modelVersion}" -> ${selected.modelId} (on-demand)`)
-            return { modelId: selected.modelId, foundationModelId: selected.modelId }
+
+            return {
+                modelId: selected.modelId,
+                foundationModelId: selected.modelId,
+            }
         }
 
         // Newer models are invocable only through a cross-region inference profile whose id
         // carries a geo prefix (e.g. `us.anthropic.claude-…`).
         const profiles = await this.listInferenceProfiles()
-        const profile = profiles.find(candidate =>
-            (candidate.models ?? []).some(
-                model => model.modelArn?.endsWith(`/${selected.modelId}`),
-            )
-        )
+        const profile = profiles.find(candidate => (candidate.models ?? []).some(model => model.modelArn?.endsWith(`/${selected.modelId}`)))
         const profileId = profile?.inferenceProfileId
+
         if (!profileId) {
             throw new Error(
                 `AWS Bedrock model ${selected.modelId} requires an inference profile, but no profile `
@@ -210,16 +265,26 @@ class BedrockInference {
         }
 
         info(`[Bedrock] Resolved ${vendor} model "${modelVersion}" -> ${profileId} (inference profile for ${selected.modelId})`)
-        return { modelId: profileId, foundationModelId: selected.modelId }
+
+        return {
+            modelId: profileId,
+            foundationModelId: selected.modelId,
+        }
     }
 
     // Logged once at construction of a Bedrock-backed provider so the routing decision is
     // visible in startup/stream logs instead of being silent.
-    logRouting(vendor: BedrockVendor, providerName: string): void {
+    logRouting(
+        vendor: BedrockVendor,
+        providerName: string,
+    ): void {
         info(`[${providerName}] AWS Bedrock inference enabled (region ${this.region})`)
-        if (this.env.ENVIRONMENT === 'local' && !this.env.AWS_PROFILE?.trim()) {
+
+        if (
+            this.env.ENVIRONMENT === 'local'
+            && !this.env.AWS_PROFILE?.trim()
+        )
             warn(`[${providerName}] ENVIRONMENT=local but AWS_PROFILE is unset — Bedrock calls will fall back to the default AWS credential chain`)
-        }
     }
 }
 

@@ -1,3 +1,1 @@
-export function svgToCssImageUrl(svg: string): string {
-    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
-}
+export const svgToCssImageUrl = (svg: string): string => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`

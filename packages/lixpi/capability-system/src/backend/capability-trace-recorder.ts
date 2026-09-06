@@ -13,7 +13,10 @@ export type CapabilityTraceRecorder = {
     setReasoning: (reasoning: string) => void
     addHandles: (...handles: ExecutionTraceHandle[]) => void
     addModelCall: (modelCall: ExecutionTraceModelCall) => void
-    addFact: (label: string, value: string) => void
+    addFact: (
+        label: string,
+        value: string,
+    ) => void
     snapshot: (settled?: {
         inputSummary?: string
         outputSummary?: string
@@ -23,28 +26,43 @@ export type CapabilityTraceRecorder = {
 
 const handleIdentity = (handle: ExecutionTraceHandle): string => `${handle.kind}:${handle.id}:${handle.role ?? ''}`
 
-export function createCapabilityTraceRecorder(): CapabilityTraceRecorder {
+export const createCapabilityTraceRecorder = (): CapabilityTraceRecorder => {
     let reasoning = ''
     const handlesByIdentity = new Map<string, ExecutionTraceHandle>()
     const modelCallsById = new Map<string, ExecutionTraceModelCall>()
     const facts: ExecutionTraceFact[] = []
 
     return {
-        setReasoning: (value) => {
-            reasoning = value
-        },
+        setReasoning: value => void (reasoning = value),
         addHandles: (...handles) => {
             for (const handle of handles) {
-                if (!handle.id || !handle.displayName) continue
-                handlesByIdentity.set(handleIdentity(handle), structuredClone(handle))
+                if (
+                    !handle.id
+                    || !handle.displayName
+                )
+                    continue
+
+                handlesByIdentity.set(
+                    handleIdentity(handle),
+                    structuredClone(handle),
+                )
             }
         },
-        addModelCall: (modelCall) => {
-            modelCallsById.set(modelCall.id, structuredClone(modelCall))
-        },
+        addModelCall: modelCall => void modelCallsById.set(
+            modelCall.id,
+            structuredClone(modelCall),
+        ),
         addFact: (label, value) => {
-            if (!label || !value) return
-            facts.push({ label, value })
+            if (
+                !label
+                || !value
+            )
+                return
+
+            facts.push({
+                label,
+                value,
+            })
         },
         snapshot: (settled = {}) => {
             const trace: ExecutionTrace = {
@@ -57,6 +75,7 @@ export function createCapabilityTraceRecorder(): CapabilityTraceRecorder {
                 ...(settled.outputSummary ? { outputSummary: settled.outputSummary } : {}),
                 ...(settled.errorMessage ? { errorMessage: settled.errorMessage } : {}),
             }
+
             return hasTraceContent(trace) ? trace : undefined
         },
     }

@@ -7,6 +7,10 @@
 // recreation reports the table's item count so it is explicit what data is
 // being deleted. Local data is disposable by design.
 
+import {
+    log as debugLog,
+    err as debugError,
+} from '@lixpi/debug-tools'
 import readline from 'node:readline/promises'
 
 import {
@@ -20,10 +24,17 @@ import {
 
 export type TableDefinition = {
     name: string
-    attributes: Array<{ name: string; type: 'S' | 'N' | 'B' }>
+    attributes: Array<{
+        name: string
+        type: 'S' | 'N' | 'B'
+    }>
     hashKey: string
     rangeKey?: string
-    localSecondaryIndexes?: Array<{ name: string; rangeKey: string; projectionType: 'ALL' }>
+    localSecondaryIndexes?: Array<{
+        name: string
+        rangeKey: string
+        projectionType: 'ALL'
+    }>
 }
 
 // Resolves whether existing tables get force-recreated this run:
@@ -32,15 +43,27 @@ export type TableDefinition = {
 // 3. no terminal (docker compose) falls back to the default: recreate.
 export const resolveForceRecreate = async (): Promise<boolean> => {
     const env = process.env.LOCAL_DYNAMODB_FORCE_RECREATE
-    if (env === 'true') return true
-    if (env === 'false') return false
 
-    if (!process.stdin.isTTY) return true
+    if (env === 'true')
+        return true
 
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    if (env === 'false')
+        return false
+
+    if (!process.stdin.isTTY)
+        return true
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    })
+
     try {
         const answer = await rl.question('Force-recreate existing local DynamoDB tables? Existing local data will be deleted. [Y/n] ')
-        return !/^n/i.test(answer.trim())
+
+        return !/^n/i.test(
+            answer.trim(),
+        )
     } finally {
         rl.close()
     }
@@ -59,20 +82,26 @@ export class LocalDynamoDbTableReconciler {
 
         if (live) {
             if (!this.forceRecreate) {
-                console.log(`  ✓ ${table.name} (exists — kept as is)`)
+                debugLog(`  ✓ ${table.name} (exists — kept as is)`)
+
                 return
             }
+
             const itemCount = live.ItemCount ?? 0
             const dataLossNote = itemCount > 0 ? `${itemCount} items will be deleted` : 'empty — no data lost'
-            console.log(`  ↻ ${table.name} (recreating; ${dataLossNote})`)
+            debugLog(`  ↻ ${table.name} (recreating; ${dataLossNote})`)
             await this.deleteTableAndWait(table.name)
         }
 
         try {
-            await this.client.send(new CreateTableCommand(this.buildCreateTableInput(table)))
-            console.log(`  ✓ ${table.name} (created)`)
+            await this.client.send(
+                new CreateTableCommand(
+                    this.buildCreateTableInput(table),
+                ),
+            )
+            debugLog(`  ✓ ${table.name} (created)`)
         } catch (error: unknown) {
-            console.error(`  ✗ ${table.name}: ${(error as Error).message}`)
+            debugError(`  ✗ ${table.name}: ${(error as Error).message}`)
         }
     }
 
@@ -80,44 +109,69 @@ export class LocalDynamoDbTableReconciler {
         return {
             TableName: table.name,
             KeySchema: [
-                { AttributeName: table.hashKey, KeyType: 'HASH' },
-                ...(table.rangeKey ? [{ AttributeName: table.rangeKey, KeyType: 'RANGE' as const }] : []),
+                {
+                    AttributeName: table.hashKey,
+                    KeyType: 'HASH',
+                },
+                ...(table.rangeKey ? [{
+                    AttributeName: table.rangeKey,
+                    KeyType: 'RANGE' as const,
+                }] : []),
             ],
-            AttributeDefinitions: table.attributes.map(attr => ({
-                AttributeName: attr.name,
-                AttributeType: attr.type,
-            })),
+            AttributeDefinitions: table.attributes.map(
+                attr => ({
+                    AttributeName: attr.name,
+                    AttributeType: attr.type,
+                }),
+            ),
             BillingMode: 'PAY_PER_REQUEST',
             ...(table.localSecondaryIndexes && {
-                LocalSecondaryIndexes: table.localSecondaryIndexes.map(lsi => ({
-                    IndexName: lsi.name,
-                    KeySchema: [
-                        { AttributeName: table.hashKey, KeyType: 'HASH' as const },
-                        { AttributeName: lsi.rangeKey, KeyType: 'RANGE' as const },
-                    ],
-                    Projection: { ProjectionType: lsi.projectionType },
-                })),
+                LocalSecondaryIndexes: table.localSecondaryIndexes.map(
+                    lsi => ({
+                        IndexName: lsi.name,
+                        KeySchema: [
+                            {
+                                AttributeName: table.hashKey,
+                                KeyType: 'HASH' as const,
+                            },
+                            {
+                                AttributeName: lsi.rangeKey,
+                                KeyType: 'RANGE' as const,
+                            },
+                        ],
+                        Projection: { ProjectionType: lsi.projectionType },
+                    }),
+                ),
             }),
         }
     }
 
     private async describeTable(tableName: string): Promise<TableDescription | null> {
         try {
-            const response = await this.client.send(new DescribeTableCommand({ TableName: tableName }))
+            const response = await this.client.send(
+                new DescribeTableCommand({ TableName: tableName }),
+            )
+
             return response.Table ?? null
         } catch (error: unknown) {
-            if ((error as { name?: string }).name === 'ResourceNotFoundException') return null
+            if ((error as { name?: string }).name === 'ResourceNotFoundException')
+                return null
+
             throw error
         }
     }
 
     private async deleteTableAndWait(tableName: string): Promise<void> {
-        await this.client.send(new DeleteTableCommand({ TableName: tableName }))
+        await this.client.send(
+            new DeleteTableCommand({ TableName: tableName }),
+        )
 
         // DynamoDB Local removes tables quickly, but poll so the follow-up
         // CreateTable never races a still-present table.
         for (let attempt = 0; attempt < 30; attempt++) {
-            if (!(await this.describeTable(tableName))) return
+            if (!(await this.describeTable(tableName)))
+                return
+
             await new Promise(resolve => setTimeout(resolve, 200))
         }
 

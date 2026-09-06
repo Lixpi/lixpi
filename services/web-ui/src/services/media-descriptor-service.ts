@@ -27,13 +27,19 @@ export const describeMedia = async ({
     workspaceId?: string
 }): Promise<DescribeMediaResult> => {
     const nats = servicesStore.getData('nats')
-    if (!nats) return { error: 'OFFLINE' }
-    return nats.request(MEDIA_DESCRIBE, {
-        token: await AuthService.getTokenSilently(),
-        assetId,
-        ...(workspaceId ? { workspaceId } : {}),
-        ...(aiModel ? { aiModel } : {}),
-    }) as Promise<DescribeMediaResult>
+
+    if (!nats)
+        return { error: 'OFFLINE' }
+
+    return nats.request(
+        MEDIA_DESCRIBE,
+        {
+            token: await AuthService.getTokenSilently(),
+            assetId,
+            ...(workspaceId ? { workspaceId } : {}),
+            ...(aiModel ? { aiModel } : {}),
+        },
+    ) as Promise<DescribeMediaResult>
 }
 
 // Text Assets use the same subject. The API loads the authorized current Asset

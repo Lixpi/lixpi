@@ -41,18 +41,17 @@ export const solarizedDarkTheme = EditorView.theme(
             color: base05,
             backgroundColor: background,
         },
-
         '.cm-content': {
             caretColor: cursor,
         },
-
         '.cm-cursor, .cm-dropCursor': { borderLeftColor: cursor },
         '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': { backgroundColor: selection },
-
-        '.cm-panels': { backgroundColor: darkBackground, color: base03 },
+        '.cm-panels': {
+            backgroundColor: darkBackground,
+            color: base03,
+        },
         '.cm-panels.cm-panels-top': { borderBottom: '2px solid black' },
         '.cm-panels.cm-panels-bottom': { borderTop: '2px solid black' },
-
         '.cm-searchMatch': {
             backgroundColor: '#72a1ff59',
             outline: '1px solid #457dff',
@@ -60,30 +59,24 @@ export const solarizedDarkTheme = EditorView.theme(
         '.cm-searchMatch.cm-searchMatch-selected': {
             backgroundColor: '#6199ff2f',
         },
-
         '.cm-activeLine': { backgroundColor: highlightBackground },
         '.cm-selectionMatch': { backgroundColor: '#aafe661a' },
-
         '&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
             outline: `1px solid ${base06}`,
         },
-
         '.cm-gutters': {
             backgroundColor: darkBackground,
             color: stone,
             border: 'none',
         },
-
         '.cm-activeLineGutter': {
             backgroundColor: highlightBackground,
         },
-
         '.cm-foldPlaceholder': {
             backgroundColor: 'transparent',
             border: 'none',
             color: '#ddd',
         },
-
         '.cm-tooltip': {
             border: 'none',
             backgroundColor: tooltipBackground,
@@ -108,20 +101,38 @@ export const solarizedDarkTheme = EditorView.theme(
 
 /// The highlighting style for code in the Solarized Dark theme.
 export const solarizedDarkHighlightStyle = HighlightStyle.define([
-    { tag: t.keyword, color: base_green },
+    {
+        tag: t.keyword,
+        color: base_green,
+    },
     {
         tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName],
         color: base_cyan,
     },
-    { tag: [t.variableName], color: base05 },
-    { tag: [t.function(t.variableName)], color: base_blue },
-    { tag: [t.labelName], color: base_magenta },
+    {
+        tag: [t.variableName],
+        color: base05,
+    },
+    {
+        tag: [t.function(t.variableName)],
+        color: base_blue,
+    },
+    {
+        tag: [t.labelName],
+        color: base_magenta,
+    },
     {
         tag: [t.color, t.constant(t.name), t.standard(t.name)],
         color: base_yellow,
     },
-    { tag: [t.definition(t.name), t.separator], color: base_cyan },
-    { tag: [t.brace], color: base_magenta },
+    {
+        tag: [t.definition(t.name), t.separator],
+        color: base_cyan,
+    },
+    {
+        tag: [t.brace],
+        color: base_magenta,
+    },
     {
         tag: [t.annotation],
         color: invalid,
@@ -162,7 +173,10 @@ export const solarizedDarkHighlightStyle = HighlightStyle.define([
         tag: [t.quote],
         color: base_green,
     },
-    { tag: [t.string], color: base_yellow },
+    {
+        tag: [t.string],
+        color: base_yellow,
+    },
     {
         tag: t.link,
         color: base_cyan,
@@ -173,13 +187,39 @@ export const solarizedDarkHighlightStyle = HighlightStyle.define([
         tag: [t.url, t.escape, t.special(t.string)],
         color: base_yellow,
     },
-    { tag: [t.meta], color: base_red },
-    { tag: [t.comment], color: base02, fontStyle: 'italic' },
-    { tag: t.strong, fontWeight: 'bold', color: base06 },
-    { tag: t.emphasis, fontStyle: 'italic', color: base_green },
-    { tag: t.strikethrough, textDecoration: 'line-through' },
-    { tag: t.heading, fontWeight: 'bold', color: base_yellow },
-    { tag: t.heading1, fontWeight: 'bold', color: base07 },
+    {
+        tag: [t.meta],
+        color: base_red,
+    },
+    {
+        tag: [t.comment],
+        color: base02,
+        fontStyle: 'italic',
+    },
+    {
+        tag: t.strong,
+        fontWeight: 'bold',
+        color: base06,
+    },
+    {
+        tag: t.emphasis,
+        fontStyle: 'italic',
+        color: base_green,
+    },
+    {
+        tag: t.strikethrough,
+        textDecoration: 'line-through',
+    },
+    {
+        tag: t.heading,
+        fontWeight: 'bold',
+        color: base_yellow,
+    },
+    {
+        tag: t.heading1,
+        fontWeight: 'bold',
+        color: base07,
+    },
     {
         tag: [t.heading2, t.heading3, t.heading4],
         fontWeight: 'bold',
@@ -189,7 +229,10 @@ export const solarizedDarkHighlightStyle = HighlightStyle.define([
         tag: [t.heading5, t.heading6],
         color: base06,
     },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: base_magenta },
+    {
+        tag: [t.atom, t.bool, t.special(t.variableName)],
+        color: base_magenta,
+    },
     {
         tag: [t.processingInstruction, t.inserted, t.contentSeparator],
         color: base_red,
@@ -198,7 +241,11 @@ export const solarizedDarkHighlightStyle = HighlightStyle.define([
         tag: [t.contentSeparator],
         color: base_yellow,
     },
-    { tag: t.invalid, color: base02, borderBottom: `1px dotted ${base_red}` },
+    {
+        tag: t.invalid,
+        color: base02,
+        borderBottom: `1px dotted ${base_red}`,
+    },
 ])
 
 /// Extension to enable the Solarized Dark theme (both the editor theme and

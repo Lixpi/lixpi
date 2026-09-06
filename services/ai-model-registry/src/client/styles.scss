@@ -27,8 +27,8 @@ $radius-card: 8px;
     --warn: #e06c75;
     --cream: #b8b3a8;
     --pink: #da81ad;
-    /* Measured header heights. Each sticky level parks under the one above, so
-       these are what keep the three of them meeting exactly. */
+    // Measured header heights. Each sticky level parks under the one above, so
+    // these are what keep the three of them meeting exactly.
     --section-h: 32px;
     --group-h: 52px;
 }
@@ -37,9 +37,9 @@ $radius-card: 8px;
     box-sizing: border-box;
 }
 
-/* Filtering toggles the `hidden` attribute. The UA stylesheet backs that with
-   `display: none`, but any author `display` rule on the element outranks it, so
-   without this the filters silently do nothing on anything styled as a flexbox. */
+// Filtering toggles the `hidden` attribute. The UA stylesheet backs that with
+// `display: none`, but any author `display` rule on the element outranks it, so
+// without this the filters silently do nothing on anything styled as a flexbox.
 [hidden] {
     display: none !important;
 }
@@ -76,8 +76,8 @@ code {
     }
 }
 
-/* Search, filter, counts and save state all share one line. Nothing here grows:
-   the toolbar is chrome, so it stays small and leaves the page to the cards. */
+// Search, filter, counts and save state all share one line. Nothing here grows:
+// the toolbar is chrome, so it stays small and leaves the page to the cards.
 .toolbar {
     position: sticky;
     top: 0;
@@ -141,9 +141,9 @@ code {
     margin-bottom: 40px;
 }
 
-/* Both header levels stick: the section under the toolbar, the provider under
-   the section. The section shrinks once stuck so it costs less of the viewport
-   while still naming what is being configured. */
+// Both header levels stick: the section under the toolbar, the provider under
+// the section. The section shrinks once stuck so it costs less of the viewport
+// while still naming what is being configured.
 .section-head {
     position: sticky;
     top: var(--toolbar-h, 52px);
@@ -163,9 +163,9 @@ code {
     color: var(--accent);
 }
 
-/* All three header levels toggle their own body: media type, provider, and the
-   categories inside a provider. The chevron points down when open and rotates a
-   quarter turn anticlockwise when the body is hidden. */
+// All three header levels toggle their own body: media type, provider, and the
+// categories inside a provider. The chevron points down when open and rotates a
+// quarter turn anticlockwise when the body is hidden.
 .section-head,
 .group-head,
 .category-head {
@@ -246,8 +246,8 @@ code {
     margin-left: auto;
 }
 
-/* Each provider's parameters are grouped by what they do. The heading sticks
-   under the provider header so the concern stays named while scrolling. */
+// Each provider's parameters are grouped by what they do. The heading sticks
+// under the provider header so the concern stays named while scrolling.
 .category:not(:first-child) {
     border-top: 1px solid var(--border);
 }
@@ -277,8 +277,8 @@ code {
     padding-top: 10px;
 }
 
-/* Two parameters per row. minmax(0, 1fr) rather than a bare 1fr, so a long
-   value chip or apiField cannot blow the column out past its share. */
+// Two parameters per row. minmax(0, 1fr) rather than a bare 1fr, so a long
+// value chip or apiField cannot blow the column out past its share.
 .rows {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -286,9 +286,9 @@ code {
     padding: 0 16px 16px;
 }
 
-/* Grid items stretch to the tallest card in their row, so the card is a flex
-   column and the footer takes the slack. That keeps sign-off on the bottom edge
-   instead of floating wherever the content happens to end. */
+// Grid items stretch to the tallest card in their row, so the card is a flex
+// column and the footer takes the slack. That keeps sign-off on the bottom edge
+// instead of floating wherever the content happens to end.
 .row {
     display: flex;
     flex-direction: column;
@@ -298,9 +298,9 @@ code {
     background: var(--bg);
 }
 
-/* Use unticked means the parameter is not part of any request, so the card fill
-   lifts to a lighter blue-grey. It keeps --bg's exact hue on purpose: anything
-   pulled toward neutral reads brown next to a blue-tinted page. */
+// Use unticked means the parameter is not part of any request, so the card fill
+// lifts to a lighter blue-grey. It keeps --bg's exact hue on purpose: anything
+// pulled toward neutral reads brown next to a blue-tinted page.
 .row[data-decision="skip"] {
     background: var(--bg);
 }
@@ -308,9 +308,9 @@ code {
     background: var(--surface-muted);
 }
 
-/* Hide sits at the far right of the title line and folds the card down to that
-   line alone. It only applies to a parameter that is not being used, so the
-   checkbox only exists while Use is off. */
+// Hide sits at the far right of the title line and folds the card down to that
+// line alone. It only applies to a parameter that is not being used, so the
+// checkbox only exists while Use is off.
 .check.row-flag {
     margin-left: auto;
     display: none;
@@ -318,8 +318,8 @@ code {
 .row[data-decision="skip"] .check.row-flag {
     display: flex;
 }
-/* A hidden row is out of scope, so its title reads back and Use is not offered
-   until Hide comes off again. */
+// A hidden row is out of scope, so its title reads back and Use is not offered
+// until Hide comes off again.
 .row[data-irrelevant="true"] {
     align-self: start;
 }
@@ -339,7 +339,7 @@ code {
     margin-bottom: 0;
 }
 
-/* The two checkboxes sit on the title line directly after the last badge. */
+// The two checkboxes sit on the title line directly after the last badge.
 .row-choices {
     display: flex;
     gap: 18px;
@@ -358,8 +358,8 @@ code {
     accent-color: var(--accent);
     cursor: pointer;
 }
-/* Show in UI is disabled until Use is on, so it reads back rather than looking
-   like an option that simply is not ticked. */
+// Show in UI is disabled until Use is on, so it reads back rather than looking
+// like an option that simply is not ticked.
 .check input:disabled {
     cursor: not-allowed;
     opacity: 0.45;
@@ -425,15 +425,15 @@ code {
     flex-wrap: wrap;
     margin-bottom: 8px;
 }
-/* Every chip carries a transparent border so marking one does not shift the row. */
+// Every chip carries a transparent border so marking one does not shift the row.
 .values code {
     background: var(--code-bg);
     border: 1px solid transparent;
     border-radius: 4px;
     padding: 3px 9px;
 }
-/* Chips are the picker for any parameter with a value list, so they are only
-   clickable while the parameter is actually used. */
+// Chips are the picker for any parameter with a value list, so they are only
+// clickable while the parameter is actually used.
 .row[data-decision="internal"] .values.is-pickable code,
 .row[data-decision="expose"] .values.is-pickable code {
     cursor: pointer;
@@ -443,8 +443,8 @@ code {
     border-color: var(--muted);
 }
 
-/* Grey dashed marks the provider's own default; solid green marks what was
-   picked, and wins when a chip is both. */
+// Grey dashed marks the provider's own default; solid green marks what was
+// picked, and wins when a chip is both.
 .values code.is-provider-default {
     border-color: var(--cream);
     border-style: dashed;
@@ -456,10 +456,10 @@ code {
     color: var(--exposed);
 }
 
-/* Picking the provider's own default turns its bubble green too, so the chip and
-   its label agree instead of the chip reading chosen and the bubble reading not. */
-/* Near-black ink rather than the page background: on this green it lifts the
-   contrast from about 5:1 to 6:1, and white goes the wrong way at only 3:1. */
+// Picking the provider's own default turns its bubble green too, so the chip and
+// its label agree instead of the chip reading chosen and the bubble reading not.
+// Near-black ink rather than the page background: on this green it lifts the
+// contrast from about 5:1 to 6:1, and white goes the wrong way at only 3:1.
 .values code.is-provider-default.is-selected::after {
     background: var(--exposed);
     color: #131a10;
@@ -468,9 +468,9 @@ code {
     border-top-color: var(--exposed);
 }
 
-/* The provider default gets a speech bubble sitting above its chip, its pointer
-   on the bubble's underside aimed down at the option. The chip row reserves the
-   height above itself so the bubble never overlaps the text before it. */
+// The provider default gets a speech bubble sitting above its chip, its pointer
+// on the bubble's underside aimed down at the option. The chip row reserves the
+// height above itself so the bubble never overlaps the text before it.
 .values.is-pickable {
     margin-top: 30px;
 }
@@ -524,8 +524,8 @@ code {
     margin-bottom: 2px;
 }
 
-/* Each value control belongs to exactly one decision, so both live in the DOM
-   and the row's decision reveals the one that applies. */
+// Each value control belongs to exactly one decision, so both live in the DOM
+// and the row's decision reveals the one that applies.
 .value-control {
     display: none;
     align-items: center;
@@ -591,7 +591,7 @@ code {
     }
 }
 
-/* Where an already-used parameter is set in the repo, and what it does there. */
+// Where an already-used parameter is set in the repo, and what it does there.
 .usage {
     margin: 0 0 12px;
     padding: 12px 14px;
@@ -625,8 +625,8 @@ code {
     white-space: pre;
 }
 
-/* Sign-off is a judgement on the finished decision, so it sits at the bottom
-   right of the card, after everything it is a judgement about. */
+// Sign-off is a judgement on the finished decision, so it sits at the bottom
+// right of the card, after everything it is a judgement about.
 .row-footer {
     display: flex;
     justify-content: flex-end;
@@ -636,7 +636,7 @@ code {
     border-top: 1px solid var(--border);
 }
 
-/* The approved border reuses the palette's green rather than a new one. */
+// The approved border reuses the palette's green rather than a new one.
 .row[data-status="approved"] {
     border-color: var(--exposed);
 }
@@ -656,9 +656,9 @@ code {
     color: var(--pink);
 }
 
-/* Which models and API surfaces accept this parameter. Green is documented
-   support, red is documented rejection; a parameter the docs do not restrict
-   lists its whole group, because unmentioned means supported. */
+// Which models and API surfaces accept this parameter. Green is documented
+// support, red is documented rejection; a parameter the docs do not restrict
+// lists its whole group, because unmentioned means supported.
 .compat {
     margin: 0 0 10px;
     display: flex;
@@ -696,8 +696,8 @@ code {
     }
 }
 
-/* The page each fact was read from, so a claim can be checked at its source.
-   Plain links rather than pills: these are references, not status. */
+// The page each fact was read from, so a claim can be checked at its source.
+// Plain links rather than pills: these are references, not status.
 .source-links {
     font-size: 15px;
     color: var(--muted);

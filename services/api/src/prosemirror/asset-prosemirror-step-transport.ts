@@ -27,12 +27,16 @@ export class AssetProseMirrorStepTransport {
 
     isExpectationFailure(error: unknown): boolean {
         const message = String((error as { message?: string })?.message ?? error).toLowerCase()
+
         return message.includes('sequence') || message.includes('expect')
     }
 
     static fromSingleton(): AssetProseMirrorStepTransport {
         const natsService = NATS_Service.getInstance()
-        if (!natsService) throw new Error('NATS service is not initialized')
+
+        if (!natsService)
+            throw new Error('NATS service is not initialized')
+
         return new AssetProseMirrorStepTransport(natsService)
     }
 
@@ -49,15 +53,26 @@ export class AssetProseMirrorStepTransport {
             max_bytes: 256 * 1024 * 1024,
             max_msgs_per_subject: 10000,
         })
+
         return streamName
     }
 
     async getCurrentSubjectState(coordinate: AssetDocCoordinate): Promise<AssetSubjectState> {
         const streamName = await this.ensureOrganizationStream(coordinate.organizationId)
-        const message = await this.natsService.getJetStreamMessage<AssetStepStreamEvent>(streamName, {
-            last_by_subj: getAssetStepSubject(coordinate),
-        })
-        if (!message) return { subjectSeq: 0, streamSequence: 0, documentVersion: 0 }
+        const message = await this.natsService.getJetStreamMessage<AssetStepStreamEvent>(
+            streamName,
+            {
+                last_by_subj: getAssetStepSubject(coordinate),
+            },
+        )
+
+        if (!message)
+            return {
+                subjectSeq: 0,
+                streamSequence: 0,
+                documentVersion: 0,
+            }
+
         return {
             subjectSeq: message.data.subjectSeq,
             streamSequence: message.seq,
@@ -69,10 +84,17 @@ export class AssetProseMirrorStepTransport {
         try {
             const state = await this.getCurrentSubjectState(payload)
             const currentVersion = state.streamSequence === 0 ? payload.baseVersion : state.documentVersion
-            if (currentVersion !== payload.expectedVersion) return { status: 'CONFLICT', currentVersion }
+
+            if (currentVersion !== payload.expectedVersion)
+                return {
+                    status: 'CONFLICT',
+                    currentVersion,
+                }
+
             let version = currentVersion
             let subjectSeq = state.subjectSeq
             let lastStreamSequence = state.streamSequence
+
             for (const step of payload.steps) {
                 version += 1
                 subjectSeq += 1
@@ -89,22 +111,39 @@ export class AssetProseMirrorStepTransport {
                     schemaVersion: PROSEMIRROR_SCHEMA_VERSION,
                     origin: 'client-edit',
                 }
-                const ack = await this.natsService.publishJetStream(getAssetStepSubject(payload), envelope, {
-                    msgID: step.msgId,
-                    expect: {
-                        streamName: getOrganizationAssetStepStreamName(payload.organizationId),
-                        lastSubjectSequence: lastStreamSequence,
+                const ack = await this.natsService.publishJetStream(
+                    getAssetStepSubject(payload),
+                    envelope,
+                    {
+                        msgID: step.msgId,
+                        expect: {
+                            streamName: getOrganizationAssetStepStreamName(payload.organizationId),
+                            lastSubjectSequence: lastStreamSequence,
+                        },
                     },
-                })
+                )
                 const streamSequence = typeof ack?.seq === 'number' ? ack.seq : ack.sequence
-                if (typeof streamSequence !== 'number') throw new Error('STEP_PUBLISH_ACK_MISSING_SEQUENCE')
+
+                if (typeof streamSequence !== 'number')
+                    throw new Error('STEP_PUBLISH_ACK_MISSING_SEQUENCE')
+
                 lastStreamSequence = streamSequence
             }
-            return { status: 'ACCEPTED', version }
+
+            return {
+                status: 'ACCEPTED',
+                version,
+            }
         } catch (error) {
-            if (!this.isExpectationFailure(error)) throw error
+            if (!this.isExpectationFailure(error))
+                throw error
+
             const state = await this.getCurrentSubjectState(payload)
-            return { status: 'CONFLICT', currentVersion: state.documentVersion || payload.baseVersion }
+
+            return {
+                status: 'CONFLICT',
+                currentVersion: state.documentVersion || payload.baseVersion,
+            }
         }
     }
 
@@ -129,12 +168,22 @@ export class AssetProseMirrorStepTransport {
             generationRun: payload.generationRun,
             origin: 'ai-stream',
         }
-        const ack = await this.natsService.publishJetStream(getAssetStepSubject(payload), envelope, {
-            msgID: payload.msgId,
-            expect: { streamName, lastSubjectSequence: payload.expectedLastStreamSequence },
-        })
+        const ack = await this.natsService.publishJetStream(
+            getAssetStepSubject(payload),
+            envelope,
+            {
+                msgID: payload.msgId,
+                expect: {
+                    streamName,
+                    lastSubjectSequence: payload.expectedLastStreamSequence,
+                },
+            },
+        )
         const sequence = typeof ack?.seq === 'number' ? ack.seq : ack.sequence
-        if (typeof sequence !== 'number') throw new Error('STEP_PUBLISH_ACK_MISSING_SEQUENCE')
+
+        if (typeof sequence !== 'number')
+            throw new Error('STEP_PUBLISH_ACK_MISSING_SEQUENCE')
+
         return sequence
     }
 
@@ -142,8 +191,12 @@ export class AssetProseMirrorStepTransport {
         payload: Omit<AssetStepEnvelope, 'kind' | 'origin' | 'schemaVersion'> & {
             expectedLastStreamSequence: number
         },
-    ): Promise<{ envelope: AssetStepEnvelope; streamSequence: number }> {
+    ): Promise<{
+        envelope: AssetStepEnvelope
+        streamSequence: number
+    }> {
         const streamSequence = await this.publishAiStep(payload)
+
         return {
             envelope: {
                 organizationId: payload.organizationId,
@@ -168,7 +221,10 @@ export class AssetProseMirrorStepTransport {
         payload: Omit<AssetStepControlEnvelope, 'origin'> & {
             expectedLastStreamSequence: number
         },
-    ): Promise<{ envelope: AssetStepControlEnvelope; streamSequence: number }> {
+    ): Promise<{
+        envelope: AssetStepControlEnvelope
+        streamSequence: number
+    }> {
         const streamName = await this.ensureOrganizationStream(payload.organizationId)
         const envelope: AssetStepControlEnvelope = {
             organizationId: payload.organizationId,
@@ -186,36 +242,83 @@ export class AssetProseMirrorStepTransport {
             generationRun: payload.generationRun,
             origin: 'ai-stream',
         }
-        const ack = await this.natsService.publishJetStream(getAssetStepSubject(payload), envelope, {
-            msgID: payload.msgId,
-            expect: { streamName, lastSubjectSequence: payload.expectedLastStreamSequence },
-        })
+        const ack = await this.natsService.publishJetStream(
+            getAssetStepSubject(payload),
+            envelope,
+            {
+                msgID: payload.msgId,
+                expect: {
+                    streamName,
+                    lastSubjectSequence: payload.expectedLastStreamSequence,
+                },
+            },
+        )
         const streamSequence = typeof ack?.seq === 'number' ? ack.seq : ack.sequence
-        if (typeof streamSequence !== 'number') throw new Error('CONTROL_PUBLISH_ACK_MISSING_SEQUENCE')
-        return { envelope, streamSequence }
+
+        if (typeof streamSequence !== 'number')
+            throw new Error('CONTROL_PUBLISH_ACK_MISSING_SEQUENCE')
+
+        return {
+            envelope,
+            streamSequence,
+        }
     }
 
-    async replay(coordinate: AssetDocCoordinate, startStreamSeq: number, maxMessages = 1000): Promise<LoggedAssetStepEnvelope[]> {
+    async replay(
+        coordinate: AssetDocCoordinate,
+        startStreamSeq: number,
+        maxMessages = 1000,
+    ): Promise<LoggedAssetStepEnvelope[]> {
         const streamName = getOrganizationAssetStepStreamName(coordinate.organizationId)
         const subject = getAssetStepSubject(coordinate)
         const last = await this.natsService.getJetStreamMessage<AssetStepStreamEvent>(streamName, { last_by_subj: subject })
-        if (!last || last.seq < startStreamSeq) return []
+
+        if (
+            !last
+            || last.seq < startStreamSeq
+        )
+            return []
+
         const events: LoggedAssetStepEnvelope[] = []
         let nextSeq = startStreamSeq
-        while (nextSeq <= last.seq && events.length < maxMessages) {
-            const message = await this.natsService.getJetStreamMessage<AssetStepStreamEvent>(streamName, {
-                seq: nextSeq,
-                next_by_subj: subject,
+
+        while (
+            nextSeq <= last.seq
+            && events.length < maxMessages
+        ) {
+            const message = await this.natsService.getJetStreamMessage<AssetStepStreamEvent>(
+                streamName,
+                {
+                    seq: nextSeq,
+                    next_by_subj: subject,
+                },
+            )
+
+            if (
+                !message
+                || message.seq > last.seq
+            )
+                break
+
+            events.push({
+                ...message.data,
+                streamSequence: message.seq,
             })
-            if (!message || message.seq > last.seq) break
-            events.push({ ...message.data, streamSequence: message.seq })
             nextSeq = message.seq + 1
         }
+
         return events
     }
 
-    async replayDocumentStepEvents(payload: AssetDocCoordinate & { startStreamSeq: number; maxMessages?: number }): Promise<LoggedAssetStepEnvelope[]> {
-        return await this.replay(payload, payload.startStreamSeq, payload.maxMessages)
+    async replayDocumentStepEvents(payload: AssetDocCoordinate & {
+        startStreamSeq: number
+        maxMessages?: number
+    }): Promise<LoggedAssetStepEnvelope[]> {
+        return await this.replay(
+            payload,
+            payload.startStreamSeq,
+            payload.maxMessages,
+        )
     }
 
     async purge(coordinate: AssetDocCoordinate): Promise<void> {
@@ -225,7 +328,10 @@ export class AssetProseMirrorStepTransport {
         )
     }
 
-    async purgeThrough(coordinate: AssetDocCoordinate, streamSequence: number): Promise<void> {
+    async purgeThrough(
+        coordinate: AssetDocCoordinate,
+        streamSequence: number,
+    ): Promise<void> {
         await this.natsService.purgeJetStreamSubject(
             getOrganizationAssetStepStreamName(coordinate.organizationId),
             getAssetStepSubject(coordinate),

@@ -2,16 +2,15 @@ class SegmentsReceiver {
     static instance
 
     static getInstance() {
-        if (!SegmentsReceiver.instance) {
+        if (!SegmentsReceiver.instance)
             new SegmentsReceiver()
-        }
+
         return SegmentsReceiver.instance
     }
 
     constructor() {
-        if (SegmentsReceiver.instance) {
+        if (SegmentsReceiver.instance)
             return SegmentsReceiver.instance
-        }
 
         // Thread-scoped listeners: Map<threadId, Set<listener>>
         this.threadListeners = new Map()
@@ -20,22 +19,28 @@ class SegmentsReceiver {
         SegmentsReceiver.instance = this
     }
 
-    /**
-     * Subscribe to segments for a specific thread only.
-     * Segments are dispatched exclusively to listeners registered for the matching threadId.
-     */
-    subscribeForThread(threadId, listener) {
-        if (!this.threadListeners.has(threadId)) {
-            this.threadListeners.set(threadId, new Set())
-        }
+    // Subscribe to segments for a specific thread only.
+    // Segments are dispatched exclusively to listeners registered for the matching threadId.
+    subscribeForThread(
+        threadId,
+        listener,
+    ) {
+        if (!this.threadListeners.has(threadId))
+            this.threadListeners.set(
+                threadId,
+                new Set(),
+            )
+
         this.threadListeners.get(threadId).add(listener)
+
         return () => {
             const listeners = this.threadListeners.get(threadId)
+
             if (listeners) {
                 listeners.delete(listener)
-                if (listeners.size === 0) {
+
+                if (listeners.size === 0)
                     this.threadListeners.delete(threadId)
-                }
             }
         }
     }
@@ -44,15 +49,17 @@ class SegmentsReceiver {
     // forwarded intact so run-level metadata can survive thread routing.
     receiveSegment(chunk) {
         const threadId = chunk.conversationAssetId
+
         if (!threadId) {
             console.warn('[SegmentsReceiver] Segment has no conversationAssetId, dropping:', chunk.status || chunk.type)
+
             return
         }
 
         const listeners = this.threadListeners.get(threadId)
-        if (listeners) {
+
+        if (listeners)
             listeners.forEach(listener => listener(chunk))
-        }
     }
 }
 

@@ -55,25 +55,26 @@ export type MediaGenerationStreamFailure = {
     updatedAt: number
 }
 
-const FAILED_OPERATION_DIMENSIONS = { width: 360, height: 104 } as const
+const FAILED_OPERATION_DIMENSIONS = {
+    width: 360,
+    height: 104,
+} as const
 
-function isMediaGenerationOperationNodeForRequest(
+const isMediaGenerationOperationNodeForRequest = (
     node: CanvasNode,
     generationRequestId: string,
-): node is OperationStatusCanvasNode {
+): node is OperationStatusCanvasNode => {
     return node.type === 'operationStatus'
         && node.operation === 'media-generation'
         && node.generationRequestId === generationRequestId
 }
 
-function isGeneratedMediaNode(node: CanvasNode): node is GeneratedMediaNode {
-    return node.type === 'image' || node.type === 'video'
-}
+const isGeneratedMediaNode = (node: CanvasNode): node is GeneratedMediaNode => node.type === 'image' || node.type === 'video'
 
-function replaceOperationFields(
+const replaceOperationFields = (
     node: OperationStatusCanvasNode,
     patch: OperationPatch,
-): OperationStatusCanvasNode {
+): OperationStatusCanvasNode => {
     const {
         problem: _problem,
         candidateAssetIds: _candidateAssetIds,
@@ -81,16 +82,24 @@ function replaceOperationFields(
         verificationAssetId: _verificationAssetId,
         ...stableNode
     } = node
-    return { ...stableNode, ...patch }
+
+    return {
+        ...stableNode,
+        ...patch,
+    }
 }
 
-function toRunStatus(status: OperationStatusCanvasNode['status']): MediaGenerationRunStatus {
-    if (status === 'failed') return 'failed'
-    if (status === 'action-required') return 'awaiting-provider-verification'
+const toRunStatus = (status: OperationStatusCanvasNode['status']): MediaGenerationRunStatus => {
+    if (status === 'failed')
+        return 'failed'
+
+    if (status === 'action-required')
+        return 'awaiting-provider-verification'
+
     return 'running'
 }
 
-function createProgressState({
+const createProgressState = ({
     generationRequestId,
     status,
     message,
@@ -106,7 +115,7 @@ function createProgressState({
     generationRun?: number
     mediaRunId?: string
     updatedAt: number
-}): MediaGenerationProgressState {
+}): MediaGenerationProgressState => {
     return {
         generationRequestId,
         status,
@@ -118,23 +127,40 @@ function createProgressState({
     }
 }
 
-function mediaNodeMatches(
+const mediaNodeMatches = (
     node: GeneratedMediaNode,
     generationRequestId: string,
     generationRun: number | undefined,
     outputNodeId: string | undefined,
     mediaRunId?: string,
-): boolean {
-    if (outputNodeId && node.nodeId === outputNodeId) return true
+): boolean => {
+    if (
+        outputNodeId
+        && node.nodeId === outputNodeId
+    )
+        return true
+
     if (node.generationProgress?.generationRequestId === generationRequestId) {
-        if (mediaRunId && node.generationProgress.mediaRunId === mediaRunId) return true
-        if (generationRun !== undefined && node.generationProgress.generationRun === generationRun) return true
+        if (
+            mediaRunId
+            && node.generationProgress.mediaRunId === mediaRunId
+        )
+            return true
+
+        if (
+            generationRun !== undefined
+            && node.generationProgress.generationRun === generationRun
+        )
+            return true
     }
-    if (node.generatedBy?.generationRequestId !== generationRequestId) return false
+
+    if (node.generatedBy?.generationRequestId !== generationRequestId)
+        return false
+
     return Boolean(mediaRunId && node.generatedBy.mediaRunId === mediaRunId)
 }
 
-function projectProgressToMediaNodes({
+const projectProgressToMediaNodes = ({
     nodes,
     generationRequestId,
     generationRun,
@@ -148,36 +174,47 @@ function projectProgressToMediaNodes({
     outputNodeId?: string
     mediaRunId?: string
     progressState: MediaGenerationProgressState
-}): { nodes: CanvasNode[]; updatedNodeIds: string[] } {
+}): {
+    nodes: CanvasNode[]
+    updatedNodeIds: string[]
+} => {
     const updatedNodeIds: string[] = []
+
     return {
         nodes: nodes.map(node => {
             if (
-                !isGeneratedMediaNode(node) || !mediaNodeMatches(
+                !isGeneratedMediaNode(node)
+                || !mediaNodeMatches(
                     node,
                     generationRequestId,
                     generationRun,
                     outputNodeId,
                     mediaRunId,
                 )
-            ) return node
+            )
+                return node
+
             const nextProgressState = {
                 ...node.generationProgress,
                 ...progressState,
-                progress: mergeMediaGenerationRunProgress(
-                    node.generationProgress?.progress,
-                    progressState.progress,
-                ),
+                progress: mergeMediaGenerationRunProgress(node.generationProgress?.progress, progressState.progress),
             }
-            if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgressState)) return node
+
+            if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgressState))
+                return node
+
             updatedNodeIds.push(node.nodeId)
-            return { ...node, generationProgress: nextProgressState }
+
+            return {
+                ...node,
+                generationProgress: nextProgressState,
+            }
         }),
         updatedNodeIds,
     }
 }
 
-function replaceFailedPendingOutputWithOperation({
+const replaceFailedPendingOutputWithOperation = ({
     state,
     generationRequestId,
     generationRun,
@@ -201,25 +238,45 @@ function replaceFailedPendingOutputWithOperation({
     requestRevision: number
     progress?: MediaGenerationRunProgress
     updatedAt: number
-}): MediaGenerationOperationRecoveryResult {
-    const output = state.nodes.find((node): node is GeneratedMediaNode => (
-        isGeneratedMediaNode(node)
-        && node.mediaGenerationPhase === 'pending-before-first-frame'
-        && mediaNodeMatches(node, generationRequestId, generationRun, outputNodeId, mediaRunId)
-    ))
-    if (!output) return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+}): MediaGenerationOperationRecoveryResult => {
+    const output = state.nodes.find(
+        (node): node is GeneratedMediaNode => (
+            isGeneratedMediaNode(node)
+            && node.mediaGenerationPhase === 'pending-before-first-frame'
+            && mediaNodeMatches(
+                node,
+                generationRequestId,
+                generationRun,
+                outputNodeId,
+                mediaRunId,
+            )
+        ),
+    )
 
-    const existingOperation = state.nodes.find((node): node is OperationStatusCanvasNode => (
-        isMediaGenerationOperationNodeForRequest(node, generationRequestId)
-        && (
-            Boolean(operationNodeId && node.nodeId === operationNodeId)
-            || Boolean(mediaRunId && node.mediaRunId === mediaRunId)
-            || Boolean(outputNodeId && node.outputNodeId === outputNodeId)
-            || (generationRun !== undefined && node.generationRun === generationRun)
-        )
-    ))
+    if (!output)
+        return {
+            state,
+            changed: false,
+            updatedNodeIds: [],
+            removedNodeIds: [],
+        }
+
+    const existingOperation = state.nodes.find(
+        (node): node is OperationStatusCanvasNode => (
+            isMediaGenerationOperationNodeForRequest(node, generationRequestId)
+            && (
+                Boolean(operationNodeId && node.nodeId === operationNodeId)
+                || Boolean(mediaRunId && node.mediaRunId === mediaRunId)
+                || Boolean(outputNodeId && node.outputNodeId === outputNodeId)
+                || (generationRun !== undefined && node.generationRun === generationRun)
+            )
+        ),
+    )
     const dimensions = existingOperation?.dimensions ?? FAILED_OPERATION_DIMENSIONS
-    const { parentId: _existingParentId, ...existingOperationWithoutParent } = existingOperation ?? {}
+    const {
+        parentId: _existingParentId,
+        ...existingOperationWithoutParent
+    } = existingOperation ?? {}
     const failedOperation: OperationStatusCanvasNode = {
         ...existingOperationWithoutParent,
         nodeId: output.nodeId,
@@ -256,39 +313,58 @@ function replaceFailedPendingOutputWithOperation({
     const replacedOperationNodeId = existingOperation?.nodeId !== output.nodeId
         ? existingOperation?.nodeId
         : undefined
-    const edges = state.edges.filter(edge => (
-        edge.sourceNodeId !== replacedOperationNodeId
-        && edge.targetNodeId !== replacedOperationNodeId
-    ))
+    const edges = state.edges.filter(
+        edge => (
+            edge.sourceNodeId !== replacedOperationNodeId
+            && edge.targetNodeId !== replacedOperationNodeId
+        ),
+    )
     const nodes = state.nodes.flatMap(node => {
-        if (node.nodeId === output.nodeId) return [failedOperation]
-        if (node.nodeId === replacedOperationNodeId) return []
+        if (node.nodeId === output.nodeId)
+            return [failedOperation]
+
+        if (node.nodeId === replacedOperationNodeId)
+            return []
+
         return [node]
     })
 
     return {
-        state: { ...state, nodes, edges },
+        state: {
+            ...state,
+            nodes,
+            edges,
+        },
         changed: true,
         updatedNodeIds: [failedOperation.nodeId],
         removedNodeIds: replacedOperationNodeId ? [replacedOperationNodeId] : [],
     }
 }
 
-export function applyMediaGenerationStreamFailureToOperationNodes(
+export const applyMediaGenerationStreamFailureToOperationNodes = (
     state: CanvasState,
     failure: MediaGenerationStreamFailure,
-): MediaGenerationOperationRecoveryResult {
-    const output = state.nodes.find((node): node is GeneratedMediaNode => (
-        isGeneratedMediaNode(node)
-        && mediaNodeMatches(
-            node,
-            failure.generationRequestId,
-            undefined,
-            failure.outputNodeId,
-            failure.mediaRunId,
-        )
-    ))
-    if (!output) return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+): MediaGenerationOperationRecoveryResult => {
+    const output = state.nodes.find(
+        (node): node is GeneratedMediaNode => (
+            isGeneratedMediaNode(node)
+            && mediaNodeMatches(
+                node,
+                failure.generationRequestId,
+                undefined,
+                failure.outputNodeId,
+                failure.mediaRunId,
+            )
+        ),
+    )
+
+    if (!output)
+        return {
+            state,
+            changed: false,
+            updatedNodeIds: [],
+            removedNodeIds: [],
+        }
 
     const generationRun = output.generationProgress?.generationRun
     const progress = settleMediaGenerationRunProgress(
@@ -313,7 +389,10 @@ export function applyMediaGenerationStreamFailureToOperationNodes(
         }),
     })
     const projectedResult: MediaGenerationOperationRecoveryResult = {
-        state: { ...state, nodes: projection.nodes },
+        state: {
+            ...state,
+            nodes: projection.nodes,
+        },
         changed: projection.updatedNodeIds.length > 0,
         updatedNodeIds: projection.updatedNodeIds,
         removedNodeIds: [],
@@ -329,7 +408,10 @@ export function applyMediaGenerationStreamFailureToOperationNodes(
         progress,
         updatedAt: failure.updatedAt,
     })
-    if (!replacement.changed) return projectedResult
+
+    if (!replacement.changed)
+        return projectedResult
+
     return {
         ...replacement,
         updatedNodeIds: [
@@ -341,47 +423,55 @@ export function applyMediaGenerationStreamFailureToOperationNodes(
     }
 }
 
-function settleMediaNodesForRuns(
+const settleMediaNodesForRuns = (
     state: CanvasState,
     generationRequestId: string,
     runs: readonly Pick<MediaGenerationRun, 'generationRun' | 'mediaRunId' | 'outputNodeId' | 'status' | 'progress' | 'problem'>[],
     requestStatus?: 'completed' | 'cancelled',
-): MediaGenerationOperationRecoveryResult {
+): MediaGenerationOperationRecoveryResult => {
     const updatedNodeIds: string[] = []
     const nodes = state.nodes.map(node => {
-        if (!isGeneratedMediaNode(node)) return node
+        if (!isGeneratedMediaNode(node))
+            return node
+
         const belongsToRequest = node.generationProgress?.generationRequestId === generationRequestId
             || node.generatedBy?.generationRequestId === generationRequestId
             || runs.some(candidate => candidate.outputNodeId === node.nodeId)
-        if (!belongsToRequest) return node
-        const matchingRun = runs.find(candidate =>
-            mediaNodeMatches(
-                node,
-                generationRequestId,
-                candidate.generationRun,
-                candidate.outputNodeId,
-                candidate.mediaRunId,
-            )
+
+        if (!belongsToRequest)
+            return node
+
+        const matchingRun = runs.find(
+            candidate =>
+                mediaNodeMatches(
+                    node,
+                    generationRequestId,
+                    candidate.generationRun,
+                    candidate.outputNodeId,
+                    candidate.mediaRunId,
+                ),
         )
         const run = matchingRun ?? (runs.length === 1 ? runs[0] : undefined)
         const existingTerminalStatus = node.generationProgress
-                && ['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)
+            && ['completed', 'failed', 'cancelled'].includes(node.generationProgress.status)
             ? node.generationProgress.status as 'completed' | 'failed' | 'cancelled'
             : undefined
         const status = requestStatus === 'cancelled'
-            ? run?.status === 'completed' || run?.status === 'failed' || run?.status === 'cancelled'
+            ? run?.status === 'completed'
+                || run?.status === 'failed'
+                || run?.status === 'cancelled'
                 ? run.status
                 : existingTerminalStatus ?? 'cancelled'
             : run?.status === 'failed'
-            ? 'failed'
-            : run?.status === 'cancelled'
-            ? 'cancelled'
-            : 'completed'
+                ? 'failed'
+                : run?.status === 'cancelled'
+                    ? 'cancelled'
+                    : 'completed'
         const message = status === 'completed'
             ? run?.progress?.message ?? 'Media generation completed.'
             : status === 'cancelled'
-            ? 'Media generation cancelled.'
-            : run?.problem?.detail ?? 'Media generation failed.'
+                ? 'Media generation cancelled.'
+                : run?.problem?.detail ?? 'Media generation failed.'
         const progress = settleMediaGenerationRunProgress(
             run?.progress ?? node.generationProgress?.progress,
             status,
@@ -396,25 +486,41 @@ function settleMediaNodesForRuns(
             mediaRunId: run?.mediaRunId ?? node.generationProgress?.mediaRunId,
             updatedAt: Date.now(),
         })
-        if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgress)) return node
+
+        if (JSON.stringify(node.generationProgress) === JSON.stringify(nextProgress))
+            return node
+
         updatedNodeIds.push(node.nodeId)
-        return { ...node, generationProgress: nextProgress }
+
+        return {
+            ...node,
+            generationProgress: nextProgress,
+        }
     })
+
     return updatedNodeIds.length === 0
-        ? { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+        ? {
+            state,
+            changed: false,
+            updatedNodeIds: [],
+            removedNodeIds: [],
+        }
         : {
-            state: { ...state, nodes },
+            state: {
+                ...state,
+                nodes,
+            },
             changed: true,
             updatedNodeIds,
             removedNodeIds: [],
         }
 }
 
-function applyOperationPatches(
+const applyOperationPatches = (
     state: CanvasState,
     generationRequestId: string,
     patchForNode: (node: OperationStatusCanvasNode) => OperationPatch | OperationRemoval | null,
-): MediaGenerationOperationRecoveryResult {
+): MediaGenerationOperationRecoveryResult => {
     const removedNodeIds = new Set<string>()
     const updatedNodeIds = new Set<string>()
     const mediaProjections: Array<{
@@ -422,16 +528,25 @@ function applyOperationPatches(
         progressState: MediaGenerationProgressState
     }> = []
     let nodes = state.nodes.flatMap<CanvasNode>(node => {
-        if (!isMediaGenerationOperationNodeForRequest(node, generationRequestId)) return [node]
+        if (!isMediaGenerationOperationNodeForRequest(node, generationRequestId))
+            return [node]
+
         const patch = patchForNode(node)
-        if (!patch) return [node]
+
+        if (!patch)
+            return [node]
+
         const status = 'remove' in patch ? patch.remove : toRunStatus(patch.status)
         const message = 'remove' in patch
             ? patch.progress?.message ?? node.progress?.message
                 ?? (status === 'completed' ? 'Media generation completed.' : 'Media generation cancelled.')
             : patch.message
         const progress = 'remove' in patch
-            ? settleMediaGenerationRunProgress(patch.progress ?? node.progress, patch.remove, message)
+            ? settleMediaGenerationRunProgress(
+                patch.progress ?? node.progress,
+                patch.remove,
+                message,
+            )
             : patch.progress ?? node.progress
                 ?? createDefaultMediaGenerationRunProgress(status, message)
         mediaProjections.push({
@@ -446,12 +561,24 @@ function applyOperationPatches(
                 updatedAt: 'remove' in patch ? Date.now() : patch.updatedAt,
             }),
         })
+
         if ('remove' in patch) {
             removedNodeIds.add(node.nodeId)
+
             return []
         }
-        const updatedNode = replaceOperationFields(node, { ...patch, progress })
-        if (JSON.stringify(updatedNode) !== JSON.stringify(node)) updatedNodeIds.add(node.nodeId)
+
+        const updatedNode = replaceOperationFields(
+            node,
+            {
+                ...patch,
+                progress,
+            },
+        )
+
+        if (JSON.stringify(updatedNode) !== JSON.stringify(node))
+            updatedNodeIds.add(node.nodeId)
+
         return [updatedNode]
     })
 
@@ -464,23 +591,35 @@ function applyOperationPatches(
             mediaRunId: projection.operation.mediaRunId,
             progressState: projection.progressState,
         })
+
         for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
+
         nodes = mediaProjection.nodes
     }
 
-    if (removedNodeIds.size === 0 && updatedNodeIds.size === 0) {
-        return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
-    }
+    if (
+        removedNodeIds.size === 0
+        && updatedNodeIds.size === 0
+    )
+        return {
+            state,
+            changed: false,
+            updatedNodeIds: [],
+            removedNodeIds: [],
+        }
+
     return {
         state: {
             ...state,
             nodes,
             edges: removedNodeIds.size === 0
                 ? state.edges
-                : state.edges.filter(edge => (
-                    !removedNodeIds.has(edge.sourceNodeId)
-                    && !removedNodeIds.has(edge.targetNodeId)
-                )),
+                : state.edges.filter(
+                    edge => (
+                        !removedNodeIds.has(edge.sourceNodeId)
+                        && !removedNodeIds.has(edge.targetNodeId)
+                    ),
+                ),
         },
         changed: true,
         updatedNodeIds: [...updatedNodeIds],
@@ -488,23 +627,26 @@ function applyOperationPatches(
     }
 }
 
-export function applyMediaGenerationRequestToOperationNodes(
+export const applyMediaGenerationRequestToOperationNodes = (
     state: CanvasState,
     request: MediaGenerationRequest,
-): MediaGenerationOperationRecoveryResult {
-    if (request.status === 'completed' || request.status === 'cancelled') {
+): MediaGenerationOperationRecoveryResult => {
+    if (
+        request.status === 'completed'
+        || request.status === 'cancelled'
+    ) {
         const operationNodeIds = new Set(
-            state.nodes
-                .filter(node => isMediaGenerationOperationNodeForRequest(node, request.generationRequestId))
-                .map(node => node.nodeId),
+            state.nodes.filter(node => isMediaGenerationOperationNodeForRequest(node, request.generationRequestId)).map(node => node.nodeId),
         )
         const withoutOperations: CanvasState = {
             ...state,
             nodes: state.nodes.filter(node => !operationNodeIds.has(node.nodeId)),
-            edges: state.edges.filter(edge => (
-                !operationNodeIds.has(edge.sourceNodeId)
-                && !operationNodeIds.has(edge.targetNodeId)
-            )),
+            edges: state.edges.filter(
+                edge => (
+                    !operationNodeIds.has(edge.sourceNodeId)
+                    && !operationNodeIds.has(edge.targetNodeId)
+                ),
+            ),
         }
         const settled = settleMediaNodesForRuns(
             withoutOperations,
@@ -512,6 +654,7 @@ export function applyMediaGenerationRequestToOperationNodes(
             request.runs,
             request.status,
         )
+
         return {
             ...settled,
             changed: settled.changed || operationNodeIds.size > 0,
@@ -521,88 +664,125 @@ export function applyMediaGenerationRequestToOperationNodes(
 
     const firstUnresolvedBinding = request.unresolvedBindings[0]
     const firstRun = request.runs[0]
-    const operationResult = applyOperationPatches(state, request.generationRequestId, node => {
-        if ((node.requestRevision ?? 0) > request.revision) return null
-        const run = request.runs.find(candidate => (
-            candidate.operationNodeId === node.nodeId
-            || candidate.generationRun === node.generationRun
-        ))
-        if (!run) return null
-        if (run.status === 'completed' || run.status === 'cancelled') {
-            return { remove: run.status, progress: run.progress }
-        }
-        if (firstUnresolvedBinding && run.generationRun === firstRun?.generationRun) {
-            const message = 'Choose which attached Asset the prompt refers to.'
+    const operationResult = applyOperationPatches(
+        state,
+        request.generationRequestId,
+        node => {
+            if ((node.requestRevision ?? 0) > request.revision)
+                return null
+
+            const run = request.runs.find(
+                candidate => (
+                    candidate.operationNodeId === node.nodeId
+                    || candidate.generationRun === node.generationRun
+                ),
+            )
+
+            if (!run)
+                return null
+
+            if (
+                run.status === 'completed'
+                || run.status === 'cancelled'
+            )
+                return {
+                    remove: run.status,
+                    progress: run.progress,
+                }
+
+            if (
+                firstUnresolvedBinding
+                && run.generationRun === firstRun?.generationRun
+            ) {
+                const message = 'Choose which attached Asset the prompt refers to.'
+
+                return {
+                    status: 'action-required',
+                    message,
+                    progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
+                    candidateAssetIds: [...new Set(
+                        firstUnresolvedBinding.candidates.map(candidate => candidate.assetId),
+                    )],
+                    unresolvedBindingId: firstUnresolvedBinding.bindingId,
+                    requestRevision: request.revision,
+                    updatedAt: request.updatedAt,
+                }
+            }
+
+            if (run.status === 'awaiting-provider-verification') {
+                const message = run.problem?.detail ?? 'Provider verification is required to continue.'
+
+                return {
+                    status: 'action-required',
+                    message,
+                    progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
+                    ...(run.problem ? { problem: run.problem } : {}),
+                    ...(run.requiredVerificationAssetIds?.[0]
+                        ? {
+                            verificationAssetId: run.requiredVerificationAssetIds[0],
+                        }
+                        : {}),
+                    requestRevision: request.revision,
+                    updatedAt: request.updatedAt,
+                }
+            }
+
+            if (run.status === 'failed') {
+                const message = run.problem?.detail ?? 'Generation failed.'
+
+                return {
+                    status: 'failed',
+                    message,
+                    progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
+                    ...(run.problem ? { problem: run.problem } : {}),
+                    requestRevision: request.revision,
+                    updatedAt: request.updatedAt,
+                }
+            }
+
+            const message = run.status === 'running'
+                ? run.progress?.message ?? 'The provider is generating media.'
+                : 'Preparing the media request.'
+
             return {
-                status: 'action-required',
+                status: 'in-progress',
                 message,
                 progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-                candidateAssetIds: [...new Set(firstUnresolvedBinding.candidates.map(candidate => candidate.assetId))],
-                unresolvedBindingId: firstUnresolvedBinding.bindingId,
                 requestRevision: request.revision,
                 updatedAt: request.updatedAt,
             }
-        }
-        if (run.status === 'awaiting-provider-verification') {
-            const message = run.problem?.detail ?? 'Provider verification is required to continue.'
-            return {
-                status: 'action-required',
-                message,
-                progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-                ...(run.problem ? { problem: run.problem } : {}),
-                ...(run.requiredVerificationAssetIds?.[0]
-                    ? {
-                        verificationAssetId: run.requiredVerificationAssetIds[0],
-                    }
-                    : {}),
-                requestRevision: request.revision,
-                updatedAt: request.updatedAt,
-            }
-        }
-        if (run.status === 'failed') {
-            const message = run.problem?.detail ?? 'Generation failed.'
-            return {
-                status: 'failed',
-                message,
-                progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-                ...(run.problem ? { problem: run.problem } : {}),
-                requestRevision: request.revision,
-                updatedAt: request.updatedAt,
-            }
-        }
-        const message = run.status === 'running'
-            ? run.progress?.message ?? 'The provider is generating media.'
-            : 'Preparing the media request.'
-        return {
-            status: 'in-progress',
-            message,
-            progress: run.progress ?? createDefaultMediaGenerationRunProgress(run.status, message),
-            requestRevision: request.revision,
-            updatedAt: request.updatedAt,
-        }
-    })
+        },
+    )
     let nodes = operationResult.state.nodes
     const updatedNodeIds = new Set(operationResult.updatedNodeIds)
+
     for (const run of request.runs) {
         const status: MediaGenerationRunStatus = firstUnresolvedBinding
-                && run.generationRun === firstRun?.generationRun
+            && run.generationRun === firstRun?.generationRun
             ? 'pending'
             : run.status
-        const message = firstUnresolvedBinding && run.generationRun === firstRun?.generationRun
+        const message = firstUnresolvedBinding
+            && run.generationRun === firstRun?.generationRun
             ? 'Choose which attached Asset the prompt refers to.'
             : run.problem?.detail
                 ?? run.progress?.message
                 ?? (status === 'completed'
                     ? 'Media generation completed.'
                     : status === 'cancelled'
-                    ? 'Media generation cancelled.'
-                    : status === 'failed'
-                    ? 'Media generation failed.'
-                    : status === 'running'
-                    ? 'The provider is generating media.'
-                    : 'Preparing the media request.')
-        const progress = status === 'completed' || status === 'failed' || status === 'cancelled'
-            ? settleMediaGenerationRunProgress(run.progress, status, message)
+                        ? 'Media generation cancelled.'
+                        : status === 'failed'
+                            ? 'Media generation failed.'
+                            : status === 'running'
+                                ? 'The provider is generating media.'
+                                : 'Preparing the media request.')
+        const progress = status === 'completed'
+            || status === 'failed'
+            || status === 'cancelled'
+            ? settleMediaGenerationRunProgress(
+                run.progress,
+                status,
+                message,
+            )
             : run.progress
         const mediaProjection = projectProgressToMediaNodes({
             nodes,
@@ -621,14 +801,24 @@ export function applyMediaGenerationRequestToOperationNodes(
             }),
         })
         nodes = mediaProjection.nodes
+
         for (const nodeId of mediaProjection.updatedNodeIds) updatedNodeIds.add(nodeId)
     }
-    let resultState = { ...operationResult.state, nodes }
+
+    let resultState = {
+        ...operationResult.state,
+        nodes,
+    }
     let changed = operationResult.changed || updatedNodeIds.size > operationResult.updatedNodeIds.length
     const removedNodeIds = new Set(operationResult.removedNodeIds)
+
     for (const run of request.runs) {
-        if (run.status !== 'failed') continue
-        const message = run.problem?.detail ?? run.progress?.message ?? 'Media generation failed.'
+        if (run.status !== 'failed')
+            continue
+
+        const message = run.problem?.detail
+            ?? run.progress?.message
+            ?? 'Media generation failed.'
         const replacement = replaceFailedPendingOutputWithOperation({
             state: resultState,
             generationRequestId: request.generationRequestId,
@@ -642,15 +832,21 @@ export function applyMediaGenerationRequestToOperationNodes(
             progress: run.progress,
             updatedAt: request.updatedAt,
         })
-        if (!replacement.changed) continue
+
+        if (!replacement.changed)
+            continue
+
         resultState = replacement.state
         changed = true
+
         for (const nodeId of replacement.removedNodeIds) {
             removedNodeIds.add(nodeId)
             updatedNodeIds.delete(nodeId)
         }
+
         for (const nodeId of replacement.updatedNodeIds) updatedNodeIds.add(nodeId)
     }
+
     return changed
         ? {
             state: resultState,
@@ -661,14 +857,22 @@ export function applyMediaGenerationRequestToOperationNodes(
         : operationResult
 }
 
-function readStringArray(value: unknown): string[] | undefined {
-    if (!Array.isArray(value)) return undefined
+const readStringArray = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value))
+        return undefined
+
     const strings = value.filter((candidate): candidate is string => typeof candidate === 'string')
+
     return strings.length > 0 ? strings : undefined
 }
 
-function readTraceHandle(value: unknown): ExecutionTraceHandle | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readTraceHandle = (value: unknown): ExecutionTraceHandle | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
     const kinds = new Set<ExecutionTraceHandle['kind']>([
         'capability-module',
@@ -677,18 +881,28 @@ function readTraceHandle(value: unknown): ExecutionTraceHandle | undefined {
         'media',
         'capability-artifact',
     ])
+
     if (
         typeof candidate.kind !== 'string'
         || !kinds.has(candidate.kind as ExecutionTraceHandle['kind'])
         || typeof candidate.id !== 'string'
         || typeof candidate.displayName !== 'string'
-    ) return undefined
-    const mediaKinds = new Set(['image', 'video', 'audio', 'document'])
+    )
+        return undefined
+
+    const mediaKinds = new Set([
+        'image',
+        'video',
+        'audio',
+        'document',
+    ])
+
     return {
         kind: candidate.kind as ExecutionTraceHandle['kind'],
         id: candidate.id,
         displayName: candidate.displayName,
-        ...(typeof candidate.mediaKind === 'string' && mediaKinds.has(candidate.mediaKind)
+        ...(typeof candidate.mediaKind === 'string'
+            && mediaKinds.has(candidate.mediaKind)
             ? { mediaKind: candidate.mediaKind as NonNullable<ExecutionTraceHandle['mediaKind']> }
             : {}),
         ...(typeof candidate.nodeId === 'string' ? { nodeId: candidate.nodeId } : {}),
@@ -698,24 +912,49 @@ function readTraceHandle(value: unknown): ExecutionTraceHandle | undefined {
     }
 }
 
-function readTraceParam(value: unknown): ExecutionTraceParam | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readTraceParam = (value: unknown): ExecutionTraceParam | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
-    return typeof candidate.name === 'string' && typeof candidate.value === 'string'
-        ? { name: candidate.name, value: candidate.value }
+
+    return typeof candidate.name === 'string'
+        && typeof candidate.value === 'string'
+        ? {
+            name: candidate.name,
+            value: candidate.value,
+        }
         : undefined
 }
 
-function readTraceFact(value: unknown): ExecutionTraceFact | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readTraceFact = (value: unknown): ExecutionTraceFact | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
-    return typeof candidate.label === 'string' && typeof candidate.value === 'string'
-        ? { label: candidate.label, value: candidate.value }
+
+    return typeof candidate.label === 'string'
+        && typeof candidate.value === 'string'
+        ? {
+            label: candidate.label,
+            value: candidate.value,
+        }
         : undefined
 }
 
-function readTraceModelCall(value: unknown): ExecutionTraceModelCall | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readTraceModelCall = (value: unknown): ExecutionTraceModelCall | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
     const roles = new Set<ExecutionTraceModelCall['role']>([
         'reasoning',
@@ -724,13 +963,16 @@ function readTraceModelCall(value: unknown): ExecutionTraceModelCall | undefined
         'assessor',
         'compositor',
     ])
+
     if (
         typeof candidate.id !== 'string'
         || typeof candidate.role !== 'string'
         || !roles.has(candidate.role as ExecutionTraceModelCall['role'])
         || typeof candidate.provider !== 'string'
         || typeof candidate.modelId !== 'string'
-    ) return undefined
+    )
+        return undefined
+
     const params = Array.isArray(candidate.params)
         ? candidate.params.map(readTraceParam).filter((item): item is ExecutionTraceParam => Boolean(item))
         : undefined
@@ -740,7 +982,8 @@ function readTraceModelCall(value: unknown): ExecutionTraceModelCall | undefined
     const outputHandles = Array.isArray(candidate.outputHandles)
         ? candidate.outputHandles.map(readTraceHandle).filter((item): item is ExecutionTraceHandle => Boolean(item))
         : undefined
-    const tokenUsageCandidate = candidate.tokenUsage && typeof candidate.tokenUsage === 'object'
+    const tokenUsageCandidate = candidate.tokenUsage
+        && typeof candidate.tokenUsage === 'object'
         ? candidate.tokenUsage as Record<string, unknown>
         : undefined
     const tokenUsage = tokenUsageCandidate
@@ -750,6 +993,7 @@ function readTraceModelCall(value: unknown): ExecutionTraceModelCall | undefined
             ...(typeof tokenUsageCandidate.reasoning === 'number' ? { reasoning: tokenUsageCandidate.reasoning } : {}),
         }
         : undefined
+
     return {
         id: candidate.id,
         role: candidate.role as ExecutionTraceModelCall['role'],
@@ -765,15 +1009,26 @@ function readTraceModelCall(value: unknown): ExecutionTraceModelCall | undefined
         ...(typeof candidate.providerOperationId === 'string' ? { providerOperationId: candidate.providerOperationId } : {}),
         ...(typeof candidate.startedAt === 'number' ? { startedAt: candidate.startedAt } : {}),
         ...(typeof candidate.completedAt === 'number' ? { completedAt: candidate.completedAt } : {}),
-        ...(tokenUsage && Object.keys(tokenUsage).length > 0 ? { tokenUsage } : {}),
+        ...(tokenUsage
+            && Object.keys(tokenUsage).length > 0
+            ? { tokenUsage }
+            : {}),
         ...(typeof candidate.errorMessage === 'string' ? { errorMessage: candidate.errorMessage } : {}),
     }
 }
 
-function readExecutionTrace(value: unknown): ExecutionTrace | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readExecutionTrace = (value: unknown): ExecutionTrace | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
-    if (candidate.traceVersion !== 'execution-trace-v1') return undefined
+
+    if (candidate.traceVersion !== 'execution-trace-v1')
+        return undefined
+
     const handles = Array.isArray(candidate.handles)
         ? candidate.handles.map(readTraceHandle).filter((item): item is ExecutionTraceHandle => Boolean(item))
         : undefined
@@ -783,6 +1038,7 @@ function readExecutionTrace(value: unknown): ExecutionTrace | undefined {
     const facts = Array.isArray(candidate.facts)
         ? candidate.facts.map(readTraceFact).filter((item): item is ExecutionTraceFact => Boolean(item))
         : undefined
+
     return {
         traceVersion: 'execution-trace-v1',
         ...(typeof candidate.reasoning === 'string' ? { reasoning: candidate.reasoning } : {}),
@@ -795,12 +1051,20 @@ function readExecutionTrace(value: unknown): ExecutionTrace | undefined {
     }
 }
 
-function readProblem(value: unknown): MediaGenerationProblem | undefined {
-    return value && typeof value === 'object' ? value as MediaGenerationProblem : undefined
+const readProblem = (value: unknown): MediaGenerationProblem | undefined => {
+    return value
+        && typeof value === 'object'
+        ? value as MediaGenerationProblem
+        : undefined
 }
 
-function readProgressItem(value: unknown): OperationProgressItem | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readProgressItem = (value: unknown): OperationProgressItem | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
     const validStatuses = new Set([
         'pending',
@@ -811,16 +1075,20 @@ function readProgressItem(value: unknown): OperationProgressItem | undefined {
         'cancelled',
         'skipped',
     ])
+
     if (
         typeof candidate.id !== 'string'
         || typeof candidate.title !== 'string'
         || typeof candidate.status !== 'string'
         || !validStatuses.has(candidate.status)
-    ) return undefined
+    )
+        return undefined
+
     const children = Array.isArray(candidate.children)
         ? candidate.children.map(readProgressItem).filter((item): item is OperationProgressItem => Boolean(item))
         : undefined
     const trace = readExecutionTrace(candidate.trace)
+
     return {
         id: candidate.id,
         title: candidate.title,
@@ -832,20 +1100,34 @@ function readProgressItem(value: unknown): OperationProgressItem | undefined {
     }
 }
 
-function readProgress(value: unknown): MediaGenerationRunProgress | undefined {
-    if (!value || typeof value !== 'object') return undefined
+const readProgress = (value: unknown): MediaGenerationRunProgress | undefined => {
+    if (
+        !value
+        || typeof value !== 'object'
+    )
+        return undefined
+
     const candidate = value as Record<string, unknown>
-    const validPhases = new Set(['preparing', 'rendering', 'assessing', 'composing'])
+    const validPhases = new Set([
+        'preparing',
+        'rendering',
+        'assessing',
+        'composing',
+    ])
+
     if (
         typeof candidate.phase !== 'string'
         || !validPhases.has(candidate.phase)
         || typeof candidate.completedSteps !== 'number'
         || typeof candidate.totalSteps !== 'number'
         || typeof candidate.message !== 'string'
-    ) return undefined
+    )
+        return undefined
+
     const items = Array.isArray(candidate.items)
         ? candidate.items.map(readProgressItem).filter((item): item is OperationProgressItem => Boolean(item))
         : undefined
+
     return {
         phase: candidate.phase as MediaGenerationRunProgress['phase'],
         completedSteps: candidate.completedSteps,
@@ -855,10 +1137,10 @@ function readProgress(value: unknown): MediaGenerationRunProgress | undefined {
     }
 }
 
-export function applyMediaGenerationRequestEventToOperationNodes(
+export const applyMediaGenerationRequestEventToOperationNodes = (
     state: CanvasState,
     event: MediaGenerationRequestEvent,
-): MediaGenerationOperationRecoveryResult {
+): MediaGenerationOperationRecoveryResult => {
     const generationRun = typeof event.payload.generationRun === 'number'
         ? event.payload.generationRun
         : undefined
@@ -879,7 +1161,8 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         'failed',
         'cancelled',
     ])
-    const mediaRunStatus = runStatus && validRunStatuses.has(runStatus as MediaGenerationRunStatus)
+    const mediaRunStatus = runStatus
+        && validRunStatuses.has(runStatus as MediaGenerationRunStatus)
         ? runStatus as MediaGenerationRunStatus
         : undefined
     const problem = readProblem(event.payload.problem)
@@ -888,21 +1171,26 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         : undefined
     const progress = readProgress(event.payload.progress)
     const requestStatus = typeof event.payload.status === 'string' ? event.payload.status : undefined
-    if (requestStatus === 'completed' || requestStatus === 'cancelled') {
+
+    if (
+        requestStatus === 'completed'
+        || requestStatus === 'cancelled'
+    ) {
         const operationNodeIds = new Set(
-            state.nodes
-                .filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId))
-                .map(node => node.nodeId),
+            state.nodes.filter(node => isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)).map(node => node.nodeId),
         )
         const withoutOperations: CanvasState = {
             ...state,
             nodes: state.nodes.filter(node => !operationNodeIds.has(node.nodeId)),
-            edges: state.edges.filter(edge => (
-                !operationNodeIds.has(edge.sourceNodeId)
-                && !operationNodeIds.has(edge.targetNodeId)
-            )),
+            edges: state.edges.filter(
+                edge => (
+                    !operationNodeIds.has(edge.sourceNodeId)
+                    && !operationNodeIds.has(edge.targetNodeId)
+                ),
+            ),
         }
-        const terminalRuns = generationRun === undefined || !mediaRunStatus
+        const terminalRuns = generationRun === undefined
+            || !mediaRunStatus
             ? []
             : [{
                 generationRun,
@@ -918,6 +1206,7 @@ export function applyMediaGenerationRequestEventToOperationNodes(
             terminalRuns,
             requestStatus,
         )
+
         return {
             ...settled,
             changed: settled.changed || operationNodeIds.size > 0,
@@ -925,22 +1214,48 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         }
     }
 
-    const requestNodes = state.nodes.filter(node => (
-        isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)
-    ))
-    const targetNode = requestNodes.find(node => (
-        Boolean(mediaRunId && node.mediaRunId === mediaRunId)
-        || Boolean(outputNodeId && node.outputNodeId === outputNodeId)
-        || (generationRun !== undefined && node.generationRun === generationRun)
-    )) ?? (generationRun === undefined && !mediaRunId && !outputNodeId ? requestNodes[0] : undefined)
+    const requestNodes = state.nodes.filter(
+        node => (
+            isMediaGenerationOperationNodeForRequest(node, event.generationRequestId)
+        ),
+    )
+    const targetNode = requestNodes.find(
+        node => (
+            Boolean(mediaRunId && node.mediaRunId === mediaRunId)
+            || Boolean(outputNodeId && node.outputNodeId === outputNodeId)
+            || (generationRun !== undefined && node.generationRun === generationRun)
+        ),
+    ) ?? (generationRun === undefined
+        && !mediaRunId
+        && !outputNodeId
+        ? requestNodes[0]
+        : undefined)
+
     if (!targetNode) {
-        if (!progress && runStatus !== 'running' && runStatus !== 'failed') {
-            return { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
-        }
-        const existingMediaProgress = state.nodes.filter(isGeneratedMediaNode).find(node => (
-            isGeneratedMediaNode(node)
-            && mediaNodeMatches(node, event.generationRequestId, generationRun, outputNodeId, mediaRunId)
-        ))?.generationProgress?.progress
+        if (
+            !progress
+            && runStatus !== 'running'
+            && runStatus !== 'failed'
+        )
+            return {
+                state,
+                changed: false,
+                updatedNodeIds: [],
+                removedNodeIds: [],
+            }
+
+        const existingMediaProgress = state.nodes.filter(isGeneratedMediaNode).find(
+            node => (
+                isGeneratedMediaNode(node)
+                && mediaNodeMatches(
+                    node,
+                    event.generationRequestId,
+                    generationRun,
+                    outputNodeId,
+                    mediaRunId,
+                )
+            ),
+        )?.generationProgress?.progress
         const status = runStatus === 'failed' ? 'failed' : 'running'
         const message = problem?.detail
             ?? progressMessage
@@ -963,14 +1278,25 @@ export function applyMediaGenerationRequestEventToOperationNodes(
             }),
         })
         const projectedResult: MediaGenerationOperationRecoveryResult = projection.updatedNodeIds.length === 0
-            ? { state, changed: false, updatedNodeIds: [], removedNodeIds: [] }
+            ? {
+                state,
+                changed: false,
+                updatedNodeIds: [],
+                removedNodeIds: [],
+            }
             : {
-                state: { ...state, nodes: projection.nodes },
+                state: {
+                    ...state,
+                    nodes: projection.nodes,
+                },
                 changed: true,
                 updatedNodeIds: projection.updatedNodeIds,
                 removedNodeIds: [],
             }
-        if (status !== 'failed') return projectedResult
+
+        if (status !== 'failed')
+            return projectedResult
+
         const replacement = replaceFailedPendingOutputWithOperation({
             state: projectedResult.state,
             generationRequestId: event.generationRequestId,
@@ -983,6 +1309,7 @@ export function applyMediaGenerationRequestEventToOperationNodes(
             progress,
             updatedAt: event.createdAt,
         })
+
         return replacement.changed ? replacement : projectedResult
     }
 
@@ -996,58 +1323,99 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         : undefined
     const hasCompleteReferenceAction = Boolean(candidateAssetIds) === Boolean(unresolvedBindingId)
     const hasActionPayload = Boolean(candidateAssetIds || verificationAssetId || problem)
-    const operationResult = applyOperationPatches(state, event.generationRequestId, node => {
-        if (node.nodeId !== targetNode.nodeId || (node.requestRevision ?? 0) > event.requestRevision) return null
-        if (runStatus === 'completed' || runStatus === 'cancelled') {
-            return { remove: runStatus, ...(progress ? { progress } : {}) }
-        }
-        if (event.status === 'MEDIA_GENERATION_ACTION_REQUIRED') {
-            if (!hasCompleteReferenceAction || !hasActionPayload) return null
-            const nextProblem = problem ?? node.problem
-            const nextCandidateAssetIds = candidateAssetIds
-            const nextUnresolvedBindingId = unresolvedBindingId
-            const nextVerificationAssetId = verificationAssetId
-            const message = nextProblem?.detail
-                ?? (nextCandidateAssetIds
-                    ? 'Choose which attached Asset the prompt refers to.'
-                    : nextVerificationAssetId
-                    ? 'Provider verification is required to continue.'
-                    : node.message)
+    const operationResult = applyOperationPatches(
+        state,
+        event.generationRequestId,
+        node => {
+            if (
+                node.nodeId !== targetNode.nodeId
+                || (node.requestRevision ?? 0) > event.requestRevision
+            )
+                return null
+
+            if (
+                runStatus === 'completed'
+                || runStatus === 'cancelled'
+            )
+                return {
+                    remove: runStatus,
+                    ...(progress ? { progress } : {}),
+                }
+
+            if (event.status === 'MEDIA_GENERATION_ACTION_REQUIRED') {
+                if (
+                    !hasCompleteReferenceAction
+                    || !hasActionPayload
+                )
+                    return null
+
+                const nextProblem = problem ?? node.problem
+                const nextCandidateAssetIds = candidateAssetIds
+                const nextUnresolvedBindingId = unresolvedBindingId
+                const nextVerificationAssetId = verificationAssetId
+                const message = nextProblem?.detail
+                    ?? (nextCandidateAssetIds
+                        ? 'Choose which attached Asset the prompt refers to.'
+                        : nextVerificationAssetId
+                            ? 'Provider verification is required to continue.'
+                            : node.message)
+
+                return {
+                    status: 'action-required',
+                    message,
+                    ...(nextProblem ? { problem: nextProblem } : {}),
+                    ...(nextCandidateAssetIds ? { candidateAssetIds: nextCandidateAssetIds } : {}),
+                    ...(nextUnresolvedBindingId ? { unresolvedBindingId: nextUnresolvedBindingId } : {}),
+                    ...(nextVerificationAssetId ? { verificationAssetId: nextVerificationAssetId } : {}),
+                    requestRevision: event.requestRevision,
+                    updatedAt: event.createdAt,
+                }
+            }
+
+            if (
+                event.status === 'MEDIA_GENERATION_PROBLEM'
+                || runStatus === 'failed'
+            ) {
+                const message = problem?.detail ?? 'Generation failed.'
+
+                return {
+                    status: 'failed',
+                    message,
+                    progress: settleMediaGenerationRunProgress(
+                        progress ?? node.progress,
+                        'failed',
+                        message,
+                    ),
+                    ...(problem ? { problem } : {}),
+                    requestRevision: event.requestRevision,
+                    updatedAt: event.createdAt,
+                }
+            }
+
+            const message = progressMessage ?? (runStatus === 'running'
+                ? 'The provider is generating media.'
+                : 'Resuming the media request.')
+
             return {
-                status: 'action-required',
+                status: 'in-progress',
                 message,
-                ...(nextProblem ? { problem: nextProblem } : {}),
-                ...(nextCandidateAssetIds ? { candidateAssetIds: nextCandidateAssetIds } : {}),
-                ...(nextUnresolvedBindingId ? { unresolvedBindingId: nextUnresolvedBindingId } : {}),
-                ...(nextVerificationAssetId ? { verificationAssetId: nextVerificationAssetId } : {}),
+                ...(progress ? { progress } : {}),
                 requestRevision: event.requestRevision,
                 updatedAt: event.createdAt,
             }
-        }
-        if (event.status === 'MEDIA_GENERATION_PROBLEM' || runStatus === 'failed') {
-            const message = problem?.detail ?? 'Generation failed.'
-            return {
-                status: 'failed',
-                message,
-                progress: settleMediaGenerationRunProgress(progress ?? node.progress, 'failed', message),
-                ...(problem ? { problem } : {}),
-                requestRevision: event.requestRevision,
-                updatedAt: event.createdAt,
-            }
-        }
-        const message = progressMessage ?? (runStatus === 'running'
-            ? 'The provider is generating media.'
-            : 'Resuming the media request.')
-        return {
-            status: 'in-progress',
-            message,
-            ...(progress ? { progress } : {}),
-            requestRevision: event.requestRevision,
-            updatedAt: event.createdAt,
-        }
-    })
-    if (event.status !== 'MEDIA_GENERATION_PROBLEM' && runStatus !== 'failed') return operationResult
-    const message = problem?.detail ?? progressMessage ?? progress?.message ?? 'Generation failed.'
+        },
+    )
+
+    if (
+        event.status !== 'MEDIA_GENERATION_PROBLEM'
+        && runStatus !== 'failed'
+    )
+        return operationResult
+
+    const message = problem?.detail
+        ?? progressMessage
+        ?? progress?.message
+        ?? 'Generation failed.'
     const replacement = replaceFailedPendingOutputWithOperation({
         state: operationResult.state,
         generationRequestId: event.generationRequestId,
@@ -1061,7 +1429,10 @@ export function applyMediaGenerationRequestEventToOperationNodes(
         progress,
         updatedAt: event.createdAt,
     })
-    if (!replacement.changed) return operationResult
+
+    if (!replacement.changed)
+        return operationResult
+
     return {
         ...replacement,
         updatedNodeIds: [

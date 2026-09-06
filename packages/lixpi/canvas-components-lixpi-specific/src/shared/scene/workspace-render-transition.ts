@@ -21,8 +21,15 @@ export type WorkspaceRenderTransitionPlan = {
     shouldShowLoadingOutline: boolean
 }
 
-export function planWorkspaceRenderTransition(input: WorkspaceRenderTransitionPlanInput): WorkspaceRenderTransitionPlan {
-    const transition = planSceneTransition({ currentSceneKey: input.currentRouteWorkspaceId, nextSceneKey: input.nextRouteWorkspaceId, renderedSceneKey: input.renderedWorkspaceId, hasSnapshot: Boolean(input.incomingCanvasState), failed: input.loadingStatus === LoadingStatus.error })
+export const planWorkspaceRenderTransition = (input: WorkspaceRenderTransitionPlanInput): WorkspaceRenderTransitionPlan => {
+    const transition = planSceneTransition({
+        currentSceneKey: input.currentRouteWorkspaceId,
+        nextSceneKey: input.nextRouteWorkspaceId,
+        renderedSceneKey: input.renderedWorkspaceId,
+        hasSnapshot: Boolean(input.incomingCanvasState),
+        failed: input.loadingStatus === LoadingStatus.error,
+    })
+
     return {
         routeWorkspaceId: transition.sceneKey,
         routeWorkspaceChanged: transition.routeChanged,

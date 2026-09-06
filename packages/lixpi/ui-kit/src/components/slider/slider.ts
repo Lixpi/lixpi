@@ -20,12 +20,20 @@ export type SliderConfig<Value extends string = string> = {
     selectedValue?: Value
     className?: string
     observeParentResize?: boolean
-    onChange?: (value: Value, id: string) => void
+    onChange?: (
+        value: Value,
+        id: string,
+    ) => void
 }
 
 export type SliderInstance<Value extends string = string> = {
     render: () => void
-    resize: (x: number, y: number, width: number, height?: number) => void
+    resize: (
+        x: number,
+        y: number,
+        width: number,
+        height?: number,
+    ) => void
     setValue: (value: Value) => void
     getValue: () => Value
     destroy: () => void
@@ -53,14 +61,24 @@ const COLORS = {
     valueText: '#ffffff',
 }
 
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+const clamp = (
+    value: number,
+    min: number,
+    max: number,
+): number => Math.min(
+    max,
+    Math.max(min, value),
+)
 
 class Slider<Value extends string = string> implements SliderInstance<Value> {
     private readonly id: string
     private readonly options: SliderOption<Value>[]
     private readonly className: string
     private readonly observeParentResize: boolean
-    private readonly onChange?: (value: Value, id: string) => void
+    private readonly onChange?: (
+        value: Value,
+        id: string,
+    ) => void
 
     private x: number
     private y: number
@@ -83,8 +101,12 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     private resizeObserver: ResizeObserver | null = null
     private resizeAnimationFrame: number | null = null
 
-    constructor(parent: any, config: SliderConfig<Value>) {
-        if (config.options.length === 0) throw new Error('Slider requires at least one option')
+    constructor(
+        parent: any,
+        config: SliderConfig<Value>,
+    ) {
+        if (config.options.length === 0)
+            throw new Error('Slider requires at least one option')
 
         this.parent = parent
         this.id = config.id
@@ -96,52 +118,61 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
         this.y = config.y
         this.width = config.width
         this.height = config.height ?? DEFAULT_HEIGHT
-        this.currentValue = config.selectedValue !== undefined && this.indexOf(config.selectedValue) >= 0
+        this.currentValue = config.selectedValue !== undefined
+            && this.indexOf(config.selectedValue) >= 0
             ? config.selectedValue
             : this.firstEnabledOption().value
 
-        this.group = parent.append('g')
+        this.group = parent
+            .append('g')
             .attr('class', `slider-group ${this.className}`)
             .attr('data-slider-id', this.id)
             .attr('role', 'slider')
             .attr('tabindex', 0)
             .style('cursor', 'pointer')
 
-        this.rail = this.group.append('line')
+        this.rail = this.group
+            .append('line')
             .attr('class', 'slider-rail')
             .attr('stroke', COLORS.rail)
             .attr('stroke-width', RAIL_STROKE_WIDTH)
             .attr('stroke-linecap', 'round')
             .attr('pointer-events', 'none')
 
-        this.activeRail = this.group.append('line')
+        this.activeRail = this.group
+            .append('line')
             .attr('class', 'slider-rail-active')
             .attr('stroke', COLORS.railActive)
             .attr('stroke-width', RAIL_STROKE_WIDTH)
             .attr('stroke-linecap', 'round')
             .attr('pointer-events', 'none')
 
-        this.thumbHalo = this.group.append('circle')
+        this.thumbHalo = this.group
+            .append('circle')
             .attr('class', 'slider-thumb-halo')
             .attr('r', THUMB_HALO_RADIUS)
             .attr('fill', COLORS.thumbHalo)
             .attr('pointer-events', 'none')
 
-        this.thumb = this.group.append('circle')
+        this.thumb = this.group
+            .append('circle')
             .attr('class', 'slider-thumb')
             .attr('r', THUMB_RADIUS)
             .attr('fill', COLORS.thumb)
             .attr('pointer-events', 'none')
 
-        this.valueBubble = this.group.append('g')
+        this.valueBubble = this.group
+            .append('g')
             .attr('class', 'slider-value-bubble')
             .attr('pointer-events', 'none')
 
-        this.valueBubblePath = this.valueBubble.append('path')
+        this.valueBubblePath = this.valueBubble
+            .append('path')
             .attr('class', 'slider-value-bubble-background')
             .attr('fill', COLORS.valueBubble)
 
-        this.valueText = this.valueBubble.append('text')
+        this.valueText = this.valueBubble
+            .append('text')
             .attr('class', 'slider-value-text')
             .attr('fill', COLORS.valueText)
             .attr('font-size', 12)
@@ -149,7 +180,8 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
 
-        this.hit = this.group.append('rect')
+        this.hit = this.group
+            .append('rect')
             .attr('class', 'slider-hit')
             .attr('fill', 'transparent')
 
@@ -177,7 +209,10 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     }
 
     private railEnd(): number {
-        return Math.max(this.railStart(), this.width - RAIL_INSET)
+        return Math.max(
+            this.railStart(),
+            this.width - RAIL_INSET,
+        )
     }
 
     private railY(): number {
@@ -185,23 +220,34 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     }
 
     private optionX(index: number): number {
-        if (this.options.length === 1) return (this.railStart() + this.railEnd()) / 2
+        if (this.options.length === 1)
+            return (this.railStart() + this.railEnd()) / 2
+
         const ratio = index / (this.options.length - 1)
+
         return this.railStart() + ratio * (this.railEnd() - this.railStart())
     }
 
     private valueBubbleWidth(label: string): number {
-        return Math.max(
-            VALUE_BUBBLE_MIN_WIDTH,
-            label.length * VALUE_BUBBLE_CHARACTER_WIDTH + VALUE_BUBBLE_HORIZONTAL_PADDING * 2,
-        )
+        return Math.max(VALUE_BUBBLE_MIN_WIDTH, label.length * VALUE_BUBBLE_CHARACTER_WIDTH + VALUE_BUBBLE_HORIZONTAL_PADDING * 2)
     }
 
-    private valueBubblePathData(width: number, pointerX: number): string {
+    private valueBubblePathData(
+        width: number,
+        pointerX: number,
+    ): string {
         const bodyBottom = VALUE_BUBBLE_HEIGHT
         const pointerHalfWidth = 5
-        const pointerLeft = clamp(pointerX - pointerHalfWidth, VALUE_BUBBLE_RADIUS, width - VALUE_BUBBLE_RADIUS)
-        const pointerRight = clamp(pointerX + pointerHalfWidth, VALUE_BUBBLE_RADIUS, width - VALUE_BUBBLE_RADIUS)
+        const pointerLeft = clamp(
+            pointerX - pointerHalfWidth,
+            VALUE_BUBBLE_RADIUS,
+            width - VALUE_BUBBLE_RADIUS,
+        )
+        const pointerRight = clamp(
+            pointerX + pointerHalfWidth,
+            VALUE_BUBBLE_RADIUS,
+            width - VALUE_BUBBLE_RADIUS,
+        )
 
         return [
             `M ${VALUE_BUBBLE_RADIUS} 0`,
@@ -226,14 +272,22 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
         this.group
             .attr('aria-label', option.ariaLabel ?? option.label)
             .attr('aria-valuemin', 0)
-            .attr('aria-valuemax', Math.max(0, this.options.length - 1))
-            .attr('aria-valuenow', Math.max(0, index))
+            .attr(
+                'aria-valuemax',
+                Math.max(0, this.options.length - 1),
+            )
+            .attr(
+                'aria-valuenow',
+                Math.max(0, index),
+            )
             .attr('aria-valuetext', option.label)
     }
 
     private updateHostSvgGeometry(): void {
         const node = this.parent.node?.()
-        if (node?.tagName?.toLowerCase() !== 'svg') return
+
+        if (node?.tagName?.toLowerCase() !== 'svg')
+            return
 
         this.parent
             .attr('width', this.width)
@@ -245,14 +299,22 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     }
 
     private renderInternal(animate: boolean): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
 
-        const selectedIndex = Math.max(0, this.indexOf(this.currentValue))
+        const selectedIndex = Math.max(
+            0,
+            this.indexOf(this.currentValue),
+        )
         const selectedOption = this.selectedOption()
         const selectedX = this.optionX(selectedIndex)
         const railY = this.railY()
         const bubbleWidth = this.valueBubbleWidth(selectedOption.label)
-        const bubbleLeft = clamp(selectedX - bubbleWidth / 2, 0, Math.max(0, this.width - bubbleWidth))
+        const bubbleLeft = clamp(
+            selectedX - bubbleWidth / 2,
+            0,
+            Math.max(0, this.width - bubbleWidth),
+        )
         const bubblePointerX = selectedX - bubbleLeft
 
         this.updateHostSvgGeometry()
@@ -260,8 +322,14 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
         this.group.attr('transform', `translate(${this.x}, ${this.y})`)
 
         this.rail
-            .attr('x1', this.railStart())
-            .attr('x2', this.railEnd())
+            .attr(
+                'x1',
+                this.railStart(),
+            )
+            .attr(
+                'x2',
+                this.railEnd(),
+            )
             .attr('y1', railY)
             .attr('y2', railY)
 
@@ -269,9 +337,15 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
             .attr('x', 0)
             .attr('y', VALUE_BUBBLE_HEIGHT)
             .attr('width', this.width)
-            .attr('height', Math.max(1, this.height - VALUE_BUBBLE_HEIGHT))
+            .attr(
+                'height',
+                Math.max(1, this.height - VALUE_BUBBLE_HEIGHT),
+            )
 
-        this.valueBubblePath.attr('d', this.valueBubblePathData(bubbleWidth, bubblePointerX))
+        this.valueBubblePath.attr(
+            'd',
+            this.valueBubblePathData(bubbleWidth, bubblePointerX),
+        )
         this.valueText
             .attr('x', bubbleWidth / 2)
             .attr('y', VALUE_BUBBLE_HEIGHT / 2)
@@ -302,55 +376,113 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
         }
 
         this.activeRail
-            .attr('x1', this.railStart())
+            .attr(
+                'x1',
+                this.railStart(),
+            )
             .attr('y1', railY)
             .attr('y2', railY)
         this.thumbHalo.attr('cy', railY)
         this.thumb.attr('cy', railY)
     }
 
-    private applyValue(value: Value, notify: boolean, animate: boolean): void {
+    private applyValue(
+        value: Value,
+        notify: boolean,
+        animate: boolean,
+    ): void {
         const nextIndex = this.indexOf(value)
-        if (nextIndex < 0 || this.options[nextIndex]?.disabled) return
+
+        if (
+            nextIndex < 0
+            || this.options[nextIndex]?.disabled
+        )
+            return
+
         const changed = value !== this.currentValue
         this.currentValue = value
         this.renderInternal(changed && animate)
-        if (changed && notify) this.onChange?.(value, this.id)
+
+        if (
+            changed
+            && notify
+        )
+            this.onChange?.(value, this.id)
     }
 
     private nearestEnabledIndex(index: number): number {
-        if (!this.options[index]?.disabled) return index
+        if (!this.options[index]?.disabled)
+            return index
+
         for (let distance = 1; distance < this.options.length; distance += 1) {
             const leftIndex = index - distance
-            if (leftIndex >= 0 && !this.options[leftIndex]?.disabled) return leftIndex
+
+            if (
+                leftIndex >= 0
+                && !this.options[leftIndex]?.disabled
+            )
+                return leftIndex
+
             const rightIndex = index + distance
-            if (rightIndex < this.options.length && !this.options[rightIndex]?.disabled) return rightIndex
+
+            if (
+                rightIndex < this.options.length
+                && !this.options[rightIndex]?.disabled
+            )
+                return rightIndex
         }
+
         return this.indexOf(this.currentValue)
     }
 
     private indexFromPointer(event: PointerEvent): number {
         const hitNode = this.hit.node() as SVGRectElement
         const rect = hitNode.getBoundingClientRect()
-        if (rect.width <= 0 || this.options.length === 1) return 0
-        const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1)
-        return this.nearestEnabledIndex(Math.round(ratio * (this.options.length - 1)))
+
+        if (
+            rect.width <= 0
+            || this.options.length === 1
+        )
+            return 0
+
+        const ratio = clamp(
+            (event.clientX - rect.left) / rect.width,
+            0,
+            1,
+        )
+
+        return this.nearestEnabledIndex(
+            Math.round(ratio * (this.options.length - 1)),
+        )
     }
 
-    private applyPointerValue(event: PointerEvent, animate: boolean): void {
+    private applyPointerValue(
+        event: PointerEvent,
+        animate: boolean,
+    ): void {
         const option = this.options[this.indexFromPointer(event)]
-        if (option) this.applyValue(option.value, true, animate)
+
+        if (option)
+            this.applyValue(
+                option.value,
+                true,
+                animate,
+            )
     }
 
     private readonly handleWindowPointerMove = (event: PointerEvent): void => {
-        if (event.pointerId !== this.activePointerId) return
+        if (event.pointerId !== this.activePointerId)
+            return
+
         event.preventDefault()
         event.stopPropagation()
         this.applyPointerValue(event, false)
     }
 
     private readonly handleWindowPointerUp = (event: PointerEvent): void => {
-        if (event.pointerId !== this.activePointerId) return
+        if (event.pointerId !== this.activePointerId)
+            return
+
         event.preventDefault()
         event.stopPropagation()
         this.activePointerId = null
@@ -362,9 +494,21 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
         event.stopPropagation()
         this.activePointerId = event.pointerId
         this.applyPointerValue(event, true)
-        window.addEventListener('pointermove', this.handleWindowPointerMove, { passive: false })
-        window.addEventListener('pointerup', this.handleWindowPointerUp, { passive: false })
-        window.addEventListener('pointercancel', this.handleWindowPointerUp, { passive: false })
+        window.addEventListener(
+            'pointermove',
+            this.handleWindowPointerMove,
+            { passive: false },
+        )
+        window.addEventListener(
+            'pointerup',
+            this.handleWindowPointerUp,
+            { passive: false },
+        )
+        window.addEventListener(
+            'pointercancel',
+            this.handleWindowPointerUp,
+            { passive: false },
+        )
     }
 
     private removeWindowPointerListeners(): void {
@@ -384,31 +528,59 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
             End: this.options.length - 1,
         }
         const requestedIndex = nextByKey[event.key]
-        if (requestedIndex === undefined) return
+
+        if (requestedIndex === undefined)
+            return
 
         event.preventDefault()
         event.stopPropagation()
-        const nextIndex = this.nearestEnabledIndex(clamp(requestedIndex, 0, this.options.length - 1))
+        const nextIndex = this.nearestEnabledIndex(
+            clamp(
+                requestedIndex,
+                0,
+                this.options.length - 1,
+            ),
+        )
         const option = this.options[nextIndex]
-        if (option) this.applyValue(option.value, true, true)
+
+        if (option)
+            this.applyValue(
+                option.value,
+                true,
+                true,
+            )
     }
 
     private bindResizeObserver(): void {
-        if (!this.observeParentResize || typeof ResizeObserver === 'undefined') return
+        if (
+            !this.observeParentResize
+            || typeof ResizeObserver === 'undefined'
+        )
+            return
+
         const node = this.parent.node?.()
         const measureElement = node?.parentElement
-        if (!measureElement) return
+
+        if (!measureElement)
+            return
 
         this.resizeObserver = new ResizeObserver(() => this.scheduleObservedResize())
         this.resizeObserver.observe(measureElement)
     }
 
     private scheduleObservedResize(): void {
-        if (this.destroyed || this.resizeAnimationFrame !== null) return
+        if (
+            this.destroyed
+            || this.resizeAnimationFrame !== null
+        )
+            return
+
         if (typeof requestAnimationFrame === 'undefined') {
             this.resizeToParent()
+
             return
         }
+
         this.resizeAnimationFrame = requestAnimationFrame(() => {
             this.resizeAnimationFrame = null
             this.resizeToParent()
@@ -421,13 +593,30 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
         const nextWidth = Number(measureElement?.clientWidth ?? 0)
             || measureElement?.getBoundingClientRect().width
             || 0
-        if (!Number.isFinite(nextWidth) || nextWidth <= 0 || Math.abs(nextWidth - this.width) < 0.5) return
-        this.resize(this.x, this.y, nextWidth, this.height)
+
+        if (
+            !Number.isFinite(nextWidth)
+            || nextWidth <= 0
+            || Math.abs(nextWidth - this.width) < 0.5
+        )
+            return
+
+        this.resize(
+            this.x,
+            this.y,
+            nextWidth,
+            this.height,
+        )
     }
 
-    render = (): void => this.renderInternal(false)
+    render = (): void => void this.renderInternal(false)
 
-    resize(x: number, y: number, width: number, height = this.height): void {
+    resize(
+        x: number,
+        y: number,
+        width: number,
+        height = this.height,
+    ): void {
         this.x = x
         this.y = y
         this.width = width
@@ -436,8 +625,14 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     }
 
     setValue(value: Value): void {
-        if (value === this.currentValue) return
-        this.applyValue(value, false, false)
+        if (value === this.currentValue)
+            return
+
+        this.applyValue(
+            value,
+            false,
+            false,
+        )
     }
 
     getValue(): Value {
@@ -445,14 +640,21 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.activePointerId = null
         this.removeWindowPointerListeners()
-        if (this.resizeAnimationFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
+
+        if (
+            this.resizeAnimationFrame !== null
+            && typeof cancelAnimationFrame !== 'undefined'
+        ) {
             cancelAnimationFrame(this.resizeAnimationFrame)
             this.resizeAnimationFrame = null
         }
+
         this.resizeObserver?.disconnect()
         this.activeRail.interrupt()
         this.thumbHalo.interrupt()
@@ -462,9 +664,7 @@ class Slider<Value extends string = string> implements SliderInstance<Value> {
     }
 }
 
-export function createSlider<Value extends string = string>(
+export const createSlider = <Value extends string = string>(
     parent: any,
     config: SliderConfig<Value>,
-): SliderInstance<Value> {
-    return new Slider(parent, config)
-}
+): SliderInstance<Value> => new Slider(parent, config)

@@ -1,3 +1,4 @@
+import { log as debugLog } from '@lixpi/debug-tools'
 import NATS_Service from '@lixpi/nats-service'
 
 const OBJECT_STREAM_PREFIX = 'OBJ_'
@@ -8,13 +9,14 @@ const LEGACY_BUCKET_PATTERNS = [
 ]
 
 const servers = process.env.NATS_SERVERS
-    ?.split(',')
-    .map((server) => server.trim())
-    .filter(Boolean)
+    ?.split(',').map(server => server.trim()).filter(Boolean)
 const password = process.env.NATS_REGULAR_USER_PASSWORD
-if (!servers?.length || !password) {
+
+if (
+    !servers?.length
+    || !password
+)
     throw new Error('NATS_SERVERS and NATS_REGULAR_USER_PASSWORD are required')
-}
 
 const confirmed = process.argv.includes(CONFIRMATION_FLAG)
 const natsService = await NATS_Service.init({
@@ -25,31 +27,34 @@ const natsService = await NATS_Service.init({
 })
 
 try {
-    const bucketNames = (await natsService.listStreamNames())
-        .filter((streamName) => streamName.startsWith(OBJECT_STREAM_PREFIX))
-        .map((streamName) => streamName.slice(OBJECT_STREAM_PREFIX.length))
-    const legacyBucketNames = bucketNames
-        .filter((bucketName) => !bucketName.startsWith('blobs-'))
-        .filter((bucketName) => LEGACY_BUCKET_PATTERNS.some((pattern) => pattern.test(bucketName)))
+    const bucketNames = (await natsService.listStreamNames()).filter(streamName => streamName.startsWith(OBJECT_STREAM_PREFIX)).map(
+        streamName => streamName.slice(OBJECT_STREAM_PREFIX.length),
+    )
+    const legacyBucketNames = bucketNames.filter(bucketName => !bucketName.startsWith('blobs-')).filter(
+        bucketName => LEGACY_BUCKET_PATTERNS.some(pattern => pattern.test(bucketName)),
+    )
         .sort()
 
-    console.log(JSON.stringify(
-        {
-            mode: confirmed ? 'delete' : 'dry-run',
-            legacyBucketNames,
-            activeBlobBucketsExcluded: bucketNames.filter((bucketName) => bucketName.startsWith('blobs-')).sort(),
-        },
-        null,
-        2,
-    ))
+    debugLog(
+        JSON.stringify(
+            {
+                mode: confirmed ? 'delete' : 'dry-run',
+                legacyBucketNames,
+                activeBlobBucketsExcluded: bucketNames.filter(bucketName => bucketName.startsWith('blobs-')).sort(),
+            },
+            null,
+            2,
+        ),
+    )
 
-    if (!confirmed) {
-        console.log(`Dry run only. Re-run with ${CONFIRMATION_FLAG} after verifying the archive and target account.`)
-    } else {
+    if (!confirmed)
+        debugLog(`Dry run only. Re-run with ${CONFIRMATION_FLAG} after verifying the archive and target account.`)
+    else {
         for (const bucketName of legacyBucketNames) {
             await natsService.deleteObjectStore(bucketName)
         }
-        console.log(`Deleted ${legacyBucketNames.length} retired Object Store bucket(s).`)
+
+        debugLog(`Deleted ${legacyBucketNames.length} retired Object Store bucket(s).`)
     }
 } finally {
     await natsService.close()

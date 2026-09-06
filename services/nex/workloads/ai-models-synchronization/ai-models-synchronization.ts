@@ -7,16 +7,11 @@ import {
     ListFoundationModelsCommand,
 } from '@aws-sdk/client-bedrock'
 import { fromSSO } from '@aws-sdk/credential-providers'
-import DynamoDBService, {
-    marshall,
-    unmarshall,
-} from '@lixpi/dynamodb-service'
+import DynamoDBService from '@lixpi/dynamodb-service'
 
 // INFO: do not remove unused imports!
 import {
-    log,
     info,
-    infoStr,
     warn,
     err,
 } from '@lixpi/debug-tools'
@@ -41,19 +36,45 @@ import {
 
 // Modality metadata constants
 const MODALITY_METADATA = {
-    text: { title: 'Text', shortTitle: 'TXT' },
-    image: { title: 'Image', shortTitle: 'IMG' },
-    image_generation: { title: 'Image Generation', shortTitle: 'IMG GEN' },
-    audio: { title: 'Audio', shortTitle: 'AUDIO' },
-    voice: { title: 'Voice', shortTitle: 'VOICE' },
-    video: { title: 'Video', shortTitle: 'VID' },
-    video_generation: { title: 'Video Generation', shortTitle: 'VID GEN' },
+    text: {
+        title: 'Text',
+        shortTitle: 'TXT',
+    },
+    image: {
+        title: 'Image',
+        shortTitle: 'IMG',
+    },
+    image_generation: {
+        title: 'Image Generation',
+        shortTitle: 'IMG GEN',
+    },
+    audio: {
+        title: 'Audio',
+        shortTitle: 'AUDIO',
+    },
+    voice: {
+        title: 'Voice',
+        shortTitle: 'VOICE',
+    },
+    video: {
+        title: 'Video',
+        shortTitle: 'VID',
+    },
+    video_generation: {
+        title: 'Video Generation',
+        shortTitle: 'VID GEN',
+    },
 } as const
 
 // Helper function to generate modalities with metadata from modalities array
-function generateModalitiesWithMetadata(modalities: string[]): Array<{ modality: string; title: string; shortTitle: string }> {
+const generateModalitiesWithMetadata = (modalities: string[]): Array<{
+    modality: string
+    title: string
+    shortTitle: string
+}> => {
     return modalities.map(modality => {
         const metadata = MODALITY_METADATA[modality as keyof typeof MODALITY_METADATA]
+
         return {
             modality,
             title: metadata?.title || modality.charAt(0).toUpperCase() + modality.slice(1),
@@ -74,7 +95,10 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
     BytePlus: 'ByteDance',
 }
 
-const greatestCommonDivisor = (left: number, right: number): number => {
+const greatestCommonDivisor = (
+    left: number,
+    right: number,
+): number => {
     let dividend = Math.abs(left)
     let divisor = Math.abs(right)
 
@@ -91,16 +115,21 @@ const greatestCommonDivisor = (left: number, right: number): number => {
 // represents an aspect-ratio choice in the UI. Keep the provider value intact
 // and store the reduced ratio in the persisted display label. Video resolution
 // controls are separate metadata and never pass through this mapper.
-export const mapResolutionOptionsToAspectRatioLabels = (
-    options: ImageSizeOption[],
-): ImageSizeOption[] =>
-    options.map((option) => {
+export const mapResolutionOptionsToAspectRatioLabels = (options: ImageSizeOption[]): ImageSizeOption[] =>
+    options.map(option => {
         const dimensions = option.value.match(/^(\d+)\s*[x×]\s*(\d+)$/i)
-        if (!dimensions) return { ...option }
+
+        if (!dimensions)
+            return { ...option }
 
         const width = Number(dimensions[1])
         const height = Number(dimensions[2])
-        if (width === 0 || height === 0) return { ...option }
+
+        if (
+            width === 0
+            || height === 0
+        )
+            return { ...option }
 
         const divisor = greatestCommonDivisor(width, height)
 
@@ -111,10 +140,22 @@ export const mapResolutionOptionsToAspectRatioLabels = (
     })
 
 const OPENAI_IMAGE_SIZES = mapResolutionOptionsToAspectRatioLabels([
-    { value: '1024x1024', label: '1024x1024' },
-    { value: '1536x1024', label: '1536x1024' },
-    { value: '1024x1536', label: '1024x1536' },
-    { value: 'auto', label: 'Auto' },
+    {
+        value: '1024x1024',
+        label: '1024x1024',
+    },
+    {
+        value: '1536x1024',
+        label: '1536x1024',
+    },
+    {
+        value: '1024x1536',
+        label: '1024x1536',
+    },
+    {
+        value: 'auto',
+        label: 'Auto',
+    },
 ])
 
 const segmentedControl = (
@@ -133,26 +174,70 @@ const segmentedControl = (
 })
 
 const OPENAI_REASONING_EFFORT_OPTIONS: ImageSizeOption[] = [
-    { value: 'none', label: 'None', description: 'Lowest latency. The model answers without allocating reasoning tokens.' },
-    { value: 'low', label: 'Low', description: 'Uses a small reasoning budget for latency-sensitive work.' },
-    { value: 'medium', label: 'Medium', description: 'Balanced quality, latency, and token usage. This is the provider default.' },
-    { value: 'high', label: 'High', description: 'Spends more reasoning tokens on difficult or multi-step work.' },
-    { value: 'xhigh', label: 'X-high', description: 'Uses extended reasoning for the hardest asynchronous work.' },
+    {
+        value: 'none',
+        label: 'None',
+        description: 'Lowest latency. The model answers without allocating reasoning tokens.',
+    },
+    {
+        value: 'low',
+        label: 'Low',
+        description: 'Uses a small reasoning budget for latency-sensitive work.',
+    },
+    {
+        value: 'medium',
+        label: 'Medium',
+        description: 'Balanced quality, latency, and token usage. This is the provider default.',
+    },
+    {
+        value: 'high',
+        label: 'High',
+        description: 'Spends more reasoning tokens on difficult or multi-step work.',
+    },
+    {
+        value: 'xhigh',
+        label: 'X-high',
+        description: 'Uses extended reasoning for the hardest asynchronous work.',
+    },
 ]
 const OPENAI_REASONING_MAX_EFFORT_OPTIONS: ImageSizeOption[] = [
     ...OPENAI_REASONING_EFFORT_OPTIONS,
-    { value: 'max', label: 'Max', description: 'Maximum exploration and verification, with the highest latency and token usage.' },
+    {
+        value: 'max',
+        label: 'Max',
+        description: 'Maximum exploration and verification, with the highest latency and token usage.',
+    },
 ]
 const OPENAI_PRO_REASONING_EFFORT_OPTIONS: ImageSizeOption[] = OPENAI_REASONING_EFFORT_OPTIONS
     .filter(option => ['medium', 'high', 'xhigh'].includes(option.value))
 const OPENAI_VERBOSITY_OPTIONS: ImageSizeOption[] = [
-    { value: 'low', label: 'Low', description: 'More concise answers while preserving the requested result.' },
-    { value: 'medium', label: 'Medium', description: 'Balanced response detail. This is the provider default.' },
-    { value: 'high', label: 'High', description: 'More detailed explanations and supporting context.' },
+    {
+        value: 'low',
+        label: 'Low',
+        description: 'More concise answers while preserving the requested result.',
+    },
+    {
+        value: 'medium',
+        label: 'Medium',
+        description: 'Balanced response detail. This is the provider default.',
+    },
+    {
+        value: 'high',
+        label: 'High',
+        description: 'More detailed explanations and supporting context.',
+    },
 ]
 const OPENAI_REASONING_MODE_OPTIONS: ImageSizeOption[] = [
-    { value: 'standard', label: 'Standard', description: 'Normal execution for routine, latency-sensitive, or high-volume work.' },
-    { value: 'pro', label: 'Pro', description: 'Applies more model work before returning one final answer. It can improve difficult tasks but increases latency and billed token usage.' },
+    {
+        value: 'standard',
+        label: 'Standard',
+        description: 'Normal execution for routine, latency-sensitive, or high-volume work.',
+    },
+    {
+        value: 'pro',
+        label: 'Pro',
+        description: 'Applies more model work before returning one final answer. It can improve difficult tasks but increases latency and billed token usage.',
+    },
 ]
 const buildOpenAIReasoningControls = (
     effortOptions: ImageSizeOption[],
@@ -185,17 +270,34 @@ const buildOpenAIReasoningControls = (
 ]
 
 const ANTHROPIC_EFFORT_OPTIONS: ImageSizeOption[] = [
-    { value: 'low', label: 'Low', description: 'Lowest token use and latency, with less depth on difficult work.' },
-    { value: 'medium', label: 'Medium', description: 'Balanced capability, speed, and output-token usage.' },
-    { value: 'high', label: 'High', description: 'Provider default for strong reasoning and tool use.' },
-    { value: 'xhigh', label: 'X-high', description: 'Extended capability for long-running coding and agentic work.' },
-    { value: 'max', label: 'Max', description: 'Maximum capability without a token-efficiency constraint.' },
+    {
+        value: 'low',
+        label: 'Low',
+        description: 'Lowest token use and latency, with less depth on difficult work.',
+    },
+    {
+        value: 'medium',
+        label: 'Medium',
+        description: 'Balanced capability, speed, and output-token usage.',
+    },
+    {
+        value: 'high',
+        label: 'High',
+        description: 'Provider default for strong reasoning and tool use.',
+    },
+    {
+        value: 'xhigh',
+        label: 'X-high',
+        description: 'Extended capability for long-running coding and agentic work.',
+    },
+    {
+        value: 'max',
+        label: 'Max',
+        description: 'Maximum capability without a token-efficiency constraint.',
+    },
 ]
-const ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS = ANTHROPIC_EFFORT_OPTIONS
-    .filter(option => option.value !== 'xhigh')
-const buildAnthropicReasoningControls = (
-    options: ImageSizeOption[],
-): MediaGenerationConfigControl[] => [segmentedControl(
+const ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS = ANTHROPIC_EFFORT_OPTIONS.filter(option => option.value !== 'xhigh')
+const buildAnthropicReasoningControls = (options: ImageSizeOption[]): MediaGenerationConfigControl[] => [segmentedControl(
     'reasoningEffort',
     'Reasoning effort',
     options,
@@ -204,10 +306,26 @@ const buildAnthropicReasoningControls = (
 )]
 
 const GOOGLE_THINKING_LEVEL_OPTIONS: ImageSizeOption[] = [
-    { value: 'minimal', label: 'Minimal', description: 'Minimizes reasoning for the lowest latency. Not every Gemini model supports this level.' },
-    { value: 'low', label: 'Low', description: 'Uses a small reasoning budget for straightforward work.' },
-    { value: 'medium', label: 'Medium', description: 'Balanced reasoning depth and latency. This is the default on the main Gemini Flash models.' },
-    { value: 'high', label: 'High', description: 'Maximizes reasoning depth for complex multi-step work.' },
+    {
+        value: 'minimal',
+        label: 'Minimal',
+        description: 'Minimizes reasoning for the lowest latency. Not every Gemini model supports this level.',
+    },
+    {
+        value: 'low',
+        label: 'Low',
+        description: 'Uses a small reasoning budget for straightforward work.',
+    },
+    {
+        value: 'medium',
+        label: 'Medium',
+        description: 'Balanced reasoning depth and latency. This is the default on the main Gemini Flash models.',
+    },
+    {
+        value: 'high',
+        label: 'High',
+        description: 'Maximizes reasoning depth for complex multi-step work.',
+    },
 ]
 const buildGoogleThinkingControls = (
     supportedLevels: string[],
@@ -233,10 +351,26 @@ const OPENAI_IMAGE_CONTROLS: MediaGenerationConfigControl[] = [
         'quality',
         'Quality',
         [
-            { value: 'auto', label: 'Auto', description: 'Lets the provider balance quality, latency, and image-token usage.' },
-            { value: 'low', label: 'Low', description: 'Fastest and least expensive output.' },
-            { value: 'medium', label: 'Medium', description: 'Balanced detail, latency, and cost.' },
-            { value: 'high', label: 'High', description: 'Highest detail, with greater latency and image-token cost.' },
+            {
+                value: 'auto',
+                label: 'Auto',
+                description: 'Lets the provider balance quality, latency, and image-token usage.',
+            },
+            {
+                value: 'low',
+                label: 'Low',
+                description: 'Fastest and least expensive output.',
+            },
+            {
+                value: 'medium',
+                label: 'Medium',
+                description: 'Balanced detail, latency, and cost.',
+            },
+            {
+                value: 'high',
+                label: 'High',
+                description: 'Highest detail, with greater latency and image-token cost.',
+            },
         ],
         'auto',
         'Controls output detail and image-token cost. Higher quality generally takes longer and costs more.',
@@ -245,9 +379,21 @@ const OPENAI_IMAGE_CONTROLS: MediaGenerationConfigControl[] = [
         'background',
         'Background',
         [
-            { value: 'auto', label: 'Auto', description: 'Lets the provider choose whether the output is opaque or transparent.' },
-            { value: 'opaque', label: 'Opaque', description: 'Always produces a filled background.' },
-            { value: 'transparent', label: 'Transparent', description: 'Requests an alpha channel. GPT Image 2 treats transparency as preview functionality and it requires PNG or WebP output.' },
+            {
+                value: 'auto',
+                label: 'Auto',
+                description: 'Lets the provider choose whether the output is opaque or transparent.',
+            },
+            {
+                value: 'opaque',
+                label: 'Opaque',
+                description: 'Always produces a filled background.',
+            },
+            {
+                value: 'transparent',
+                label: 'Transparent',
+                description: 'Requests an alpha channel. GPT Image 2 treats transparency as preview functionality and it requires PNG or WebP output.',
+            },
         ],
         'auto',
         'Controls background transparency. Lixpi keeps PNG output internally, so transparent output is compatible with the fixed output format.',
@@ -255,34 +401,103 @@ const OPENAI_IMAGE_CONTROLS: MediaGenerationConfigControl[] = [
 ]
 
 const GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS: ImageSizeOption[] = [
-    { value: '1:1', label: '1:1' },
-    { value: '3:2', label: '3:2' },
-    { value: '2:3', label: '2:3' },
-    { value: '3:4', label: '3:4' },
-    { value: '4:3', label: '4:3' },
-    { value: '4:5', label: '4:5' },
-    { value: '5:4', label: '5:4' },
-    { value: '9:16', label: '9:16' },
-    { value: '16:9', label: '16:9' },
-    { value: '21:9', label: '21:9' },
+    {
+        value: '1:1',
+        label: '1:1',
+    },
+    {
+        value: '3:2',
+        label: '3:2',
+    },
+    {
+        value: '2:3',
+        label: '2:3',
+    },
+    {
+        value: '3:4',
+        label: '3:4',
+    },
+    {
+        value: '4:3',
+        label: '4:3',
+    },
+    {
+        value: '4:5',
+        label: '4:5',
+    },
+    {
+        value: '5:4',
+        label: '5:4',
+    },
+    {
+        value: '9:16',
+        label: '9:16',
+    },
+    {
+        value: '16:9',
+        label: '16:9',
+    },
+    {
+        value: '21:9',
+        label: '21:9',
+    },
 ]
 const GOOGLE_FLASH_IMAGE_ASPECT_RATIOS: ImageSizeOption[] = [
     ...GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS,
-    { value: '1:4', label: '1:4' },
-    { value: '4:1', label: '4:1' },
-    { value: '1:8', label: '1:8' },
-    { value: '8:1', label: '8:1' },
+    {
+        value: '1:4',
+        label: '1:4',
+    },
+    {
+        value: '4:1',
+        label: '4:1',
+    },
+    {
+        value: '1:8',
+        label: '1:8',
+    },
+    {
+        value: '8:1',
+        label: '8:1',
+    },
 ]
 const STABILITY_IMAGE_ASPECT_RATIOS: ImageSizeOption[] = [
-    { value: '1:1', label: '1:1' },
-    { value: '21:9', label: '21:9' },
-    { value: '16:9', label: '16:9' },
-    { value: '3:2', label: '3:2' },
-    { value: '5:4', label: '5:4' },
-    { value: '4:5', label: '4:5' },
-    { value: '2:3', label: '2:3' },
-    { value: '9:16', label: '9:16' },
-    { value: '9:21', label: '9:21' },
+    {
+        value: '1:1',
+        label: '1:1',
+    },
+    {
+        value: '21:9',
+        label: '21:9',
+    },
+    {
+        value: '16:9',
+        label: '16:9',
+    },
+    {
+        value: '3:2',
+        label: '3:2',
+    },
+    {
+        value: '5:4',
+        label: '5:4',
+    },
+    {
+        value: '4:5',
+        label: '4:5',
+    },
+    {
+        value: '2:3',
+        label: '2:3',
+    },
+    {
+        value: '9:16',
+        label: '9:16',
+    },
+    {
+        value: '9:21',
+        label: '9:21',
+    },
 ]
 const STABILITY_IMAGE_CONTROLS: MediaGenerationConfigControl[] = [{
     key: 'imageSize',
@@ -321,11 +536,20 @@ const buildGoogleImageControls = (
 // VEO video-generation option lists. Reuse the ImageSizeOption { value, label }
 // shape across every synchronized media-generation control.
 const VEO_ASPECT_RATIOS: ImageSizeOption[] = [
-    { value: '16:9', label: '16:9' },
-    { value: '9:16', label: '9:16' },
+    {
+        value: '16:9',
+        label: '16:9',
+    },
+    {
+        value: '9:16',
+        label: '9:16',
+    },
 ]
 const VEO_RESOLUTIONS: ImageSizeOption[] = [
-    { value: '720p', label: '720p' },
+    {
+        value: '720p',
+        label: '720p',
+    },
     {
         value: '1080p',
         label: '1080p',
@@ -341,8 +565,14 @@ const VEO_31_RESOLUTIONS: ImageSizeOption[] = [
     },
 ]
 const VEO_DURATIONS: ImageSizeOption[] = [
-    { value: '4', label: '4s' },
-    { value: '6', label: '6s' },
+    {
+        value: '4',
+        label: '4s',
+    },
+    {
+        value: '6',
+        label: '6s',
+    },
     {
         value: '8',
         label: '8s',
@@ -354,28 +584,76 @@ const VEO_DURATIONS: ImageSizeOption[] = [
 // Fast supports 480p/720p. Both support adaptive aspect ratio and intelligent
 // duration selection.
 const SEEDANCE_ASPECT_RATIOS: ImageSizeOption[] = [
-    { value: '16:9', label: '16:9' },
-    { value: '4:3', label: '4:3' },
-    { value: '1:1', label: '1:1' },
-    { value: '3:4', label: '3:4' },
-    { value: '9:16', label: '9:16' },
-    { value: '21:9', label: '21:9' },
-    { value: 'adaptive', label: 'Auto' },
+    {
+        value: '16:9',
+        label: '16:9',
+    },
+    {
+        value: '4:3',
+        label: '4:3',
+    },
+    {
+        value: '1:1',
+        label: '1:1',
+    },
+    {
+        value: '3:4',
+        label: '3:4',
+    },
+    {
+        value: '9:16',
+        label: '9:16',
+    },
+    {
+        value: '21:9',
+        label: '21:9',
+    },
+    {
+        value: 'adaptive',
+        label: 'Auto',
+    },
 ]
 const SEEDANCE_STANDARD_RESOLUTIONS: ImageSizeOption[] = [
-    { value: '480p', label: '480p' },
-    { value: '720p', label: '720p' },
-    { value: '1080p', label: '1080p' },
-    { value: '4k', label: '4K' },
+    {
+        value: '480p',
+        label: '480p',
+    },
+    {
+        value: '720p',
+        label: '720p',
+    },
+    {
+        value: '1080p',
+        label: '1080p',
+    },
+    {
+        value: '4k',
+        label: '4K',
+    },
 ]
 const SEEDANCE_FAST_RESOLUTIONS: ImageSizeOption[] = [
-    { value: '480p', label: '480p' },
-    { value: '720p', label: '720p' },
+    {
+        value: '480p',
+        label: '480p',
+    },
+    {
+        value: '720p',
+        label: '720p',
+    },
 ]
 const SEEDANCE_25_RESOLUTIONS: ImageSizeOption[] = [
-    { value: '480p', label: '480p' },
-    { value: '720p', label: '720p' },
-    { value: '1080p', label: '1080p' },
+    {
+        value: '480p',
+        label: '480p',
+    },
+    {
+        value: '720p',
+        label: '720p',
+    },
+    {
+        value: '1080p',
+        label: '1080p',
+    },
 ]
 const SEEDANCE_DURATIONS: ImageSizeOption[] = [
     {
@@ -383,18 +661,54 @@ const SEEDANCE_DURATIONS: ImageSizeOption[] = [
         label: 'Smart length',
         description: 'Smart length lets Seedance choose any duration from 4 to 15 seconds.',
     },
-    { value: '4', label: '4s' },
-    { value: '5', label: '5s' },
-    { value: '6', label: '6s' },
-    { value: '7', label: '7s' },
-    { value: '8', label: '8s' },
-    { value: '9', label: '9s' },
-    { value: '10', label: '10s' },
-    { value: '11', label: '11s' },
-    { value: '12', label: '12s' },
-    { value: '13', label: '13s' },
-    { value: '14', label: '14s' },
-    { value: '15', label: '15s' },
+    {
+        value: '4',
+        label: '4s',
+    },
+    {
+        value: '5',
+        label: '5s',
+    },
+    {
+        value: '6',
+        label: '6s',
+    },
+    {
+        value: '7',
+        label: '7s',
+    },
+    {
+        value: '8',
+        label: '8s',
+    },
+    {
+        value: '9',
+        label: '9s',
+    },
+    {
+        value: '10',
+        label: '10s',
+    },
+    {
+        value: '11',
+        label: '11s',
+    },
+    {
+        value: '12',
+        label: '12s',
+    },
+    {
+        value: '13',
+        label: '13s',
+    },
+    {
+        value: '14',
+        label: '14s',
+    },
+    {
+        value: '15',
+        label: '15s',
+    },
 ]
 const SEEDANCE_25_DURATIONS: ImageSizeOption[] = [
     {
@@ -404,7 +718,11 @@ const SEEDANCE_25_DURATIONS: ImageSizeOption[] = [
     },
     ...Array.from({ length: 27 }, (_, index) => {
         const duration = String(index + 4)
-        return { value: duration, label: `${duration}s` }
+
+        return {
+            value: duration,
+            label: `${duration}s`,
+        }
     }),
 ]
 
@@ -418,8 +736,14 @@ const toggleControl = (
     label,
     kind: 'toggle',
     options: [
-        { value: 'true', label: 'On' },
-        { value: 'false', label: 'Off' },
+        {
+            value: 'true',
+            label: 'On',
+        },
+        {
+            value: 'false',
+            label: 'Off',
+        },
     ],
     defaultValue,
     ...(description ? { description } : {}),
@@ -490,7 +814,10 @@ const buildSeedanceControls = (
             label: 'Output format',
             kind: 'segmented' as const,
             options: [
-                { value: 'mp4', label: 'MP4' },
+                {
+                    value: 'mp4',
+                    label: 'MP4',
+                },
                 {
                     value: 'mov',
                     label: 'MOV',
@@ -682,106 +1009,128 @@ const AI_MODEL_INPUT_KINDS = new Set<AiModelInputKind>([
     'document-text',
 ])
 
-export function assertValidInferenceCapabilities(model: AiModel): AiModel {
+export const assertValidInferenceCapabilities = (model: AiModel): AiModel => {
     const profile = model.inferenceCapabilities
-    if (!profile) throw new Error(`INFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
+
+    if (!profile)
+        throw new Error(`INFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
+
     if (
         typeof profile.requiresAutoToolChoiceWithThinking !== 'boolean'
         || typeof profile.supportsTemperature !== 'boolean'
         || typeof profile.supportsSystemPrompt !== 'boolean'
         || typeof profile.requiresClosedJsonSchema !== 'boolean'
-    ) {
+    )
         throw new Error(`INFERENCE_CAPABILITIES_FLAGS_INVALID:${model.provider}:${model.model}`)
-    }
+
     if (
         profile.supportedInputKinds.length === 0
         || new Set(profile.supportedInputKinds).size !== profile.supportedInputKinds.length
         || profile.supportedInputKinds.some(kind => !AI_MODEL_INPUT_KINDS.has(kind))
-    ) {
+    )
         throw new Error(`INFERENCE_CAPABILITIES_INPUTS_INVALID:${model.provider}:${model.model}`)
-    }
+
     const anthropicThinking = profile.thinkingMode === 'anthropic-manual'
         || profile.thinkingMode === 'anthropic-adaptive'
     const googleThinking = profile.thinkingMode === 'google-budget'
         || profile.thinkingMode === 'google-level'
+
     if (
         (anthropicThinking && model.provider !== 'Anthropic')
         || (googleThinking && model.provider !== 'Google')
         || profile.requiresAutoToolChoiceWithThinking !== anthropicThinking
-    ) {
+    )
         throw new Error(`INFERENCE_CAPABILITIES_THINKING_INVALID:${model.provider}:${model.model}`)
-    }
+
     return model
 }
 
-export function assertValidImageReferenceCapabilities(model: AiModel): AiModel {
+export const assertValidImageReferenceCapabilities = (model: AiModel): AiModel => {
     const supportsImageGeneration = model.modalities.some(({ modality }) => modality === 'image_generation')
     const profile = model.imageReferenceCapabilities
+
     if (!supportsImageGeneration) {
-        if (profile) throw new Error(`IMAGE_REFERENCE_CAPABILITIES_UNEXPECTED:${model.provider}:${model.model}`)
+        if (profile)
+            throw new Error(`IMAGE_REFERENCE_CAPABILITIES_UNEXPECTED:${model.provider}:${model.model}`)
+
         return model
     }
-    if (!profile) throw new Error(`IMAGE_REFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
+
+    if (!profile)
+        throw new Error(`IMAGE_REFERENCE_CAPABILITIES_REQUIRED:${model.provider}:${model.model}`)
+
     if (
-        !Number.isInteger(profile.maxReferenceImages) || profile.maxReferenceImages < 0
-        || !Number.isInteger(profile.maxIdentityReferenceImages) || profile.maxIdentityReferenceImages < 0
+        !Number.isInteger(profile.maxReferenceImages)
+        || profile.maxReferenceImages < 0
+        || !Number.isInteger(profile.maxIdentityReferenceImages)
+        || profile.maxIdentityReferenceImages < 0
         || profile.maxIdentityReferenceImages > profile.maxReferenceImages
-    ) {
+    )
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_LIMITS_INVALID:${model.provider}:${model.model}`)
-    }
+
     if (
         profile.conditioningModes.length === 0
         || new Set(profile.conditioningModes).size !== profile.conditioningModes.length
         || profile.conditioningModes.some(mode => !IMAGE_REFERENCE_CONDITIONING_MODES.has(mode))
-    ) {
+    )
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_MODES_INVALID:${model.provider}:${model.model}`)
-    }
+
     if (
         !['provider-managed', 'standard', 'high'].includes(profile.inputFidelity)
-        || !Number.isInteger(profile.maxOutputPixels) || profile.maxOutputPixels <= 0
+        || !Number.isInteger(profile.maxOutputPixels)
+        || profile.maxOutputPixels <= 0
         || profile.supportedAspectRatios.length === 0
         || profile.supportedAspectRatios.some(ratio => !/^\d+:\d+$/u.test(ratio))
-    ) {
+    )
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_PROFILE_INVALID:${model.provider}:${model.model}`)
-    }
-    if (profile.maxIdentityReferenceImages > 0 && !profile.conditioningModes.includes('identity')) {
+
+    if (
+        profile.maxIdentityReferenceImages > 0
+        && !profile.conditioningModes.includes('identity')
+    )
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_IDENTITY_INVALID:${model.provider}:${model.model}`)
-    }
+
     if (
         profile.supportsStructureControl !== profile.conditioningModes.includes('structure')
         || profile.supportsPoseControl !== profile.conditioningModes.includes('pose')
-    ) {
+    )
         throw new Error(`IMAGE_REFERENCE_CAPABILITIES_CONTROLS_INVALID:${model.provider}:${model.model}`)
-    }
+
     return model
 }
 
-export function assertValidVideoGenerationControls(model: AiModel): AiModel {
+export const assertValidVideoGenerationControls = (model: AiModel): AiModel => {
     const supportsVideoGeneration = model.modalities.some(({ modality }) => modality === 'video_generation')
     const controls = model.videoGenerationControls
+
     if (!supportsVideoGeneration) {
-        if (controls?.length) throw new Error(`VIDEO_GENERATION_CONTROLS_UNEXPECTED:${model.provider}:${model.model}`)
+        if (controls?.length)
+            throw new Error(`VIDEO_GENERATION_CONTROLS_UNEXPECTED:${model.provider}:${model.model}`)
+
         return model
     }
-    if (!controls?.length) throw new Error(`VIDEO_GENERATION_CONTROLS_REQUIRED:${model.provider}:${model.model}`)
-    if (new Set(controls.map(control => control.key)).size !== controls.length) {
+
+    if (!controls?.length)
+        throw new Error(`VIDEO_GENERATION_CONTROLS_REQUIRED:${model.provider}:${model.model}`)
+
+    if (new Set(
+        controls.map(control => control.key),
+    ).size !== controls.length)
         throw new Error(`VIDEO_GENERATION_CONTROL_KEYS_INVALID:${model.provider}:${model.model}`)
-    }
+
     for (const control of controls) {
         const optionValues = control.options.map(option => option.value)
+
         if (
             !control.label
             || new Set(optionValues).size !== optionValues.length
             || (control.kind !== 'number' && control.kind !== 'text' && optionValues.length === 0)
-            || (control.defaultValue !== undefined
-                && control.kind !== 'number'
-                && control.kind !== 'text'
-                && !optionValues.includes(control.defaultValue))
+            || (control.defaultValue !== undefined && control.kind !== 'number' && control.kind !== 'text' && !optionValues.includes(control.defaultValue))
             || (control.kind === 'fixed' && control.readOnly !== true)
-        ) {
+        )
             throw new Error(`VIDEO_GENERATION_CONTROL_INVALID:${model.provider}:${model.model}:${control.key}`)
-        }
     }
+
     return model
 }
 
@@ -829,8 +1178,14 @@ type ModelDefaults =
 
 type ProviderModelDefaults = {
     exact: Record<string, PartialDeep<ModelDefaults>>
-    prefix: Array<{ prefix: string; values: PartialDeep<ModelDefaults> }>
-    contains: Array<{ includes: string; values: PartialDeep<ModelDefaults> }>
+    prefix: Array<{
+        prefix: string
+        values: PartialDeep<ModelDefaults>
+    }>
+    contains: Array<{
+        includes: string
+        values: PartialDeep<ModelDefaults>
+    }>
     fallback?: ModelDefaults
 }
 
@@ -913,7 +1268,11 @@ export class AiModelsSync {
             apiKey: options.googleApiKey || env.GOOGLE_API_KEY,
         })
 
-        this.aiModelsListTableName = getDynamoDbTableStageName('AI_MODELS_LIST', env.ORG_NAME!, env.STAGE!)
+        this.aiModelsListTableName = getDynamoDbTableStageName(
+            'AI_MODELS_LIST',
+            env.ORG_NAME!,
+            env.STAGE!,
+        )
         this.serviceName = 'ai-models-sync-service'
     }
 
@@ -935,9 +1294,10 @@ export class AiModelsSync {
         const modelId = `${model.provider}:${model.model}` as AiModelId
         const isDefaultFor = (Object.keys(AiModelsSync.DEFAULT_MODELS) as DefaultAiModelCapability[])
             .filter(capability => AiModelsSync.DEFAULT_MODELS[capability] === modelId)
-        if (isDefaultFor.length > 0) {
+
+        if (isDefaultFor.length > 0)
             model.isDefaultFor = isDefaultFor
-        }
+
         return model
     }
 
@@ -989,19 +1349,157 @@ export class AiModelsSync {
     ])
 
     // Default model capability/settings per provider.
-    private static readonly MODELS_DEFAULTS: { OpenAI: ProviderModelDefaults; Anthropic: ProviderModelDefaults; Google: ProviderModelDefaults; Stability: ProviderModelDefaults; BytePlus: ProviderModelDefaults } = {
+    private static readonly MODELS_DEFAULTS: {
+        OpenAI: ProviderModelDefaults
+        Anthropic: ProviderModelDefaults
+        Google: ProviderModelDefaults
+        Stability: ProviderModelDefaults
+        BytePlus: ProviderModelDefaults
+    } = {
         // OpenAI model defaults sourced from the official model and pricing references.
         // Only differences from fallback are specified; remaining fields inherit via mergeWithFallback.
         OpenAI: {
             exact: {
-                'gpt-5.6-sol': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '4.00', completion: '20.00' } } } } },
-                'gpt-5.6-terra': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '12.00' } } } } },
-                'gpt-5.6-luna': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.20', completion: '1.20' } } } } },
-                'gpt-5.5': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '30.00' } } } } },
-                'gpt-5.5-pro': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_PRO_REASONING_EFFORT_OPTIONS, false, 'high'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '30.00', completion: '180.00' } } } } },
-                'gpt-5.4': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_EFFORT_OPTIONS, false, 'none'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.50', completion: '15.00' } } } } },
-                'gpt-5.4-pro': { contextWindow: 1050000, maxCompletionSize: 128000, modalities: ['text', 'image'], inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_PRO_REASONING_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '30.00', completion: '180.00' } } } } },
-                'gpt-image-2': { imagePromptMaxChars: 32000, contextWindow: 0, maxCompletionSize: 0, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, imageSizeMode: 'resolution', imageSizes: OPENAI_IMAGE_SIZES, imageGenerationControls: OPENAI_IMAGE_CONTROLS, imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '10.00' } } }, image: { measuringUnit: 'tokens', pricePer: '1000000', prompt: '8.00', completion: '32.00' } } },
+                'gpt-5.6-sol': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '4.00',
+                            completion: '20.00',
+                        } },
+                    } },
+                },
+                'gpt-5.6-terra': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '2.00',
+                            completion: '12.00',
+                        } },
+                    } },
+                },
+                'gpt-5.6-luna': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_MAX_EFFORT_OPTIONS, true),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '0.20',
+                            completion: '1.20',
+                        } },
+                    } },
+                },
+                'gpt-5.5': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_REASONING_EFFORT_OPTIONS),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '5.00',
+                            completion: '30.00',
+                        } },
+                    } },
+                },
+                'gpt-5.5-pro': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(
+                        OPENAI_PRO_REASONING_EFFORT_OPTIONS,
+                        false,
+                        'high',
+                    ),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '30.00',
+                            completion: '180.00',
+                        } },
+                    } },
+                },
+                'gpt-5.4': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(
+                        OPENAI_REASONING_EFFORT_OPTIONS,
+                        false,
+                        'none',
+                    ),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '2.50',
+                            completion: '15.00',
+                        } },
+                    } },
+                },
+                'gpt-5.4-pro': {
+                    contextWindow: 1050000,
+                    maxCompletionSize: 128000,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: OPENAI_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildOpenAIReasoningControls(OPENAI_PRO_REASONING_EFFORT_OPTIONS),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '30.00',
+                            completion: '180.00',
+                        } },
+                    } },
+                },
+                'gpt-image-2': {
+                    imagePromptMaxChars: 32000,
+                    contextWindow: 0,
+                    maxCompletionSize: 0,
+                    modalities: ['text', 'image', 'image_generation'],
+                    inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
+                    imageSizeMode: 'resolution',
+                    imageSizes: OPENAI_IMAGE_SIZES,
+                    imageGenerationControls: OPENAI_IMAGE_CONTROLS,
+                    imageReferenceCapabilities: OPENAI_PROVIDER_MANAGED_IMAGE_REFERENCES,
+                    pricing: {
+                        text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '5.00',
+                                completion: '10.00',
+                            } },
+                        },
+                        image: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            prompt: '8.00',
+                            completion: '32.00',
+                        },
+                    },
+                },
             },
             prefix: [],
             contains: [],
@@ -1017,7 +1515,10 @@ export class AiModelsSync {
                     text: {
                         measuringUnit: 'tokens',
                         pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } },
+                        tiers: { default: {
+                            prompt: '0.00',
+                            completion: '0.00',
+                        } },
                     },
                 },
                 // Provider UI defaults
@@ -1030,27 +1531,42 @@ export class AiModelsSync {
                 transforms: {
                     title: (modelId: string) => {
                         return modelId
-                            .split('-')
-                            .map(part => {
-                                if (part.toLowerCase() === 'gpt') return 'GPT'
-                                if (part.toLowerCase() === 'o1') return 'O1'
-                                if (part.toLowerCase() === 'o3') return 'O3'
-                                if (part.toLowerCase() === 'o4') return 'O4'
+                            .split('-').map(part => {
+                                if (part.toLowerCase() === 'gpt')
+                                    return 'GPT'
+
+                                if (part.toLowerCase() === 'o1')
+                                    return 'O1'
+
+                                if (part.toLowerCase() === 'o3')
+                                    return 'O3'
+
+                                if (part.toLowerCase() === 'o4')
+                                    return 'O4'
+
                                 return part.charAt(0).toUpperCase() + part.slice(1)
                             })
                             .join(' ')
                     },
                     shortTitle: (modelId: string) => {
                         const title = modelId
-                            .split('-')
-                            .map(part => {
-                                if (part.toLowerCase() === 'gpt') return 'GPT'
-                                if (part.toLowerCase() === 'o1') return 'O1'
-                                if (part.toLowerCase() === 'o3') return 'O3'
-                                if (part.toLowerCase() === 'o4') return 'O4'
+                            .split('-').map(part => {
+                                if (part.toLowerCase() === 'gpt')
+                                    return 'GPT'
+
+                                if (part.toLowerCase() === 'o1')
+                                    return 'O1'
+
+                                if (part.toLowerCase() === 'o3')
+                                    return 'O3'
+
+                                if (part.toLowerCase() === 'o4')
+                                    return 'O4'
+
                                 return part.charAt(0).toUpperCase() + part.slice(1)
                             })
                             .join(' ')
+
                         // Remove "Latest" suffix if present
                         return title.replace(/\s+Latest$/i, '')
                     },
@@ -1062,14 +1578,142 @@ export class AiModelsSync {
         Anthropic: {
             exact: {},
             prefix: [
-                { prefix: 'claude-fable-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '10.00', completion: '50.00' } } } } } },
-                { prefix: 'claude-opus-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
-                { prefix: 'claude-opus-4-8', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
-                { prefix: 'claude-opus-4-7', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
-                { prefix: 'claude-opus-4-6', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '5.00', completion: '25.00' } } } } } },
-                { prefix: 'claude-sonnet-5', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '10.00' } } } } } },
-                { prefix: 'claude-sonnet-4-6', values: { contextWindow: 1000000, maxCompletionSize: 128000, inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '3.00', completion: '15.00' } } } } } },
-                { prefix: 'claude-haiku-4-5', values: { contextWindow: 200000, maxCompletionSize: 64000, inferenceCapabilities: ANTHROPIC_MANUAL_NO_TEMPERATURE_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.00', completion: '5.00' } } } } } },
+                {
+                    prefix: 'claude-fable-5',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '10.00',
+                                completion: '50.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-opus-5',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '5.00',
+                                completion: '25.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-opus-4-8',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '5.00',
+                                completion: '25.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-opus-4-7',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '5.00',
+                                completion: '25.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-opus-4-6',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '5.00',
+                                completion: '25.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-sonnet-5',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '2.00',
+                                completion: '10.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-sonnet-4-6',
+                    values: {
+                        contextWindow: 1000000,
+                        maxCompletionSize: 128000,
+                        inferenceCapabilities: ANTHROPIC_ADAPTIVE_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: buildAnthropicReasoningControls(ANTHROPIC_EFFORT_WITHOUT_XHIGH_OPTIONS),
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '3.00',
+                                completion: '15.00',
+                            } },
+                        } },
+                    },
+                },
+                {
+                    prefix: 'claude-haiku-4-5',
+                    values: {
+                        contextWindow: 200000,
+                        maxCompletionSize: 64000,
+                        inferenceCapabilities: ANTHROPIC_MANUAL_NO_TEMPERATURE_INFERENCE_CAPABILITIES,
+                        reasoningGenerationControls: [],
+                        pricing: { text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '1.00',
+                                completion: '5.00',
+                            } },
+                        } },
+                    },
+                },
             ],
             contains: [],
             fallback: {
@@ -1084,7 +1728,10 @@ export class AiModelsSync {
                     text: {
                         measuringUnit: 'tokens',
                         pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } },
+                        tiers: { default: {
+                            prompt: '0.00',
+                            completion: '0.00',
+                        } },
                     },
                 },
                 color: '#D97757',
@@ -1093,15 +1740,14 @@ export class AiModelsSync {
                 transforms: {
                     title: (modelId: string, displayName?: string) => {
                         return displayName || modelId
-                            .split('-')
-                            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                            .split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1))
                             .join(' ')
                     },
                     shortTitle: (modelId: string, displayName?: string) => {
                         const fullTitle = displayName || modelId
-                            .split('-')
-                            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                            .split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1))
                             .join(' ')
+
                         // Remove "Claude " prefix if present
                         return fullTitle.replace(/^Claude\s+/i, '')
                     },
@@ -1110,24 +1756,285 @@ export class AiModelsSync {
         },
         Google: {
             exact: {
-                'gemini-3.7-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['low', 'medium', 'high'], 'medium'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.75', completion: '3.75' } } } } },
-                'gemini-3.6-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'medium'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.75', completion: '3.75' } } } } },
-                'gemini-3.5-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'medium'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.50', completion: '9.00' } } } } },
-                'gemini-3.5-flash-lite': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'minimal'), pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.30', completion: '2.50' } } } } },
-                'gemini-2.5-pro': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '1.25', completion: '10.00' } } } } },
-                'gemini-2.5-flash': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.30', completion: '2.50' } } } } },
-                'gemini-2.5-flash-lite': { contextWindow: 1048576, maxCompletionSize: 65536, defaultTemperature: 1, modalities: ['text', 'image'], inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES, reasoningGenerationControls: [], pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.10', completion: '0.40' } } } } },
-                'gemini-3.1-flash-image': { contextWindow: 131072, maxCompletionSize: 32768, defaultTemperature: 1, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageSizeMode: 'aspectRatio', imageSizes: GOOGLE_FLASH_IMAGE_ASPECT_RATIOS, imageGenerationControls: buildGoogleImageControls(GOOGLE_FLASH_IMAGE_ASPECT_RATIOS, [{ value: '512', label: '512 px' }, { value: '1K', label: '1K' }, { value: '2K', label: '2K' }, { value: '4K', label: '4K' }]), imageReferenceCapabilities: GOOGLE_FLASH_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.50', completion: '3.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.067' } } },
-                'gemini-3.1-flash-lite-image': { contextWindow: 65536, maxCompletionSize: 4096, defaultTemperature: 1, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageSizeMode: 'aspectRatio', imageSizes: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, imageGenerationControls: buildGoogleImageControls(GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, [{ value: '1K', label: '1K' }]), imageReferenceCapabilities: GOOGLE_FLASH_LITE_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '0.25', completion: '1.50' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.0336' } } },
-                'gemini-3-pro-image': { contextWindow: 65536, maxCompletionSize: 32768, defaultTemperature: 1, modalities: ['text', 'image', 'image_generation'], inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES, imageSizeMode: 'aspectRatio', imageSizes: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, imageGenerationControls: buildGoogleImageControls(GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS, [{ value: '1K', label: '1K' }, { value: '2K', label: '2K' }, { value: '4K', label: '4K' }]), imageReferenceCapabilities: GOOGLE_PRO_IMAGE_REFERENCES, pricing: { text: { measuringUnit: 'tokens', pricePer: '1000000', tiers: { default: { prompt: '2.00', completion: '12.00' } } }, image: { measuringUnit: 'images', pricePer: '1', prompt: '0.00', completion: '0.134' } } },
+                'gemini-3.7-flash': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildGoogleThinkingControls(['low', 'medium', 'high'], 'medium'),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '0.75',
+                            completion: '3.75',
+                        } },
+                    } },
+                },
+                'gemini-3.6-flash': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'medium'),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '0.75',
+                            completion: '3.75',
+                        } },
+                    } },
+                },
+                'gemini-3.5-flash': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'medium'),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '1.50',
+                            completion: '9.00',
+                        } },
+                    } },
+                },
+                'gemini-3.5-flash-lite': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: buildGoogleThinkingControls(['minimal', 'low', 'medium', 'high'], 'minimal'),
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '0.30',
+                            completion: '2.50',
+                        } },
+                    } },
+                },
+                'gemini-2.5-pro': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: [],
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '1.25',
+                            completion: '10.00',
+                        } },
+                    } },
+                },
+                'gemini-2.5-flash': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: [],
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '0.30',
+                            completion: '2.50',
+                        } },
+                    } },
+                },
+                'gemini-2.5-flash-lite': {
+                    contextWindow: 1048576,
+                    maxCompletionSize: 65536,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image'],
+                    inferenceCapabilities: GOOGLE_BUDGET_THINKING_INFERENCE_CAPABILITIES,
+                    reasoningGenerationControls: [],
+                    pricing: { text: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        tiers: { default: {
+                            prompt: '0.10',
+                            completion: '0.40',
+                        } },
+                    } },
+                },
+                'gemini-3.1-flash-image': {
+                    contextWindow: 131072,
+                    maxCompletionSize: 32768,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image', 'image_generation'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    imageSizeMode: 'aspectRatio',
+                    imageSizes: GOOGLE_FLASH_IMAGE_ASPECT_RATIOS,
+                    imageGenerationControls: buildGoogleImageControls(
+                        GOOGLE_FLASH_IMAGE_ASPECT_RATIOS,
+                        [{
+                            value: '512',
+                            label: '512 px',
+                        }, {
+                            value: '1K',
+                            label: '1K',
+                        }, {
+                            value: '2K',
+                            label: '2K',
+                        }, {
+                            value: '4K',
+                            label: '4K',
+                        }],
+                    ),
+                    imageReferenceCapabilities: GOOGLE_FLASH_IMAGE_REFERENCES,
+                    pricing: {
+                        text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '0.50',
+                                completion: '3.00',
+                            } },
+                        },
+                        image: {
+                            measuringUnit: 'images',
+                            pricePer: '1',
+                            prompt: '0.00',
+                            completion: '0.067',
+                        },
+                    },
+                },
+                'gemini-3.1-flash-lite-image': {
+                    contextWindow: 65536,
+                    maxCompletionSize: 4096,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image', 'image_generation'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    imageSizeMode: 'aspectRatio',
+                    imageSizes: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS,
+                    imageGenerationControls: buildGoogleImageControls(
+                        GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS,
+                        [{
+                            value: '1K',
+                            label: '1K',
+                        }],
+                    ),
+                    imageReferenceCapabilities: GOOGLE_FLASH_LITE_IMAGE_REFERENCES,
+                    pricing: {
+                        text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '0.25',
+                                completion: '1.50',
+                            } },
+                        },
+                        image: {
+                            measuringUnit: 'images',
+                            pricePer: '1',
+                            prompt: '0.00',
+                            completion: '0.0336',
+                        },
+                    },
+                },
+                'gemini-3-pro-image': {
+                    contextWindow: 65536,
+                    maxCompletionSize: 32768,
+                    defaultTemperature: 1,
+                    modalities: ['text', 'image', 'image_generation'],
+                    inferenceCapabilities: GOOGLE_LEVEL_THINKING_INFERENCE_CAPABILITIES,
+                    imageSizeMode: 'aspectRatio',
+                    imageSizes: GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS,
+                    imageGenerationControls: buildGoogleImageControls(
+                        GOOGLE_STANDARD_IMAGE_ASPECT_RATIOS,
+                        [{
+                            value: '1K',
+                            label: '1K',
+                        }, {
+                            value: '2K',
+                            label: '2K',
+                        }, {
+                            value: '4K',
+                            label: '4K',
+                        }],
+                    ),
+                    imageReferenceCapabilities: GOOGLE_PRO_IMAGE_REFERENCES,
+                    pricing: {
+                        text: {
+                            measuringUnit: 'tokens',
+                            pricePer: '1000000',
+                            tiers: { default: {
+                                prompt: '2.00',
+                                completion: '12.00',
+                            } },
+                        },
+                        image: {
+                            measuringUnit: 'images',
+                            pricePer: '1',
+                            prompt: '0.00',
+                            completion: '0.134',
+                        },
+                    },
+                },
             },
             prefix: [
                 // VEO 3.1 video generation models (billed per second of video).
                 // Prices are placeholders to reconcile against https://ai.google.dev/gemini-api/docs/pricing.
                 // More-specific prefixes (fast/lite) must precede the general prefix so resolveModelDefaults matches them first.
-                { prefix: 'veo-3.1-fast', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.15' } } } },
-                { prefix: 'veo-3.1-lite', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_LITE_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.10' } } } },
-                { prefix: 'veo-3.1', values: { modalities: ['video', 'video_generation'], inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES, videoAspectRatios: VEO_ASPECT_RATIOS, videoResolutions: VEO_31_RESOLUTIONS, videoDurations: VEO_DURATIONS, videoGenerationControls: VEO_CONTROLS, pricing: { video: { measuringUnit: 'seconds', pricePer: '1', price: '0.40' } } } },
+                {
+                    prefix: 'veo-3.1-fast',
+                    values: {
+                        modalities: ['video', 'video_generation'],
+                        inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
+                        videoAspectRatios: VEO_ASPECT_RATIOS,
+                        videoResolutions: VEO_31_RESOLUTIONS,
+                        videoDurations: VEO_DURATIONS,
+                        videoGenerationControls: VEO_CONTROLS,
+                        pricing: { video: {
+                            measuringUnit: 'seconds',
+                            pricePer: '1',
+                            price: '0.15',
+                        } },
+                    },
+                },
+                {
+                    prefix: 'veo-3.1-lite',
+                    values: {
+                        modalities: ['video', 'video_generation'],
+                        inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
+                        videoAspectRatios: VEO_ASPECT_RATIOS,
+                        videoResolutions: VEO_RESOLUTIONS,
+                        videoDurations: VEO_DURATIONS,
+                        videoGenerationControls: VEO_LITE_CONTROLS,
+                        pricing: { video: {
+                            measuringUnit: 'seconds',
+                            pricePer: '1',
+                            price: '0.10',
+                        } },
+                    },
+                },
+                {
+                    prefix: 'veo-3.1',
+                    values: {
+                        modalities: ['video', 'video_generation'],
+                        inferenceCapabilities: NON_REASONING_INFERENCE_CAPABILITIES,
+                        videoAspectRatios: VEO_ASPECT_RATIOS,
+                        videoResolutions: VEO_31_RESOLUTIONS,
+                        videoDurations: VEO_DURATIONS,
+                        videoGenerationControls: VEO_CONTROLS,
+                        pricing: { video: {
+                            measuringUnit: 'seconds',
+                            pricePer: '1',
+                            price: '0.40',
+                        } },
+                    },
+                },
             ],
             contains: [],
             fallback: {
@@ -1142,7 +2049,10 @@ export class AiModelsSync {
                     text: {
                         measuringUnit: 'tokens',
                         pricePer: '1000000',
-                        tiers: { default: { prompt: '0.00', completion: '0.00' } },
+                        tiers: { default: {
+                            prompt: '0.00',
+                            completion: '0.00',
+                        } },
                     },
                 },
                 color: '#4285F4',
@@ -1150,17 +2060,50 @@ export class AiModelsSync {
                 colorIconName: 'geminiColorIcon',
                 imageSizeMode: 'aspectRatio',
                 imageSizes: [
-                    { value: '1:1', label: '1:1' },
-                    { value: '3:2', label: '3:2' },
-                    { value: '2:3', label: '2:3' },
-                    { value: '16:9', label: '16:9' },
-                    { value: '9:16', label: '9:16' },
-                    { value: '4:3', label: '4:3' },
-                    { value: '3:4', label: '3:4' },
-                    { value: '4:5', label: '4:5' },
-                    { value: '5:4', label: '5:4' },
-                    { value: '21:9', label: '21:9' },
-                    { value: 'auto', label: 'Auto' },
+                    {
+                        value: '1:1',
+                        label: '1:1',
+                    },
+                    {
+                        value: '3:2',
+                        label: '3:2',
+                    },
+                    {
+                        value: '2:3',
+                        label: '2:3',
+                    },
+                    {
+                        value: '16:9',
+                        label: '16:9',
+                    },
+                    {
+                        value: '9:16',
+                        label: '9:16',
+                    },
+                    {
+                        value: '4:3',
+                        label: '4:3',
+                    },
+                    {
+                        value: '3:4',
+                        label: '3:4',
+                    },
+                    {
+                        value: '4:5',
+                        label: '4:5',
+                    },
+                    {
+                        value: '5:4',
+                        label: '5:4',
+                    },
+                    {
+                        value: '21:9',
+                        label: '21:9',
+                    },
+                    {
+                        value: 'auto',
+                        label: 'Auto',
+                    },
                 ],
                 starSortingPosition: 150,
                 transforms: {
@@ -1174,13 +2117,16 @@ export class AiModelsSync {
                             'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
                             'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
                         }
-                        if (nanoBananaNames[modelId]) return nanoBananaNames[modelId]
+
+                        if (nanoBananaNames[modelId])
+                            return nanoBananaNames[modelId]
 
                         return modelId
                             .replace(/^models\//, '')
-                            .split('-')
-                            .map(part => {
-                                if (part.toLowerCase() === 'gemini') return 'Gemini'
+                            .split('-').map(part => {
+                                if (part.toLowerCase() === 'gemini')
+                                    return 'Gemini'
+
                                 return part.charAt(0).toUpperCase() + part.slice(1)
                             })
                             .join(' ')
@@ -1194,13 +2140,16 @@ export class AiModelsSync {
                             'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
                             'veo-3.1-lite-generate-preview': 'Veo 3.1 Lite',
                         }
-                        if (nanoBananaNames[modelId]) return nanoBananaNames[modelId]
+
+                        if (nanoBananaNames[modelId])
+                            return nanoBananaNames[modelId]
 
                         return modelId
                             .replace(/^models\//, '')
-                            .split('-')
-                            .map(part => {
-                                if (part.toLowerCase() === 'gemini') return 'Gemini'
+                            .split('-').map(part => {
+                                if (part.toLowerCase() === 'gemini')
+                                    return 'Gemini'
+
                                 return part.charAt(0).toUpperCase() + part.slice(1)
                             })
                             .join(' ')
@@ -1214,12 +2163,30 @@ export class AiModelsSync {
                 'stability-ultra': {
                     modalities: ['image_generation'],
                     imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '8.00' } },
+                    pricing: {
+                        currency: 'USD',
+                        resaleMargin: '1',
+                        image: {
+                            measuringUnit: 'credits',
+                            pricePer: '1',
+                            prompt: '0.00',
+                            completion: '8.00',
+                        },
+                    },
                 },
                 'sd3.5-large': {
                     modalities: ['image_generation'],
                     imageReferenceCapabilities: STABILITY_IMAGE_REFERENCES,
-                    pricing: { currency: 'USD', resaleMargin: '1', image: { measuringUnit: 'credits', pricePer: '1', prompt: '0.00', completion: '6.50' } },
+                    pricing: {
+                        currency: 'USD',
+                        resaleMargin: '1',
+                        image: {
+                            measuringUnit: 'credits',
+                            pricePer: '1',
+                            prompt: '0.00',
+                            completion: '6.50',
+                        },
+                    },
                 },
             },
             prefix: [],
@@ -1254,6 +2221,7 @@ export class AiModelsSync {
                             'stability-ultra': 'Stable Image Ultra',
                             'sd3.5-large': 'SD 3.5 Large',
                         }
+
                         return names[modelId] || modelId
                     },
                     shortTitle: (modelId: string) => {
@@ -1261,6 +2229,7 @@ export class AiModelsSync {
                             'stability-ultra': 'Ultra',
                             'sd3.5-large': 'SD 3.5 Large',
                         }
+
                         return names[modelId] || modelId
                     },
                 },
@@ -1291,10 +2260,22 @@ export class AiModelsSync {
                             pricePer: '1000000',
                             price: '7.7',
                             tiers: {
-                                '480p': { withoutVideoInput: '7.0', withVideoInput: '4.3' },
-                                '720p': { withoutVideoInput: '7.0', withVideoInput: '4.3' },
-                                '1080p': { withoutVideoInput: '7.7', withVideoInput: '4.7' },
-                                '4k': { withoutVideoInput: '4.0', withVideoInput: '2.4' },
+                                '480p': {
+                                    withoutVideoInput: '7.0',
+                                    withVideoInput: '4.3',
+                                },
+                                '720p': {
+                                    withoutVideoInput: '7.0',
+                                    withVideoInput: '4.3',
+                                },
+                                '1080p': {
+                                    withoutVideoInput: '7.7',
+                                    withVideoInput: '4.7',
+                                },
+                                '4k': {
+                                    withoutVideoInput: '4.0',
+                                    withVideoInput: '2.4',
+                                },
                             },
                         },
                     },
@@ -1308,8 +2289,14 @@ export class AiModelsSync {
                             pricePer: '1000000',
                             price: '5.6',
                             tiers: {
-                                '480p': { withoutVideoInput: '5.6', withVideoInput: '3.3' },
-                                '720p': { withoutVideoInput: '5.6', withVideoInput: '3.3' },
+                                '480p': {
+                                    withoutVideoInput: '5.6',
+                                    withVideoInput: '3.3',
+                                },
+                                '720p': {
+                                    withoutVideoInput: '5.6',
+                                    withVideoInput: '3.3',
+                                },
                             },
                         },
                     },
@@ -1323,8 +2310,14 @@ export class AiModelsSync {
                             pricePer: '1000000',
                             price: '3.5',
                             tiers: {
-                                '480p': { withoutVideoInput: '3.5', withVideoInput: '2.1' },
-                                '720p': { withoutVideoInput: '3.5', withVideoInput: '2.1' },
+                                '480p': {
+                                    withoutVideoInput: '3.5',
+                                    withVideoInput: '2.1',
+                                },
+                                '720p': {
+                                    withoutVideoInput: '3.5',
+                                    withVideoInput: '2.1',
+                                },
                             },
                         },
                     },
@@ -1340,9 +2333,18 @@ export class AiModelsSync {
                             pricePer: '1000000',
                             price: '11.7',
                             tiers: {
-                                '480p': { withoutVideoInput: '10.7', withVideoInput: '6.4' },
-                                '720p': { withoutVideoInput: '10.7', withVideoInput: '6.4' },
-                                '1080p': { withoutVideoInput: '11.7', withVideoInput: '7.0' },
+                                '480p': {
+                                    withoutVideoInput: '10.7',
+                                    withVideoInput: '6.4',
+                                },
+                                '720p': {
+                                    withoutVideoInput: '10.7',
+                                    withVideoInput: '6.4',
+                                },
+                                '1080p': {
+                                    withoutVideoInput: '11.7',
+                                    withVideoInput: '7.0',
+                                },
                             },
                         },
                     },
@@ -1366,7 +2368,11 @@ export class AiModelsSync {
                 pricing: {
                     currency: 'USD',
                     resaleMargin: '1',
-                    video: { measuringUnit: 'tokens', pricePer: '1000000', price: '7.7' },
+                    video: {
+                        measuringUnit: 'tokens',
+                        pricePer: '1000000',
+                        price: '7.7',
+                    },
                 },
                 // Seedance is a ByteDance model — brand color plus the ByteDance brand icon.
                 color: '#1664FF',
@@ -1380,6 +2386,7 @@ export class AiModelsSync {
                             'dreamina-seedance-2-0-mini-260615': 'Seedance 2.0 Mini',
                             'dreamina-seedance-2-5-260628': 'Seedance 2.5',
                         }
+
                         return names[modelId] || modelId
                     },
                     shortTitle: (modelId: string) => {
@@ -1389,6 +2396,7 @@ export class AiModelsSync {
                             'dreamina-seedance-2-0-mini-260615': 'Seedance 2.0 Mini',
                             'dreamina-seedance-2-5-260628': 'Seedance 2.5',
                         }
+
                         return names[modelId] || modelId
                     },
                 },
@@ -1397,22 +2405,50 @@ export class AiModelsSync {
     }
 
     // Helper to merge pricing from partial values with provider fallback
-    private mergePricingWithFallback(partial: Partial<AiModel['pricing']> | undefined, fallback: AiModel['pricing']): AiModel['pricing'] {
+    private mergePricingWithFallback(
+        partial: Partial<AiModel['pricing']> | undefined,
+        fallback: AiModel['pricing'],
+    ): AiModel['pricing'] {
         const p = partial || {}
         const merged: any = {
             currency: p.currency || fallback.currency,
             resaleMargin: p.resaleMargin || fallback.resaleMargin,
         }
-        if (p.text || fallback.text) merged.text = p.text || fallback.text
-        if (p.audio || (fallback as any).audio) merged.audio = p.audio || (fallback as any).audio
-        if (p.image || (fallback as any).image) merged.image = p.image || (fallback as any).image
-        if ((p as any).video || (fallback as any).video) merged.video = (p as any).video || (fallback as any).video
+
+        if (
+            p.text
+            || fallback.text
+        )
+            merged.text = p.text || fallback.text
+
+        if (
+            p.audio
+            || (fallback as any).audio
+        )
+            merged.audio = p.audio || (fallback as any).audio
+
+        if (
+            p.image
+            || (fallback as any).image
+        )
+            merged.image = p.image || (fallback as any).image
+
+        if (
+            (p as any).video
+            || (fallback as any).video
+        )
+            merged.video = (p as any).video || (fallback as any).video
+
         return merged as AiModel['pricing']
     }
 
     // Merge a (possibly partial) entry with the provider fallback to ensure all fields are present.
-    private mergeWithFallback(partial: PartialDeep<ModelDefaults> | undefined, fallback: ModelDefaults): ModelDefaults {
+    private mergeWithFallback(
+        partial: PartialDeep<ModelDefaults> | undefined,
+        fallback: ModelDefaults,
+    ): ModelDefaults {
         const p = partial || {}
+
         return {
             imagePromptMaxChars: typeof p.imagePromptMaxChars === 'number' ? p.imagePromptMaxChars : fallback.imagePromptMaxChars,
             contextWindow: typeof p.contextWindow === 'number' ? p.contextWindow : fallback.contextWindow,
@@ -1449,27 +2485,27 @@ export class AiModelsSync {
         }
     }
 
-    private resolveModelDefaults(provider: keyof typeof AiModelsSync.MODELS_DEFAULTS, modelId: string): ModelDefaults {
+    private resolveModelDefaults(
+        provider: keyof typeof AiModelsSync.MODELS_DEFAULTS,
+        modelId: string,
+    ): ModelDefaults {
         const config = AiModelsSync.MODELS_DEFAULTS[provider]
         const fallback = config.fallback!
 
         // 1. Check exact matches first
-        if (config.exact[modelId]) {
+        if (config.exact[modelId])
             return this.mergeWithFallback(config.exact[modelId], fallback)
-        }
 
         // 2. Check prefix matches
         for (const prefixEntry of config.prefix) {
-            if (modelId.startsWith(prefixEntry.prefix)) {
+            if (modelId.startsWith(prefixEntry.prefix))
                 return this.mergeWithFallback(prefixEntry.values, fallback)
-            }
         }
 
         // 3. Check contains (partial-name) matches
         for (const containsEntry of config.contains) {
-            if (modelId.includes(containsEntry.includes)) {
+            if (modelId.includes(containsEntry.includes))
                 return this.mergeWithFallback(containsEntry.values, fallback)
-            }
         }
 
         // 4. Return fallback if no specific match
@@ -1479,9 +2515,9 @@ export class AiModelsSync {
     // Fetch available models from OpenAI API using SDK
     private async fetchOpenAIModels(): Promise<OpenAIModel[]> {
         const apiKey = this.openai.apiKey
-        if (!apiKey) {
+
+        if (!apiKey)
             throw new Error('OpenAI API key is required but not provided')
-        }
 
         try {
             const modelsList = await this.openai.models.list()
@@ -1490,17 +2526,24 @@ export class AiModelsSync {
             return models.filter((model: OpenAIModel) => AiModelsSync.OPENAI_ALLOWED_MODELS.has(model.id))
         } catch (error) {
             err('Failed to fetch OpenAI models:', error)
+
             throw error
         }
     }
 
     // Bedrock exposes concrete dated releases rather than the vendor's moving aliases.
     // Preserve those releases so persisted selections remain exact catalog keys.
-    private filterAnthropicModels(models: AnthropicModel[], includeSnapshots = false): AnthropicModel[] {
+    private filterAnthropicModels(
+        models: AnthropicModel[],
+        includeSnapshots = false,
+    ): AnthropicModel[] {
         return models.filter(model => {
             const modelId = model.id
             const alias = modelId.replace(/-\d{8}$/u, '')
-            if (!AiModelsSync.ANTHROPIC_ALLOWED_MODEL_ALIASES.has(alias)) return false
+
+            if (!AiModelsSync.ANTHROPIC_ALLOWED_MODEL_ALIASES.has(alias))
+                return false
+
             return includeSnapshots || alias === modelId
         })
     }
@@ -1513,10 +2556,14 @@ export class AiModelsSync {
         displayName: string | undefined,
     ): AnthropicModel | undefined {
         const match = /^anthropic\.(claude-[^:]+?)(?:-v\d+(?::\d+)?)?$/i.exec(bedrockModelId)
-        if (!match?.[1]) return undefined
+
+        if (!match?.[1])
+            return undefined
 
         const modelId = match[1]
-        if (!modelId.startsWith('claude-')) return undefined
+
+        if (!modelId.startsWith('claude-'))
+            return undefined
 
         const releaseDate = /-(\d{8})$/u.exec(modelId)?.[1]
 
@@ -1534,9 +2581,9 @@ export class AiModelsSync {
     private async fetchAnthropicModelsFromBedrock(): Promise<AnthropicModel[]> {
         const env = process.env
         const region = env.AWS_REGION?.trim()
-        if (!region) {
+
+        if (!region)
             throw new Error('AWS_REGION is required to list Anthropic models on AWS Bedrock')
-        }
 
         const ssoProfile = env.AWS_PROFILE?.trim()
         const client = new BedrockClient({
@@ -1544,22 +2591,35 @@ export class AiModelsSync {
             ...((env.ENVIRONMENT === 'local' && ssoProfile) && { credentials: fromSSO({ profile: ssoProfile }) }),
         })
 
-        const response = await client.send(new ListFoundationModelsCommand({ byProvider: 'Anthropic' }))
+        const response = await client.send(
+            new ListFoundationModelsCommand({ byProvider: 'Anthropic' }),
+        )
         const summaries = response.modelSummaries ?? []
 
         const byModelId = new Map<string, AnthropicModel>()
+
         for (const summary of summaries) {
             const bedrockModelId = summary.modelId
-            if (!bedrockModelId) continue
+
+            if (!bedrockModelId)
+                continue
+
             const model = this.projectBedrockAnthropicModel(bedrockModelId, summary.modelName)
-            if (!model || byModelId.has(model.id)) continue
+
+            if (
+                !model
+                || byModelId.has(model.id)
+            )
+                continue
+
             byModelId.set(model.id, model)
         }
 
         const models = this.filterAnthropicModels([...byModelId.values()], true)
-        if (models.length === 0) {
+
+        if (models.length === 0)
             throw new Error(`AWS Bedrock returned no usable Anthropic models in region ${region}`)
-        }
+
         return models
     }
 
@@ -1567,28 +2627,29 @@ export class AiModelsSync {
     private async fetchAnthropicModels(): Promise<AnthropicModel[]> {
         if (this.useBedrockForAnthropic) {
             info('Sourcing Anthropic models from the AWS Bedrock foundation-model catalog (ANTHROPIC_USE_AWS_BEDROCK_INFERENCE=true)')
+
             return await this.fetchAnthropicModelsFromBedrock()
         }
 
         const apiKey = this.anthropic.apiKey
-        if (!apiKey) {
+
+        if (!apiKey)
             throw new Error('Anthropic API key is required but not provided')
-        }
 
         try {
             if (typeof this.anthropic.models?.list === 'function') {
-                const page = await this.anthropic.models.list({
+                const page = (await this.anthropic.models.list({
                     limit: 100,
-                }) as any
+                })) as any
 
-                if (page?.data) {
+                if (page?.data)
                     return this.filterAnthropicModels(page.data as AnthropicModel[])
-                }
             }
 
             throw new Error('Anthropic models list endpoint returned no models')
         } catch (error) {
             warn('Failed to fetch Anthropic models:', error)
+
             throw error
         }
     }
@@ -1603,7 +2664,9 @@ export class AiModelsSync {
                 // The API returns model names like "models/gemini-2.5-flash"
                 // Strip the "models/" prefix for consistency
                 const modelId = (model.name || '').replace(/^models\//, '')
-                if (!modelId) continue
+
+                if (!modelId)
+                    continue
 
                 allModels.push({
                     name: modelId,
@@ -1620,19 +2683,26 @@ export class AiModelsSync {
                 // Keep active preview ids such as veo-3.1-generate-preview, but
                 // reject known shut-down ids and dated snapshots.
                 if (modelId.includes('veo')) {
-                    if (AiModelsSync.GOOGLE_RETIRED_VIDEO_MODELS.has(modelId)) return false
+                    if (AiModelsSync.GOOGLE_RETIRED_VIDEO_MODELS.has(modelId))
+                        return false
+
                     return !/\d{4}-\d{2}-\d{2}/.test(modelId) && !/:\d{8}/.test(modelId)
                 }
+
                 return AiModelsSync.GOOGLE_ALLOWED_MODELS.has(modelId)
             })
         } catch (error) {
             err('Failed to fetch Google models:', error)
+
             throw error
         }
     }
 
     // Map OpenAI model to our AiModel format
-    private mapOpenAIModelToAiModel(openAIModel: OpenAIModel, sortingPosition: number): AiModel {
+    private mapOpenAIModelToAiModel(
+        openAIModel: OpenAIModel,
+        sortingPosition: number,
+    ): AiModel {
         const modelDefaults = this.resolveModelDefaults('OpenAI', openAIModel.id)
 
         const now = Date.now()
@@ -1673,11 +2743,18 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model)))
+        return assertValidVideoGenerationControls(
+            assertValidImageReferenceCapabilities(
+                assertValidInferenceCapabilities(model),
+            ),
+        )
     }
 
     // Map Anthropic model to our AiModel format
-    private mapAnthropicModelToAiModel(anthropicModel: AnthropicModel, sortingPosition: number): AiModel {
+    private mapAnthropicModelToAiModel(
+        anthropicModel: AnthropicModel,
+        sortingPosition: number,
+    ): AiModel {
         const modelDefaults = this.resolveModelDefaults('Anthropic', anthropicModel.id)
 
         const now = Date.now()
@@ -1718,18 +2795,29 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model)))
+        return assertValidVideoGenerationControls(
+            assertValidImageReferenceCapabilities(
+                assertValidInferenceCapabilities(model),
+            ),
+        )
     }
 
     // Map Google model to our AiModel format
-    private mapGoogleModelToAiModel(googleModel: GoogleModel, sortingPosition: number): AiModel {
+    private mapGoogleModelToAiModel(
+        googleModel: GoogleModel,
+        sortingPosition: number,
+    ): AiModel {
         const modelDefaults = this.resolveModelDefaults('Google', googleModel.name)
 
         const now = Date.now()
 
         // Use API-reported token limits if available and our defaults are 0
-        const contextWindow = modelDefaults.contextWindow || googleModel.inputTokenLimit || 0
-        const maxCompletionSize = modelDefaults.maxCompletionSize || googleModel.outputTokenLimit || 0
+        const contextWindow = modelDefaults.contextWindow
+            || googleModel.inputTokenLimit
+            || 0
+        const maxCompletionSize = modelDefaults.maxCompletionSize
+            || googleModel.outputTokenLimit
+            || 0
 
         const model: AiModel = {
             provider: 'Google',
@@ -1772,12 +2860,21 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(model)))
+        return assertValidVideoGenerationControls(
+            assertValidImageReferenceCapabilities(
+                assertValidInferenceCapabilities(model),
+            ),
+        )
     }
 
     // Update existing models sequentially to avoid overwhelming DynamoDB
-    private async updateModelsSequentially(modelsToUpdate: AiModel[], tableName: string, origin: string) {
-        if (modelsToUpdate.length === 0) return
+    private async updateModelsSequentially(
+        modelsToUpdate: AiModel[],
+        tableName: string,
+        origin: string,
+    ) {
+        if (modelsToUpdate.length === 0)
+            return
 
         info(`📝 Updating ${modelsToUpdate.length} existing models sequentially`)
 
@@ -1791,6 +2888,7 @@ export class AiModelsSync {
                 info(`Updated model: ${model.model}`)
             } catch (error) {
                 err(`Failed to update model ${model.model}:`, error)
+
                 throw error
             }
         }
@@ -1800,9 +2898,8 @@ export class AiModelsSync {
 
     // Synchronize OpenAI models with database
     private async synchronizeOpenAIModels() {
-        if (!this.aiModelsListTableName) {
+        if (!this.aiModelsListTableName)
             throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
-        }
 
         info('🔄 Starting OpenAI models synchronization')
 
@@ -1813,17 +2910,25 @@ export class AiModelsSync {
 
             // Log the raw models from OpenAI
             info('📋 Raw OpenAI models:')
-            openAIModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.id} (owner: ${model.owned_by}, created: ${new Date(model.created * 1000).toISOString()})`)
-            })
+            openAIModels.forEach(
+                (model, index) => void info(
+                    `  ${index + 1}. ${model.id} (owner: ${model.owned_by}, created: ${new Date(model.created * 1000).toISOString()})`,
+                ),
+            )
 
             // Map OpenAI models to our format
-            const mappedModels: AiModel[] = openAIModels.map((model, index) => this.applyDefaultModelFlags(this.mapOpenAIModelToAiModel(model, index + 1)))
+            const mappedModels: AiModel[] = openAIModels.map(
+                (model, index) => this.applyDefaultModelFlags(
+                    this.mapOpenAIModelToAiModel(model, index + 1),
+                ),
+            )
 
             info(`🔧 Mapped ${mappedModels.length} models to our format:`)
-            mappedModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`)
-            })
+            mappedModels.forEach(
+                (model, index) => void info(
+                    `  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`,
+                ),
+            )
 
             // Get existing OpenAI models from database
             const existingModelsResult = await this.dynamoDBService.queryItems({
@@ -1846,7 +2951,9 @@ export class AiModelsSync {
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
 
-            info(`Processing ${newModels.length} new OpenAI models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+            info(
+                `Processing ${newModels.length} new OpenAI models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`,
+            )
 
             // Delete obsolete models first
             if (modelsToDelete.length > 0) {
@@ -1856,15 +2963,20 @@ export class AiModelsSync {
                     try {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
-                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            key: {
+                                provider: (modelToDelete as any).provider,
+                                model: (modelToDelete as any).model,
+                            },
                             origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete OpenAI model: ${(modelToDelete as any).model}`)
                     } catch (error) {
                         err(`Failed to delete OpenAI model ${(modelToDelete as any).model}:`, error)
+
                         throw error
                     }
                 }
+
                 info(`✅ Successfully deleted ${modelsToDelete.length} obsolete OpenAI models`)
             }
 
@@ -1879,9 +2991,12 @@ export class AiModelsSync {
             }
 
             // Process updates sequentially
-            if (modelsToUpdate.length > 0) {
-                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
-            }
+            if (modelsToUpdate.length > 0)
+                await this.updateModelsSequentially(
+                    modelsToUpdate,
+                    this.aiModelsListTableName,
+                    `Service::${this.serviceName}`,
+                )
 
             info('✅ OpenAI models synchronization completed successfully')
 
@@ -1893,15 +3008,15 @@ export class AiModelsSync {
             }
         } catch (error) {
             err('❌ OpenAI models synchronization failed:', error)
+
             throw error
         }
     }
 
     // Synchronize Anthropic models with database
     private async synchronizeAnthropicModels() {
-        if (!this.aiModelsListTableName) {
+        if (!this.aiModelsListTableName)
             throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
-        }
 
         info('🔄 Starting Anthropic models synchronization')
 
@@ -1919,12 +3034,18 @@ export class AiModelsSync {
             })
 
             // Map Anthropic models to our format
-            const mappedModels: AiModel[] = anthropicModels.map((model, index) => this.applyDefaultModelFlags(this.mapAnthropicModelToAiModel(model, index + 1)))
+            const mappedModels: AiModel[] = anthropicModels.map(
+                (model, index) => this.applyDefaultModelFlags(
+                    this.mapAnthropicModelToAiModel(model, index + 1),
+                ),
+            )
 
             info(`🔧 Mapped ${mappedModels.length} Anthropic models to our format:`)
-            mappedModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`)
-            })
+            mappedModels.forEach(
+                (model, index) => void info(
+                    `  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`,
+                ),
+            )
 
             // Get existing Anthropic models from database
             const existingModelsResult = await this.dynamoDBService.queryItems({
@@ -1947,7 +3068,9 @@ export class AiModelsSync {
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
 
-            info(`Processing ${newModels.length} new Anthropic models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+            info(
+                `Processing ${newModels.length} new Anthropic models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`,
+            )
 
             // Delete obsolete models first
             if (modelsToDelete.length > 0) {
@@ -1957,15 +3080,20 @@ export class AiModelsSync {
                     try {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
-                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            key: {
+                                provider: (modelToDelete as any).provider,
+                                model: (modelToDelete as any).model,
+                            },
                             origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete Anthropic model: ${(modelToDelete as any).model}`)
                     } catch (error) {
                         err(`Failed to delete Anthropic model ${(modelToDelete as any).model}:`, error)
+
                         throw error
                     }
                 }
+
                 info(`✅ Successfully deleted ${modelsToDelete.length} obsolete Anthropic models`)
             }
 
@@ -1980,9 +3108,12 @@ export class AiModelsSync {
             }
 
             // Process updates sequentially
-            if (modelsToUpdate.length > 0) {
-                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
-            }
+            if (modelsToUpdate.length > 0)
+                await this.updateModelsSequentially(
+                    modelsToUpdate,
+                    this.aiModelsListTableName,
+                    `Service::${this.serviceName}`,
+                )
 
             info('✅ Anthropic models synchronization completed successfully')
 
@@ -1994,15 +3125,15 @@ export class AiModelsSync {
             }
         } catch (error) {
             err('❌ Anthropic models synchronization failed:', error)
+
             throw error
         }
     }
 
     // Synchronize Google models with database
     private async synchronizeGoogleModels() {
-        if (!this.aiModelsListTableName) {
+        if (!this.aiModelsListTableName)
             throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
-        }
 
         info('🔄 Starting Google models synchronization')
 
@@ -2011,16 +3142,24 @@ export class AiModelsSync {
             info(`📡 Fetched ${googleModels.length} models from Google API`)
 
             info('📋 Raw Google models:')
-            googleModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.name} (display: ${model.displayName || 'N/A'}, input: ${model.inputTokenLimit}, output: ${model.outputTokenLimit})`)
-            })
+            googleModels.forEach(
+                (model, index) => void info(
+                    `  ${index + 1}. ${model.name} (display: ${model.displayName || 'N/A'}, input: ${model.inputTokenLimit}, output: ${model.outputTokenLimit})`,
+                ),
+            )
 
-            const mappedModels: AiModel[] = googleModels.map((model, index) => this.applyDefaultModelFlags(this.mapGoogleModelToAiModel(model, index + 1)))
+            const mappedModels: AiModel[] = googleModels.map(
+                (model, index) => this.applyDefaultModelFlags(
+                    this.mapGoogleModelToAiModel(model, index + 1),
+                ),
+            )
 
             info(`🔧 Mapped ${mappedModels.length} Google models to our format:`)
-            mappedModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`)
-            })
+            mappedModels.forEach(
+                (model, index) => void info(
+                    `  ${index + 1}. ${model.model} - ${model.title} (context: ${model.contextWindow}, max completion: ${model.maxCompletionSize})`,
+                ),
+            )
 
             const existingModelsResult = await this.dynamoDBService.queryItems({
                 tableName: this.aiModelsListTableName,
@@ -2040,7 +3179,9 @@ export class AiModelsSync {
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
 
-            info(`Processing ${newModels.length} new Google models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+            info(
+                `Processing ${newModels.length} new Google models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`,
+            )
 
             if (modelsToDelete.length > 0) {
                 info(`🗑️ Deleting ${modelsToDelete.length} obsolete Google models`)
@@ -2049,15 +3190,20 @@ export class AiModelsSync {
                     try {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
-                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            key: {
+                                provider: (modelToDelete as any).provider,
+                                model: (modelToDelete as any).model,
+                            },
                             origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete Google model: ${(modelToDelete as any).model}`)
                     } catch (error) {
                         err(`Failed to delete Google model ${(modelToDelete as any).model}:`, error)
+
                         throw error
                     }
                 }
+
                 info(`✅ Successfully deleted ${modelsToDelete.length} obsolete Google models`)
             }
 
@@ -2070,9 +3216,12 @@ export class AiModelsSync {
                 info(`Inserted ${newModels.length} new Google models`)
             }
 
-            if (modelsToUpdate.length > 0) {
-                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
-            }
+            if (modelsToUpdate.length > 0)
+                await this.updateModelsSequentially(
+                    modelsToUpdate,
+                    this.aiModelsListTableName,
+                    `Service::${this.serviceName}`,
+                )
 
             info('✅ Google models synchronization completed successfully')
 
@@ -2084,20 +3233,36 @@ export class AiModelsSync {
             }
         } catch (error) {
             err('❌ Google models synchronization failed:', error)
+
             throw error
         }
     }
 
     // Stability AI models (hardcoded — no list-models API available)
-    private getStabilityModels(): Array<{ id: string; displayName: string }> {
+    private getStabilityModels(): Array<{
+        id: string
+        displayName: string
+    }> {
         return [
-            { id: 'stability-ultra', displayName: 'Stable Image Ultra' },
-            { id: 'sd3.5-large', displayName: 'SD 3.5 Large' },
+            {
+                id: 'stability-ultra',
+                displayName: 'Stable Image Ultra',
+            },
+            {
+                id: 'sd3.5-large',
+                displayName: 'SD 3.5 Large',
+            },
         ]
     }
 
     // Map Stability model to our AiModel format
-    private mapStabilityModelToAiModel(model: { id: string; displayName: string }, sortingPosition: number): AiModel {
+    private mapStabilityModelToAiModel(
+        model: {
+            id: string
+            displayName: string
+        },
+        sortingPosition: number,
+    ): AiModel {
         const modelDefaults = this.resolveModelDefaults('Stability', model.id)
 
         const now = Date.now()
@@ -2137,14 +3302,17 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel)))
+        return assertValidVideoGenerationControls(
+            assertValidImageReferenceCapabilities(
+                assertValidInferenceCapabilities(aiModel),
+            ),
+        )
     }
 
     // Synchronize Stability AI models with database
     private async synchronizeStabilityModels() {
-        if (!this.aiModelsListTableName) {
+        if (!this.aiModelsListTableName)
             throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
-        }
 
         info('🔄 Starting Stability AI models synchronization')
 
@@ -2152,12 +3320,14 @@ export class AiModelsSync {
             const stabilityModels = this.getStabilityModels()
             info(`📡 Using ${stabilityModels.length} hardcoded Stability AI models`)
 
-            const mappedModels: AiModel[] = stabilityModels.map((model, index) => this.applyDefaultModelFlags(this.mapStabilityModelToAiModel(model, index + 1)))
+            const mappedModels: AiModel[] = stabilityModels.map(
+                (model, index) => this.applyDefaultModelFlags(
+                    this.mapStabilityModelToAiModel(model, index + 1),
+                ),
+            )
 
             info(`🔧 Mapped ${mappedModels.length} Stability AI models to our format:`)
-            mappedModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.model} - ${model.title}`)
-            })
+            mappedModels.forEach((model, index) => void info(`  ${index + 1}. ${model.model} - ${model.title}`))
 
             const existingModelsResult = await this.dynamoDBService.queryItems({
                 tableName: this.aiModelsListTableName,
@@ -2177,7 +3347,9 @@ export class AiModelsSync {
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
 
-            info(`Processing ${newModels.length} new Stability AI models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+            info(
+                `Processing ${newModels.length} new Stability AI models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`,
+            )
 
             if (modelsToDelete.length > 0) {
                 info(`🗑️ Deleting ${modelsToDelete.length} obsolete Stability AI models`)
@@ -2186,15 +3358,20 @@ export class AiModelsSync {
                     try {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
-                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            key: {
+                                provider: (modelToDelete as any).provider,
+                                model: (modelToDelete as any).model,
+                            },
                             origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete Stability AI model: ${(modelToDelete as any).model}`)
                     } catch (error) {
                         err(`Failed to delete Stability AI model ${(modelToDelete as any).model}:`, error)
+
                         throw error
                     }
                 }
+
                 info(`✅ Successfully deleted ${modelsToDelete.length} obsolete Stability AI models`)
             }
 
@@ -2207,9 +3384,12 @@ export class AiModelsSync {
                 info(`Inserted ${newModels.length} new Stability AI models`)
             }
 
-            if (modelsToUpdate.length > 0) {
-                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
-            }
+            if (modelsToUpdate.length > 0)
+                await this.updateModelsSequentially(
+                    modelsToUpdate,
+                    this.aiModelsListTableName,
+                    `Service::${this.serviceName}`,
+                )
 
             info('✅ Stability AI models synchronization completed successfully')
 
@@ -2221,24 +3401,46 @@ export class AiModelsSync {
             }
         } catch (error) {
             err('❌ Stability AI models synchronization failed:', error)
+
             throw error
         }
     }
 
     // BytePlus ModelArk models (hardcoded — no list-models API in the repo).
     // Seedance video generation; mirrors the Stability static-injection path.
-    private getBytePlusModels(): Array<{ id: string; displayName: string }> {
+    private getBytePlusModels(): Array<{
+        id: string
+        displayName: string
+    }> {
         return [
-            { id: 'dreamina-seedance-2-0-260128', displayName: 'Seedance 2.0' },
-            { id: 'dreamina-seedance-2-0-fast-260128', displayName: 'Seedance 2.0 Fast' },
-            { id: 'dreamina-seedance-2-0-mini-260615', displayName: 'Seedance 2.0 Mini' },
-            { id: 'dreamina-seedance-2-5-260628', displayName: 'Seedance 2.5' },
+            {
+                id: 'dreamina-seedance-2-0-260128',
+                displayName: 'Seedance 2.0',
+            },
+            {
+                id: 'dreamina-seedance-2-0-fast-260128',
+                displayName: 'Seedance 2.0 Fast',
+            },
+            {
+                id: 'dreamina-seedance-2-0-mini-260615',
+                displayName: 'Seedance 2.0 Mini',
+            },
+            {
+                id: 'dreamina-seedance-2-5-260628',
+                displayName: 'Seedance 2.5',
+            },
         ]
     }
 
     // Map a BytePlus model to our AiModel format. Mirrors mapStabilityModelToAiModel
     // but carries the video option lists + reference cap (Seedance is video-only).
-    private mapBytePlusModelToAiModel(model: { id: string; displayName: string }, sortingPosition: number): AiModel {
+    private mapBytePlusModelToAiModel(
+        model: {
+            id: string
+            displayName: string
+        },
+        sortingPosition: number,
+    ): AiModel {
         const modelDefaults = this.resolveModelDefaults('BytePlus', model.id)
 
         const now = Date.now()
@@ -2282,15 +3484,18 @@ export class AiModelsSync {
             }
         }
 
-        return assertValidVideoGenerationControls(assertValidImageReferenceCapabilities(assertValidInferenceCapabilities(aiModel)))
+        return assertValidVideoGenerationControls(
+            assertValidImageReferenceCapabilities(
+                assertValidInferenceCapabilities(aiModel),
+            ),
+        )
     }
 
     // Synchronize BytePlus (Seedance) models with database. Mirrors the Stability
     // path exactly (static list -> map -> diff against DB -> delete/insert/update).
     private async synchronizeBytePlusModels() {
-        if (!this.aiModelsListTableName) {
+        if (!this.aiModelsListTableName)
             throw new Error('AI_MODELS_LIST_TABLE_NAME environment variable is required')
-        }
 
         info('🔄 Starting BytePlus models synchronization')
 
@@ -2298,12 +3503,14 @@ export class AiModelsSync {
             const bytePlusModels = this.getBytePlusModels()
             info(`📡 Using ${bytePlusModels.length} hardcoded BytePlus models`)
 
-            const mappedModels: AiModel[] = bytePlusModels.map((model, index) => this.applyDefaultModelFlags(this.mapBytePlusModelToAiModel(model, index + 1)))
+            const mappedModels: AiModel[] = bytePlusModels.map(
+                (model, index) => this.applyDefaultModelFlags(
+                    this.mapBytePlusModelToAiModel(model, index + 1),
+                ),
+            )
 
             info(`🔧 Mapped ${mappedModels.length} BytePlus models to our format:`)
-            mappedModels.forEach((model, index) => {
-                info(`  ${index + 1}. ${model.model} - ${model.title}`)
-            })
+            mappedModels.forEach((model, index) => void info(`  ${index + 1}. ${model.model} - ${model.title}`))
 
             const existingModelsResult = await this.dynamoDBService.queryItems({
                 tableName: this.aiModelsListTableName,
@@ -2323,7 +3530,9 @@ export class AiModelsSync {
             const newModels = mappedModels.filter(model => existingModelIds.indexOf(model.model) === -1)
             const modelsToUpdate = mappedModels.filter(model => existingModelIds.indexOf(model.model) !== -1)
 
-            info(`Processing ${newModels.length} new BytePlus models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`)
+            info(
+                `Processing ${newModels.length} new BytePlus models, ${modelsToUpdate.length} existing models, and ${modelsToDelete.length} models to delete`,
+            )
 
             if (modelsToDelete.length > 0) {
                 info(`🗑️ Deleting ${modelsToDelete.length} obsolete BytePlus models`)
@@ -2332,15 +3541,20 @@ export class AiModelsSync {
                     try {
                         await this.dynamoDBService.deleteItems({
                             tableName: this.aiModelsListTableName,
-                            key: { provider: (modelToDelete as any).provider, model: (modelToDelete as any).model },
+                            key: {
+                                provider: (modelToDelete as any).provider,
+                                model: (modelToDelete as any).model,
+                            },
                             origin: `Service::${this.serviceName}`,
                         })
                         info(`Deleted obsolete BytePlus model: ${(modelToDelete as any).model}`)
                     } catch (error) {
                         err(`Failed to delete BytePlus model ${(modelToDelete as any).model}:`, error)
+
                         throw error
                     }
                 }
+
                 info(`✅ Successfully deleted ${modelsToDelete.length} obsolete BytePlus models`)
             }
 
@@ -2353,9 +3567,12 @@ export class AiModelsSync {
                 info(`Inserted ${newModels.length} new BytePlus models`)
             }
 
-            if (modelsToUpdate.length > 0) {
-                await this.updateModelsSequentially(modelsToUpdate, this.aiModelsListTableName, `Service::${this.serviceName}`)
-            }
+            if (modelsToUpdate.length > 0)
+                await this.updateModelsSequentially(
+                    modelsToUpdate,
+                    this.aiModelsListTableName,
+                    `Service::${this.serviceName}`,
+                )
 
             info('✅ BytePlus models synchronization completed successfully')
 
@@ -2367,6 +3584,7 @@ export class AiModelsSync {
             }
         } catch (error) {
             err('❌ BytePlus models synchronization failed:', error)
+
             throw error
         }
     }
@@ -2379,15 +3597,30 @@ export class AiModelsSync {
         // provider-side failure) is logged and skipped — it must never abort the
         // other providers or crash startup, since model sync is a best-effort
         // bootstrap task, not a hard dependency for the server to run.
-        type ProviderResult = { processed: number; newModels: number; updatedModels: number; deletedModels: number }
-        const zero: ProviderResult = { processed: 0, newModels: 0, updatedModels: 0, deletedModels: 0 }
-        const runProvider = async (name: string, fn: () => Promise<ProviderResult>): Promise<ProviderResult> => {
+        type ProviderResult = {
+            processed: number
+            newModels: number
+            updatedModels: number
+            deletedModels: number
+        }
+        const zero: ProviderResult = {
+            processed: 0,
+            newModels: 0,
+            updatedModels: 0,
+            deletedModels: 0,
+        }
+        const runProvider = async (
+            name: string,
+            fn: () => Promise<ProviderResult>,
+        ): Promise<ProviderResult> => {
             try {
                 const result = await fn()
                 info(`${name} synchronization completed: ${JSON.stringify(result)}`)
+
                 return result
             } catch (error) {
                 warn(`⚠️  ${name} models synchronization skipped (continuing): ${error instanceof Error ? error.message : String(error)}`)
+
                 return { ...zero }
             }
         }

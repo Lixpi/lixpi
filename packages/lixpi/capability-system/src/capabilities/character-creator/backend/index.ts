@@ -24,9 +24,7 @@ export type CharacterCreatorModuleDependencies = {
     runtime: CharacterCreatorRuntimePorts
 }
 
-export function createCharacterCreatorModule(
-    dependencies: CharacterCreatorModuleDependencies,
-): CapabilityModuleDefinition {
+export const createCharacterCreatorModule = (dependencies: CharacterCreatorModuleDependencies): CapabilityModuleDefinition => {
     return {
         moduleId: 'character-creator',
         name: 'Character Creator',
@@ -66,13 +64,17 @@ export function createCharacterCreatorModule(
                 summary: 'Generates three shots by default. Explicit 4-to-10-shot requests scale cost and latency, while every shot remains limited to one attempt.',
             },
         },
-        entry: { capabilityId: CHARACTER_CREATOR_TOOL_ID, kind: 'tool' },
+        entry: {
+            capabilityId: CHARACTER_CREATOR_TOOL_ID,
+            kind: 'tool',
+        },
         tools: [createCharacterCreatorToolPackage(dependencies.capabilityStorage)],
         skills: createCharacterCreatorSkillPackages(dependencies.capabilityStorage),
         mediaStrategies: [new CharacterSheetStrategy(dependencies.runtime)],
         routing: {
             resolve: prompt => {
                 const route = resolveCharacterCreatorRouting(prompt, undefined)
+
                 return route.isCharacterCreator
                     ? {
                         capabilityId: CHARACTER_CREATOR_TOOL_ID,

@@ -21,34 +21,48 @@ export type ImageNodeOptions<Data> = Omit<ImageSurfaceOptions, 'surface' | 'onIm
     type: string
     geometry: NodeGeometryPolicy<Data>
     getMedia: (node: EngineNode<Data>) => MediaDescriptor | null
-    onImageLoaded?: (node: EngineNode<Data>, image: Parameters<NonNullable<ImageSurfaceOptions['onImageLoaded']>>[0]) => void
+    onImageLoaded?: (
+        node: EngineNode<Data>,
+        image: Parameters<NonNullable<ImageSurfaceOptions['onImageLoaded']>>[0],
+    ) => void
 }
 
 class ImageNodeView<Data> implements NodeView<Data> {
     private node: EngineNode<Data>
     private readonly image: ImageSurface
 
-    constructor(node: EngineNode<Data>, context: ComponentContext, private readonly options: ImageNodeOptions<Data>) {
+    constructor(
+        node: EngineNode<Data>,
+        context: ComponentContext,
+        private readonly options: ImageNodeOptions<Data>,
+    ) {
         this.node = node
         this.image = new ImageSurface({
             ...options,
             surface: context,
             onImageLoaded: image => options.onImageLoaded?.(this.node, image),
         })
+
         try {
             this.update(node)
         } catch (error) {
             this.image.destroy()
+
             throw error
         }
     }
 
     update(node: EngineNode<Data>): void {
         this.node = node
-        this.image.setMedia(this.options.getMedia(node))
+        this.image.setMedia(
+            this.options.getMedia(node),
+        )
     }
 
-    setGeometry(bounds: CanvasEngineRect, viewport: CanvasViewport): void {
+    setGeometry(
+        bounds: CanvasEngineRect,
+        viewport: CanvasViewport,
+    ): void {
         this.image.setGeometry(bounds, viewport)
     }
     setVisible(visible: boolean): void {
@@ -63,10 +77,14 @@ class ImageNodeView<Data> implements NodeView<Data> {
     }
 }
 
-export function createImageNodeRegistration<Data>(options: ImageNodeOptions<Data>): NodeRegistration<Data> {
+export const createImageNodeRegistration = <Data>(options: ImageNodeOptions<Data>): NodeRegistration<Data> => {
     return {
         type: options.type,
         geometry: options.geometry,
-        mount: (node, context) => new ImageNodeView(node, context, options),
+        mount: (node, context) => new ImageNodeView(
+            node,
+            context,
+            options,
+        ),
     }
 }

@@ -26,6 +26,4 @@ export class CapabilityError extends Error {
     }
 }
 
-export function isCapabilityError(error: unknown): error is CapabilityError {
-    return error instanceof CapabilityError
-}
+export const isCapabilityError = (error: unknown): error is CapabilityError => error instanceof CapabilityError

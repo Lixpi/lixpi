@@ -24,7 +24,7 @@ type NodeBounds = {
 }
 
 // Convert our simplified anchor position to XYFlow's Position enum
-function toXYFlowPosition(position: AnchorPosition): Position {
+const toXYFlowPosition = (position: AnchorPosition): Position => {
     switch (position) {
         case 'left':
             return Position.Left
@@ -42,12 +42,12 @@ function toXYFlowPosition(position: AnchorPosition): Position {
 // Build a horizontal symmetric S-curve bezier path
 // Leaves horizontally from source, transitions in the middle, arrives horizontally at target
 // This is the custom path type used in contextSelector for smooth horizontal flows
-function buildHorizontalBezierPath(
+const buildHorizontalBezierPath = (
     sourceX: number,
     sourceY: number,
     targetX: number,
     targetY: number,
-): string {
+): string => {
     // Place both control points at the horizontal midpoint
     const midX = (sourceX + targetX) / 2
 
@@ -66,14 +66,14 @@ function buildHorizontalBezierPath(
 // The vertical segment goes from sourceY to targetY, so any node that overlaps
 // this Y range AND would be intersected by our vertical line is a blocker
 // Returns X coordinate for the vertical segment that won't intersect any nodes
-function findSafeVerticalLane(
+const findSafeVerticalLane = (
     sourceX: number,
     sourceY: number,
     targetX: number,
     targetY: number,
     obstacleNodes: NodeBounds[],
     margin: number = 15,
-): number {
+): number => {
     const minY = Math.min(sourceY, targetY)
     const maxY = Math.max(sourceY, targetY)
 
@@ -85,6 +85,7 @@ function findSafeVerticalLane(
     const nodesInYRange = obstacleNodes.filter(node => {
         const nodeTop = node.y
         const nodeBottom = node.y + node.height
+
         // Node overlaps with the vertical range of the edge
         return nodeBottom + margin > minY && nodeTop - margin < maxY
     })
@@ -96,7 +97,10 @@ function findSafeVerticalLane(
 
     // Collect all "forbidden" X ranges where we can't place the vertical segment
     // A vertical line at X would hit a node if X is within [node.x - margin, node.x + node.width + margin]
-    const forbiddenRanges: Array<{ left: number; right: number }> = []
+    const forbiddenRanges: Array<{
+        left: number
+        right: number
+    }> = []
 
     for (const node of nodesInYRange) {
         forbiddenRanges.push({
@@ -107,18 +111,22 @@ function findSafeVerticalLane(
 
     // Merge overlapping forbidden ranges
     forbiddenRanges.sort((a, b) => a.left - b.left)
-    const mergedRanges: Array<{ left: number; right: number }> = []
+    const mergedRanges: Array<{
+        left: number
+        right: number
+    }> = []
+
     for (const range of forbiddenRanges) {
-        if (mergedRanges.length === 0) {
+        if (mergedRanges.length === 0)
             mergedRanges.push(range)
-        } else {
+        else {
             const last = mergedRanges.at(-1)!
+
             if (range.left <= last.right) {
                 // Overlapping, merge
                 last.right = Math.max(last.right, range.right)
-            } else {
+            } else
                 mergedRanges.push(range)
-            }
         }
     }
 
@@ -133,12 +141,17 @@ function findSafeVerticalLane(
     const searchLeft = Math.min(minX, ...mergedRanges.map(r => r.left)) - margin * 2
     const searchRight = Math.max(maxX, ...mergedRanges.map(r => r.right)) + margin * 2
 
-    const validRanges: Array<{ left: number; right: number }> = []
+    const validRanges: Array<{
+        left: number
+        right: number
+    }> = []
 
     // Check space before first forbidden range
-    if (mergedRanges[0].left > searchLeft) {
-        validRanges.push({ left: searchLeft, right: mergedRanges[0].left })
-    }
+    if (mergedRanges[0].left > searchLeft)
+        validRanges.push({
+            left: searchLeft,
+            right: mergedRanges[0].left,
+        })
 
     // Check gaps between forbidden ranges
     for (let i = 0; i < mergedRanges.length - 1; i++) {
@@ -150,14 +163,16 @@ function findSafeVerticalLane(
 
     // Check space after last forbidden range
     const lastMergedRange = mergedRanges.at(-1)!
-    if (lastMergedRange.right < searchRight) {
-        validRanges.push({ left: lastMergedRange.right, right: searchRight })
-    }
+
+    if (lastMergedRange.right < searchRight)
+        validRanges.push({
+            left: lastMergedRange.right,
+            right: searchRight,
+        })
 
     // If no valid ranges at all (shouldn't happen), fall back to midpoint
-    if (validRanges.length === 0) {
+    if (validRanges.length === 0)
         return midX
-    }
 
     // Find the valid range closest to the midpoint
     let bestX = midX
@@ -165,7 +180,10 @@ function findSafeVerticalLane(
 
     for (const range of validRanges) {
         // Find closest point in this range to the midpoint
-        const clampedX = Math.max(range.left, Math.min(range.right, midX))
+        const clampedX = Math.max(
+            range.left,
+            Math.min(range.right, midX),
+        )
         const distance = Math.abs(clampedX - midX)
 
         if (distance < bestDistance) {
@@ -178,13 +196,13 @@ function findSafeVerticalLane(
 }
 
 // Check if a horizontal line from x1 to x2 at height y intersects any node
-function horizontalLineIntersectsNodes(
+const horizontalLineIntersectsNodes = (
     x1: number,
     x2: number,
     y: number,
     nodes: NodeBounds[],
     margin: number = 10,
-): NodeBounds | null {
+): NodeBounds | null => {
     const minX = Math.min(x1, x2)
     const maxX = Math.max(x1, x2)
 
@@ -195,20 +213,25 @@ function horizontalLineIntersectsNodes(
         const nodeBottom = node.y + node.height + margin
 
         // Check if line passes through node's bounding box
-        if (y >= nodeTop && y <= nodeBottom && nodeRight > minX && nodeLeft < maxX) {
+        if (
+            y >= nodeTop
+            && y <= nodeBottom
+            && nodeRight > minX
+            && nodeLeft < maxX
+        )
             return node
-        }
     }
+
     return null
 }
 
 // Find a safe Y position for a horizontal detour around a blocking node
-function findSafeHorizontalLane(
+const findSafeHorizontalLane = (
     node: NodeBounds,
     sourceY: number,
     targetY: number,
     margin: number = 15,
-): number {
+): number => {
     const nodeTop = node.y - margin
     const nodeBottom = node.y + node.height + margin
 
@@ -222,14 +245,18 @@ function findSafeHorizontalLane(
 }
 
 // Build an SVG path with rounded corners from a sequence of orthogonal points
-function buildMultiSegmentPath(
-    points: Array<{ x: number; y: number }>,
+const buildMultiSegmentPath = (
+    points: Array<{
+        x: number
+        y: number
+    }>,
     borderRadius: number = 8,
-): string {
-    if (points.length < 2) return ''
-    if (points.length === 2) {
+): string => {
+    if (points.length < 2)
+        return ''
+
+    if (points.length === 2)
         return `M ${points[0].x},${points[0].y} L ${points[1].x},${points[1].y}`
-    }
 
     const segments: string[] = [`M ${points[0].x},${points[0].y}`]
 
@@ -241,22 +268,43 @@ function buildMultiSegmentPath(
         // Calculate distances to determine max radius
         const distToPrev = Math.abs(curr.x - prev.x) + Math.abs(curr.y - prev.y)
         const distToNext = Math.abs(next.x - curr.x) + Math.abs(next.y - curr.y)
-        const r = Math.min(borderRadius, distToPrev / 2, distToNext / 2)
+        const r = Math.min(
+            borderRadius,
+            distToPrev / 2,
+            distToNext / 2,
+        )
 
         if (r < 1) {
             segments.push(`L ${curr.x},${curr.y}`)
+
             continue
         }
 
         // Direction from prev to curr
         const dirFromPrev = {
-            x: curr.x === prev.x ? 0 : (curr.x > prev.x ? 1 : -1),
-            y: curr.y === prev.y ? 0 : (curr.y > prev.y ? 1 : -1),
+            x: curr.x === prev.x
+                ? 0
+                : curr.x > prev.x
+                    ? 1
+                    : -1,
+            y: curr.y === prev.y
+                ? 0
+                : curr.y > prev.y
+                    ? 1
+                    : -1,
         }
         // Direction from curr to next
         const dirToNext = {
-            x: next.x === curr.x ? 0 : (next.x > curr.x ? 1 : -1),
-            y: next.y === curr.y ? 0 : (next.y > curr.y ? 1 : -1),
+            x: next.x === curr.x
+                ? 0
+                : next.x > curr.x
+                    ? 1
+                    : -1,
+            y: next.y === curr.y
+                ? 0
+                : next.y > curr.y
+                    ? 1
+                    : -1,
         }
 
         // Curve start (approaching the corner)
@@ -287,37 +335,49 @@ function buildMultiSegmentPath(
 // obstacleNodes are all nodes to avoid (excluding source/target)
 // laneIndex/laneCount are used to spread vertical segments for edges sharing same target
 // ALWAYS produces orthogonal (horizontal/vertical) segments, NEVER diagonal
-function buildOrthogonalPath(
+const buildOrthogonalPath = (
     sourceX: number,
     sourceY: number,
     targetX: number,
     targetY: number,
     borderRadius: number = 24,
-    bendPoints?: Array<{ x: number; y: number }>,
+    bendPoints?: Array<{
+        x: number
+        y: number
+    }>,
     obstacleNodes?: NodeBounds[],
     sourceNodeId?: string,
     targetNodeId?: string,
     laneIndex: number = 0,
     laneCount: number = 1,
-): string {
+): string => {
     // If no bend points provided (or empty), compute an orthogonal path
-    if (!bendPoints || bendPoints.length === 0) {
+    if (
+        !bendPoints
+        || bendPoints.length === 0
+    ) {
         // Filter out source and target nodes from obstacles
-        const filteredObstacles = obstacleNodes?.filter(
-            n => n.id !== sourceNodeId && n.id !== targetNodeId,
-        ) ?? []
+        const filteredObstacles = obstacleNodes?.filter(n => n.id !== sourceNodeId && n.id !== targetNodeId) ?? []
 
         const verticalDist = Math.abs(targetY - sourceY)
         const horizontalDist = Math.abs(targetX - sourceX)
 
         // Straight horizontal line when endpoints are at the same Y
-        if (verticalDist < 2 && horizontalDist > 1) {
+        if (
+            verticalDist < 2
+            && horizontalDist > 1
+        )
             return `M ${sourceX},${sourceY} L ${targetX},${targetY}`
-        }
 
         // Otherwise use obstacle-aware 3-point routing
         // Find a safe vertical lane that avoids all intermediate nodes
-        let midX = findSafeVerticalLane(sourceX, sourceY, targetX, targetY, filteredObstacles)
+        let midX = findSafeVerticalLane(
+            sourceX,
+            sourceY,
+            targetX,
+            targetY,
+            filteredObstacles,
+        )
 
         // Apply lane offset for edges sharing the same target
         // Higher laneIndex (lower source on screen) = vertical segment closer to target
@@ -343,14 +403,28 @@ function buildOrthogonalPath(
         // Check if horizontal segments would pass through any nodes
         // Segment 1: sourceX to midX at sourceY
         // Segment 2: midX to targetX at targetY
-        const blockingNode1 = horizontalLineIntersectsNodes(sourceX, midX, sourceY, filteredObstacles)
-        const blockingNode2 = horizontalLineIntersectsNodes(midX, targetX, targetY, filteredObstacles)
+        const blockingNode1 = horizontalLineIntersectsNodes(
+            sourceX,
+            midX,
+            sourceY,
+            filteredObstacles,
+        )
+        const blockingNode2 = horizontalLineIntersectsNodes(
+            midX,
+            targetX,
+            targetY,
+            filteredObstacles,
+        )
 
         // If first horizontal segment is blocked, we need to go around
         if (blockingNode1) {
             // Route around the blocking node
             // Determine which way to go around (above or below)
-            const detourY = findSafeHorizontalLane(blockingNode1, sourceY, targetY)
+            const detourY = findSafeHorizontalLane(
+                blockingNode1,
+                sourceY,
+                targetY,
+            )
 
             // Determine a safe X to start the horizontal run - BEFORE the blocking node
             const nodeLeft = blockingNode1.x - 20
@@ -365,12 +439,30 @@ function buildOrthogonalPath(
                 // We're going right, so go around the right side of the node
                 return buildMultiSegmentPath(
                     [
-                        { x: sourceX, y: sourceY },
-                        { x: nodeLeft, y: sourceY }, // Go horizontal to just before node
-                        { x: nodeLeft, y: detourY }, // Go vertical to detour height
-                        { x: nodeRight, y: detourY }, // Go horizontal past the node
-                        { x: nodeRight, y: targetY }, // Go vertical to target Y
-                        { x: targetX, y: targetY },
+                        {
+                            x: sourceX,
+                            y: sourceY,
+                        },
+                        {
+                            x: nodeLeft,
+                            y: sourceY,
+                        }, // Go horizontal to just before node
+                        {
+                            x: nodeLeft,
+                            y: detourY,
+                        }, // Go vertical to detour height
+                        {
+                            x: nodeRight,
+                            y: detourY,
+                        }, // Go horizontal past the node
+                        {
+                            x: nodeRight,
+                            y: targetY,
+                        }, // Go vertical to target Y
+                        {
+                            x: targetX,
+                            y: targetY,
+                        },
                     ],
                     borderRadius,
                 )
@@ -378,12 +470,30 @@ function buildOrthogonalPath(
                 // We're going left, so go around the left side of the node
                 return buildMultiSegmentPath(
                     [
-                        { x: sourceX, y: sourceY },
-                        { x: nodeRight, y: sourceY }, // Go horizontal to just after node
-                        { x: nodeRight, y: detourY }, // Go vertical to detour height
-                        { x: nodeLeft, y: detourY }, // Go horizontal past the node
-                        { x: nodeLeft, y: targetY }, // Go vertical to target Y
-                        { x: targetX, y: targetY },
+                        {
+                            x: sourceX,
+                            y: sourceY,
+                        },
+                        {
+                            x: nodeRight,
+                            y: sourceY,
+                        }, // Go horizontal to just after node
+                        {
+                            x: nodeRight,
+                            y: detourY,
+                        }, // Go vertical to detour height
+                        {
+                            x: nodeLeft,
+                            y: detourY,
+                        }, // Go horizontal past the node
+                        {
+                            x: nodeLeft,
+                            y: targetY,
+                        }, // Go vertical to target Y
+                        {
+                            x: targetX,
+                            y: targetY,
+                        },
                     ],
                     borderRadius,
                 )
@@ -392,7 +502,11 @@ function buildOrthogonalPath(
 
         // If second horizontal segment is blocked, route around
         if (blockingNode2) {
-            const detourY = findSafeHorizontalLane(blockingNode2, sourceY, targetY)
+            const detourY = findSafeHorizontalLane(
+                blockingNode2,
+                sourceY,
+                targetY,
+            )
             const nodeLeft = blockingNode2.x - 20
             const nodeRight = blockingNode2.x + blockingNode2.width + 20
             const goingRight = targetX > sourceX
@@ -400,24 +514,60 @@ function buildOrthogonalPath(
             if (goingRight) {
                 return buildMultiSegmentPath(
                     [
-                        { x: sourceX, y: sourceY },
-                        { x: nodeLeft, y: sourceY }, // Go horizontal to just before node
-                        { x: nodeLeft, y: detourY }, // Go vertical to detour height
-                        { x: nodeRight, y: detourY }, // Go horizontal past the node
-                        { x: nodeRight, y: targetY }, // Go vertical to target Y
-                        { x: targetX, y: targetY },
+                        {
+                            x: sourceX,
+                            y: sourceY,
+                        },
+                        {
+                            x: nodeLeft,
+                            y: sourceY,
+                        }, // Go horizontal to just before node
+                        {
+                            x: nodeLeft,
+                            y: detourY,
+                        }, // Go vertical to detour height
+                        {
+                            x: nodeRight,
+                            y: detourY,
+                        }, // Go horizontal past the node
+                        {
+                            x: nodeRight,
+                            y: targetY,
+                        }, // Go vertical to target Y
+                        {
+                            x: targetX,
+                            y: targetY,
+                        },
                     ],
                     borderRadius,
                 )
             } else {
                 return buildMultiSegmentPath(
                     [
-                        { x: sourceX, y: sourceY },
-                        { x: nodeRight, y: sourceY },
-                        { x: nodeRight, y: detourY },
-                        { x: nodeLeft, y: detourY },
-                        { x: nodeLeft, y: targetY },
-                        { x: targetX, y: targetY },
+                        {
+                            x: sourceX,
+                            y: sourceY,
+                        },
+                        {
+                            x: nodeRight,
+                            y: sourceY,
+                        },
+                        {
+                            x: nodeRight,
+                            y: detourY,
+                        },
+                        {
+                            x: nodeLeft,
+                            y: detourY,
+                        },
+                        {
+                            x: nodeLeft,
+                            y: targetY,
+                        },
+                        {
+                            x: targetX,
+                            y: targetY,
+                        },
                     ],
                     borderRadius,
                 )
@@ -440,7 +590,11 @@ function buildOrthogonalPath(
 
         if (blockingVerticalNode) {
             // Route around this node by going around it horizontally
-            const detourY = findSafeHorizontalLane(blockingVerticalNode, sourceY, targetY)
+            const detourY = findSafeHorizontalLane(
+                blockingVerticalNode,
+                sourceY,
+                targetY,
+            )
             const nodeLeft = blockingVerticalNode.x - 20
             const nodeRight = blockingVerticalNode.x + blockingVerticalNode.width + 20
 
@@ -450,10 +604,22 @@ function buildOrthogonalPath(
 
             return buildMultiSegmentPath(
                 [
-                    { x: sourceX, y: sourceY },
-                    { x: safeMidX, y: sourceY },
-                    { x: safeMidX, y: targetY },
-                    { x: targetX, y: targetY },
+                    {
+                        x: sourceX,
+                        y: sourceY,
+                    },
+                    {
+                        x: safeMidX,
+                        y: sourceY,
+                    },
+                    {
+                        x: safeMidX,
+                        y: targetY,
+                    },
+                    {
+                        x: targetX,
+                        y: targetY,
+                    },
                 ],
                 borderRadius,
             )
@@ -466,7 +632,10 @@ function buildOrthogonalPath(
             Math.abs(targetY - sourceY) / 2,
         )
 
-        if (r < 1 || Math.abs(targetY - sourceY) < 1) {
+        if (
+            r < 1
+            || Math.abs(targetY - sourceY) < 1
+        ) {
             // Horizontal line or too small for rounding
             return `M ${sourceX},${sourceY} L ${midX},${sourceY} L ${midX},${targetY} L ${targetX},${targetY}`
         }
@@ -486,9 +655,15 @@ function buildOrthogonalPath(
 
     // Build full point sequence: source -> bend points -> target
     const points = [
-        { x: sourceX, y: sourceY },
+        {
+            x: sourceX,
+            y: sourceY,
+        },
         ...bendPoints,
-        { x: targetX, y: targetY },
+        {
+            x: targetX,
+            y: targetY,
+        },
     ]
 
     // Build path with rounded corners at each bend point
@@ -502,11 +677,16 @@ function buildOrthogonalPath(
         // Calculate distances to determine max radius
         const distToPrev = Math.sqrt((curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2)
         const distToNext = Math.sqrt((next.x - curr.x) ** 2 + (next.y - curr.y) ** 2)
-        const maxRadius = Math.min(borderRadius, distToPrev / 2, distToNext / 2)
+        const maxRadius = Math.min(
+            borderRadius,
+            distToPrev / 2,
+            distToNext / 2,
+        )
 
         if (maxRadius < 1) {
             // Too close for rounding, just draw straight lines
             segments.push(`L ${curr.x},${curr.y}`)
+
             continue
         }
 
@@ -547,7 +727,7 @@ function buildOrthogonalPath(
 // Compute SVG path between two points using specified path type
 // Returns computed path with SVG string and label coordinates
 // allNodes is used by orthogonal paths to avoid node intersections
-export function computePath(
+export const computePath = (
     pathType: PathType,
     sourceX: number,
     sourceY: number,
@@ -557,13 +737,16 @@ export function computePath(
     targetPosition: AnchorPosition,
     curvature: number = 0.25,
     borderRadius: number = 8,
-    bendPoints?: Array<{ x: number; y: number }>,
+    bendPoints?: Array<{
+        x: number
+        y: number
+    }>,
     allNodes?: Map<string, NodeConfig>,
     sourceNodeId?: string,
     targetNodeId?: string,
     laneIndex: number = 0,
     laneCount: number = 1,
-): ComputedPath {
+): ComputedPath => {
     switch (pathType) {
         case 'bezier': {
             const [path, labelX, labelY, offsetX, offsetY] = getBezierPath({
@@ -575,9 +758,15 @@ export function computePath(
                 targetPosition: toXYFlowPosition(targetPosition),
                 curvature,
             })
-            return { path, labelX, labelY, offsetX, offsetY }
-        }
 
+            return {
+                path,
+                labelX,
+                labelY,
+                offsetX,
+                offsetY,
+            }
+        }
         case 'straight': {
             const [path, labelX, labelY, offsetX, offsetY] = getStraightPath({
                 sourceX,
@@ -585,9 +774,15 @@ export function computePath(
                 targetX,
                 targetY,
             })
-            return { path, labelX, labelY, offsetX, offsetY }
-        }
 
+            return {
+                path,
+                labelX,
+                labelY,
+                offsetX,
+                offsetY,
+            }
+        }
         case 'smoothstep': {
             const [path, labelX, labelY, offsetX, offsetY] = getSmoothStepPath({
                 sourceX,
@@ -599,29 +794,50 @@ export function computePath(
                 borderRadius: 8, // Default border radius
                 offset: 20, // Default orthogonal offset
             })
-            return { path, labelX, labelY, offsetX, offsetY }
-        }
 
+            return {
+                path,
+                labelX,
+                labelY,
+                offsetX,
+                offsetY,
+            }
+        }
         case 'horizontal-bezier': {
-            const path = buildHorizontalBezierPath(sourceX, sourceY, targetX, targetY)
+            const path = buildHorizontalBezierPath(
+                sourceX,
+                sourceY,
+                targetX,
+                targetY,
+            )
             // For custom paths, compute label position as midpoint
             const labelX = (sourceX + targetX) / 2
             const labelY = (sourceY + targetY) / 2
             const offsetX = Math.abs(labelX - sourceX)
             const offsetY = Math.abs(labelY - sourceY)
-            return { path, labelX, labelY, offsetX, offsetY }
-        }
 
+            return {
+                path,
+                labelX,
+                labelY,
+                offsetX,
+                offsetY,
+            }
+        }
         case 'orthogonal': {
             // Convert nodes Map to array of bounds for obstacle avoidance
             const obstacleNodes: NodeBounds[] = allNodes
-                ? Array.from(allNodes.values()).map(n => ({
-                    id: n.id,
-                    x: n.x,
-                    y: n.y,
-                    width: n.width,
-                    height: n.height,
-                }))
+                ? Array.from(
+                    allNodes.values(),
+                ).map(
+                    n => ({
+                        id: n.id,
+                        x: n.x,
+                        y: n.y,
+                        width: n.width,
+                        height: n.height,
+                    }),
+                )
                 : []
 
             const path = buildOrthogonalPath(
@@ -642,9 +858,15 @@ export function computePath(
             const labelY = (sourceY + targetY) / 2
             const offsetX = Math.abs(labelX - sourceX)
             const offsetY = Math.abs(labelY - sourceY)
-            return { path, labelX, labelY, offsetX, offsetY }
-        }
 
+            return {
+                path,
+                labelX,
+                labelY,
+                offsetX,
+                offsetY,
+            }
+        }
         default:
             // Fallback to straight path
             const [path, labelX, labelY, offsetX, offsetY] = getStraightPath({
@@ -653,18 +875,28 @@ export function computePath(
                 targetX,
                 targetY,
             })
-            return { path, labelX, labelY, offsetX, offsetY }
+
+            return {
+                path,
+                labelX,
+                labelY,
+                offsetX,
+                offsetY,
+            }
     }
 }
 
 // Compute label position for a path (center point)
 // Useful for placing text or icons along edges
-export function computeLabelPosition(
+export const computeLabelPosition = (
     sourceX: number,
     sourceY: number,
     targetX: number,
     targetY: number,
-): { x: number; y: number } {
+): {
+    x: number
+    y: number
+} => {
     return {
         x: (sourceX + targetX) / 2,
         y: (sourceY + targetY) / 2,
@@ -672,11 +904,17 @@ export function computeLabelPosition(
 }
 
 // Adjust coordinates with offset
-export function applyOffset(
+export const applyOffset = (
     x: number,
     y: number,
-    offset?: { x?: number; y?: number },
-): { x: number; y: number } {
+    offset?: {
+        x?: number
+        y?: number
+    },
+): {
+    x: number
+    y: number
+} => {
     return {
         x: x + (offset?.x ?? 0),
         y: y + (offset?.y ?? 0),

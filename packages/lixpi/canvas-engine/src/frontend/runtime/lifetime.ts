@@ -15,28 +15,42 @@ export class Lifetime {
     own(cleanup: Dispose): Dispose {
         let released = false
         const release = () => {
-            if (released) return
+            if (released)
+                return
+
             released = true
             this.cleanups.delete(release)
             cleanup()
         }
-        if (this.disposed) release()
-        else this.cleanups.add(release)
+
+        if (this.disposed)
+            release()
+        else
+            this.cleanups.add(release)
+
         return release
     }
 
     child(): Lifetime {
         const child = new Lifetime()
         const release = this.own(() => child.destroy())
-        child.signal.addEventListener('abort', () => this.cleanups.delete(release), { once: true })
+        child.signal.addEventListener(
+            'abort',
+            () => this.cleanups.delete(release),
+            { once: true },
+        )
+
         return child
     }
 
     destroy(): void {
-        if (this.disposed) return
+        if (this.disposed)
+            return
+
         this.disposed = true
         this.abortController.abort()
         const errors: unknown[] = []
+
         for (const cleanup of Array.from(this.cleanups).reverse()) {
             try {
                 cleanup()
@@ -44,7 +58,10 @@ export class Lifetime {
                 errors.push(error)
             }
         }
+
         this.cleanups.clear()
-        if (errors.length > 0) throw new AggregateError(errors, 'Canvas lifetime cleanup failed')
+
+        if (errors.length > 0)
+            throw new AggregateError(errors, 'Canvas lifetime cleanup failed')
     }
 }

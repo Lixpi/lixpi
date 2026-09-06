@@ -54,7 +54,11 @@ export const createDnsRecords = async (args: DnsRecordsArgs) => {
     const createdRecords: { [key: string]: aws.route53.Record } = {}
 
     records.forEach((record, index) => {
-        const recordName = formatStageResourceName(`${serviceName}-Route53-record-${index}`, orgName, stage)
+        const recordName = formatStageResourceName(
+            `${serviceName}-Route53-record-${index}`,
+            orgName,
+            stage,
+        )
 
         const recordArgs: aws.route53.RecordArgs = {
             name: record.name,
@@ -77,18 +81,29 @@ export const createDnsRecords = async (args: DnsRecordsArgs) => {
         }
 
         // Add additional configurations if provided
-        if (record.setIdentifier) recordArgs.setIdentifier = record.setIdentifier
-        if (record.weight !== undefined) recordArgs.weightedRoutingPolicies = [{ weight: record.weight }]
-        if (record.healthCheckId) recordArgs.healthCheckId = record.healthCheckId
-        if (record.failover) recordArgs.failoverRoutingPolicies = [{ type: record.failover }]
+        if (record.setIdentifier)
+            recordArgs.setIdentifier = record.setIdentifier
+
+        if (record.weight !== undefined)
+            recordArgs.weightedRoutingPolicies = [{ weight: record.weight }]
+
+        if (record.healthCheckId)
+            recordArgs.healthCheckId = record.healthCheckId
+
+        if (record.failover)
+            recordArgs.failoverRoutingPolicies = [{ type: record.failover }]
 
         // Create the record
         const recordOptions: pulumi.ResourceOptions = {}
-        if (dnsProvider) {
-            recordOptions.provider = dnsProvider
-        }
 
-        const dnsRecord = new aws.route53.Record(recordName, recordArgs, recordOptions)
+        if (dnsProvider)
+            recordOptions.provider = dnsProvider
+
+        const dnsRecord = new aws.route53.Record(
+            recordName,
+            recordArgs,
+            recordOptions,
+        )
 
         createdRecords[recordName] = dnsRecord
     })
@@ -110,14 +125,20 @@ export type CreateHostedZoneArgs = {
 }
 
 export const createHostedZone = async (args: CreateHostedZoneArgs) => {
-    const { domainName, serviceName } = args
+    const {
+        domainName,
+        serviceName,
+    } = args
 
-    const hostedZone = new aws.route53.Zone(`${serviceName}-hosted-zone`, {
-        name: domainName,
-        comment: `Hosted zone for ${domainName}`,
-        // Never want Pulumi to destroy and recreate a public hosted zone automatically
-        // (manual registrar updates depend on stability of NS set)
-    })
+    const hostedZone = new aws.route53.Zone(
+        `${serviceName}-hosted-zone`,
+        {
+            name: domainName,
+            comment: `Hosted zone for ${domainName}`,
+            // Never want Pulumi to destroy and recreate a public hosted zone automatically
+            // (manual registrar updates depend on stability of NS set)
+        },
+    )
 
     return {
         hostedZone,
@@ -133,7 +154,10 @@ export const createHostedZone = async (args: CreateHostedZoneArgs) => {
 // only creating a new one if none found. Prevents accidental duplicate zones which
 // would cause conflicting NS delegations at the registrar.
 export const getOrCreateHostedZone = async (args: CreateHostedZoneArgs & { protectExisting?: boolean }) => {
-    const { domainName, serviceName } = args
+    const {
+        domainName,
+        serviceName,
+    } = args
 
     plInfo(`🔍 [getOrCreateHostedZone] Starting lookup for domain: "${domainName}"`)
     plInfo(`🔍 [getOrCreateHostedZone] Service name: "${serviceName}"`)
@@ -144,29 +168,44 @@ export const getOrCreateHostedZone = async (args: CreateHostedZoneArgs & { prote
 
     // Try multiple lookup strategies
     const lookupStrategies = [
-        { name: normalized, description: `normalized with dot: "${normalized}"` },
-        { name: domainName, description: `original domain: "${domainName}"` },
-        { name: domainName.endsWith('.') ? domainName.slice(0, -1) : domainName, description: `without dot: "${domainName.endsWith('.') ? domainName.slice(0, -1) : domainName}"` },
+        {
+            name: normalized,
+            description: `normalized with dot: "${normalized}"`,
+        },
+        {
+            name: domainName,
+            description: `original domain: "${domainName}"`,
+        },
+        {
+            name: domainName.endsWith('.') ? domainName.slice(0, -1) : domainName,
+            description: `without dot: "${domainName.endsWith('.') ? domainName.slice(0, -1) : domainName}"`,
+        },
     ]
 
     for (const strategy of lookupStrategies) {
         plInfo(`🔍 [getOrCreateHostedZone] Trying lookup strategy: ${strategy.description}`)
+
         try {
             const existing = await aws.route53.getZone({ name: strategy.name })
+
             if (existing) {
                 plInfo(`✅ [getOrCreateHostedZone] Found existing hosted zone (will import).`)
                 plInfo(`✅ [getOrCreateHostedZone] Zone ID: ${existing.zoneId}`)
                 plInfo(`✅ [getOrCreateHostedZone] Zone Name: ${existing.name}`)
                 plInfo(`✅ [getOrCreateHostedZone] Name servers: ${JSON.stringify(existing.nameServers)}`)
 
-                const importedZone = new aws.route53.Zone(`${serviceName}-hosted-zone`, {
-                    name: domainName,
-                    comment: `Hosted zone for ${domainName} (imported)`,
-                }, {
-                    import: existing.zoneId,
-                    // Protect existing zone from accidental deletion; can be disabled by removing protect.
-                    protect: true,
-                })
+                const importedZone = new aws.route53.Zone(
+                    `${serviceName}-hosted-zone`,
+                    {
+                        name: domainName,
+                        comment: `Hosted zone for ${domainName} (imported)`,
+                    },
+                    {
+                        import: existing.zoneId,
+                        // Protect existing zone from accidental deletion; can be disabled by removing protect.
+                        protect: true,
+                    },
+                )
 
                 return {
                     hostedZone: importedZone,
@@ -177,16 +216,15 @@ export const getOrCreateHostedZone = async (args: CreateHostedZoneArgs & { prote
                         domainName: domainName,
                     },
                 }
-            } else {
+            } else
                 plWarn(`❌ [getOrCreateHostedZone] Strategy "${strategy.description}" returned null/undefined`)
-            }
         } catch (error) {
             plError(`❌ [getOrCreateHostedZone] Strategy "${strategy.description}" failed with error:`)
             plError(`❌ [getOrCreateHostedZone] Error type: ${(error as any)?.constructor?.name}`)
             plError(`❌ [getOrCreateHostedZone] Error message: ${(error as any)?.message}`)
-            if ((error as any).code) {
+
+            if ((error as any).code)
                 plError(`❌ [getOrCreateHostedZone] Error code: ${(error as any).code}`)
-            }
         }
     }
 
@@ -195,7 +233,11 @@ export const getOrCreateHostedZone = async (args: CreateHostedZoneArgs & { prote
 
     const created = await createHostedZone(args)
     plInfo(`✅ [getOrCreateHostedZone] Created new hosted zone successfully`)
-    return { ...created, reused: false }
+
+    return {
+        ...created,
+        reused: false,
+    }
 }
 
 export type CreateDelegationRecordArgs = {
@@ -207,13 +249,23 @@ export type CreateDelegationRecordArgs = {
 }
 
 export const createDelegationRecord = (args: CreateDelegationRecordArgs) => {
-    const { parentHostedZoneId, subdomainName, nameServers, serviceName, dnsProvider } = args
+    const {
+        parentHostedZoneId,
+        subdomainName,
+        nameServers,
+        serviceName,
+        dnsProvider,
+    } = args
 
-    return new aws.route53.Record(`${serviceName}-delegation-ns`, {
-        zoneId: parentHostedZoneId,
-        name: subdomainName,
-        type: 'NS',
-        ttl: 300,
-        records: nameServers,
-    }, { provider: dnsProvider })
+    return new aws.route53.Record(
+        `${serviceName}-delegation-ns`,
+        {
+            zoneId: parentHostedZoneId,
+            name: subdomainName,
+            type: 'NS',
+            ttl: 300,
+            records: nameServers,
+        },
+        { provider: dnsProvider },
+    )
 }

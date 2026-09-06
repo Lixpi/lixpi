@@ -2,7 +2,7 @@ import {
     type ConnectionSettings,
 } from '@lixpi/canvas-engine/frontend/connectors'
 
-export function createWorkspaceConnectorSettings(colors: { lineDefaultColor: string }): ConnectionSettings {
+export const createWorkspaceConnectorSettings = (colors: { lineDefaultColor: string }): ConnectionSettings => {
     return {
         // Default curve used for connector lines between nodes.
         lineCurve: 'horizontal-bezier',
@@ -19,7 +19,10 @@ export function createWorkspaceConnectorSettings(colors: { lineDefaultColor: str
             // and is identical for both ends; it carries NO arrowhead knowledge —
             // WorkspaceConnectionManager adds the arrowhead's own length only on
             // ends that actually draw an arrow.
-            markerOffset: { source: 15, target: 15 },
+            markerOffset: {
+                source: 15,
+                target: 15,
+            },
             // Screen-pixel width of the invisible selection hit area around connector lines.
             clickAreaWidth: 24,
             // Lower zoom breakpoint for connector chrome. Runtime call sites opt

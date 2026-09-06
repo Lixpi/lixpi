@@ -34,37 +34,67 @@ export class LoadingOverlay {
     constructor(private readonly options: LoadingOverlayOptions) {
         this.message = html`<div className="canvas-loading-error-message"></div>` as HTMLDivElement
         this.dom = html`
-            <div className="canvas-loading-overlay" aria-hidden="true">
-                <div className="canvas-loading-error" role="status">
+            <div
+                className="canvas-loading-overlay"
+                aria-hidden="true"
+            >
+                <div
+                    className="canvas-loading-error"
+                    role="status"
+                >
                     <div className="canvas-loading-error-title">${options.errorTitle}</div>
                     ${this.message}
-                    <button type="button" className="canvas-loading-error-retry" onclick=${this.retry}>${options.retryLabel}</button>
+                    <button
+                        type="button"
+                        className="canvas-loading-error-retry"
+                        onclick=${this.retry}
+                    >${options.retryLabel}</button>
                 </div>
             </div>
         ` as HTMLDivElement
         options.root.appendChild(this.dom)
-        this.renderer = new CanvasRenderer({ root: this.dom, onError: options.onError })
+        this.renderer = new CanvasRenderer({
+            root: this.dom,
+            onError: options.onError,
+        })
         this.scope = this.renderer.createScope()
+
         try {
-            this.outline = new TravelingOutline({ ...options.outline, surface: this.scope, space: 'screen' })
+            this.outline = new TravelingOutline({
+                ...options.outline,
+                surface: this.scope,
+                space: 'screen',
+            })
         } catch (error) {
             this.renderer.destroy()
             this.dom.remove()
+
             throw error
         }
+
         this.resizeObserver = new ResizeObserver(() => this.syncOutline())
         this.resizeObserver.observe(this.dom)
     }
 
     setVisible(visible: boolean): void {
-        if (this.destroyed || this.visible === visible) return
+        if (
+            this.destroyed
+            || this.visible === visible
+        )
+            return
+
         this.visible = visible
-        if (visible) this.message.textContent = ''
+
+        if (visible)
+            this.message.textContent = ''
+
         this.renderState()
     }
 
     setErrorMessage(message: string | null): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.message.textContent = message?.trim() || ''
         this.renderState()
     }
@@ -79,15 +109,32 @@ export class LoadingOverlay {
     }
 
     private syncOutline(): void {
-        if (this.destroyed) return
-        if (!this.visible || this.message.textContent) {
+        if (this.destroyed)
+            return
+
+        if (
+            !this.visible
+            || this.message.textContent
+        ) {
             this.outline.sync([])
+
             return
         }
+
         const bounds = this.dom.getBoundingClientRect()
-        const width = this.dom.clientWidth || this.options.root.clientWidth || bounds.width || window.innerWidth
-        const height = this.dom.clientHeight || this.options.root.clientHeight || bounds.height || window.innerHeight
-        const { size, durationMs, snakeLengthFraction } = this.options.outline
+        const width = this.dom.clientWidth
+            || this.options.root.clientWidth
+            || bounds.width
+            || window.innerWidth
+        const height = this.dom.clientHeight
+            || this.options.root.clientHeight
+            || bounds.height
+            || window.innerHeight
+        const {
+            size,
+            durationMs,
+            snakeLengthFraction,
+        } = this.options.outline
         this.outline.sync([{
             id: 'loading',
             x: (width - size) / 2,
@@ -105,11 +152,15 @@ export class LoadingOverlay {
     private retry = (event: Event): void => {
         event.preventDefault()
         event.stopPropagation()
-        if (!this.destroyed) this.options.onRetry?.()
+
+        if (!this.destroyed)
+            this.options.onRetry?.()
     }
 
     destroy(): void {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.resizeObserver.disconnect()
         this.outline.destroy()

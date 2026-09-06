@@ -74,8 +74,5 @@ class ReadOnlyAiChatThreadRenderer implements ReadOnlyAiChatThreadRendererInstan
     }
 }
 
-export function mountReadOnlyAiChatThreadProjection(
-    options: ReadOnlyAiChatThreadRenderOptions,
-): ReadOnlyAiChatThreadRendererInstance {
-    return new ReadOnlyAiChatThreadRenderer(options)
-}
+export const mountReadOnlyAiChatThreadProjection = (options: ReadOnlyAiChatThreadRenderOptions): ReadOnlyAiChatThreadRendererInstance =>
+    new ReadOnlyAiChatThreadRenderer(options)

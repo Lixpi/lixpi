@@ -21,7 +21,7 @@ export {
     STYLE_EXTRACTION_SYNTHESIS_SKILL_ID,
 } from './synthesis/index.ts'
 
-export function createStyleExtractionSkillPackages(storage: InstructionSkillStorage): CapabilitySkillPackageInstaller[] {
+export const createStyleExtractionSkillPackages = (storage: InstructionSkillStorage): CapabilitySkillPackageInstaller[] => {
     return [
         createStyleExtractionRouterSkillPackage(storage),
         createStyleExtractionAxesSkillPackage(storage),

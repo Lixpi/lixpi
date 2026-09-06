@@ -169,36 +169,108 @@ export const workspaceCollisionSettings: WorkspaceCollisionSettings = {
     // Viewport-centered insertions use wider breathing room.
     insertion: {
         nodeTypes: {
-            document: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-            image: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-            video: { iterations: 50, margin: 32, overlapThreshold: 0.5 },
-            branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            document: {
+                iterations: 50,
+                margin: 32,
+                overlapThreshold: 0.5,
+            },
+            image: {
+                iterations: 50,
+                margin: 32,
+                overlapThreshold: 0.5,
+            },
+            video: {
+                iterations: 50,
+                margin: 32,
+                overlapThreshold: 0.5,
+            },
+            branchOrigin: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
+            branchFork: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
+            branchLine: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
         },
     },
     // Drag-release cleanup keeps manually positioned nodes tight while runtime
     // marker margins still prevent branch-lineage marker bodies from overlapping.
     dragRelease: {
         nodeTypes: {
-            document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-            image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-            video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-            branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            document: {
+                iterations: 50,
+                margin: 20,
+                overlapThreshold: 0.5,
+            },
+            image: {
+                iterations: 50,
+                margin: 20,
+                overlapThreshold: 0.5,
+            },
+            video: {
+                iterations: 50,
+                margin: 20,
+                overlapThreshold: 0.5,
+            },
+            branchOrigin: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
+            branchFork: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
+            branchLine: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
         },
     },
     // Branch-tree rebalancing combines normal media/document breathing room with
     // runtime branch-marker clearance from mediaGenerationLayoutSettings.nodeGap.
     branchTree: {
         nodeTypes: {
-            document: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-            image: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-            video: { iterations: 50, margin: 20, overlapThreshold: 0.5 },
-            branchOrigin: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            branchFork: { iterations: 50, margin: 0, overlapThreshold: 0 },
-            branchLine: { iterations: 50, margin: 0, overlapThreshold: 0 },
+            document: {
+                iterations: 50,
+                margin: 20,
+                overlapThreshold: 0.5,
+            },
+            image: {
+                iterations: 50,
+                margin: 20,
+                overlapThreshold: 0.5,
+            },
+            video: {
+                iterations: 50,
+                margin: 20,
+                overlapThreshold: 0.5,
+            },
+            branchOrigin: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
+            branchFork: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
+            branchLine: {
+                iterations: 50,
+                margin: 0,
+                overlapThreshold: 0,
+            },
         },
     },
 }

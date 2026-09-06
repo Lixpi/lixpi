@@ -61,19 +61,23 @@ const adaptByBudget = ({
     requiresIdentity,
 }: ImageReferenceAdapterInput): ImageReferenceAdaptation => {
     if (
-        requiresIdentity && (!capabilities.conditioningModes.includes('identity')
-            || capabilities.maxIdentityReferenceImages === 0)
-    ) {
+        requiresIdentity
+        && (!capabilities.conditioningModes.includes('identity') || capabilities.maxIdentityReferenceImages === 0)
+    )
         throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
-    }
 
     const hasCanonicalAnchor = references.some(reference => reference.role === 'canonical-anchor')
-    const sorted = references
-        .map((reference, index) => ({ reference, index }))
-        .sort((left, right) =>
-            getRolePriority(left.reference.role, hasCanonicalAnchor)
-                - getRolePriority(right.reference.role, hasCanonicalAnchor)
-            || left.index - right.index
+    const sorted = references.map(
+        (reference, index) => ({
+            reference,
+            index,
+        }),
+    )
+        .sort(
+            (left, right) =>
+                getRolePriority(left.reference.role, hasCanonicalAnchor)
+                    - getRolePriority(right.reference.role, hasCanonicalAnchor)
+                || left.index - right.index,
         )
     const included: ResolvedImageGenerationReference[] = []
     const omitted: ImageReferenceAdaptation['omitted'] = []
@@ -87,38 +91,63 @@ const adaptByBudget = ({
                 && (!capabilities.conditioningModes.includes('pose') || !capabilities.supportsPoseControl))
             || (reference.role === 'structure-reference'
                 && (!capabilities.conditioningModes.includes('structure') || !capabilities.supportsStructureControl))
+
         if (unsupportedConditioning) {
-            omitted.push({ role: reference.role, fileName: reference.fileName, reason: 'unsupported-conditioning' })
+            omitted.push({
+                role: reference.role,
+                fileName: reference.fileName,
+                reason: 'unsupported-conditioning',
+            })
+
             continue
         }
-        if (identity && identityCount >= capabilities.maxIdentityReferenceImages) {
-            omitted.push({ role: reference.role, fileName: reference.fileName, reason: 'identity-budget' })
+
+        if (
+            identity
+            && identityCount >= capabilities.maxIdentityReferenceImages
+        ) {
+            omitted.push({
+                role: reference.role,
+                fileName: reference.fileName,
+                reason: 'identity-budget',
+            })
+
             continue
         }
+
         if (included.length >= capabilities.maxReferenceImages) {
-            omitted.push({ role: reference.role, fileName: reference.fileName, reason: 'reference-budget' })
+            omitted.push({
+                role: reference.role,
+                fileName: reference.fileName,
+                reason: 'reference-budget',
+            })
+
             continue
         }
+
         included.push(reference)
-        if (identity) identityCount += 1
+
+        if (identity)
+            identityCount += 1
     }
 
     const suppliedIdentityReference = references.some(reference => IDENTITY_ROLES.has(reference.role))
+
     if (
         requiresIdentity
         && suppliedIdentityReference
         && !included.some(reference => IDENTITY_ROLES.has(reference.role))
-    ) {
+    )
         throw new Error('IMAGE_REFERENCE_IDENTITY_BUDGET_EXHAUSTED')
-    }
+
     const suppliedPoseReference = references.some(reference => reference.role === 'pose-reference')
+
     if (
         requiresIdentity
         && suppliedPoseReference
         && !included.some(reference => reference.role === 'pose-reference')
-    ) {
+    )
         throw new Error('IMAGE_REFERENCE_POSE_CONDITIONING_UNAVAILABLE')
-    }
 
     return {
         included,
@@ -132,16 +161,34 @@ const getRolePriority = (
     hasCanonicalAnchor: boolean,
 ): number => {
     if (!hasCanonicalAnchor) {
-        if (role === 'edit-target') return 0
-        if (role === 'edit-target-identity') return 1
-        if (role === 'original-source') return 2
-        if (role === 'pose-reference') return 3
-        if (role === 'face-crop') return 4
-        if (role === 'body-outfit-crop') return 5
-        if (role === 'prop-crop') return 6
-        if (role === 'adjacent-angle') return 7
-        if (role === 'opposite-angle') return 8
+        if (role === 'edit-target')
+            return 0
+
+        if (role === 'edit-target-identity')
+            return 1
+
+        if (role === 'original-source')
+            return 2
+
+        if (role === 'pose-reference')
+            return 3
+
+        if (role === 'face-crop')
+            return 4
+
+        if (role === 'body-outfit-crop')
+            return 5
+
+        if (role === 'prop-crop')
+            return 6
+
+        if (role === 'adjacent-angle')
+            return 7
+
+        if (role === 'opposite-angle')
+            return 8
     }
+
     return ROLE_PRIORITY[role]
 }
 
@@ -157,21 +204,27 @@ export const GOOGLE_IMAGE_REFERENCE_ADAPTER: ImageReferenceAdapter = {
 
 export const STABILITY_IMAGE_REFERENCE_ADAPTER: ImageReferenceAdapter = {
     implementation: 'stability-controls',
-    adapt: (input) => {
-        if (input.requiresIdentity) throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
+    adapt: input => {
+        if (input.requiresIdentity)
+            throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
+
         const unsupported = input.references.filter(reference => IDENTITY_ROLES.has(reference.role))
-        if (unsupported.length > 0) throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
+
+        if (unsupported.length > 0)
+            throw new Error('IMAGE_REFERENCE_IDENTITY_CONDITIONING_UNSUPPORTED')
+
         return adaptByBudget(input)
     },
 }
 
-export function buildImageReferencePromptLabel(
+export const buildImageReferencePromptLabel = (
     reference: Pick<ResolvedImageGenerationReference, 'role' | 'fileName'>,
     index: number,
     prefix = 'INPUT IMAGE',
-): string {
+): string => {
     const heading = `${prefix} ${index + 1}`
     const file = ` File: ${reference.fileName}.`
+
     switch (reference.role) {
         case 'edit-target':
             return `${heading} — EXISTING EDIT TARGET.${file} This is not authoritative for traits rejected by the request. Preserve only request-approved or unchanged traits and apply every requested edit.`
@@ -202,11 +255,13 @@ export function buildImageReferencePromptLabel(
     }
 }
 
-export function prependImageReferencePromptLegend(
+export const prependImageReferencePromptLegend = (
     prompt: string,
     references: readonly Pick<ResolvedImageGenerationReference, 'role' | 'fileName'>[],
-): string {
-    if (references.length === 0) return prompt
+): string => {
+    if (references.length === 0)
+        return prompt
+
     return [
         'INPUT IMAGE ORDER — THE FOLLOWING ROLES MAP EXACTLY TO THE ORDERED REFERENCE IMAGE SET',
         ...references.map((reference, index) => buildImageReferencePromptLabel(reference, index)),

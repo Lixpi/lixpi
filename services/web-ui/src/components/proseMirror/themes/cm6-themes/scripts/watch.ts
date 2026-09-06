@@ -9,9 +9,27 @@ import {
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url))
-const workspacePath = resolve(scriptDirectory, '..', 'packages')
-const packages = readdirSync(workspacePath)
-    .filter((file) => lstatSync(resolve(workspacePath, file)).isDirectory())
+const scriptDirectory = dirname(
+    fileURLToPath(import.meta.url),
+)
+const workspacePath = resolve(
+    scriptDirectory,
+    '..',
+    'packages',
+)
+const packages = readdirSync(workspacePath).filter(
+    file => lstatSync(
+        resolve(workspacePath, file),
+    ).isDirectory(),
+)
 
-watch(packages.map((packageName) => resolve(workspacePath, packageName, 'src', 'index.ts')))
+watch(
+    packages.map(
+        packageName => resolve(
+            workspacePath,
+            packageName,
+            'src',
+            'index.ts',
+        ),
+    ),
+)

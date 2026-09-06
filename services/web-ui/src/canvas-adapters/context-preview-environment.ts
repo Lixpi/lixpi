@@ -10,19 +10,28 @@ import {
     resolveAuthenticatedMediaUrl,
 } from '$src/utils/mediaUrls.ts'
 
-export function createContextPreviewEnvironment(sources: Pick<ContextPreviewEnvironment, 'document' | 'getDocuments' | 'getThreads' | 'getAsset'>): ContextPreviewEnvironment {
+export const createContextPreviewEnvironment = (sources: Pick<ContextPreviewEnvironment, 'document' | 'getDocuments' | 'getThreads' | 'getAsset'>): ContextPreviewEnvironment => {
     return {
         ...sources,
         tooltipHideDelayMs: settings.helpTooltip.interactiveHideDelayMs,
         getArtifactIcon: getCapabilityArtifactIcon,
         extractDocumentText: content => extractContentFromProseMirror(content).text,
         initialRenditionUrl: buildAssetRenditionPath,
-        resolveRenditionUrl: async (assetId, rendition, signal) => {
-            if (signal.aborted) return ''
-            return await resolveAuthenticatedMediaUrl(buildAssetRenditionPath(assetId, rendition), {
-                apiBaseUrl: import.meta.env.VITE_API_URL || '',
-                getAuthToken: () => AuthService.getTokenSilently(),
-            })
+        resolveRenditionUrl: async (
+            assetId,
+            rendition,
+            signal,
+        ) => {
+            if (signal.aborted)
+                return ''
+
+            return await resolveAuthenticatedMediaUrl(
+                buildAssetRenditionPath(assetId, rendition),
+                {
+                    apiBaseUrl: import.meta.env.VITE_API_URL || '',
+                    getAuthToken: () => AuthService.getTokenSilently(),
+                },
+            )
         },
         onError: error => console.warn('Failed to resolve context preview media URL:', error),
     }

@@ -26,16 +26,23 @@ export type ExecutionTraceTimelineDetailAdapter = {
 // Adapts an ExecutionTrace carried on a progress item into the timeline's
 // domain-free detail hooks, so every timeline host — canvas branch markers,
 // media nodes, and replayed provenance alike — renders traces identically.
-export function createExecutionTraceTimelineDetailAdapter(
-    options: ExecutionTraceTimelineDetailOptions = {},
-): ExecutionTraceTimelineDetailAdapter {
+export const createExecutionTraceTimelineDetailAdapter = (options: ExecutionTraceTimelineDetailOptions = {}): ExecutionTraceTimelineDetailAdapter => {
     return {
-        renderItemDetail: (detail) => {
-            if (!isRenderableExecutionTrace(detail)) return null
-            const instance = createExecutionTraceDetail({ trace: detail, ...options })
-            return { element: instance.element, destroy: () => instance.destroy() }
+        renderItemDetail: detail => {
+            if (!isRenderableExecutionTrace(detail))
+                return null
+
+            const instance = createExecutionTraceDetail({
+                trace: detail,
+                ...options,
+            })
+
+            return {
+                element: instance.element,
+                destroy: () => instance.destroy(),
+            }
         },
-        getItemDetailKey: (detail) => (
+        getItemDetailKey: detail => (
             isRenderableExecutionTrace(detail) ? getExecutionTraceKey(detail) : ''
         ),
     }

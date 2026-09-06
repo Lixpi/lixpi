@@ -20,7 +20,10 @@ export type EdgeAnchor = {
     nodeId: string
     position: AnchorPosition
     t?: number // Position along the side (0=start, 1=end, 0.5=center). Default: 0.5
-    offset?: { x?: number; y?: number } // Fine-tune anchor position in pixels
+    offset?: {
+        x?: number
+        y?: number
+    } // Fine-tune anchor position in pixels
 }
 
 // Edge configuration with source/target and styling
@@ -34,21 +37,51 @@ export type EdgeConfig = {
     curvature?: number // For bezier/smoothstep paths (default: 0.25)
     borderRadius?: number // For orthogonal paths corner rounding (default: 8)
     lineStyle?: 'solid' | 'dashed' // Line style (default: 'solid')
-    bendPoints?: Array<{ x: number; y: number }> // elkjs-computed waypoints for orthogonal routing
+    bendPoints?: Array<{
+        x: number
+        y: number
+    }> // elkjs-computed waypoints for orthogonal routing
     laneIndex?: number // Index within edges sharing same target (for vertical lane ordering)
     laneCount?: number // Total edges sharing same target
 }
 
 export type NodeShape = 'rect' | 'circle' | 'foreignObject' | 'path'
 
-export type NodeAnchorOverride = Partial<Record<AnchorPosition, { x: number; y: number }>>
+export type NodeAnchorOverride = Partial<Record<AnchorPosition, {
+    x: number
+    y: number
+}>>
 
 // Node content types
 export type NodeContent =
-    | { type: 'text'; text: string; className?: string; align?: 'middle' | 'start' | 'end'; dx?: number; dy?: number }
-    | { type: 'html'; html: string; className?: string }
-    | { type: 'lines'; count: number; className?: string; padding?: { x: number; y: number }; spacingScale?: number }
-    | { type: 'icon'; icon: string; className?: string }
+    | {
+        type: 'text'
+        text: string
+        className?: string
+        align?: 'middle' | 'start' | 'end'
+        dx?: number
+        dy?: number
+    }
+    | {
+        type: 'html'
+        html: string
+        className?: string
+    }
+    | {
+        type: 'lines'
+        count: number
+        className?: string
+        padding?: {
+            x: number
+            y: number
+        }
+        spacingScale?: number
+    }
+    | {
+        type: 'icon'
+        icon: string
+        className?: string
+    }
 
 // Visual node configuration
 export type NodeConfig = {

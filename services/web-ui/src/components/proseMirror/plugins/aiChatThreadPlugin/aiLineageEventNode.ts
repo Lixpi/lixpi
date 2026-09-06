@@ -14,7 +14,7 @@ export {
     aiLineageEventNodeType,
 }
 
-export const aiLineageEventNodeView = (node) => {
+export const aiLineageEventNodeView = node => {
     const buildMarker = () =>
         createAiLineageEventMarker({
             kind: normalizeAiLineageEventKind(node.attrs.kind),
@@ -28,12 +28,15 @@ export const aiLineageEventNodeView = (node) => {
 
     return {
         dom,
-        update: (updatedNode) => {
-            if (updatedNode.type.name !== aiLineageEventNodeType) return false
+        update: updatedNode => {
+            if (updatedNode.type.name !== aiLineageEventNodeType)
+                return false
+
             node = updatedNode
             const nextDom = buildMarker()
             dom.replaceWith(nextDom)
             dom = nextDom
+
             return true
         },
     }

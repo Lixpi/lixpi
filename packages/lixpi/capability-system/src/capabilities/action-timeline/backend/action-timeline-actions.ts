@@ -58,9 +58,14 @@ type TimelineBatchResponse = {
 
 // Batch planning and the per-call budget both read the same capability settings,
 // so a planned batch always fits the budget requested for it.
-const { segmentAnswerTokens, batchAnswerOverheadTokens, maxBatchAnswerTokens, maxBatchAttempts } = actionTimelineSettings.generation
+const {
+    segmentAnswerTokens,
+    batchAnswerOverheadTokens,
+    maxBatchAnswerTokens,
+    maxBatchAttempts,
+} = actionTimelineSettings.generation
 
-function maxAnswerTokensForModel(maxCompletionSize: number): number {
+const maxAnswerTokensForModel = (maxCompletionSize: number): number => {
     return Math.max(
         batchAnswerOverheadTokens + segmentAnswerTokens,
         Math.min(maxBatchAnswerTokens, maxCompletionSize),
@@ -79,7 +84,10 @@ const TIMELINE_BATCH_SCHEMA = {
                 additionalProperties: false,
                 required: ['slotIndex', 'runs'],
                 properties: {
-                    slotIndex: { type: 'integer', minimum: 0 },
+                    slotIndex: {
+                        type: 'integer',
+                        minimum: 0,
+                    },
                     runs: {
                         type: 'array',
                         minItems: 1,
@@ -95,7 +103,10 @@ const TIMELINE_BATCH_SCHEMA = {
                                     type: 'object',
                                     additionalProperties: false,
                                     required: ['assetId'],
-                                    properties: { assetId: { type: 'string', minLength: 1 } },
+                                    properties: { assetId: {
+                                        type: 'string',
+                                        minLength: 1,
+                                    } },
                                 },
                             ],
                         },
@@ -107,10 +118,10 @@ const TIMELINE_BATCH_SCHEMA = {
     },
 } satisfies Record<string, CapabilityJsonValue>
 
-export function registerActionTimelineActions(
+export const registerActionTimelineActions = (
     registry: CapabilityActionRegistry,
     dependencies: ActionTimelineBackendDependencies,
-): void {
+): void => {
     registry.register({
         key: 'action-timeline.validate-request',
         timeoutMs: actionTimelineSettings.actionTimeoutsMs.validateRequest,
@@ -124,16 +135,19 @@ export function registerActionTimelineActions(
                 assetIds: normalized.referenceAssetIds,
                 context,
             })
-            if (modelInputs.length !== normalized.referenceAssetIds.length) {
-                throw new CapabilityError(
-                    'CAPABILITY_ACTION_INPUT_INVALID',
-                    'Every Action Timeline reference Asset must resolve before generation',
-                )
-            }
-            return { input: normalized, grid, modelInputs } satisfies ValidatedTimelineRequest
+
+            if (modelInputs.length !== normalized.referenceAssetIds.length)
+                throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Every Action Timeline reference Asset must resolve before generation')
+
+            return {
+                input: normalized,
+                grid,
+                modelInputs,
+            } satisfies ValidatedTimelineRequest
         },
         classifyRetry: () => 'terminal',
-        summarizeInput: input => `durationMs=${String(input.durationMs)} precisionMs=${String(input.precisionMs)} references=${arrayLength(input.referenceAssetIds)}`,
+        summarizeInput: input =>
+            `durationMs=${String(input.durationMs)} precisionMs=${String(input.precisionMs)} references=${arrayLength(input.referenceAssetIds)}`,
         summarizeOutput: output => `segments=${arrayLength(asRecord(output)?.grid)} references=${arrayLength(asRecord(output)?.modelInputs)}`,
     })
     registry.register({
@@ -172,6 +186,7 @@ export function registerActionTimelineActions(
                 referencedAssetIds: collectReferencedAssetIds(written.segments),
                 context,
             })
+
             return {
                 outputKind: 'capabilityArtifact',
                 assetId: persisted.assetId,
@@ -182,24 +197,29 @@ export function registerActionTimelineActions(
         summarizeOutput: output => `assetId=${String(asRecord(output)?.assetId ?? '')}`,
         collectOutputAssetIds: output => {
             const assetId = asRecord(output)?.assetId
+
             return typeof assetId === 'string' ? [assetId] : []
         },
     })
 }
 
-export function planActionTimelineBatches(
+export const planActionTimelineBatches = (
     grid: readonly ActionTimelineGridSlot[],
     maxCompletionSize: number,
-): ActionTimelineGridSlot[][] {
-    const usableTokens = Math.max(
-        segmentAnswerTokens,
-        maxAnswerTokensForModel(maxCompletionSize) - batchAnswerOverheadTokens,
+): ActionTimelineGridSlot[][] => {
+    const usableTokens = Math.max(segmentAnswerTokens, maxAnswerTokensForModel(maxCompletionSize) - batchAnswerOverheadTokens)
+    const batchSize = Math.max(
+        1,
+        Math.floor(usableTokens / segmentAnswerTokens),
     )
-    const batchSize = Math.max(1, Math.floor(usableTokens / segmentAnswerTokens))
     const batches: ActionTimelineGridSlot[][] = []
+
     for (let index = 0; index < grid.length; index += batchSize) {
-        batches.push(grid.slice(index, index + batchSize))
+        batches.push(
+            grid.slice(index, index + batchSize),
+        )
     }
+
     return batches
 }
 
@@ -207,13 +227,13 @@ async function writeSegments(
     prepared: ValidatedTimelineRequest,
     context: CapabilityActionExecutionContext,
     model: CapabilityStructuredModelPort,
-): Promise<{ input: ActionTimelineInput; segments: ActionTimelineGeneratedSegment[] }> {
-    if (context.variant.axis !== 'reasoning-model') {
-        throw new CapabilityError(
-            'CAPABILITY_ACTION_INPUT_INVALID',
-            'Action Timeline requires a sealed reasoning-model variant',
-        )
-    }
+): Promise<{
+    input: ActionTimelineInput
+    segments: ActionTimelineGeneratedSegment[]
+}> {
+    if (context.variant.axis !== 'reasoning-model')
+        throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Action Timeline requires a sealed reasoning-model variant')
+
     model.assertSupportedInputs(context.variant, prepared.modelInputs)
     const authorizedAssetIds = new Set(prepared.input.referenceAssetIds)
     const batches = planActionTimelineBatches(prepared.grid, context.variant.maxCompletionSize)
@@ -221,7 +241,12 @@ async function writeSegments(
     let continuity = ''
 
     for (const batch of batches) {
-        const requestPrompt = buildBatchPrompt(prepared.input, batch, continuity, prepared.modelInputs)
+        const requestPrompt = buildBatchPrompt(
+            prepared.input,
+            batch,
+            continuity,
+            prepared.modelInputs,
+        )
         const maxTokens = Math.max(
             segmentAnswerTokens,
             Math.min(
@@ -239,6 +264,7 @@ async function writeSegments(
         })
         let accepted: TimelineBatchResponse | undefined
         let validationFeedback = ''
+
         for (let attempt = 0; attempt < maxBatchAttempts; attempt += 1) {
             const userPrompt = attempt === 0
                 ? requestPrompt
@@ -252,6 +278,7 @@ async function writeSegments(
                 maxTokens,
                 abortSignal: context.signal,
             })
+
             try {
                 accepted = validateBatchResponse(
                     result.parsed,
@@ -259,23 +286,34 @@ async function writeSegments(
                     authorizedAssetIds,
                     prepared.modelInputs,
                 )
+
                 break
             } catch (error) {
                 validationFeedback = error instanceof Error ? error.message : 'ACTION_TIMELINE_BATCH_INVALID'
             }
         }
+
         if (!accepted) {
             throw new CapabilityError(
                 'CAPABILITY_ACTION_OUTPUT_INVALID',
                 `Action Timeline batch failed validation after one correction attempt: ${validationFeedback}`,
             )
         }
+
         merged.push(...accepted.segments)
         continuity = accepted.continuity
     }
 
-    assertGeneratedSegments(merged, prepared.grid, authorizedAssetIds)
-    return { input: prepared.input, segments: merged.sort((left, right) => left.slotIndex - right.slotIndex) }
+    assertGeneratedSegments(
+        merged,
+        prepared.grid,
+        authorizedAssetIds,
+    )
+
+    return {
+        input: prepared.input,
+        segments: merged.sort((left, right) => left.slotIndex - right.slotIndex),
+    }
 }
 
 function validateBatchResponse(
@@ -285,23 +323,37 @@ function validateBatchResponse(
     modelInputs: readonly CapabilityResolvedModelInput[],
 ): TimelineBatchResponse {
     const record = asRecord(input)
-    if (!record || !Array.isArray(record.segments) || typeof record.continuity !== 'string') {
+
+    if (
+        !record
+        || !Array.isArray(record.segments)
+        || typeof record.continuity !== 'string'
+    )
         throw new Error('ACTION_TIMELINE_BATCH_SCHEMA_INVALID')
-    }
+
     const segments = normalizeReferenceTitleRuns(
         record.segments.map(readGeneratedSegment),
         modelInputs,
     )
-    const expectedSlots = new Set(batch.map(slot => slot.slotIndex))
+    const expectedSlots = new Set(
+        batch.map(slot => slot.slotIndex),
+    )
+
     if (
         segments.length !== batch.length
         || segments.some(segment => !expectedSlots.has(segment.slotIndex))
-        || new Set(segments.map(segment => segment.slotIndex)).size !== segments.length
-    ) {
+        || new Set(
+            segments.map(segment => segment.slotIndex),
+        ).size !== segments.length
+    )
         throw new Error(`ACTION_TIMELINE_BATCH_SLOTS_INVALID:expected=${[...expectedSlots].join(',')}`)
-    }
+
     assertActionTimelineRuns(segments, authorizedAssetIds)
-    return { segments, continuity: record.continuity }
+
+    return {
+        segments,
+        continuity: record.continuity,
+    }
 }
 
 function buildBatchPrompt(
@@ -314,6 +366,7 @@ function buildBatchPrompt(
     const referenceRoster = modelInputs.length > 0
         ? modelInputs.map(modelInput => `${resolveModelInputTitle(modelInput)} => ${modelInput.assetId}`).join('\n')
         : '(none)'
+
     return [
         `Original request:\n${input.prompt}`,
         `Authorized reference Asset ids: ${input.referenceAssetIds.length > 0 ? input.referenceAssetIds.join(', ') : '(none)'}`,
@@ -343,32 +396,59 @@ function normalizeReferenceTitleRuns(
     segments: readonly ActionTimelineGeneratedSegment[],
     modelInputs: readonly CapabilityResolvedModelInput[],
 ): ActionTimelineGeneratedSegment[] {
-    const referencesByTitle = new Map<string, Array<{ assetId: string; title: string }>>()
+    const referencesByTitle = new Map<string, Array<{
+        assetId: string
+        title: string
+    }>>()
+
     for (const input of modelInputs) {
         const title = resolveModelInputTitle(input)
-        if (!title || title === input.assetId) continue
+
+        if (
+            !title
+            || title === input.assetId
+        )
+            continue
+
         const foldedTitle = title.toLocaleLowerCase('en-US')
         const matches = referencesByTitle.get(foldedTitle) ?? []
-        matches.push({ assetId: input.assetId, title })
+        matches.push({
+            assetId: input.assetId,
+            title,
+        })
         referencesByTitle.set(foldedTitle, matches)
     }
-    const references = [...referencesByTitle.entries()]
-        .map(([foldedTitle, matches]): CanonicalReferenceTitle => ({
+
+    const references = [...referencesByTitle.entries()].map(
+        ([foldedTitle, matches]): CanonicalReferenceTitle => ({
             foldedTitle,
             title: matches[0]!.title,
             ...(matches.length === 1 ? { assetId: matches[0]!.assetId } : {}),
-        }))
+        }),
+    )
         .sort((left, right) => right.title.length - left.title.length)
 
-    if (references.length === 0) return segments.map(segment => ({ ...segment, runs: [...segment.runs] }))
-    return segments.map(segment => ({
-        ...segment,
-        runs: mergeAdjacentTextRuns(segment.runs.flatMap(run =>
-            'text' in run
-                ? splitTextRunAtReferenceTitles(run.text, references)
-                : [run]
-        )),
-    }))
+    if (references.length === 0)
+        return segments.map(
+            segment => ({
+                ...segment,
+                runs: [...segment.runs],
+            }),
+        )
+
+    return segments.map(
+        segment => ({
+            ...segment,
+            runs: mergeAdjacentTextRuns(
+                segment.runs.flatMap(
+                    run =>
+                        'text' in run
+                            ? splitTextRunAtReferenceTitles(run.text, references)
+                            : [run],
+                ),
+            ),
+        }),
+    )
 }
 
 function splitTextRunAtReferenceTitles(
@@ -380,38 +460,68 @@ function splitTextRunAtReferenceTitles(
     let cursor = 0
 
     while (cursor < text.length) {
-        let next: { reference: CanonicalReferenceTitle; index: number } | undefined
+        let next: {
+            reference: CanonicalReferenceTitle
+            index: number
+        } | undefined
+
         for (const reference of references) {
             let index = foldedText.indexOf(reference.foldedTitle, cursor)
-            while (index >= 0 && !hasReferenceTitleBoundaries(text, index, reference.title.length)) {
+
+            while (
+                index >= 0
+                && !hasReferenceTitleBoundaries(
+                    text,
+                    index,
+                    reference.title.length,
+                )
+            ) {
                 index = foldedText.indexOf(reference.foldedTitle, index + 1)
             }
-            if (index < 0) continue
+
+            if (index < 0)
+                continue
+
             if (
-                !next || index < next.index
-                || index === next.index && reference.title.length > next.reference.title.length
-            ) {
-                next = { reference, index }
-            }
+                !next
+                || index < next.index
+                || (index === next.index && reference.title.length > next.reference.title.length)
+            )
+                next = {
+                    reference,
+                    index,
+                }
         }
-        if (!next) break
-        if (!next.reference.assetId) {
+
+        if (!next)
+            break
+
+        if (!next.reference.assetId)
             throw new Error(`ACTION_TIMELINE_REFERENCE_TITLE_AMBIGUOUS:${next.reference.title}`)
-        }
-        if (next.index > cursor) runs.push({ text: text.slice(cursor, next.index) })
+
+        if (next.index > cursor)
+            runs.push({ text: text.slice(cursor, next.index) })
+
         runs.push({ assetId: next.reference.assetId })
         cursor = next.index + next.reference.title.length
     }
 
-    if (cursor < text.length) runs.push({ text: text.slice(cursor) })
+    if (cursor < text.length)
+        runs.push({ text: text.slice(cursor) })
+
     return runs.length > 0 ? runs : [{ text }]
 }
 
-function hasReferenceTitleBoundaries(text: string, start: number, length: number): boolean {
+function hasReferenceTitleBoundaries(
+    text: string,
+    start: number,
+    length: number,
+): boolean {
     const first = text[start]
     const last = text[start + length - 1]
     const before = text[start - 1]
     const after = text[start + length]
+
     return (!isWordCharacter(first) || !isWordCharacter(before))
         && (!isWordCharacter(last) || !isWordCharacter(after))
 }
@@ -422,34 +532,61 @@ function isWordCharacter(value: string | undefined): boolean {
 
 function mergeAdjacentTextRuns(runs: readonly ActionTimelineRun[]): ActionTimelineRun[] {
     const merged: ActionTimelineRun[] = []
+
     for (const run of runs) {
         const previous = merged.at(-1)
-        if ('text' in run && previous && 'text' in previous) {
+
+        if (
+            'text' in run
+            && previous
+            && 'text' in previous
+        )
             previous.text += run.text
-        } else if (!('text' in run) || run.text) {
+        else if (
+            !('text' in run)
+            || run.text
+        )
             merged.push({ ...run })
-        }
     }
+
     return merged
 }
 
 function normalizeInput(input: Readonly<Record<string, unknown>>): ActionTimelineInput {
     const prompt = readString(input.prompt, 'prompt').trim()
-    if (!prompt) throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Action Timeline prompt is required')
+
+    if (!prompt)
+        throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', 'Action Timeline prompt is required')
+
     const durationMs = readPositiveInteger(input.durationMs, 'durationMs')
     const precisionMs = readPositiveInteger(input.precisionMs, 'precisionMs')
-    const referenceAssetIds = [...new Set(readStringArray(input.referenceAssetIds, 'referenceAssetIds'))]
+    const referenceAssetIds = [...new Set(
+        readStringArray(input.referenceAssetIds, 'referenceAssetIds'),
+    )]
     createActionTimelineGrid(durationMs, precisionMs)
-    return { prompt, referenceAssetIds, durationMs, precisionMs }
+
+    return {
+        prompt,
+        referenceAssetIds,
+        durationMs,
+        precisionMs,
+    }
 }
 
 function readValidatedRequest(input: unknown): ValidatedTimelineRequest {
     const record = asRecord(input)
-    if (!record) throw new Error('ACTION_TIMELINE_PREPARED_INPUT_INVALID')
-    const normalized = normalizeInput(asRecord(record.input) ?? {})
-    if (!Array.isArray(record.grid) || !Array.isArray(record.modelInputs)) {
+
+    if (!record)
         throw new Error('ACTION_TIMELINE_PREPARED_INPUT_INVALID')
-    }
+
+    const normalized = normalizeInput(asRecord(record.input) ?? {})
+
+    if (
+        !Array.isArray(record.grid)
+        || !Array.isArray(record.modelInputs)
+    )
+        throw new Error('ACTION_TIMELINE_PREPARED_INPUT_INVALID')
+
     return {
         input: normalized,
         grid: record.grid as ActionTimelineGridSlot[],
@@ -459,15 +596,26 @@ function readValidatedRequest(input: unknown): ValidatedTimelineRequest {
 
 function readWrittenOutput(input: unknown): { segments: ActionTimelineGeneratedSegment[] } {
     const record = asRecord(input)
-    if (!record || !Array.isArray(record.segments)) throw new Error('ACTION_TIMELINE_WRITTEN_OUTPUT_INVALID')
+
+    if (
+        !record
+        || !Array.isArray(record.segments)
+    )
+        throw new Error('ACTION_TIMELINE_WRITTEN_OUTPUT_INVALID')
+
     return { segments: record.segments.map(readGeneratedSegment) }
 }
 
 function readGeneratedSegment(input: unknown): ActionTimelineGeneratedSegment {
     const record = asRecord(input)
-    if (!record || !Number.isSafeInteger(record.slotIndex) || !Array.isArray(record.runs)) {
+
+    if (
+        !record
+        || !Number.isSafeInteger(record.slotIndex)
+        || !Array.isArray(record.runs)
+    )
         throw new Error('ACTION_TIMELINE_SEGMENT_SCHEMA_INVALID')
-    }
+
     return {
         slotIndex: record.slotIndex as number,
         runs: record.runs.map(readRun),
@@ -476,46 +624,73 @@ function readGeneratedSegment(input: unknown): ActionTimelineGeneratedSegment {
 
 function readRun(input: unknown): ActionTimelineRun {
     const record = asRecord(input)
-    if (!record) throw new Error('ACTION_TIMELINE_RUN_SCHEMA_INVALID')
-    if (typeof record.text === 'string' && record.assetId === undefined) return { text: record.text }
-    if (typeof record.assetId === 'string' && record.assetId.trim() && record.text === undefined) {
+
+    if (!record)
+        throw new Error('ACTION_TIMELINE_RUN_SCHEMA_INVALID')
+
+    if (
+        typeof record.text === 'string'
+        && record.assetId === undefined
+    )
+        return { text: record.text }
+
+    if (
+        typeof record.assetId === 'string'
+        && record.assetId.trim()
+        && record.text === undefined
+    )
         return { assetId: record.assetId.trim() }
-    }
+
     throw new Error('ACTION_TIMELINE_RUN_SCHEMA_INVALID')
 }
 
 function collectReferencedAssetIds(segments: readonly ActionTimelineGeneratedSegment[]): string[] {
     const seen = new Set<string>()
     const assetIds: string[] = []
+
     for (const segment of segments) {
         for (const run of segment.runs) {
-            if (!('assetId' in run) || seen.has(run.assetId)) continue
+            if (
+                !('assetId' in run)
+                || seen.has(run.assetId)
+            )
+                continue
+
             seen.add(run.assetId)
             assetIds.push(run.assetId)
         }
     }
+
     return assetIds
 }
 
-function buildReferenceMetadata(
-    modelInputs: readonly CapabilityResolvedModelInput[],
-): ReadonlyMap<string, {
+function buildReferenceMetadata(modelInputs: readonly CapabilityResolvedModelInput[]): ReadonlyMap<string, {
     mediaKind: 'image' | 'video' | 'audio' | 'document'
     displayName: string
 }> {
-    return new Map(modelInputs.map(input => [input.assetId, {
-        mediaKind: input.kind === 'video-frame'
-            ? 'video'
-            : input.kind === 'document-text'
-            ? 'document'
-            : input.kind,
-        displayName: resolveModelInputTitle(input),
-    }]))
+    return new Map(
+        modelInputs.map(
+            input => [input.assetId, {
+                mediaKind: input.kind === 'video-frame'
+                    ? 'video'
+                    : input.kind === 'document-text'
+                        ? 'document'
+                        : input.kind,
+                displayName: resolveModelInputTitle(input),
+            }],
+        ),
+    )
 }
 
 function resolveModelInputTitle(input: CapabilityResolvedModelInput): string {
-    if (typeof input.title === 'string' && input.title.trim()) return input.title.trim()
+    if (
+        typeof input.title === 'string'
+        && input.title.trim()
+    )
+        return input.title.trim()
+
     const markerTitle = input.marker.match(/^<ref asset:\S+ "((?:\\.|[^"])*)">$/u)?.[1]
+
     return markerTitle?.replaceAll('\\"', '"').trim() || input.assetId
 }
 
@@ -524,60 +699,102 @@ function authorizeActionTimeline(context: { rootCapabilityId: string }): boolean
 }
 
 function validateObject(value: unknown): CapabilityActionValidationResult {
-    return asRecord(value) ? { valid: true } : { valid: false, message: 'Value must be an object' }
+    return asRecord(value) ? { valid: true } : {
+        valid: false,
+        message: 'Value must be an object',
+    }
 }
 
 function validatePreparedInput(value: unknown): CapabilityActionValidationResult {
     const record = asRecord(value)
-    return record && asRecord(record.prepared)
+
+    return record
+        && asRecord(record.prepared)
         ? { valid: true }
-        : { valid: false, message: 'Prepared Action Timeline request is required' }
+        : {
+            valid: false,
+            message: 'Prepared Action Timeline request is required',
+        }
 }
 
 function validateWrittenOutput(value: unknown): CapabilityActionValidationResult {
     const record = asRecord(value)
-    return record && Array.isArray(record.segments)
+
+    return record
+        && Array.isArray(record.segments)
         ? { valid: true }
-        : { valid: false, message: 'Written Action Timeline segments are required' }
+        : {
+            valid: false,
+            message: 'Written Action Timeline segments are required',
+        }
 }
 
 function validatePersistInput(value: unknown): CapabilityActionValidationResult {
     const record = asRecord(value)
-    return record && asRecord(record.prepared) && asRecord(record.written)
+
+    return record
+        && asRecord(record.prepared)
+        && asRecord(record.written)
         ? { valid: true }
-        : { valid: false, message: 'Prepared and written Action Timeline data is required' }
+        : {
+            valid: false,
+            message: 'Prepared and written Action Timeline data is required',
+        }
 }
 
 function validatePersistOutput(value: unknown): CapabilityActionValidationResult {
     const record = asRecord(value)
+
     return record?.outputKind === 'capabilityArtifact'
-            && typeof record.assetId === 'string'
+        && typeof record.assetId === 'string'
         ? { valid: true }
-        : { valid: false, message: 'Persisted Action Timeline output is invalid' }
+        : {
+            valid: false,
+            message: 'Persisted Action Timeline output is invalid',
+        }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-    return value && typeof value === 'object' && !Array.isArray(value)
+    return value
+        && typeof value === 'object'
+        && !Array.isArray(value)
         ? value as Record<string, unknown>
         : undefined
 }
 
-function readString(value: unknown, field: string): string {
-    if (typeof value !== 'string') throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `${field} must be a string`)
+function readString(
+    value: unknown,
+    field: string,
+): string {
+    if (typeof value !== 'string')
+        throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `${field} must be a string`)
+
     return value
 }
 
-function readPositiveInteger(value: unknown, field: string): number {
-    if (!Number.isSafeInteger(value) || Number(value) <= 0) {
+function readPositiveInteger(
+    value: unknown,
+    field: string,
+): number {
+    if (
+        !Number.isSafeInteger(value)
+        || Number(value) <= 0
+    )
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `${field} must be a positive integer`)
-    }
+
     return value as number
 }
 
-function readStringArray(value: unknown, field: string): string[] {
-    if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) {
+function readStringArray(
+    value: unknown,
+    field: string,
+): string[] {
+    if (
+        !Array.isArray(value)
+        || value.some(item => typeof item !== 'string' || !item.trim())
+    )
         throw new CapabilityError('CAPABILITY_ACTION_INPUT_INVALID', `${field} must be an array of non-empty strings`)
-    }
+
     return value.map(item => String(item).trim())
 }
 
@@ -587,5 +804,6 @@ function arrayLength(value: unknown): number {
 
 function isRetryablePersistenceError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error)
+
     return /throttl|timeout|temporar|conflict/i.test(message)
 }

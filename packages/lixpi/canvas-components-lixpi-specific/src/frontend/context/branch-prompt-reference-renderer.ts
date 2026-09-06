@@ -9,28 +9,48 @@ import {
     type PromptReferencePreviewRenderer,
 } from '@lixpi/canvas-components-lixpi-specific/frontend/context'
 
-export function createCanvasPromptReferenceRenderer(
-    options: {
-        document: Document
-        previewRenderer?: PromptReferencePreviewRenderer
-        inlinePopover?: boolean
-    },
-): BranchPromptReferenceRenderer {
+export const createCanvasPromptReferenceRenderer = (options: {
+    document: Document
+    previewRenderer?: PromptReferencePreviewRenderer
+    inlinePopover?: boolean
+}): BranchPromptReferenceRenderer => {
     return reference => {
-        if (reference.referenceType === 'media' && options.previewRenderer) {
-            const preview = createMediaPromptReferencePreview(reference, options.previewRenderer, {
-                inlinePopover: options.inlinePopover,
-                preferredPlacement: 'top',
-            })
-            if (preview) return preview
+        if (
+            reference.referenceType === 'media'
+            && options.previewRenderer
+        ) {
+            const preview = createMediaPromptReferencePreview(
+                reference,
+                options.previewRenderer,
+                {
+                    inlinePopover: options.inlinePopover,
+                    preferredPlacement: 'top',
+                },
+            )
+
+            if (preview)
+                return preview
         }
-        if (reference.referenceType === 'capability-module' && options.previewRenderer?.getCapabilityModule) {
-            return createCapabilityPromptReferencePreview(reference, options.previewRenderer, {
-                inlinePopover: options.inlinePopover,
-                preferredPlacement: 'top',
-            })
+
+        if (
+            reference.referenceType === 'capability-module'
+            && options.previewRenderer?.getCapabilityModule
+        ) {
+            return createCapabilityPromptReferencePreview(
+                reference,
+                options.previewRenderer,
+                {
+                    inlinePopover: options.inlinePopover,
+                    preferredPlacement: 'top',
+                },
+            )
         }
+
         const dom = createPromptReferenceChipElement(reference, options.document)
-        return { dom, destroy: () => dom.remove() }
+
+        return {
+            dom,
+            destroy: () => dom.remove(),
+        }
     }
 }

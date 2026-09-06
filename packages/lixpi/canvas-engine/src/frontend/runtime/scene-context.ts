@@ -15,7 +15,10 @@ import {
 export type SceneContextHost = {
     subscribeScene: (callback: (scene: SceneSnapshot) => void) => Dispose
     subscribeView: (callback: (view: CanvasView) => void) => Dispose
-    mountOverlay: (element: HTMLElement, space: 'world' | 'screen') => Dispose
+    mountOverlay: (
+        element: HTMLElement,
+        space: 'world' | 'screen',
+    ) => Dispose
 }
 
 export class SceneContext implements ComponentContext {
@@ -30,7 +33,11 @@ export class SceneContext implements ComponentContext {
     ) {
         this.lifetime.own(onDestroy)
         this.lifetime.own(() => contentRoot.remove())
-        drawing.signal.addEventListener('abort', this.destroy, { once: true })
+        drawing.signal.addEventListener(
+            'abort',
+            this.destroy,
+            { once: true },
+        )
     }
 
     get resources() {
@@ -50,27 +57,55 @@ export class SceneContext implements ComponentContext {
 
     subscribeScene: ComponentContext['subscribeScene'] = callback => {
         this.signal.throwIfAborted()
-        return this.lifetime.own(this.host.subscribeScene(callback))
+
+        return this.lifetime.own(
+            this.host.subscribeScene(callback),
+        )
     }
 
     subscribeView: ComponentContext['subscribeView'] = callback => {
         this.signal.throwIfAborted()
-        return this.lifetime.own(this.host.subscribeView(callback))
+
+        return this.lifetime.own(
+            this.host.subscribeView(callback),
+        )
     }
 
-    mountOverlay: ComponentContext['mountOverlay'] = (element, space) => {
+    mountOverlay: ComponentContext['mountOverlay'] = (
+        element,
+        space,
+    ) => {
         this.signal.throwIfAborted()
-        return this.lifetime.own(this.host.mountOverlay(element, space))
+
+        return this.lifetime.own(
+            this.host.mountOverlay(element, space),
+        )
     }
 
-    setGeometry(bounds: { x: number; y: number; width: number; height: number }): void {
-        applyStyle(this.contentRoot, { left: `${bounds.x}px`, top: `${bounds.y}px`, width: `${bounds.width}px`, height: `${bounds.height}px` })
+    setGeometry(bounds: {
+        x: number
+        y: number
+        width: number
+        height: number
+    }): void {
+        applyStyle(
+            this.contentRoot,
+            {
+                left: `${bounds.x}px`,
+                top: `${bounds.y}px`,
+                width: `${bounds.width}px`,
+                height: `${bounds.height}px`,
+            },
+        )
     }
 
     destroy = (): void => {
-        if (this.destroyed) return
+        if (this.destroyed)
+            return
+
         this.destroyed = true
         this.signal.removeEventListener('abort', this.destroy)
+
         try {
             this.lifetime.destroy()
         } finally {

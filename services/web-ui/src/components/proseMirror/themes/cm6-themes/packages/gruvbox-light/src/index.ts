@@ -78,18 +78,15 @@ export const gruvboxLightTheme = EditorView.theme(
             color: fg1,
             background: background,
         },
-
         '.cm-content': {
             caretColor: cursor,
         },
-
         '.cm-cursor, .cm-dropCursor': {
             borderLeftColor: cursor,
         },
         '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
             backgroundColor: selectionBackground,
         },
-
         '.cm-panels': {
             backgroundColor: darkBackground,
             color: fg1,
@@ -100,7 +97,6 @@ export const gruvboxLightTheme = EditorView.theme(
         '.cm-panels.cm-panels-bottom': {
             borderTop: '2px solid black',
         },
-
         '.cm-searchMatch': {
             backgroundColor: bg0,
             color: yellow,
@@ -109,23 +105,19 @@ export const gruvboxLightTheme = EditorView.theme(
         '.cm-searchMatch.cm-searchMatch-selected': {
             backgroundColor: bg3,
         },
-
         '.cm-activeLine': {
             backgroundColor: highlightBackground,
         },
         '.cm-selectionMatch': {
             backgroundColor: bg3,
         },
-
         '&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
             outline: `1px solid ${bg3}`,
             fontStyle: 'bold',
         },
-
         '&.cm-focused .cm-matchingBracket': {
             backgroundColor: bg3,
         },
-
         '.cm-gutters': {
             backgroundColor: guttersBackground,
             color: guttersColor,
@@ -133,17 +125,14 @@ export const gruvboxLightTheme = EditorView.theme(
             userSelect: 'none',
             marginRight: '8px',
         },
-
         '.cm-activeLineGutter': {
             backgroundColor: highlightBackground,
         },
-
         '.cm-foldPlaceholder': {
             backgroundColor: 'transparent',
             border: 'none',
             color: '#ddd',
         },
-
         '.cm-tooltip': {
             border: 'none',
             backgroundColor: tooltipBackground,
@@ -168,20 +157,39 @@ export const gruvboxLightTheme = EditorView.theme(
 
 /// The highlighting style for code in the Gruvbox Light theme.
 export const gruvboxLightHighlightStyle = HighlightStyle.define([
-    { tag: t.keyword, color: red },
+    {
+        tag: t.keyword,
+        color: red,
+    },
     {
         tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName],
         color: aqua,
     },
-    { tag: [t.variableName], color: blue },
-    { tag: [t.function(t.variableName)], color: green, fontStyle: 'bold' },
-    { tag: [t.labelName], color: fg1 },
+    {
+        tag: [t.variableName],
+        color: blue,
+    },
+    {
+        tag: [t.function(t.variableName)],
+        color: green,
+        fontStyle: 'bold',
+    },
+    {
+        tag: [t.labelName],
+        color: fg1,
+    },
     {
         tag: [t.color, t.constant(t.name), t.standard(t.name)],
         color: purple,
     },
-    { tag: [t.definition(t.name), t.separator], color: fg1 },
-    { tag: [t.brace], color: fg1 },
+    {
+        tag: [t.definition(t.name), t.separator],
+        color: fg1,
+    },
+    {
+        tag: [t.brace],
+        color: fg1,
+    },
     {
         tag: [t.annotation],
         color: invalid,
@@ -223,7 +231,10 @@ export const gruvboxLightHighlightStyle = HighlightStyle.define([
         tag: [t.quote],
         color: gray,
     },
-    { tag: [t.string], color: fg1 },
+    {
+        tag: [t.string],
+        color: fg1,
+    },
     {
         tag: t.link,
         color: fg4,
@@ -234,13 +245,39 @@ export const gruvboxLightHighlightStyle = HighlightStyle.define([
         tag: [t.url, t.escape, t.special(t.string)],
         color: purple,
     },
-    { tag: [t.meta], color: yellow },
-    { tag: [t.comment], color: gray, fontStyle: 'italic' },
-    { tag: t.strong, fontWeight: 'bold', color: orange },
-    { tag: t.emphasis, fontStyle: 'italic', color: green },
-    { tag: t.strikethrough, textDecoration: 'line-through' },
-    { tag: t.heading, fontWeight: 'bold', color: green },
-    { tag: [t.heading1, t.heading2], fontWeight: 'bold', color: green },
+    {
+        tag: [t.meta],
+        color: yellow,
+    },
+    {
+        tag: [t.comment],
+        color: gray,
+        fontStyle: 'italic',
+    },
+    {
+        tag: t.strong,
+        fontWeight: 'bold',
+        color: orange,
+    },
+    {
+        tag: t.emphasis,
+        fontStyle: 'italic',
+        color: green,
+    },
+    {
+        tag: t.strikethrough,
+        textDecoration: 'line-through',
+    },
+    {
+        tag: t.heading,
+        fontWeight: 'bold',
+        color: green,
+    },
+    {
+        tag: [t.heading1, t.heading2],
+        fontWeight: 'bold',
+        color: green,
+    },
     {
         tag: [t.heading3, t.heading4],
         fontWeight: 'bold',
@@ -250,7 +287,10 @@ export const gruvboxLightHighlightStyle = HighlightStyle.define([
         tag: [t.heading5, t.heading6],
         color: yellow,
     },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: purple },
+    {
+        tag: [t.atom, t.bool, t.special(t.variableName)],
+        color: purple,
+    },
     {
         tag: [t.processingInstruction, t.inserted],
         color: blue,
@@ -259,7 +299,11 @@ export const gruvboxLightHighlightStyle = HighlightStyle.define([
         tag: [t.contentSeparator],
         color: red,
     },
-    { tag: t.invalid, color: orange, borderBottom: `1px dotted ${invalid}` },
+    {
+        tag: t.invalid,
+        color: orange,
+        borderBottom: `1px dotted ${invalid}`,
+    },
 ])
 
 /// Extension to enable the Gruvbox Light theme (both the editor theme and

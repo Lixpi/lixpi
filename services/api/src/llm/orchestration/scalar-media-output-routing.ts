@@ -22,6 +22,7 @@ export const restrictMediaRequestToExplicitVideoOutput = <
 }): T => {
     void prompt
     void hasVideoSource
+
     return request
 }
 
@@ -41,7 +42,10 @@ export const resolveScalarMediaModelSelection = ({
     videoModelId?: string
     hasVideoSource: boolean
 }): ScalarMediaModelSelection => {
-    if (!imageModelId || !videoModelId) {
+    if (
+        !imageModelId
+        || !videoModelId
+    ) {
         return {
             ...(imageModelId ? { imageModelId } : {}),
             ...(videoModelId ? { videoModelId } : {}),
@@ -50,5 +54,6 @@ export const resolveScalarMediaModelSelection = ({
 
     void prompt
     void hasVideoSource
+
     return { imageModelId }
 }

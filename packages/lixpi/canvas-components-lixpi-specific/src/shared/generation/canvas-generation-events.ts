@@ -197,16 +197,21 @@ export type AiGeneratedVideoCallbacks = {
     }) => void | Promise<void>
 }
 
-function routeSegmentEventToCanvas(
+const routeSegmentEventToCanvas = (
     event: CanvasMediaSegment,
     imageCallbacks: AiGeneratedImageCallbacks,
     videoCallbacks: AiGeneratedVideoCallbacks,
     options: CanvasMediaSegmentOptions,
-): void {
+): void => {
     const threadId = event.conversationAssetId || event.threadId
-    if (!threadId) return
 
-    const identity = { threadId, ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}) }
+    if (!threadId)
+        return
+
+    const identity = {
+        threadId,
+        ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}),
+    }
     const { generationRun } = event
     const responseMessageId = options.responseMessageId ?? ''
 
@@ -218,12 +223,15 @@ function routeSegmentEventToCanvas(
                     event: event.capabilityRunEvent,
                 })
             }
-            return
 
+            return
         case 'image_generation_trace':
-            imageCallbacks.onImageGenerationTraceToCanvas?.({ ...identity, generationRun })
-            return
+            imageCallbacks.onImageGenerationTraceToCanvas?.({
+                ...identity,
+                generationRun,
+            })
 
+            return
         case 'image_partial':
             imageCallbacks.onImagePartialToCanvas?.({
                 ...identity,
@@ -234,10 +242,16 @@ function routeSegmentEventToCanvas(
                 ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
-            return
 
+            return
         case 'image_complete':
-            if (!event.imageUrl && !event.assetId && !event.canvasGeometry) return
+            if (
+                !event.imageUrl
+                && !event.assetId
+                && !event.canvasGeometry
+            )
+                return
+
             imageCallbacks.onImageCompleteToCanvas?.({
                 ...identity,
                 imageUrl: event.imageUrl || '',
@@ -251,16 +265,16 @@ function routeSegmentEventToCanvas(
                 ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
-            return
 
+            return
         case 'image_error':
             imageCallbacks.onImageErrorToCanvas?.({
                 ...identity,
                 error: event.error || 'Image generation failed',
                 generationRun,
             })
-            return
 
+            return
         case 'image_branch_resolved':
             if (event.mediaBranchResolution) {
                 imageCallbacks.onMediaBranchResolvedToCanvas?.({
@@ -269,8 +283,8 @@ function routeSegmentEventToCanvas(
                     generationRun,
                 })
             }
-            return
 
+            return
         case 'media_lineage_planned':
             if (event.mediaBranchLineagePlan) {
                 imageCallbacks.onMediaLineagePlannedToCanvas?.({
@@ -279,24 +293,24 @@ function routeSegmentEventToCanvas(
                     generationRun,
                 })
             }
-            return
 
+            return
         case 'media_generation_skipped':
             imageCallbacks.onMediaGenerationSkippedToCanvas?.({
                 ...identity,
                 generationRequestId: event.generationRequestId || '',
                 generationRun,
             })
-            return
 
+            return
         case 'media_generation_request_complete':
             imageCallbacks.onMediaGenerationRequestCompleteToCanvas?.({
                 ...identity,
                 generationRequestId: event.generationRequestId || '',
                 generationRun,
             })
-            return
 
+            return
         case 'canvas_geometry_resolved':
             if (event.canvasGeometry) {
                 imageCallbacks.onCanvasGeometryResolvedToCanvas?.({
@@ -305,8 +319,8 @@ function routeSegmentEventToCanvas(
                     generationRun,
                 })
             }
-            return
 
+            return
         case 'context_relevance_resolved':
             if (event.workspaceContextResolution) {
                 imageCallbacks.onWorkspaceContextResolvedToCanvas?.({
@@ -315,8 +329,8 @@ function routeSegmentEventToCanvas(
                     generationRun,
                 })
             }
-            return
 
+            return
         case 'image_branch_resolution_error':
             imageCallbacks.onMediaBranchResolutionErrorToCanvas?.({
                 ...identity,
@@ -328,8 +342,8 @@ function routeSegmentEventToCanvas(
                 error: event.error || 'Image branch resolution failed',
                 generationRun,
             })
-            return
 
+            return
         case 'video_pending':
             videoCallbacks.onVideoPendingToCanvas?.({
                 ...identity,
@@ -337,14 +351,20 @@ function routeSegmentEventToCanvas(
                 ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
-            return
 
+            return
         case 'video_generating':
-            videoCallbacks.onVideoGeneratingToCanvas?.({ ...identity, aiProvider: event.aiProvider || '', generationRun })
-            return
+            videoCallbacks.onVideoGeneratingToCanvas?.({
+                ...identity,
+                aiProvider: event.aiProvider || '',
+                generationRun,
+            })
 
+            return
         case 'video_complete':
-            if (!event.videoUrl) return
+            if (!event.videoUrl)
+                return
+
             videoCallbacks.onVideoCompleteToCanvas?.({
                 ...identity,
                 videoUrl: event.videoUrl,
@@ -360,23 +380,30 @@ function routeSegmentEventToCanvas(
                 ...(event.canvasGeometry ? { canvasGeometry: event.canvasGeometry } : {}),
                 generationRun,
             })
-            return
 
+            return
         case 'video_error':
             videoCallbacks.onVideoErrorToCanvas?.({
                 ...identity,
                 error: event.error || 'Video generation failed',
                 generationRun,
             })
-            return
 
+            return
         case 'video_generation_trace':
-            videoCallbacks.onVideoGenerationTraceToCanvas?.({ ...identity, generationRun })
+            videoCallbacks.onVideoGenerationTraceToCanvas?.({
+                ...identity,
+                generationRun,
+            })
+
             return
         default:
-            if (event.status === 'ERROR') {
-                imageCallbacks.onImageErrorToCanvas?.({ ...identity, error: event.error || 'AI generation failed', generationRun })
-            }
+            if (event.status === 'ERROR')
+                imageCallbacks.onImageErrorToCanvas?.({
+                    ...identity,
+                    error: event.error || 'AI generation failed',
+                    generationRun,
+                })
     }
 }
 
@@ -395,13 +422,31 @@ export class CanvasGenerationEvents {
         return this.subscribe(this.videoListeners, callbacks)
     }
 
-    route(event: CanvasMediaSegment, options: CanvasMediaSegmentOptions = {}): void {
-        if (this.destroyed) return
+    route(
+        event: CanvasMediaSegment,
+        options: CanvasMediaSegmentOptions = {},
+    ): void {
+        if (this.destroyed)
+            return
+
         for (const listener of [...this.imageListeners]) {
-            if (this.imageListeners.has(listener)) routeSegmentEventToCanvas(event, listener, {}, options)
+            if (this.imageListeners.has(listener))
+                routeSegmentEventToCanvas(
+                    event,
+                    listener,
+                    {},
+                    options,
+                )
         }
+
         for (const listener of [...this.videoListeners]) {
-            if (this.videoListeners.has(listener)) routeSegmentEventToCanvas(event, {}, listener, options)
+            if (this.videoListeners.has(listener))
+                routeSegmentEventToCanvas(
+                    event,
+                    {},
+                    listener,
+                    options,
+                )
         }
     }
 
@@ -411,23 +456,39 @@ export class CanvasGenerationEvents {
         this.videoListeners.clear()
     }
 
-    private subscribe<Callbacks extends object>(listeners: Set<Callbacks>, callbacks: Callbacks): () => void {
-        if (this.destroyed) throw new Error('Canvas generation events are disposed')
+    private subscribe<Callbacks extends object>(
+        listeners: Set<Callbacks>,
+        callbacks: Callbacks,
+    ): () => void {
+        if (this.destroyed)
+            throw new Error('Canvas generation events are disposed')
+
         const wrapped = Object.fromEntries(
-            Object.entries(callbacks).map(([name, callback]) => [name, (data: unknown) => {
-                if (!listeners.has(wrapped) || typeof callback !== 'function') return
-                void this.invoke(callback, data)
-            }]),
+            Object.entries(callbacks).map(
+                ([name, callback]) => [name, (data: unknown) => {
+                    if (
+                        !listeners.has(wrapped)
+                        || typeof callback !== 'function'
+                    )
+                        return
+
+                    void this.invoke(callback, data)
+                }],
+            ),
         ) as Callbacks
         listeners.add(wrapped)
-        return () => {
-            listeners.delete(wrapped)
-        }
+
+        return () => void listeners.delete(wrapped)
     }
 
-    private async invoke(callback: (data: unknown) => unknown, data: unknown): Promise<void> {
+    private async invoke(
+        callback: (data: unknown) => unknown,
+        data: unknown,
+    ): Promise<void> {
         try {
-            await callback(structuredClone(data))
+            await callback(
+                structuredClone(data),
+            )
         } catch (error) {
             this.reportError(error)
         }

@@ -10,14 +10,22 @@ export type ViewportRenderPlanInput = {
     sceneChanged: boolean
 }
 
-export function viewportsMatch(a: ViewportSnapshot | null | undefined, b: ViewportSnapshot | null | undefined): boolean {
-    if (!a || !b) return false
+export const viewportsMatch = (
+    a: ViewportSnapshot | null | undefined,
+    b: ViewportSnapshot | null | undefined,
+): boolean => {
+    if (
+        !a
+        || !b
+    )
+        return false
+
     return Math.abs(a.x - b.x) < 0.001
         && Math.abs(a.y - b.y) < 0.001
         && Math.abs(a.zoom - b.zoom) < 0.0001
 }
 
-export function shouldPreserveLiveViewportForScene(input: ViewportRenderPlanInput): boolean {
+export const shouldPreserveLiveViewportForScene = (input: ViewportRenderPlanInput): boolean => {
     const {
         incomingViewport,
         liveViewport,

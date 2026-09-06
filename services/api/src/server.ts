@@ -5,7 +5,6 @@ import cookieParser from 'cookie-parser'
 import chalk from 'chalk'
 import {
     log,
-    info,
     infoStr,
     warn,
     err,
@@ -61,7 +60,10 @@ import {
 const env = process.env
 
 // Production safety check: Prevent LocalAuth0 from being used in non-local environments
-if (env.ENVIRONMENT !== 'local' && env.MOCK_AUTH0 === 'true') {
+if (
+    env.ENVIRONMENT !== 'local'
+    && env.MOCK_AUTH0 === 'true'
+) {
     err('FATAL: LocalAuth0 detected in non-local environment!')
     err(`Environment: ${env.ENVIRONMENT}`)
     err(`AUTH0_DOMAIN: ${env.AUTH0_DOMAIN}`)
@@ -254,9 +256,20 @@ await startNatsAuthCalloutService({
 // (METRICS_ENABLED!=true) → the open-source plug (check approves, confirm no-ops).
 const metricsNatsConn = (await NATS_Service.getInstance())!
 const metricsNats: MetricsNats = {
-    request: (subject, data, timeoutMs) => metricsNatsConn.request(subject, data, timeoutMs),
+    request: (
+        subject,
+        data,
+        timeoutMs,
+    ) => metricsNatsConn.request(
+        subject,
+        data,
+        timeoutMs,
+    ),
 }
-const metrics = new MetricsClient(metricsNats, metricsConfigFromEnv())
+const metrics = new MetricsClient(
+    metricsNats,
+    metricsConfigFromEnv(),
+)
 
 // Initialize the in-process LLM module. The LangGraph workflow that previously
 // ran in the standalone services/llm-api Python service now runs here directly.
@@ -282,9 +295,7 @@ setCapabilityRunDispatcher({
         }),
         ownerUserId: input.userId,
     }),
-    stop: async run => {
-        capabilityDispatcher.stopDetached(run, run.ownerUserId)
-    },
+    stop: async run => void capabilityDispatcher.stopDetached(run, run.ownerUserId),
 })
 setLlmModule(llmModule)
 
@@ -298,10 +309,21 @@ const corsOptions = {
     credentials: true,
 }
 
-app.use(express.json({ limit: '100mb' }))
-app.use(express.urlencoded({ limit: '100mb', extended: true }))
-app.use(cors(corsOptions))
-app.use(cookieParser())
+app.use(
+    express.json({ limit: '100mb' }),
+)
+app.use(
+    express.urlencoded({
+        limit: '100mb',
+        extended: true,
+    }),
+)
+app.use(
+    cors(corsOptions),
+)
+app.use(
+    cookieParser(),
+)
 
 // Asset upload/import and authorized rendition delivery. The API resolves
 // organization-scoped Blobs and supports Range requests for seekable media.
@@ -318,30 +340,41 @@ app.get('/health-check', (req, res) => {
     // Perform other necessary health checks
     const isHealthy = httpServer.listening
 
-    if (isHealthy) {
-        res.json({ status: 'healthy', services: { httpServer: 'running' } })
-    } else {
-        res.status(503).json({ status: 'unhealthy', services: { httpServer: 'not running' } })
-    }
+    if (isHealthy)
+        res.json({
+            status: 'healthy',
+            services: { httpServer: 'running' },
+        })
+    else
+        res.status(503).json({
+            status: 'unhealthy',
+            services: { httpServer: 'not running' },
+        })
 })
 
 // Use HTTP server to listen on the specified port instead of the Express app
-httpServer.listen(3000, '0.0.0.0', () => {
-    infoStr([
-        chalk.green('Server is running on: '),
-        chalk.blue('http://localhost:3000'),
-        '\n\n\n',
-    ])
-})
+httpServer.listen(
+    3000,
+    '0.0.0.0',
+    () => {
+        infoStr([
+            chalk.green('Server is running on: '),
+            chalk.blue('http://localhost:3000'),
+            '\n\n\n',
+        ])
+    },
+)
 
 // Graceful shutdown (for your application termination handlers)
 process.on('SIGINT', async () => {
     log('Shutting down...')
+
     try {
         await llmModule.shutdown()
     } catch (e) {
         err('LLM module shutdown failed:', e)
     }
+
     await await NATS_Service.getInstance()!.drain() // Drains subscriptions and closes connection
     process.exit(0)
 })

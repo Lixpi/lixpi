@@ -1,24 +1,18 @@
-import * as aws from '@pulumi/aws'
 import * as pulumi from '@pulumi/pulumi'
 
-/**
- * Helper functions for working with Caddy-managed certificates
- */
+// Helper functions for working with Caddy-managed certificates
 
 export type CertificateHelper = {
-    /**
-     * Gets certificate ARN or path for use in other services
-     */
+    // Gets certificate ARN or path for use in other services
     getCertificateReference(): pulumi.Output<string>
 
-    /**
-     * Gets environment variables needed to access certificates
-     */
-    getCertificateEnvironment(): Array<{ name: string; value: string }>
+    // Gets environment variables needed to access certificates
+    getCertificateEnvironment(): Array<{
+        name: string
+        value: string
+    }>
 
-    /**
-     * Creates a script to download certificates for container use
-     */
+    // Creates a script to download certificates for container use
     getCertificateDownloadScript(): string
 }
 
@@ -38,13 +32,20 @@ export const createCertificateHelper = (
 
             return {
                 getCertificateReference: () => pulumi.output(secretName),
-
                 getCertificateEnvironment: () => [
-                    { name: 'CERT_STORAGE_TYPE', value: 'secrets-manager' },
-                    { name: 'CERT_SECRET_NAME', value: secretName },
-                    { name: 'CERT_DOMAIN', value: domain },
+                    {
+                        name: 'CERT_STORAGE_TYPE',
+                        value: 'secrets-manager',
+                    },
+                    {
+                        name: 'CERT_SECRET_NAME',
+                        value: secretName,
+                    },
+                    {
+                        name: 'CERT_DOMAIN',
+                        value: domain,
+                    },
                 ],
-
                 getCertificateDownloadScript: () => `
                     # Enhanced certificate download from Secrets Manager with validation
                     echo "🔐 Downloading certificate for ${domain} from Secrets Manager..."
@@ -94,18 +95,27 @@ export const createCertificateHelper = (
                     fi
                 `,
             }
-
         case 's3':
             return {
                 getCertificateReference: () => pulumi.interpolate`s3://${storageConfig.s3Bucket}/${storageConfig.s3Prefix || 'certificates'}`,
-
                 getCertificateEnvironment: () => [
-                    { name: 'CERT_STORAGE_TYPE', value: 's3' },
-                    { name: 'CERT_S3_BUCKET', value: storageConfig.s3Bucket as string },
-                    { name: 'CERT_S3_PREFIX', value: storageConfig.s3Prefix || 'certificates' },
-                    { name: 'CERT_DOMAIN', value: domain },
+                    {
+                        name: 'CERT_STORAGE_TYPE',
+                        value: 's3',
+                    },
+                    {
+                        name: 'CERT_S3_BUCKET',
+                        value: storageConfig.s3Bucket as string,
+                    },
+                    {
+                        name: 'CERT_S3_PREFIX',
+                        value: storageConfig.s3Prefix || 'certificates',
+                    },
+                    {
+                        name: 'CERT_DOMAIN',
+                        value: domain,
+                    },
                 ],
-
                 getCertificateDownloadScript: () => `
                     # Enhanced certificate download from S3 with validation
                     echo "📦 Downloading certificate for ${domain} from S3..."
@@ -149,17 +159,23 @@ export const createCertificateHelper = (
                     fi
                 `,
             }
-
         case 'efs':
             return {
                 getCertificateReference: () => pulumi.interpolate`efs://${storageConfig.efsFileSystemId}/certificates`,
-
                 getCertificateEnvironment: () => [
-                    { name: 'CERT_STORAGE_TYPE', value: 'efs' },
-                    { name: 'CERT_EFS_PATH', value: '/certificates' },
-                    { name: 'CERT_DOMAIN', value: domain },
+                    {
+                        name: 'CERT_STORAGE_TYPE',
+                        value: 'efs',
+                    },
+                    {
+                        name: 'CERT_EFS_PATH',
+                        value: '/certificates',
+                    },
+                    {
+                        name: 'CERT_DOMAIN',
+                        value: domain,
+                    },
                 ],
-
                 getCertificateDownloadScript: () => `
                     # Enhanced certificate copy from EFS with validation
                     echo "📁 Copying certificate for ${domain} from EFS..."
