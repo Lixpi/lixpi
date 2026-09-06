@@ -133,7 +133,8 @@ export class WorkspaceBranchMarkerPresentation {
     }
 
     updateZoom(zoomScale: number): void {
-        for (const controls of this.actions.values()) controls.setZoomScale(zoomScale)
+        for (const controls of this.actions.values())
+            controls.setZoomScale(zoomScale)
     }
 
     destroyNode(nodeId: string): void {

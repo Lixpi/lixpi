@@ -87,7 +87,8 @@ export const layoutTree = (
     // stacking is deterministic.
     const byId = new Map<string, TreeLayoutNode>()
 
-    for (const node of nodes) byId.set(node.id, node)
+    for (const node of nodes)
+        byId.set(node.id, node)
 
     const childrenByParent = new Map<string, TreeLayoutNode[]>()
     const roots: TreeLayoutNode[] = []
@@ -129,7 +130,8 @@ export const layoutTree = (
 
         let stack = 0
 
-        for (const child of children) stack += computeBand(child)
+        for (const child of children)
+            stack += computeBand(child)
 
         stack += siblingGap * (children.length - 1)
 
@@ -167,7 +169,8 @@ export const layoutTree = (
         const band = bandHeight.get(node.id) ?? node.height
         let stack = 0
 
-        for (const child of children) stack += bandHeight.get(child.id) ?? child.height
+        for (const child of children)
+            stack += bandHeight.get(child.id) ?? child.height
 
         stack += siblingGap * (children.length - 1)
 

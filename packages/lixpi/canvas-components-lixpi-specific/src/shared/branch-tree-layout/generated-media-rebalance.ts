@@ -252,7 +252,8 @@ export const reflowStackedBranchMarkers = (options: ReflowStackedBranchMarkersOp
 
     const nodesById = getNodesById(options.allNodes)
 
-    for (const marker of options.markers) nodesById.set(marker.nodeId, marker)
+    for (const marker of options.markers)
+        nodesById.set(marker.nodeId, marker)
 
     for (const group of groups) {
         let y = getBranchMarkerStackAnchorTop(

@@ -296,7 +296,8 @@ export class AnimatedSvgIcon<State extends string> implements AnimatedSvgIconIns
 
         this.destroyed = true
 
-        for (const runtime of this.parts) runtime.group.interrupt(this.transitionNamespace)
+        for (const runtime of this.parts)
+            runtime.group.interrupt(this.transitionNamespace)
 
         this.element.remove()
     }

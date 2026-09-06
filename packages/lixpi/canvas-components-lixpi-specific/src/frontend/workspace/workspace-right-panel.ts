@@ -235,7 +235,8 @@ export class WorkspaceRightPanel {
         }
 
         try {
-            for (const [name, value] of Object.entries(this.options.cssProperties)) panel.style.setProperty(name, value)
+            for (const [name, value] of Object.entries(this.options.cssProperties))
+                panel.style.setProperty(name, value)
 
             const switchElement = preservedSwitch ?? this.createModeSwitch(state.topLevelMode)
             panel.appendChild(switchElement)

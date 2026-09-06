@@ -428,7 +428,8 @@ function deepFreeze<T>(value: T): T {
 
     Object.freeze(value)
 
-    for (const child of Object.values(value)) deepFreeze(child)
+    for (const child of Object.values(value))
+        deepFreeze(child)
 
     return value
 }

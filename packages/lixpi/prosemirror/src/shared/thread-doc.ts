@@ -85,7 +85,8 @@ export const collectProseMirrorPromptReferences = (node: ProseMirrorJsonNode | n
         if (attrs)
             references.push(attrs)
 
-        for (const child of candidate.content ?? []) visit(child)
+        for (const child of candidate.content ?? [])
+            visit(child)
     }
     visit(node)
 

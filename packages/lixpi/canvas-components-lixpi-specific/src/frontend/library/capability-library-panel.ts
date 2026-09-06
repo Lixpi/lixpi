@@ -151,9 +151,10 @@ class CapabilityLibraryPanel implements CapabilityLibraryPanelInstance {
         else {
             const itemsElement = this.html`<div className="capability-library-section-items"></div>` as HTMLElement
 
-            for (const item of this.items) itemsElement.appendChild(
-                this.buildRow(item),
-            )
+            for (const item of this.items)
+                itemsElement.appendChild(
+                    this.buildRow(item),
+                )
 
             this.browserElement.appendChild(itemsElement)
         }

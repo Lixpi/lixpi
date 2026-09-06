@@ -29,11 +29,12 @@ const collectAssetIds = (
     if (!Array.isArray(record.content))
         return
 
-    for (const child of record.content) collectAssetIds(
-        child,
-        includePromptReferences,
-        assetIds,
-    )
+    for (const child of record.content)
+        collectAssetIds(
+            child,
+            includePromptReferences,
+            assetIds,
+        )
 }
 
 export const collectReferencedAssetIds = (node: unknown): Set<string> => {

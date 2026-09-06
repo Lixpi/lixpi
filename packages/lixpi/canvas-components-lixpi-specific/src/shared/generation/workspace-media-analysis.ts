@@ -149,7 +149,8 @@ export class WorkspaceMediaAnalysis {
         this.analysis.clear()
         this.refreshes.clear()
 
-        for (const work of pending) work.cancelTimer?.()
+        for (const work of pending)
+            work.cancelTimer?.()
     }
 
     destroy(): void {

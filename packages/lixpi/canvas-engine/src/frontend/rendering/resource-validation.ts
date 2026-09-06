@@ -26,14 +26,17 @@ export const validateMesh = (data: MeshData): void => {
 
     const vertices = data.positions.length / 2
 
-    for (const value of data.positions) if (!Number.isFinite(value))
-        throw new RangeError('Mesh positions must be finite')
+    for (const value of data.positions)
+        if (!Number.isFinite(value))
+            throw new RangeError('Mesh positions must be finite')
 
-    for (const value of data.uvs) if (!Number.isFinite(value))
-        throw new RangeError('Mesh UVs must be finite')
+    for (const value of data.uvs)
+        if (!Number.isFinite(value))
+            throw new RangeError('Mesh UVs must be finite')
 
-    for (const index of data.indices) if (index >= vertices)
-        throw new RangeError('Mesh index exceeds the vertex count')
+    for (const index of data.indices)
+        if (index >= vertices)
+            throw new RangeError('Mesh index exceeds the vertex count')
 }
 
 export const validateTexture = (input: TextureInput): void => {
@@ -103,8 +106,9 @@ export const validateMaterialBindings = (bindings: readonly MaterialBinding[]): 
         )
             throw new RangeError(`Invalid value length for ${binding.name}`)
 
-        for (const value of values) if (!Number.isFinite(value))
-            throw new RangeError(`Non-finite uniform ${binding.name}`)
+        for (const value of values)
+            if (!Number.isFinite(value))
+                throw new RangeError(`Non-finite uniform ${binding.name}`)
     }
 }
 

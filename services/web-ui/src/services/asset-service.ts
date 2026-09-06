@@ -167,7 +167,8 @@ export class AssetService {
         const missingAssetIds = [...new Set(assetIds)].filter(assetId => assetId && !assetsStore.get(assetId))
         const loadedAssets = await this.loadAssetsById(missingAssetIds)
 
-        for (const asset of loadedAssets) assetsStore.upsert(asset)
+        for (const asset of loadedAssets)
+            assetsStore.upsert(asset)
 
         return loadedAssets
     }

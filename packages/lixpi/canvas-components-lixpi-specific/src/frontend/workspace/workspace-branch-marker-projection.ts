@@ -198,7 +198,8 @@ export class WorkspaceBranchMarkerProjection {
     }
 
     refreshThreads = (threadIds: Iterable<string>): void => {
-        for (const threadId of threadIds) this.refresh(threadId)
+        for (const threadId of threadIds)
+            this.refresh(threadId)
     }
 
     private getContentDimensions(

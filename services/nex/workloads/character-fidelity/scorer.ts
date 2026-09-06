@@ -630,7 +630,8 @@ const cosineSimilarity = (
 
     let score = 0
 
-    for (let index = 0; index < left.length; index += 1) score += left[index]! * right[index]!
+    for (let index = 0; index < left.length; index += 1)
+        score += left[index]! * right[index]!
 
     return Math.max(
         -1,

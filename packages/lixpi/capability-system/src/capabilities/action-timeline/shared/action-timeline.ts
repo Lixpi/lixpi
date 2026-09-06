@@ -263,7 +263,8 @@ export const assertActionTimelineRuns = (
     segments: readonly ActionTimelineGeneratedSegment[],
     authorizedReferenceAssetIds: ReadonlySet<string>,
 ): void => {
-    for (const segment of segments) assertRuns(segment.runs, authorizedReferenceAssetIds)
+    for (const segment of segments)
+        assertRuns(segment.runs, authorizedReferenceAssetIds)
 }
 
 export const buildActionTimelineDocument = (
@@ -642,7 +643,8 @@ function walkNodes(
 ): void {
     visitor(node)
 
-    for (const child of node.content ?? []) walkNodes(child, visitor)
+    for (const child of node.content ?? [])
+        walkNodes(child, visitor)
 }
 
 function collectInlineText(

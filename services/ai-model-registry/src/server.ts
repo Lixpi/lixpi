@@ -145,9 +145,11 @@ class AiModelRegistryServer {
             const categories = new Set<string>()
 
             for (const param of group.parameters) {
-                for (const model of param.supportedModels) models.add(model)
+                for (const model of param.supportedModels)
+                    models.add(model)
 
-                for (const api of param.supportedApis) apis.add(api)
+                for (const api of param.supportedApis)
+                    apis.add(api)
 
                 categories.add(param.category)
             }
@@ -425,7 +427,8 @@ class AiModelRegistryServer {
             for (const {
                 path,
                 record,
-            } of pending) await this.tree.writeParam(path, record)
+            } of pending)
+                await this.tree.writeParam(path, record)
 
             AiModelRegistryServer.sendJson(
                 res,
@@ -599,12 +602,14 @@ class AiModelRegistryServer {
             for (const {
                 path,
                 record,
-            } of pendingParams) await this.tree.writeParam(path, record)
+            } of pendingParams)
+                await this.tree.writeParam(path, record)
 
             for (const {
                 path,
                 meta,
-            } of pendingGroups) await this.tree.writeGroupMeta(path, meta)
+            } of pendingGroups)
+                await this.tree.writeGroupMeta(path, meta)
 
             AiModelRegistryServer.sendJson(
                 res,

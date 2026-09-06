@@ -47,7 +47,8 @@ export const applyWorkspaceCanvasTheme = (
         '--workspace-branch-marker-response-line-height': `${markerText.responseLineHeight}`,
     }
 
-    for (const [name, value] of Object.entries(properties)) pane.style.setProperty(name, value)
+    for (const [name, value] of Object.entries(properties))
+        pane.style.setProperty(name, value)
 }
 
 export const getWorkspaceRightPanelCssProperties = (settings: WorkspaceCanvasSettings): Record<`--${string}`, string> => {

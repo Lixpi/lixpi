@@ -328,7 +328,8 @@ export class CanvasMedia implements EngineMedia {
 
         for (const entry of Array.from(
             this.entries.values(),
-        )) this.discard(entry)
+        ))
+            this.discard(entry)
 
         this.decoder.destroy()
     }

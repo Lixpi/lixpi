@@ -154,8 +154,9 @@ export class WorkspaceGenerationVisuals {
         }
 
         for (const references of this.references.values()) {
-            for (const nodeId of references) if (!targets.has(nodeId))
-                targets.set(nodeId, { direction: 'counterclockwise' })
+            for (const nodeId of references)
+                if (!targets.has(nodeId))
+                    targets.set(nodeId, { direction: 'counterclockwise' })
         }
 
         this.ports.setTargets(targets)
@@ -240,15 +241,17 @@ export class WorkspaceGenerationVisuals {
             return ids
 
         for (const tracker of [this.ports.images, this.ports.videos]) {
-            for (const node of tracker.values()) if (
-                !node.hasReceivedFrame
-                && !this.hasTerminalProgress(node.nodeId)
-            )
-                ids.add(node.nodeId)
+            for (const node of tracker.values())
+                if (
+                    !node.hasReceivedFrame
+                    && !this.hasTerminalProgress(node.nodeId)
+                )
+                    ids.add(node.nodeId)
         }
 
-        for (const node of this.ports.getState()?.nodes ?? []) if (this.isWaitingForFrame(node))
-            ids.add(node.nodeId)
+        for (const node of this.ports.getState()?.nodes ?? [])
+            if (this.isWaitingForFrame(node))
+                ids.add(node.nodeId)
 
         return ids
     }
@@ -295,8 +298,9 @@ export class WorkspaceGenerationVisuals {
             return false
 
         for (const tracker of [this.ports.images, this.ports.videos]) {
-            for (const pending of tracker.values()) if (pending.nodeId === nodeId)
-                return !pending.hasReceivedFrame
+            for (const pending of tracker.values())
+                if (pending.nodeId === nodeId)
+                    return !pending.hasReceivedFrame
         }
 
         const node = this.ports.getState()?.nodes.find(candidate => candidate.nodeId === nodeId)

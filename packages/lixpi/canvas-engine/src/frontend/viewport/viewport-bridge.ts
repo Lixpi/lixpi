@@ -18,9 +18,11 @@ export class ViewportBridge {
         const transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`
         applyStyle(this.options.viewportEl, { transform })
 
-        for (const overlayEl of this.options.viewportOverlayEls ?? []) applyStyle(overlayEl, { transform })
+        for (const overlayEl of this.options.viewportOverlayEls ?? [])
+            applyStyle(overlayEl, { transform })
 
-        for (const target of this.options.targets?.() ?? []) target?.setViewport(viewport)
+        for (const target of this.options.targets?.() ?? [])
+            target?.setViewport(viewport)
     }
 }
 

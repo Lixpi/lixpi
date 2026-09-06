@@ -104,8 +104,9 @@ const reconcileApiBranchMarkersWithTemporaryPreflightNodes = (
     const cleanupBranchMarkerArtifacts = (nodeIds: Iterable<string>) => {
         const removed = new Set(nodeIds)
 
-        for (const [key, record] of pendingBranchMarkers) if (removed.has(record.nodeId))
-            pendingBranchMarkers.delete(key)
+        for (const [key, record] of pendingBranchMarkers)
+            if (removed.has(record.nodeId))
+                pendingBranchMarkers.delete(key)
     }
     const plannedMarkers = (canvasGeometry.nodeSnapshots ?? []).filter((node: CanvasNode): node is BranchMarkerNode => isBranchMarkerNode(node)).filter(
         node =>
@@ -483,7 +484,8 @@ export class WorkspaceApiCanvasGeometry {
 
             this.ports.placements.markers.clear()
 
-            for (const [key, record] of preflight.records) this.ports.placements.markers.set(key, record)
+            for (const [key, record] of preflight.records)
+                this.ports.placements.markers.set(key, record)
         }
 
         if (result.fullyApplied)

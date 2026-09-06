@@ -43,7 +43,8 @@ export class ResourceRegistry {
         if (options.parent)
             this.entry(options.parent)
 
-        for (const dependency of dependencies) this.entry(dependency)
+        for (const dependency of dependencies)
+            this.entry(dependency)
 
         const handle = Object.freeze({
             id: `resource-${++this.counter}`,
@@ -63,7 +64,8 @@ export class ResourceRegistry {
             },
         )
 
-        for (const dependency of dependencies) this.entries.get(dependency)!.dependents.add(handle)
+        for (const dependency of dependencies)
+            this.entries.get(dependency)!.dependents.add(handle)
 
         if (options.parent)
             this.entries.get(options.parent)!.children.add(handle)
@@ -101,7 +103,8 @@ export class ResourceRegistry {
         const previous = entry.dependencies
         entry.dependencies = next
 
-        for (const dependency of next) this.entries.get(dependency)!.dependents.add(handle)
+        for (const dependency of next)
+            this.entries.get(dependency)!.dependents.add(handle)
 
         for (const dependency of previous) {
             if (next.has(dependency))
@@ -129,7 +132,8 @@ export class ResourceRegistry {
 
         entry.released = true
 
-        for (const child of Array.from(entry.children)) this.release(child)
+        for (const child of Array.from(entry.children))
+            this.release(child)
 
         this.collect(handle)
     }
@@ -206,6 +210,7 @@ export class ResourceRegistry {
 
         for (const handle of Array.from(
             this.entries.keys(),
-        ).reverse()) this.release(handle)
+        ).reverse())
+            this.release(handle)
     }
 }

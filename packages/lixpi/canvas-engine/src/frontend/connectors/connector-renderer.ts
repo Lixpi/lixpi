@@ -91,8 +91,9 @@ export class ConnectorRenderer {
             edges.map(edge => edge.id),
         )
 
-        for (const [id, entry] of this.entries) if (!incoming.has(id))
-            resources.setVisible(entry.group, false)
+        for (const [id, entry] of this.entries)
+            if (!incoming.has(id))
+                resources.setVisible(entry.group, false)
 
         for (const edge of edges) {
             let entry = this.entries.get(edge.id)
@@ -149,7 +150,8 @@ export class ConnectorRenderer {
             const marker = this.options.marker
             const arrows = marker ? [edge.arrowStart, edge.arrowEnd].filter((arrow): arrow is ConnectorArrow => arrow !== null) : []
 
-            for (const [index, arrowEntry] of entry.arrows.entries()) resources.setVisible(arrowEntry.group, index < arrows.length)
+            for (const [index, arrowEntry] of entry.arrows.entries())
+                resources.setVisible(arrowEntry.group, index < arrows.length)
 
             for (const [index, arrow] of arrows.entries()) {
                 let arrowEntry = entry.arrows[index]

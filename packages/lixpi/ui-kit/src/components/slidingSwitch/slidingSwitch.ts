@@ -609,7 +609,8 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
     }
 
     private synchronizeOptionDomOrder(): void {
-        for (const view of this.optionViews) view.group.raise()
+        for (const view of this.optionViews)
+            view.group.raise()
     }
 
     private completeReshuffleAnimation(): void {
@@ -1123,7 +1124,8 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
             this.indicatorAnimationTargetX = targetX
 
         if (!this.reshuffleAnimationActive) {
-            for (const view of this.optionViews) this.renderOptionView(view)
+            for (const view of this.optionViews)
+                this.renderOptionView(view)
         }
     }
 
@@ -1237,7 +1239,8 @@ class SlidingSwitch<Value extends string = string> implements SlidingSwitchInsta
         this.resizeObserver?.disconnect()
         this.observedResizeTargets.clear()
 
-        for (const view of this.optionViews) view.customRenderer?.destroy?.()
+        for (const view of this.optionViews)
+            view.customRenderer?.destroy?.()
 
         this.group.remove()
     }

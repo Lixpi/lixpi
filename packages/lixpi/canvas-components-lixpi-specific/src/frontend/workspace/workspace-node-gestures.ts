@@ -380,7 +380,8 @@ export class WorkspaceNodeGestures {
         }
 
         const cleanup = this.ownGestureCleanup(scope, () => {
-            for (const entry of draggedNodeEntries.values()) entry.el.classList.remove('is-dragging')
+            for (const entry of draggedNodeEntries.values())
+                entry.el.classList.remove('is-dragging')
         })
         let dragVisualsActivated = false
         const activateDragVisuals = () => {

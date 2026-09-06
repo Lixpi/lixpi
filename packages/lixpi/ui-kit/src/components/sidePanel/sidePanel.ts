@@ -395,7 +395,8 @@ class SidePanel implements SidePanelInstance {
     private emit = (width: number): void => {
         this.config.onResize?.(width)
 
-        for (const listener of this.listeners) listener(width)
+        for (const listener of this.listeners)
+            listener(width)
     }
 
     private persist = (): void => void this.config.persistState?.(
@@ -862,7 +863,8 @@ class SidePanel implements SidePanelInstance {
     }
 
     private forceSlideStartFrame = (targets: SlideTarget[]): void => {
-        for (const target of targets) void target.element.offsetWidth
+        for (const target of targets)
+            void target.element.offsetWidth
     }
 
     private nextAnimationFrame = (): Promise<void> => new Promise(resolve => void requestAnimationFrame(() => resolve()))
@@ -966,7 +968,8 @@ class SidePanel implements SidePanelInstance {
                     finish()
             }
             const finish = (): void => {
-                for (const target of targets) target.removeEventListener('transitionend', handleTransitionEnd)
+                for (const target of targets)
+                    target.removeEventListener('transitionend', handleTransitionEnd)
 
                 window.clearTimeout(timeoutId)
 
@@ -979,7 +982,8 @@ class SidePanel implements SidePanelInstance {
 
             this.finishSlideWait = finish
 
-            for (const target of targets) target.addEventListener('transitionend', handleTransitionEnd)
+            for (const target of targets)
+                target.addEventListener('transitionend', handleTransitionEnd)
         })
 
     private setAnimatedPanel = (panelElement: HTMLElement | null): void => {

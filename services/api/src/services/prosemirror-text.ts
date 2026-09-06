@@ -22,7 +22,8 @@ export const collectDocumentText = (doc: object): string => {
         )
             parts.push('\n')
 
-        for (const child of node.content ?? []) visit(child)
+        for (const child of node.content ?? [])
+            visit(child)
     }
     visit(root)
 

@@ -130,15 +130,17 @@ const files = new Map<string, LegacyFile>(
 const canvasNodes = oldManifest.workspace.canvasState.nodes ?? []
 const renditionLinkFields = ['posterFileId', 'frameFileId', 'canonicalFileId', 'previewFileId', 'thumbnailFileId'] as const
 
-for (const document of oldManifest.documents ?? []) legacyIdToAssetId.set(
-    document.documentId,
-    uuid(),
-)
+for (const document of oldManifest.documents ?? [])
+    legacyIdToAssetId.set(
+        document.documentId,
+        uuid(),
+    )
 
-for (const thread of oldManifest.aiChatThreads ?? []) legacyIdToAssetId.set(
-    thread.threadId,
-    uuid(),
-)
+for (const thread of oldManifest.aiChatThreads ?? [])
+    legacyIdToAssetId.set(
+        thread.threadId,
+        uuid(),
+    )
 
 const rootFileIds = new Set<string>()
 const relatedFileIdsByRoot = new Map<string, Set<string>>()
@@ -824,7 +826,8 @@ outputZip.addFile(
     ),
 )
 
-for (const [blobHash, bytes] of blobBytes) outputZip.addFile(`blobs/${blobHash}`, bytes)
+for (const [blobHash, bytes] of blobBytes)
+    outputZip.addFile(`blobs/${blobHash}`, bytes)
 
 await writeFile(
     outputPath,

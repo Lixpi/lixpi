@@ -353,10 +353,8 @@ export class CanvasScene {
                 connectorBounds: worldBounds,
             }
 
-            for (const key of ['visualBounds', 'hitBounds', 'selectionBounds', 'collisionBounds', 'connectorBounds'] as const) assertCanvasBounds(
-                measurement[key],
-                node.nodeId,
-            )
+            for (const key of ['visualBounds', 'hitBounds', 'selectionBounds', 'collisionBounds', 'connectorBounds'] as const)
+                assertCanvasBounds(measurement[key], node.nodeId)
 
             boundsById.set(
                 node.nodeId,
@@ -582,7 +580,8 @@ export class CanvasScene {
             this.prefetch = new IdleTask({
                 signal: this.lifetime.signal,
                 callback: () => {
-                    for (const node of candidates.splice(0, batchSize)) void this.prefetchNode(node.nodeId)
+                    for (const node of candidates.splice(0, batchSize))
+                        void this.prefetchNode(node.nodeId)
 
                     if (
                         candidates.length
